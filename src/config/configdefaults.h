@@ -283,15 +283,17 @@ public:
     // PhosphorZones::Zone Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static int zonePadding()
+    // Inner gap: the single shared inter-window gap used by BOTH snapping and
+    // tiling (replaces the former snapping zonePadding + tiling autotileInnerGap).
+    static int innerGap()
     {
-        return Defaults::ZonePadding;
+        return Defaults::InnerGap;
     }
-    static constexpr int zonePaddingMin()
+    static constexpr int innerGapMin()
     {
         return 0;
     }
-    static constexpr int zonePaddingMax()
+    static constexpr int innerGapMax()
     {
         return Defaults::MaxGap;
     }
@@ -891,82 +893,9 @@ public:
     {
         return PhosphorTiles::AutotileDefaults::MaxMasterCount;
     }
-    static constexpr int autotileInnerGap()
-    {
-        return Defaults::ZonePadding;
-    }
-    static constexpr int autotileInnerGapMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileInnerGapMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static constexpr int autotileOuterGap()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static bool autotileUsePerSideOuterGap()
-    {
-        return false;
-    }
-    static int autotileOuterGapTop()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapTopMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapTopMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static int autotileOuterGapBottom()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapBottomMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapBottomMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static int autotileOuterGapLeft()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapLeftMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapLeftMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static int autotileOuterGapRight()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapRightMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapRightMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
+    // Autotile inner/outer gaps are unified with snapping — see innerGap() /
+    // outerGap*() above. Tiling reads the same shared accessors; no autotile-
+    // specific gap defaults remain.
     static constexpr bool autotileFocusNewWindows()
     {
         return true;

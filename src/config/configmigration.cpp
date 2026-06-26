@@ -813,15 +813,21 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // v1 ZoneSelector keys don't have prefixes, so they stay the same
     QJsonObject zoneSelector = v1ZoneSelector;
 
-    // ── Snapping.Gaps ───────────────────────────────────────────────────────
+    // ── Gaps (shared) + Snapping.Gaps ────────────────────────────────────────
+    // v2 unifies the inner/outer gaps across snapping and tiling into the shared
+    // top-level "Gaps" group. Snapping's v1 zone-padding/outer-gaps populate it
+    // first; the autotile section below fills only the keys snapping left unset
+    // (snapping precedence). The snapping-specific AdjacentThreshold stays in
+    // Snapping.Gaps.
+    QJsonObject sharedGaps;
+    moveKey(v1Zones, QLatin1String("Padding"), sharedGaps, QLatin1String("Inner"));
+    moveKey(v1Zones, QLatin1String("OuterGap"), sharedGaps, QLatin1String("Outer"));
+    moveKey(v1Zones, QLatin1String("UsePerSideOuterGap"), sharedGaps, QLatin1String("UsePerSide"));
+    moveKey(v1Zones, QLatin1String("OuterGapTop"), sharedGaps, QLatin1String("Top"));
+    moveKey(v1Zones, QLatin1String("OuterGapBottom"), sharedGaps, QLatin1String("Bottom"));
+    moveKey(v1Zones, QLatin1String("OuterGapLeft"), sharedGaps, QLatin1String("Left"));
+    moveKey(v1Zones, QLatin1String("OuterGapRight"), sharedGaps, QLatin1String("Right"));
     QJsonObject snappingGaps;
-    moveKey(v1Zones, QLatin1String("Padding"), snappingGaps, QLatin1String("Inner"));
-    moveKey(v1Zones, QLatin1String("OuterGap"), snappingGaps, QLatin1String("Outer"));
-    moveKey(v1Zones, QLatin1String("UsePerSideOuterGap"), snappingGaps, QLatin1String("UsePerSide"));
-    moveKey(v1Zones, QLatin1String("OuterGapTop"), snappingGaps, QLatin1String("Top"));
-    moveKey(v1Zones, QLatin1String("OuterGapBottom"), snappingGaps, QLatin1String("Bottom"));
-    moveKey(v1Zones, QLatin1String("OuterGapLeft"), snappingGaps, QLatin1String("Left"));
-    moveKey(v1Zones, QLatin1String("OuterGapRight"), snappingGaps, QLatin1String("Right"));
     moveKey(v1Zones, QLatin1String("AdjacentThreshold"), snappingGaps, QLatin1String("AdjacentThreshold"));
 
     // ── Assemble Snapping ───────────────────────────────────────────────────
@@ -892,14 +898,22 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     if (!tBorders.isEmpty())
         tilingAppearance[QLatin1String("Borders")] = tBorders;
 
+    // Autotile inner/outer gaps fold into the shared "Gaps" group, filling only
+    // the keys snapping didn't already populate (snapping precedence). SmartGaps
+    // is tiling-specific and stays in Tiling.Gaps.
+    const auto fillSharedGap = [&sharedGaps, &v1Autotiling](QLatin1String srcKey, QLatin1String dstKey) {
+        if (!sharedGaps.contains(dstKey) && v1Autotiling.contains(srcKey)) {
+            sharedGaps[dstKey] = v1Autotiling.value(srcKey);
+        }
+    };
+    fillSharedGap(QLatin1String("AutotileInnerGap"), QLatin1String("Inner"));
+    fillSharedGap(QLatin1String("AutotileOuterGap"), QLatin1String("Outer"));
+    fillSharedGap(QLatin1String("AutotileUsePerSideOuterGap"), QLatin1String("UsePerSide"));
+    fillSharedGap(QLatin1String("AutotileOuterGapTop"), QLatin1String("Top"));
+    fillSharedGap(QLatin1String("AutotileOuterGapBottom"), QLatin1String("Bottom"));
+    fillSharedGap(QLatin1String("AutotileOuterGapLeft"), QLatin1String("Left"));
+    fillSharedGap(QLatin1String("AutotileOuterGapRight"), QLatin1String("Right"));
     QJsonObject tilingGaps;
-    moveKey(v1Autotiling, QLatin1String("AutotileInnerGap"), tilingGaps, QLatin1String("Inner"));
-    moveKey(v1Autotiling, QLatin1String("AutotileOuterGap"), tilingGaps, QLatin1String("Outer"));
-    moveKey(v1Autotiling, QLatin1String("AutotileUsePerSideOuterGap"), tilingGaps, QLatin1String("UsePerSide"));
-    moveKey(v1Autotiling, QLatin1String("AutotileOuterGapTop"), tilingGaps, QLatin1String("Top"));
-    moveKey(v1Autotiling, QLatin1String("AutotileOuterGapBottom"), tilingGaps, QLatin1String("Bottom"));
-    moveKey(v1Autotiling, QLatin1String("AutotileOuterGapLeft"), tilingGaps, QLatin1String("Left"));
-    moveKey(v1Autotiling, QLatin1String("AutotileOuterGapRight"), tilingGaps, QLatin1String("Right"));
     moveKey(v1Autotiling, QLatin1String("AutotileSmartGaps"), tilingGaps, QLatin1String("SmartGaps"));
 
     QJsonObject tiling = tilingTop;
@@ -913,6 +927,10 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         tiling[QLatin1String("Gaps")] = tilingGaps;
     if (!tiling.isEmpty())
         root[ConfigKeys::Legacy::v2TilingGroup()] = tiling;
+
+    // Shared inner/outer gaps (populated by the snapping + autotile sections above).
+    if (!sharedGaps.isEmpty())
+        root[QLatin1String("Gaps")] = sharedGaps;
 
     // ── Exclusions (key renames) ────────────────────────────────────────────
     QJsonObject exclusions;

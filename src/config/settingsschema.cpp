@@ -364,8 +364,9 @@ void appendPerformanceSchema(PhosphorConfig::Schema& schema)
 void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
-    schema.groups[CD::snappingGapsGroup()] = {
-        {CD::innerKey(), CD::zonePadding(), QMetaType::Int, {}, clampInt(CD::zonePaddingMin(), CD::zonePaddingMax())},
+    // Shared inner/outer gaps (gapsGroup = "Gaps") — used by BOTH snapping and tiling.
+    schema.groups[CD::gapsGroup()] = {
+        {CD::innerKey(), CD::innerGap(), QMetaType::Int, {}, clampInt(CD::innerGapMin(), CD::innerGapMax())},
         {CD::outerKey(), CD::outerGap(), QMetaType::Int, {}, clampInt(CD::outerGapMin(), CD::outerGapMax())},
         {CD::usePerSideKey(), CD::usePerSideOuterGap(), QMetaType::Bool},
         {CD::topKey(), CD::outerGapTop(), QMetaType::Int, {}, clampInt(CD::outerGapTopMin(), CD::outerGapTopMax())},
@@ -380,6 +381,9 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::outerGapRightMin(), CD::outerGapRightMax())},
+    };
+    // Snapping.Gaps keeps only the snapping-specific adjacency threshold.
+    schema.groups[CD::snappingGapsGroup()] = {
         {CD::adjacentThresholdKey(),
          CD::adjacentThreshold(),
          QMetaType::Int,
@@ -842,38 +846,9 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          clampInt(CD::autotileBorderRadiusMin(), CD::autotileBorderRadiusMax())},
     };
 
+    // Tiling.Gaps keeps only the tiling-specific SmartGaps toggle — inner/outer
+    // gaps are unified into the shared gapsGroup ("Gaps").
     schema.groups[CD::tilingGapsGroup()] = {
-        {CD::innerKey(),
-         CD::autotileInnerGap(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileInnerGapMin(), CD::autotileInnerGapMax())},
-        {CD::outerKey(),
-         CD::autotileOuterGap(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapMin(), CD::autotileOuterGapMax())},
-        {CD::usePerSideKey(), CD::autotileUsePerSideOuterGap(), QMetaType::Bool},
-        {CD::topKey(),
-         CD::autotileOuterGapTop(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapTopMin(), CD::autotileOuterGapTopMax())},
-        {CD::bottomKey(),
-         CD::autotileOuterGapBottom(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapBottomMin(), CD::autotileOuterGapBottomMax())},
-        {CD::leftKey(),
-         CD::autotileOuterGapLeft(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapLeftMin(), CD::autotileOuterGapLeftMax())},
-        {CD::rightKey(),
-         CD::autotileOuterGapRight(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapRightMin(), CD::autotileOuterGapRightMax())},
         {CD::smartGapsKey(), CD::autotileSmartGaps(), QMetaType::Bool},
     };
 }

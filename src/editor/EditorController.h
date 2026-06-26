@@ -1027,7 +1027,7 @@ private:
     int m_overlayDisplayMode = -1; // -1 = use global setting
     bool m_useFullScreenGeometry = false;
     int m_aspectRatioClass = 0; // 0 = Any (AspectRatioClass::Any)
-    int m_cachedGlobalZonePadding = PlasmaZones::Defaults::ZonePadding; // Cached to avoid D-Bus calls
+    int m_cachedGlobalZonePadding = PlasmaZones::Defaults::InnerGap; // Cached to avoid D-Bus calls
     int m_cachedGlobalOuterGap = PlasmaZones::Defaults::OuterGap; // Cached to avoid D-Bus calls
     int m_cachedGlobalOverlayDisplayMode = 0; // Cached global overlay display mode
     bool m_cachedGlobalUsePerSideOuterGap = false;

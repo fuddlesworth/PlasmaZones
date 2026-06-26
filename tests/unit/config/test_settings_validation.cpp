@@ -48,7 +48,7 @@ private Q_SLOTS:
      * a hand-written 999 into the schema max, so the reader sees the
      * canonical default instead of the raw invalid value.
      *
-     * Seeds at the v2 schema location (Snapping.Gaps/Inner) so the validator
+     * Seeds at the v2 schema location (Gaps/Inner) so the validator
      * is actually exercised. Seeding at the legacy v1 location would be
      * skipped by ensureJsonConfig's version-match short-circuit and the test
      * would pass for the wrong reason.
@@ -59,14 +59,14 @@ private Q_SLOTS:
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
-            gaps->writeInt(ConfigDefaults::innerKey(), 999); // clamp max is zonePaddingMax()
+            auto gaps = backend->group(ConfigDefaults::gapsGroup());
+            gaps->writeInt(ConfigDefaults::innerKey(), 999); // clamp max is innerGapMax()
             gaps.reset();
             backend->sync();
         }
 
         Settings settings;
-        QCOMPARE(settings.zonePadding(), ConfigDefaults::zonePaddingMax());
+        QCOMPARE(settings.innerGap(), ConfigDefaults::innerGapMax());
     }
 
     /**

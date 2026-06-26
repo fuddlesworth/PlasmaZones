@@ -372,13 +372,13 @@ private Q_SLOTS:
 
         const QString screen = QStringLiteral("test-screen-1");
 
-        settings.setPerScreenSnappingSetting(screen, QStringLiteral("ZonePadding"), 8);
+        settings.setPerScreenSnappingSetting(screen, QStringLiteral("InnerGap"), 8);
         settings.setPerScreenSnappingSetting(screen, QStringLiteral("OuterGap"), 12);
 
         QVERIFY(settings.hasPerScreenSnappingSettings(screen));
         // Pin the accept path: both gap keys round-trip through the validator.
         const QVariantMap stored = settings.getPerScreenSnappingSettings(screen);
-        QCOMPARE(stored.value(QStringLiteral("ZonePadding")).toInt(), 8);
+        QCOMPARE(stored.value(QStringLiteral("InnerGap")).toInt(), 8);
         QCOMPARE(stored.value(QStringLiteral("OuterGap")).toInt(), 12);
 
         QSignalSpy spy(&settings, &Settings::perScreenSnappingSettingsChanged);
@@ -424,7 +424,7 @@ private Q_SLOTS:
         QVERIFY(qFuzzyCompare(settings.labelFontSizeScale(), ConfigDefaults::labelFontSizeScale()));
 
         // PhosphorZones::Zone geometry defaults
-        QCOMPARE(settings.zonePadding(), ConfigDefaults::zonePadding());
+        QCOMPARE(settings.innerGap(), ConfigDefaults::innerGap());
         QCOMPARE(settings.outerGap(), ConfigDefaults::outerGap());
         QCOMPARE(settings.adjacentThreshold(), ConfigDefaults::adjacentThreshold());
         QCOMPARE(settings.pollIntervalMs(), ConfigDefaults::pollIntervalMs());

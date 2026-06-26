@@ -894,7 +894,7 @@ void TestWindowRuleController::authoringMetadata()
     }
     QVERIFY(sawFloat);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode")), 0); // Layout & engine
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setZonePadding")), 1); // Gaps
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap")), 1); // Gaps
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude")), 2); // Window
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity")), 3); // Appearance
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 4); // Animation

@@ -1063,7 +1063,7 @@ bool Daemon::init()
     const auto scheduleGapResnap = [this]() {
         m_gapResnapTimer.start();
     };
-    connect(m_settings.get(), &Settings::zonePaddingChanged, this, scheduleGapResnap);
+    connect(m_settings.get(), &Settings::innerGapChanged, this, scheduleGapResnap);
     connect(m_settings.get(), &Settings::outerGapChanged, this, scheduleGapResnap);
     connect(m_settings.get(), &Settings::usePerSideOuterGapChanged, this, scheduleGapResnap);
     connect(m_settings.get(), &Settings::outerGapTopChanged, this, scheduleGapResnap);
@@ -1237,9 +1237,9 @@ bool Daemon::init()
             }
             namespace PSK = PhosphorEngine::PerScreenKeys;
             QVariantMap map;
-            // zonePadding is snapping's inner spacing — the autotile inner gap.
-            if (gaps.zonePadding) {
-                map.insert(QString(PSK::InnerGap), *gaps.zonePadding);
+            // innerGap is the single shared inner spacing for snapping and tiling.
+            if (gaps.innerGap) {
+                map.insert(QString(PSK::InnerGap), *gaps.innerGap);
             }
             if (gaps.outerGap) {
                 map.insert(QString(PSK::OuterGap), *gaps.outerGap);

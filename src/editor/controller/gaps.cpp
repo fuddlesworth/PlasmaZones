@@ -711,7 +711,7 @@ void EditorController::refreshGlobalGapOverlaySettings()
     // registry so the daemon-side cost is unchanged, and we avoid N-1
     // extra IPC round-trips on the editor startup hot path.
     static const QStringList kGapOverlayKeys = {
-        QStringLiteral("zonePadding"),   QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
+        QStringLiteral("innerGap"),      QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
         QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),
         QStringLiteral("outerGapRight"), QStringLiteral("overlayDisplayMode"),
     };
@@ -743,7 +743,7 @@ void EditorController::refreshGlobalGapOverlaySettings()
 
     // zonePadding
     {
-        const int newValue = readInt(QStringLiteral("zonePadding"), Defaults::ZonePadding);
+        const int newValue = readInt(QStringLiteral("innerGap"), Defaults::InnerGap);
         if (m_cachedGlobalZonePadding != newValue) {
             m_cachedGlobalZonePadding = newValue;
             Q_EMIT globalZonePaddingChanged();

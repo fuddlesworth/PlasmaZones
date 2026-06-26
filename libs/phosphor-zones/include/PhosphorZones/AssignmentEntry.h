@@ -182,11 +182,11 @@ struct AssignmentEntry
  * matching context rule fills the corresponding gap slot, so an unset field
  * falls through to the next precedence layer (per-screen → layout → global).
  * The daemon maps a populated override into a PerScreenSnappingKey-shaped map
- * for @c GeometryUtils::getEffectiveOuterGaps / getEffectiveZonePadding.
+ * for @c GeometryUtils::getEffectiveOuterGaps / getEffectiveInnerGap.
  */
 struct ContextGapOverride
 {
-    std::optional<int> zonePadding;
+    std::optional<int> innerGap;
     std::optional<int> outerGap;
     std::optional<bool> usePerSideOuterGap;
     std::optional<int> outerGapTop;
@@ -196,7 +196,7 @@ struct ContextGapOverride
 
     bool isEmpty() const
     {
-        return !zonePadding && !outerGap && !usePerSideOuterGap && !outerGapTop && !outerGapBottom && !outerGapLeft
+        return !innerGap && !outerGap && !usePerSideOuterGap && !outerGapTop && !outerGapBottom && !outerGapLeft
             && !outerGapRight;
     }
 };

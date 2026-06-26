@@ -892,15 +892,15 @@ private Q_SLOTS:
         // ONLY the outer gap. Different slots → both must apply (no shadowing),
         // and neither carries an engine-mode action.
         const PWR::WindowRule pad = gapRule(QStringLiteral("pad"), 400, QStringLiteral("DP-1"),
-                                            {intGapAction(PWR::ActionType::SetZonePadding, 0)});
+                                            {intGapAction(PWR::ActionType::SetInnerGap, 0)});
         const PWR::WindowRule gap = gapRule(QStringLiteral("gap"), 300, QStringLiteral("DP-1"),
                                             {intGapAction(PWR::ActionType::SetOuterGap, 12)});
         QVERIFY(f.store->setAllRules({pad, gap}));
 
         const PhosphorZones::ContextGapOverride resolved =
             f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
-        QVERIFY(resolved.zonePadding.has_value());
-        QCOMPARE(*resolved.zonePadding, 0);
+        QVERIFY(resolved.innerGap.has_value());
+        QCOMPARE(*resolved.innerGap, 0);
         QVERIFY(resolved.outerGap.has_value()); // separate slot — composes, not shadowed
         QCOMPARE(*resolved.outerGap, 12);
         QVERIFY(!resolved.usePerSideOuterGap.has_value());

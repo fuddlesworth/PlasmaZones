@@ -208,21 +208,20 @@ private Q_SLOTS:
         const WindowRule r =
             makeRule(QStringLiteral("konsole padding"), 200,
                      MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("org.kde.konsole")),
-                     {zonePadding(0)});
+                     {innerGap(0)});
         const auto issues = r.validationIssues();
         QCOMPARE(issues.size(), 1);
         QCOMPARE(issues.first().code, ValidationIssue::Code::ContextActionWithWindowMatch);
-        QCOMPARE(issues.first().actionType, QString(ActionType::SetZonePadding));
+        QCOMPARE(issues.first().actionType, QString(ActionType::SetInnerGap));
     }
 
     void testValidationIssues_gapActionWithContextMatch()
     {
         // Gap override + context-only match → valid: "zero padding on activity
         // X" is exactly the intended use of a context gap rule.
-        const WindowRule r =
-            makeRule(QStringLiteral("gaming no gaps"), 510,
-                     MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QStringLiteral("gaming-uuid")),
-                     {zonePadding(0)});
+        const WindowRule r = makeRule(
+            QStringLiteral("gaming no gaps"), 510,
+            MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QStringLiteral("gaming-uuid")), {innerGap(0)});
         QVERIFY(r.validationIssues().isEmpty());
     }
 

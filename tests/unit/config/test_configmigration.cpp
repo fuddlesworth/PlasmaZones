@@ -334,7 +334,8 @@ private Q_SLOTS:
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
-        QJsonObject gaps = snapping.value(QStringLiteral("Gaps")).toObject();
+        // Inner/outer gaps now live in the shared top-level "Gaps" group.
+        QJsonObject gaps = root.value(QStringLiteral("Gaps")).toObject();
         QCOMPARE(gaps.value(QStringLiteral("Inner")).toInt(), 8);
         QCOMPARE(gaps.value(QStringLiteral("Outer")).toInt(), 4);
 

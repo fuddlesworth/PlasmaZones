@@ -426,8 +426,8 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("enableAudioVisualizer", enableAudioVisualizer, setEnableAudioVisualizer)
     REGISTER_INT_SETTING("audioSpectrumBarCount", audioSpectrumBarCount, setAudioSpectrumBarCount)
 
-    // PhosphorZones::Zone settings
-    REGISTER_INT_SETTING("zonePadding", zonePadding, setZonePadding)
+    // Zone settings — inner/outer gaps are shared across snapping and tiling.
+    REGISTER_INT_SETTING("innerGap", innerGap, setInnerGap)
     REGISTER_INT_SETTING("outerGap", outerGap, setOuterGap)
     REGISTER_BOOL_SETTING("usePerSideOuterGap", usePerSideOuterGap, setUsePerSideOuterGap)
     REGISTER_INT_SETTING("outerGapTop", outerGapTop, setOuterGapTop)
@@ -655,13 +655,8 @@ void SettingsAdaptor::initializeRegistry()
             return true;
         };
         m_schemas[QStringLiteral("autotilePerAlgorithmSettings")] = QStringLiteral("map");
-        REGISTER_CONCRETE_INT("autotileInnerGap", autotileInnerGap, setAutotileInnerGap)
-        REGISTER_CONCRETE_INT("autotileOuterGap", autotileOuterGap, setAutotileOuterGap)
-        REGISTER_CONCRETE_BOOL("autotileUsePerSideOuterGap", autotileUsePerSideOuterGap, setAutotileUsePerSideOuterGap)
-        REGISTER_CONCRETE_INT("autotileOuterGapTop", autotileOuterGapTop, setAutotileOuterGapTop)
-        REGISTER_CONCRETE_INT("autotileOuterGapBottom", autotileOuterGapBottom, setAutotileOuterGapBottom)
-        REGISTER_CONCRETE_INT("autotileOuterGapLeft", autotileOuterGapLeft, setAutotileOuterGapLeft)
-        REGISTER_CONCRETE_INT("autotileOuterGapRight", autotileOuterGapRight, setAutotileOuterGapRight)
+        // Autotile inner/outer gaps are unified with snapping — the shared
+        // "innerGap" / "outerGap*" D-Bus keys (registered above) drive both modes.
         REGISTER_CONCRETE_BOOL("autotileFocusNewWindows", autotileFocusNewWindows, setAutotileFocusNewWindows)
         REGISTER_CONCRETE_BOOL("autotileSmartGaps", autotileSmartGaps, setAutotileSmartGaps)
         REGISTER_CONCRETE_INT("autotileMaxWindows", autotileMaxWindows, setAutotileMaxWindows)

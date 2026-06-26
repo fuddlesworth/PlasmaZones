@@ -204,7 +204,7 @@ SettingsFlickable {
             scopeClearerMethod: "clearPerScreenSnappingSettings"
             // Snapping shares the "Inner gap" / "Outer gap" labels with tiling
             // (consistent cross-mode wording) but has no Smart gaps. Inner-gap
-            // bounds come from zonePaddingMin/Max; the outer / per-side gaps from
+            // bounds come from innerGapMin/Max; the outer / per-side gaps from
             // gapMin/Max — each matching its validator clamp.
             primaryGapLabel: i18n("Inner gap")
             primaryGapDescription: i18n("Space between snapped windows")
@@ -213,9 +213,9 @@ SettingsFlickable {
             showSmartGaps: false
             gapMin: root.settingsBridge.gapMin
             gapMax: root.settingsBridge.gapMax
-            primaryGapMin: root.settingsBridge.zonePaddingMin
-            primaryGapMax: root.settingsBridge.zonePaddingMax
-            primaryGapValue: root.snappingSettingValue("ZonePadding", appSettings.zonePadding)
+            primaryGapMin: root.settingsBridge.innerGapMin
+            primaryGapMax: root.settingsBridge.innerGapMax
+            primaryGapValue: root.snappingSettingValue("InnerGap", appSettings.innerGap)
             outerGapValue: root.snappingSettingValue("OuterGap", appSettings.outerGap)
             usePerSideOuterGap: root.snappingSettingValue("UsePerSideOuterGap", appSettings.usePerSideOuterGap)
             outerGapTopValue: root.snappingSettingValue("OuterGapTop", appSettings.outerGapTop)
@@ -223,8 +223,8 @@ SettingsFlickable {
             outerGapLeftValue: root.snappingSettingValue("OuterGapLeft", appSettings.outerGapLeft)
             outerGapRightValue: root.snappingSettingValue("OuterGapRight", appSettings.outerGapRight)
             onPrimaryGapModified: value => {
-                return root.writeSnappingSetting("ZonePadding", value, function (v) {
-                    appSettings.zonePadding = v;
+                return root.writeSnappingSetting("InnerGap", value, function (v) {
+                    appSettings.innerGap = v;
                 });
             }
             onOuterGapModified: value => {

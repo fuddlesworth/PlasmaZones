@@ -195,7 +195,7 @@ private Q_SLOTS:
         Settings settings;
 
         // Set non-default values across different groups
-        settings.setZonePadding(15);
+        settings.setInnerGap(15);
         settings.setOuterGap(20);
         settings.setBorderWidth(5);
         settings.setBorderRadius(25);
@@ -211,7 +211,7 @@ private Q_SLOTS:
         settings.setZoneSelectorGridColumns(3);
         settings.setAutotileSplitRatio(0.7);
         settings.setAutotileMasterCount(3);
-        settings.setAutotileInnerGap(12);
+        // Tiling inner gap is unified with snapping (setInnerGap above)...
         settings.setAnimationDuration(300);
         settings.setAnimationSequenceMode(0);
         settings.setLabelFontWeight(400);
@@ -233,7 +233,7 @@ private Q_SLOTS:
         auto backend = PlasmaZones::createDefaultConfigBackend();
 
         {
-            auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
+            auto gaps = backend->group(ConfigDefaults::gapsGroup());
             QCOMPARE(gaps->readInt(ConfigDefaults::innerKey(), 0), 15);
             QCOMPARE(gaps->readInt(ConfigDefaults::outerKey(), 0), 20);
         }
@@ -283,10 +283,6 @@ private Q_SLOTS:
             QVERIFY2(qAbs(readRatio - 0.7) < 0.001,
                      qPrintable(QStringLiteral("SplitRatio: expected 0.7, got %1").arg(readRatio)));
             QCOMPARE(algo->readInt(ConfigDefaults::masterCountKey(), 0), 3);
-        }
-        {
-            auto tilingGaps = backend->group(ConfigDefaults::tilingGapsGroup());
-            QCOMPARE(tilingGaps->readInt(ConfigDefaults::innerKey(), 0), 12);
         }
 
         {
@@ -374,14 +370,14 @@ private Q_SLOTS:
         Settings settings;
 
         QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::zonePaddingChanged);
+        QSignalSpy specificSpy(&settings, &Settings::innerGapChanged);
         QVERIFY(generalSpy.isValid());
         QVERIFY(specificSpy.isValid());
 
-        int currentPadding = settings.zonePadding();
+        int currentPadding = settings.innerGap();
         int newPadding = (currentPadding == 15) ? 20 : 15;
 
-        settings.setZonePadding(newPadding);
+        settings.setInnerGap(newPadding);
 
         QCOMPARE(specificSpy.count(), 1);
         QVERIFY(generalSpy.count() >= 1);
@@ -395,12 +391,12 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        settings.setZonePadding(15); // force a known value
+        settings.setInnerGap(15); // force a known value
 
         QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::zonePaddingChanged);
+        QSignalSpy specificSpy(&settings, &Settings::innerGapChanged);
 
-        settings.setZonePadding(15); // same value again
+        settings.setInnerGap(15); // same value again
 
         QCOMPARE(specificSpy.count(), 0);
         QCOMPARE(generalSpy.count(), 0);
@@ -619,7 +615,7 @@ private Q_SLOTS:
         Settings settings;
 
         // Mutate one value to ensure save actually writes
-        settings.setZonePadding(99);
+        settings.setInnerGap(99);
         settings.save();
 
         // Re-read the file and verify stale keys are gone
@@ -818,7 +814,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        settings.setZonePadding(42);
+        settings.setInnerGap(42);
         settings.setBorderWidth(7);
         settings.setActiveOpacity(0.65);
         settings.setShowZoneNumbers(false);
@@ -828,7 +824,7 @@ private Q_SLOTS:
 
         // Reload from disk
         Settings reloaded;
-        QCOMPARE(reloaded.zonePadding(), 42);
+        QCOMPARE(reloaded.innerGap(), 42);
         QCOMPARE(reloaded.borderWidth(), 7);
         QCOMPARE(reloaded.activeOpacity(), 0.65);
         QCOMPARE(reloaded.showZoneNumbers(), false);

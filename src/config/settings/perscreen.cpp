@@ -194,23 +194,21 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == PerScreenKeys::MasterCount)
         return boundedInt(value, ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax());
     if (k == PerScreenKeys::InnerGap)
-        return boundedInt(value, ConfigDefaults::autotileInnerGapMin(), ConfigDefaults::autotileInnerGapMax());
+        return boundedInt(value, ConfigDefaults::innerGapMin(), ConfigDefaults::innerGapMax());
     // Per-side gaps each have their own min/max — match exactly, not by prefix.
     // A single startsWith("OuterGap") would apply the uniform-gap bounds to
     // Top/Bottom/Left/Right, which silently clamps to the wrong range whenever
     // those bounds diverge from the uniform ones.
     if (k == PerScreenKeys::OuterGap)
-        return boundedInt(value, ConfigDefaults::autotileOuterGapMin(), ConfigDefaults::autotileOuterGapMax());
+        return boundedInt(value, ConfigDefaults::outerGapMin(), ConfigDefaults::outerGapMax());
     if (k == PerScreenKeys::OuterGapTop)
-        return boundedInt(value, ConfigDefaults::autotileOuterGapTopMin(), ConfigDefaults::autotileOuterGapTopMax());
+        return boundedInt(value, ConfigDefaults::outerGapTopMin(), ConfigDefaults::outerGapTopMax());
     if (k == PerScreenKeys::OuterGapBottom)
-        return boundedInt(value, ConfigDefaults::autotileOuterGapBottomMin(),
-                          ConfigDefaults::autotileOuterGapBottomMax());
+        return boundedInt(value, ConfigDefaults::outerGapBottomMin(), ConfigDefaults::outerGapBottomMax());
     if (k == PerScreenKeys::OuterGapLeft)
-        return boundedInt(value, ConfigDefaults::autotileOuterGapLeftMin(), ConfigDefaults::autotileOuterGapLeftMax());
+        return boundedInt(value, ConfigDefaults::outerGapLeftMin(), ConfigDefaults::outerGapLeftMax());
     if (k == PerScreenKeys::OuterGapRight)
-        return boundedInt(value, ConfigDefaults::autotileOuterGapRightMin(),
-                          ConfigDefaults::autotileOuterGapRightMax());
+        return boundedInt(value, ConfigDefaults::outerGapRightMin(), ConfigDefaults::outerGapRightMax());
     if (k == PerScreenKeys::MaxWindows)
         return boundedInt(value, ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax());
     if (k == PerScreenKeys::InsertPosition)
@@ -245,7 +243,7 @@ QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString
         || key == QLatin1String(PerScreenAutotileKey::AnimationEasingCurve))
         return QVariant(group.readString(key));
     if (key == QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap))
-        return QVariant(group.readBool(key, ConfigDefaults::autotileUsePerSideOuterGap()));
+        return QVariant(group.readBool(key, ConfigDefaults::usePerSideOuterGap()));
     if (key == QLatin1String(PerScreenAutotileKey::FocusNewWindows))
         return QVariant(group.readBool(key, ConfigDefaults::autotileFocusNewWindows()));
     if (key == QLatin1String(PerScreenAutotileKey::SmartGaps))
@@ -265,7 +263,7 @@ const QLatin1String kPerScreenSnappingKeys[] = {
     // and the zone-selector keys live in their own per-screen map. Without these
     // the Gaps card's overrides would not be re-loaded on next launch even after
     // the validator accepts the write.
-    PerScreenSnappingKey::ZonePadding,   PerScreenSnappingKey::OuterGap,       PerScreenSnappingKey::UsePerSideOuterGap,
+    PerScreenSnappingKey::InnerGap,      PerScreenSnappingKey::OuterGap,       PerScreenSnappingKey::UsePerSideOuterGap,
     PerScreenSnappingKey::OuterGapTop,   PerScreenSnappingKey::OuterGapBottom, PerScreenSnappingKey::OuterGapLeft,
     PerScreenSnappingKey::OuterGapRight,
 };
@@ -278,8 +276,8 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
     // per-side handling in the autotile validator above; a uniform startsWith
     // would clamp Top/Bottom/Left/Right to the wrong range when those bounds
     // diverge from the uniform OuterGap bounds.
-    if (key == K::ZonePadding)
-        return boundedInt(value, ConfigDefaults::zonePaddingMin(), ConfigDefaults::zonePaddingMax());
+    if (key == K::InnerGap)
+        return boundedInt(value, ConfigDefaults::innerGapMin(), ConfigDefaults::innerGapMax());
     if (key == K::OuterGap)
         return boundedInt(value, ConfigDefaults::outerGapMin(), ConfigDefaults::outerGapMax());
     if (key == K::OuterGapTop)
@@ -298,7 +296,7 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
 QVariant readPerScreenSnappingEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     namespace K = PerScreenSnappingKey;
-    // UsePerSideOuterGap is a bool; the int gap keys (ZonePadding/OuterGap/per-side)
+    // UsePerSideOuterGap is a bool; the int gap keys (InnerGap/OuterGap/per-side)
     // fall through to readInt below, which is the correct type for them.
     if (key == K::UsePerSideOuterGap)
         return QVariant(group.readBool(key, ConfigDefaults::usePerSideOuterGap()));

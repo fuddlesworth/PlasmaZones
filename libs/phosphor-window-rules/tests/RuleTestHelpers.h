@@ -85,10 +85,10 @@ inline RuleAction borderColor(const QString& activeHex, const QString& inactiveH
     return a;
 }
 
-inline RuleAction zonePadding(int px)
+inline RuleAction innerGap(int px)
 {
     RuleAction a;
-    a.type = QString(ActionType::SetZonePadding);
+    a.type = QString(ActionType::SetInnerGap);
     a.params.insert(ActionParam::Value, px);
     return a;
 }

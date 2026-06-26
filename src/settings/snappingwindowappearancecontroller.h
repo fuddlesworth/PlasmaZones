@@ -30,8 +30,8 @@ class SnappingWindowAppearanceController : public PhosphorControl::PageControlle
     // validator clamps against (zonePadding* for the padding spin box, outerGap*
     // for every edge/per-side gap) so the UI range and the clamp range can never
     // drift apart.
-    Q_PROPERTY(int zonePaddingMin READ zonePaddingMin CONSTANT)
-    Q_PROPERTY(int zonePaddingMax READ zonePaddingMax CONSTANT)
+    Q_PROPERTY(int innerGapMin READ innerGapMin CONSTANT)
+    Q_PROPERTY(int innerGapMax READ innerGapMax CONSTANT)
     Q_PROPERTY(int gapMin READ gapMin CONSTANT)
     Q_PROPERTY(int gapMax READ gapMax CONSTANT)
 
@@ -68,13 +68,13 @@ public:
     {
         return ConfigDefaults::snappingBorderRadiusMax();
     }
-    int zonePaddingMin() const
+    int innerGapMin() const
     {
-        return ConfigDefaults::zonePaddingMin();
+        return ConfigDefaults::innerGapMin();
     }
-    int zonePaddingMax() const
+    int innerGapMax() const
     {
-        return ConfigDefaults::zonePaddingMax();
+        return ConfigDefaults::innerGapMax();
     }
     int gapMin() const
     {

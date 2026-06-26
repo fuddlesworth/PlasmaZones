@@ -367,7 +367,7 @@ Q_SIGNALS:
     void labelFontItalicChanged();
     void labelFontUnderlineChanged();
     void labelFontStrikeoutChanged();
-    void zonePaddingChanged();
+    void innerGapChanged();
     void outerGapChanged();
     void usePerSideOuterGapChanged();
     void outerGapTopChanged();
@@ -523,13 +523,8 @@ Q_SIGNALS:
     void autotileSplitRatioStepChanged();
     void autotileMasterCountChanged();
     void autotilePerAlgorithmSettingsChanged();
-    void autotileInnerGapChanged();
-    void autotileOuterGapChanged();
-    void autotileUsePerSideOuterGapChanged();
-    void autotileOuterGapTopChanged();
-    void autotileOuterGapBottomChanged();
-    void autotileOuterGapLeftChanged();
-    void autotileOuterGapRightChanged();
+    // Autotile inner/outer gap change signals are unified with snapping —
+    // listeners use innerGapChanged / outerGap*Changed above.
     void autotileSmartGapsChanged();
     void autotileMaxWindowsChanged();
     void autotileFocusNewWindowsChanged();

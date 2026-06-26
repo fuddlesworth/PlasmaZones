@@ -38,7 +38,7 @@ public:
     {
     }
 
-    int resolveZonePadding(PhosphorZones::Layout* layout, const QString& screenId) const override;
+    int resolveInnerGap(PhosphorZones::Layout* layout, const QString& screenId) const override;
     PhosphorLayout::EdgeGaps resolveOuterGaps(PhosphorZones::Layout* layout, const QString& screenId) const override;
     int defaultBorderWidth() const override;
     int defaultBorderRadius() const override;

@@ -94,7 +94,14 @@ public:
     P_CONFIG_GROUP(snappingAppearanceBordersGroup, "Snapping.Appearance.Borders")
     P_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     P_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
+    // Snapping.Gaps now holds only the snapping-specific adjacency threshold —
+    // the inner/outer gap values moved to the shared gapsGroup ("Gaps") below,
+    // unified across snapping and tiling.
     P_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
+
+    // Shared inner/outer gap values, used by BOTH snapping and tiling. Holds the
+    // Inner/Outer/UsePerSide/Top/Bottom/Left/Right keys.
+    P_CONFIG_GROUP(gapsGroup, "Gaps")
 
     // Display (mode-neutral) — per-mode disable lists. Lives outside Snapping.*
     // because the values gate the whole product (snap + autotile), not just

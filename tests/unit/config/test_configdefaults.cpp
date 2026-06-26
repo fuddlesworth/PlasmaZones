@@ -81,8 +81,8 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::labelFontWeight() <= ConfigDefaults::labelFontWeightMax());
 
         // Zones
-        QVERIFY(ConfigDefaults::zonePadding() >= ConfigDefaults::zonePaddingMin());
-        QVERIFY(ConfigDefaults::zonePadding() <= ConfigDefaults::zonePaddingMax());
+        QVERIFY(ConfigDefaults::innerGap() >= ConfigDefaults::innerGapMin());
+        QVERIFY(ConfigDefaults::innerGap() <= ConfigDefaults::innerGapMax());
         QVERIFY(ConfigDefaults::outerGap() >= ConfigDefaults::outerGapMin());
         QVERIFY(ConfigDefaults::outerGap() <= ConfigDefaults::outerGapMax());
         QVERIFY(ConfigDefaults::outerGapTop() >= ConfigDefaults::outerGapTopMin());
@@ -140,10 +140,7 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::autotileMasterCount() >= ConfigDefaults::autotileMasterCountMin());
         QVERIFY(ConfigDefaults::autotileMasterCount() <= ConfigDefaults::autotileMasterCountMax());
 
-        QVERIFY(ConfigDefaults::autotileInnerGap() >= ConfigDefaults::autotileInnerGapMin());
-        QVERIFY(ConfigDefaults::autotileInnerGap() <= ConfigDefaults::autotileInnerGapMax());
-        QVERIFY(ConfigDefaults::autotileOuterGap() >= ConfigDefaults::autotileOuterGapMin());
-        QVERIFY(ConfigDefaults::autotileOuterGap() <= ConfigDefaults::autotileOuterGapMax());
+        // Inner/outer gaps are unified with snapping (tested above as innerGap/outerGap).
         QVERIFY(ConfigDefaults::autotileMaxWindows() >= ConfigDefaults::autotileMaxWindowsMin());
         QVERIFY(ConfigDefaults::autotileMaxWindows() <= ConfigDefaults::autotileMaxWindowsMax());
         QVERIFY(ConfigDefaults::autotileInsertPosition() >= ConfigDefaults::autotileInsertPositionMin());
@@ -156,14 +153,6 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::snappingBorderWidth() <= ConfigDefaults::snappingBorderWidthMax());
         QVERIFY(ConfigDefaults::snappingBorderRadius() >= ConfigDefaults::snappingBorderRadiusMin());
         QVERIFY(ConfigDefaults::snappingBorderRadius() <= ConfigDefaults::snappingBorderRadiusMax());
-        QVERIFY(ConfigDefaults::autotileOuterGapTop() >= ConfigDefaults::autotileOuterGapTopMin());
-        QVERIFY(ConfigDefaults::autotileOuterGapTop() <= ConfigDefaults::autotileOuterGapTopMax());
-        QVERIFY(ConfigDefaults::autotileOuterGapBottom() >= ConfigDefaults::autotileOuterGapBottomMin());
-        QVERIFY(ConfigDefaults::autotileOuterGapBottom() <= ConfigDefaults::autotileOuterGapBottomMax());
-        QVERIFY(ConfigDefaults::autotileOuterGapLeft() >= ConfigDefaults::autotileOuterGapLeftMin());
-        QVERIFY(ConfigDefaults::autotileOuterGapLeft() <= ConfigDefaults::autotileOuterGapLeftMax());
-        QVERIFY(ConfigDefaults::autotileOuterGapRight() >= ConfigDefaults::autotileOuterGapRightMin());
-        QVERIFY(ConfigDefaults::autotileOuterGapRight() <= ConfigDefaults::autotileOuterGapRightMax());
 
         // Animations
         QVERIFY(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDurationMin());

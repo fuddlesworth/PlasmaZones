@@ -867,8 +867,8 @@ void ActionRegistry::registerBuiltins()
     // PerScreenSnappingKey set; the resolver maps these slots into a
     // per-screen-shaped override map and reuses the existing per-side logic.
     registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetZonePadding),
-        .slotFor = constantSlot(ActionSlot::ZonePadding),
+        .type = QString(ActionType::SetInnerGap),
+        .slotFor = constantSlot(ActionSlot::InnerGap),
         .validate =
             [](const QJsonObject& p) {
                 return hasNumberInRange(p, ActionParam::Value, kMaxGap);

@@ -342,8 +342,8 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
             return PhosphorI18n::tr("Border: %1 / %2").arg(fmt(active), fmt(inactive));
         }
         // ── per-context gap overrides ──
-        if (action.type == ActionType::SetZonePadding) {
-            return PhosphorI18n::tr("Zone padding: %1 px").arg(raw.toInt());
+        if (action.type == ActionType::SetInnerGap) {
+            return PhosphorI18n::tr("Gap: %1 px").arg(raw.toInt());
         }
         if (action.type == ActionType::SetOuterGap) {
             return PhosphorI18n::tr("Outer gap: %1 px").arg(raw.toInt());

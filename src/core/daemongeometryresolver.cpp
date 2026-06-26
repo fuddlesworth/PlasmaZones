@@ -24,12 +24,12 @@ QVariantMap DaemonGeometryResolver::contextGapOverrideFor(const QString& screenI
         m_layoutRegistry->resolveContextGaps(screenId, virtualDesktop, activity));
 }
 
-int DaemonGeometryResolver::resolveZonePadding(PhosphorZones::Layout* layout, const QString& screenId) const
+int DaemonGeometryResolver::resolveInnerGap(PhosphorZones::Layout* layout, const QString& screenId) const
 {
     if (!m_settings) {
-        return PhosphorEngine::GeometryDefaults::ZonePadding;
+        return PhosphorEngine::GeometryDefaults::InnerGap;
     }
-    return GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId, contextGapOverrideFor(screenId));
+    return GeometryUtils::getEffectiveInnerGap(layout, m_settings, screenId, contextGapOverrideFor(screenId));
 }
 
 PhosphorLayout::EdgeGaps DaemonGeometryResolver::resolveOuterGaps(PhosphorZones::Layout* layout,

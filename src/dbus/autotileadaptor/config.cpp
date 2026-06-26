@@ -93,7 +93,7 @@ void AutotileAdaptor::setMasterCount(int count)
 int AutotileAdaptor::innerGap() const
 {
     if (!m_engine || !m_engine->config()) {
-        return ConfigDefaults::autotileInnerGap();
+        return ConfigDefaults::innerGap();
     }
     return m_engine->config()->innerGap;
 }
@@ -113,7 +113,7 @@ void AutotileAdaptor::setInnerGap(int gap)
 int AutotileAdaptor::outerGap() const
 {
     if (!m_engine || !m_engine->config()) {
-        return ConfigDefaults::autotileOuterGap();
+        return ConfigDefaults::outerGap();
     }
     return m_engine->config()->outerGap;
 }

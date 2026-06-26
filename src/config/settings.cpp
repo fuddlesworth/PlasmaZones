@@ -1238,20 +1238,21 @@ P_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDispla
 // Inner/outer gaps (uniform + per-side) plus adjacency threshold. Schema
 // clampInt validators enforce the same ranges readValidatedInt used to.
 
-P_STORE_GET(int, zonePadding, snappingGapsGroup, innerKey, int)
-P_STORE_SET_INT(setZonePadding, snappingGapsGroup, innerKey, zonePaddingChanged)
-P_STORE_GET(int, outerGap, snappingGapsGroup, outerKey, int)
-P_STORE_SET_INT(setOuterGap, snappingGapsGroup, outerKey, outerGapChanged)
-P_STORE_GET(bool, usePerSideOuterGap, snappingGapsGroup, usePerSideKey, bool)
-P_STORE_SET_BOOL(setUsePerSideOuterGap, snappingGapsGroup, usePerSideKey, usePerSideOuterGapChanged)
-P_STORE_GET(int, outerGapTop, snappingGapsGroup, topKey, int)
-P_STORE_SET_INT(setOuterGapTop, snappingGapsGroup, topKey, outerGapTopChanged)
-P_STORE_GET(int, outerGapBottom, snappingGapsGroup, bottomKey, int)
-P_STORE_SET_INT(setOuterGapBottom, snappingGapsGroup, bottomKey, outerGapBottomChanged)
-P_STORE_GET(int, outerGapLeft, snappingGapsGroup, leftKey, int)
-P_STORE_SET_INT(setOuterGapLeft, snappingGapsGroup, leftKey, outerGapLeftChanged)
-P_STORE_GET(int, outerGapRight, snappingGapsGroup, rightKey, int)
-P_STORE_SET_INT(setOuterGapRight, snappingGapsGroup, rightKey, outerGapRightChanged)
+// Shared inner/outer gaps (gapsGroup = "Gaps") — used by BOTH snapping and tiling.
+P_STORE_GET(int, innerGap, gapsGroup, innerKey, int)
+P_STORE_SET_INT(setInnerGap, gapsGroup, innerKey, innerGapChanged)
+P_STORE_GET(int, outerGap, gapsGroup, outerKey, int)
+P_STORE_SET_INT(setOuterGap, gapsGroup, outerKey, outerGapChanged)
+P_STORE_GET(bool, usePerSideOuterGap, gapsGroup, usePerSideKey, bool)
+P_STORE_SET_BOOL(setUsePerSideOuterGap, gapsGroup, usePerSideKey, usePerSideOuterGapChanged)
+P_STORE_GET(int, outerGapTop, gapsGroup, topKey, int)
+P_STORE_SET_INT(setOuterGapTop, gapsGroup, topKey, outerGapTopChanged)
+P_STORE_GET(int, outerGapBottom, gapsGroup, bottomKey, int)
+P_STORE_SET_INT(setOuterGapBottom, gapsGroup, bottomKey, outerGapBottomChanged)
+P_STORE_GET(int, outerGapLeft, gapsGroup, leftKey, int)
+P_STORE_SET_INT(setOuterGapLeft, gapsGroup, leftKey, outerGapLeftChanged)
+P_STORE_GET(int, outerGapRight, gapsGroup, rightKey, int)
+P_STORE_SET_INT(setOuterGapRight, gapsGroup, rightKey, outerGapRightChanged)
 P_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)
 P_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, adjacentThresholdChanged)
 
@@ -2225,20 +2226,9 @@ void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
 }
 
 // Tiling.Gaps
-P_STORE_GET(int, autotileInnerGap, tilingGapsGroup, innerKey, int)
-P_STORE_SET_INT(setAutotileInnerGap, tilingGapsGroup, innerKey, autotileInnerGapChanged)
-P_STORE_GET(int, autotileOuterGap, tilingGapsGroup, outerKey, int)
-P_STORE_SET_INT(setAutotileOuterGap, tilingGapsGroup, outerKey, autotileOuterGapChanged)
-P_STORE_GET(bool, autotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, bool)
-P_STORE_SET_BOOL(setAutotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, autotileUsePerSideOuterGapChanged)
-P_STORE_GET(int, autotileOuterGapTop, tilingGapsGroup, topKey, int)
-P_STORE_SET_INT(setAutotileOuterGapTop, tilingGapsGroup, topKey, autotileOuterGapTopChanged)
-P_STORE_GET(int, autotileOuterGapBottom, tilingGapsGroup, bottomKey, int)
-P_STORE_SET_INT(setAutotileOuterGapBottom, tilingGapsGroup, bottomKey, autotileOuterGapBottomChanged)
-P_STORE_GET(int, autotileOuterGapLeft, tilingGapsGroup, leftKey, int)
-P_STORE_SET_INT(setAutotileOuterGapLeft, tilingGapsGroup, leftKey, autotileOuterGapLeftChanged)
-P_STORE_GET(int, autotileOuterGapRight, tilingGapsGroup, rightKey, int)
-P_STORE_SET_INT(setAutotileOuterGapRight, tilingGapsGroup, rightKey, autotileOuterGapRightChanged)
+// Autotile inner/outer gaps are unified with snapping — the IAutotileSettings
+// gap getters forward to the shared innerGap()/outerGap*() accessors (see
+// settings.h). Only the tiling-specific SmartGaps remains stored here.
 P_STORE_GET(bool, autotileSmartGaps, tilingGapsGroup, smartGapsKey, bool)
 P_STORE_SET_BOOL(setAutotileSmartGaps, tilingGapsGroup, smartGapsKey, autotileSmartGapsChanged)
 

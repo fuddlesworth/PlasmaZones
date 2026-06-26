@@ -144,8 +144,9 @@ public:
     Q_PROPERTY(
         bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
 
-    // PhosphorZones::Zone settings
-    Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
+    // Zone settings — inner/outer gaps are the single shared model used by BOTH
+    // snapping and tiling.
+    Q_PROPERTY(int innerGap READ innerGap WRITE setInnerGap NOTIFY innerGapChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
     Q_PROPERTY(
         bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
@@ -265,18 +266,9 @@ public:
         int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
     Q_PROPERTY(QVariantMap autotilePerAlgorithmSettings READ autotilePerAlgorithmSettings WRITE
                    setAutotilePerAlgorithmSettings NOTIFY autotilePerAlgorithmSettingsChanged)
-    Q_PROPERTY(int autotileInnerGap READ autotileInnerGap WRITE setAutotileInnerGap NOTIFY autotileInnerGapChanged)
-    Q_PROPERTY(int autotileOuterGap READ autotileOuterGap WRITE setAutotileOuterGap NOTIFY autotileOuterGapChanged)
-    Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap
-                   NOTIFY autotileUsePerSideOuterGapChanged)
-    Q_PROPERTY(
-        int autotileOuterGapTop READ autotileOuterGapTop WRITE setAutotileOuterGapTop NOTIFY autotileOuterGapTopChanged)
-    Q_PROPERTY(int autotileOuterGapBottom READ autotileOuterGapBottom WRITE setAutotileOuterGapBottom NOTIFY
-                   autotileOuterGapBottomChanged)
-    Q_PROPERTY(int autotileOuterGapLeft READ autotileOuterGapLeft WRITE setAutotileOuterGapLeft NOTIFY
-                   autotileOuterGapLeftChanged)
-    Q_PROPERTY(int autotileOuterGapRight READ autotileOuterGapRight WRITE setAutotileOuterGapRight NOTIFY
-                   autotileOuterGapRightChanged)
+    // Autotile inner/outer gaps are unified with snapping — the settings UI binds
+    // the shared innerGap / outerGap* properties above for both modes. The
+    // IAutotileSettings gap getters (autotileInnerGap(), …) forward to them.
     Q_PROPERTY(bool autotileFocusNewWindows READ autotileFocusNewWindows WRITE setAutotileFocusNewWindows NOTIFY
                    autotileFocusNewWindowsChanged)
     Q_PROPERTY(bool autotileSmartGaps READ autotileSmartGaps WRITE setAutotileSmartGaps NOTIFY autotileSmartGapsChanged)
@@ -621,9 +613,9 @@ public:
     bool labelFontStrikeout() const override;
     void setLabelFontStrikeout(bool strikeout) override;
 
-    // PhosphorZones::Zone geometry (Snapping.Gaps) — PhosphorConfig::Store-backed.
-    int zonePadding() const override;
-    void setZonePadding(int padding) override;
+    // Zone geometry (shared "Gaps" group) — PhosphorConfig::Store-backed.
+    int innerGap() const override;
+    void setInnerGap(int gap) override;
     int outerGap() const override;
     void setOuterGap(int gap) override;
     bool usePerSideOuterGap() const override;
@@ -797,20 +789,37 @@ public:
     void setAutotileMasterCount(int count) override;
     QVariantMap autotilePerAlgorithmSettings() const override;
     void setAutotilePerAlgorithmSettings(const QVariantMap& settings) override;
-    int autotileInnerGap() const override;
-    void setAutotileInnerGap(int gap);
-    int autotileOuterGap() const override;
-    void setAutotileOuterGap(int gap);
-    bool autotileUsePerSideOuterGap() const override;
-    void setAutotileUsePerSideOuterGap(bool enabled);
-    int autotileOuterGapTop() const override;
-    void setAutotileOuterGapTop(int gap);
-    int autotileOuterGapBottom() const override;
-    void setAutotileOuterGapBottom(int gap);
-    int autotileOuterGapLeft() const override;
-    void setAutotileOuterGapLeft(int gap);
-    int autotileOuterGapRight() const override;
-    void setAutotileOuterGapRight(int gap);
+    // Autotile gap getters forward to the shared inner/outer gap model so tiling
+    // and snapping always resolve the same values. There are no autotile-specific
+    // gap setters: the settings UI writes the shared setInnerGap()/setOuterGap*().
+    int autotileInnerGap() const override
+    {
+        return innerGap();
+    }
+    int autotileOuterGap() const override
+    {
+        return outerGap();
+    }
+    bool autotileUsePerSideOuterGap() const override
+    {
+        return usePerSideOuterGap();
+    }
+    int autotileOuterGapTop() const override
+    {
+        return outerGapTop();
+    }
+    int autotileOuterGapBottom() const override
+    {
+        return outerGapBottom();
+    }
+    int autotileOuterGapLeft() const override
+    {
+        return outerGapLeft();
+    }
+    int autotileOuterGapRight() const override
+    {
+        return outerGapRight();
+    }
     bool autotileFocusNewWindows() const override;
     void setAutotileFocusNewWindows(bool focus);
     bool autotileSmartGaps() const override;

@@ -18,7 +18,7 @@ class PHOSPHORPLACEMENT_EXPORT IGeometryResolver
 public:
     virtual ~IGeometryResolver() = default;
 
-    virtual int resolveZonePadding(PhosphorZones::Layout* layout, const QString& screenId) const = 0;
+    virtual int resolveInnerGap(PhosphorZones::Layout* layout, const QString& screenId) const = 0;
     virtual PhosphorLayout::EdgeGaps resolveOuterGaps(PhosphorZones::Layout* layout, const QString& screenId) const = 0;
     virtual int defaultBorderWidth() const = 0;
     virtual int defaultBorderRadius() const = 0;

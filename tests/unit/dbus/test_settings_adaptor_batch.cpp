@@ -53,18 +53,18 @@ PhosphorAnimation::Profile profileWithDuration(qreal ms)
 // distinguish "setter not invoked" (guard hit) from "setter invoked,
 // returned true" (guard missed). StubSettings' getters are hard-coded
 // (setters are no-ops), so this subclass keeps the getter unchanged
-// and only adds a hit counter for setZonePadding.
+// and only adds a hit counter for setInnerGap.
 class CountingStubSettings : public StubSettings
 {
 public:
     using StubSettings::StubSettings;
-    void setZonePadding(int v) override
+    void setInnerGap(int v) override
     {
-        ++setZonePaddingCalls;
-        lastZonePadding = v;
+        ++setInnerGapCalls;
+        lastInnerGap = v;
     }
-    int setZonePaddingCalls = 0;
-    int lastZonePadding = -1;
+    int setInnerGapCalls = 0;
+    int lastInnerGap = -1;
 };
 
 class TestSettingsAdaptorBatch : public QObject
@@ -96,7 +96,7 @@ private Q_SLOTS:
     void testGetSettings_gapOverlayKeys_allReturned()
     {
         const QStringList keys{
-            QStringLiteral("zonePadding"),   QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
+            QStringLiteral("innerGap"),      QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
             QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),
             QStringLiteral("outerGapRight"), QStringLiteral("overlayDisplayMode"),
         };
@@ -111,7 +111,7 @@ private Q_SLOTS:
         // Int-typed keys should land on disk as ints, not coerced strings —
         // readInt() on the editor side checks toInt(&ok) so a wrong type
         // would be silently replaced by the default. Pin the type here.
-        QCOMPARE(result.value(QStringLiteral("zonePadding")).metaType().id(), QMetaType::Int);
+        QCOMPARE(result.value(QStringLiteral("innerGap")).metaType().id(), QMetaType::Int);
         QCOMPARE(result.value(QStringLiteral("outerGap")).metaType().id(), QMetaType::Int);
         QCOMPARE(result.value(QStringLiteral("usePerSideOuterGap")).metaType().id(), QMetaType::Bool);
         QCOMPARE(result.value(QStringLiteral("overlayDisplayMode")).metaType().id(), QMetaType::Int);
@@ -126,7 +126,7 @@ private Q_SLOTS:
     void testGetSettings_mixedKnownUnknown_unknownsOmitted()
     {
         const QStringList keys{
-            QStringLiteral("zonePadding"),
+            QStringLiteral("innerGap"),
             QStringLiteral("definitelyNotARealSettingKey_xyzzy"),
             QStringLiteral("outerGap"),
         };
@@ -134,7 +134,7 @@ private Q_SLOTS:
         const QVariantMap result = m_adaptor->getSettings(keys);
 
         QCOMPARE(result.size(), 2);
-        QVERIFY(result.contains(QStringLiteral("zonePadding")));
+        QVERIFY(result.contains(QStringLiteral("innerGap")));
         QVERIFY(result.contains(QStringLiteral("outerGap")));
         QVERIFY(!result.contains(QStringLiteral("definitelyNotARealSettingKey_xyzzy")));
     }
@@ -159,13 +159,13 @@ private Q_SLOTS:
     void testGetSettings_emptyStringKeysSkipped()
     {
         const QStringList keys{
-            QString(), QStringLiteral("zonePadding"), QString(), QStringLiteral("outerGap"), QString(),
+            QString(), QStringLiteral("innerGap"), QString(), QStringLiteral("outerGap"), QString(),
         };
 
         const QVariantMap result = m_adaptor->getSettings(keys);
 
         QCOMPARE(result.size(), 2);
-        QVERIFY(result.contains(QStringLiteral("zonePadding")));
+        QVERIFY(result.contains(QStringLiteral("innerGap")));
         QVERIFY(result.contains(QStringLiteral("outerGap")));
     }
 
@@ -191,14 +191,14 @@ private Q_SLOTS:
     // return-value-only assertions can't distinguish guard-fires from
     // setter-runs-and-returns-true.
     //
-    // StubSettings::zonePadding() returns 8 — supply 8 and the guard fires.
+    // StubSettings::innerGap() returns 8 — supply 8 and the guard fires.
     // ─────────────────────────────────────────────────────────────────────
     void testSetSetting_unchangedScalar_guardShortCircuits()
     {
-        m_settings->setZonePaddingCalls = 0;
-        const bool ok = m_adaptor->setSetting(QStringLiteral("zonePadding"), QDBusVariant(QVariant(8)));
+        m_settings->setInnerGapCalls = 0;
+        const bool ok = m_adaptor->setSetting(QStringLiteral("innerGap"), QDBusVariant(QVariant(8)));
         QVERIFY(ok);
-        QCOMPARE(m_settings->setZonePaddingCalls, 0);
+        QCOMPARE(m_settings->setInnerGapCalls, 0);
     }
 
     // Value-equality guard must NOT intercept changing writes — setter
@@ -206,11 +206,11 @@ private Q_SLOTS:
     // return code.
     void testSetSetting_changedScalar_invokesSetter()
     {
-        m_settings->setZonePaddingCalls = 0;
-        const bool ok = m_adaptor->setSetting(QStringLiteral("zonePadding"), QDBusVariant(QVariant(42)));
+        m_settings->setInnerGapCalls = 0;
+        const bool ok = m_adaptor->setSetting(QStringLiteral("innerGap"), QDBusVariant(QVariant(42)));
         QVERIFY(ok);
-        QCOMPARE(m_settings->setZonePaddingCalls, 1);
-        QCOMPARE(m_settings->lastZonePadding, 42);
+        QCOMPARE(m_settings->setInnerGapCalls, 1);
+        QCOMPARE(m_settings->lastInnerGap, 42);
     }
 
     // Empty-string matches StubSettings::defaultLayoutId() default — guard fires.

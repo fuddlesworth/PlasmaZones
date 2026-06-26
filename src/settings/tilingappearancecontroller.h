@@ -29,8 +29,8 @@ class TilingAppearanceController : public PhosphorControl::PageController
     // validator clamps against — so each spin box's UI range matches its clamp
     // range exactly (they resolve to the shared AutotileDefaults range today,
     // but stay coupled if either is ever retuned independently).
-    Q_PROPERTY(int autotileInnerGapMin READ autotileInnerGapMin CONSTANT)
-    Q_PROPERTY(int autotileInnerGapMax READ autotileInnerGapMax CONSTANT)
+    Q_PROPERTY(int innerGapMin READ innerGapMin CONSTANT)
+    Q_PROPERTY(int innerGapMax READ innerGapMax CONSTANT)
     Q_PROPERTY(int autotileGapMin READ autotileGapMin CONSTANT)
     Q_PROPERTY(int autotileGapMax READ autotileGapMax CONSTANT)
 
@@ -67,21 +67,21 @@ public:
     {
         return ConfigDefaults::autotileBorderRadiusMax();
     }
-    int autotileInnerGapMin() const
+    int innerGapMin() const
     {
-        return ConfigDefaults::autotileInnerGapMin();
+        return ConfigDefaults::innerGapMin();
     }
-    int autotileInnerGapMax() const
+    int innerGapMax() const
     {
-        return ConfigDefaults::autotileInnerGapMax();
+        return ConfigDefaults::innerGapMax();
     }
     int autotileGapMin() const
     {
-        return ConfigDefaults::autotileOuterGapMin();
+        return ConfigDefaults::outerGapMin();
     }
     int autotileGapMax() const
     {
-        return ConfigDefaults::autotileOuterGapMax();
+        return ConfigDefaults::outerGapMax();
     }
 };
 

@@ -40,7 +40,7 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::DefaultLayoutAssignment,
     // Gap overrides are context-domain — resolved during the
     // screen/desktop/activity pass, never per-window.
-    ActionType::SetZonePadding,
+    ActionType::SetInnerGap,
     ActionType::SetOuterGap,
     ActionType::SetUsePerSideOuterGap,
     ActionType::SetOuterGapTop,
@@ -434,7 +434,7 @@ private Q_SLOTS:
     void testGapNumberActions_range()
     {
         for (const QLatin1StringView type :
-             {ActionType::SetZonePadding, ActionType::SetOuterGap, ActionType::SetOuterGapTop,
+             {ActionType::SetInnerGap, ActionType::SetOuterGap, ActionType::SetOuterGapTop,
               ActionType::SetOuterGapBottom, ActionType::SetOuterGapLeft, ActionType::SetOuterGapRight}) {
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(type));

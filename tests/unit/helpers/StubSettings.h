@@ -357,11 +357,11 @@ public:
     }
 
     // IZoneGeometrySettings
-    int zonePadding() const override
+    int innerGap() const override
     {
         return 8;
     }
-    void setZonePadding(int) override
+    void setInnerGap(int) override
     {
     }
     int outerGap() const override

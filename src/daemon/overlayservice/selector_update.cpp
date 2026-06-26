@@ -48,7 +48,7 @@ void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, Q
     // overrides (resolution cascade: per-screen → global → default); border
     // width/radius are global-only settings (no per-screen key exists).
     if (settings) {
-        const int zonePadding = GeometryUtils::getEffectiveZonePadding(nullptr, settings, virtualScreenId);
+        const int zonePadding = GeometryUtils::getEffectiveInnerGap(nullptr, settings, virtualScreenId);
         const int zoneBorderWidth = settings->borderWidth();
         const int zoneBorderRadius = settings->borderRadius();
 
@@ -148,7 +148,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         // honors per-screen overrides (per-screen → global → default); border
         // width/radius are global-only (no per-screen key exists).
         writeQmlProperty(window, QStringLiteral("zonePadding"),
-                         GeometryUtils::getEffectiveZonePadding(nullptr, m_settings, screenId));
+                         GeometryUtils::getEffectiveInnerGap(nullptr, m_settings, screenId));
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
         // Font settings for zone number labels

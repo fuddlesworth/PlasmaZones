@@ -382,7 +382,7 @@ inline constexpr QLatin1StringView SetBorderColor{"setBorderColor"};
 // Resolved daemon-side at zone-geometry time as the highest-precedence gap
 // layer (rule > per-screen > layout > global). Match on screen / desktop /
 // activity; per-property to mirror the PerScreenSnappingKey set.
-inline constexpr QLatin1StringView SetZonePadding{"setZonePadding"};
+inline constexpr QLatin1StringView SetInnerGap{"setInnerGap"};
 inline constexpr QLatin1StringView SetOuterGap{"setOuterGap"};
 inline constexpr QLatin1StringView SetUsePerSideOuterGap{"setUsePerSideOuterGap"};
 inline constexpr QLatin1StringView SetOuterGapTop{"setOuterGapTop"};
@@ -544,7 +544,7 @@ inline constexpr QLatin1StringView BorderWidth{"border-width"};
 inline constexpr QLatin1StringView BorderRadius{"border-radius"};
 inline constexpr QLatin1StringView BorderColor{"border-color"};
 // Per-context gap slots (mirror the PerScreenSnappingKey set).
-inline constexpr QLatin1StringView ZonePadding{"zone-padding"};
+inline constexpr QLatin1StringView InnerGap{"inner-gap"};
 inline constexpr QLatin1StringView OuterGap{"outer-gap"};
 inline constexpr QLatin1StringView UsePerSideOuterGap{"use-per-side-outer-gap"};
 inline constexpr QLatin1StringView OuterGapTop{"outer-gap-top"};

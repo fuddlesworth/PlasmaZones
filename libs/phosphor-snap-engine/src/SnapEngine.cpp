@@ -111,7 +111,7 @@ SnapEngine::GapParams SnapEngine::resolveGapParams(const QString& screenId, Phos
     namespace PSK = PhosphorEngine::PerScreenSnappingKey;
     auto* gs = dynamic_cast<PhosphorEngine::IGeometrySettings*>(engineSettings());
     if (!gs) {
-        return {PhosphorEngine::GeometryDefaults::ZonePadding,
+        return {PhosphorEngine::GeometryDefaults::InnerGap,
                 ::PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap)};
     }
 
@@ -129,13 +129,13 @@ SnapEngine::GapParams SnapEngine::resolveGapParams(const QString& screenId, Phos
 
     // Zone padding precedence: per-screen -> layout override -> global.
     int zonePadding;
-    const auto zpIt = perScreen.constFind(PSK::ZonePadding);
+    const auto zpIt = perScreen.constFind(PSK::InnerGap);
     if (zpIt != perScreen.constEnd()) {
         zonePadding = zpIt->toInt();
     } else if (layout && layout->hasZonePaddingOverride()) {
         zonePadding = layout->zonePadding();
     } else {
-        zonePadding = gs->zonePadding();
+        zonePadding = gs->innerGap();
     }
 
     return {zonePadding, resolveOuterGapsForScreen(perScreen, layout, gs)};

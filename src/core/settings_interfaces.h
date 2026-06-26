@@ -97,13 +97,13 @@ inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
 
 namespace PerScreenSnappingKey {
 
+using PhosphorEngine::PerScreenSnappingKey::InnerGap;
 using PhosphorEngine::PerScreenSnappingKey::OuterGap;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapBottom;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapLeft;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapRight;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapTop;
 using PhosphorEngine::PerScreenSnappingKey::UsePerSideOuterGap;
-using PhosphorEngine::PerScreenSnappingKey::ZonePadding;
 
 // Only the gap keys above are per-screen. Snap-assist and the zone-selector
 // enable switch are global-only (ISettings::setSnapAssistEnabled /
@@ -252,7 +252,7 @@ class PLASMAZONES_EXPORT IZoneGeometrySettings : public PhosphorEngine::IGeometr
 public:
     ~IZoneGeometrySettings() override = default;
 
-    virtual void setZonePadding(int padding) = 0;
+    virtual void setInnerGap(int gap) = 0;
     virtual void setOuterGap(int gap) = 0;
     virtual void setUsePerSideOuterGap(bool enabled) = 0;
     virtual void setOuterGapTop(int gap) = 0;

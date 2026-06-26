@@ -108,8 +108,8 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManag
  * Resolution cascade: context-rule override → per-screen override → layout
  * override → global settings → default (8px)
  */
-PLASMAZONES_EXPORT int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings,
-                                               const QString& screenId = {}, const QVariantMap& ruleGapOverride = {});
+PLASMAZONES_EXPORT int getEffectiveInnerGap(PhosphorZones::Layout* layout, ISettings* settings,
+                                            const QString& screenId = {}, const QVariantMap& ruleGapOverride = {});
 
 using ::PhosphorZones::GeometryUtils::snapToRect;
 
@@ -132,7 +132,7 @@ PLASMAZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZone
 
 /**
  * @brief Convert a resolved ContextGapOverride into the PerScreenSnappingKey-shaped
- *        QVariantMap consumed by getEffectiveZonePadding / getEffectiveOuterGaps as
+ *        QVariantMap consumed by getEffectiveInnerGap / getEffectiveOuterGaps as
  *        the `ruleGapOverride` argument. Only the override's set (engaged) fields
  *        are written; an empty override yields an empty map.
  *

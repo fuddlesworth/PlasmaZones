@@ -264,8 +264,8 @@ QString paramLabel(const QString& type, const QString& key)
         return PhosphorI18n::tr("Border color (unfocused)");
     }
     // Per-context gap overrides (all single-value, keyed ActionParam::Value).
-    if (type == ActionType::SetZonePadding && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Zone padding (px)");
+    if (type == ActionType::SetInnerGap && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Inner gap (px)");
     }
     if (type == ActionType::SetOuterGap && key == ActionParam::Value) {
         return PhosphorI18n::tr("Outer gap (px)");
@@ -500,8 +500,8 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetBorderColor) {
         return PhosphorI18n::tr("Set border color");
     }
-    if (type == ActionType::SetZonePadding) {
-        return PhosphorI18n::tr("Set zone padding");
+    if (type == ActionType::SetInnerGap) {
+        return PhosphorI18n::tr("Set inner gap");
     }
     if (type == ActionType::SetOuterGap) {
         return PhosphorI18n::tr("Set outer gap");

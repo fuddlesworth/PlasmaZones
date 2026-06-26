@@ -234,7 +234,7 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
                     out = action->params.value(PWR::ActionParam::Value).toBool();
                 }
             };
-            readInt(PWR::ActionSlot::ZonePadding, gaps.zonePadding);
+            readInt(PWR::ActionSlot::InnerGap, gaps.innerGap);
             readInt(PWR::ActionSlot::OuterGap, gaps.outerGap);
             readBool(PWR::ActionSlot::UsePerSideOuterGap, gaps.usePerSideOuterGap);
             readInt(PWR::ActionSlot::OuterGapTop, gaps.outerGapTop);

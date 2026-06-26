@@ -207,49 +207,49 @@ SettingsFlickable {
             scopeClearerMethod: "clearPerScreenAutotileGapsSettings"
             gapMax: root.gapMax
             gapMin: root.settingsBridge.autotileGapMin
-            primaryGapMin: root.settingsBridge.autotileInnerGapMin
-            primaryGapMax: root.settingsBridge.autotileInnerGapMax
-            primaryGapValue: root.settingValue("InnerGap", appSettings.autotileInnerGap)
-            outerGapValue: root.settingValue("OuterGap", appSettings.autotileOuterGap)
-            usePerSideOuterGap: root.settingValue("UsePerSideOuterGap", appSettings.autotileUsePerSideOuterGap)
+            primaryGapMin: root.settingsBridge.innerGapMin
+            primaryGapMax: root.settingsBridge.innerGapMax
+            primaryGapValue: root.settingValue("InnerGap", appSettings.innerGap)
+            outerGapValue: root.settingValue("OuterGap", appSettings.outerGap)
+            usePerSideOuterGap: root.settingValue("UsePerSideOuterGap", appSettings.usePerSideOuterGap)
             smartGapsValue: root.settingValue("SmartGaps", appSettings.autotileSmartGaps)
-            outerGapTopValue: root.settingValue("OuterGapTop", appSettings.autotileOuterGapTop)
-            outerGapBottomValue: root.settingValue("OuterGapBottom", appSettings.autotileOuterGapBottom)
-            outerGapLeftValue: root.settingValue("OuterGapLeft", appSettings.autotileOuterGapLeft)
-            outerGapRightValue: root.settingValue("OuterGapRight", appSettings.autotileOuterGapRight)
+            outerGapTopValue: root.settingValue("OuterGapTop", appSettings.outerGapTop)
+            outerGapBottomValue: root.settingValue("OuterGapBottom", appSettings.outerGapBottom)
+            outerGapLeftValue: root.settingValue("OuterGapLeft", appSettings.outerGapLeft)
+            outerGapRightValue: root.settingValue("OuterGapRight", appSettings.outerGapRight)
             onPrimaryGapModified: value => {
                 return root.writeSetting("InnerGap", value, function (v) {
-                    appSettings.autotileInnerGap = v;
+                    appSettings.innerGap = v;
                 });
             }
             onOuterGapModified: value => {
                 return root.writeSetting("OuterGap", value, function (v) {
-                    appSettings.autotileOuterGap = v;
+                    appSettings.outerGap = v;
                 });
             }
             onUsePerSideOuterGapToggled: checked => {
                 return root.writeSetting("UsePerSideOuterGap", checked, function (v) {
-                    appSettings.autotileUsePerSideOuterGap = v;
+                    appSettings.usePerSideOuterGap = v;
                 });
             }
             onOuterGapTopModified: value => {
                 return root.writeSetting("OuterGapTop", value, function (v) {
-                    appSettings.autotileOuterGapTop = v;
+                    appSettings.outerGapTop = v;
                 });
             }
             onOuterGapBottomModified: value => {
                 return root.writeSetting("OuterGapBottom", value, function (v) {
-                    appSettings.autotileOuterGapBottom = v;
+                    appSettings.outerGapBottom = v;
                 });
             }
             onOuterGapLeftModified: value => {
                 return root.writeSetting("OuterGapLeft", value, function (v) {
-                    appSettings.autotileOuterGapLeft = v;
+                    appSettings.outerGapLeft = v;
                 });
             }
             onOuterGapRightModified: value => {
                 return root.writeSetting("OuterGapRight", value, function (v) {
-                    appSettings.autotileOuterGapRight = v;
+                    appSettings.outerGapRight = v;
                 });
             }
             onSmartGapsToggled: checked => {

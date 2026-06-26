@@ -70,12 +70,12 @@ private Q_SLOTS:
 
     void testGetSettingSchema_intSetting_returnsTypeInt()
     {
-        QString json = m_adaptor->getSettingSchema(QStringLiteral("zonePadding"));
+        QString json = m_adaptor->getSettingSchema(QStringLiteral("innerGap"));
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QVERIFY(!doc.isNull());
 
         QJsonObject obj = doc.object();
-        QCOMPARE(obj[QLatin1String("key")].toString(), QStringLiteral("zonePadding"));
+        QCOMPARE(obj[QLatin1String("key")].toString(), QStringLiteral("innerGap"));
         QCOMPARE(obj[QLatin1String("type")].toString(), QStringLiteral("int"));
     }
 

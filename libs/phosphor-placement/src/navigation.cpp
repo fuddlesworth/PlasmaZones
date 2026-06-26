@@ -157,8 +157,8 @@ PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QStri
     // blocking snap assist (discussion #323).
     const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
     QSet<QUuid> occupied = buildOccupiedZoneSet(screenId, desktopFilter);
-    int zp = m_geometryResolver ? m_geometryResolver->resolveZonePadding(layout, screenId)
-                                : PhosphorEngine::GeometryDefaults::ZonePadding;
+    int zp = m_geometryResolver ? m_geometryResolver->resolveInnerGap(layout, screenId)
+                                : PhosphorEngine::GeometryDefaults::InnerGap;
     auto og = m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
                                  : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
     int defaultBw = m_geometryResolver ? m_geometryResolver->defaultBorderWidth() : 2;
@@ -220,8 +220,8 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    int zp = m_geometryResolver ? m_geometryResolver->resolveZonePadding(layout, screenId)
-                                : PhosphorEngine::GeometryDefaults::ZonePadding;
+    int zp = m_geometryResolver ? m_geometryResolver->resolveInnerGap(layout, screenId)
+                                : PhosphorEngine::GeometryDefaults::InnerGap;
     auto og = m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
                                  : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
     return PhosphorZones::GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout, zp,
@@ -252,8 +252,8 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
 
         QRectF geoF = PhosphorZones::GeometryUtils::getZoneGeometryForScreenF(
             m_screenManager, zone, screen, screenId, layout,
-            m_geometryResolver ? m_geometryResolver->resolveZonePadding(layout, screenId)
-                               : PhosphorEngine::GeometryDefaults::ZonePadding,
+            m_geometryResolver ? m_geometryResolver->resolveInnerGap(layout, screenId)
+                               : PhosphorEngine::GeometryDefaults::InnerGap,
             m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
                                : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap));
         if (geoF.isValid()) {

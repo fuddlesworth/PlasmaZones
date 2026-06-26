@@ -95,11 +95,11 @@ private Q_SLOTS:
     // Must use a value that StubSettings actually returns from its
     // getter — the stub ignores setters, so priming has no effect and
     // the guard only engages if we supply the stub's default.
-    // See StubSettings::zonePadding() which returns 8.
+    // See StubSettings::innerGap() which returns 8.
     // ─────────────────────────────────────────────────────────────────
     void benchSetSetting_unchanged()
     {
-        const QString key = QStringLiteral("zonePadding");
+        const QString key = QStringLiteral("innerGap");
         const QDBusVariant value(QVariant(8));
 
         QBENCHMARK {
@@ -111,14 +111,14 @@ private Q_SLOTS:
     // Settings: setSetting with a value that actually changes.
     // Baseline for "unchanged path must not be slower than changed path".
     //
-    // Seed v outside the StubSettings::zonePadding() default (8) so no
+    // Seed v outside the StubSettings::innerGap() default (8) so no
     // iteration accidentally short-circuits through the Phase 1.1
     // equality guard. Without this seed, one in every N iterations
     // collides with the stub default and skews the bench.
     // ─────────────────────────────────────────────────────────────────
     void benchSetSetting_changing()
     {
-        const QString key = QStringLiteral("zonePadding");
+        const QString key = QStringLiteral("innerGap");
         int v = 100;
 
         QBENCHMARK {
@@ -135,7 +135,7 @@ private Q_SLOTS:
     void benchGetSettings_batch()
     {
         const QStringList keys{
-            QStringLiteral("zonePadding"),   QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
+            QStringLiteral("innerGap"),      QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
             QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),
             QStringLiteral("outerGapRight"), QStringLiteral("overlayDisplayMode"),
         };
@@ -148,7 +148,7 @@ private Q_SLOTS:
     void benchGetSetting_individual()
     {
         const QStringList keys{
-            QStringLiteral("zonePadding"),   QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
+            QStringLiteral("innerGap"),      QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
             QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),
             QStringLiteral("outerGapRight"), QStringLiteral("overlayDisplayMode"),
         };

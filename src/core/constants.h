@@ -58,9 +58,9 @@ inline constexpr int FallbackScreenHeight = 1080;
 
 // PlasmaZones-side defaults that aren't part of the zone-presentation
 // surface — daemon overlay / settings / geometry constants.
-constexpr int ZonePadding = 8;
-constexpr int OuterGap = 8; // Gap at screen edges (separate from zonePadding between zones)
-constexpr int MaxGap = 50; // Maximum for zone padding and outer gap settings
+constexpr int InnerGap = 8;
+constexpr int OuterGap = 8; // Gap at screen edges (separate from the inner gap between zones)
+constexpr int MaxGap = 50; // Maximum for inner gap and outer gap settings
 // EdgeThreshold for overlay window detection (pixels, used in WindowTracker/Overlay)
 constexpr qreal EdgeThreshold = 15.0;
 
