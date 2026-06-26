@@ -78,6 +78,16 @@ bool hasHexColor(const QJsonObject& params, QLatin1StringView key)
     return true;
 }
 
+/// A border colour param value: a hex shape `hasHexColor` admits, OR the
+/// `BorderColorToken::Accent` sentinel ("track the live system accent").
+bool hasHexColorOrAccent(const QJsonObject& params, QLatin1StringView key)
+{
+    if (params.value(key).toString() == BorderColorToken::Accent) {
+        return true;
+    }
+    return hasHexColor(params, key);
+}
+
 // Upper validation bounds (display units). The effect/daemon clamp to their
 // own ConfigDefaults ranges on consumption; these only reject grossly
 // malformed hand-edited payloads. Kept generous so values a user could pick
@@ -834,12 +844,18 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::BorderColor),
         .validate =
             [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
+                // `active` is required; `inactive` is optional and falls back to
+                // active. Either may be a hex colour or the accent sentinel.
+                if (!hasHexColorOrAccent(p, ActionParam::Active)) {
+                    return false;
+                }
+                return !p.contains(ActionParam::Inactive) || hasHexColorOrAccent(p, ActionParam::Inactive);
             },
         .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
+        .allowedKeys = {QString(ActionParam::Active), QString(ActionParam::Inactive)},
         .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+        .params = {P{.key = QString(ActionParam::Active), .kind = QStringLiteral("color")},
+                   P{.key = QString(ActionParam::Inactive), .kind = QStringLiteral("color")}},
         .category = QStringLiteral("borderAppearance"),
         .displayOrder = 4,
         .tags = {QString(Tag::Border), QString(Tag::Effect)},

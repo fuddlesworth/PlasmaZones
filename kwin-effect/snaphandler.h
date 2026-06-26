@@ -173,13 +173,9 @@ public:
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);
     }
-    bool shouldShowBorderForWindow(const QString& windowId) const
-    {
-        return AutotileStateHelpers::shouldShowBorderForWindow(m_border, windowId);
-    }
-    /// Read-only view of the snap border state. The effect's mode-aware border
-    /// resolution reads this alongside the parallel autotile BorderState so each
-    /// window draws with the settings of the mode that manages it.
+    /// Read-only view of the snap border state. Carries the snapped-window set
+    /// and the title-bar-hide flag; per-window border appearance is resolved
+    /// from rules.
     const BorderState& borderState() const
     {
         return m_border;
@@ -187,46 +183,6 @@ public:
     bool hideTitleBars() const
     {
         return m_border.hideTitleBars;
-    }
-    bool showBorder() const
-    {
-        return m_border.showBorder;
-    }
-    void setShowBorder(bool show)
-    {
-        m_border.showBorder = show;
-    }
-    int borderWidth() const
-    {
-        return m_border.width;
-    }
-    void setBorderWidth(int w)
-    {
-        m_border.width = w;
-    }
-    int borderRadius() const
-    {
-        return m_border.radius;
-    }
-    void setBorderRadius(int r)
-    {
-        m_border.radius = r;
-    }
-    QColor borderColor() const
-    {
-        return m_border.color;
-    }
-    void setBorderColor(const QColor& c)
-    {
-        m_border.color = c;
-    }
-    QColor inactiveBorderColor() const
-    {
-        return m_border.inactiveColor;
-    }
-    void setInactiveBorderColor(const QColor& c)
-    {
-        m_border.inactiveColor = c;
     }
 
 public Q_SLOTS:

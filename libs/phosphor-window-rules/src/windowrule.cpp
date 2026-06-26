@@ -18,6 +18,7 @@ constexpr QLatin1StringView kKeyEnabled{"enabled"};
 constexpr QLatin1StringView kKeyPriority{"priority"};
 constexpr QLatin1StringView kKeyMatch{"match"};
 constexpr QLatin1StringView kKeyActions{"actions"};
+constexpr QLatin1StringView kKeyManaged{"managed"};
 
 } // namespace
 
@@ -91,7 +92,7 @@ QList<ValidationIssue> WindowRule::validationIssues() const
 bool WindowRule::operator==(const WindowRule& other) const
 {
     return id == other.id && name == other.name && enabled == other.enabled && priority == other.priority
-        && match == other.match && actions == other.actions;
+        && match == other.match && actions == other.actions && managed == other.managed;
 }
 
 QJsonObject WindowRule::toJson() const
@@ -109,6 +110,12 @@ QJsonObject WindowRule::toJson() const
         actionsArr.append(action.toJson());
     }
     o.insert(kKeyActions, actionsArr);
+    // Only emit `managed` for the built-in rules it applies to — user rules
+    // (the overwhelming majority) stay free of the key, and its absence loads
+    // back as false.
+    if (managed) {
+        o.insert(kKeyManaged, true);
+    }
     return o;
 }
 
@@ -126,6 +133,7 @@ std::optional<WindowRule> WindowRule::fromJson(const QJsonObject& obj)
     // `enabled` defaults to true when absent — a rule with no flag is on.
     rule.enabled = obj.value(kKeyEnabled).toBool(true);
     rule.priority = obj.value(kKeyPriority).toInt(0);
+    rule.managed = obj.value(kKeyManaged).toBool(false);
 
     const QJsonValue matchValue = obj.value(kKeyMatch);
     if (!matchValue.isObject()) {

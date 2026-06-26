@@ -34,15 +34,10 @@ struct BorderState
     /// retile. Title-bar (borderless) state is NOT tracked here — that is
     /// the DecorationManager's owner model.
     QHash<QString, QSet<QString>> tiledWindowsByScreen;
-    // Defaults shared with the daemon's ConfigDefaults via DecorationDefaults
-    // so the effect's pre-settings-load rendering can't drift from what the
-    // daemon would persist.
+    // Title-bar hide flag for the mode (snap / autotile). Per-window border
+    // appearance (width / radius / colour / show) is resolved from window rules
+    // in the effect, not stored here.
     bool hideTitleBars = DecorationDefaults::HideTitleBars;
-    bool showBorder = DecorationDefaults::ShowBorder;
-    int width = DecorationDefaults::BorderWidth;
-    int radius = DecorationDefaults::BorderRadius;
-    QColor color;
-    QColor inactiveColor;
 };
 
 /**
@@ -65,11 +60,6 @@ inline bool isTiledWindow(const BorderState& border, const QString& windowId)
         }
     }
     return false;
-}
-
-inline bool shouldShowBorderForWindow(const BorderState& border, const QString& windowId)
-{
-    return border.showBorder && isTiledWindow(border, windowId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

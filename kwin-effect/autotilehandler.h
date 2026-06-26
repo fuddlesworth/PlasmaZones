@@ -157,9 +157,6 @@ public:
     // Returns true if the value actually changed (so the caller can skip a
     // redundant updateAllBorders() stacking-order walk on a no-op reload).
     bool updateHideTitleBarsSetting(bool enabled);
-    /// Returns true if the value actually changed (so the caller can skip a
-    /// redundant updateAllBorders() stacking-order walk on a no-op reload).
-    bool updateShowBorderSetting(bool enabled);
 
     // Focus follows mouse: focus autotile window under cursor
     void setFocusFollowsMouse(bool enabled);
@@ -200,45 +197,9 @@ public:
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);
     }
-    bool shouldShowBorderForWindow(const QString& windowId) const
-    {
-        return AutotileStateHelpers::shouldShowBorderForWindow(m_border, windowId);
-    }
-    int borderWidth() const
-    {
-        return m_border.width;
-    }
-    void setBorderWidth(int w)
-    {
-        m_border.width = w;
-    }
-    QColor borderColor() const
-    {
-        return m_border.color;
-    }
-    void setBorderColor(const QColor& c)
-    {
-        m_border.color = c;
-    }
-    QColor inactiveBorderColor() const
-    {
-        return m_border.inactiveColor;
-    }
-    void setInactiveBorderColor(const QColor& c)
-    {
-        m_border.inactiveColor = c;
-    }
-    int borderRadius() const
-    {
-        return m_border.radius;
-    }
-    void setBorderRadius(int r)
-    {
-        m_border.radius = r;
-    }
-    /// Read-only view of the autotile border state. The effect's mode-aware
-    /// border resolution reads this alongside the parallel snap BorderState so
-    /// each window draws with the settings of the mode that manages it.
+    /// Read-only view of the autotile border state. Carries the tiled-window
+    /// set (border rendering membership + the IsTiled rule field) and the
+    /// title-bar-hide flag; per-window border appearance is resolved from rules.
     const BorderState& borderState() const
     {
         return m_border;

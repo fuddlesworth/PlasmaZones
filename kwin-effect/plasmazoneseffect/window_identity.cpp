@@ -145,7 +145,7 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
     // avoiding a per-frame query build + a{sv} marshal for chatty-title windows.
     QVariantMap extended;
     if (includeExtended) {
-        const PhosphorWindowRules::WindowQuery props = windowRuleQueryFor(w, QString(), false, false, QString());
+        const PhosphorWindowRules::WindowQuery props = windowRuleQueryFor(w, QString(), false, false, false, QString());
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
         if (props.isMinimized) {
             extended.insert(Key::IsMinimized, *props.isMinimized);

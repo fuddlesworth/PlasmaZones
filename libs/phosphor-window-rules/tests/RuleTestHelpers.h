@@ -72,7 +72,16 @@ inline RuleAction borderColor(const QString& hex)
 {
     RuleAction a;
     a.type = QString(ActionType::SetBorderColor);
-    a.params.insert(ActionParam::Value, hex);
+    a.params.insert(ActionParam::Active, hex);
+    return a;
+}
+
+inline RuleAction borderColor(const QString& activeHex, const QString& inactiveHex)
+{
+    RuleAction a;
+    a.type = QString(ActionType::SetBorderColor);
+    a.params.insert(ActionParam::Active, activeHex);
+    a.params.insert(ActionParam::Inactive, inactiveHex);
     return a;
 }
 

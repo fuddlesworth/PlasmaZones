@@ -96,6 +96,9 @@ public:
                                   ///< action paired with a window-property match,
                                   ///< etc). The row delegate shows a warning
                                   ///< badge when this is non-zero.
+        ManagedRole, ///< bool — true for built-in rules the app owns (the
+                     ///< baseline appearance rule). The row delegate hides the
+                     ///< delete and drag-reorder affordances when set.
     };
     Q_ENUM(Roles)
 

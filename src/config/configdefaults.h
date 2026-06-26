@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
+#include <QUuid>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QtCore/qnamespace.h>
@@ -680,6 +681,17 @@ public:
     // rule writes do not churn the cold user-settings blob. The daemon is the
     // sole writer; see docs/window-rule-refactor-design.md §5.
     PLASMAZONES_EXPORT static QString windowRulesFilePath();
+
+    // Stable id of the managed baseline appearance rule: the catch-all,
+    // lowest-priority WindowRule whose actions hold the default window
+    // border / title-bar appearance the Appearance settings page edits. Fixed
+    // so the daemon can re-find (and idempotently re-seed) it across restarts
+    // and the settings UI can bind to the same rule. See
+    // docs/window-rule-refactor-design.md.
+    static QUuid baselineAppearanceRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000001}"));
+    }
 
     // Returns the absolute path to quicklayouts.json (the numbered quick-layout
     // shortcut slots 1..9). Quick-layout slots are NOT window rules, so they

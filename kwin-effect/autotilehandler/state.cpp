@@ -101,15 +101,6 @@ bool AutotileHandler::updateHideTitleBarsSetting(bool enabled)
     return true;
 }
 
-bool AutotileHandler::updateShowBorderSetting(bool enabled)
-{
-    if (m_border.showBorder == enabled) {
-        return false;
-    }
-    m_border.showBorder = enabled;
-    return true;
-}
-
 void AutotileHandler::setFocusFollowsMouse(bool enabled)
 {
     m_focusFollowsMouse = enabled;

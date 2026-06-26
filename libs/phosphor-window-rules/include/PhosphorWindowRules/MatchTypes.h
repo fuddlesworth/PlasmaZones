@@ -52,12 +52,13 @@ enum class Field : int {
     IsFloating = 30, ///< floated out of tiling (snap or autotile)
     IsSnapped = 31, ///< occupies a snap zone
     Zone = 32, ///< the snap zone's UUID the window occupies
+    IsTiled = 33, ///< managed by the autotile engine (distinct from IsSnapped)
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::Zone) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::IsTiled) + 1;
 
 // ── Field descriptor table ──────────────────────────────────────────────────
 // Single source of truth for every field's wire string, value-kind, and
@@ -125,6 +126,7 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     {Field::IsFloating, QLatin1StringView("isFloating"), FieldType::Bool, FieldSource::Window},
     {Field::IsSnapped, QLatin1StringView("isSnapped"), FieldType::Bool, FieldSource::Window},
     {Field::Zone, QLatin1StringView("zone"), FieldType::String, FieldSource::Window},
+    {Field::IsTiled, QLatin1StringView("isTiled"), FieldType::Bool, FieldSource::Window},
 };
 static_assert(sizeof(kFieldTable) / sizeof(kFieldTable[0]) == static_cast<unsigned>(FieldCount),
               "kFieldTable must have one entry per Field");

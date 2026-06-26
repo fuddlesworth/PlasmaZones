@@ -471,6 +471,14 @@ void WindowRuleController::renormalizePriorities()
     // `operator[]` on QHash would otherwise produce.
     QHash<int, int> nextOffset;
     for (int i = 0; i < n; ++i) {
+        // Managed rules (the baseline appearance rule) carry a pinned priority
+        // that fixes them at the bottom of evaluation regardless of list
+        // position — never re-stamp them with a band value, or they'd jump
+        // above user rules.
+        if (rules.at(i).managed) {
+            priorities[i] = rules.at(i).priority;
+            continue;
+        }
         const int base = baseFor(rules.at(i));
         auto it = nextOffset.find(base);
         if (it == nextOffset.end()) {
@@ -529,12 +537,22 @@ QString WindowRuleController::addRuleFromJson(const QVariantMap& ruleJson)
 
 bool WindowRuleController::updateRuleFromJson(const QVariantMap& ruleJson)
 {
-    const WindowRule rule = ruleFromVariant(ruleJson);
+    WindowRule rule = ruleFromVariant(ruleJson);
     if (rule.id.isNull()) {
         // ruleFromVariant() yields a null-id rule when WindowRule::fromJson
         // rejects the payload (malformed map, missing/invalid id).
         qCWarning(lcConfig) << "WindowRuleController::updateRuleFromJson: rejecting malformed rule payload";
         return false;
+    }
+    // The baseline appearance rule is editable (the Appearance page rewrites
+    // its actions) but its identity is app-owned: a save must never demote it
+    // to a user rule, retarget its catch-all match, or unpin its priority.
+    // Force-preserve those from the stored rule regardless of the payload.
+    const WindowRule existing = m_model.ruleById(rule.id);
+    if (existing.managed) {
+        rule.managed = true;
+        rule.priority = existing.priority;
+        rule.match = existing.match;
     }
     const WindowRuleModel::UpdateResult result = m_model.updateRule(rule);
     switch (result) {
@@ -579,6 +597,9 @@ QString WindowRuleController::duplicateRule(const QString& ruleId)
     }
     WindowRule clone = source;
     clone.id = QUuid::createUuid();
+    // A duplicate of the baseline appearance rule is an ordinary user rule —
+    // the managed flag (non-deletable, pinned priority) does not carry over.
+    clone.managed = false;
     // Auto-suffix the name when the source has one so the two rules don't
     // share an identical label in the list. An empty source name stays empty
     // — the matchSummary will distinguish the clone in that case (and the

@@ -82,6 +82,7 @@ PickerCategory fieldCategory(Field f)
     // PlasmaZones-owned placement state.
     case Field::IsFloating:
     case Field::IsSnapped:
+    case Field::IsTiled:
     case Field::Zone:
         return {PhosphorI18n::tr("Tiling"), 4};
     case Field::Width:
@@ -163,6 +164,8 @@ QString fieldDescription(Field f)
     case Field::IsSnapped:
         return PhosphorI18n::tr(
             "Whether the window is snapped into a zone (manual-zone mode, where tiled windows are not snapped).");
+    case Field::IsTiled:
+        return PhosphorI18n::tr("Whether the window is managed by the autotile engine.");
     case Field::Zone:
         return PhosphorI18n::tr("The zone the window is snapped into (manual-zone mode only).");
     case Field::ScreenId:
@@ -254,8 +257,11 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetBorderRadius && key == ActionParam::Value) {
         return PhosphorI18n::tr("Corner radius (px)");
     }
-    if (type == ActionType::SetBorderColor && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Border color");
+    if (type == ActionType::SetBorderColor && key == ActionParam::Active) {
+        return PhosphorI18n::tr("Border color (focused)");
+    }
+    if (type == ActionType::SetBorderColor && key == ActionParam::Inactive) {
+        return PhosphorI18n::tr("Border color (unfocused)");
     }
     // Per-context gap overrides (all single-value, keyed ActionParam::Value).
     if (type == ActionType::SetZonePadding && key == ActionParam::Value) {

@@ -712,58 +712,9 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedZoneSelectorEnabled = v.toBool();
     });
 
-    // autotileHideTitleBars needs extra logic when toggled off — delegate to handler
-    loadSettingAsync(QStringLiteral("autotileHideTitleBars"), [this](const QVariant& v) {
-        if (m_autotileHandler->updateHideTitleBarsSetting(v.toBool())) {
-            updateAllBorders();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("autotileShowBorder"), [this](const QVariant& v) {
-        if (m_autotileHandler->updateShowBorderSetting(v.toBool())) {
-            updateAllBorders();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
-        // No retile on width change: borders are OutlinedBorderItem overlays
-        // drawn INSIDE the window frame, so zone geometry is width-independent.
-        // The retileAllScreens this handler used to fire was a leftover from
-        // the geometry-inset border era (windows were once shrunk by the
-        // border width); the inset surface was removed long ago and nothing
-        // daemon-side consumes autotileBorderWidth. updateAllBorders()
-        // rebuilds the overlays at the new thickness — symmetric with the
-        // snapping width handler below, which never retiled.
-        const int bw = qBound(DecorationDefaults::BorderWidthMin, v.toInt(), DecorationDefaults::BorderWidthMax);
-        if (m_autotileHandler->borderWidth() != bw) {
-            m_autotileHandler->setBorderWidth(bw);
-            updateAllBorders();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("autotileBorderRadius"), [this](const QVariant& v) {
-        int br = qBound(DecorationDefaults::BorderRadiusMin, v.toInt(), DecorationDefaults::BorderRadiusMax);
-        if (m_autotileHandler->borderRadius() != br) {
-            m_autotileHandler->setBorderRadius(br);
-            updateAllBorders();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("autotileBorderColor"), [this](const QVariant& v) {
-        const QColor c(v.toString());
-        if (m_autotileHandler->borderColor() != c) {
-            m_autotileHandler->setBorderColor(c);
-            updateAllBorders();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("autotileInactiveBorderColor"), [this](const QVariant& v) {
-        const QColor c(v.toString());
-        if (m_autotileHandler->inactiveBorderColor() != c) {
-            m_autotileHandler->setInactiveBorderColor(c);
-            updateAllBorders();
-        }
-    });
+    // Window border / title-bar appearance is no longer pushed as per-mode
+    // settings — it is resolved from window rules (the managed baseline rule
+    // plus per-window overrides) inside updateWindowBorder / reconcileRuleHiddenTitleBar.
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
         m_autotileHandler->setFocusFollowsMouse(v.toBool());
@@ -771,57 +722,6 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {
         m_snapHandler->setFocusFollowsMouse(v.toBool());
-    });
-
-    // Snapped-window border settings — feed SnapHandler's parallel snap
-    // BorderState, mirroring the autotile* block above. When
-    // snappingUseSystemBorderColors is on the daemon writes the resolved
-    // accent into the colour keys, so (like autotile) the effect only reads the
-    // resolved colours and never the use-system flag.
-    // Each setter guards on a changed value before re-walking the stacking
-    // order in updateAllBorders / re-toggling title bars — matching the
-    // "only act on change" convention the autotile width/radius setters use.
-    loadSettingAsync(QStringLiteral("snappingHideTitleBars"), [this](const QVariant& v) {
-        // Value-changed guard lives inside the handler; the border refresh
-        // is the caller's job on true — mirrors autotileHideTitleBars above.
-        if (m_snapHandler->updateSnapHideTitleBars(v.toBool())) {
-            updateAllBorders();
-        }
-    });
-    loadSettingAsync(QStringLiteral("snappingShowBorder"), [this](const QVariant& v) {
-        const bool show = v.toBool();
-        if (m_snapHandler->showBorder() != show) {
-            m_snapHandler->setShowBorder(show);
-            updateAllBorders();
-        }
-    });
-    loadSettingAsync(QStringLiteral("snappingBorderWidth"), [this](const QVariant& v) {
-        const int bw = qBound(DecorationDefaults::BorderWidthMin, v.toInt(), DecorationDefaults::BorderWidthMax);
-        if (m_snapHandler->borderWidth() != bw) {
-            m_snapHandler->setBorderWidth(bw);
-            updateAllBorders();
-        }
-    });
-    loadSettingAsync(QStringLiteral("snappingBorderRadius"), [this](const QVariant& v) {
-        const int br = qBound(DecorationDefaults::BorderRadiusMin, v.toInt(), DecorationDefaults::BorderRadiusMax);
-        if (m_snapHandler->borderRadius() != br) {
-            m_snapHandler->setBorderRadius(br);
-            updateAllBorders();
-        }
-    });
-    loadSettingAsync(QStringLiteral("snappingBorderColor"), [this](const QVariant& v) {
-        const QColor c(v.toString());
-        if (m_snapHandler->borderColor() != c) {
-            m_snapHandler->setBorderColor(c);
-            updateAllBorders();
-        }
-    });
-    loadSettingAsync(QStringLiteral("snappingInactiveBorderColor"), [this](const QVariant& v) {
-        const QColor c(v.toString());
-        if (m_snapHandler->inactiveBorderColor() != c) {
-            m_snapHandler->setInactiveBorderColor(c);
-            updateAllBorders();
-        }
     });
 
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization

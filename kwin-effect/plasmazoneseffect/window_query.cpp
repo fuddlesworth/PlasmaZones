@@ -57,7 +57,7 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
 }
 
 PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
-                                                    bool isSnapped, const QString& zoneId)
+                                                    bool isSnapped, bool isTiled, const QString& zoneId)
 {
     PhosphorWindowRules::WindowQuery query;
     if (!w) {
@@ -69,6 +69,7 @@ PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const
     // (the engaged-empty foot-gun the string fields below also avoid).
     query.isFloating = isFloating;
     query.isSnapped = isSnapped;
+    query.isTiled = isTiled;
     if (!zoneId.isEmpty()) {
         query.zone = zoneId;
     }

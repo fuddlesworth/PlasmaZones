@@ -513,7 +513,7 @@ private Q_SLOTS:
 
         const auto color = resolved.slot(QString(ActionSlot::BorderColor));
         QVERIFY(color.has_value()); // colour slot also filled — not shadowed by the width rules
-        QCOMPARE(color->params.value(QString(ActionParam::Value)).toString(), QStringLiteral("#ff0000"));
+        QCOMPARE(color->params.value(QString(ActionParam::Active)).toString(), QStringLiteral("#ff0000"));
     }
 };
 

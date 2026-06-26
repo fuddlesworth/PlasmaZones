@@ -18,7 +18,7 @@ private Q_SLOTS:
         // Canary: the loop bound is derived from FieldCount, not hard-coded.
         // If this fails, an enumerator was added/removed without updating
         // FieldCount in MatchTypes.h.
-        QCOMPARE(FieldCount, 33);
+        QCOMPARE(FieldCount, 34);
         QTest::addColumn<int>("fieldValue");
         for (int v = 0; v < FieldCount; ++v) {
             QTest::addRow("field-%d", v) << v;

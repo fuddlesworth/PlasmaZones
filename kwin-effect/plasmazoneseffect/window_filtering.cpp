@@ -86,7 +86,7 @@ PhosphorWindowRules::WindowQuery PlasmaZonesEffect::windowRuleQuery(KWin::Effect
 {
     const QString windowId = getWindowId(w);
     return windowRuleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
-                              zoneForWindow(windowId));
+                              m_autotileHandler->isTiledWindow(windowId), zoneForWindow(windowId));
 }
 
 PhosphorWindowRules::ResolvedActions PlasmaZonesEffect::resolveWindowRuleActions(KWin::EffectWindow* w,

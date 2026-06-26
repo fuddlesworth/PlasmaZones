@@ -222,7 +222,8 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRules::ResolvedAct
     return value;
 }
 
-std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRules::ResolvedActions& resolved)
+std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRules::ResolvedActions& resolved,
+                                                                const QColor& accentColor)
 {
     // Each reader re-validates the param type even though the load-time
     // descriptor validators already did — defence in depth against a
@@ -260,16 +261,23 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
         }
         return static_cast<int>(d);
     };
-    const auto colorSlot = [&resolved](QLatin1StringView slot) -> std::optional<QColor> {
-        const auto action = resolved.slot(QString(slot));
+    // Both colours live on the single BorderColor slot action (`active` /
+    // `inactive` params). The accent sentinel resolves to the live accent;
+    // anything else parses as a hex colour.
+    const auto borderColorParam = [&resolved, &accentColor](QLatin1StringView paramKey) -> std::optional<QColor> {
+        const auto action = resolved.slot(QString(PhosphorWindowRules::ActionSlot::BorderColor));
         if (!action) {
             return std::nullopt;
         }
-        const QJsonValue v = action->params.value(PhosphorWindowRules::ActionParam::Value);
+        const QJsonValue v = action->params.value(QString(paramKey));
         if (!v.isString()) {
             return std::nullopt;
         }
-        const QColor color(v.toString());
+        const QString s = v.toString();
+        if (s == PhosphorWindowRules::BorderColorToken::Accent) {
+            return accentColor.isValid() ? std::optional<QColor>(accentColor) : std::nullopt;
+        }
+        const QColor color(s);
         if (!color.isValid()) {
             return std::nullopt;
         }
@@ -281,7 +289,14 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
     out.showBorder = boolSlot(PhosphorWindowRules::ActionSlot::BorderVisible);
     out.borderWidth = intSlot(PhosphorWindowRules::ActionSlot::BorderWidth, kMaxBorderWidth);
     out.borderRadius = intSlot(PhosphorWindowRules::ActionSlot::BorderRadius, kMaxBorderRadius);
-    out.borderColor = colorSlot(PhosphorWindowRules::ActionSlot::BorderColor);
+    out.activeColor = borderColorParam(PhosphorWindowRules::ActionParam::Active);
+    out.inactiveColor = borderColorParam(PhosphorWindowRules::ActionParam::Inactive);
+    // An omitted `inactive` mirrors the active colour, matching the retired
+    // global behaviour where a window with no distinct inactive colour kept its
+    // active border when unfocused.
+    if (!out.inactiveColor) {
+        out.inactiveColor = out.activeColor;
+    }
     if (!out.any()) {
         return std::nullopt;
     }

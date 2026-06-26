@@ -114,30 +114,21 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // Remove existing border for this window first
     removeWindowBorder(windowId);
 
-    // Base appearance from the owning mode (autotile / snap). nullptr → no mode
-    // currently draws a border for this window (floating, or its mode's border
-    // is off) — a per-window rule may still force one on below.
-    const PhosphorCompositor::BorderState* state = resolveBorderStateFor(windowId);
-
-    // Per-window rule override — applies to ANY matched window, snapped or
-    // floating (mirrors SetOpacity). Resolved against the same evaluator the
-    // opacity / animation rules use; gated on a non-empty rule set so windows
-    // with no rules pay nothing.
+    // Border appearance is resolved entirely from window rules. The managed
+    // baseline rule (catch-all, lowest priority) supplies the default for every
+    // window; higher-priority per-window rules override per slot. A window whose
+    // resolved appearance does not show a border draws nothing — borders are
+    // opt-in, the baseline defaults them off.
     std::optional<ResolvedWindowAppearance> ovr;
     if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
-        ovr = resolveWindowAppearance(resolveWindowRuleActions(w, windowId));
+        ovr = resolveWindowAppearance(resolveWindowRuleActions(w, windowId), m_borderAccentColor);
     }
 
-    // Merge: a rule field wins; otherwise fall back to the owning mode's value
-    // (or "no border" when the window has no owning border state).
-    // resolveBorderStateFor only returns non-null when that mode SHOWS a
-    // border, so a non-null `state` means baseShows == true.
-    const bool show = (ovr && ovr->showBorder) ? *ovr->showBorder : (state != nullptr);
-    if (!show) {
+    if (!ovr || !ovr->showBorder || !*ovr->showBorder) {
         return;
     }
 
-    const int bw = (ovr && ovr->borderWidth) ? *ovr->borderWidth : (state ? state->width : 0);
+    const int bw = ovr->borderWidth.value_or(0);
     if (bw <= 0) {
         return;
     }
@@ -146,22 +137,13 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         return;
     }
 
-    // Choose color. The owning mode (autotile / snap) carries separate active
-    // and inactive border colours — global appearance settings, not rules — so
-    // pick the one matching the window's current focus state. A per-window
-    // SetBorderColor rule, when matched, overrides it. Focus-dependence of the
-    // RULE colour is expressed in the rule itself via the IsFocused match
-    // condition: `windowRuleQuery` sets the query's isFocused flag, so a
-    // focus-scoped rule (`WHEN focused`/`WHEN NOT focused`) only fills the
-    // border-colour slot in its matching state, while a focus-agnostic rule
-    // applies in both. Either way `ovr->borderColor` already holds the colour
-    // appropriate to this window's current focus — no post-resolution switch.
-    // A floating window (no owning mode) whose only rule is focus-scoped thus
-    // correctly shows no border in the unmatched state; author a focus-agnostic
-    // rule to keep a border in both states.
+    // Colour comes from the rule's SetBorderColor: `active` when the window is
+    // focused, `inactive` otherwise. The resolver already defaulted inactive to
+    // active when the rule omitted it and resolved the accent sentinel to the
+    // live accent, so this is a straight focus-state pick. A rule can also scope
+    // a single colour by matching IsFocused.
     const bool isFocused = (w == KWin::effects->activeWindow());
-    const QColor modeColor = state ? (isFocused ? state->color : state->inactiveColor) : QColor();
-    const QColor bc = (ovr && ovr->borderColor) ? *ovr->borderColor : modeColor;
+    const QColor bc = (isFocused ? ovr->activeColor : ovr->inactiveColor).value_or(QColor());
     if (!bc.isValid() || bc.alpha() == 0) {
         return;
     }
@@ -171,7 +153,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // by borderWidth so the border draws fully inside the frame (no clipping).
     const QRectF frame = w->frameGeometry();
     const KWin::RectF innerRect(bw, bw, frame.width() - 2.0 * bw, frame.height() - 2.0 * bw);
-    const int br = (ovr && ovr->borderRadius) ? *ovr->borderRadius : (state ? state->radius : 0);
+    const int br = ovr->borderRadius.value_or(0);
     const KWin::BorderOutline outline(bw, bc, KWin::BorderRadius(br));
 
     KWin::WindowItem* windowItem = w->windowItem();
@@ -279,7 +261,7 @@ void PlasmaZonesEffect::updateAllBorders()
         // it for ALL windows the rule may match — otherwise a SetHideTitleBar
         // rule added while the matched window sits on another virtual desktop
         // would not take effect until that window is next activated.
-        if (w->isOnCurrentDesktop() && (haveRules || resolveBorderStateFor(wid))) {
+        if (w->isOnCurrentDesktop() && haveRules) {
             updateWindowBorder(wid, w);
         }
         if (haveRules) {
@@ -309,30 +291,14 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     // The manager owns the capability gate, the mode-ownership coordination
     // the old m_ruleHiddenTitleBars/modeBorderless dance approximated, and
     // the geometry re-assert across veto-driven decoration flips.
-    const std::optional<ResolvedWindowAppearance> ovr = resolveWindowAppearance(resolveWindowRuleActions(w, windowId));
+    const std::optional<ResolvedWindowAppearance> ovr =
+        resolveWindowAppearance(resolveWindowRuleActions(w, windowId), m_borderAccentColor);
     m_decorationManager->setRuleOverride(windowId, ovr ? ovr->hideTitleBar : std::nullopt);
 }
 
 bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
 {
     return m_snapHandler->isTiledWindow(windowId);
-}
-
-const PhosphorCompositor::BorderState* PlasmaZonesEffect::resolveBorderStateFor(const QString& windowId) const
-{
-    // Autotile takes precedence; a window can transiently appear in both the
-    // autotile and snap border sets during a mode switch (the call sites guard
-    // against steady-state double-tracking via isAutotileScreen, but the
-    // transition window is real), and resolving autotile-first is the
-    // authoritative tie-break — this ordering is load-bearing, not cosmetic.
-    const BorderState& autotile = m_autotileHandler->borderState();
-    if (AutotileStateHelpers::shouldShowBorderForWindow(autotile, windowId)) {
-        return &autotile;
-    }
-    if (m_snapHandler->shouldShowBorderForWindow(windowId)) {
-        return &m_snapHandler->borderState();
-    }
-    return nullptr;
 }
 
 void PlasmaZonesEffect::restoreAllRuleHiddenTitleBars()

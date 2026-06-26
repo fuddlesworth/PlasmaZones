@@ -648,6 +648,12 @@ private:
 
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 
+    // Live system accent colour that a `BorderColorToken::Accent` sentinel in a
+    // SetBorderColor rule resolves to. Pushed from the daemon, which tracks the
+    // Plasma colour scheme; invalid until the first push (sentinel then yields
+    // no colour). See resolveWindowAppearance.
+    QColor m_borderAccentColor;
+
     // The window most recently passed to slotWindowActivated — i.e. the
     // "previously active" window on the next focus change. Used to repaint the
     // window that just lost focus so a focus-scoped (IsFocused) SetOpacity rule
@@ -739,7 +745,6 @@ private:
 
     /// Resolve which mode's BorderState manages @p windowId — autotile first,
     /// then snap — or nullptr if neither draws a border for it.
-    const PhosphorCompositor::BorderState* resolveBorderStateFor(const QString& windowId) const;
 
     /// Resolve the per-window-rule SetHideTitleBar override for @p windowId
     /// and forward it to the DecorationManager as a tri-state rule override

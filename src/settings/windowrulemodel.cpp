@@ -328,7 +328,18 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
             return PhosphorI18n::tr("Corner radius: %1 px").arg(raw.toInt());
         }
         if (action.type == ActionType::SetBorderColor) {
-            return PhosphorI18n::tr("Border: %1").arg(raw.toString().toUpper());
+            // Two colours on one action (active / inactive). The accent sentinel
+            // shows as a word, hex as upper-case. Collapse to one when inactive
+            // is absent or equal to active.
+            const auto fmt = [](const QString& s) {
+                return s == PhosphorWindowRules::BorderColorToken::Accent ? PhosphorI18n::tr("Accent") : s.toUpper();
+            };
+            const QString active = action.params.value(PhosphorWindowRules::ActionParam::Active).toString();
+            const QString inactive = action.params.value(PhosphorWindowRules::ActionParam::Inactive).toString();
+            if (inactive.isEmpty() || inactive == active) {
+                return PhosphorI18n::tr("Border: %1").arg(fmt(active));
+            }
+            return PhosphorI18n::tr("Border: %1 / %2").arg(fmt(active), fmt(inactive));
         }
         // ── per-context gap overrides ──
         if (action.type == ActionType::SetZonePadding) {
@@ -383,6 +394,7 @@ QHash<int, QByteArray> WindowRuleModel::roleNames() const
         {IsCompositeRole, "isComposite"},
         {ScreenIdsRole, "screenIds"},
         {ValidationIssueCountRole, "validationIssueCount"},
+        {ManagedRole, "managed"},
     };
 }
 
@@ -420,6 +432,8 @@ QVariant WindowRuleModel::data(const QModelIndex& index, int role) const
         // model-side cache would have to be invalidated on every rule edit, so
         // pay the trivial cost over keeping the staleness guard.
         return rule.validationIssues().size();
+    case ManagedRole:
+        return rule.managed;
     default:
         return {};
     }
@@ -516,6 +530,12 @@ bool WindowRuleModel::removeRule(const QUuid& id)
     if (row < 0) {
         return false;
     }
+    // Managed rules (the baseline appearance rule) are app-owned and must stay
+    // present — refuse deletion. The UI hides the affordance via ManagedRole;
+    // this is the model-level backstop against a programmatic caller.
+    if (m_rules.at(row).managed) {
+        return false;
+    }
     beginRemoveRows(QModelIndex(), row, row);
     m_rules.removeAt(row);
     endRemoveRows();
@@ -527,6 +547,12 @@ bool WindowRuleModel::moveRule(const QUuid& id, const QUuid& beforeId)
 {
     const int from = indexOf(id);
     if (from < 0) {
+        return false;
+    }
+    // Managed rules are pinned (their precedence comes from a fixed priority,
+    // not list position) — refuse to reorder them. The UI hides drag for
+    // managed rows; this is the model-level backstop.
+    if (m_rules.at(from).managed) {
         return false;
     }
     int dest = beforeId.isNull() ? m_rules.size() : indexOf(beforeId);
@@ -692,6 +718,8 @@ QString WindowRuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Floating");
     case Field::IsSnapped:
         return PhosphorI18n::tr("Snapped");
+    case Field::IsTiled:
+        return PhosphorI18n::tr("Tiled");
     case Field::Zone:
         return PhosphorI18n::tr("Zone");
     }

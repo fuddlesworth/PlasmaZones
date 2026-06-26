@@ -88,8 +88,14 @@
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "../dbus/windowruleadaptor.h"
+#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorWindowRules/ExclusionRules.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
 #include <PhosphorWindowRules/WindowRuleStore.h>
+
+#include <limits>
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
@@ -115,6 +121,54 @@ static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
               "Snapping and autotile gap clamp ceilings must match — they are the same gap quantity");
 
 namespace {
+
+// Build the managed baseline appearance rule: a catch-all, lowest-priority
+// WindowRule whose actions hold the default window border / title-bar
+// appearance. It is the single fallback every window resolves against now that
+// the per-mode global border settings are gone — borders default OFF (opt-in),
+// width/radius/colour carry sensible defaults so flipping "show border" on in
+// the Appearance page draws immediately, and the colour follows the system
+// accent. The Appearance settings page rewrites these actions; per-window
+// overrides are ordinary higher-priority rules that win per slot.
+PhosphorWindowRules::WindowRule makeBaselineAppearanceRule()
+{
+    using namespace PhosphorWindowRules;
+    namespace DD = PhosphorCompositor::DecorationDefaults;
+
+    const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
+        RuleAction a;
+        a.type = QString(type);
+        a.params.insert(QString(key), value);
+        return a;
+    };
+
+    WindowRule rule;
+    rule.id = ConfigDefaults::baselineAppearanceRuleId();
+    rule.name = PhosphorI18n::tr("Default appearance");
+    rule.managed = true;
+    // Lowest possible precedence — any user rule (all of which carry a higher
+    // priority) overrides the baseline per slot. renormalizePriorities in the
+    // settings controller deliberately leaves managed rules pinned here.
+    rule.priority = std::numeric_limits<int>::min();
+    rule.match = MatchExpression{}; // empty All{} — matches every window
+    // Concrete default colour (KDE accent blue, opaque) so enabling the baseline
+    // border draws immediately. "Follow the system accent" is an Appearance-page
+    // opt-in that writes the BorderColorToken::Accent sentinel; the effect-side
+    // accent push that resolves it is a follow-up, so the default stays concrete.
+    RuleAction color;
+    color.type = QString(ActionType::SetBorderColor);
+    color.params.insert(QString(ActionParam::Active), QStringLiteral("#FF3DAEE9"));
+    color.params.insert(QString(ActionParam::Inactive), QStringLiteral("#FF3DAEE9"));
+    rule.actions = {
+        action(ActionType::SetBorderVisible, ActionParam::Value, DD::ShowBorder),
+        action(ActionType::SetBorderWidth, ActionParam::Value, DD::BorderWidth),
+        action(ActionType::SetBorderRadius, ActionParam::Value, DD::BorderRadius),
+        color,
+        action(ActionType::SetHideTitleBar, ActionParam::Value, DD::HideTitleBars),
+    };
+    return rule;
+}
+
 // Debounce interval (ms): coalesce rapid geometry changes (multi-screen, panel editor) into one update.
 // Conceptually distinct from DELAYED_PANEL_REQUERY_MS in autotile.cpp (which schedules a
 // follow-up panel geometry requery after the debounced update completes).
@@ -223,6 +277,19 @@ Daemon::Daemon(QObject* parent)
     // `QObject((ensureScreenIdResolver(), parent))` comma-operator trick
     // because that idiom reads as an accidental typo.
     ensureScreenIdResolver();
+
+    // Seed the managed baseline appearance rule if the store doesn't already
+    // carry it. The store loaded in its constructor, so this runs every startup
+    // (not first-run only) — existing windowrules.json files predating this rule
+    // gain it too. addRule persists and emits rulesChanged, but the daemon's
+    // rulesChanged consumers are wired later (createAdaptors / setup), so the
+    // emit at construction is inert. The daemon is the sole writer, so seeding
+    // here is the single source for every consumer (effect, settings, editor).
+    if (m_windowRuleStore && !m_windowRuleStore->contains(ConfigDefaults::baselineAppearanceRuleId())) {
+        if (!m_windowRuleStore->addRule(makeBaselineAppearanceRule())) {
+            qCWarning(lcDaemon) << "Failed to seed the baseline appearance rule";
+        }
+    }
 
     // Configure geometry update debounce timer
     // This prevents cascading recalculations when multiple geometry changes occur rapidly.

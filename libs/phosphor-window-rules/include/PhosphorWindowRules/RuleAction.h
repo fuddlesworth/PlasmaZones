@@ -370,9 +370,12 @@ inline constexpr QLatin1StringView SetHideTitleBar{"setHideTitleBar"};
 inline constexpr QLatin1StringView SetBorderVisible{"setBorderVisible"};
 inline constexpr QLatin1StringView SetBorderWidth{"setBorderWidth"};
 inline constexpr QLatin1StringView SetBorderRadius{"setBorderRadius"};
-// Focus-dependent colours are expressed by matching on `Field::IsFocused`
-// (e.g. a rule `WHEN NOT focused ⇒ SetBorderColor(gray)`) rather than a
-// separate inactive-colour action — see the effect's updateWindowBorder.
+// Carries the focus-dependent colour pair in one action: `active` (focused,
+// required) and `inactive` (unfocused, optional → falls back to active). Each
+// is a hex string or the `BorderColorToken::Accent` sentinel. A rule may still
+// scope a single `active` colour by matching `Field::IsFocused` instead, but
+// the pair lets the baseline rule hold both states without a second rule — see
+// the effect's updateWindowBorder.
 inline constexpr QLatin1StringView SetBorderColor{"setBorderColor"};
 
 // ── Per-context gap overrides (domain Context) ──
@@ -440,6 +443,14 @@ inline constexpr QLatin1StringView Curve{"curve"};
 inline constexpr QLatin1StringView DurationMs{"durationMs"};
 // SetOpacity payload — the wire-encoded opacity is a [0.0, 1.0] double.
 inline constexpr QLatin1StringView Value{"value"};
+// SetBorderColor payload — `active` is the focused-window colour (required),
+// `inactive` the unfocused colour (optional; falls back to `active`). Each is a
+// `#AARRGGBB` hex string OR the `BorderColorToken::Accent` sentinel, which the
+// consumer resolves to the live system accent. This one action carries the
+// focus-dependent colour pair the retired global border settings held; a rule
+// that only needs one colour sets `active` alone.
+inline constexpr QLatin1StringView Active{"active"};
+inline constexpr QLatin1StringView Inactive{"inactive"};
 // SetEngineMode / DisableEngine engine-token key — the wire token vocabulary
 // is `PhosphorZones::modeToWireString(Mode)` (snapping / autotile / scrolling).
 inline constexpr QLatin1StringView Mode{"mode"};
@@ -485,6 +496,15 @@ namespace OverlayStyleToken {
 inline constexpr QLatin1StringView Rectangles{"rectangles"}; ///< OverlayDisplayMode::ZoneRectangles (0)
 inline constexpr QLatin1StringView Preview{"preview"}; ///< OverlayDisplayMode::LayoutPreview (1)
 } // namespace OverlayStyleToken
+
+/// Sentinel value a `SetBorderColor` `active`/`inactive` param may carry instead
+/// of a hex string, meaning "track the live system accent colour". The
+/// descriptor validator admits it alongside the hex shapes; the consumer (the
+/// KWin effect's border resolver) substitutes the current accent at apply time
+/// so the colour follows a Plasma accent change without a rule edit.
+namespace BorderColorToken {
+inline constexpr QLatin1StringView Accent{"accent"};
+} // namespace BorderColorToken
 
 // ── Built-in slot ids ──
 namespace ActionSlot {

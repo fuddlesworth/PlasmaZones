@@ -76,6 +76,13 @@ struct PHOSPHORWINDOWRULES_EXPORT WindowRule
     int priority = 0;
     MatchExpression match; ///< default-constructs to the catch-all All{}
     QList<RuleAction> actions;
+    /// True for built-in rules the application owns rather than the user
+    /// (currently the baseline appearance rule). Managed rules are seeded and
+    /// kept present by the store, are non-deletable and non-reorderable in the
+    /// settings UI, and are pinned to lowest precedence so any user rule
+    /// overrides them. The flag is metadata only — evaluation treats a managed
+    /// rule like any other; the UI and store layers enforce the lifecycle.
+    bool managed = false;
 
     /// True if the rule has a non-null id, a valid match expression, and
     /// every action validates against the registry.

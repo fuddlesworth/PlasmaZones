@@ -59,6 +59,7 @@ struct WindowQuery
     std::optional<bool> isFloating; ///< floated out of tiling (snap or autotile)
     std::optional<bool> isSnapped; ///< occupies a snap zone (snap mode only)
     std::optional<QString> zone; ///< the snap zone's UUID the window occupies
+    std::optional<bool> isTiled; ///< managed by the autotile engine (distinct from isSnapped)
 
     // ── Context attributes — always present ──
     QString screenId;
@@ -157,6 +158,8 @@ struct WindowQuery
             return isSnapped ? std::optional<QVariant>(*isSnapped) : std::nullopt;
         case Field::Zone:
             return zone ? std::optional<QVariant>(*zone) : std::nullopt;
+        case Field::IsTiled:
+            return isTiled ? std::optional<QVariant>(*isTiled) : std::nullopt;
         }
         return std::nullopt;
     }
