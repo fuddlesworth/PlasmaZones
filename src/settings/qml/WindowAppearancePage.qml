@@ -585,16 +585,16 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: i18n("These settings apply to every window. To override the border or title bar for a specific app or monitor, add a window rule.")
-                }
+                SettingsRow {
+                    title: i18n("Override per app or monitor")
+                    description: i18n("These settings apply to every window. Add a window rule to override the border or title bar for a specific app or monitor.")
+                    searchAnchor: "perWindowRules"
 
-                Button {
-                    text: i18n("Open Window Rules")
-                    icon.name: "view-list-details"
-                    onClicked: settingsController.activePage = "window-rules"
+                    Button {
+                        text: i18n("Open Window Rules")
+                        icon.name: "view-list-details"
+                        onClicked: settingsController.activePage = "window-rules"
+                    }
                 }
             }
         }
