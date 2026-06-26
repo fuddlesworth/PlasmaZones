@@ -93,13 +93,12 @@ void SettingsController::buildApplicationController()
     // Animations / Window Rules pages that follow.
     regVirtual(QStringLiteral("placement"), QString(), PhosphorI18n::tr("Placement"), QString(),
                QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
-    // Shared, mode-neutral pages. Window Appearance edits the single managed
-    // baseline appearance WindowRule; Gaps edits the unified inner/outer gap
-    // model. Both are global (not per-mode), so they sit as top-level leaves
-    // rather than under the Snapping / Tiling categories.
+    // Shared, mode-neutral page. Window Appearance edits the single managed
+    // baseline appearance WindowRule — the window border / title bar AND the
+    // unified inner/outer gap model (both global, not per-mode), so it sits as a
+    // top-level leaf rather than under the Snapping / Tiling categories.
     regPage(m_windowAppearancePage, QString(), PhosphorI18n::tr("Window Appearance"),
             QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
-    regPage(m_gapsPage, QString(), PhosphorI18n::tr("Gaps"), QStringLiteral("GapsPage.qml"), QStringLiteral("measure"));
     // "animations" is a no-QML drill-down parent — register it as a virtual
     // navigation node (like display / placement / snapping / tiling), NOT as
     // m_animationsPage's own id. The AnimationsPageController is the staging
@@ -509,7 +508,6 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
         QStringLiteral("window-appearance"),
-        QStringLiteral("gaps"),
         QStringLiteral("window-rules"),
         QStringLiteral("editor"),
         QStringLiteral("general"),

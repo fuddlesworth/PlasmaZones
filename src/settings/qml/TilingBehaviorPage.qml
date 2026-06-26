@@ -150,6 +150,25 @@ SettingsFlickable {
 
                 SettingsSeparator {}
 
+                // Smart gaps is tiling-only and is a plain Setting (not part of
+                // the rule-backed shared gap model on the Window Appearance page),
+                // so it lives here on the Tiling behavior page.
+                SettingsRow {
+                    title: i18n("Smart gaps")
+                    searchAnchor: "smartGaps"
+                    description: i18n("Remove all gaps when only one window is tiled")
+
+                    SettingsSwitch {
+                        checked: appSettings.autotileSmartGaps
+                        accessibleName: i18n("Smart gaps")
+                        onToggled: function (newValue) {
+                            appSettings.autotileSmartGaps = newValue;
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
                 SettingsRow {
                     title: i18n("Restore untiled windows to their previous position")
                     searchAnchor: "restoreUntiledWindowsPosition"

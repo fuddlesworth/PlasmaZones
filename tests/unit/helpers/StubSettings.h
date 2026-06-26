@@ -356,55 +356,35 @@ public:
     {
     }
 
-    // IZoneGeometrySettings
+    // IZoneGeometrySettings — gaps are read-only getters now (the global
+    // default is rule-backed; no setters on the interface).
     int innerGap() const override
     {
         return 8;
-    }
-    void setInnerGap(int) override
-    {
     }
     int outerGap() const override
     {
         return 8;
     }
-    void setOuterGap(int) override
-    {
-    }
     bool usePerSideOuterGap() const override
     {
         return false;
-    }
-    void setUsePerSideOuterGap(bool) override
-    {
     }
     int outerGapTop() const override
     {
         return 8;
     }
-    void setOuterGapTop(int) override
-    {
-    }
     int outerGapBottom() const override
     {
         return 8;
-    }
-    void setOuterGapBottom(int) override
-    {
     }
     int outerGapLeft() const override
     {
         return 8;
     }
-    void setOuterGapLeft(int) override
-    {
-    }
     int outerGapRight() const override
     {
         return 8;
-    }
-    void setOuterGapRight(int) override
-    {
     }
     int adjacentThreshold() const override
     {

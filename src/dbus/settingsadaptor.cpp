@@ -426,14 +426,10 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("enableAudioVisualizer", enableAudioVisualizer, setEnableAudioVisualizer)
     REGISTER_INT_SETTING("audioSpectrumBarCount", audioSpectrumBarCount, setAudioSpectrumBarCount)
 
-    // Zone settings — inner/outer gaps are shared across snapping and tiling.
-    REGISTER_INT_SETTING("innerGap", innerGap, setInnerGap)
-    REGISTER_INT_SETTING("outerGap", outerGap, setOuterGap)
-    REGISTER_BOOL_SETTING("usePerSideOuterGap", usePerSideOuterGap, setUsePerSideOuterGap)
-    REGISTER_INT_SETTING("outerGapTop", outerGapTop, setOuterGapTop)
-    REGISTER_INT_SETTING("outerGapBottom", outerGapBottom, setOuterGapBottom)
-    REGISTER_INT_SETTING("outerGapLeft", outerGapLeft, setOuterGapLeft)
-    REGISTER_INT_SETTING("outerGapRight", outerGapRight, setOuterGapRight)
+    // Zone settings. The shared inner/outer gaps are no longer exposed here:
+    // their global default is rule-backed (the managed baseline appearance
+    // WindowRule), edited over the org.plasmazones.WindowRules surface, not the
+    // generic settings get/set map.
     REGISTER_INT_SETTING("adjacentThreshold", adjacentThreshold, setAdjacentThreshold)
     REGISTER_INT_SETTING("pollIntervalMs", pollIntervalMs, setPollIntervalMs)
     REGISTER_INT_SETTING("minimumZoneSizePx", minimumZoneSizePx, setMinimumZoneSizePx)
@@ -655,8 +651,10 @@ void SettingsAdaptor::initializeRegistry()
             return true;
         };
         m_schemas[QStringLiteral("autotilePerAlgorithmSettings")] = QStringLiteral("map");
-        // Autotile inner/outer gaps are unified with snapping — the shared
-        // "innerGap" / "outerGap*" D-Bus keys (registered above) drive both modes.
+        // Autotile inner/outer gaps are unified with snapping and rule-backed —
+        // their global default lives on the managed baseline appearance
+        // WindowRule (edited over the org.plasmazones.WindowRules surface), so
+        // no gap keys are registered on this generic settings map.
         REGISTER_CONCRETE_BOOL("autotileFocusNewWindows", autotileFocusNewWindows, setAutotileFocusNewWindows)
         REGISTER_CONCRETE_BOOL("autotileSmartGaps", autotileSmartGaps, setAutotileSmartGaps)
         REGISTER_CONCRETE_INT("autotileMaxWindows", autotileMaxWindows, setAutotileMaxWindows)

@@ -165,6 +165,20 @@ PhosphorWindowRules::WindowRule makeBaselineAppearanceRule()
         action(ActionType::SetBorderRadius, ActionParam::Value, DD::BorderRadius),
         color,
         action(ActionType::SetHideTitleBar, ActionParam::Value, DD::HideTitleBars),
+        // Global default gaps live on the baseline rule too — it is the single
+        // source of truth for the shared inner/outer gap model (Settings reads
+        // these actions back as its innerGap()/outerGap*() getters). These are
+        // Context-domain actions; resolveContextGaps EXCLUDES this managed rule so
+        // the values surface only as the level-4 global default, never as a
+        // top-tier context override. Seeded from the same ConfigDefaults accessors
+        // the schema validators and the compile-time defaults use.
+        action(ActionType::SetInnerGap, ActionParam::Value, ConfigDefaults::innerGap()),
+        action(ActionType::SetOuterGap, ActionParam::Value, ConfigDefaults::outerGap()),
+        action(ActionType::SetUsePerSideOuterGap, ActionParam::Value, ConfigDefaults::usePerSideOuterGap()),
+        action(ActionType::SetOuterGapTop, ActionParam::Value, ConfigDefaults::outerGapTop()),
+        action(ActionType::SetOuterGapBottom, ActionParam::Value, ConfigDefaults::outerGapBottom()),
+        action(ActionType::SetOuterGapLeft, ActionParam::Value, ConfigDefaults::outerGapLeft()),
+        action(ActionType::SetOuterGapRight, ActionParam::Value, ConfigDefaults::outerGapRight()),
     };
     return rule;
 }

@@ -145,15 +145,19 @@ public:
         bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
 
     // Zone settings — inner/outer gaps are the single shared model used by BOTH
-    // snapping and tiling.
-    Q_PROPERTY(int innerGap READ innerGap WRITE setInnerGap NOTIFY innerGapChanged)
-    Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
-    Q_PROPERTY(
-        bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
-    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapTopChanged)
-    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapBottomChanged)
-    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
-    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
+    // snapping and tiling. The global default is now rule-backed: these are
+    // computed READ-ONLY getters reading the managed baseline appearance
+    // WindowRule's gap actions. Editing happens through the rule (the Window
+    // Appearance page writes via WindowRuleController), so there are no setters.
+    // NOTIFY fires when the baseline rule's gap values change (see
+    // onRuleStoreChanged).
+    Q_PROPERTY(int innerGap READ innerGap NOTIFY innerGapChanged)
+    Q_PROPERTY(int outerGap READ outerGap NOTIFY outerGapChanged)
+    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop NOTIFY outerGapTopChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom NOTIFY outerGapBottomChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft NOTIFY outerGapLeftChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight NOTIFY outerGapRightChanged)
     Q_PROPERTY(int adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
 
     // Performance and behavior (configurable constants)
@@ -585,21 +589,20 @@ public:
     bool labelFontStrikeout() const override;
     void setLabelFontStrikeout(bool strikeout) override;
 
-    // Zone geometry (shared "Gaps" group) — PhosphorConfig::Store-backed.
+    // Zone geometry (shared inner/outer gaps) — the global default is now
+    // rule-backed. These getters read the managed baseline appearance
+    // WindowRule's gap actions, falling back to the compile-time defaults when
+    // no store / rule / action is present. There are no setters: the gap values
+    // are edited on the baseline rule directly (Window Appearance page →
+    // WindowRuleController). The autotile* gap forwarders above route through
+    // these same getters, so the tile engine stays untouched.
     int innerGap() const override;
-    void setInnerGap(int gap) override;
     int outerGap() const override;
-    void setOuterGap(int gap) override;
     bool usePerSideOuterGap() const override;
-    void setUsePerSideOuterGap(bool enabled) override;
     int outerGapTop() const override;
-    void setOuterGapTop(int gap) override;
     int outerGapBottom() const override;
-    void setOuterGapBottom(int gap) override;
     int outerGapLeft() const override;
-    void setOuterGapLeft(int gap) override;
     int outerGapRight() const override;
-    void setOuterGapRight(int gap) override;
     int adjacentThreshold() const override;
     void setAdjacentThreshold(int threshold) override;
 
@@ -1229,6 +1232,32 @@ private:
     // active store — owned or borrowed).
     std::unique_ptr<PhosphorWindowRules::WindowRuleStore> m_ownedWindowRuleStore;
     PhosphorWindowRules::WindowRuleStore* m_windowRuleStore = nullptr;
+
+    // Connect the active rule store's rulesChanged to onRuleStoreChanged and
+    // seed the gap cache from the current baseline rule. Called once at the end
+    // of every constructor (after load()), so both the owned and borrowed store
+    // paths get the reactive wiring.
+    void connectRuleStoreGapReactivity();
+
+    // Recompute the rule-backed global gap values; emit the per-property NOTIFY
+    // signals for those that changed and a single settingsChanged if any did.
+    // Driven by the baseline rule's gap actions, so a gap edit on the Window
+    // Appearance page retiles autotiled windows and re-spaces snapped zones
+    // exactly as the old stored-setting setters did. Bound to the store's
+    // rulesChanged signal.
+    void onRuleStoreChanged();
+
+    // Cached snapshot of the baseline rule's gap values, used by
+    // onRuleStoreChanged for change detection (the getters read live, so a
+    // pre-change snapshot must be retained here). Seeded in
+    // connectRuleStoreGapReactivity.
+    int m_cachedInnerGap = 0;
+    int m_cachedOuterGap = 0;
+    bool m_cachedUsePerSideOuterGap = false;
+    int m_cachedOuterGapTop = 0;
+    int m_cachedOuterGapBottom = 0;
+    int m_cachedOuterGapLeft = 0;
+    int m_cachedOuterGapRight = 0;
 
     // Activation
     // Activation is stored in m_store.

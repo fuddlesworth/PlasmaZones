@@ -29,6 +29,14 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
     Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
+    // Gap slider bounds — the unified inner/outer gap controls moved onto this
+    // page (they edit the same baseline rule). Sourced from the ConfigDefaults
+    // accessors the gap action validators clamp against so the UI range and the
+    // clamp range can never drift apart.
+    Q_PROPERTY(int innerGapMin READ innerGapMin CONSTANT)
+    Q_PROPERTY(int innerGapMax READ innerGapMax CONSTANT)
+    Q_PROPERTY(int outerGapMin READ outerGapMin CONSTANT)
+    Q_PROPERTY(int outerGapMax READ outerGapMax CONSTANT)
     /// Stable id (UUID string, braces) of the managed baseline appearance rule
     /// the page edits. QML passes it to the WindowRuleController's
     /// ruleJson() / updateRuleFromJson() calls.
@@ -70,6 +78,22 @@ public:
     QString baselineRuleId() const
     {
         return ConfigDefaults::baselineAppearanceRuleId().toString();
+    }
+    int innerGapMin() const
+    {
+        return ConfigDefaults::innerGapMin();
+    }
+    int innerGapMax() const
+    {
+        return ConfigDefaults::innerGapMax();
+    }
+    int outerGapMin() const
+    {
+        return ConfigDefaults::outerGapMin();
+    }
+    int outerGapMax() const
+    {
+        return ConfigDefaults::outerGapMax();
     }
 };
 

@@ -13,7 +13,6 @@
 #include "snappingeffectscontroller.h"
 #include "snappingzoneselectorcontroller.h"
 #include "tilingalgorithmcontroller.h"
-#include "gapscontroller.h"
 #include "windowappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
 #include "virtualscreenutils.h"
@@ -380,12 +379,11 @@ SettingsController::SettingsController(QObject* parent)
     connect(m_snappingZonesPage, &SnappingZonesController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
 
-    // Snapping→Effects + the shared Gaps + Window Appearance pages —
-    // CONSTANT-only bounds facades. Window Appearance edits the managed baseline
-    // appearance WindowRule through m_windowRulesPage; this controller only
-    // carries the slider bounds and the baseline rule id.
+    // Snapping→Effects + the Window Appearance page — CONSTANT-only bounds
+    // facades. Window Appearance edits the managed baseline appearance WindowRule
+    // through m_windowRulesPage; this controller only carries the slider bounds
+    // (border + the unified gap bounds) and the baseline rule id.
     m_snappingEffectsPage = new SnappingEffectsController(this);
-    m_gapsPage = new GapsController(this);
     m_windowAppearancePage = new WindowAppearanceController(this);
 
     // Tiling→Algorithm page sub-controller. Owns 7 slider bounds + the
@@ -803,11 +801,6 @@ SettingsController::SettingsController(QObject* parent)
 SnappingZonesController* SettingsController::snappingZonesPage() const
 {
     return m_snappingZonesPage;
-}
-
-GapsController* SettingsController::gapsPage() const
-{
-    return m_gapsPage;
 }
 
 WindowAppearanceController* SettingsController::windowAppearancePage() const

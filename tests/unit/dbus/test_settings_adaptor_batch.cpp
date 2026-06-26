@@ -53,18 +53,20 @@ PhosphorAnimation::Profile profileWithDuration(qreal ms)
 // distinguish "setter not invoked" (guard hit) from "setter invoked,
 // returned true" (guard missed). StubSettings' getters are hard-coded
 // (setters are no-ops), so this subclass keeps the getter unchanged
-// and only adds a hit counter for setInnerGap.
+// and only adds a hit counter for setAdjacentThreshold (a registered int
+// scalar — the shared gap keys are no longer on this generic settings map
+// since their global default is rule-backed).
 class CountingStubSettings : public StubSettings
 {
 public:
     using StubSettings::StubSettings;
-    void setInnerGap(int v) override
+    void setAdjacentThreshold(int v) override
     {
-        ++setInnerGapCalls;
-        lastInnerGap = v;
+        ++setAdjacentThresholdCalls;
+        lastAdjacentThreshold = v;
     }
-    int setInnerGapCalls = 0;
-    int lastInnerGap = -1;
+    int setAdjacentThresholdCalls = 0;
+    int lastAdjacentThreshold = -1;
 };
 
 class TestSettingsAdaptorBatch : public QObject
@@ -91,14 +93,21 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Happy path: every gap/overlay key the editor startup batches for.
+    // Happy path: a representative batch of scalar keys is all returned. (The
+    // shared gap keys are no longer on this generic map — their global default
+    // is rule-backed — so this uses other registered scalars.)
     // ─────────────────────────────────────────────────────────────────────
     void testGetSettings_gapOverlayKeys_allReturned()
     {
         const QStringList keys{
-            QStringLiteral("innerGap"),      QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
-            QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),
-            QStringLiteral("outerGapRight"), QStringLiteral("overlayDisplayMode"),
+            QStringLiteral("borderWidth"),
+            QStringLiteral("borderRadius"),
+            QStringLiteral("useSystemColors"),
+            QStringLiteral("adjacentThreshold"),
+            QStringLiteral("pollIntervalMs"),
+            QStringLiteral("minimumZoneSizePx"),
+            QStringLiteral("minimumZoneDisplaySizePx"),
+            QStringLiteral("overlayDisplayMode"),
         };
 
         const QVariantMap result = m_adaptor->getSettings(keys);
@@ -111,9 +120,9 @@ private Q_SLOTS:
         // Int-typed keys should land on disk as ints, not coerced strings —
         // readInt() on the editor side checks toInt(&ok) so a wrong type
         // would be silently replaced by the default. Pin the type here.
-        QCOMPARE(result.value(QStringLiteral("innerGap")).metaType().id(), QMetaType::Int);
-        QCOMPARE(result.value(QStringLiteral("outerGap")).metaType().id(), QMetaType::Int);
-        QCOMPARE(result.value(QStringLiteral("usePerSideOuterGap")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("borderWidth")).metaType().id(), QMetaType::Int);
+        QCOMPARE(result.value(QStringLiteral("adjacentThreshold")).metaType().id(), QMetaType::Int);
+        QCOMPARE(result.value(QStringLiteral("useSystemColors")).metaType().id(), QMetaType::Bool);
         QCOMPARE(result.value(QStringLiteral("overlayDisplayMode")).metaType().id(), QMetaType::Int);
     }
 
@@ -126,16 +135,16 @@ private Q_SLOTS:
     void testGetSettings_mixedKnownUnknown_unknownsOmitted()
     {
         const QStringList keys{
-            QStringLiteral("innerGap"),
+            QStringLiteral("borderWidth"),
             QStringLiteral("definitelyNotARealSettingKey_xyzzy"),
-            QStringLiteral("outerGap"),
+            QStringLiteral("borderRadius"),
         };
 
         const QVariantMap result = m_adaptor->getSettings(keys);
 
         QCOMPARE(result.size(), 2);
-        QVERIFY(result.contains(QStringLiteral("innerGap")));
-        QVERIFY(result.contains(QStringLiteral("outerGap")));
+        QVERIFY(result.contains(QStringLiteral("borderWidth")));
+        QVERIFY(result.contains(QStringLiteral("borderRadius")));
         QVERIFY(!result.contains(QStringLiteral("definitelyNotARealSettingKey_xyzzy")));
     }
 
@@ -159,14 +168,14 @@ private Q_SLOTS:
     void testGetSettings_emptyStringKeysSkipped()
     {
         const QStringList keys{
-            QString(), QStringLiteral("innerGap"), QString(), QStringLiteral("outerGap"), QString(),
+            QString(), QStringLiteral("borderWidth"), QString(), QStringLiteral("borderRadius"), QString(),
         };
 
         const QVariantMap result = m_adaptor->getSettings(keys);
 
         QCOMPARE(result.size(), 2);
-        QVERIFY(result.contains(QStringLiteral("innerGap")));
-        QVERIFY(result.contains(QStringLiteral("outerGap")));
+        QVERIFY(result.contains(QStringLiteral("borderWidth")));
+        QVERIFY(result.contains(QStringLiteral("borderRadius")));
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -191,14 +200,14 @@ private Q_SLOTS:
     // return-value-only assertions can't distinguish guard-fires from
     // setter-runs-and-returns-true.
     //
-    // StubSettings::innerGap() returns 8 — supply 8 and the guard fires.
+    // StubSettings::adjacentThreshold() returns 20 — supply 20 and the guard fires.
     // ─────────────────────────────────────────────────────────────────────
     void testSetSetting_unchangedScalar_guardShortCircuits()
     {
-        m_settings->setInnerGapCalls = 0;
-        const bool ok = m_adaptor->setSetting(QStringLiteral("innerGap"), QDBusVariant(QVariant(8)));
+        m_settings->setAdjacentThresholdCalls = 0;
+        const bool ok = m_adaptor->setSetting(QStringLiteral("adjacentThreshold"), QDBusVariant(QVariant(20)));
         QVERIFY(ok);
-        QCOMPARE(m_settings->setInnerGapCalls, 0);
+        QCOMPARE(m_settings->setAdjacentThresholdCalls, 0);
     }
 
     // Value-equality guard must NOT intercept changing writes — setter
@@ -206,11 +215,11 @@ private Q_SLOTS:
     // return code.
     void testSetSetting_changedScalar_invokesSetter()
     {
-        m_settings->setInnerGapCalls = 0;
-        const bool ok = m_adaptor->setSetting(QStringLiteral("innerGap"), QDBusVariant(QVariant(42)));
+        m_settings->setAdjacentThresholdCalls = 0;
+        const bool ok = m_adaptor->setSetting(QStringLiteral("adjacentThreshold"), QDBusVariant(QVariant(42)));
         QVERIFY(ok);
-        QCOMPARE(m_settings->setInnerGapCalls, 1);
-        QCOMPARE(m_settings->lastInnerGap, 42);
+        QCOMPARE(m_settings->setAdjacentThresholdCalls, 1);
+        QCOMPARE(m_settings->lastAdjacentThreshold, 42);
     }
 
     // Empty-string matches StubSettings::defaultLayoutId() default — guard fires.

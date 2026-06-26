@@ -132,10 +132,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("window-appearance"),
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("border"), PhosphorI18n::tr("color"),
                              PhosphorI18n::tr("title bar"), PhosphorI18n::tr("decoration"),
-                             PhosphorI18n::tr("appearance")});
-    search->setPageKeywords(QStringLiteral("gaps"),
-                            {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
-                             PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin")});
+                             PhosphorI18n::tr("appearance"), PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"),
+                             PhosphorI18n::tr("spacing"), PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin")});
     search->setPageKeywords(QStringLiteral("window-rules"),
                             {PhosphorI18n::tr("rule"), PhosphorI18n::tr("exclude"), PhosphorI18n::tr("float"),
                              PhosphorI18n::tr("monitor"), PhosphorI18n::tr("priority"), PhosphorI18n::tr("activity")});
@@ -267,20 +265,23 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Hide title bars"),
                {PhosphorI18n::tr("titlebar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("header")});
 
-    // Gaps (shared inner/outer gap model)
-    addSection(search, QStringLiteral("gaps"), QStringLiteral("gaps"), PhosphorI18n::tr("Gaps"));
-    addSetting(search, QStringLiteral("gaps"), QStringLiteral("primaryGap"), PhosphorI18n::tr("Inner gap"),
+    // Gaps (shared inner/outer gap model) — folded onto the Window Appearance
+    // page, which edits the same rule-backed model.
+    addSection(search, QStringLiteral("window-appearance"), QStringLiteral("gaps"), PhosphorI18n::tr("Gaps"));
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("primaryGap"), PhosphorI18n::tr("Inner gap"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
                 PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"), PhosphorI18n::tr("inner")});
-    addSetting(search, QStringLiteral("gaps"), QStringLiteral("outerGap"), PhosphorI18n::tr("Outer gap"),
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("outerGap"), PhosphorI18n::tr("Outer gap"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
                 PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"), PhosphorI18n::tr("outer"),
                 PhosphorI18n::tr("edge")});
-    addSetting(
-        search, QStringLiteral("gaps"), QStringLiteral("perSideOuterGaps"), PhosphorI18n::tr("Per-side outer gaps"),
-        {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"), PhosphorI18n::tr("padding"),
-         PhosphorI18n::tr("margin"), PhosphorI18n::tr("edge"), PhosphorI18n::tr("side")});
-    addSetting(search, QStringLiteral("gaps"), QStringLiteral("smartGaps"), PhosphorI18n::tr("Smart gaps"),
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("perSideOuterGaps"),
+               PhosphorI18n::tr("Per-side outer gaps"),
+               {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
+                PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"), PhosphorI18n::tr("edge"),
+                PhosphorI18n::tr("side")});
+    // Smart gaps is tiling-only and relocated to the Tiling → Window page.
+    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("smartGaps"), PhosphorI18n::tr("Smart gaps"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
                 PhosphorI18n::tr("smart"), PhosphorI18n::tr("single")});
 

@@ -28,6 +28,16 @@ SettingsFlickable {
     readonly property string actBorderRadius: "setBorderRadius"
     readonly property string actBorderColor: "setBorderColor"
     readonly property string actHideTitleBar: "setHideTitleBar"
+    // Gap action wire strings (mirrors PhosphorWindowRules::ActionType). The
+    // shared inner/outer gap model is rule-backed too, so the Gaps card edits the
+    // same baseline rule as the border controls.
+    readonly property string actInnerGap: "setInnerGap"
+    readonly property string actOuterGap: "setOuterGap"
+    readonly property string actUsePerSideOuterGap: "setUsePerSideOuterGap"
+    readonly property string actOuterGapTop: "setOuterGapTop"
+    readonly property string actOuterGapBottom: "setOuterGapBottom"
+    readonly property string actOuterGapLeft: "setOuterGapLeft"
+    readonly property string actOuterGapRight: "setOuterGapRight"
     // "Follow the system accent" sentinel (PhosphorWindowRules::BorderColorToken::Accent).
     // Writing it records intent; the effect-side push that resolves the sentinel
     // to the live accent colour is a pending follow-up (see the daemon's
@@ -300,6 +310,88 @@ SettingsFlickable {
                         }
                     }
                 }
+            }
+        }
+
+        // =================================================================
+        // Gaps Card — the unified inner/outer gap model, rule-backed on the
+        // same baseline rule. Smart gaps is tiling-only and lives on the
+        // Tiling → Window page, so it is hidden here.
+        // =================================================================
+        GapsSettingsCard {
+            Layout.fillWidth: true
+            searchAnchor: "gaps"
+            gapMin: root.bounds.outerGapMin
+            gapMax: root.bounds.outerGapMax
+            primaryGapMin: root.bounds.innerGapMin
+            primaryGapMax: root.bounds.innerGapMax
+            primaryGapLabel: i18n("Inner gap")
+            primaryGapDescription: i18n("Space between windows")
+            outerGapLabel: i18n("Outer gap")
+            outerGapDescription: i18n("Space from the screen edges to windows")
+            showSmartGaps: false
+            primaryGapValue: {
+                root.reloadTick;
+                return root.actionValue(root.actInnerGap, "value", root.bounds.innerGapMin);
+            }
+            outerGapValue: {
+                root.reloadTick;
+                return root.actionValue(root.actOuterGap, "value", root.bounds.outerGapMin);
+            }
+            usePerSideOuterGap: {
+                root.reloadTick;
+                return root.actionValue(root.actUsePerSideOuterGap, "value", false);
+            }
+            outerGapTopValue: {
+                root.reloadTick;
+                return root.actionValue(root.actOuterGapTop, "value", root.bounds.outerGapMin);
+            }
+            outerGapBottomValue: {
+                root.reloadTick;
+                return root.actionValue(root.actOuterGapBottom, "value", root.bounds.outerGapMin);
+            }
+            outerGapLeftValue: {
+                root.reloadTick;
+                return root.actionValue(root.actOuterGapLeft, "value", root.bounds.outerGapMin);
+            }
+            outerGapRightValue: {
+                root.reloadTick;
+                return root.actionValue(root.actOuterGapRight, "value", root.bounds.outerGapMin);
+            }
+            onPrimaryGapModified: value => {
+                return root.writeAction(root.actInnerGap, {
+                    "value": value
+                });
+            }
+            onOuterGapModified: value => {
+                return root.writeAction(root.actOuterGap, {
+                    "value": value
+                });
+            }
+            onUsePerSideOuterGapToggled: checked => {
+                return root.writeAction(root.actUsePerSideOuterGap, {
+                    "value": checked
+                });
+            }
+            onOuterGapTopModified: value => {
+                return root.writeAction(root.actOuterGapTop, {
+                    "value": value
+                });
+            }
+            onOuterGapBottomModified: value => {
+                return root.writeAction(root.actOuterGapBottom, {
+                    "value": value
+                });
+            }
+            onOuterGapLeftModified: value => {
+                return root.writeAction(root.actOuterGapLeft, {
+                    "value": value
+                });
+            }
+            onOuterGapRightModified: value => {
+                return root.writeAction(root.actOuterGapRight, {
+                    "value": value
+                });
             }
         }
 

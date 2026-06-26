@@ -16,6 +16,8 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
 
 #include <QGuiApplication>
 #include <QMetaMethod>
@@ -25,8 +27,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QSet>
 #include <QUuid>
+
+#include <optional>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -77,6 +82,7 @@ Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRe
     // (The owning ctor below routes through migrateAndCreateOwnedBackend
     // which performs the migration itself for standalone tools and tests.)
     load();
+    connectRuleStoreGapReactivity();
 }
 
 Settings::Settings(QObject* parent)
@@ -100,6 +106,7 @@ Settings::Settings(QObject* parent)
     // fixture and standalone-settings launch.
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
+    connectRuleStoreGapReactivity();
 }
 
 Settings::Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent)
@@ -121,6 +128,7 @@ Settings::Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObjec
     // preserved across the Settings ↔ daemon boundary in this configuration.
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
+    connectRuleStoreGapReactivity();
 }
 
 // ── Helper Methods ───────────────────────────────────────────────────────────
@@ -1232,21 +1240,149 @@ P_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDispla
 // Inner/outer gaps (uniform + per-side) plus adjacency threshold. Schema
 // clampInt validators enforce the same ranges readValidatedInt used to.
 
-// Shared inner/outer gaps (gapsGroup = "Gaps") — used by BOTH snapping and tiling.
-P_STORE_GET(int, innerGap, gapsGroup, innerKey, int)
-P_STORE_SET_INT(setInnerGap, gapsGroup, innerKey, innerGapChanged)
-P_STORE_GET(int, outerGap, gapsGroup, outerKey, int)
-P_STORE_SET_INT(setOuterGap, gapsGroup, outerKey, outerGapChanged)
-P_STORE_GET(bool, usePerSideOuterGap, gapsGroup, usePerSideKey, bool)
-P_STORE_SET_BOOL(setUsePerSideOuterGap, gapsGroup, usePerSideKey, usePerSideOuterGapChanged)
-P_STORE_GET(int, outerGapTop, gapsGroup, topKey, int)
-P_STORE_SET_INT(setOuterGapTop, gapsGroup, topKey, outerGapTopChanged)
-P_STORE_GET(int, outerGapBottom, gapsGroup, bottomKey, int)
-P_STORE_SET_INT(setOuterGapBottom, gapsGroup, bottomKey, outerGapBottomChanged)
-P_STORE_GET(int, outerGapLeft, gapsGroup, leftKey, int)
-P_STORE_SET_INT(setOuterGapLeft, gapsGroup, leftKey, outerGapLeftChanged)
-P_STORE_GET(int, outerGapRight, gapsGroup, rightKey, int)
-P_STORE_SET_INT(setOuterGapRight, gapsGroup, rightKey, outerGapRightChanged)
+// Shared inner/outer gaps — the GLOBAL default is rule-backed (the managed
+// baseline appearance WindowRule). These getters read that rule's gap actions
+// (SetInnerGap / SetOuterGap / …) through the active window-rule store and fall
+// back to the compile-time ConfigDefaults when no store / rule / action is
+// present (the standalone settings app or a test may construct Settings without
+// a daemon-seeded store). There are no setters — the values are edited on the
+// rule directly. KEEP these accessors in lockstep with makeBaselineAppearanceRule
+// (daemon.cpp) and with the autotile* gap forwarders in settings.h.
+namespace {
+// Read one gap action's Value param from the managed baseline rule, or return
+// std::nullopt when the store / rule / action is absent.
+std::optional<QJsonValue> baselineGapValue(const PhosphorWindowRules::WindowRuleStore* store,
+                                           QLatin1StringView actionType)
+{
+    if (store == nullptr) {
+        return std::nullopt;
+    }
+    const auto rule = store->ruleSet().ruleById(ConfigDefaults::baselineAppearanceRuleId());
+    if (!rule) {
+        return std::nullopt;
+    }
+    const QString type = QString(actionType);
+    for (const PhosphorWindowRules::RuleAction& a : rule->actions) {
+        if (a.type == type) {
+            return a.params.value(QString(PhosphorWindowRules::ActionParam::Value));
+        }
+    }
+    return std::nullopt;
+}
+} // namespace
+
+int Settings::innerGap() const
+{
+    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetInnerGap)) {
+        return v->toInt(ConfigDefaults::innerGap());
+    }
+    return ConfigDefaults::innerGap();
+}
+int Settings::outerGap() const
+{
+    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetOuterGap)) {
+        return v->toInt(ConfigDefaults::outerGap());
+    }
+    return ConfigDefaults::outerGap();
+}
+bool Settings::usePerSideOuterGap() const
+{
+    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetUsePerSideOuterGap)) {
+        return v->toBool(ConfigDefaults::usePerSideOuterGap());
+    }
+    return ConfigDefaults::usePerSideOuterGap();
+}
+int Settings::outerGapTop() const
+{
+    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetOuterGapTop)) {
+        return v->toInt(ConfigDefaults::outerGapTop());
+    }
+    return ConfigDefaults::outerGapTop();
+}
+int Settings::outerGapBottom() const
+{
+    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetOuterGapBottom)) {
+        return v->toInt(ConfigDefaults::outerGapBottom());
+    }
+    return ConfigDefaults::outerGapBottom();
+}
+int Settings::outerGapLeft() const
+{
+    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetOuterGapLeft)) {
+        return v->toInt(ConfigDefaults::outerGapLeft());
+    }
+    return ConfigDefaults::outerGapLeft();
+}
+int Settings::outerGapRight() const
+{
+    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetOuterGapRight)) {
+        return v->toInt(ConfigDefaults::outerGapRight());
+    }
+    return ConfigDefaults::outerGapRight();
+}
+
+void Settings::connectRuleStoreGapReactivity()
+{
+    if (m_windowRuleStore == nullptr) {
+        return;
+    }
+    // Seed the change-detection cache from the current baseline rule so the
+    // first rulesChanged emit compares against a real snapshot.
+    m_cachedInnerGap = innerGap();
+    m_cachedOuterGap = outerGap();
+    m_cachedUsePerSideOuterGap = usePerSideOuterGap();
+    m_cachedOuterGapTop = outerGapTop();
+    m_cachedOuterGapBottom = outerGapBottom();
+    m_cachedOuterGapLeft = outerGapLeft();
+    m_cachedOuterGapRight = outerGapRight();
+    connect(m_windowRuleStore, &PhosphorWindowRules::WindowRuleStore::rulesChanged, this, [this](bool /*persisted*/) {
+        onRuleStoreChanged();
+    });
+}
+
+void Settings::onRuleStoreChanged()
+{
+    // A baseline-rule gap edit changes the rule-backed global gaps. Mirror the
+    // old stored-setter emissions: one per-property NOTIFY per changed value,
+    // plus a single settingsChanged so the autotile engine re-syncs (daemon's
+    // settingsChanged handler → refreshConfigFromSettings) and snapped zones
+    // re-space (daemon's innerGap*Changed → scheduleGapResnap). Only emit on a
+    // real change so unrelated rule edits (a new border rule, a rename) don't
+    // trigger spurious retiles.
+    bool anyChanged = false;
+    const auto detect = [&anyChanged](auto& cached, auto current, auto emitSignal) {
+        if (cached != current) {
+            cached = current;
+            anyChanged = true;
+            emitSignal();
+        }
+    };
+    detect(m_cachedInnerGap, innerGap(), [this]() {
+        Q_EMIT innerGapChanged();
+    });
+    detect(m_cachedOuterGap, outerGap(), [this]() {
+        Q_EMIT outerGapChanged();
+    });
+    detect(m_cachedUsePerSideOuterGap, usePerSideOuterGap(), [this]() {
+        Q_EMIT usePerSideOuterGapChanged();
+    });
+    detect(m_cachedOuterGapTop, outerGapTop(), [this]() {
+        Q_EMIT outerGapTopChanged();
+    });
+    detect(m_cachedOuterGapBottom, outerGapBottom(), [this]() {
+        Q_EMIT outerGapBottomChanged();
+    });
+    detect(m_cachedOuterGapLeft, outerGapLeft(), [this]() {
+        Q_EMIT outerGapLeftChanged();
+    });
+    detect(m_cachedOuterGapRight, outerGapRight(), [this]() {
+        Q_EMIT outerGapRightChanged();
+    });
+    if (anyChanged) {
+        Q_EMIT settingsChanged();
+    }
+}
+
 P_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)
 P_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, adjacentThresholdChanged)
 

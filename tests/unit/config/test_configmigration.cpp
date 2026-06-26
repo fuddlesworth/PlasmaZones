@@ -334,10 +334,11 @@ private Q_SLOTS:
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
-        // Inner/outer gaps now live in the shared top-level "Gaps" group.
-        QJsonObject gaps = root.value(QStringLiteral("Gaps")).toObject();
-        QCOMPARE(gaps.value(QStringLiteral("Inner")).toInt(), 8);
-        QCOMPARE(gaps.value(QStringLiteral("Outer")).toInt(), 4);
+        // The shared inner/outer gaps are no longer migrated to a stored group —
+        // the global default is rule-backed (the managed baseline appearance
+        // WindowRule), so the v1 Padding/OuterGap values are silently dropped and
+        // no top-level "Gaps" group is produced.
+        QVERIFY(!root.contains(QStringLiteral("Gaps")));
 
         // Zone-overlay groups land under Snapping.Zones.* after the v3→v4 rename.
         QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();

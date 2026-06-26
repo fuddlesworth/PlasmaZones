@@ -333,24 +333,10 @@ void appendPerformanceSchema(PhosphorConfig::Schema& schema)
 void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
-    // Shared inner/outer gaps (gapsGroup = "Gaps") — used by BOTH snapping and tiling.
-    schema.groups[CD::gapsGroup()] = {
-        {CD::innerKey(), CD::innerGap(), QMetaType::Int, {}, clampInt(CD::innerGapMin(), CD::innerGapMax())},
-        {CD::outerKey(), CD::outerGap(), QMetaType::Int, {}, clampInt(CD::outerGapMin(), CD::outerGapMax())},
-        {CD::usePerSideKey(), CD::usePerSideOuterGap(), QMetaType::Bool},
-        {CD::topKey(), CD::outerGapTop(), QMetaType::Int, {}, clampInt(CD::outerGapTopMin(), CD::outerGapTopMax())},
-        {CD::bottomKey(),
-         CD::outerGapBottom(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::outerGapBottomMin(), CD::outerGapBottomMax())},
-        {CD::leftKey(), CD::outerGapLeft(), QMetaType::Int, {}, clampInt(CD::outerGapLeftMin(), CD::outerGapLeftMax())},
-        {CD::rightKey(),
-         CD::outerGapRight(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::outerGapRightMin(), CD::outerGapRightMax())},
-    };
+    // The shared inner/outer gaps are no longer stored config keys: the global
+    // default is rule-backed (the managed baseline appearance WindowRule), so
+    // there is no "Gaps" group in the schema. Settings reads the values from the
+    // rule and the Window Appearance page edits the rule directly.
     // Snapping.Gaps keeps only the snapping-specific adjacency threshold.
     schema.groups[CD::snappingGapsGroup()] = {
         {CD::adjacentThresholdKey(),

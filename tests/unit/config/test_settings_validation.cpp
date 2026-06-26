@@ -44,14 +44,14 @@ private Q_SLOTS:
     // =========================================================================
 
     /**
-     * The clampInt validator wired into the PhosphorZones::Zone padding KeyDef must coerce
-     * a hand-written 999 into the schema max, so the reader sees the
-     * canonical default instead of the raw invalid value.
+     * The clampInt validator wired into a stored int KeyDef must coerce a
+     * hand-written 999 into the schema max, so the reader sees the canonical
+     * clamped value instead of the raw invalid value.
      *
-     * Seeds at the v2 schema location (Gaps/Inner) so the validator
-     * is actually exercised. Seeding at the legacy v1 location would be
-     * skipped by ensureJsonConfig's version-match short-circuit and the test
-     * would pass for the wrong reason.
+     * Uses adjacentThreshold (Snapping.Gaps/AdjacentThreshold, clamp max 500).
+     * The shared inner/outer gaps are no longer stored config keys (their global
+     * default is rule-backed), so this exercises the validator on a key that is
+     * still schema-backed.
      */
     void testReadValidatedInt_outOfRange_returnsDefault()
     {
@@ -59,14 +59,14 @@ private Q_SLOTS:
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto gaps = backend->group(ConfigDefaults::gapsGroup());
-            gaps->writeInt(ConfigDefaults::innerKey(), 999); // clamp max is innerGapMax()
+            auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
+            gaps->writeInt(ConfigDefaults::adjacentThresholdKey(), 999); // clamp max is adjacentThresholdMax()
             gaps.reset();
             backend->sync();
         }
 
         Settings settings;
-        QCOMPARE(settings.innerGap(), ConfigDefaults::innerGapMax());
+        QCOMPARE(settings.adjacentThreshold(), ConfigDefaults::adjacentThresholdMax());
     }
 
     // =========================================================================

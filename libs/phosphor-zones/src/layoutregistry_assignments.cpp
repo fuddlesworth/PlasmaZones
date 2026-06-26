@@ -222,15 +222,51 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
         m_contextGapCache, m_contextGapCacheRevision, screenId, virtualDesktop, activity, [&]() -> ContextGapOverride {
             ContextGapOverride gaps;
             const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-            const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
 
-            const auto readInt = [&resolved](QLatin1StringView slot, std::optional<int>& out) {
-                if (const auto action = resolved.slot(QString(slot))) {
+            // Resolve each gap slot from the highest-priority matching USER rule
+            // that carries that slot's action. Managed rules are deliberately
+            // EXCLUDED: the managed baseline appearance rule carries the GLOBAL
+            // default gap values (it is the level-4 default tier, surfaced through
+            // Settings), not a context override. Were it included here, its
+            // catch-all match would fill every gap slot with the global default,
+            // and that value would masquerade as a top-tier context override —
+            // shadowing the per-screen and layout tiers that sit BELOW the context
+            // layer. The per-slot, first-matching-rule-wins semantics the old
+            // resolve() walk produced are reproduced by highestPriorityMatch with a
+            // per-slot "carries this slot, not managed" filter.
+            const PWR::ActionRegistry& registry = PWR::ActionRegistry::instance();
+            const auto winningAction = [this, &query,
+                                        &registry](QLatin1StringView slot) -> std::optional<PWR::RuleAction> {
+                const QString slotId = QString(slot);
+                const auto carries = [&registry, &slotId](const PWR::WindowRule& rule) {
+                    if (rule.managed) {
+                        return false;
+                    }
+                    for (const PWR::RuleAction& a : rule.actions) {
+                        if (registry.slotFor(a) == slotId) {
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+                const PWR::WindowRule* rule = m_evaluator->highestPriorityMatch(query, carries);
+                if (rule == nullptr) {
+                    return std::nullopt;
+                }
+                for (const PWR::RuleAction& a : rule->actions) {
+                    if (registry.slotFor(a) == slotId) {
+                        return a;
+                    }
+                }
+                return std::nullopt;
+            };
+            const auto readInt = [&winningAction](QLatin1StringView slot, std::optional<int>& out) {
+                if (const auto action = winningAction(slot)) {
                     out = action->params.value(PWR::ActionParam::Value).toInt();
                 }
             };
-            const auto readBool = [&resolved](QLatin1StringView slot, std::optional<bool>& out) {
-                if (const auto action = resolved.slot(QString(slot))) {
+            const auto readBool = [&winningAction](QLatin1StringView slot, std::optional<bool>& out) {
+                if (const auto action = winningAction(slot)) {
                     out = action->params.value(PWR::ActionParam::Value).toBool();
                 }
             };

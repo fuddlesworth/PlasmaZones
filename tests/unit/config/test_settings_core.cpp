@@ -27,7 +27,12 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 #include "config/configbackends.h"
+
+#include <limits>
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
@@ -156,9 +161,9 @@ private Q_SLOTS:
 
         Settings settings;
 
-        // Set non-default values across different groups
-        settings.setInnerGap(15);
-        settings.setOuterGap(20);
+        // Set non-default values across different groups. Inner/outer gaps are
+        // no longer stored config keys (the global default is rule-backed), so
+        // they are not part of this config-persistence round-trip.
         settings.setBorderWidth(5);
         settings.setBorderRadius(25);
         settings.setActiveOpacity(0.8);
@@ -173,7 +178,6 @@ private Q_SLOTS:
         settings.setZoneSelectorGridColumns(3);
         settings.setAutotileSplitRatio(0.7);
         settings.setAutotileMasterCount(3);
-        // Tiling inner gap is unified with snapping (setInnerGap above)...
         settings.setAnimationDuration(300);
         settings.setAnimationSequenceMode(0);
         settings.setLabelFontWeight(400);
@@ -183,12 +187,6 @@ private Q_SLOTS:
         // Verify the round-trip by reading from a fresh config backend
         // (re-reads from disk after save() flushed). Uses v2 dot-path groups.
         auto backend = PlasmaZones::createDefaultConfigBackend();
-
-        {
-            auto gaps = backend->group(ConfigDefaults::gapsGroup());
-            QCOMPARE(gaps->readInt(ConfigDefaults::innerKey(), 0), 15);
-            QCOMPARE(gaps->readInt(ConfigDefaults::outerKey(), 0), 20);
-        }
 
         {
             auto border = backend->group(ConfigDefaults::snappingZonesBorderGroup());
@@ -284,14 +282,14 @@ private Q_SLOTS:
         Settings settings;
 
         QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::innerGapChanged);
+        QSignalSpy specificSpy(&settings, &Settings::adjacentThresholdChanged);
         QVERIFY(generalSpy.isValid());
         QVERIFY(specificSpy.isValid());
 
-        int currentPadding = settings.innerGap();
-        int newPadding = (currentPadding == 15) ? 20 : 15;
+        int current = settings.adjacentThreshold();
+        int next = (current == 15) ? 20 : 15;
 
-        settings.setInnerGap(newPadding);
+        settings.setAdjacentThreshold(next);
 
         QCOMPARE(specificSpy.count(), 1);
         QVERIFY(generalSpy.count() >= 1);
@@ -305,12 +303,12 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        settings.setInnerGap(15); // force a known value
+        settings.setAdjacentThreshold(15); // force a known value
 
         QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::innerGapChanged);
+        QSignalSpy specificSpy(&settings, &Settings::adjacentThresholdChanged);
 
-        settings.setInnerGap(15); // same value again
+        settings.setAdjacentThreshold(15); // same value again
 
         QCOMPARE(specificSpy.count(), 0);
         QCOMPARE(generalSpy.count(), 0);
@@ -494,7 +492,7 @@ private Q_SLOTS:
         Settings settings;
 
         // Mutate one value to ensure save actually writes
-        settings.setInnerGap(99);
+        settings.setAdjacentThreshold(99);
         settings.save();
 
         // Re-read the file and verify stale keys are gone
@@ -693,7 +691,6 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        settings.setInnerGap(42);
         settings.setBorderWidth(7);
         settings.setActiveOpacity(0.65);
         settings.setShowZoneNumbers(false);
@@ -703,12 +700,56 @@ private Q_SLOTS:
 
         // Reload from disk
         Settings reloaded;
-        QCOMPARE(reloaded.innerGap(), 42);
         QCOMPARE(reloaded.borderWidth(), 7);
         QCOMPARE(reloaded.activeOpacity(), 0.65);
         QCOMPARE(reloaded.showZoneNumbers(), false);
         QCOMPARE(reloaded.autotileEnabled(), true);
         QCOMPARE(reloaded.animationDuration(), 500);
+    }
+
+    /**
+     * The shared inner/outer gap global default is rule-backed: the getters read
+     * the managed baseline appearance WindowRule's gap actions, and a change to
+     * that rule re-emits the per-property NOTIFY + settingsChanged so the daemon
+     * retiles / re-spaces. This validates the read path and the reactivity wiring
+     * (onRuleStoreChanged) that replaces the old stored-setter signals.
+     */
+    void testRuleBackedGap_readsBaselineRule_andReactsToChange()
+    {
+        IsolatedConfigGuard guard;
+
+        namespace PWR = PhosphorWindowRules;
+        PWR::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
+
+        // Seed a minimal managed baseline rule carrying an inner-gap action.
+        PWR::WindowRule rule;
+        rule.id = ConfigDefaults::baselineAppearanceRuleId();
+        rule.name = QStringLiteral("Default appearance");
+        rule.managed = true;
+        rule.priority = std::numeric_limits<int>::min();
+        PWR::RuleAction inner;
+        inner.type = QString(PWR::ActionType::SetInnerGap);
+        inner.params.insert(QString(PWR::ActionParam::Value), 8);
+        rule.actions = {inner};
+        QVERIFY(store.addRule(rule));
+
+        Settings settings(&store, nullptr);
+        // Getter reads the rule's action value.
+        QCOMPARE(settings.innerGap(), 8);
+
+        QSignalSpy specificSpy(&settings, &Settings::innerGapChanged);
+        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(specificSpy.isValid());
+        QVERIFY(generalSpy.isValid());
+
+        // Edit the baseline rule's inner gap → rulesChanged → Settings re-emits.
+        PWR::WindowRule updated = rule;
+        updated.actions[0].params.insert(QString(PWR::ActionParam::Value), 24);
+        QVERIFY(store.updateRule(updated));
+
+        QCOMPARE(settings.innerGap(), 24);
+        QCOMPARE(specificSpy.count(), 1);
+        QVERIFY(generalSpy.count() >= 1);
     }
 };
 

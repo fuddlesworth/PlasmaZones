@@ -95,10 +95,8 @@ set(plasmazones_settings_SRCS
     generalpagecontroller.cpp
     snappingzonescontroller.h
     snappingzonescontroller.cpp
-    # Shared "Gaps" page bounds facade.
-    gapscontroller.h
-    gapscontroller.cpp
-    # Slim "Window Appearance" page bounds + baseline-rule-id facade.
+    # Slim "Window Appearance" page bounds + baseline-rule-id facade (also
+    # carries the unified gap slider bounds now that gaps live on this page).
     windowappearancecontroller.h
     windowappearancecontroller.cpp
     snappingbehaviorcontroller.h
@@ -232,18 +230,17 @@ qt_add_qml_module(plasmazones-settings
         qml/GeneralPage.qml
         # Snapping, organised by subject (Overlay / Zone Selector / Window),
         # each with a Behavior page. Shaders lives under Configuration. The
-        # window border / title-bar appearance is shared across modes and lives
-        # on the top-level WindowAppearancePage; gaps live on GapsPage.
+        # window border / title-bar appearance AND the unified gaps are shared
+        # across modes and live on the top-level WindowAppearancePage.
         qml/SnappingOverlayBehaviorPage.qml
         qml/SnappingOverlayAppearancePage.qml
         qml/SnappingZoneSelectorPage.qml
         qml/SnappingWindowBehaviorPage.qml
         qml/TilingBehaviorPage.qml
         qml/TilingAlgorithmPage.qml
-        # Shared, mode-neutral pages: the baseline window-appearance editor and
-        # the unified inner/outer gap controls.
+        # Shared, mode-neutral page: the baseline window-appearance editor, which
+        # also hosts the unified inner/outer gap controls.
         qml/WindowAppearancePage.qml
-        qml/GapsPage.qml
         qml/EditorPage.qml
         qml/LayoutsPage.qml
         qml/SnappingQuickShortcutsPage.qml
