@@ -86,21 +86,7 @@ QVariantMap SettingsController::getPerScreenSnappingSettings(const QString& scre
     return m_settings.getPerScreenSnappingSettings(screenName);
 }
 
-void SettingsController::setPerScreenSnappingSetting(const QString& screenName, const QString& key,
-                                                     const QVariant& value)
-{
-    m_settings.setPerScreenSnappingSetting(screenName, key, value);
-}
-
-void SettingsController::clearPerScreenSnappingSettings(const QString& screenName)
-{
-    m_settings.clearPerScreenSnappingSettings(screenName);
-}
-
-bool SettingsController::hasPerScreenSnappingSettings(const QString& screenName) const
-{
-    return m_settings.hasPerScreenSnappingSettings(screenName);
-}
+// Snapping per-screen gaps are rule-backed; there is no set/clear/has here.
 
 // ── Per-screen zone selector overrides ───────────────────────────────────
 

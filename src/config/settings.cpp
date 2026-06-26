@@ -236,15 +236,16 @@ void Settings::load()
     // so per-monitor gaps never take effect on save (discussion #661).
     const QHash<QString, QVariantMap> perScreenZoneSelectorBefore = m_perScreenZoneSelectorSettings;
     const QHash<QString, QVariantMap> perScreenAutotileBefore = m_perScreenAutotileSettings;
-    const QHash<QString, QVariantMap> perScreenSnappingBefore = m_perScreenSnappingSettings;
 
     loadPerScreenOverrides(m_configBackend);
     loadVirtualScreenConfigs(m_configBackend);
 
     const bool perScreenZoneSelectorChanged = perScreenZoneSelectorBefore != m_perScreenZoneSelectorSettings;
     const bool perScreenAutotileChanged = perScreenAutotileBefore != m_perScreenAutotileSettings;
-    const bool perScreenSnappingChanged = perScreenSnappingBefore != m_perScreenSnappingSettings;
-    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged || perScreenSnappingChanged;
+    // Per-screen snapping gaps are rule-backed now (no Settings storage); their
+    // change signal is driven by the rule store via onRuleStoreChanged, not by
+    // this config reload.
+    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged;
 
     if (useSystemColors()) {
         applySystemColorScheme();
@@ -304,8 +305,6 @@ void Settings::load()
         Q_EMIT perScreenZoneSelectorSettingsChanged();
     if (perScreenAutotileChanged)
         Q_EMIT perScreenAutotileSettingsChanged();
-    if (perScreenSnappingChanged)
-        Q_EMIT perScreenSnappingSettingsChanged();
 
     if (anyChanged || anyDisableChanged || perScreenChanged)
         Q_EMIT settingsChanged();
@@ -1248,16 +1247,17 @@ P_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDispla
 // a daemon-seeded store). There are no setters — the values are edited on the
 // rule directly. KEEP these accessors in lockstep with makeBaselineAppearanceRule
 // (daemon.cpp) and with the autotile* gap forwarders in settings.h.
-namespace {
-// Read one gap action's Value param from the managed baseline rule, or return
-// std::nullopt when the store / rule / action is absent.
-std::optional<QJsonValue> baselineGapValue(const PhosphorWindowRules::WindowRuleStore* store,
-                                           QLatin1StringView actionType)
+// Read one gap action's Value param from the rule @p ruleId in @p store, or
+// std::nullopt when the store / rule / action is absent. Backs both the global
+// gap getters (the managed baseline rule id) and the per-screen gap accessors
+// (the per-monitor gap rule id, resolved in perScreenGapRuleOverrides).
+std::optional<QJsonValue> Settings::gapValueFromRule(const PhosphorWindowRules::WindowRuleStore* store,
+                                                     const QUuid& ruleId, QLatin1StringView actionType)
 {
     if (store == nullptr) {
         return std::nullopt;
     }
-    const auto rule = store->ruleSet().ruleById(ConfigDefaults::baselineAppearanceRuleId());
+    const auto rule = store->ruleSet().ruleById(ruleId);
     if (!rule) {
         return std::nullopt;
     }
@@ -1269,53 +1269,59 @@ std::optional<QJsonValue> baselineGapValue(const PhosphorWindowRules::WindowRule
     }
     return std::nullopt;
 }
-} // namespace
 
 int Settings::innerGap() const
 {
-    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetInnerGap)) {
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+                                        PhosphorWindowRules::ActionType::SetInnerGap)) {
         return v->toInt(ConfigDefaults::innerGap());
     }
     return ConfigDefaults::innerGap();
 }
 int Settings::outerGap() const
 {
-    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetOuterGap)) {
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+                                        PhosphorWindowRules::ActionType::SetOuterGap)) {
         return v->toInt(ConfigDefaults::outerGap());
     }
     return ConfigDefaults::outerGap();
 }
 bool Settings::usePerSideOuterGap() const
 {
-    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetUsePerSideOuterGap)) {
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+                                        PhosphorWindowRules::ActionType::SetUsePerSideOuterGap)) {
         return v->toBool(ConfigDefaults::usePerSideOuterGap());
     }
     return ConfigDefaults::usePerSideOuterGap();
 }
 int Settings::outerGapTop() const
 {
-    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetOuterGapTop)) {
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+                                        PhosphorWindowRules::ActionType::SetOuterGapTop)) {
         return v->toInt(ConfigDefaults::outerGapTop());
     }
     return ConfigDefaults::outerGapTop();
 }
 int Settings::outerGapBottom() const
 {
-    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetOuterGapBottom)) {
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+                                        PhosphorWindowRules::ActionType::SetOuterGapBottom)) {
         return v->toInt(ConfigDefaults::outerGapBottom());
     }
     return ConfigDefaults::outerGapBottom();
 }
 int Settings::outerGapLeft() const
 {
-    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetOuterGapLeft)) {
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+                                        PhosphorWindowRules::ActionType::SetOuterGapLeft)) {
         return v->toInt(ConfigDefaults::outerGapLeft());
     }
     return ConfigDefaults::outerGapLeft();
 }
 int Settings::outerGapRight() const
 {
-    if (const auto v = baselineGapValue(m_windowRuleStore, PhosphorWindowRules::ActionType::SetOuterGapRight)) {
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+                                        PhosphorWindowRules::ActionType::SetOuterGapRight)) {
         return v->toInt(ConfigDefaults::outerGapRight());
     }
     return ConfigDefaults::outerGapRight();
@@ -1378,9 +1384,23 @@ void Settings::onRuleStoreChanged()
     detect(m_cachedOuterGapRight, outerGapRight(), [this]() {
         Q_EMIT outerGapRightChanged();
     });
-    if (anyChanged) {
-        Q_EMIT settingsChanged();
-    }
+
+    // A rule edit can also change a per-monitor gap rule, which feeds the
+    // rule-backed getPerScreenAutotileSettings / getPerScreenSnappingSettings.
+    // Precisely diffing every per-screen gap rule is complex (and rule edits are
+    // user-paced), so re-sync the per-screen consumers on any rulesChanged: the
+    // daemon's perScreenSnappingSettingsChanged handler reschedules the gap
+    // resnap, and its settingsChanged handler re-runs the per-screen autotile
+    // config (updateAutotileScreens → applyPerScreenConfig, now reading the
+    // rule-backed getter) plus refreshConfigFromSettings. None of these write
+    // the rule store, so this cannot re-enter rulesChanged. settingsChanged is
+    // emitted here unconditionally for that reason — covering both the global
+    // (baseline) and per-monitor gap cases — while the per-property gap NOTIFY
+    // signals above still fire only on a real global change for QML bindings.
+    Q_UNUSED(anyChanged);
+    Q_EMIT perScreenAutotileSettingsChanged();
+    Q_EMIT perScreenSnappingSettingsChanged();
+    Q_EMIT settingsChanged();
 }
 
 P_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)

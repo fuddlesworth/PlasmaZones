@@ -18,8 +18,11 @@
 #include <PhosphorWindowRules/WindowRuleStore.h>
 
 #include <memory>
+#include <optional>
 #include <QFont>
 #include <QHash>
+#include <QJsonValue>
+#include <QUuid>
 #include <QVariantMap>
 
 namespace PlasmaZones {
@@ -740,12 +743,12 @@ public:
     void clearPerScreenAutotileGapsSettings(const QString& screenIdOrName);
     void clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName);
 
-    // Per-screen snapping config (override > global fallback)
+    // Per-screen snapping gaps are rule-backed (per-monitor gap WindowRules), so
+    // the only accessor is the reader. There is no per-screen snapping storage
+    // and no setter/clear/has: the set/clear/has triplet stays as ISettings
+    // no-op defaults (the geometry path only ever reads). Writes go through the
+    // window-rule store via the Appearance page.
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
-    Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenIdOrName, const QString& key,
-                                                 const QVariant& value) override;
-    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenIdOrName) override;
-    Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenIdOrName) const override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (ISettings interface)
@@ -1247,6 +1250,25 @@ private:
     // rulesChanged signal.
     void onRuleStoreChanged();
 
+    // Read one gap action's Value param from the rule @p ruleId in @p store, or
+    // std::nullopt when the store / rule / action is absent. Backs both the
+    // global gap getters (the managed baseline rule id) and the per-screen gap
+    // accessors (the per-monitor gap rule id).
+    static std::optional<QJsonValue> gapValueFromRule(const PhosphorWindowRules::WindowRuleStore* store,
+                                                      const QUuid& ruleId, QLatin1StringView actionType);
+
+    // Gap overrides authored on the per-monitor gap WindowRule for
+    // @p screenIdOrName, keyed in the short engine form the autotile / snapping
+    // consumers expect (InnerGap / OuterGap / UsePerSideOuterGap / OuterGap
+    // {Top,Bottom,Left,Right}), or an empty map when no such rule exists. The
+    // rule is keyed by the screen's CONNECTOR NAME (the id the Appearance page's
+    // monitor scope chooser stores and the rule's `ScreenId Equals` match
+    // carries) under the deterministic id
+    // createUuidV5(baselineAppearanceRuleId, <connector name>); the incoming
+    // identifier is resolved to that connector-name form first.
+    static QVariantMap perScreenGapRuleOverrides(const PhosphorWindowRules::WindowRuleStore* store,
+                                                 const QString& screenIdOrName);
+
     // Cached snapshot of the baseline rule's gap values, used by
     // onRuleStoreChanged for change detection (the getters read live, so a
     // pre-change snapshot must be retained here). Seeded in
@@ -1303,8 +1325,9 @@ private:
     // Per-screen autotile overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;
 
-    // Per-screen snapping overrides (screenIdOrName -> settings map)
-    QHash<QString, QVariantMap> m_perScreenSnappingSettings;
+    // Per-screen snapping gaps are no longer stored here: they are rule-backed
+    // (per-monitor gap WindowRules), read by getPerScreenSnappingSettings via
+    // perScreenGapRuleOverrides. There are no other per-screen snapping keys.
 
     // Autotiling Settings
     // Autotiling stored in m_store.
