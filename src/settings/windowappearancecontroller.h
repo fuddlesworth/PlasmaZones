@@ -15,13 +15,14 @@ namespace PlasmaZones {
 
 /// Q_PROPERTY surface for the slim "Window Appearance" settings page.
 ///
-/// The page is a friendly editor for the managed baseline appearance
-/// WindowRule (the catch-all, lowest-priority rule the daemon seeds). It reads
-/// and writes that rule's actions through `settingsController.windowRulesPage`
-/// (WindowRuleController), so this controller only carries the CONSTANT slider
-/// bounds and the baseline rule id. It holds no editable state of its own, so
-/// it is never dirty and its apply/discard are no-ops; the dirty/save path runs
-/// through the Window Rules page controller.
+/// The page is a friendly editor for the three managed baseline appearance
+/// WindowRules (borders, title bars, gaps — the catch-all, lowest-priority
+/// rules the daemon seeds, one per concern). It reads and writes those rules'
+/// actions through `settingsController.windowRulesPage` (WindowRuleController),
+/// so this controller only carries the CONSTANT slider bounds and the three
+/// baseline rule ids. It holds no editable state of its own, so it is never
+/// dirty and its apply/discard are no-ops; the dirty/save path runs through the
+/// Window Rules page controller.
 class WindowAppearanceController : public PhosphorControl::PageController
 {
     Q_OBJECT
@@ -38,10 +39,13 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int innerGapMax READ innerGapMax CONSTANT)
     Q_PROPERTY(int outerGapMin READ outerGapMin CONSTANT)
     Q_PROPERTY(int outerGapMax READ outerGapMax CONSTANT)
-    /// Stable id (UUID string, braces) of the managed baseline appearance rule
-    /// the page edits. QML passes it to the WindowRuleController's
+    /// Stable ids (UUID strings, braces) of the three managed baseline rules the
+    /// page edits, one per concern. QML routes each action's read/write to the
+    /// matching rule and passes the id to the WindowRuleController's
     /// ruleJson() / updateRuleFromJson() calls.
-    Q_PROPERTY(QString baselineRuleId READ baselineRuleId CONSTANT)
+    Q_PROPERTY(QString borderBaselineRuleId READ borderBaselineRuleId CONSTANT)
+    Q_PROPERTY(QString titleBarBaselineRuleId READ titleBarBaselineRuleId CONSTANT)
+    Q_PROPERTY(QString gapBaselineRuleId READ gapBaselineRuleId CONSTANT)
 
 public:
     explicit WindowAppearanceController(QObject* parent = nullptr)
@@ -76,9 +80,17 @@ public:
     {
         return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
     }
-    QString baselineRuleId() const
+    QString borderBaselineRuleId() const
     {
-        return ConfigDefaults::baselineAppearanceRuleId().toString();
+        return ConfigDefaults::baselineBorderRuleId().toString();
+    }
+    QString titleBarBaselineRuleId() const
+    {
+        return ConfigDefaults::baselineTitleBarRuleId().toString();
+    }
+    QString gapBaselineRuleId() const
+    {
+        return ConfigDefaults::baselineGapRuleId().toString();
     }
 
     /// Deterministic, reproducible id (UUID string, braces) of the per-monitor
@@ -92,13 +104,13 @@ public:
     /// then drives find-or-create through the Window Rules controller's
     /// ruleJson() / addRuleFromJson() / updateRuleFromJson() / removeRule().
     /// Returns an empty string for an empty screen id (the "all monitors" /
-    /// global scope, which edits the baseline rule directly).
+    /// global scope, which edits the gap baseline rule directly).
     Q_INVOKABLE QString perScreenGapRuleId(const QString& screenId) const
     {
         if (screenId.isEmpty()) {
             return QString();
         }
-        return QUuid::createUuidV5(ConfigDefaults::baselineAppearanceRuleId(), screenId.toUtf8()).toString();
+        return QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), screenId.toUtf8()).toString();
     }
     int innerGapMin() const
     {

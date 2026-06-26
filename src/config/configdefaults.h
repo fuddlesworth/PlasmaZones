@@ -683,15 +683,44 @@ public:
     // sole writer; see docs/window-rule-refactor-design.md §5.
     PLASMAZONES_EXPORT static QString windowRulesFilePath();
 
-    // Stable id of the managed baseline appearance rule: the catch-all,
-    // lowest-priority WindowRule whose actions hold the default window
-    // border / title-bar appearance the Appearance settings page edits. Fixed
-    // so the daemon can re-find (and idempotently re-seed) it across restarts
-    // and the settings UI can bind to the same rule. See
-    // docs/window-rule-refactor-design.md.
+    // LEGACY id of the old single managed baseline appearance rule that carried
+    // ALL default appearance actions (borders + title bar + gaps) on one rule.
+    // It has been split into three focused managed rules (see the three ids
+    // below). This accessor is retained ONLY so the daemon's startup migration
+    // can find and remove the old single rule, distributing its values into the
+    // three replacements. No new code should seed or read this id.
     static QUuid baselineAppearanceRuleId()
     {
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000001}"));
+    }
+
+    // Stable id of the managed baseline BORDER rule: the catch-all,
+    // lowest-priority WindowRule whose actions hold the default window border
+    // appearance (visible / width / radius / colour) the Appearance settings
+    // page edits. Fixed so the daemon can re-find (and idempotently re-seed) it
+    // across restarts and the settings UI can bind to the same rule. See
+    // docs/window-rule-refactor-design.md.
+    static QUuid baselineBorderRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000002}"));
+    }
+
+    // Stable id of the managed baseline TITLE BAR rule: the catch-all,
+    // lowest-priority WindowRule whose single action holds the default
+    // hide-title-bar value the Appearance settings page edits.
+    static QUuid baselineTitleBarRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000003}"));
+    }
+
+    // Stable id of the managed baseline GAP rule: the catch-all,
+    // lowest-priority WindowRule whose actions hold the global default inner /
+    // outer gap model. Settings reads these actions back as its innerGap() /
+    // outerGap*() getters, and per-monitor gap overrides are v5 ids namespaced
+    // under this id.
+    static QUuid baselineGapRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000004}"));
     }
 
     // Returns the absolute path to quicklayouts.json (the numbered quick-layout

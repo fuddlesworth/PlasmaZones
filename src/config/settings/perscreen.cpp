@@ -716,7 +716,7 @@ QVariantMap Settings::perScreenGapRuleOverrides(const PhosphorWindowRules::Windo
     namespace AT = PhosphorWindowRules::ActionType;
     namespace PSK = PhosphorEngine::PerScreenKeys;
     for (const QString& connector : perScreenGapConnectorForms(screenIdOrName)) {
-        const QUuid ruleId = QUuid::createUuidV5(ConfigDefaults::baselineAppearanceRuleId(), connector.toUtf8());
+        const QUuid ruleId = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), connector.toUtf8());
         if (!store->ruleSet().ruleById(ruleId)) {
             continue;
         }

@@ -1272,7 +1272,7 @@ std::optional<QJsonValue> Settings::gapValueFromRule(const PhosphorWindowRules::
 
 int Settings::innerGap() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
                                         PhosphorWindowRules::ActionType::SetInnerGap)) {
         return v->toInt(ConfigDefaults::innerGap());
     }
@@ -1280,7 +1280,7 @@ int Settings::innerGap() const
 }
 int Settings::outerGap() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
                                         PhosphorWindowRules::ActionType::SetOuterGap)) {
         return v->toInt(ConfigDefaults::outerGap());
     }
@@ -1288,7 +1288,7 @@ int Settings::outerGap() const
 }
 bool Settings::usePerSideOuterGap() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
                                         PhosphorWindowRules::ActionType::SetUsePerSideOuterGap)) {
         return v->toBool(ConfigDefaults::usePerSideOuterGap());
     }
@@ -1296,7 +1296,7 @@ bool Settings::usePerSideOuterGap() const
 }
 int Settings::outerGapTop() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
                                         PhosphorWindowRules::ActionType::SetOuterGapTop)) {
         return v->toInt(ConfigDefaults::outerGapTop());
     }
@@ -1304,7 +1304,7 @@ int Settings::outerGapTop() const
 }
 int Settings::outerGapBottom() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
                                         PhosphorWindowRules::ActionType::SetOuterGapBottom)) {
         return v->toInt(ConfigDefaults::outerGapBottom());
     }
@@ -1312,7 +1312,7 @@ int Settings::outerGapBottom() const
 }
 int Settings::outerGapLeft() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
                                         PhosphorWindowRules::ActionType::SetOuterGapLeft)) {
         return v->toInt(ConfigDefaults::outerGapLeft());
     }
@@ -1320,7 +1320,7 @@ int Settings::outerGapLeft() const
 }
 int Settings::outerGapRight() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineAppearanceRuleId(),
+    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
                                         PhosphorWindowRules::ActionType::SetOuterGapRight)) {
         return v->toInt(ConfigDefaults::outerGapRight());
     }

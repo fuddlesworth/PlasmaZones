@@ -39,7 +39,7 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 namespace {
 
 // Build a per-monitor gap WindowRule keyed exactly as the Appearance page keys
-// it: the deterministic v5 id namespaced under the baseline appearance rule
+// it: the deterministic v5 id namespaced under the baseline gap rule
 // from the monitor's connector name, with a `ScreenId Equals <connector>` match
 // and the inner/outer gap actions. The match value is irrelevant to the
 // rule-backed accessors (which look up BY ID), but mirrors the real shape.
@@ -54,7 +54,7 @@ PhosphorWindowRules::WindowRule makePerScreenGapRule(const QString& connector, i
     };
 
     WindowRule rule;
-    rule.id = QUuid::createUuidV5(ConfigDefaults::baselineAppearanceRuleId(), connector.toUtf8());
+    rule.id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), connector.toUtf8());
     rule.name = QStringLiteral("Gaps (%1)").arg(connector);
     rule.enabled = true;
     rule.priority = 100;

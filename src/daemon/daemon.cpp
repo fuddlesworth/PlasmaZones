@@ -122,15 +122,33 @@ static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
 
 namespace {
 
-// Build the managed baseline appearance rule: a catch-all, lowest-priority
-// WindowRule whose actions hold the default window border / title-bar
-// appearance. It is the single fallback every window resolves against now that
-// the per-mode global border settings are gone — borders default OFF (opt-in),
+// Common skeleton for the three managed baseline rules: catch-all, lowest
+// priority, managed. Each is a focused fallback every window resolves against
+// per concern now that the per-mode global appearance settings are gone. The
+// Appearance settings page rewrites these actions; per-window overrides are
+// ordinary higher-priority rules that win per slot.
+PhosphorWindowRules::WindowRule makeBaselineSkeleton(const QUuid& id, const QString& name)
+{
+    using namespace PhosphorWindowRules;
+    WindowRule rule;
+    rule.id = id;
+    rule.name = name;
+    rule.managed = true;
+    // Lowest possible precedence — any user rule (all of which carry a higher
+    // priority) overrides the baseline per slot. renormalizePriorities in the
+    // settings controller deliberately leaves managed rules pinned here.
+    rule.priority = std::numeric_limits<int>::min();
+    rule.match = MatchExpression{}; // empty All{} — matches every window
+    return rule;
+}
+
+// Build the managed baseline BORDER rule: the catch-all, lowest-priority rule
+// carrying the default border appearance. Borders default OFF (opt-in),
 // width/radius/colour carry sensible defaults so flipping "show border" on in
 // the Appearance page draws immediately, and the colour follows the system
-// accent. The Appearance settings page rewrites these actions; per-window
-// overrides are ordinary higher-priority rules that win per slot.
-PhosphorWindowRules::WindowRule makeBaselineAppearanceRule()
+// accent (the effect resolves the sentinel to the live highlight colour it
+// tracks).
+PhosphorWindowRules::WindowRule makeBaselineBorderRule()
 {
     using namespace PhosphorWindowRules;
     namespace DD = PhosphorCompositor::DecorationDefaults;
@@ -142,19 +160,7 @@ PhosphorWindowRules::WindowRule makeBaselineAppearanceRule()
         return a;
     };
 
-    WindowRule rule;
-    rule.id = ConfigDefaults::baselineAppearanceRuleId();
-    rule.name = PhosphorI18n::tr("Default appearance");
-    rule.managed = true;
-    // Lowest possible precedence — any user rule (all of which carry a higher
-    // priority) overrides the baseline per slot. renormalizePriorities in the
-    // settings controller deliberately leaves managed rules pinned here.
-    rule.priority = std::numeric_limits<int>::min();
-    rule.match = MatchExpression{}; // empty All{} — matches every window
-    // Default colour follows the system accent — the effect resolves the sentinel
-    // to the live highlight colour it tracks. Matches the retired
-    // UseSystemBorderColors default. Borders are off by default, so this only
-    // becomes visible once the user enables the border in the Appearance page.
+    WindowRule rule = makeBaselineSkeleton(ConfigDefaults::baselineBorderRuleId(), PhosphorI18n::tr("Default borders"));
     RuleAction color;
     color.type = QString(ActionType::SetBorderColor);
     color.params.insert(QString(ActionParam::Active), QString(BorderColorToken::Accent));
@@ -164,14 +170,52 @@ PhosphorWindowRules::WindowRule makeBaselineAppearanceRule()
         action(ActionType::SetBorderWidth, ActionParam::Value, DD::BorderWidth),
         action(ActionType::SetBorderRadius, ActionParam::Value, DD::BorderRadius),
         color,
+    };
+    return rule;
+}
+
+// Build the managed baseline TITLE BAR rule: the catch-all, lowest-priority
+// rule carrying the default hide-title-bar value.
+PhosphorWindowRules::WindowRule makeBaselineTitleBarRule()
+{
+    using namespace PhosphorWindowRules;
+    namespace DD = PhosphorCompositor::DecorationDefaults;
+
+    const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
+        RuleAction a;
+        a.type = QString(type);
+        a.params.insert(QString(key), value);
+        return a;
+    };
+
+    WindowRule rule =
+        makeBaselineSkeleton(ConfigDefaults::baselineTitleBarRuleId(), PhosphorI18n::tr("Default title bars"));
+    rule.actions = {
         action(ActionType::SetHideTitleBar, ActionParam::Value, DD::HideTitleBars),
-        // Global default gaps live on the baseline rule too — it is the single
-        // source of truth for the shared inner/outer gap model (Settings reads
-        // these actions back as its innerGap()/outerGap*() getters). These are
-        // Context-domain actions; resolveContextGaps EXCLUDES this managed rule so
-        // the values surface only as the level-4 global default, never as a
-        // top-tier context override. Seeded from the same ConfigDefaults accessors
-        // the schema validators and the compile-time defaults use.
+    };
+    return rule;
+}
+
+// Build the managed baseline GAP rule: the catch-all, lowest-priority rule that
+// is the single source of truth for the shared inner/outer gap model (Settings
+// reads these actions back as its innerGap()/outerGap*() getters). These are
+// Context-domain actions; resolveContextGaps EXCLUDES this managed rule so the
+// values surface only as the level-4 global default, never as a top-tier
+// context override. Seeded from the same ConfigDefaults accessors the schema
+// validators and the compile-time defaults use.
+PhosphorWindowRules::WindowRule makeBaselineGapRule()
+{
+    using namespace PhosphorWindowRules;
+
+    const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
+        RuleAction a;
+        a.type = QString(type);
+        a.params.insert(QString(key), value);
+        return a;
+    };
+
+    WindowRule rule = makeBaselineSkeleton(ConfigDefaults::baselineGapRuleId(), PhosphorI18n::tr("Default gaps"));
+    rule.actions = {
         action(ActionType::SetInnerGap, ActionParam::Value, ConfigDefaults::innerGap()),
         action(ActionType::SetOuterGap, ActionParam::Value, ConfigDefaults::outerGap()),
         action(ActionType::SetUsePerSideOuterGap, ActionParam::Value, ConfigDefaults::usePerSideOuterGap()),
@@ -292,41 +336,57 @@ Daemon::Daemon(QObject* parent)
     // because that idiom reads as an accidental typo.
     ensureScreenIdResolver();
 
-    // Seed the managed baseline appearance rule if the store doesn't already
-    // carry it. The store loaded in its constructor, so this runs every startup
-    // (not first-run only) — existing windowrules.json files predating this rule
-    // gain it too. addRule persists and emits rulesChanged, but the daemon's
-    // rulesChanged consumers are wired later (createAdaptors / setup), so the
-    // emit at construction is inert. The daemon is the sole writer, so seeding
-    // here is the single source for every consumer (effect, settings, editor).
+    // Seed the three managed baseline appearance rules (borders, title bars,
+    // gaps) if the store doesn't already carry them. The store loaded in its
+    // constructor, so this runs every startup (not first-run only) — existing
+    // windowrules.json files predating these rules gain them too. addRule
+    // persists and emits rulesChanged, but the daemon's rulesChanged consumers
+    // are wired later (createAdaptors / setup), so the emit at construction is
+    // inert. The daemon is the sole writer, so seeding here is the single source
+    // for every consumer (effect, settings, editor).
     if (m_windowRuleStore) {
-        const QUuid baselineId = ConfigDefaults::baselineAppearanceRuleId();
-        const auto existing = m_windowRuleStore->ruleSet().ruleById(baselineId);
-        if (!existing) {
-            if (!m_windowRuleStore->addRule(makeBaselineAppearanceRule())) {
-                qCWarning(lcDaemon) << "Failed to seed the baseline appearance rule";
+        using PhosphorWindowRules::RuleAction;
+        using PhosphorWindowRules::WindowRule;
+
+        // Ensure a managed baseline rule exists and carries every action its
+        // canonical maker defines: create it from @p desired when absent,
+        // otherwise append any action type missing from the canonical template
+        // (preserving the user's Appearance-page-edited values for actions
+        // already present).
+        const auto ensureManagedRule = [this](const WindowRule& desired) {
+            const auto existing = m_windowRuleStore->ruleSet().ruleById(desired.id);
+            if (!existing) {
+                if (!m_windowRuleStore->addRule(desired)) {
+                    qCWarning(lcDaemon) << "Failed to seed managed baseline rule" << desired.id;
+                }
+                return;
             }
-        } else {
-            // Reconcile: a baseline seeded by an older build may lack actions added
-            // since (e.g. the gap actions). Append any missing action type from the
-            // canonical template, preserving the user's Appearance-page-edited
-            // values for actions already present.
-            const PhosphorWindowRules::WindowRule canonical = makeBaselineAppearanceRule();
             QSet<QString> present;
-            for (const PhosphorWindowRules::RuleAction& a : existing->actions) {
+            for (const RuleAction& a : existing->actions) {
                 present.insert(a.type);
             }
-            PhosphorWindowRules::WindowRule merged = *existing;
+            WindowRule merged = *existing;
             bool changed = false;
-            for (const PhosphorWindowRules::RuleAction& a : canonical.actions) {
+            for (const RuleAction& a : desired.actions) {
                 if (!present.contains(a.type)) {
                     merged.actions.append(a);
                     changed = true;
                 }
             }
             if (changed && !m_windowRuleStore->updateRule(merged)) {
-                qCWarning(lcDaemon) << "Failed to reconcile the baseline appearance rule";
+                qCWarning(lcDaemon) << "Failed to reconcile managed baseline rule" << desired.id;
             }
+        };
+
+        ensureManagedRule(makeBaselineBorderRule());
+        ensureManagedRule(makeBaselineTitleBarRule());
+        ensureManagedRule(makeBaselineGapRule());
+
+        // Drop the pre-split single "Default appearance" rule if a dev config
+        // still carries it. This branch never shipped, so there is nothing to
+        // migrate — the three rules above are seeded fresh.
+        if (m_windowRuleStore->ruleSet().ruleById(ConfigDefaults::baselineAppearanceRuleId())) {
+            m_windowRuleStore->removeRule(ConfigDefaults::baselineAppearanceRuleId());
         }
     }
 

@@ -1264,7 +1264,7 @@ private:
     // rule is keyed by the screen's CONNECTOR NAME (the id the Appearance page's
     // monitor scope chooser stores and the rule's `ScreenId Equals` match
     // carries) under the deterministic id
-    // createUuidV5(baselineAppearanceRuleId, <connector name>); the incoming
+    // createUuidV5(baselineGapRuleId, <connector name>); the incoming
     // identifier is resolved to that connector-name form first.
     static QVariantMap perScreenGapRuleOverrides(const PhosphorWindowRules::WindowRuleStore* store,
                                                  const QString& screenIdOrName);

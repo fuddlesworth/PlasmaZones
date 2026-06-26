@@ -7,20 +7,24 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-// Slim "Window Appearance" page. The window border and title-bar appearance is
-// resolved entirely from the managed baseline appearance WindowRule (the
-// catch-all, lowest-priority rule the daemon seeds). This page is a friendly
-// editor for that single rule: it reads and writes the rule's actions through
-// the Window Rules controller. Per-window overrides are ordinary higher-priority
-// rules edited on the Window Rules page (the link at the bottom).
+// Slim "Window Appearance" page. The window border, title-bar, and gap defaults
+// are resolved from three managed baseline appearance WindowRules (the
+// catch-all, lowest-priority rules the daemon seeds, one per concern). This page
+// is a friendly editor for those three rules: each action's read/write routes to
+// the matching baseline rule through the Window Rules controller. Per-window
+// overrides are ordinary higher-priority rules edited on the Window Rules page
+// (the link at the bottom).
 SettingsFlickable {
     id: root
 
-    // Bounds + the baseline rule id.
+    // Bounds + the three baseline rule ids.
     readonly property var bounds: settingsController.windowAppearancePage
     // The Window Rules controller owns the rule model + the daemon round-trip.
     readonly property var ruleController: settingsController.windowRulesPage
-    readonly property string baselineId: bounds.baselineRuleId
+    // One managed baseline rule per concern.
+    readonly property string borderId: bounds.borderBaselineRuleId
+    readonly property string titleBarId: bounds.titleBarBaselineRuleId
+    readonly property string gapId: bounds.gapBaselineRuleId
 
     // Action wire strings (mirrors PhosphorWindowRules::ActionType).
     readonly property string actBorderVisible: "setBorderVisible"
@@ -41,7 +45,7 @@ SettingsFlickable {
     // "Follow the system accent" sentinel (PhosphorWindowRules::BorderColorToken::Accent).
     // Writing it records intent; the effect-side push that resolves the sentinel
     // to the live accent colour is a pending follow-up (see the daemon's
-    // makeBaselineAppearanceRule note), so for now it persists as a stored token.
+    // makeBaselineBorderRule note), so for now it persists as a stored token.
     readonly property string accentToken: "accent"
     // Concrete fallback colour written when the user turns the accent toggle off
     // (matches the daemon's seeded baseline default — KDE accent blue, opaque).
@@ -52,10 +56,10 @@ SettingsFlickable {
     property int reloadTick: 0
 
     // Gap scope follows the shared monitor scope chip (settingsController.
-    // scopeScreenName): "" = global (edits the baseline rule's gap actions);
+    // scopeScreenName): "" = global (edits the gap baseline rule's actions);
     // otherwise the monitor whose gap override rule is being edited. The
-    // border/title-bar cards always edit the global baseline; only the Gaps card
-    // is scope-aware.
+    // border/title-bar cards always edit their global baseline; only the Gaps
+    // card is scope-aware.
     readonly property string gapScope: settingsController.scopeScreenName
 
     contentHeight: content.implicitHeight
@@ -77,9 +81,30 @@ SettingsFlickable {
         return fallback;
     }
 
-    // Read one action param from the baseline rule, or @p fallback if absent.
+    // Map an action wire type to the managed baseline rule that owns it: the gap
+    // actions live on the gap baseline, hide-title-bar on the title-bar baseline,
+    // and every border action on the border baseline.
+    function baselineFor(typeWire) {
+        switch (typeWire) {
+        case root.actHideTitleBar:
+            return root.titleBarId;
+        case root.actInnerGap:
+        case root.actOuterGap:
+        case root.actUsePerSideOuterGap:
+        case root.actOuterGapTop:
+        case root.actOuterGapBottom:
+        case root.actOuterGapLeft:
+        case root.actOuterGapRight:
+            return root.gapId;
+        default:
+            return root.borderId;
+        }
+    }
+
+    // Read one action param from the baseline rule that owns @p typeWire, or
+    // @p fallback if absent.
     function actionValue(typeWire, paramKey, fallback) {
-        return root.actionValueFrom(root.baselineId, typeWire, paramKey, fallback);
+        return root.actionValueFrom(root.baselineFor(typeWire), typeWire, paramKey, fallback);
     }
 
     // ─── Per-monitor gap overrides (screen-scoped rules) ─────────────────────
@@ -104,9 +129,9 @@ SettingsFlickable {
     // inherited global values as its starting point).
     function gapReadId() {
         if (root.gapScope === "") {
-            return root.baselineId;
+            return root.gapId;
         }
-        return root.perScreenGapRuleExists() ? root.perScreenGapId() : root.baselineId;
+        return root.perScreenGapRuleExists() ? root.perScreenGapId() : root.gapId;
     }
 
     // Read a gap action param honouring the current scope.
@@ -160,7 +185,7 @@ SettingsFlickable {
     function buildPerScreenGapRule(id) {
         const scope = root.gapScope;
         const baseVal = function (typeWire, fallback) {
-            return root.actionValueFrom(root.baselineId, typeWire, "value", fallback);
+            return root.actionValueFrom(root.gapId, typeWire, "value", fallback);
         };
         return {
             "id": id,
@@ -224,12 +249,12 @@ SettingsFlickable {
         root.reloadTick++;
     }
 
-    // Write one or more param values onto the baseline rule's action of the
-    // given type (creating the action if it is somehow absent), then push the
-    // updated rule back through the controller. @p params is a plain object of
-    // { paramKey: value } pairs.
+    // Write one or more param values onto the action of the given type on the
+    // baseline rule that owns it (creating the action if it is somehow absent),
+    // then push the updated rule back through the controller. @p params is a
+    // plain object of { paramKey: value } pairs.
     function writeAction(typeWire, params) {
-        const rule = ruleController.ruleJson(baselineId);
+        const rule = ruleController.ruleJson(root.baselineFor(typeWire));
         if (!rule || !rule.id) {
             return;
         }
@@ -485,7 +510,7 @@ SettingsFlickable {
 
         // =================================================================
         // Gaps Card — the unified inner/outer gap model, rule-backed on the
-        // same baseline rule. Smart gaps is tiling-only and lives on the
+        // gap baseline rule. Smart gaps is tiling-only and lives on the
         // Tiling → Window page, so it is hidden here.
         // =================================================================
         GapsSettingsCard {

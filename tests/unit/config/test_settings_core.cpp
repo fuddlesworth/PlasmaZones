@@ -709,7 +709,7 @@ private Q_SLOTS:
 
     /**
      * The shared inner/outer gap global default is rule-backed: the getters read
-     * the managed baseline appearance WindowRule's gap actions, and a change to
+     * the managed baseline gap WindowRule's gap actions, and a change to
      * that rule re-emits the per-property NOTIFY + settingsChanged so the daemon
      * retiles / re-spaces. This validates the read path and the reactivity wiring
      * (onRuleStoreChanged) that replaces the old stored-setter signals.
@@ -721,10 +721,10 @@ private Q_SLOTS:
         namespace PWR = PhosphorWindowRules;
         PWR::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
 
-        // Seed a minimal managed baseline rule carrying an inner-gap action.
+        // Seed a minimal managed baseline gap rule carrying an inner-gap action.
         PWR::WindowRule rule;
-        rule.id = ConfigDefaults::baselineAppearanceRuleId();
-        rule.name = QStringLiteral("Default appearance");
+        rule.id = ConfigDefaults::baselineGapRuleId();
+        rule.name = QStringLiteral("Default gaps");
         rule.managed = true;
         rule.priority = std::numeric_limits<int>::min();
         PWR::RuleAction inner;
