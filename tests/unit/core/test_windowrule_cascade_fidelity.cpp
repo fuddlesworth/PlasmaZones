@@ -40,6 +40,8 @@
 #include <QScopedPointer>
 #include <QString>
 #include <QTest>
+#include <QUuid>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -906,6 +908,66 @@ private Q_SLOTS:
         QVERIFY(!resolved.usePerSideOuterGap.has_value());
 
         // A context the rules do not pin → no override (cascade falls through).
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+    }
+
+    // ─── Per-monitor gap rule overrides the baseline for that screen only ────
+    // A per-monitor gap override is authored by the Appearance page as a NORMAL
+    // (non-managed) screen-scoped rule: match `ScreenId == screen`, carrying the
+    // gap actions. It must override the GLOBAL default (the managed, catch-all
+    // baseline rule that holds the global gaps) for that monitor only — and the
+    // managed catch-all baseline must itself stay EXCLUDED from the context
+    // override, so an un-pinned monitor reports no override and falls through to
+    // the global default tier.
+
+    void testContextGaps_perScreenRuleOverridesBaseline()
+    {
+        const auto intGapAction = [](QLatin1StringView type, int value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), value);
+            return a;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+
+        // The managed, catch-all baseline rule that carries the GLOBAL default
+        // gaps (inner = 4). It is pinned to lowest precedence and is the level-4
+        // default tier, NOT a context override — resolveContextGaps excludes it.
+        PWR::WindowRule baseline;
+        baseline.id = ConfigDefaults::baselineAppearanceRuleId();
+        baseline.name = QStringLiteral("Default appearance");
+        baseline.enabled = true;
+        baseline.managed = true;
+        baseline.priority = std::numeric_limits<int>::min();
+        baseline.match = PWR::MatchExpression{}; // catch-all All{}
+        baseline.actions = {intGapAction(PWR::ActionType::SetInnerGap, 4)};
+
+        // A non-managed per-monitor gap override for DP-1 (inner = 20), the shape
+        // the Appearance page's monitor scope authors. Its deterministic id is
+        // namespaced under the baseline (mirrors perScreenGapRuleId).
+        PWR::WindowRule perScreen;
+        perScreen.id = QUuid::createUuidV5(ConfigDefaults::baselineAppearanceRuleId(), QByteArrayLiteral("DP-1"));
+        perScreen.name = QStringLiteral("Gaps (DP-1)");
+        perScreen.enabled = true;
+        perScreen.managed = false;
+        perScreen.priority = 310; // context band, well above the baseline floor
+        perScreen.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
+        perScreen.actions = {intGapAction(PWR::ActionType::SetInnerGap, 20)};
+
+        QVERIFY(f.store->setAllRules({baseline, perScreen}));
+
+        // DP-1 carries the per-monitor override → inner gap 20 surfaces as a
+        // tier-1 context override (it beats the excluded baseline).
+        const PhosphorZones::ContextGapOverride dp1 =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(dp1.innerGap.has_value());
+        QCOMPARE(*dp1.innerGap, 20);
+
+        // DP-2 has no per-monitor rule. The managed catch-all baseline is
+        // EXCLUDED, so there is NO context override — the cascade falls through
+        // to the global default tier (the baseline's value, surfaced elsewhere).
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 

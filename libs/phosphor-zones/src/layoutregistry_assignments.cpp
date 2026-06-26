@@ -205,6 +205,16 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
 ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, int virtualDesktop,
                                                       const QString& activity) const
 {
+    // This returns CONTEXT OVERRIDE rules only — the per-screen, per-desktop and
+    // per-activity gap rules that sit ABOVE the per-layout tier in the geometry
+    // cascade (getEffectiveInnerGap / getEffectiveOuterGaps tier 1). It is NOT
+    // the cascade's default tier: the global default gap lives on the managed
+    // catch-all baseline rule and is read separately, BY ID, through
+    // Settings::innerGap()/outerGap*() at the cascade's default tier (tier 3),
+    // with the per-layout override sitting between this override layer and that
+    // default. The clean tiering is: context overrides (here) → per-layout →
+    // global default (baseline by id) → compile default.
+    //
     // Unlike resolveAssignmentEntry (single winning engine-mode rule), gap
     // overrides are read PER SLOT from the evaluator's ResolvedActions, so a
     // gap-only rule and, say, a separate engine-mode rule on the same context
@@ -225,17 +235,20 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
 
             // Resolve each gap slot from the highest-priority matching rule that
             // carries that slot's action. The CATCH-ALL managed baseline rule is
-            // EXCLUDED: it carries the GLOBAL default gap values (the level-4
-            // default tier, surfaced through Settings), not a context override —
-            // were it included, its catch-all match would fill every gap slot with
-            // the global default and masquerade as a top-tier context override,
-            // shadowing the per-screen and layout tiers below the context layer.
-            // Managed SCREEN-scoped gap rules (per-monitor overrides authored via
-            // the Appearance page's monitor scope) have a SPECIFIC match, so they
-            // are NOT catch-all and DO participate here as context overrides. The
-            // per-slot, first-matching-rule-wins semantics the old resolve() walk
-            // produced are reproduced by highestPriorityMatch with a per-slot
-            // "carries this slot, not the catch-all baseline" filter.
+            // EXCLUDED because it is the cascade's DEFAULT TIER, not a context
+            // override: it carries the GLOBAL default gap values and is read by id
+            // through Settings::innerGap()/outerGap*() at the geometry cascade's
+            // default tier, with the per-layout override sitting between this
+            // override layer and that default. Were the baseline included here, its
+            // catch-all match would fill every gap slot with the global default and
+            // masquerade as a top-tier context override, shadowing the per-layout
+            // tier that must sit below context overrides. Managed SCREEN-scoped gap
+            // rules (per-monitor overrides authored via the Appearance page's
+            // monitor scope) have a SPECIFIC match, so they are NOT catch-all and DO
+            // participate here as context overrides. The per-slot,
+            // first-matching-rule-wins semantics the old resolve() walk produced are
+            // reproduced by highestPriorityMatch with a per-slot "carries this slot,
+            // not the catch-all baseline" filter.
             const PWR::ActionRegistry& registry = PWR::ActionRegistry::instance();
             const auto winningAction = [this, &query,
                                         &registry](QLatin1StringView slot) -> std::optional<PWR::RuleAction> {

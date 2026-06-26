@@ -9,6 +9,7 @@
 #include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QString>
+#include <QUuid>
 
 namespace PlasmaZones {
 
@@ -78,6 +79,26 @@ public:
     QString baselineRuleId() const
     {
         return ConfigDefaults::baselineAppearanceRuleId().toString();
+    }
+
+    /// Deterministic, reproducible id (UUID string, braces) of the per-monitor
+    /// gap-override WindowRule for @p screenId. A per-monitor gap override is an
+    /// ordinary (non-managed) screen-scoped rule whose match is
+    /// `ScreenId Equals screenId` and whose actions carry the gap values; it
+    /// rides the context-gap cascade so it overrides the global baseline for
+    /// that monitor only. The id is a v5 UUID namespaced under the baseline
+    /// appearance rule so it is stable across restarts and reproducible from the
+    /// screen id alone — QML cannot compute v5, so the page resolves it here and
+    /// then drives find-or-create through the Window Rules controller's
+    /// ruleJson() / addRuleFromJson() / updateRuleFromJson() / removeRule().
+    /// Returns an empty string for an empty screen id (the "all monitors" /
+    /// global scope, which edits the baseline rule directly).
+    Q_INVOKABLE QString perScreenGapRuleId(const QString& screenId) const
+    {
+        if (screenId.isEmpty()) {
+            return QString();
+        }
+        return QUuid::createUuidV5(ConfigDefaults::baselineAppearanceRuleId(), screenId.toUtf8()).toString();
     }
     int innerGapMin() const
     {

@@ -115,9 +115,9 @@ SnapEngine::GapParams SnapEngine::resolveGapParams(const QString& screenId, Phos
                 ::PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap)};
     }
 
-    // Per-screen snapping override with virtual->physical fallback, mirroring
-    // GeometryUtils::getPerScreenSnappingWithFallback so a per-monitor gap set on
-    // a physical screen still applies on its virtual sub-screens.
+    // Per-screen snapping override with virtual->physical fallback so a
+    // per-monitor gap set on a physical screen still applies on its virtual
+    // sub-screens.
     QVariantMap perScreen;
     if (!screenId.isEmpty()) {
         perScreen = gs->getPerScreenSnappingSettings(screenId);

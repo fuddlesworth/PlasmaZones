@@ -666,8 +666,8 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdO
     auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
     // Virtual-screen fallback: an override stored on the physical monitor must
     // still apply when the selector runs on one of its virtual sub-screens.
-    // Mirrors getPerScreenSnappingWithFallback() in geometryutils.cpp so the
-    // selector resolver and the snapping geometry path resolve ids alike.
+    // Resolve a physical-monitor override for a virtual sub-screen id, matching
+    // the virtual->physical fallback the per-screen reads elsewhere perform.
     if (it == m_perScreenZoneSelectorSettings.constEnd()
         && PhosphorIdentity::VirtualScreenId::isVirtual(screenIdOrName)) {
         it = findPerScreenEntry(m_perScreenZoneSelectorSettings,

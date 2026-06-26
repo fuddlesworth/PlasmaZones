@@ -98,18 +98,21 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManag
  * @brief Get effective zone padding for a layout
  * @param layout PhosphorZones::Layout to get padding for (may have per-layout override)
  * @param settings Global settings (used if layout has no override)
- * @param screenId Optional screen identifier for per-screen override lookup
  * @return Effective zone padding in pixels
  *
  * @param ruleGapOverride Optional PerScreenSnappingKey-shaped map of context-rule
- *        gap overrides (built by DaemonGeometryResolver from the resolved
- *        context rules); takes precedence over every other layer.
+ *        gap overrides (built from the resolved context rules — per-screen,
+ *        per-desktop, per-activity — by DaemonGeometryResolver on the commit path
+ *        or by currentContextGapOverride on the preview/query path); takes
+ *        precedence over every other tier. Per-screen gaps are themselves rules
+ *        now, so they arrive through this override — there is no separate
+ *        per-screen Settings tier.
  *
- * Resolution cascade: context-rule override → per-screen override → layout
- * override → global settings → default (8px)
+ * Resolution cascade: context-rule override → per-layout override → global
+ * default (settings->innerGap(), which reads the baseline rule) → compile default
  */
 PLASMAZONES_EXPORT int getEffectiveInnerGap(PhosphorZones::Layout* layout, ISettings* settings,
-                                            const QString& screenId = {}, const QVariantMap& ruleGapOverride = {});
+                                            const QVariantMap& ruleGapOverride = {});
 
 using ::PhosphorZones::GeometryUtils::snapToRect;
 
@@ -117,17 +120,17 @@ using ::PhosphorZones::GeometryUtils::snapToRect;
  * @brief Get effective per-side outer gaps for a layout
  * @param layout PhosphorZones::Layout to get gaps for (may have per-layout overrides)
  * @param settings Global settings (used if layout has no override)
- * @param screenId Optional screen identifier for per-screen override lookup
  * @return Effective per-side edge gaps
  *
  * @param ruleGapOverride Optional PerScreenSnappingKey-shaped map of context-rule
- *        gap overrides; takes precedence over every other layer.
+ *        gap overrides (per-screen/desktop/activity rules); takes precedence over
+ *        every other tier. Per-screen gaps are rules now, so they arrive through
+ *        this override — there is no separate per-screen Settings tier.
  *
- * Resolution cascade: context-rule override → per-screen per-side → per-screen
- * uniform → layout per-side → layout uniform → global per-side → global uniform → default
+ * Resolution cascade: context-rule override → layout per-side → layout uniform →
+ * global per-side → global uniform → compile default
  */
 PLASMAZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZones::Layout* layout, ISettings* settings,
-                                                                    const QString& screenId = {},
                                                                     const QVariantMap& ruleGapOverride = {});
 
 /**
@@ -140,6 +143,22 @@ PLASMAZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZone
  * helpers above so the rule→map translation lives in exactly one place.
  */
 PLASMAZONES_EXPORT QVariantMap contextGapOverrideMap(const PhosphorZones::ContextGapOverride& gaps);
+
+/**
+ * @brief Resolve the context-rule gap override for @p screenId in @p reg's
+ *        CURRENT desktop/activity, as the PerScreenSnappingKey-shaped map that
+ *        getEffectiveInnerGap / getEffectiveOuterGaps consume as `ruleGapOverride`.
+ *
+ * Returns an empty map when there is no registry or no matching context rule, so
+ * the caller falls through to the per-layout/global cascade. The registry's
+ * current context is kept in sync with the compositor by the daemon, so the
+ * override matches the one DaemonGeometryResolver computes on the commit path.
+ * This is the preview/query-path counterpart to DaemonGeometryResolver's
+ * contextGapOverrideFor — both translate the resolved context rules into the
+ * same map so preview/selector geometry matches commit-time geometry.
+ */
+PLASMAZONES_EXPORT QVariantMap currentContextGapOverride(PhosphorZones::IZoneLayoutRegistry* reg,
+                                                         const QString& screenId);
 
 using ::PhosphorZones::GeometryUtils::effectiveScreenGeometry;
 

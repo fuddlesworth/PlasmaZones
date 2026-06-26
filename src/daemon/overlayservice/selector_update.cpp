@@ -24,7 +24,8 @@ namespace {
 
 void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, QObject* window, QScreen* screen,
                                           const QString& virtualScreenId, const ZoneSelectorConfig& config,
-                                          ISettings* settings, const ZoneSelectorLayout& layout)
+                                          ISettings* settings, const ZoneSelectorLayout& layout,
+                                          PhosphorZones::IZoneLayoutRegistry* layoutRegistry)
 {
     if (!window || !screen) {
         return;
@@ -44,11 +45,13 @@ void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, Q
     writeQmlProperty(window, QStringLiteral("positionIsVertical"),
                      (pos == ZoneSelectorPosition::Left || pos == ZoneSelectorPosition::Right));
 
-    // Compute scaled zone appearance values. Zone padding honors per-screen
-    // overrides (resolution cascade: per-screen → global → default); border
-    // width/radius are global-only settings (no per-screen key exists).
+    // Compute scaled zone appearance values. Zone padding honors per-monitor gap
+    // RULES (cascade: context-rule override → layout → global → default) via the
+    // layout registry's current context; border width/radius are global-only
+    // settings (no per-screen key exists).
     if (settings) {
-        const int zonePadding = GeometryUtils::getEffectiveInnerGap(nullptr, settings, virtualScreenId);
+        const int zonePadding = GeometryUtils::getEffectiveInnerGap(
+            nullptr, settings, GeometryUtils::currentContextGapOverride(layoutRegistry, virtualScreenId));
         const int zoneBorderWidth = settings->borderWidth();
         const int zoneBorderRadius = settings->borderRadius();
 
@@ -145,10 +148,12 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     if (m_settings) {
         writeColorSettings(window, m_settings);
         // PhosphorZones::Zone appearance for the scaled preview. Zone padding
-        // honors per-screen overrides (per-screen → global → default); border
-        // width/radius are global-only (no per-screen key exists).
+        // honors per-monitor gap RULES (context-rule override → layout → global →
+        // default) via the layout registry's current context; border width/radius
+        // are global-only (no per-screen key exists).
         writeQmlProperty(window, QStringLiteral("zonePadding"),
-                         GeometryUtils::getEffectiveInnerGap(nullptr, m_settings, screenId));
+                         GeometryUtils::getEffectiveInnerGap(
+                             nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, screenId)));
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
         // Font settings for zone number labels
@@ -205,7 +210,8 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     applyZoneSelectorLayout(window, layout);
 
     // Update computed properties that depend on layout and settings
-    updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, config, m_settings, layout);
+    updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, config, m_settings, layout,
+                                         m_layoutManager);
 
     // Positioning is entirely QML-internal: ZoneSelectorWindow.qml's
     // selectorPosition state anchors the inner container to the requested

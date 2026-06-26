@@ -51,12 +51,21 @@ SettingsFlickable {
     // function-call value bindings below re-evaluate against the fresh rule.
     property int reloadTick: 0
 
+    // Gap scope: "" = global (edits the baseline rule's gap actions); otherwise
+    // the connector id of the monitor whose gap override is being edited (a
+    // separate, screen-scoped rule). The border/title-bar cards always edit the
+    // global baseline; only the Gaps card is scope-aware.
+    property string gapScope: ""
+
     contentHeight: content.implicitHeight
     clip: true
 
-    // Read one action param from the baseline rule, or @p fallback if absent.
-    function actionValue(typeWire, paramKey, fallback) {
-        const rule = ruleController.ruleJson(baselineId);
+    // Read one action param from the rule @p ruleId, or @p fallback if absent.
+    function actionValueFrom(ruleId, typeWire, paramKey, fallback) {
+        if (!ruleId) {
+            return fallback;
+        }
+        const rule = ruleController.ruleJson(ruleId);
         const actions = rule.actions || [];
         for (var i = 0; i < actions.length; ++i) {
             if (actions[i].type === typeWire) {
@@ -65,6 +74,162 @@ SettingsFlickable {
             }
         }
         return fallback;
+    }
+
+    // Read one action param from the baseline rule, or @p fallback if absent.
+    function actionValue(typeWire, paramKey, fallback) {
+        return root.actionValueFrom(root.baselineId, typeWire, paramKey, fallback);
+    }
+
+    // ─── Per-monitor gap overrides (screen-scoped rules) ─────────────────────
+
+    // The deterministic id of the current monitor's gap rule, or "" when global.
+    function perScreenGapId() {
+        return root.gapScope === "" ? "" : root.bounds.perScreenGapRuleId(root.gapScope);
+    }
+
+    // True when the current monitor scope already carries a gap override rule.
+    function perScreenGapRuleExists() {
+        const id = root.perScreenGapId();
+        if (id === "") {
+            return false;
+        }
+        const rule = ruleController.ruleJson(id);
+        return rule && rule.id ? true : false;
+    }
+
+    // The rule the gap controls READ from: the per-screen rule when one exists,
+    // otherwise the baseline rule (so a not-yet-overridden monitor shows the
+    // inherited global values as its starting point).
+    function gapReadId() {
+        if (root.gapScope === "") {
+            return root.baselineId;
+        }
+        return root.perScreenGapRuleExists() ? root.perScreenGapId() : root.baselineId;
+    }
+
+    // Read a gap action param honouring the current scope.
+    function gapValue(typeWire, paramKey, fallback) {
+        return root.actionValueFrom(root.gapReadId(), typeWire, paramKey, fallback);
+    }
+
+    // Friendly name for a screen connector id (falls back to the raw id).
+    function scopeDisplayName(connector) {
+        const arr = settingsController.screens || [];
+        for (var i = 0; i < arr.length; ++i) {
+            if ((arr[i].name || "") === connector) {
+                return arr[i].displayLabel || arr[i].name || connector;
+            }
+        }
+        return connector;
+    }
+
+    // Merge @p params into the action of @p typeWire on @p ruleObj (creating the
+    // action if absent). Mutates and returns the rule object.
+    function applyGapParam(ruleObj, typeWire, params) {
+        const actions = (ruleObj.actions || []).slice();
+        var found = false;
+        for (var i = 0; i < actions.length; ++i) {
+            if (actions[i].type === typeWire) {
+                var updated = Object.assign({}, actions[i]);
+                for (var k in params) {
+                    updated[k] = params[k];
+                }
+                actions[i] = updated;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            var created = {
+                "type": typeWire
+            };
+            for (var k2 in params) {
+                created[k2] = params[k2];
+            }
+            actions.push(created);
+        }
+        ruleObj.actions = actions;
+        return ruleObj;
+    }
+
+    // Build a fresh per-screen gap rule for the current scope, seeding every gap
+    // action from the global baseline's current values so the override starts as
+    // an exact copy of what the monitor already inherited.
+    function buildPerScreenGapRule(id) {
+        const scope = root.gapScope;
+        const baseVal = function (typeWire, fallback) {
+            return root.actionValueFrom(root.baselineId, typeWire, "value", fallback);
+        };
+        return {
+            "id": id,
+            "name": i18n("Gaps (%1)", root.scopeDisplayName(scope)),
+            "enabled": true,
+            "match": {
+                "field": "screenId",
+                "op": "equals",
+                "value": scope
+            },
+            "actions": [
+                {
+                    "type": root.actInnerGap,
+                    "value": baseVal(root.actInnerGap, root.bounds.innerGapMin)
+                },
+                {
+                    "type": root.actOuterGap,
+                    "value": baseVal(root.actOuterGap, root.bounds.outerGapMin)
+                },
+                {
+                    "type": root.actUsePerSideOuterGap,
+                    "value": baseVal(root.actUsePerSideOuterGap, false)
+                },
+                {
+                    "type": root.actOuterGapTop,
+                    "value": baseVal(root.actOuterGapTop, root.bounds.outerGapMin)
+                },
+                {
+                    "type": root.actOuterGapBottom,
+                    "value": baseVal(root.actOuterGapBottom, root.bounds.outerGapMin)
+                },
+                {
+                    "type": root.actOuterGapLeft,
+                    "value": baseVal(root.actOuterGapLeft, root.bounds.outerGapMin)
+                },
+                {
+                    "type": root.actOuterGapRight,
+                    "value": baseVal(root.actOuterGapRight, root.bounds.outerGapMin)
+                }
+            ]
+        };
+    }
+
+    // Write a gap action honouring the current scope. Global scope rewrites the
+    // baseline rule; a monitor scope finds-or-creates that monitor's gap rule.
+    function writeGapAction(typeWire, params) {
+        if (root.gapScope === "") {
+            root.writeAction(typeWire, params);
+            return;
+        }
+        const id = root.perScreenGapId();
+        var rule = ruleController.ruleJson(id);
+        if (!rule || !rule.id) {
+            rule = root.buildPerScreenGapRule(id);
+            root.applyGapParam(rule, typeWire, params);
+            ruleController.addRuleFromJson(rule);
+        } else {
+            root.applyGapParam(rule, typeWire, params);
+            ruleController.updateRuleFromJson(rule);
+        }
+        root.reloadTick++;
+    }
+
+    // Drop the current monitor's gap override so it falls back to the global gaps.
+    function resetGapScope() {
+        const id = root.perScreenGapId();
+        if (id !== "") {
+            ruleController.removeRule(id);
+        }
+        root.reloadTick++;
     }
 
     // Write one or more param values onto the baseline rule's action of the
@@ -330,66 +495,83 @@ SettingsFlickable {
             outerGapLabel: i18n("Outer gap")
             outerGapDescription: i18n("Space from the screen edges to windows")
             showSmartGaps: false
+            // Per-monitor scope chooser: "All monitors" edits the global default
+            // (the baseline rule); picking a monitor edits that monitor's gap
+            // override rule only.
+            showScopeSelector: true
+            scopeScreens: settingsController.screens
+            scopeValue: root.gapScope
+            scopeHasOverride: {
+                root.reloadTick;
+                return root.perScreenGapRuleExists();
+            }
             primaryGapValue: {
                 root.reloadTick;
-                return root.actionValue(root.actInnerGap, "value", root.bounds.innerGapMin);
+                return root.gapValue(root.actInnerGap, "value", root.bounds.innerGapMin);
             }
             outerGapValue: {
                 root.reloadTick;
-                return root.actionValue(root.actOuterGap, "value", root.bounds.outerGapMin);
+                return root.gapValue(root.actOuterGap, "value", root.bounds.outerGapMin);
             }
             usePerSideOuterGap: {
                 root.reloadTick;
-                return root.actionValue(root.actUsePerSideOuterGap, "value", false);
+                return root.gapValue(root.actUsePerSideOuterGap, "value", false);
             }
             outerGapTopValue: {
                 root.reloadTick;
-                return root.actionValue(root.actOuterGapTop, "value", root.bounds.outerGapMin);
+                return root.gapValue(root.actOuterGapTop, "value", root.bounds.outerGapMin);
             }
             outerGapBottomValue: {
                 root.reloadTick;
-                return root.actionValue(root.actOuterGapBottom, "value", root.bounds.outerGapMin);
+                return root.gapValue(root.actOuterGapBottom, "value", root.bounds.outerGapMin);
             }
             outerGapLeftValue: {
                 root.reloadTick;
-                return root.actionValue(root.actOuterGapLeft, "value", root.bounds.outerGapMin);
+                return root.gapValue(root.actOuterGapLeft, "value", root.bounds.outerGapMin);
             }
             outerGapRightValue: {
                 root.reloadTick;
-                return root.actionValue(root.actOuterGapRight, "value", root.bounds.outerGapMin);
+                return root.gapValue(root.actOuterGapRight, "value", root.bounds.outerGapMin);
+            }
+            onScopeSelected: screenName => {
+                root.gapScope = screenName;
+                root.reloadTick++;
+            }
+            onScopeReset: {
+                root.resetGapScope();
             }
             onPrimaryGapModified: value => {
-                return root.writeAction(root.actInnerGap, {
+                return root.writeGapAction(root.actInnerGap, {
                     "value": value
                 });
             }
             onOuterGapModified: value => {
-                return root.writeAction(root.actOuterGap, {
+                return root.writeGapAction(root.actOuterGap, {
                     "value": value
                 });
             }
             onUsePerSideOuterGapToggled: checked => {
-                return root.writeAction(root.actUsePerSideOuterGap, {
+                return root.writeGapAction(root.actUsePerSideOuterGap, {
                     "value": checked
                 });
             }
             onOuterGapTopModified: value => {
-                return root.writeAction(root.actOuterGapTop, {
+                return root.writeGapAction(root.actOuterGapTop, {
                     "value": value
                 });
             }
             onOuterGapBottomModified: value => {
-                return root.writeAction(root.actOuterGapBottom, {
+                return root.writeGapAction(root.actOuterGapBottom, {
                     "value": value
                 });
             }
             onOuterGapLeftModified: value => {
-                return root.writeAction(root.actOuterGapLeft, {
+                return root.writeGapAction(root.actOuterGapLeft, {
                     "value": value
                 });
             }
             onOuterGapRightModified: value => {
-                return root.writeAction(root.actOuterGapRight, {
+                return root.writeGapAction(root.actOuterGapRight, {
                     "value": value
                 });
             }

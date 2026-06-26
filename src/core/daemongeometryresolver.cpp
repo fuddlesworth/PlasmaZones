@@ -29,7 +29,7 @@ int DaemonGeometryResolver::resolveInnerGap(PhosphorZones::Layout* layout, const
     if (!m_settings) {
         return PhosphorEngine::GeometryDefaults::InnerGap;
     }
-    return GeometryUtils::getEffectiveInnerGap(layout, m_settings, screenId, contextGapOverrideFor(screenId));
+    return GeometryUtils::getEffectiveInnerGap(layout, m_settings, contextGapOverrideFor(screenId));
 }
 
 PhosphorLayout::EdgeGaps DaemonGeometryResolver::resolveOuterGaps(PhosphorZones::Layout* layout,
@@ -38,7 +38,7 @@ PhosphorLayout::EdgeGaps DaemonGeometryResolver::resolveOuterGaps(PhosphorZones:
     if (!m_settings) {
         return PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
     }
-    return GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId, contextGapOverrideFor(screenId));
+    return GeometryUtils::getEffectiveOuterGaps(layout, m_settings, contextGapOverrideFor(screenId));
 }
 
 int DaemonGeometryResolver::defaultBorderWidth() const
