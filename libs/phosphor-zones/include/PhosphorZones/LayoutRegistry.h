@@ -837,13 +837,32 @@ private:
         return value;
     }
 
-    /// Cache of @ref resolveAssignmentEntry results keyed by context tuple.
-    /// A @c nullopt value caches a genuine cascade miss (no pinned context
-    /// rule wins) — so a missed lookup pays the linear walk exactly once per
-    /// rule-set revision, not three times per cursor-move (the
+    /// The rule-derived slot resolution cached by @ref resolveAssignmentEntry.
+    /// Holds ONLY what the rule set produced for each of the three independent
+    /// slots, so the cache stays a pure function of the rule set (the cache's
+    /// revision-invalidation contract). The global default — an external
+    /// provider, not part of the rule set and not revision-tracked — is folded
+    /// in AFTER the cache returns, so a default-setting change is reflected
+    /// immediately without a rule-set revision bump (a settings edit produces
+    /// none). @c modeEntry is engaged when an engine-mode rule won (it carries
+    /// that rule's mode plus its own layout tokens); when disengaged the caller
+    /// bases the entry on the live global default for the context.
+    /// @c snappingLayout / @c tilingAlgorithm are engaged when a layout rule
+    /// filled that slot, and override the base's field.
+    struct RuleSlotResolution
+    {
+        std::optional<AssignmentEntry> modeEntry;
+        std::optional<QString> snappingLayout;
+        std::optional<QString> tilingAlgorithm;
+    };
+
+    /// Cache of @ref resolveAssignmentEntry's rule-derived resolution keyed by
+    /// context tuple. A @c nullopt value caches a genuine cascade miss (no rule
+    /// filled any slot) — so a missed lookup pays the linear walk exactly once
+    /// per rule-set revision, not three times per cursor-move (the
     /// connector / virtual-screen fallback chain in
     /// @ref assignmentEntryForScreen drives the same miss into three lookups).
-    mutable QHash<ContextResolveKey, std::optional<AssignmentEntry>> m_contextResolveCache;
+    mutable QHash<ContextResolveKey, std::optional<RuleSlotResolution>> m_contextResolveCache;
     /// The rule-set revision the cache contents are valid for. The cache is
     /// dropped wholesale whenever this no longer matches
     /// @c m_ruleStore->ruleSet().revision() — see @ref resolveAssignmentEntry.

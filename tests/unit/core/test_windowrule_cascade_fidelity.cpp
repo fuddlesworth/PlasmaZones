@@ -157,6 +157,25 @@ private:
         return mixed;
     }
 
+    /// A USER-authored catch-all engine rule — an empty-All{} match (so
+    /// isCatchAll() is true) at a non-zero, UI-band priority. This is the shape
+    /// the Settings UI persists for a "Default / Any window" engine+layout rule,
+    /// distinct from CRB::makeProviderDefaultRule (which forces priority 0 and a
+    /// fixed identity). It must act as the default floor, not be discarded.
+    PWR::WindowRule makeUserCatchAllRule(bool autotileMode, const QString& snappingLayout,
+                                         const QString& tilingAlgorithm, int priority)
+    {
+        PWR::WindowRule r;
+        r.id = QUuid::createUuid();
+        r.name = QStringLiteral("Default");
+        r.enabled = true;
+        r.priority = priority;
+        r.match = PWR::MatchExpression(); // default-constructed → empty All{} catch-all
+        r.actions = CRB::makeAssignmentActions(autotileMode ? QStringLiteral("autotile") : QStringLiteral("snapping"),
+                                               snappingLayout, tilingAlgorithm);
+        return r;
+    }
+
 private Q_SLOTS:
 
     // ─── Priority formula — exact values ─────────────────────────────────
@@ -629,6 +648,217 @@ private Q_SLOTS:
             QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
             QVERIFY(entry.snappingLayout.isEmpty());
             QCOMPARE(entry.tilingAlgorithm, QStringLiteral("bsp"));
+        }
+    }
+
+    // ─── User catch-all engine rule is the default floor ──────────────────
+    //
+    // The reported bug: a "Default / Any window" rule (catch-all match,
+    // engine=snapping, layout=Grid 2x2) was discarded by the resolver's old
+    // `!isCatchAll()` candidate filter, so every context with no more-specific
+    // pin — including a freshly-switched virtual desktop — fell through to the
+    // global default (BSP). resolveAssignmentEntry is specificity-tiered: a
+    // pinned rule wins first, else a USER catch-all engine rule (priority > 0)
+    // is the floor, and only the synthesized provider-default (priority 0)
+    // stays a miss so the settings-gated default resolver remains authoritative.
+
+    void testUserCatchAllEngineRuleDrivesFloor()
+    {
+        // ── A: the catch-all drives a context with no pin (the bug repro) ──
+        {
+            RegistryFixture f = makeRegistryFixture();
+            // A global default DISTINCT from the rule's output, so a wrong
+            // fallthrough would surface as Autotile/bsp instead of the rule.
+            f.registry->setDefaultAutotileAlgorithmProvider([]() {
+                return QStringLiteral("bsp");
+            });
+            QVERIFY(f.store->addRule(
+                makeUserCatchAllRule(/*autotileMode=*/false, QStringLiteral("{grid-2x2}"), QString(), 398)));
+
+            // Desktop 2, any screen — no pinned rule. The catch-all floor wins,
+            // not the BSP global default.
+            const PhosphorZones::AssignmentEntry entry =
+                f.registry->assignmentEntryForScreen(QStringLiteral("DP-2"), 2, QString());
+            QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+            QCOMPARE(entry.snappingLayout, QStringLiteral("{grid-2x2}"));
+        }
+
+        // ── B: a pinned rule beats the catch-all even at LOWER numeric
+        //       priority — specificity tier, not the raw number, decides ──
+        {
+            RegistryFixture f = makeRegistryFixture();
+            // Screen-only pin at the cascade's screen band (310) ...
+            const PWR::WindowRule pinned =
+                CRB::makeAssignmentRule(QStringLiteral("DP-5"), QStringLiteral("DP-5"), 0, QString(),
+                                        QStringLiteral("snapping"), QStringLiteral("{screen-pin}"), QString());
+            // ... versus a user catch-all at 398, numerically ABOVE 310.
+            const PWR::WindowRule catchAll =
+                makeUserCatchAllRule(/*autotileMode=*/false, QStringLiteral("{grid-2x2}"), QString(), 398);
+            // Insert the catch-all FIRST so neither list order nor numeric
+            // priority would pick the pin unless the specificity tier holds.
+            QVERIFY(f.store->setAllRules({catchAll, pinned}));
+
+            // On DP-5 the pin wins despite its lower number.
+            QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-5"), 1, QString()).snappingLayout,
+                     QStringLiteral("{screen-pin}"));
+            // On any other screen the catch-all floor still applies.
+            QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-6"), 1, QString()).snappingLayout,
+                     QStringLiteral("{grid-2x2}"));
+        }
+
+        // ── C: the synthesized provider-default (priority 0) is NOT a tier-2
+        //       floor — it defers to the settings-gated default resolver ──
+        {
+            RegistryFixture f = makeRegistryFixture();
+            f.registry->setDefaultLayoutIdProvider([]() {
+                return QStringLiteral("{gated-default}");
+            });
+            // A provider-default catch-all carrying a DIFFERENT layout. If the
+            // resolver wrongly treated it as a user floor, the entry would carry
+            // {provider-rule-layout}; the gated lambda default must win instead.
+            QVERIFY(
+                f.store->addRule(CRB::makeProviderDefaultRule(QStringLiteral("Default"), QStringLiteral("snapping"),
+                                                              QStringLiteral("{provider-rule-layout}"), QString())));
+
+            const PhosphorZones::AssignmentEntry entry =
+                f.registry->assignmentEntryForScreen(QStringLiteral("HDMI-3"), 1, QString());
+            QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+            QCOMPARE(entry.snappingLayout, QStringLiteral("{gated-default}"));
+        }
+    }
+
+    // ─── Layout-only rule fills its slot without forcing the engine ───────
+    //
+    // A rule carrying ONLY a SetSnappingLayout (or SetTilingAlgorithm) action,
+    // no SetEngineMode, sets the layout for that engine in the context but does
+    // NOT force the engine mode. The mode comes from the default (or another
+    // rule); the layout slot is filled independently. This is the per-slot
+    // composition model — distinct from a rule that pins the engine.
+
+    void testLayoutOnlyRuleFillsSlotWithoutForcingMode()
+    {
+        // ── A: the reported scenario — global default is snapping, a catch-all
+        //       SetSnappingLayout rule supplies the snapping layout ──
+        {
+            RegistryFixture f = makeRegistryFixture();
+            f.registry->setSnappingPreferredProvider([]() {
+                return true; // default engine is snapping, but with no default layout id
+            });
+            // A layout-only catch-all: Columns(3), NO engine-mode action.
+            PWR::WindowRule layoutOnly =
+                makeUserCatchAllRule(/*autotileMode=*/false, QStringLiteral("{columns-3}"), QString(), 398);
+            // Drop the engine-mode action makeUserCatchAllRule's helper does not
+            // add (it builds via makeAssignmentActions with a snapping mode, so
+            // strip the SetEngineMode to model the UI's layout-only rule).
+            layoutOnly.actions.removeIf([](const PWR::RuleAction& a) {
+                return a.type == QString(PWR::ActionType::SetEngineMode);
+            });
+            QVERIFY(f.store->addRule(layoutOnly));
+
+            const PhosphorZones::AssignmentEntry entry =
+                f.registry->assignmentEntryForScreen(QStringLiteral("DP-2"), 2, QString());
+            // Mode is the default's snapping (not forced by the rule), and the
+            // rule supplies the layout the default left empty.
+            QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+            QCOMPARE(entry.snappingLayout, QStringLiteral("{columns-3}"));
+        }
+
+        // ── B: a layout-only rule does NOT flip the engine — default autotile
+        //       stays autotile, the snapping layout is merely stored (lossless) ──
+        {
+            RegistryFixture f = makeRegistryFixture();
+            f.registry->setDefaultAutotileAlgorithmProvider([]() {
+                return QStringLiteral("bsp"); // default engine resolves to autotile
+            });
+            PWR::WindowRule layoutOnly =
+                makeUserCatchAllRule(/*autotileMode=*/false, QStringLiteral("{columns-3}"), QString(), 398);
+            layoutOnly.actions.removeIf([](const PWR::RuleAction& a) {
+                return a.type == QString(PWR::ActionType::SetEngineMode);
+            });
+            QVERIFY(f.store->addRule(layoutOnly));
+
+            const PhosphorZones::AssignmentEntry entry =
+                f.registry->assignmentEntryForScreen(QStringLiteral("HDMI-1"), 1, QString());
+            // The rule did not force snapping — the engine stays the default's
+            // autotile — but the snapping layout slot is filled for a later toggle.
+            QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+            QCOMPARE(entry.tilingAlgorithm, QStringLiteral("bsp"));
+            QCOMPARE(entry.snappingLayout, QStringLiteral("{columns-3}"));
+        }
+
+        // ── C: a pinned engine rule sets the mode; a separate catch-all
+        //       layout-only rule fills the layout slot — they compose ──
+        {
+            RegistryFixture f = makeRegistryFixture();
+            // Pinned engine-only rule (autotile, default algorithm) on DP-4.
+            const PWR::WindowRule pinnedMode =
+                CRB::makeAssignmentRule(QStringLiteral("DP-4 autotile"), QStringLiteral("DP-4"), 0, QString(),
+                                        QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"));
+            // Catch-all layout-only snapping rule.
+            PWR::WindowRule layoutOnly =
+                makeUserCatchAllRule(/*autotileMode=*/false, QStringLiteral("{columns-3}"), QString(), 398);
+            layoutOnly.actions.removeIf([](const PWR::RuleAction& a) {
+                return a.type == QString(PWR::ActionType::SetEngineMode);
+            });
+            QVERIFY(f.store->setAllRules({layoutOnly, pinnedMode}));
+
+            const PhosphorZones::AssignmentEntry entry =
+                f.registry->assignmentEntryForScreen(QStringLiteral("DP-4"), 1, QString());
+            // Engine from the pinned rule; snapping layout from the catch-all.
+            QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+            QCOMPARE(entry.tilingAlgorithm, QStringLiteral("dwindle"));
+            QCOMPARE(entry.snappingLayout, QStringLiteral("{columns-3}"));
+        }
+    }
+
+    // ─── Default change is reflected without a rule-set mutation ──────────
+    //
+    // A layout-only rule bases its entry on the GLOBAL default for every slot
+    // it does not fill. The resolver memoizes only the rule-derived portion, so
+    // a default-setting change must surface immediately — with NO rule-set
+    // revision bump (a settings edit produces none). This guards against baking
+    // the live default into the revision-invalidated context cache, which would
+    // pin a stale mode/algorithm on the layout-only path until the next rule
+    // edit or daemon restart.
+
+    void testDefaultChangeReflectedWithoutRuleMutation()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        bool snappingPreferred = false;
+        f.registry->setSnappingPreferredProvider([&snappingPreferred]() {
+            return snappingPreferred;
+        });
+        f.registry->setDefaultAutotileAlgorithmProvider([]() {
+            return QStringLiteral("bsp");
+        });
+
+        // Layout-only catch-all: snapping layout, NO engine-mode action.
+        PWR::WindowRule layoutOnly =
+            makeUserCatchAllRule(/*autotileMode=*/false, QStringLiteral("{columns-3}"), QString(), 398);
+        layoutOnly.actions.removeIf([](const PWR::RuleAction& a) {
+            return a.type == QString(PWR::ActionType::SetEngineMode);
+        });
+        QVERIFY(f.store->addRule(layoutOnly));
+
+        // Default engine is autotile (snapping not preferred). The rule fills
+        // the snapping slot; the mode is the default's autotile.
+        {
+            const PhosphorZones::AssignmentEntry entry =
+                f.registry->assignmentEntryForScreen(QStringLiteral("DP-2"), 2, QString());
+            QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+            QCOMPARE(entry.tilingAlgorithm, QStringLiteral("bsp"));
+            QCOMPARE(entry.snappingLayout, QStringLiteral("{columns-3}"));
+        }
+
+        // Flip the global default to snapping-preferred WITHOUT mutating any
+        // rule. The same cached context must now report the NEW default mode,
+        // not the stale autotile one.
+        snappingPreferred = true;
+        {
+            const PhosphorZones::AssignmentEntry entry =
+                f.registry->assignmentEntryForScreen(QStringLiteral("DP-2"), 2, QString());
+            QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+            QCOMPARE(entry.snappingLayout, QStringLiteral("{columns-3}"));
         }
     }
 

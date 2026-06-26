@@ -58,6 +58,26 @@ bool hasEngineModeAction(const PWR::WindowRule& rule)
     return false;
 }
 
+bool hasSnappingLayoutAction(const PWR::WindowRule& rule)
+{
+    for (const PWR::RuleAction& action : rule.actions) {
+        if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool hasTilingAlgorithmAction(const PWR::WindowRule& rule)
+{
+    for (const PWR::RuleAction& action : rule.actions) {
+        if (action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool isPureAssignmentRule(const PWR::WindowRule& rule)
 {
     // True when every action belongs to the three assignment slots

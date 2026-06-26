@@ -80,6 +80,13 @@ bool matchIsExactContext(const PWR::MatchExpression& match, const QString& scree
 // the matchIsExactContext* shape filters reject a catch-all anyway.
 bool hasEngineModeAction(const PWR::WindowRule& rule);
 
+// True if @p rule carries a SetSnappingLayout / SetTilingAlgorithm action. The
+// per-slot assignment resolver reads each layout slot independently of the
+// engine-mode slot, so a layout-only rule (no SetEngineMode) sets the layout
+// for its engine in a context without forcing the engine mode.
+bool hasSnappingLayoutAction(const PWR::WindowRule& rule);
+bool hasTilingAlgorithmAction(const PWR::WindowRule& rule);
+
 // True when every action on @p rule is one of the three assignment slots
 // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). False on an
 // empty action list. Used by the shape-based fallback in
