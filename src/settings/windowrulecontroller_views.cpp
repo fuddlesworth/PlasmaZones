@@ -40,11 +40,12 @@ using PhosphorWindowRules::WindowRule;
 
 QVariantList WindowRuleController::sections() const
 {
-    // Canonical display order — Monitor & Layout first, Advanced last. The
-    // enum values are emitted as data so QML never hardcodes them.
+    // Canonical display order — Monitor & Layout first, then the user-authored
+    // sections, then the app-managed System defaults last. The enum values are
+    // emitted as data so QML never hardcodes them.
     static const QList<WindowRuleModel::Section> kOrder = {
         WindowRuleModel::Section::Monitor,   WindowRuleModel::Section::Application, WindowRuleModel::Section::Activity,
-        WindowRuleModel::Section::Animation, WindowRuleModel::Section::Advanced,
+        WindowRuleModel::Section::Animation, WindowRuleModel::Section::Advanced,    WindowRuleModel::Section::System,
     };
     QVariantList out;
     for (WindowRuleModel::Section s : kOrder) {
@@ -81,6 +82,7 @@ QVariantList WindowRuleController::rulesSnapshot() const
         // by-id lookup, so the snapshot stays O(n).
         entry[QStringLiteral("screenIds")] = m_model.data(idx, WindowRuleModel::ScreenIdsRole);
         entry[QStringLiteral("validationIssueCount")] = m_model.data(idx, WindowRuleModel::ValidationIssueCountRole);
+        entry[QStringLiteral("managed")] = m_model.data(idx, WindowRuleModel::ManagedRole);
         out.append(entry);
     }
     return out;

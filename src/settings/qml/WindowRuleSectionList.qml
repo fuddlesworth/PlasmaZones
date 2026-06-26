@@ -404,6 +404,7 @@ Item {
                     isComposite: delegateRoot.modelData.isComposite
                     validationIssueCount: delegateRoot.modelData.validationIssueCount
                     priority: delegateRoot.modelData.priority
+                    managed: delegateRoot.modelData.managed === true
                     controller: root.controller
                     matchFieldOptions: root.matchFieldOptions
                     actionTypeOptions: root.actionTypeOptions

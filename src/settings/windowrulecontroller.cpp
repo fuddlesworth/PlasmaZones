@@ -459,6 +459,11 @@ void WindowRuleController::renormalizePriorities()
             return kApplicationBandBase;
         case WindowRuleModel::Section::Animation:
             return kAnimationBandBase;
+        case WindowRuleModel::Section::System:
+            // Managed System rules keep their pinned INT_MIN priority and are
+            // skipped before this runs (see the managed guard in the loop); this
+            // case only keeps the switch exhaustive.
+            return kAdvancedBandBase;
         }
         return kAnimationBandBase;
     };

@@ -603,6 +603,13 @@ void WindowRuleModel::setPriorities(const QList<int>& priorities)
 
 WindowRuleModel::Section WindowRuleModel::sectionFor(const WindowRule& rule)
 {
+    // App-managed baseline rules (the seeded Default borders / title bars / gaps)
+    // are System rules — grouped apart from user-authored ones regardless of
+    // their match/actions.
+    if (rule.managed) {
+        return Section::System;
+    }
+
     // Animation actions are decisive — a rule that touches an animation slot
     // belongs to the Animations group regardless of its match shape.
     if (hasAnimationAction(rule.actions)) {
@@ -647,6 +654,8 @@ QString WindowRuleModel::sectionLabel(Section section)
         return PhosphorI18n::tr("Animations");
     case Section::Advanced:
         return PhosphorI18n::tr("Advanced / Custom");
+    case Section::System:
+        return PhosphorI18n::tr("System");
     }
     return QString();
 }

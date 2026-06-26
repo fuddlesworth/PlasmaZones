@@ -47,6 +47,9 @@ ItemDelegate {
     /// the badge cluster on every row, so each rule's effective ordering
     /// priority is visible regardless of section.
     required property int priority
+    /// True for app-managed System rules (the seeded baseline defaults). They
+    /// are non-deletable and pinned, so the delete affordance is hidden.
+    property bool managed: false
     /// WindowRuleController — needed to resolve a rule's match JSON
     /// on-demand for the expansion view (`controller.ruleJson(ruleId).match`).
     /// `null` disables expansion entirely; expansion-capable callers must
@@ -338,6 +341,9 @@ ItemDelegate {
             }
 
             ToolButton {
+                // Managed System rules (the seeded defaults) are non-deletable;
+                // hide the affordance rather than show a no-op.
+                visible: !row.managed
                 icon.name: "edit-delete"
                 Layout.alignment: Qt.AlignVCenter
                 ToolTip.text: i18n("Delete rule")

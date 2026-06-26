@@ -76,6 +76,7 @@ public:
         Activity, ///< context-only rule pinned to an activity
         Animation, ///< carries an OverrideAnimation* action
         Advanced, ///< composite / mixed — graduated out of every section
+        System, ///< app-managed baseline rule (the seeded defaults)
     };
     Q_ENUM(Section)
 
