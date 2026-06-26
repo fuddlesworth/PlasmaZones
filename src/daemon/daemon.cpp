@@ -151,14 +151,14 @@ PhosphorWindowRules::WindowRule makeBaselineAppearanceRule()
     // settings controller deliberately leaves managed rules pinned here.
     rule.priority = std::numeric_limits<int>::min();
     rule.match = MatchExpression{}; // empty All{} — matches every window
-    // Concrete default colour (KDE accent blue, opaque) so enabling the baseline
-    // border draws immediately. "Follow the system accent" is an Appearance-page
-    // opt-in that writes the BorderColorToken::Accent sentinel; the effect-side
-    // accent push that resolves it is a follow-up, so the default stays concrete.
+    // Default colour follows the system accent — the effect resolves the sentinel
+    // to the live highlight colour it tracks. Matches the retired
+    // UseSystemBorderColors default. Borders are off by default, so this only
+    // becomes visible once the user enables the border in the Appearance page.
     RuleAction color;
     color.type = QString(ActionType::SetBorderColor);
-    color.params.insert(QString(ActionParam::Active), QStringLiteral("#FF3DAEE9"));
-    color.params.insert(QString(ActionParam::Inactive), QStringLiteral("#FF3DAEE9"));
+    color.params.insert(QString(ActionParam::Active), QString(BorderColorToken::Accent));
+    color.params.insert(QString(ActionParam::Inactive), QString(BorderColorToken::Accent));
     rule.actions = {
         action(ActionType::SetBorderVisible, ActionParam::Value, DD::ShowBorder),
         action(ActionType::SetBorderWidth, ActionParam::Value, DD::BorderWidth),
