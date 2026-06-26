@@ -48,11 +48,11 @@ struct CachedSnapRestore
 /**
  * @brief Handles snapping integration for PlasmaZones.
  *
- * The snap-mode counterpart to AutotileHandler. Owns the snap-side border
- * APPEARANCE state and tiled tracking (m_border, parallel to
- * AutotileHandler::m_border) for snap-committed windows. Title-bar
- * (borderless) state is owned by the effect's DecorationManager — this
- * handler only acquires/releases its per-screen Snap ownership there.
+ * The snap-mode counterpart to AutotileHandler. Owns the snap-side tiled
+ * tracking (m_border, parallel to AutotileHandler::m_border) for
+ * snap-committed windows, which drives border RENDERING. Title-bar
+ * (borderless) state is owned by the effect's DecorationManager and driven
+ * by window rules — this handler does not touch decorations.
  * Delegates window lookups and border rendering back to the effect through
  * the m_effect back-pointer.
  *
@@ -71,18 +71,12 @@ public:
 
     // ── Snap border-state lifecycle (mirrors AutotileHandler's set) ──
 
-    /// Record @p windowId as snap-committed on @p screenId (idempotent), apply
-    /// title-bar hiding if enabled, and (re)draw its border.
+    /// Record @p windowId as snap-committed on @p screenId (idempotent) and
+    /// (re)draw its border. Title-bar hiding is driven by window rules.
     void markWindowSnapped(const QString& windowId, const QString& screenId);
-    /// Drop @p windowId from the snap set on every screen, restore its title
-    /// bar if we hid it, and remove its border.
+    /// Drop @p windowId from the snap set on every screen and remove its
+    /// border. Title-bar restores flow through the rule path.
     void clearWindowSnapped(const QString& windowId);
-    /// Apply/restore title-bar hiding across all currently snap-committed
-    /// windows when the resolved hide-title-bar appearance toggles.
-    /// Returns true if the value actually changed; the caller runs
-    /// updateAllBorders() on true (and skips it on a no-op reload) — full
-    /// mirror of AutotileHandler::updateHideTitleBarsSetting.
-    bool updateSnapHideTitleBars(bool hide);
     /// Drop all snap tiled-tracking bookkeeping. Physical title-bar restores
     /// are the DecorationManager's job — teardown callers pair this with
     /// DecorationManager::restoreAll() (symmetric with
@@ -173,16 +167,11 @@ public:
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);
     }
-    /// Read-only view of the snap border state. Carries the snapped-window set
-    /// and the title-bar-hide flag; per-window border appearance is resolved
-    /// from rules.
+    /// Read-only view of the snap border state. Carries the snapped-window set;
+    /// per-window border appearance and title-bar hiding are resolved from rules.
     const BorderState& borderState() const
     {
         return m_border;
-    }
-    bool hideTitleBars() const
-    {
-        return m_border.hideTitleBars;
     }
 
 public Q_SLOTS:

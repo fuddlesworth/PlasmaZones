@@ -824,7 +824,6 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 #   test_floating_cache: FloatingCache + ZoneCache + TriggerParser tests
 #   test_autotile_state: AutotileStateHelpers + WindowId tests
 #   test_decoration_manager: DecorationManager ownership/veto behavioral spec
-#   test_decoration_manager_timers: DecorationManager deferred-drain/fallback timers
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_wire_types compositor-common/test_wire_types.cpp)
 target_link_libraries(test_wire_types PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
@@ -843,10 +842,6 @@ add_test(NAME test_autotile_state COMMAND test_autotile_state)
 add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
 target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
-
-add_executable(test_decoration_manager_timers compositor-common/test_decoration_manager_timers.cpp)
-target_link_libraries(test_decoration_manager_timers PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
-add_test(NAME test_decoration_manager_timers COMMAND test_decoration_manager_timers)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation

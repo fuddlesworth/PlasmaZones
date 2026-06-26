@@ -297,7 +297,6 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         // windows that left that screen's tiling state. Title bars are
         // restored by the DecorationManager only when no owner remains —
         // a sibling VS's claim or a snap takeover keeps the window hidden.
-        bool anyDeferred = false;
         for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
             const QString& screenId = screenIt.key();
             // A newer retile of this screen has superseded us — it owns this
@@ -313,20 +312,11 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             for (const QString& wid : untiled) {
                 KWin::EffectWindow* win = m_effect->findWindowById(wid);
                 if (!win || win->isMinimized()) {
-                    // Minimized windows keep their decoration ownership: a
-                    // restore here would poison the minimize→unminimize
-                    // round-trip; the re-tile on unminimize re-asserts.
+                    // Minimized windows keep their tracking quiescent: the
+                    // re-tile on unminimize re-asserts.
                     AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
                     continue;
                 }
-                // Deferred: each physical restore is a synchronous Wayland
-                // round-trip (30-120 ms) — a multi-window untile batch must
-                // not stall the compositor mid-retile-animation. A window
-                // re-tiled by the next batch is rescued by the manager's
-                // re-acquire cancellation; stale entries also drop any
-                // unconsumed zone-centering targets below.
-                m_effect->decorationManager()->release(wid, DecorationManager::autotile(screenId),
-                                                       DecorationManager::Restore::Deferred);
                 AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
                 // A daemon-initiated untile that is not a float/fullscreen/
                 // close/desktop-switch (e.g. a rule change dropping the
@@ -339,11 +329,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     m_autotileTargetZones.remove(wid);
                     m_centeredWaylandZones.remove(wid);
                 }
-                anyDeferred = true;
             }
-        }
-        if (anyDeferred) {
-            m_effect->decorationManager()->drainPendingRestores();
         }
         auto* ws = KWin::Workspace::self();
         if (ws) {
@@ -465,24 +451,10 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // from an autotile VS onto a sibling autotile VS.
             AutotileStateHelpers::removeFromOtherScreens(m_border, snap.windowId, snap.screenId);
             AutotileStateHelpers::addTiledOnScreen(m_border, snap.screenId, snap.windowId);
-            if (m_border.hideTitleBars) {
-                // Cross-screen transfer: move the decoration claim to this
-                // screen without a physical flap, then hide BEFORE the
-                // applyWindowGeometry below supplies the zone frame
-                // (CallerWillPlace — the placement sees the final
-                // frame/client relationship).
-                m_effect->decorationManager()->releaseOthersOfKind(
-                    snap.windowId, DecorationManager::OwnerKind::Autotile, snap.screenId);
-                m_effect->decorationManager()->acquire(snap.windowId, DecorationManager::autotile(snap.screenId),
-                                                       DecorationManager::Placement::CallerWillPlace);
-            }
+            // Title-bar (borderless) state is driven by window rules through the
+            // effect's reconcileRuleHiddenTitleBar → DecorationManager path.
 
             if (snap.isMonocle) {
-                // The maximize leg needs the KWin::Window, but the geometry
-                // apply must run regardless: the CallerWillPlace acquire
-                // above already hid the decoration expecting this placement
-                // — skipping it on a null kw would leave a borderless window
-                // with a title-bar-height gap.
                 if (KWin::Window* kw = snap.window->window()) {
                     const bool wasAlreadyMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
                     ++m_suppressMaximizeChanged;

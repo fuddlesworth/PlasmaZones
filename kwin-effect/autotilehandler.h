@@ -41,8 +41,8 @@ class PlasmaZonesEffect;
  * Manages the autotile D-Bus interface, screen tracking, window tiling,
  * monocle mode, tiled-tracking for border rendering, and pre-autotile
  * geometry preservation. Title-bar (borderless) state is owned by the
- * effect's DecorationManager — this handler only acquires/releases its
- * per-screen Autotile ownership there.
+ * effect's DecorationManager and driven by window rules — this handler does
+ * not touch decorations.
  *
  * Delegates window lookups, geometry application, and animation back to the effect.
  */
@@ -153,11 +153,6 @@ public:
     /// pair this with DecorationManager::restoreAll().
     void clearTiledTracking();
 
-    // Settings update: toggle hide-title-bars with border restore on disable.
-    // Returns true if the value actually changed (so the caller can skip a
-    // redundant updateAllBorders() stacking-order walk on a no-op reload).
-    bool updateHideTitleBarsSetting(bool enabled);
-
     // Focus follows mouse: focus autotile window under cursor
     void setFocusFollowsMouse(bool enabled);
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
@@ -198,8 +193,8 @@ public:
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);
     }
     /// Read-only view of the autotile border state. Carries the tiled-window
-    /// set (border rendering membership + the IsTiled rule field) and the
-    /// title-bar-hide flag; per-window border appearance is resolved from rules.
+    /// set (border rendering membership + the IsTiled rule field); per-window
+    /// border appearance and title-bar hiding are resolved from rules.
     const BorderState& borderState() const
     {
         return m_border;
@@ -244,11 +239,10 @@ private:
     /**
      * @brief Shared float-state cleanup for a window being floated
      *
-     * Updates the float cache, releases autotile's DecorationManager
-     * ownership (the manager restores the title bar unless another owner
-     * remains), clears tiled tracking, removes the border overlay, and
-     * unmaximizes monocle. Used by both slotWindowFloatingChanged
-     * (per-window D-Bus signal path) and slotWindowsTileRequested (batch float path).
+     * Updates the float cache, clears tiled tracking, removes the border
+     * overlay, and unmaximizes monocle (title-bar restores flow through the
+     * rule path). Used by both slotWindowFloatingChanged (per-window D-Bus
+     * signal path) and slotWindowsTileRequested (batch float path).
      */
     void applyFloatCleanup(const QString& windowId);
 

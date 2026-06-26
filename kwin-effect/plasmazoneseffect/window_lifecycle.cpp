@@ -435,19 +435,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // geometry is used instead of the current (tiled) frame position.
                 m_autotileHandler->savePreAutotileForDesktopMove(windowId);
 
-                // Do NOT release autotile's decoration ownership here: the window
-                // is still autotile-managed, just relocated to another desktop.
-                // releaseKind runs restoreNow and brings the title bar / border
-                // back, stranding the window decorated until the target desktop
-                // becomes current and the catch-scan re-tiles it (observed: title
-                // bar visible for the whole interval). Keeping the claim across
-                // the desktop hop mirrors the cross-OUTPUT transfer (which keeps
-                // the claim on an autotile→autotile move): the no-border intent
-                // survives, KWin's off-desktop reset is corrected on desktop
-                // return by updateAllBorders → resyncWindow (a no-op without an
-                // owned claim), and the claim is released for real only when the
-                // window genuinely closes. onWindowClosed below only clears
-                // effect-side tracking (shared with the genuine-close path).
+                // Title-bar state is rule-driven (no autotile decoration claim
+                // to release): KWin's off-desktop noBorder reset is corrected on
+                // desktop return by updateAllBorders → resyncWindow for any
+                // rule-owned window. onWindowClosed below only clears effect-side
+                // tracking (shared with the genuine-close path).
                 m_autotileHandler->onWindowClosed(windowId, screenId);
                 removeWindowBorder(windowId);
                 qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
@@ -818,18 +810,14 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     return;
                 }
                 // Self-heal a noBorder reset KWin issues asynchronously after a
-                // cross-OUTPUT move. The daemon-driven destination retile keeps
-                // the autotile decoration claim and re-acquires it on the new
-                // screen (releaseOthersOfKind + acquire), but the manager already
-                // believes the window hidden, so reconcile re-asserts nothing —
-                // then KWin re-evaluates the decoration on the output change and
-                // flips noBorder back ON in a later turn. The synchronous resync
-                // in updateAllBorders runs in the retile turn, BEFORE that reset,
-                // so it bails ("still suppressed"). KWin grows the frame by the
-                // title-bar height when it re-decorates, firing this very signal:
-                // resyncWindow re-hides exactly the windows the manager owns and
-                // believes hidden whose decoration drifted back, and is a self-
-                // guarding no-op otherwise.
+                // cross-OUTPUT move. For a rule-owned (title-bar-hidden) window
+                // the manager already believes it hidden, so the synchronous
+                // resync in updateAllBorders bails ("still suppressed") when it
+                // runs before KWin re-evaluates the decoration. KWin grows the
+                // frame by the title-bar height when it re-decorates, firing this
+                // very signal: resyncWindow re-hides exactly the windows the
+                // manager owns and believes hidden whose decoration drifted back,
+                // and is a self-guarding no-op otherwise.
                 m_decorationManager->resyncWindow(windowId);
                 const QRect geo = safeW->frameGeometry().toRect();
                 if (geo.width() <= 0 || geo.height() <= 0) {

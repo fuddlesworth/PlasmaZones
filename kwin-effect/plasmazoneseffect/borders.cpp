@@ -23,28 +23,6 @@ namespace PlasmaZones {
 
 void PlasmaZonesEffect::setupDecorationManager()
 {
-    // The drain-time veto is the authoritative re-check for deferred
-    // title-bar restores: a vetoed restore stays QUEUED (the manager
-    // re-arms its fallback timer and bounds the retries), so the veto must
-    // hold ONLY while a re-acquire is genuinely expected — the window's
-    // screen re-entered autotile mid-drain, the mode's hide-title-bars is
-    // still on, and the window is not floating (a retile never re-acquires
-    // floated windows). Without the latter two conditions, a hide-toggle-off
-    // drain or a floated window's restore would be vetoed until the
-    // manager's retry bound overrides it.
-    m_decorationManager->setRestoreVeto([this](const QString& windowId) {
-        KWin::EffectWindow* w = findWindowById(windowId);
-        // Exact-id re-check: findWindowById's appId fuzzy fallback can
-        // resolve a same-app SIBLING when the exact id misses, and a
-        // sibling's screen/floating state must never decide the veto for
-        // the window the queue entry tracks (same hazard guard as
-        // SnapHandler::markWindowSnapped and the manager's own
-        // resolveExact for physical toggles).
-        if (!w || getWindowId(w) != windowId || !m_autotileHandler->isAutotileScreen(getWindowScreenId(w))) {
-            return false;
-        }
-        return m_autotileHandler->borderState().hideTitleBars && !isWindowFloating(windowId);
-    });
     connect(m_decorationManager.get(), &DecorationManager::windowDecorationRestored, this,
             [this](const QString& windowId) {
                 // A veto-driven restore leaves the window mode-owned and
@@ -67,9 +45,6 @@ void PlasmaZonesEffect::setupDecorationManager()
                     removeWindowBorder(windowId);
                 }
             });
-    connect(m_decorationManager.get(), &DecorationManager::drainFinished, this, [this]() {
-        updateAllBorders();
-    });
 }
 
 void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)

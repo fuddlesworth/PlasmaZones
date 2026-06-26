@@ -66,7 +66,6 @@ using PhosphorCompositor::DecorationManager;
 using PhosphorCompositor::ICompositorBridge;
 using PhosphorCompositor::ParsedTrigger;
 namespace AutotileStateHelpers = PhosphorCompositor::AutotileStateHelpers;
-namespace DecorationDefaults = PhosphorCompositor::DecorationDefaults;
 namespace TriggerParser = PhosphorCompositor::TriggerParser;
 
 // Mirror of PhosphorTiles::AutotileDragBehavior (re-exported via core/enums.h).
@@ -694,10 +693,9 @@ private:
     /// `getAllRules` fetch at the trailing edge.
     QTimer m_animationRulesRefreshDebounce;
 
-    /// Wire the DecorationManager into the effect: the deferred-restore veto
-    /// plus the windowDecorationRestored / drainFinished connections.
-    /// Defined in borders.cpp with the rest of the decoration code; called
-    /// once from the constructor.
+    /// Wire the DecorationManager into the effect: the windowDecorationRestored
+    /// connection. Defined in borders.cpp with the rest of the decoration code;
+    /// called once from the constructor.
     void setupDecorationManager();
 
     // Interactive-resize latch. windowStartUserMovedResized fires once with

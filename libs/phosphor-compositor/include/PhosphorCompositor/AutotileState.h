@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <PhosphorCompositor/DecorationDefaults.h>
-
 #include <QColor>
 #include <QHash>
 #include <QPair>
@@ -19,9 +17,10 @@ namespace PhosphorCompositor {
 /**
  * @brief Compositor-agnostic autotile border state
  *
- * Tracks which windows are tile-managed (drives border RENDERING) plus the
- * shared border appearance settings. Title-bar/borderless state lives in
- * the DecorationManager's owner model, not here.
+ * Tracks which windows are tile-managed (drives border RENDERING). Title-bar/
+ * borderless state lives in the DecorationManager's owner model, not here, and
+ * per-window border appearance (width / radius / colour / show) is resolved
+ * from window rules in the effect.
  * Per-screen keyed so per-VS retiles can update tracking in isolation
  * without cross-contaminating with windows on sibling virtual screens.
  * Shared across compositor plugins to avoid duplicating state management.
@@ -34,10 +33,6 @@ struct BorderState
     /// retile. Title-bar (borderless) state is NOT tracked here — that is
     /// the DecorationManager's owner model.
     QHash<QString, QSet<QString>> tiledWindowsByScreen;
-    // Title-bar hide flag for the mode (snap / autotile). Per-window border
-    // appearance (width / radius / colour / show) is resolved from window rules
-    // in the effect, not stored here.
-    bool hideTitleBars = DecorationDefaults::HideTitleBars;
 };
 
 /**
@@ -191,20 +186,6 @@ inline bool removeFromAllScreens(BorderState& border, const QString& windowId)
 inline QSet<QString> tiledOnScreen(const BorderState& border, const QString& screenId)
 {
     return border.tiledWindowsByScreen.value(screenId);
-}
-
-/// Collect every tiled (windowId, screenId) pair for bulk operations
-/// (hide-titlebars toggle on). Returned as a flat vector so callers can
-/// iterate without holding a reference into the hash.
-inline QVector<QPair<QString, QString>> allTiledPairs(const BorderState& border)
-{
-    QVector<QPair<QString, QString>> result;
-    for (auto it = border.tiledWindowsByScreen.constBegin(); it != border.tiledWindowsByScreen.constEnd(); ++it) {
-        for (const QString& wid : it.value()) {
-            result.append({wid, it.key()});
-        }
-    }
-    return result;
 }
 
 } // namespace AutotileStateHelpers

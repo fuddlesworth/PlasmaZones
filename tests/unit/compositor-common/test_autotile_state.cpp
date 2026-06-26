@@ -5,9 +5,8 @@
  * @file test_autotile_state.cpp
  * @brief Unit tests for WindowId utilities and AutotileStateHelpers
  *
- * Tests WindowId::extractAppId, WindowId::deriveShortName,
- * AutotileStateHelpers::cleanupClosedWindowState and removeFromOtherScreens,
- * and the BorderState ↔ DecorationDefaults default-drift tripwire.
+ * Tests WindowId::extractAppId, WindowId::deriveShortName, and
+ * AutotileStateHelpers::cleanupClosedWindowState and removeFromOtherScreens.
  */
 
 #include <QTest>
@@ -150,20 +149,6 @@ private Q_SLOTS:
         QVERIFY(!border.tiledWindowsByScreen.value(shared).contains(windowId));
         QVERIFY(border.tiledWindowsByScreen.value(shared).contains(other));
         QVERIFY(!border.tiledWindowsByScreen.contains(solo));
-    }
-
-    // =================================================================
-    // BorderState: defaults drift tripwire
-    // =================================================================
-
-    void testBorderStateDefaultsMatchDecorationDefaults()
-    {
-        // BorderState now carries only the mode title-bar-hide flag (border
-        // appearance is resolved from window rules). The flag must still match
-        // its DecorationDefaults counterpart so the mode's pre-load title-bar
-        // state can't drift from what the daemon would persist.
-        const PhosphorCompositor::BorderState border;
-        QCOMPARE(border.hideTitleBars, PhosphorCompositor::DecorationDefaults::HideTitleBars);
     }
 
     // =================================================================

@@ -71,36 +71,6 @@ void AutotileHandler::clearTiledTracking()
     m_border.tiledWindowsByScreen.clear();
 }
 
-bool AutotileHandler::updateHideTitleBarsSetting(bool enabled)
-{
-    if (m_border.hideTitleBars == enabled) {
-        return false;
-    }
-    m_border.hideTitleBars = enabled;
-    if (!enabled) {
-        // Turning OFF — release every autotile ownership; the manager
-        // restores each title bar no other owner still claims. Deferred +
-        // an immediate drain: each restore is a 30-120 ms synchronous
-        // Wayland round-trip, so the drain runs them one per event-loop
-        // tick instead of stalling the compositor for the whole batch.
-        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Autotile,
-                                                        DecorationManager::Restore::Deferred);
-        m_effect->decorationManager()->drainPendingRestores();
-    } else {
-        // Turning ON — hide title bars for all currently tiled windows. The
-        // windows are already placed in their zones, so the AlreadyPlaced
-        // sequence re-asserts the zone rect across the decoration change
-        // (KWin holds the client size constant, which would otherwise leave
-        // a title-bar-height gap).
-        const auto pairs = AutotileStateHelpers::allTiledPairs(m_border);
-        for (const auto& p : pairs) {
-            m_effect->decorationManager()->acquire(p.first, DecorationManager::autotile(p.second),
-                                                   DecorationManager::Placement::AlreadyPlaced);
-        }
-    }
-    return true;
-}
-
 void AutotileHandler::setFocusFollowsMouse(bool enabled)
 {
     m_focusFollowsMouse = enabled;
@@ -339,10 +309,8 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
 void AutotileHandler::applyFloatCleanup(const QString& windowId)
 {
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
-    // A floating window is no longer tile-managed on any screen — release
-    // autotile's decoration ownership (the manager restores the title bar
-    // unless another owner still claims it) and clear tiled tracking.
-    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
+    // A floating window is no longer tile-managed on any screen — clear tiled
+    // tracking (title-bar restores flow through the rule path).
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
     // Drop centering/target tracking too — a floated window isn't being
     // tiled anymore so a stale entry here would trigger centering on the

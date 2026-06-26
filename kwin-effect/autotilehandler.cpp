@@ -223,13 +223,6 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFlo
                 qCWarning(lcEffect) << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
                 m_notifiedWindows.remove(windowId);
                 m_notifiedWindowScreens.remove(windowId);
-                // The autotile→autotile transfer path in
-                // handleWindowOutputChanged skips its decoration release in
-                // anticipation of this call's tile request moving the claim.
-                // The call failed — no tile request is coming — so release
-                // the stale ownership here (no-op for fresh windows, which
-                // hold no claim yet).
-                m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
                 // notifyWindowAdded() returned true on the synchronous
                 // path, so the caller (PlasmaZonesEffect::slotWindowAdded)
                 // left first-frame open suppression engaged expecting a
@@ -334,13 +327,11 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         w->deleteLater();
         if (w->isError()) {
             qCWarning(lcEffect) << "windowsOpenedBatch D-Bus call failed:" << w->error().message();
-            // Tracking rollback only — deliberately NO releaseKind or
-            // endRestoreSuppression here, unlike notifyWindowAdded's error
-            // handler: the batch paths (daemon-restart re-announce,
-            // toggle-on) serve windows that are still physically tiled and
-            // may be re-announced when the daemon returns, and the batch
-            // never serves the cross-screen transfer that parks a kept
-            // decoration claim on the single-window path.
+            // Tracking rollback only — deliberately NO endRestoreSuppression
+            // here, unlike notifyWindowAdded's error handler: the batch paths
+            // (daemon-restart re-announce, toggle-on) serve windows that are
+            // still physically tiled and may be re-announced when the daemon
+            // returns.
             for (const QString& wid : batchWindowIds) {
                 m_notifiedWindows.remove(wid);
                 m_notifiedWindowScreens.remove(wid);
@@ -420,16 +411,10 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         if (expectedScreen == newScreenId) {
             if (newIsAutotile) {
                 m_notifiedWindowScreens[windowId] = newScreenId;
-                // The daemon's destination tile request moves the decoration claim
-                // (releaseOthersOfKind + acquire in slotWindowsTileRequested); keep
-                // our claim coherent here without a physical flap.
-                m_effect->decorationManager()->releaseOthersOfKind(windowId, DecorationManager::OwnerKind::Autotile,
-                                                                   newScreenId);
             } else {
-                // Cross-MODE move: window left autotile for a SNAP screen. Release
-                // the decoration claim and drop effect-side autotile tracking (daemon
-                // already relinquished via handoffRelease) — else it lingers phantom.
-                m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
+                // Cross-MODE move: window left autotile for a SNAP screen. Drop
+                // effect-side autotile tracking (daemon already relinquished via
+                // handoffRelease) — else it lingers phantom.
                 cleanupAutotileTracking(windowId, oldScreenId);
             }
             m_effect->updateAllBorders();
@@ -446,20 +431,8 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         savedPreAutotileGeo = findPreAutotileGeometry(windowId);
     }
 
-    // Release autotile's decoration ownership only when the window is
-    // actually leaving autotile management. On an autotile→autotile
-    // transfer the imminent retile moves the claim atomically without a
-    // physical flap (releaseOthersOfKind + acquire in
-    // slotWindowsTileRequested), so releasing here would only produce a
-    // transient title-bar flash. Every no-retile fallthrough has a release:
-    // a daemon overflow-float lands in applyFloatCleanup (releaseKind), a
-    // locally-filtered re-add releases right below, and a failed
-    // windowOpened call releases in notifyWindowAdded's error handler. The
-    // predicate mirrors the re-add condition below.
+    // The predicate mirrors the re-add condition below.
     const bool willReAdd = newIsAutotile && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
-    if (!willReAdd) {
-        m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
-    }
 
     // Remove from old screen's autotile state
     onWindowClosed(windowId, oldScreenId);
@@ -480,15 +453,11 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // (a genuinely floating window passes the guard and keeps its float
         // geometry captured). Without this the tiled rect would be pushed with
         // overwrite=true and destroy the daemon's persisted free-back.
-        if (!notifyWindowAdded(w, /*knownFreeFloating=*/false)) {
-            // The re-add was filtered locally — eligibility drift (e.g. the
-            // tiled frame now sits below the user's min-size threshold) or a
-            // pending close. No windowOpened call was issued, so neither the
-            // D-Bus error handler nor a tile request will ever touch this
-            // window again: the claim kept above for the flap-free transfer
-            // would strand the title bar hidden. Release it now.
-            m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
-        }
+        // Re-add on the new autotile screen. Eligibility drift (e.g. the tiled
+        // frame now sits below the user's min-size threshold) or a pending
+        // close can filter it locally — a no-op then, the daemon's tile path
+        // owns any follow-up.
+        notifyWindowAdded(w, /*knownFreeFloating=*/false);
     } else if (oldIsAutotile && !newIsAutotile) {
         // Autotile → snapping: restore the window's original (pre-snap/pre-tile)
         // SIZE after the drag ends.  The effect-side m_preAutotileGeometries may
