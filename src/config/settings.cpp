@@ -241,12 +241,6 @@ void Settings::load()
     if (useSystemColors()) {
         applySystemColorScheme();
     }
-    if (autotileUseSystemBorderColors()) {
-        applyAutotileBorderSystemColor();
-    }
-    if (snappingUseSystemBorderColors()) {
-        applySnappingBorderSystemColor();
-    }
 
     qCInfo(lcConfig) << "Settings loaded";
 
@@ -2480,69 +2474,6 @@ void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
 P_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, bool)
 P_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, autotileDragInsertToggleChanged)
 
-// Tiling.Appearance
-P_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
-P_STORE_SET_COLOR(setAutotileBorderColor, tilingAppearanceColorsGroup, activeKey, autotileBorderColorChanged)
-P_STORE_GET(QColor, autotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey, QColor)
-P_STORE_SET_COLOR(setAutotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey,
-                  autotileInactiveBorderColorChanged)
-
-P_STORE_GET(bool, autotileUseSystemBorderColors, tilingAppearanceColorsGroup, useSystemKey, bool)
-void Settings::setAutotileUseSystemBorderColors(bool use)
-{
-    if (autotileUseSystemBorderColors() == use) {
-        return;
-    }
-    m_store->write(ConfigDefaults::tilingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
-    if (use) {
-        applyAutotileBorderSystemColor();
-    }
-    Q_EMIT autotileUseSystemBorderColorsChanged();
-    Q_EMIT settingsChanged();
-}
-
-P_STORE_GET(bool, autotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
-P_STORE_SET_BOOL(setAutotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey,
-                 autotileHideTitleBarsChanged)
-P_STORE_GET(bool, autotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, bool)
-P_STORE_SET_BOOL(setAutotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, autotileShowBorderChanged)
-P_STORE_GET(int, autotileBorderWidth, tilingAppearanceBordersGroup, widthKey, int)
-P_STORE_SET_INT(setAutotileBorderWidth, tilingAppearanceBordersGroup, widthKey, autotileBorderWidthChanged)
-P_STORE_GET(int, autotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, int)
-P_STORE_SET_INT(setAutotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, autotileBorderRadiusChanged)
-
-// Snapping.Appearance — the snapped window's border / title-bar (parallel to
-// Tiling.Appearance above; distinct from the Snapping.Zones.* drag overlay).
-P_STORE_GET(QColor, snappingBorderColor, snappingAppearanceColorsGroup, activeKey, QColor)
-P_STORE_SET_COLOR(setSnappingBorderColor, snappingAppearanceColorsGroup, activeKey, snappingBorderColorChanged)
-P_STORE_GET(QColor, snappingInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
-P_STORE_SET_COLOR(setSnappingInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey,
-                  snappingInactiveBorderColorChanged)
-
-P_STORE_GET(bool, snappingUseSystemBorderColors, snappingAppearanceColorsGroup, useSystemKey, bool)
-void Settings::setSnappingUseSystemBorderColors(bool use)
-{
-    if (snappingUseSystemBorderColors() == use) {
-        return;
-    }
-    m_store->write(ConfigDefaults::snappingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
-    if (use) {
-        applySnappingBorderSystemColor();
-    }
-    Q_EMIT snappingUseSystemBorderColorsChanged();
-    Q_EMIT settingsChanged();
-}
-
-P_STORE_GET(bool, snappingHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
-P_STORE_SET_BOOL(setSnappingHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey,
-                 snappingHideTitleBarsChanged)
-P_STORE_GET(bool, snappingShowBorder, snappingAppearanceBordersGroup, showBorderKey, bool)
-P_STORE_SET_BOOL(setSnappingShowBorder, snappingAppearanceBordersGroup, showBorderKey, snappingShowBorderChanged)
-P_STORE_GET(int, snappingBorderWidth, snappingAppearanceBordersGroup, widthKey, int)
-P_STORE_SET_INT(setSnappingBorderWidth, snappingAppearanceBordersGroup, widthKey, snappingBorderWidthChanged)
-P_STORE_GET(int, snappingBorderRadius, snappingAppearanceBordersGroup, radiusKey, int)
-P_STORE_SET_INT(setSnappingBorderRadius, snappingAppearanceBordersGroup, radiusKey, snappingBorderRadiusChanged)
-
 // ── reset / color helpers ────────────────────────────────────────────────────
 
 void Settings::reset()
@@ -2936,25 +2867,6 @@ void Settings::applySystemColorScheme()
 
     const QColor fontColor = pal.color(QPalette::Active, QPalette::Text);
     setLabelFontColor(fontColor);
-}
-
-void Settings::applyAutotileBorderSystemColor()
-{
-    // Use the exact snapping zone highlight/inactive colors including their
-    // alpha. Route through the setters so the Store stays the source of
-    // truth (and the NOTIFY signals fire as a side effect).
-    setAutotileBorderColor(highlightColor());
-    setAutotileInactiveBorderColor(inactiveColor());
-}
-
-void Settings::applySnappingBorderSystemColor()
-{
-    // Mirror applyAutotileBorderSystemColor: adopt the zone highlight/inactive
-    // colors (which themselves track the system accent) so the snapped-window
-    // border follows the system accent. Route through the setters so the Store
-    // stays the source of truth and NOTIFY signals fire.
-    setSnappingBorderColor(highlightColor());
-    setSnappingInactiveBorderColor(inactiveColor());
 }
 
 #undef P_STORE_GET

@@ -78,7 +78,7 @@ public:
     /// bar if we hid it, and remove its border.
     void clearWindowSnapped(const QString& windowId);
     /// Apply/restore title-bar hiding across all currently snap-committed
-    /// windows when the snappingHideTitleBars setting toggles.
+    /// windows when the resolved hide-title-bar appearance toggles.
     /// Returns true if the value actually changed; the caller runs
     /// updateAllBorders() on true (and skips it on a no-op reload) — full
     /// mirror of AutotileHandler::updateHideTitleBarsSetting.

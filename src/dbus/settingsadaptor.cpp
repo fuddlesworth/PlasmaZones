@@ -676,26 +676,6 @@ void SettingsAdaptor::initializeRegistry()
         m_schemas[QStringLiteral("autotileInsertPosition")] = QStringLiteral("int");
     }
 
-    // Autotile decoration settings (on ISettings interface)
-    REGISTER_BOOL_SETTING("autotileHideTitleBars", autotileHideTitleBars, setAutotileHideTitleBars)
-    REGISTER_BOOL_SETTING("autotileShowBorder", autotileShowBorder, setAutotileShowBorder)
-    REGISTER_INT_SETTING("autotileBorderWidth", autotileBorderWidth, setAutotileBorderWidth)
-    REGISTER_INT_SETTING("autotileBorderRadius", autotileBorderRadius, setAutotileBorderRadius)
-    REGISTER_COLOR_SETTING("autotileBorderColor", autotileBorderColor, setAutotileBorderColor)
-    REGISTER_COLOR_SETTING("autotileInactiveBorderColor", autotileInactiveBorderColor, setAutotileInactiveBorderColor)
-    REGISTER_BOOL_SETTING("autotileUseSystemBorderColors", autotileUseSystemBorderColors,
-                          setAutotileUseSystemBorderColors)
-
-    // Snapping window decoration settings (on ISettings interface)
-    REGISTER_BOOL_SETTING("snappingHideTitleBars", snappingHideTitleBars, setSnappingHideTitleBars)
-    REGISTER_BOOL_SETTING("snappingShowBorder", snappingShowBorder, setSnappingShowBorder)
-    REGISTER_INT_SETTING("snappingBorderWidth", snappingBorderWidth, setSnappingBorderWidth)
-    REGISTER_INT_SETTING("snappingBorderRadius", snappingBorderRadius, setSnappingBorderRadius)
-    REGISTER_COLOR_SETTING("snappingBorderColor", snappingBorderColor, setSnappingBorderColor)
-    REGISTER_COLOR_SETTING("snappingInactiveBorderColor", snappingInactiveBorderColor, setSnappingInactiveBorderColor)
-    REGISTER_BOOL_SETTING("snappingUseSystemBorderColors", snappingUseSystemBorderColors,
-                          setSnappingUseSystemBorderColors)
-
     REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
     m_getters[QStringLiteral("autotileStickyWindowHandling")] = [this]() {
         return static_cast<int>(m_settings->autotileStickyWindowHandling());

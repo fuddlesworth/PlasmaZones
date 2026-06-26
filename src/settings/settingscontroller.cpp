@@ -13,8 +13,8 @@
 #include "snappingeffectscontroller.h"
 #include "snappingzoneselectorcontroller.h"
 #include "tilingalgorithmcontroller.h"
-#include "snappingwindowappearancecontroller.h"
-#include "tilingappearancecontroller.h"
+#include "gapscontroller.h"
+#include "windowappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
 #include "virtualscreenutils.h"
 #include "../config/configbackends.h"
@@ -380,11 +380,13 @@ SettingsController::SettingsController(QObject* parent)
     connect(m_snappingZonesPage, &SnappingZonesController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
 
-    // Snapping→Effects + Snapping→Window Appearance + Tiling→Appearance pages —
-    // CONSTANT-only bounds facades.
+    // Snapping→Effects + the shared Gaps + Window Appearance pages —
+    // CONSTANT-only bounds facades. Window Appearance edits the managed baseline
+    // appearance WindowRule through m_windowRulesPage; this controller only
+    // carries the slider bounds and the baseline rule id.
     m_snappingEffectsPage = new SnappingEffectsController(this);
-    m_snappingWindowAppearancePage = new SnappingWindowAppearanceController(this);
-    m_tilingAppearancePage = new TilingAppearanceController(this);
+    m_gapsPage = new GapsController(this);
+    m_windowAppearancePage = new WindowAppearanceController(this);
 
     // Tiling→Algorithm page sub-controller. Owns 7 slider bounds + the
     // custom-parameter CRUD surface. Borrows the algorithm registry this
@@ -803,9 +805,14 @@ SnappingZonesController* SettingsController::snappingZonesPage() const
     return m_snappingZonesPage;
 }
 
-SnappingWindowAppearanceController* SettingsController::snappingWindowAppearancePage() const
+GapsController* SettingsController::gapsPage() const
 {
-    return m_snappingWindowAppearancePage;
+    return m_gapsPage;
+}
+
+WindowAppearanceController* SettingsController::windowAppearancePage() const
+{
+    return m_windowAppearancePage;
 }
 
 SnappingEffectsController* SettingsController::snappingEffectsPage() const
@@ -816,11 +823,6 @@ SnappingEffectsController* SettingsController::snappingEffectsPage() const
 SnappingShadersPageController* SettingsController::snappingShadersPage() const
 {
     return m_snappingShadersPage.get();
-}
-
-TilingAppearanceController* SettingsController::tilingAppearancePage() const
-{
-    return m_tilingAppearancePage;
 }
 
 TilingAlgorithmController* SettingsController::tilingAlgorithmPage() const

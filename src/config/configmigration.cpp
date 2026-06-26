@@ -877,26 +877,13 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
             QLatin1String("StickyWindowHandling"));
     moveKey(v1Autotiling, QLatin1String("LockedScreens"), tilingBehavior, QLatin1String("LockedScreens"));
 
-    QJsonObject tColors;
-    moveKey(v1Autotiling, QLatin1String("AutotileUseSystemBorderColors"), tColors, QLatin1String("UseSystem"));
-    moveKey(v1Autotiling, QLatin1String("AutotileBorderColor"), tColors, QLatin1String("Active"));
-    moveKey(v1Autotiling, QLatin1String("AutotileInactiveBorderColor"), tColors, QLatin1String("Inactive"));
-
-    QJsonObject tDecorations;
-    moveKey(v1Autotiling, QLatin1String("AutotileHideTitleBars"), tDecorations, QLatin1String("HideTitleBars"));
-
-    QJsonObject tBorders;
-    moveKey(v1Autotiling, QLatin1String("AutotileShowBorder"), tBorders, QLatin1String("ShowBorder"));
-    moveKey(v1Autotiling, QLatin1String("AutotileBorderWidth"), tBorders, QLatin1String("Width"));
-    moveKey(v1Autotiling, QLatin1String("AutotileBorderRadius"), tBorders, QLatin1String("Radius"));
-
-    QJsonObject tilingAppearance;
-    if (!tColors.isEmpty())
-        tilingAppearance[QLatin1String("Colors")] = tColors;
-    if (!tDecorations.isEmpty())
-        tilingAppearance[QLatin1String("Decorations")] = tDecorations;
-    if (!tBorders.isEmpty())
-        tilingAppearance[QLatin1String("Borders")] = tBorders;
+    // The v1 autotile border / title-bar appearance keys
+    // (AutotileShowBorder / Width / Radius / BorderColor / InactiveBorderColor /
+    // UseSystemBorderColors / HideTitleBars) are intentionally dropped: window
+    // appearance is resolved from the managed baseline appearance WindowRule
+    // now, so there is no Tiling.Appearance destination group. Per the
+    // no-ad-hoc-backwards-compat policy the stale v1 values are silently
+    // discarded; users fall back to the baseline rule's defaults.
 
     // Autotile inner/outer gaps fold into the shared "Gaps" group, filling only
     // the keys snapping didn't already populate (snapping precedence). SmartGaps
@@ -921,8 +908,6 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         tiling[QLatin1String("Algorithm")] = tilingAlgo;
     if (!tilingBehavior.isEmpty())
         tiling[QLatin1String("Behavior")] = tilingBehavior;
-    if (!tilingAppearance.isEmpty())
-        tiling[QLatin1String("Appearance")] = tilingAppearance;
     if (!tilingGaps.isEmpty())
         tiling[QLatin1String("Gaps")] = tilingGaps;
     if (!tiling.isEmpty())

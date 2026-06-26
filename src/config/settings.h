@@ -308,34 +308,6 @@ public:
                    snappingFocusFollowsMouseChanged)
     Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize
                    NOTIFY autotileRespectMinimumSizeChanged)
-    Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY
-                   autotileHideTitleBarsChanged)
-    Q_PROPERTY(
-        bool autotileShowBorder READ autotileShowBorder WRITE setAutotileShowBorder NOTIFY autotileShowBorderChanged)
-    Q_PROPERTY(
-        int autotileBorderWidth READ autotileBorderWidth WRITE setAutotileBorderWidth NOTIFY autotileBorderWidthChanged)
-    Q_PROPERTY(int autotileBorderRadius READ autotileBorderRadius WRITE setAutotileBorderRadius NOTIFY
-                   autotileBorderRadiusChanged)
-    Q_PROPERTY(QColor autotileBorderColor READ autotileBorderColor WRITE setAutotileBorderColor NOTIFY
-                   autotileBorderColorChanged)
-    Q_PROPERTY(QColor autotileInactiveBorderColor READ autotileInactiveBorderColor WRITE setAutotileInactiveBorderColor
-                   NOTIFY autotileInactiveBorderColorChanged)
-    Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE
-                   setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
-    Q_PROPERTY(bool snappingHideTitleBars READ snappingHideTitleBars WRITE setSnappingHideTitleBars NOTIFY
-                   snappingHideTitleBarsChanged)
-    Q_PROPERTY(
-        bool snappingShowBorder READ snappingShowBorder WRITE setSnappingShowBorder NOTIFY snappingShowBorderChanged)
-    Q_PROPERTY(
-        int snappingBorderWidth READ snappingBorderWidth WRITE setSnappingBorderWidth NOTIFY snappingBorderWidthChanged)
-    Q_PROPERTY(int snappingBorderRadius READ snappingBorderRadius WRITE setSnappingBorderRadius NOTIFY
-                   snappingBorderRadiusChanged)
-    Q_PROPERTY(QColor snappingBorderColor READ snappingBorderColor WRITE setSnappingBorderColor NOTIFY
-                   snappingBorderColorChanged)
-    Q_PROPERTY(QColor snappingInactiveBorderColor READ snappingInactiveBorderColor WRITE setSnappingInactiveBorderColor
-                   NOTIFY snappingInactiveBorderColorChanged)
-    Q_PROPERTY(bool snappingUseSystemBorderColors READ snappingUseSystemBorderColors WRITE
-                   setSnappingUseSystemBorderColors NOTIFY snappingUseSystemBorderColorsChanged)
     Q_PROPERTY(int autotileStickyWindowHandling READ autotileStickyWindowHandlingInt WRITE
                    setAutotileStickyWindowHandlingInt NOTIFY autotileStickyWindowHandlingChanged)
     Q_PROPERTY(int autotileDragBehavior READ autotileDragBehaviorInt WRITE setAutotileDragBehaviorInt NOTIFY
@@ -901,34 +873,6 @@ public:
     void setSnappingFocusFollowsMouse(bool focus) override;
     bool autotileRespectMinimumSize() const override;
     void setAutotileRespectMinimumSize(bool respect);
-    bool autotileHideTitleBars() const override;
-    void setAutotileHideTitleBars(bool hide) override;
-    bool autotileShowBorder() const override;
-    void setAutotileShowBorder(bool show) override;
-    int autotileBorderWidth() const override;
-    void setAutotileBorderWidth(int width) override;
-    int autotileBorderRadius() const override;
-    void setAutotileBorderRadius(int radius) override;
-    QColor autotileBorderColor() const override;
-    void setAutotileBorderColor(const QColor& color) override;
-    QColor autotileInactiveBorderColor() const override;
-    void setAutotileInactiveBorderColor(const QColor& color) override;
-    bool autotileUseSystemBorderColors() const override;
-    void setAutotileUseSystemBorderColors(bool use) override;
-    bool snappingHideTitleBars() const override;
-    void setSnappingHideTitleBars(bool hide) override;
-    bool snappingShowBorder() const override;
-    void setSnappingShowBorder(bool show) override;
-    int snappingBorderWidth() const override;
-    void setSnappingBorderWidth(int width) override;
-    int snappingBorderRadius() const override;
-    void setSnappingBorderRadius(int radius) override;
-    QColor snappingBorderColor() const override;
-    void setSnappingBorderColor(const QColor& color) override;
-    QColor snappingInactiveBorderColor() const override;
-    void setSnappingInactiveBorderColor(const QColor& color) override;
-    bool snappingUseSystemBorderColors() const override;
-    void setSnappingUseSystemBorderColors(bool use) override;
     StickyWindowHandling autotileStickyWindowHandling() const override;
     void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
     int autotileStickyWindowHandlingInt() const;
@@ -1141,8 +1085,6 @@ public:
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
     Q_INVOKABLE void applySystemColorScheme();
-    void applyAutotileBorderSystemColor();
-    void applySnappingBorderSystemColor();
 
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via

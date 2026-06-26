@@ -85,13 +85,6 @@ public:
     P_CONFIG_GROUP(snappingZonesOpacityGroup, "Snapping.Zones.Opacity")
     P_CONFIG_GROUP(snappingZonesBorderGroup, "Snapping.Zones.Border")
     P_CONFIG_GROUP(snappingZonesLabelsGroup, "Snapping.Zones.Labels")
-    // Snapping window appearance — the post-snap window's border / title-bar
-    // decoration (parallel to Tiling.Appearance.*, distinct from the
-    // Snapping.Zones.* drag-time zone overlay above).
-    P_CONFIG_GROUP(snappingAppearanceGroup, "Snapping.Appearance")
-    P_CONFIG_GROUP(snappingAppearanceColorsGroup, "Snapping.Appearance.Colors")
-    P_CONFIG_GROUP(snappingAppearanceDecorationsGroup, "Snapping.Appearance.Decorations")
-    P_CONFIG_GROUP(snappingAppearanceBordersGroup, "Snapping.Appearance.Borders")
     P_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     P_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
     // Snapping.Gaps now holds only the snapping-specific adjacency threshold —
@@ -112,13 +105,9 @@ public:
     P_CONFIG_GROUP(animationsWindowFilteringGroup, "Animations.WindowFiltering")
 
     // Tiling sub-groups
-    P_CONFIG_GROUP(tilingAppearanceGroup, "Tiling.Appearance")
     P_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
     P_CONFIG_GROUP(tilingBehaviorGroup, "Tiling.Behavior")
     P_CONFIG_GROUP(tilingBehaviorTriggersGroup, "Tiling.Behavior.Triggers")
-    P_CONFIG_GROUP(tilingAppearanceColorsGroup, "Tiling.Appearance.Colors")
-    P_CONFIG_GROUP(tilingAppearanceDecorationsGroup, "Tiling.Appearance.Decorations")
-    P_CONFIG_GROUP(tilingAppearanceBordersGroup, "Tiling.Appearance.Borders")
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
 
     // Parent groups (for purge enumeration — covers all sub-groups)
@@ -350,25 +339,6 @@ public:
     P_CONFIG_KEY(dragBehaviorKey, "DragBehavior")
     P_CONFIG_KEY(overflowBehaviorKey, "OverflowBehavior")
     P_CONFIG_KEY(lockedScreensKey, "LockedScreens")
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Colors + Snapping.Appearance.Colors
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // (uses useSystemKey, activeKey, inactiveKey)
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Decorations + Snapping.Appearance.Decorations
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    P_CONFIG_KEY(hideTitleBarsKey, "HideTitleBars")
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Borders + Snapping.Appearance.Borders
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    P_CONFIG_KEY(showBorderKey, "ShowBorder")
-    // (also uses widthKey, radiusKey)
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Gaps

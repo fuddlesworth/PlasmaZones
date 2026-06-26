@@ -226,37 +226,6 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
     // Effects.Blur lives in the Effects group alongside the display-OSD keys;
     // the whole Effects group is declared in one shot by appendDisplaySchema
     // below to avoid split-across-two-call-sites ordering bugs.
-
-    // Snapping.Appearance.* — the snapped window's border / title-bar
-    // decoration (parallel to Tiling.Appearance.* in appendAutotilingSchema;
-    // defaults via snapping* in ConfigDefaults).
-    schema.groups[CD::snappingAppearanceColorsGroup()] = {
-        {CD::activeKey(), CD::snappingBorderColor(), QMetaType::QColor, {}, validColorOr(CD::snappingBorderColor())},
-        {CD::inactiveKey(),
-         CD::snappingInactiveBorderColor(),
-         QMetaType::QColor,
-         {},
-         validColorOr(CD::snappingInactiveBorderColor())},
-        {CD::useSystemKey(), CD::snappingUseSystemBorderColors(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::snappingAppearanceDecorationsGroup()] = {
-        {CD::hideTitleBarsKey(), CD::snappingHideTitleBars(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::snappingAppearanceBordersGroup()] = {
-        {CD::showBorderKey(), CD::snappingShowBorder(), QMetaType::Bool},
-        {CD::widthKey(),
-         CD::snappingBorderWidth(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::snappingBorderWidthMin(), CD::snappingBorderWidthMax())},
-        {CD::radiusKey(),
-         CD::snappingBorderRadius(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::snappingBorderRadiusMin(), CD::snappingBorderRadiusMax())},
-    };
 }
 
 // ─── Ordering ───────────────────────────────────────────────────────────────
@@ -816,34 +785,6 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
         {CD::lockedScreensKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
         {CD::triggersKey(), CD::autotileDragInsertTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::tilingAppearanceColorsGroup()] = {
-        {CD::activeKey(), CD::autotileBorderColor(), QMetaType::QColor, {}, validColorOr(CD::autotileBorderColor())},
-        {CD::inactiveKey(),
-         CD::autotileInactiveBorderColor(),
-         QMetaType::QColor,
-         {},
-         validColorOr(CD::autotileInactiveBorderColor())},
-        {CD::useSystemKey(), CD::autotileUseSystemBorderColors(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::tilingAppearanceDecorationsGroup()] = {
-        {CD::hideTitleBarsKey(), CD::autotileHideTitleBars(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::tilingAppearanceBordersGroup()] = {
-        {CD::showBorderKey(), CD::autotileShowBorder(), QMetaType::Bool},
-        {CD::widthKey(),
-         CD::autotileBorderWidth(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileBorderWidthMin(), CD::autotileBorderWidthMax())},
-        {CD::radiusKey(),
-         CD::autotileBorderRadius(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileBorderRadiusMin(), CD::autotileBorderRadiusMax())},
     };
 
     // Tiling.Gaps keeps only the tiling-specific SmartGaps toggle — inner/outer

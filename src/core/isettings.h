@@ -150,37 +150,6 @@ public:
     virtual void setSnappingFocusNewWindows(bool enabled) = 0;
     virtual bool snappingFocusFollowsMouse() const = 0;
     virtual void setSnappingFocusFollowsMouse(bool enabled) = 0;
-    virtual bool autotileHideTitleBars() const = 0;
-    virtual void setAutotileHideTitleBars(bool hide) = 0;
-    virtual bool autotileShowBorder() const = 0;
-    virtual void setAutotileShowBorder(bool show) = 0;
-    virtual int autotileBorderWidth() const = 0;
-    virtual void setAutotileBorderWidth(int width) = 0;
-    virtual int autotileBorderRadius() const = 0;
-    virtual void setAutotileBorderRadius(int radius) = 0;
-    virtual QColor autotileBorderColor() const = 0;
-    virtual void setAutotileBorderColor(const QColor& color) = 0;
-    virtual QColor autotileInactiveBorderColor() const = 0;
-    virtual void setAutotileInactiveBorderColor(const QColor& color) = 0;
-    virtual bool autotileUseSystemBorderColors() const = 0;
-    virtual void setAutotileUseSystemBorderColors(bool use) = 0;
-
-    // Snapping window decoration settings (fetched by KWin effect via D-Bus).
-    // Parallel to autotile* — the snapped window's border / title-bar.
-    virtual bool snappingHideTitleBars() const = 0;
-    virtual void setSnappingHideTitleBars(bool hide) = 0;
-    virtual bool snappingShowBorder() const = 0;
-    virtual void setSnappingShowBorder(bool show) = 0;
-    virtual int snappingBorderWidth() const = 0;
-    virtual void setSnappingBorderWidth(int width) = 0;
-    virtual int snappingBorderRadius() const = 0;
-    virtual void setSnappingBorderRadius(int radius) = 0;
-    virtual QColor snappingBorderColor() const = 0;
-    virtual void setSnappingBorderColor(const QColor& color) = 0;
-    virtual QColor snappingInactiveBorderColor() const = 0;
-    virtual void setSnappingInactiveBorderColor(const QColor& color) = 0;
-    virtual bool snappingUseSystemBorderColors() const = 0;
-    virtual void setSnappingUseSystemBorderColors(bool use) = 0;
 
     virtual StickyWindowHandling autotileStickyWindowHandling() const = 0;
     virtual void setAutotileStickyWindowHandling(StickyWindowHandling handling) = 0;
@@ -533,20 +502,6 @@ Q_SIGNALS:
     void autotileFocusFollowsMouseChanged();
     void snappingFocusNewWindowsChanged();
     void snappingFocusFollowsMouseChanged();
-    void autotileHideTitleBarsChanged();
-    void autotileShowBorderChanged();
-    void autotileBorderWidthChanged();
-    void autotileBorderRadiusChanged();
-    void autotileBorderColorChanged();
-    void autotileInactiveBorderColorChanged();
-    void autotileUseSystemBorderColorsChanged();
-    void snappingHideTitleBarsChanged();
-    void snappingShowBorderChanged();
-    void snappingBorderWidthChanged();
-    void snappingBorderRadiusChanged();
-    void snappingBorderColorChanged();
-    void snappingInactiveBorderColorChanged();
-    void snappingUseSystemBorderColorsChanged();
     void autotileStickyWindowHandlingChanged();
     void autotileDragBehaviorChanged();
     void autotileOverflowBehaviorChanged();

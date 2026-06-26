@@ -95,8 +95,12 @@ set(plasmazones_settings_SRCS
     generalpagecontroller.cpp
     snappingzonescontroller.h
     snappingzonescontroller.cpp
-    snappingwindowappearancecontroller.h
-    snappingwindowappearancecontroller.cpp
+    # Shared "Gaps" page bounds facade.
+    gapscontroller.h
+    gapscontroller.cpp
+    # Slim "Window Appearance" page bounds + baseline-rule-id facade.
+    windowappearancecontroller.h
+    windowappearancecontroller.cpp
     snappingbehaviorcontroller.h
     snappingbehaviorcontroller.cpp
     snappingeffectscontroller.h
@@ -107,8 +111,6 @@ set(plasmazones_settings_SRCS
     snappingzoneselectorcontroller.cpp
     tilingalgorithmcontroller.h
     tilingalgorithmcontroller.cpp
-    tilingappearancecontroller.h
-    tilingappearancecontroller.cpp
     tilingbehaviorcontroller.h
     tilingbehaviorcontroller.cpp
     # PhosphorControl integration scaffold. PageAdapter wraps existing
@@ -229,16 +231,19 @@ qt_add_qml_module(plasmazones-settings
         qml/GlobalSearchField.qml
         qml/GeneralPage.qml
         # Snapping, organised by subject (Overlay / Zone Selector / Window),
-        # each with a Behavior + Appearance page. Window Appearance also hosts
-        # the per-screen Gaps; Shaders lives under Configuration.
+        # each with a Behavior page. Shaders lives under Configuration. The
+        # window border / title-bar appearance is shared across modes and lives
+        # on the top-level WindowAppearancePage; gaps live on GapsPage.
         qml/SnappingOverlayBehaviorPage.qml
         qml/SnappingOverlayAppearancePage.qml
         qml/SnappingZoneSelectorPage.qml
         qml/SnappingWindowBehaviorPage.qml
-        qml/SnappingWindowAppearancePage.qml
-        qml/TilingAppearancePage.qml
         qml/TilingBehaviorPage.qml
         qml/TilingAlgorithmPage.qml
+        # Shared, mode-neutral pages: the baseline window-appearance editor and
+        # the unified inner/outer gap controls.
+        qml/WindowAppearancePage.qml
+        qml/GapsPage.qml
         qml/EditorPage.qml
         qml/LayoutsPage.qml
         qml/SnappingQuickShortcutsPage.qml

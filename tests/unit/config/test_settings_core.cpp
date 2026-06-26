@@ -116,44 +116,6 @@ private Q_SLOTS:
     }
 
     /**
-     * reset() must restore every snapped-window appearance setting
-     * (Snapping.Appearance.{Borders,Decorations,Colors}) to its ConfigDefaults
-     * value. reset() reverts them via its group-delete + reload path (like every
-     * other store-backed setting), so this pins dedicated reset coverage for them.
-     */
-    void testReset_restoresSnappingWindowAppearanceDefaults()
-    {
-        IsolatedConfigGuard guard;
-
-        Settings settings;
-
-        // Drive every snapping* setting away from its default.
-        settings.setSnappingHideTitleBars(!ConfigDefaults::snappingHideTitleBars());
-        settings.setSnappingShowBorder(!ConfigDefaults::snappingShowBorder());
-        settings.setSnappingUseSystemBorderColors(!ConfigDefaults::snappingUseSystemBorderColors());
-        settings.setSnappingBorderWidth(ConfigDefaults::snappingBorderWidth() + 1);
-        settings.setSnappingBorderRadius(ConfigDefaults::snappingBorderRadius() + 1);
-        settings.setSnappingBorderColor(QColor(10, 20, 30));
-        settings.setSnappingInactiveBorderColor(QColor(40, 50, 60));
-
-        settings.reset();
-
-        QCOMPARE(settings.snappingHideTitleBars(), ConfigDefaults::snappingHideTitleBars());
-        QCOMPARE(settings.snappingShowBorder(), ConfigDefaults::snappingShowBorder());
-        QCOMPARE(settings.snappingUseSystemBorderColors(), ConfigDefaults::snappingUseSystemBorderColors());
-        QCOMPARE(settings.snappingBorderWidth(), ConfigDefaults::snappingBorderWidth());
-        QCOMPARE(settings.snappingBorderRadius(), ConfigDefaults::snappingBorderRadius());
-        // The default snappingUseSystemBorderColors is true, so reset()'s
-        // reload drives the snap border colors to the (also-reset) zone
-        // highlight/inactive colors via applySnappingBorderSystemColor().
-        // Assert against the live zone colors — the actual contract when
-        // system colors are enabled — rather than the static ConfigDefaults
-        // border colors, which only apply when system colors are off.
-        QCOMPARE(settings.snappingBorderColor(), settings.highlightColor());
-        QCOMPARE(settings.snappingInactiveBorderColor(), settings.inactiveColor());
-    }
-
-    /**
      * Snapping focus-behavior settings default off and return to the default on
      * reset(). Both gate runtime focus changes (the daemon focus-new-windows emit
      * and the effect focus-follows-mouse), so a flipped default would silently
@@ -215,16 +177,6 @@ private Q_SLOTS:
         settings.setAnimationDuration(300);
         settings.setAnimationSequenceMode(0);
         settings.setLabelFontWeight(400);
-        // Snapped-window appearance (Snapping.Appearance.{Borders,Decorations,Colors}).
-        // useSystemBorderColors=false so the explicit colors persist instead of
-        // being overwritten by the accent-derived system colors on load.
-        settings.setSnappingShowBorder(false);
-        settings.setSnappingHideTitleBars(false);
-        settings.setSnappingBorderWidth(4);
-        settings.setSnappingBorderRadius(8);
-        settings.setSnappingUseSystemBorderColors(false);
-        settings.setSnappingBorderColor(QColor(10, 20, 30));
-        settings.setSnappingInactiveBorderColor(QColor(40, 50, 60));
 
         settings.save();
 
@@ -299,44 +251,6 @@ private Q_SLOTS:
             QCOMPARE(obj.value(QLatin1String("duration")).toInt(), 300);
             QCOMPARE(obj.value(QLatin1String("sequenceMode")).toInt(), 0);
         }
-
-        {
-            // Snapped-window border decoration (Snapping.Appearance.Borders).
-            auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
-            QCOMPARE(borders->readBool(ConfigDefaults::showBorderKey(), true), false);
-            QCOMPARE(borders->readInt(ConfigDefaults::widthKey(), 0), 4);
-            QCOMPARE(borders->readInt(ConfigDefaults::radiusKey(), 0), 8);
-        }
-        {
-            // Snapped-window title-bar decoration (Snapping.Appearance.Decorations).
-            auto decorations = backend->group(ConfigDefaults::snappingAppearanceDecorationsGroup());
-            QCOMPARE(decorations->readBool(ConfigDefaults::hideTitleBarsKey(), true), false);
-        }
-        {
-            // Snapped-window border colors (Snapping.Appearance.Colors). Read the
-            // stored strings back through QColor so the on-disk serialization
-            // format is irrelevant to the comparison.
-            auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
-            QCOMPARE(colors->readBool(ConfigDefaults::useSystemKey(), true), false);
-            QCOMPARE(QColor(colors->readString(ConfigDefaults::activeKey(), QString())), QColor(10, 20, 30));
-            QCOMPARE(QColor(colors->readString(ConfigDefaults::inactiveKey(), QString())), QColor(40, 50, 60));
-        }
-
-        {
-            // Load-side getter round-trip: a freshly-constructed Settings must
-            // read every snapping* value back through its OWN getter. The
-            // on-disk assertions above only prove save() wrote the right keys;
-            // a getter wired to the wrong group/key would still pass them.
-            // Reading through the getters pins the read path too.
-            Settings reloaded;
-            QCOMPARE(reloaded.snappingShowBorder(), false);
-            QCOMPARE(reloaded.snappingHideTitleBars(), false);
-            QCOMPARE(reloaded.snappingBorderWidth(), 4);
-            QCOMPARE(reloaded.snappingBorderRadius(), 8);
-            QCOMPARE(reloaded.snappingUseSystemBorderColors(), false);
-            QCOMPARE(reloaded.snappingBorderColor(), QColor(10, 20, 30));
-            QCOMPARE(reloaded.snappingInactiveBorderColor(), QColor(40, 50, 60));
-        }
     }
 
     // =========================================================================
@@ -400,41 +314,6 @@ private Q_SLOTS:
 
         QCOMPARE(specificSpy.count(), 0);
         QCOMPARE(generalSpy.count(), 0);
-    }
-
-    /**
-     * The hand-written setSnappingUseSystemBorderColors setter (not
-     * macro-generated) must emit both its specific
-     * snappingUseSystemBorderColorsChanged signal and settingsChanged() on a
-     * real change, and stay silent on a no-op (set to the same value twice).
-     */
-    void testSetSnappingUseSystemBorderColors_emitsAndGuards()
-    {
-        IsolatedConfigGuard guard;
-
-        Settings settings;
-
-        const bool current = settings.snappingUseSystemBorderColors();
-        const bool toggled = !current;
-        settings.setSnappingUseSystemBorderColors(current); // force known value
-
-        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::snappingUseSystemBorderColorsChanged);
-        QVERIFY(generalSpy.isValid());
-        QVERIFY(specificSpy.isValid());
-
-        // Real change emits both signals.
-        settings.setSnappingUseSystemBorderColors(toggled);
-        QCOMPARE(specificSpy.count(), 1);
-        QVERIFY(generalSpy.count() >= 1);
-
-        const int specificBefore = specificSpy.count();
-        const int generalBefore = generalSpy.count();
-
-        // No-op (same value again) emits nothing.
-        settings.setSnappingUseSystemBorderColors(toggled);
-        QCOMPARE(specificSpy.count(), specificBefore);
-        QCOMPARE(generalSpy.count(), generalBefore);
     }
 
     /**

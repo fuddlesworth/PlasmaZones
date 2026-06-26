@@ -20,7 +20,6 @@
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
-#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorTiles/AutotileConstants.h>
 // Animation duration / stagger UI bounds — generic policy, not autotile-specific.
 #include <PhosphorAnimation/AnimationLimits.h>
@@ -1015,110 +1014,6 @@ public:
     static bool autotileRespectMinimumSize()
     {
         return true;
-    }
-    // Window-decoration hide/show/width/radius defaults delegate to the
-    // shared PhosphorCompositor::DecorationDefaults constants — the same
-    // symbols the effect's BorderState member-initializers use — so the
-    // daemon's persisted defaults and the effect's pre-settings-load
-    // rendering can't drift. (ZoneDefaults is the zone OVERLAY's constants,
-    // a different visual concept; the old width/radius delegation to it was
-    // an accident of equal values.) The border COLORS below intentionally
-    // remain ZoneDefaults-sourced: DecorationDefaults carries no color
-    // constants because colors are daemon-resolved (system accent) and
-    // pushed via settings — nothing renders pre-load (ShowBorder defaults
-    // false), so there is no drift concern to share symbols over.
-    static bool autotileHideTitleBars()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
-    }
-    static bool autotileShowBorder()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::ShowBorder;
-    }
-    static int autotileBorderWidth()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
-    }
-    static constexpr int autotileBorderWidthMin()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMin;
-    }
-    static constexpr int autotileBorderWidthMax()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMax;
-    }
-    static int autotileBorderRadius()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
-    }
-    static constexpr int autotileBorderRadiusMin()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin;
-    }
-    static constexpr int autotileBorderRadiusMax()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
-    }
-    static QColor autotileBorderColor()
-    {
-        return ::PhosphorZones::ZoneDefaults::HighlightColor;
-    }
-    static QColor autotileInactiveBorderColor()
-    {
-        return ::PhosphorZones::ZoneDefaults::InactiveColor;
-    }
-    static bool autotileUseSystemBorderColors()
-    {
-        return true;
-    }
-
-    // Snapping window appearance — the snapped window's border / title-bar
-    // decoration (stored under Snapping.Appearance.*). Every default delegates to
-    // its autotile* counterpart so the two modes start from identical window
-    // appearance: a single edit to the autotile default moves both in lockstep.
-    static bool snappingHideTitleBars()
-    {
-        return autotileHideTitleBars();
-    }
-    static bool snappingShowBorder()
-    {
-        return autotileShowBorder();
-    }
-    static int snappingBorderWidth()
-    {
-        return autotileBorderWidth();
-    }
-    static constexpr int snappingBorderWidthMin()
-    {
-        return autotileBorderWidthMin();
-    }
-    static constexpr int snappingBorderWidthMax()
-    {
-        return autotileBorderWidthMax();
-    }
-    static int snappingBorderRadius()
-    {
-        return autotileBorderRadius();
-    }
-    static constexpr int snappingBorderRadiusMin()
-    {
-        return autotileBorderRadiusMin();
-    }
-    static constexpr int snappingBorderRadiusMax()
-    {
-        return autotileBorderRadiusMax();
-    }
-    static QColor snappingBorderColor()
-    {
-        return autotileBorderColor();
-    }
-    static QColor snappingInactiveBorderColor()
-    {
-        return autotileInactiveBorderColor();
-    }
-    static bool snappingUseSystemBorderColors()
-    {
-        return autotileUseSystemBorderColors();
     }
     static int autotileStickyWindowHandling()
     {

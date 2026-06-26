@@ -2384,13 +2384,12 @@ private Q_SLOTS:
             snapping.value(QStringLiteral("Behavior")).toObject().value(QStringLiteral("ToggleActivation")).toBool(),
             true);
 
-        // End-state collision check: the NEW snap-window appearance settings reuse the
-        // freed Snapping.Appearance.Colors namespace. The v3 zone-overlay value
-        // (UseSystem=false) was relocated to Snapping.Zones above, so a Settings loaded
-        // from the migrated config must read snappingUseSystemBorderColors() as the
-        // SHIPPED DEFAULT — proving no stale v3 zone value bleeds into the new key.
+        // End-state load check: a Settings loaded from the migrated config must
+        // read the zone-overlay UseSystem flag from its new Snapping.Zones.Colors
+        // home (the migration relocated the v3 UseSystem=false there), proving the
+        // renamed group is wired to the live getter.
         Settings settings;
-        QCOMPARE(settings.snappingUseSystemBorderColors(), ConfigDefaults::snappingUseSystemBorderColors());
+        QCOMPARE(settings.useSystemColors(), false);
     }
 
     void testZoneRename_absentSourceIsNoOp()

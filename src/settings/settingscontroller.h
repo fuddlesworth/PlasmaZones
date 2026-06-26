@@ -72,8 +72,8 @@ class RegistryShaderPreviewBackend;
 #include "snappingzoneselectorcontroller.h"
 #include "stagingservice.h"
 #include "tilingalgorithmcontroller.h"
-#include "snappingwindowappearancecontroller.h"
-#include "tilingappearancecontroller.h"
+#include "gapscontroller.h"
+#include "windowappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
 #include "windowrulecontroller.h"
 
@@ -122,9 +122,8 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingZonesController* snappingZonesPage READ snappingZonesPage CONSTANT)
     Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
     Q_PROPERTY(SnappingShadersPageController* snappingShadersPage READ snappingShadersPage CONSTANT)
-    Q_PROPERTY(
-        SnappingWindowAppearanceController* snappingWindowAppearancePage READ snappingWindowAppearancePage CONSTANT)
-    Q_PROPERTY(TilingAppearanceController* tilingAppearancePage READ tilingAppearancePage CONSTANT)
+    Q_PROPERTY(GapsController* gapsPage READ gapsPage CONSTANT)
+    Q_PROPERTY(WindowAppearanceController* windowAppearancePage READ windowAppearancePage CONSTANT)
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
     Q_PROPERTY(AnimationsPageController* animationsPage READ animationsPage CONSTANT)
@@ -370,8 +369,8 @@ public:
     SnappingZonesController* snappingZonesPage() const;
     SnappingEffectsController* snappingEffectsPage() const;
     SnappingShadersPageController* snappingShadersPage() const;
-    SnappingWindowAppearanceController* snappingWindowAppearancePage() const;
-    TilingAppearanceController* tilingAppearancePage() const;
+    GapsController* gapsPage() const;
+    WindowAppearanceController* windowAppearancePage() const;
     TilingAlgorithmController* tilingAlgorithmPage() const;
     GeneralPageController* generalPage() const
     {
@@ -641,8 +640,8 @@ private:
     SnappingZoneSelectorController* m_snappingZoneSelectorPage = nullptr;
     SnappingZonesController* m_snappingZonesPage = nullptr;
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
-    SnappingWindowAppearanceController* m_snappingWindowAppearancePage = nullptr;
-    TilingAppearanceController* m_tilingAppearancePage = nullptr;
+    GapsController* m_gapsPage = nullptr;
+    WindowAppearanceController* m_windowAppearancePage = nullptr;
     GeneralPageController* m_generalPage = nullptr;
     /// Parented to `this` so Qt manages lifetime; the raw pointer is fine
     /// because every consumer is also a child of this controller and Qt's
