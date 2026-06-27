@@ -149,10 +149,10 @@ public:
 
     // Zone settings — inner/outer gaps are the single shared model used by BOTH
     // snapping and tiling. The global default is now rule-backed: these are
-    // computed READ-ONLY getters reading the managed baseline appearance
-    // Rule's gap actions. Editing happens through the rule (the Window
-    // Appearance page writes via RuleController), so there are no setters.
-    // NOTIFY fires when the baseline rule's gap values change (see
+    // computed READ-ONLY getters reading the managed "Default gaps" rule's
+    // (baselineGapRuleId) gap actions. Editing happens through the rule (the
+    // Window Appearance page writes via RuleController), so there are no setters.
+    // NOTIFY fires when the baseline gap rule's values change (see
     // onRuleStoreChanged).
     Q_PROPERTY(int innerGap READ innerGap NOTIFY innerGapChanged)
     Q_PROPERTY(int outerGap READ outerGap NOTIFY outerGapChanged)
@@ -593,11 +593,11 @@ public:
     void setLabelFontStrikeout(bool strikeout) override;
 
     // Zone geometry (shared inner/outer gaps) — the global default is now
-    // rule-backed. These getters read the managed baseline appearance
-    // Rule's gap actions, falling back to the compile-time defaults when
-    // no store / rule / action is present. There are no setters: the gap values
-    // are edited on the baseline rule directly (Window Appearance page →
-    // RuleController). The autotile* gap forwarders above route through
+    // rule-backed. These getters read the managed "Default gaps" rule's
+    // (baselineGapRuleId) gap actions, falling back to the compile-time defaults
+    // when no store / rule / action is present. There are no setters: the gap
+    // values are edited on the baseline gap rule directly (Window Appearance
+    // page → RuleController). The autotile* gap forwarders above route through
     // these same getters, so the tile engine stays untouched.
     int innerGap() const override;
     int outerGap() const override;

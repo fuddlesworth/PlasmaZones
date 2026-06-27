@@ -16,7 +16,7 @@
 #include <QScreen>
 
 static_assert(PhosphorEngine::GeometryDefaults::InnerGap == PlasmaZones::Defaults::InnerGap,
-              "Library and daemon ZonePadding defaults out of sync");
+              "Library and daemon InnerGap defaults out of sync");
 static_assert(PhosphorEngine::GeometryDefaults::OuterGap == PlasmaZones::Defaults::OuterGap,
               "Library and daemon OuterGap defaults out of sync");
 

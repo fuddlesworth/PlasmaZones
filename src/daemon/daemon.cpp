@@ -108,15 +108,13 @@
 
 namespace PlasmaZones {
 
-// Snapping and autotile gaps are the SAME two quantities under different names:
-// snapping's per-zone "zonePadding" is the full inter-region gap (each zone's
-// interior edge insets by zonePadding/2, so two neighbours leave a zonePadding
-// gap — see GeometryUtils::applyGapsToZoneGeometry), exactly like autotile's
-// "innerGap" (the single gap between two tiles). Snapping "outerGap" and
-// autotile "outerGap" both inset the content area from the screen edge per side.
+// Snapping and autotile share one unified gap model: a single innerGap (the
+// gap between two adjacent regions — each zone's interior edge insets by
+// innerGap/2 so two neighbours leave an innerGap gap, see
+// GeometryUtils::applyGapsToZoneGeometry) and a single outerGap (insets the
+// content area from the screen edge per side), with one default for each.
 // A context gap-override rule must therefore clamp to the same range in both
 // modes; these assertions fail the build if the two ranges ever drift apart.
-// (The defaults may legitimately differ per mode, so only the range is tied.)
 static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
               "Snapping and autotile gap clamp ceilings must match — they are the same gap quantity");
 

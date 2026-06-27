@@ -36,7 +36,7 @@ struct PHOSPHORRULES_EXPORT ValidationIssue
     /// Wire-stable code so callers can localise the message themselves without
     /// string-matching the diagnostic. New codes append; never renumber.
     enum class Code : int {
-        /// A context-domain action (SetEngineMode / SetSnappingLayout /
+        /// A context-domain action (e.g. SetEngineMode / SetSnappingLayout /
         /// SetTilingAlgorithm / DisableEngine) paired with a match that
         /// references window-property fields. The match fails during context
         /// resolution (window fields are absent on the windowless query), so

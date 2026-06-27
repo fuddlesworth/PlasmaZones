@@ -438,7 +438,11 @@ bool ConfigMigration::ensureJsonConfigImpl()
     }
 
     qInfo("ConfigMigration: migration complete");
-    return finalizeV4Conversion(jsonPath);
+    // The in-memory chain above ran through migrateV4ToV5, which stashes the v5
+    // appearance/gap payload — run BOTH finalizers (matching the version-path
+    // return sites) so the v5 override rules are built on this launch, not the
+    // next.
+    return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
 }
 
 void ConfigMigration::resetMigrationGuardForTesting()

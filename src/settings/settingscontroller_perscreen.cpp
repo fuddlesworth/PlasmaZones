@@ -108,9 +108,9 @@ void SettingsController::clearPerScreenGapRule(const QString& screenName)
         return;
     }
     const QString id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), screenName.toUtf8()).toString();
-    if (m_rulesPage->removeRule(id)) {
-        Q_EMIT perScreenOverridesChanged();
-    }
+    // removeRule drives RuleModel::countChanged → perScreenOverridesChanged
+    // (wired in settingscontroller.cpp), so no manual emit is needed here.
+    m_rulesPage->removeRule(id);
 }
 
 // ── Per-screen zone selector overrides ───────────────────────────────────

@@ -651,10 +651,40 @@ void SettingsAdaptor::initializeRegistry()
             return true;
         };
         m_schemas[QStringLiteral("autotilePerAlgorithmSettings")] = QStringLiteral("map");
-        // Autotile inner/outer gaps are unified with snapping and rule-backed —
-        // their global default lives on the managed baseline appearance
-        // Rule (edited over the org.plasmazones.Rules surface), so
-        // no gap keys are registered on this generic settings map.
+        // Gaps are unified with snapping and rule-backed — their global default
+        // lives on the managed Default gaps Rule, edited over the
+        // org.plasmazones.Rules surface, so they are NOT writable on this generic
+        // settings map. But the editor (a separate process) reads the resolved
+        // global gap values over D-Bus, so register READ-ONLY getters (no setter)
+        // for them; a write attempt still fails because no setter is registered.
+        m_getters[QStringLiteral("innerGap")] = [concrete]() {
+            return concrete->innerGap();
+        };
+        m_schemas[QStringLiteral("innerGap")] = QStringLiteral("int");
+        m_getters[QStringLiteral("outerGap")] = [concrete]() {
+            return concrete->outerGap();
+        };
+        m_schemas[QStringLiteral("outerGap")] = QStringLiteral("int");
+        m_getters[QStringLiteral("usePerSideOuterGap")] = [concrete]() {
+            return concrete->usePerSideOuterGap();
+        };
+        m_schemas[QStringLiteral("usePerSideOuterGap")] = QStringLiteral("bool");
+        m_getters[QStringLiteral("outerGapTop")] = [concrete]() {
+            return concrete->outerGapTop();
+        };
+        m_schemas[QStringLiteral("outerGapTop")] = QStringLiteral("int");
+        m_getters[QStringLiteral("outerGapBottom")] = [concrete]() {
+            return concrete->outerGapBottom();
+        };
+        m_schemas[QStringLiteral("outerGapBottom")] = QStringLiteral("int");
+        m_getters[QStringLiteral("outerGapLeft")] = [concrete]() {
+            return concrete->outerGapLeft();
+        };
+        m_schemas[QStringLiteral("outerGapLeft")] = QStringLiteral("int");
+        m_getters[QStringLiteral("outerGapRight")] = [concrete]() {
+            return concrete->outerGapRight();
+        };
+        m_schemas[QStringLiteral("outerGapRight")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("autotileFocusNewWindows", autotileFocusNewWindows, setAutotileFocusNewWindows)
         REGISTER_CONCRETE_BOOL("autotileSmartGaps", autotileSmartGaps, setAutotileSmartGaps)
         REGISTER_CONCRETE_INT("autotileMaxWindows", autotileMaxWindows, setAutotileMaxWindows)

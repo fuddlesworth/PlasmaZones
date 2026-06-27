@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
-# PhosphorRule
+# PhosphorRules
 
 The unified window/context rule engine for Phosphor: one composable
 match-expression language, one pluggable action set, one serialization

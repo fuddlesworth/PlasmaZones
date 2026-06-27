@@ -294,11 +294,11 @@ registerAction(ActionDescriptor{
 });
 
 registerAction(ActionDescriptor{
-    .type = QString(ActionType::SetBorderColor),
+    .type = QString(ActionType::SetBorderColorActive), // analogous SetBorderColorInactive registered alongside
     // ... existing fields unchanged ...
     .category = QStringLiteral("appearance"),
     .displayOrder = 50,
-    .tags = {QString(ActionType::Tag::Effect), QString(ActionType::Tag::Border)},
+    .tags = {QString(Tag::Effect), QString(Tag::Border)},
 });
 ```
 
@@ -326,7 +326,8 @@ Complete mapping (all 26 registered actions):
 | SetBorderVisible | `appearance` | `effect`, `border` |
 | SetBorderWidth | `appearance` | `effect`, `border` |
 | SetBorderRadius | `appearance` | `effect`, `border` |
-| SetBorderColor | `appearance` | `effect`, `border` |
+| SetBorderColorActive | `appearance` | `effect`, `border` |
+| SetBorderColorInactive | `appearance` | `effect`, `border` |
 | OverrideAnimationShader | `animation` | `effect`, `animation` |
 | OverrideAnimationTiming | `animation` | `effect`, `animation` |
 | OverrideAnimationCurve | `animation` | `effect`, `animation` |
@@ -345,7 +346,7 @@ void testHasTag()
     auto& reg = ActionRegistry::instance();
     QVERIFY(reg.hasTag(QString(ActionType::SetOpacity), ActionType::Tag::Effect));
     QVERIFY(!reg.hasTag(QString(ActionType::Exclude), ActionType::Tag::Effect));
-    QVERIFY(reg.hasTag(QString(ActionType::SetBorderColor), ActionType::Tag::Border));
+    QVERIFY(reg.hasTag(QString(ActionType::SetBorderColorActive), Tag::Border));
 }
 
 void testTypesWithTag()

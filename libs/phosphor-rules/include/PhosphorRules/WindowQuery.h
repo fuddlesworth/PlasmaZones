@@ -65,7 +65,7 @@ struct WindowQuery
     QString screenId;
     int virtualDesktop = 0; ///< 0 = all desktops
     QString activity; ///< empty = all activities
-    QString mode; ///< current placement mode wire token ("snapping" / "tiling" / "floating"); empty = unknown
+    QString mode; ///< current placement mode wire token ("snapping" / "tiling"); a floating window has no mode (empty)
 
     /// True if any window attribute is set — i.e. this is a per-window query
     /// rather than a windowless context query.

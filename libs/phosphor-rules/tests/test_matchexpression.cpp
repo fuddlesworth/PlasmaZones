@@ -239,6 +239,25 @@ private Q_SLOTS:
         QVERIFY(!dialog.evaluate(firefoxQuery()));
     }
 
+    void testModeField_contextLeaf()
+    {
+        // Mode is a context field — always present. A `Mode Equals "tiling"`
+        // leaf matches a query in tiling mode and nothing else.
+        const auto tilingLeaf = MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QStringLiteral("tiling"));
+
+        WindowQuery tiling;
+        tiling.mode = QStringLiteral("tiling");
+        QVERIFY(tilingLeaf.evaluate(tiling));
+
+        WindowQuery snapping;
+        snapping.mode = QStringLiteral("snapping");
+        QVERIFY(!tilingLeaf.evaluate(snapping));
+
+        // A floating window carries no mode (empty token) — the leaf is inert.
+        WindowQuery floating; // mode defaults to empty
+        QVERIFY(!tilingLeaf.evaluate(floating));
+    }
+
     // ── Composites ──
 
     void testAll_andSemantics()

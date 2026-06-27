@@ -560,10 +560,12 @@ SettingsFlickable {
                     ColorSwatchRow {
                         color: {
                             root.reloadTick;
-                            return root.actionValue(root.actBorderColorInactive, "value", root.defaultBorderHex);
+                            const raw = root.actionValue(root.actBorderColorInactive, "value", root.defaultBorderHex);
+                            return raw === root.accentToken ? Kirigami.Theme.highlightColor : raw;
                         }
                         onClicked: {
-                            inactiveBorderColorDialog.selectedColor = root.actionValue(root.actBorderColorInactive, "value", root.defaultBorderHex);
+                            const raw = root.actionValue(root.actBorderColorInactive, "value", root.defaultBorderHex);
+                            inactiveBorderColorDialog.selectedColor = raw === root.accentToken ? root.defaultBorderHex : raw;
                             inactiveBorderColorDialog.open();
                         }
                     }

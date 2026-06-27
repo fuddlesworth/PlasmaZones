@@ -146,8 +146,6 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
             label = PhosphorI18n::tr("Snapping");
         } else if (token == QLatin1String("tiling")) {
             label = PhosphorI18n::tr("Tiling");
-        } else if (token == QLatin1String("floating")) {
-            label = PhosphorI18n::tr("Floating");
         }
         return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field), label);
     }

@@ -54,7 +54,7 @@ enum class Field : int {
     Zone = 32, ///< the snap zone's UUID the window occupies
     IsTiled = 33, ///< managed by the autotile engine (distinct from IsSnapped)
     // ── Context placement-mode field [34] ────────────────────────────────
-    Mode = 34, ///< context — current placement mode (snapping / tiling / floating)
+    Mode = 34, ///< context — current placement mode (snapping / tiling)
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
@@ -130,7 +130,7 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     {Field::Zone, QLatin1StringView("zone"), FieldType::String, FieldSource::Window},
     {Field::IsTiled, QLatin1StringView("isTiled"), FieldType::Bool, FieldSource::Window},
     // [34] — Context placement-mode field. String-valued (wire tokens
-    // "snapping" / "tiling" / "floating") so an `Equals` leaf compares the
+    // "snapping" / "tiling") so an `Equals` leaf compares the
     // token directly, and Context-sourced so it is present during windowless
     // context resolution — which is what lets a per-mode rule participate in
     // the gap cascade and pass the context-action compatibility check.

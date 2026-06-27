@@ -1238,12 +1238,12 @@ P_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDispla
 // clampInt validators enforce the same ranges readValidatedInt used to.
 
 // Shared inner/outer gaps — the GLOBAL default is rule-backed (the managed
-// baseline appearance Rule). These getters read that rule's gap actions
-// (SetInnerGap / SetOuterGap / …) through the active window-rule store and fall
-// back to the compile-time ConfigDefaults when no store / rule / action is
-// present (the standalone settings app or a test may construct Settings without
-// a daemon-seeded store). There are no setters — the values are edited on the
-// rule directly. KEEP these accessors in lockstep with makeBaselineAppearanceRule
+// "Default gaps" rule, baselineGapRuleId). These getters read that rule's gap
+// actions (SetInnerGap / SetOuterGap / …) through the active window-rule store
+// and fall back to the compile-time ConfigDefaults when no store / rule / action
+// is present (the standalone settings app or a test may construct Settings
+// without a daemon-seeded store). There are no setters — the values are edited on
+// the rule directly. KEEP these accessors in lockstep with makeBaselineGapRule
 // (daemon.cpp) and with the autotile* gap forwarders in settings.h.
 // Read one gap action's Value param from the rule @p ruleId in @p store, or
 // std::nullopt when the store / rule / action is absent. Backs both the global
@@ -1354,11 +1354,9 @@ void Settings::onRuleStoreChanged()
     // re-space (daemon's innerGap*Changed → scheduleGapResnap). Only emit on a
     // real change so unrelated rule edits (a new border rule, a rename) don't
     // trigger spurious retiles.
-    bool anyChanged = false;
-    const auto detect = [&anyChanged](auto& cached, auto current, auto emitSignal) {
+    const auto detect = [](auto& cached, auto current, auto emitSignal) {
         if (cached != current) {
             cached = current;
-            anyChanged = true;
             emitSignal();
         }
     };
@@ -1395,7 +1393,6 @@ void Settings::onRuleStoreChanged()
     // re-resolve the default assignment and immediately revert the toggle. The
     // fingerprint covers every gap action across all rules (baseline + per-screen
     // + per-mode), so non-gap rule writes no longer trigger a gap re-sync.
-    Q_UNUSED(anyChanged);
     const QString gapFingerprint = gapRulesFingerprint();
     if (gapFingerprint != m_cachedGapFingerprint) {
         m_cachedGapFingerprint = gapFingerprint;

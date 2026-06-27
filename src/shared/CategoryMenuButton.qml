@@ -474,7 +474,8 @@ ComboBox {
                     var group = cat.group || "";
                     if (lastGroup !== "" && group !== "" && group !== lastGroup)
                         _addSeparator(categoryMenu);
-                    lastGroup = group;
+                    if (group !== "")
+                        lastGroup = group;
 
                     var subMenu = _addSubmenu(categoryMenu, {
                         "title": cat.name

@@ -146,6 +146,23 @@ private Q_SLOTS:
         QVERIFY(q.hasWindow());
     }
 
+    void testValueForField_modeAlwaysPresent()
+    {
+        WindowQuery q; // no window attributes, mode unset
+        // Mode is context-sourced: always engaged, even when unset, and
+        // defaults to an empty string.
+        const auto v = q.valueForField(Field::Mode);
+        QVERIFY(v.has_value());
+        QCOMPARE(v->toString(), QString());
+        // Context-sourced, so it never makes the query look per-window.
+        QVERIFY(!q.hasWindow());
+
+        q.mode = QStringLiteral("tiling");
+        QCOMPARE(q.valueForField(Field::Mode)->toString(), QStringLiteral("tiling"));
+        // Setting the mode still does not flip hasWindow().
+        QVERIFY(!q.hasWindow());
+    }
+
     void testValueForField_pzStateFields()
     {
         WindowQuery q;

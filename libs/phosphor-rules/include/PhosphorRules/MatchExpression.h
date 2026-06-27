@@ -113,7 +113,7 @@ public:
     }
 
     /// True if this expression references only context fields (ScreenId /
-    /// VirtualDesktop / Activity) — i.e. a windowless context rule. An empty
+    /// VirtualDesktop / Activity / Mode) — i.e. a windowless context rule. An empty
     /// catch-all is context-only by this definition.
     bool isContextOnly() const;
 

@@ -378,7 +378,7 @@ ColumnLayout {
                                     implicitWidth: valueLabel.implicitHeight
                                     implicitHeight: valueLabel.implicitHeight
                                     radius: Math.round(Kirigami.Units.smallSpacing / 2)
-                                    color: _rawColor === "accent" ? Kirigami.Theme.highlightColor : _rawColor
+                                    color: paramRow.modelData.kind !== "color" ? "transparent" : (_rawColor === "accent" ? Kirigami.Theme.highlightColor : _rawColor)
                                     border.width: Math.round(Screen.devicePixelRatio)
                                     border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
                                 }
