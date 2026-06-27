@@ -1250,6 +1250,10 @@ private:
     // rulesChanged signal.
     void onRuleStoreChanged();
 
+    // Fingerprint of every gap action across the rule set, used to gate the
+    // per-screen gap re-sync in onRuleStoreChanged so only real gap edits fire it.
+    QString gapRulesFingerprint() const;
+
     // Read one gap action's Value param from the rule @p ruleId in @p store, or
     // std::nullopt when the store / rule / action is absent. Backs both the
     // global gap getters (the managed baseline rule id) and the per-screen gap
@@ -1279,6 +1283,9 @@ private:
     int m_cachedOuterGapBottom = 0;
     int m_cachedOuterGapLeft = 0;
     int m_cachedOuterGapRight = 0;
+    // Snapshot of all gap actions across the rule set; gates the per-screen gap
+    // re-sync so non-gap rule writes (mode/assignment toggles) don't fire it.
+    QString m_cachedGapFingerprint;
 
     // Activation
     // Activation is stored in m_store.

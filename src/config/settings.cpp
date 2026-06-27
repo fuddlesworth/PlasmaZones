@@ -1339,6 +1339,7 @@ void Settings::connectRuleStoreGapReactivity()
     m_cachedOuterGapBottom = outerGapBottom();
     m_cachedOuterGapLeft = outerGapLeft();
     m_cachedOuterGapRight = outerGapRight();
+    m_cachedGapFingerprint = gapRulesFingerprint();
     connect(m_ruleStore, &PhosphorRules::RuleStore::rulesChanged, this, [this](bool /*persisted*/) {
         onRuleStoreChanged();
     });
@@ -1383,22 +1384,56 @@ void Settings::onRuleStoreChanged()
         Q_EMIT outerGapRightChanged();
     });
 
-    // A rule edit can also change a per-monitor gap rule, which feeds the
-    // rule-backed getPerScreenAutotileSettings / getPerScreenSnappingSettings.
-    // Precisely diffing every per-screen gap rule is complex (and rule edits are
-    // user-paced), so re-sync the per-screen consumers on any rulesChanged: the
-    // daemon's perScreenSnappingSettingsChanged handler reschedules the gap
-    // resnap, and its settingsChanged handler re-runs the per-screen autotile
-    // config (updateAutotileScreens → applyPerScreenConfig, now reading the
-    // rule-backed getter) plus refreshConfigFromSettings. None of these write
-    // the rule store, so this cannot re-enter rulesChanged. settingsChanged is
-    // emitted here unconditionally for that reason — covering both the global
-    // (baseline) and per-monitor gap cases — while the per-property gap NOTIFY
-    // signals above still fire only on a real global change for QML bindings.
+    // A rule edit can also change a per-monitor (or per-mode) gap rule, which
+    // feeds the rule-backed getPerScreenAutotileSettings / getPerScreenSnapping-
+    // Settings. Re-sync those consumers — the daemon's perScreenSnappingSettings-
+    // Changed handler reschedules the gap resnap, and its settingsChanged handler
+    // re-runs the per-screen autotile config (updateAutotileScreens) plus
+    // refreshConfigFromSettings — but ONLY when a gap action somewhere in the rule
+    // set actually changed. Emitting on every rulesChanged made a mode/assignment
+    // toggle (also a rule write) fire settingsChanged, which drove the daemon to
+    // re-resolve the default assignment and immediately revert the toggle. The
+    // fingerprint covers every gap action across all rules (baseline + per-screen
+    // + per-mode), so non-gap rule writes no longer trigger a gap re-sync.
     Q_UNUSED(anyChanged);
-    Q_EMIT perScreenAutotileSettingsChanged();
-    Q_EMIT perScreenSnappingSettingsChanged();
-    Q_EMIT settingsChanged();
+    const QString gapFingerprint = gapRulesFingerprint();
+    if (gapFingerprint != m_cachedGapFingerprint) {
+        m_cachedGapFingerprint = gapFingerprint;
+        Q_EMIT perScreenAutotileSettingsChanged();
+        Q_EMIT perScreenSnappingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+// Fingerprint of every gap action across the whole rule set (baseline + per-
+// screen + per-mode gap rules), used to gate the per-screen gap re-sync in
+// onRuleStoreChanged so only real gap edits fire it — never a mode/assignment/
+// border rule write.
+QString Settings::gapRulesFingerprint() const
+{
+    if (m_ruleStore == nullptr) {
+        return QString();
+    }
+    static const QSet<QString> gapTypes = {
+        QString(PhosphorRules::ActionType::SetInnerGap),           QString(PhosphorRules::ActionType::SetOuterGap),
+        QString(PhosphorRules::ActionType::SetUsePerSideOuterGap), QString(PhosphorRules::ActionType::SetOuterGapTop),
+        QString(PhosphorRules::ActionType::SetOuterGapBottom),     QString(PhosphorRules::ActionType::SetOuterGapLeft),
+        QString(PhosphorRules::ActionType::SetOuterGapRight)};
+    QString fingerprint;
+    const QString valueKey = QString(PhosphorRules::ActionParam::Value);
+    for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
+        for (const PhosphorRules::RuleAction& action : rule.actions) {
+            if (gapTypes.contains(action.type)) {
+                fingerprint += rule.id.toString();
+                fingerprint += QLatin1Char('|');
+                fingerprint += action.type;
+                fingerprint += QLatin1Char('=');
+                fingerprint += action.params.value(valueKey).toVariant().toString();
+                fingerprint += QLatin1Char(';');
+            }
+        }
+    }
+    return fingerprint;
 }
 
 P_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)

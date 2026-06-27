@@ -491,6 +491,49 @@ private Q_SLOTS:
         QCOMPARE(snapping.value(QString(PSK::OuterGap)).toInt(), 9);
     }
 
+    /**
+     * Regression: the rule-store gap re-sync (perScreenAutotile/Snapping +
+     * settingsChanged) must fire ONLY when a gap action actually changes — never
+     * on a non-gap rule write. Emitting it on every rulesChanged made a mode /
+     * assignment toggle (also a rule write) fire settingsChanged, which drove the
+     * daemon to re-resolve the default assignment and instantly revert the
+     * toggle, breaking the snapping<->autotile switch.
+     */
+    void testGapResyncOnlyOnGapRuleChange()
+    {
+        using namespace PhosphorRules;
+        IsolatedConfigGuard guard;
+
+        auto store = std::make_unique<RuleStore>(ConfigDefaults::rulesFilePath());
+        Settings settings(store.get(), nullptr);
+
+        QSignalSpy settingsSpy(&settings, &Settings::settingsChanged);
+        QSignalSpy autotileSpy(&settings, &Settings::perScreenAutotileSettingsChanged);
+        QSignalSpy snappingSpy(&settings, &Settings::perScreenSnappingSettingsChanged);
+
+        // A non-gap rule write (a border rule, standing in for a mode/assignment
+        // toggle) must NOT trigger the gap re-sync.
+        Rule borderRule;
+        borderRule.id = QUuid::createUuidV5(ConfigDefaults::baselineBorderRuleId(), QByteArrayLiteral("nongap"));
+        borderRule.name = QStringLiteral("Border");
+        borderRule.enabled = true;
+        borderRule.priority = 50;
+        RuleAction widthAction;
+        widthAction.type = QString(ActionType::SetBorderWidth);
+        widthAction.params.insert(QString(ActionParam::Value), 4);
+        borderRule.actions = {widthAction};
+        QVERIFY(store->addRule(borderRule));
+        QCOMPARE(settingsSpy.count(), 0);
+        QCOMPARE(autotileSpy.count(), 0);
+        QCOMPARE(snappingSpy.count(), 0);
+
+        // A gap rule write DOES trigger the re-sync.
+        QVERIFY(store->addRule(makePerScreenGapRule(QStringLiteral("DP-resync"), /*inner=*/11, /*outer=*/12)));
+        QVERIFY(settingsSpy.count() >= 1);
+        QVERIFY(autotileSpy.count() >= 1);
+        QVERIFY(snappingSpy.count() >= 1);
+    }
+
     // =========================================================================
     // P2: edge cases -- fresh config defaults
     // =========================================================================
