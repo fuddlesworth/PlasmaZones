@@ -321,25 +321,6 @@ bool ConfigMigration::ensureJsonConfig()
 
 bool ConfigMigration::ensureJsonConfigImpl()
 {
-    // One-time carry-over: the rule store moved from windowrules.json to
-    // rules.json. A pre-rename install still has windowrules.json on disk; if
-    // the new rules.json is absent, adopt the legacy file under the new name so
-    // existing users keep their rules. This must run before any finalizer probes
-    // rules.json — finalizeV4Conversion's "already converted" gate keys off
-    // rules.json existing, so without the carry-over it would treat a converted
-    // user as un-converted and rebuild from the (now-retired) legacy inputs.
-    {
-        const QString rulesPath = ConfigDefaults::rulesFilePath();
-        const QString legacyRulesPath = QFileInfo(rulesPath).absolutePath() + QStringLiteral("/windowrules.json");
-        if (!QFile::exists(rulesPath) && QFile::exists(legacyRulesPath)) {
-            if (QFile::rename(legacyRulesPath, rulesPath)) {
-                qInfo("ConfigMigration: carried over legacy windowrules.json to rules.json");
-            } else {
-                qWarning("ConfigMigration: failed to carry over legacy windowrules.json to rules.json");
-            }
-        }
-    }
-
     const QString jsonPath = ConfigDefaults::configFilePath();
     if (QFile::exists(jsonPath)) {
         QFile f(jsonPath);
@@ -2659,6 +2640,25 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 {
     const QString rulesPath = ConfigDefaults::rulesFilePath();
     const QString assignmentsPath = legacyAssignmentsFilePath();
+
+    // ── Adopt the pre-v5 rule store filename ───────────────────────────────
+    // The rule store moved from windowrules.json to rules.json in v5. A store
+    // converted under the old name (or shipped at v4) still has windowrules.json
+    // on disk; adopt it under the new name BEFORE the "already converted" gate
+    // below probes rulesPath — otherwise a converted user reads as un-converted
+    // and gets rebuilt from the retired assignments.json. Same same-directory
+    // rename this function uses to retire assignments.json; idempotent (only
+    // fires when the new file is absent and the legacy one present).
+    {
+        const QString legacyRulesPath = QFileInfo(rulesPath).absolutePath() + QStringLiteral("/windowrules.json");
+        if (!QFile::exists(rulesPath) && QFile::exists(legacyRulesPath)) {
+            if (QFile::rename(legacyRulesPath, rulesPath)) {
+                qInfo("ConfigMigration: adopted legacy windowrules.json as rules.json");
+            } else {
+                qWarning("ConfigMigration: failed to adopt legacy windowrules.json as rules.json");
+            }
+        }
+    }
 
     // ── Relocate per-layout settings out of the layout files (v4) ──────────
     // Independent of the rules/assignments machinery below: split each
