@@ -31,6 +31,13 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
     Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
+    // Seed defaults for the dependent border details. The baseline border rule
+    // carries only the "show border" parent action; the Appearance page seeds
+    // these width/radius defaults into the rule when the user first turns the
+    // border on. Sourced from the same DecorationDefaults the daemon's seeder
+    // used so the on-enable value matches the historical baseline default.
+    Q_PROPERTY(int borderWidthDefault READ borderWidthDefault CONSTANT)
+    Q_PROPERTY(int borderRadiusDefault READ borderRadiusDefault CONSTANT)
     // Gap slider bounds — the unified inner/outer gap controls moved onto this
     // page (they edit the same baseline rule). Sourced from the ConfigDefaults
     // accessors the gap action validators clamp against so the UI range and the
@@ -79,6 +86,14 @@ public:
     int borderRadiusMax() const
     {
         return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
+    }
+    int borderWidthDefault() const
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
+    }
+    int borderRadiusDefault() const
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
     }
     QString borderBaselineRuleId() const
     {

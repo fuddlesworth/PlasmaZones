@@ -143,11 +143,12 @@ PhosphorWindowRules::WindowRule makeBaselineSkeleton(const QUuid& id, const QStr
 }
 
 // Build the managed baseline BORDER rule: the catch-all, lowest-priority rule
-// carrying the default border appearance. Borders default OFF (opt-in),
-// width/radius/colour carry sensible defaults so flipping "show border" on in
-// the Appearance page draws immediately, and the colour follows the system
-// accent (the effect resolves the sentinel to the live highlight colour it
-// tracks).
+// carrying only the "show border" parent action, which defaults OFF (opt-in).
+// The dependent border details (width, radius, active/inactive colour) are not
+// seeded here. The Appearance page adds them when the user turns "show border"
+// on and removes them when it is turned off, so the baseline stays minimal.
+// Consumers that read an absent detail fall back to their own defaults, and a
+// hidden border draws nothing regardless.
 PhosphorWindowRules::WindowRule makeBaselineBorderRule()
 {
     using namespace PhosphorWindowRules;
@@ -163,10 +164,6 @@ PhosphorWindowRules::WindowRule makeBaselineBorderRule()
     WindowRule rule = makeBaselineSkeleton(ConfigDefaults::baselineBorderRuleId(), PhosphorI18n::tr("Default borders"));
     rule.actions = {
         action(ActionType::SetBorderVisible, ActionParam::Value, DD::ShowBorder),
-        action(ActionType::SetBorderWidth, ActionParam::Value, DD::BorderWidth),
-        action(ActionType::SetBorderRadius, ActionParam::Value, DD::BorderRadius),
-        action(ActionType::SetBorderColorActive, ActionParam::Value, QString(BorderColorToken::Accent)),
-        action(ActionType::SetBorderColorInactive, ActionParam::Value, QString(BorderColorToken::Accent)),
     };
     return rule;
 }
@@ -199,7 +196,11 @@ PhosphorWindowRules::WindowRule makeBaselineTitleBarRule()
 // Context-domain actions; resolveContextGaps EXCLUDES this managed rule so the
 // values surface only as the level-4 global default, never as a top-tier
 // context override. Seeded from the same ConfigDefaults accessors the schema
-// validators and the compile-time defaults use.
+// validators and the compile-time defaults use. Only the parent actions
+// (inner gap, outer gap, and the per-side toggle, which defaults off) are
+// seeded. The four per-side outer gap actions are added by the Appearance page
+// when the user turns per-side gaps on and removed when it is turned off, so an
+// absent per-side action falls back to the uniform outer gap.
 PhosphorWindowRules::WindowRule makeBaselineGapRule()
 {
     using namespace PhosphorWindowRules;
@@ -216,10 +217,6 @@ PhosphorWindowRules::WindowRule makeBaselineGapRule()
         action(ActionType::SetInnerGap, ActionParam::Value, ConfigDefaults::innerGap()),
         action(ActionType::SetOuterGap, ActionParam::Value, ConfigDefaults::outerGap()),
         action(ActionType::SetUsePerSideOuterGap, ActionParam::Value, ConfigDefaults::usePerSideOuterGap()),
-        action(ActionType::SetOuterGapTop, ActionParam::Value, ConfigDefaults::outerGapTop()),
-        action(ActionType::SetOuterGapBottom, ActionParam::Value, ConfigDefaults::outerGapBottom()),
-        action(ActionType::SetOuterGapLeft, ActionParam::Value, ConfigDefaults::outerGapLeft()),
-        action(ActionType::SetOuterGapRight, ActionParam::Value, ConfigDefaults::outerGapRight()),
     };
     return rule;
 }
