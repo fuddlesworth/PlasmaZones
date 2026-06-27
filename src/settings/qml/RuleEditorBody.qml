@@ -24,7 +24,7 @@ import org.kde.kirigami as Kirigami
 ColumnLayout {
     id: root
 
-    /// The WindowRuleController — threaded into the recursive editors.
+    /// The RuleController — threaded into the recursive editors.
     required property var controller
     /// The SettingsController bridge — threaded into the leaf and action
     /// editors so the picker-kind params (screen / activity / layout) can
@@ -196,7 +196,7 @@ ColumnLayout {
         // Priority + band-name hint. Bare integers like "610" are
         // meaningless without the band scheme; the inline label maps the
         // current value back to its semantic band. Bands defined in
-        // windowrulecontroller.cpp.
+        // rulecontroller.cpp.
         RowLayout {
             id: priorityRow
 

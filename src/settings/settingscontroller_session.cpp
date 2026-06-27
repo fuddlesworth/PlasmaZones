@@ -263,7 +263,7 @@ void SettingsController::onVirtualDesktopsChanged()
     // the user clicking on the active page — target the "overview" page
     // (where MonitorStatePage.qml owns the per-mode disabled lists) so
     // dirty state attaches to the right tab regardless of where the user
-    // is currently looking. Pattern mirrors the window-rules handler in
+    // is currently looking. Pattern mirrors the rules handler in
     // settingscontroller.cpp.
     //
     // Wrap the SETTER calls (not just the trailing setNeedsSave) so the
@@ -606,20 +606,20 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // re-fire dirtyChanged before the trailing setNeedsSave(false)
         // runs. Both connect-side handlers (the
         // m_animationsPage::pendingChangesChanged and
-        // m_windowRulesPage::dirtyChanged connect lambdas in
+        // m_rulesPage::dirtyChanged connect lambdas in
         // settingscontroller.cpp) early-return when m_loading is true.
         m_loading = true;
         m_settings.load();
         // Page controllers with their own on-disk staging surfaces
-        // (animations / window-rules) must reload too — m_settings.load()
+        // (animations / rules) must reload too — m_settings.load()
         // only refreshes settings.json-backed state. Without these the
         // imported config disagrees with what the page controllers still
         // hold in their in-memory snapshots.
         if (m_animationsPage) {
             m_animationsPage->revertPending();
         }
-        if (m_windowRulesPage) {
-            m_windowRulesPage->revert();
+        if (m_rulesPage) {
+            m_rulesPage->revert();
         }
         m_loading = false;
         DaemonDBus::notifyReload();

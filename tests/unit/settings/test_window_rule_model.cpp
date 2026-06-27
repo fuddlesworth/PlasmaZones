@@ -3,8 +3,8 @@
 
 /**
  * @file test_window_rule_model.cpp
- * @brief Coverage for WindowRuleModel — the single flat model behind the
- *        unified Window Rules page.
+ * @brief Coverage for RuleModel — the single flat model behind the
+ *        unified Rules page.
  *
  * Pins:
  *   - role exposure (id / name / enabled / summaries / counts),
@@ -17,21 +17,21 @@
 #include <QSignalSpy>
 #include <QTest>
 
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
 
-#include "settings/windowrulemodel.h"
+#include "settings/rulemodel.h"
 
 using namespace PlasmaZones;
-using namespace PhosphorWindowRules;
+using namespace PhosphorRules;
 
 namespace {
 
 /// Build a context-only layout-assignment rule pinned to @p screenId.
-WindowRule monitorRule(const QString& screenId, const QString& name)
+Rule monitorRule(const QString& screenId, const QString& name)
 {
-    WindowRule rule;
+    Rule rule;
     rule.id = QUuid::createUuid();
     rule.name = name;
     rule.priority = 300;
@@ -44,9 +44,9 @@ WindowRule monitorRule(const QString& screenId, const QString& name)
 }
 
 /// Build a window-property float rule for @p appId.
-WindowRule applicationRule(const QString& appId, const QString& name)
+Rule applicationRule(const QString& appId, const QString& name)
 {
-    WindowRule rule;
+    Rule rule;
     rule.id = QUuid::createUuid();
     rule.name = name;
     rule.priority = 200;
@@ -58,9 +58,9 @@ WindowRule applicationRule(const QString& appId, const QString& name)
 }
 
 /// Build an animation-override rule.
-WindowRule animationRule(const QString& windowClass, const QString& name)
+Rule animationRule(const QString& windowClass, const QString& name)
 {
-    WindowRule rule;
+    Rule rule;
     rule.id = QUuid::createUuid();
     rule.name = name;
     rule.priority = 100;
@@ -75,9 +75,9 @@ WindowRule animationRule(const QString& windowClass, const QString& name)
 
 /// Build a composite (ALL of {a leaf, a nested ANY}) rule — the kind that
 /// must graduate to Advanced.
-WindowRule compositeRule(const QString& name)
+Rule compositeRule(const QString& name)
 {
-    WindowRule rule;
+    Rule rule;
     rule.id = QUuid::createUuid();
     rule.name = name;
     rule.priority = 500;
@@ -94,7 +94,7 @@ WindowRule compositeRule(const QString& name)
 
 } // namespace
 
-class TestWindowRuleModel : public QObject
+class TestRuleModel : public QObject
 {
     Q_OBJECT
 
@@ -116,63 +116,61 @@ private Q_SLOTS:
     void routeActionsRenderFriendlyLabels();
 };
 
-void TestWindowRuleModel::rolesExposed()
+void TestRuleModel::rolesExposed()
 {
-    WindowRuleModel model;
-    const WindowRule rule = monitorRule(QStringLiteral("DP-2"), QStringLiteral("Work monitor"));
+    RuleModel model;
+    const Rule rule = monitorRule(QStringLiteral("DP-2"), QStringLiteral("Work monitor"));
     model.setRules({rule});
 
     QCOMPARE(model.rowCount(), 1);
     const QModelIndex idx = model.index(0, 0);
-    QCOMPARE(model.data(idx, WindowRuleModel::IdRole).toString(), rule.id.toString());
-    QCOMPARE(model.data(idx, WindowRuleModel::NameRole).toString(), QStringLiteral("Work monitor"));
-    QCOMPARE(model.data(idx, WindowRuleModel::EnabledRole).toBool(), true);
-    QCOMPARE(model.data(idx, WindowRuleModel::ConditionCountRole).toInt(), 1);
-    QCOMPARE(model.data(idx, WindowRuleModel::ActionCountRole).toInt(), 1);
-    QVERIFY(!model.data(idx, WindowRuleModel::MatchSummaryRole).toString().isEmpty());
-    QVERIFY(!model.data(idx, WindowRuleModel::ActionSummaryRole).toString().isEmpty());
+    QCOMPARE(model.data(idx, RuleModel::IdRole).toString(), rule.id.toString());
+    QCOMPARE(model.data(idx, RuleModel::NameRole).toString(), QStringLiteral("Work monitor"));
+    QCOMPARE(model.data(idx, RuleModel::EnabledRole).toBool(), true);
+    QCOMPARE(model.data(idx, RuleModel::ConditionCountRole).toInt(), 1);
+    QCOMPARE(model.data(idx, RuleModel::ActionCountRole).toInt(), 1);
+    QVERIFY(!model.data(idx, RuleModel::MatchSummaryRole).toString().isEmpty());
+    QVERIFY(!model.data(idx, RuleModel::ActionSummaryRole).toString().isEmpty());
 }
 
-void TestWindowRuleModel::sectionDerivation()
+void TestRuleModel::sectionDerivation()
 {
-    QCOMPARE(WindowRuleModel::sectionFor(monitorRule(QStringLiteral("DP-1"), QString())),
-             WindowRuleModel::Section::Monitor);
-    QCOMPARE(WindowRuleModel::sectionFor(applicationRule(QStringLiteral("firefox"), QString())),
-             WindowRuleModel::Section::Application);
-    QCOMPARE(WindowRuleModel::sectionFor(animationRule(QStringLiteral("firefox"), QString())),
-             WindowRuleModel::Section::Animation);
+    QCOMPARE(RuleModel::sectionFor(monitorRule(QStringLiteral("DP-1"), QString())), RuleModel::Section::Monitor);
+    QCOMPARE(RuleModel::sectionFor(applicationRule(QStringLiteral("firefox"), QString())),
+             RuleModel::Section::Application);
+    QCOMPARE(RuleModel::sectionFor(animationRule(QStringLiteral("firefox"), QString())), RuleModel::Section::Animation);
 
     // An Activity-pinned context rule (no monitor leaf) reads as Activity.
-    WindowRule activity;
+    Rule activity;
     activity.id = QUuid::createUuid();
     activity.match = MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QStringLiteral("{uuid}"));
     RuleAction engine;
     engine.type = QString(ActionType::SetEngineMode);
     engine.params.insert(ActionParam::Mode, QStringLiteral("snapping"));
     activity.actions = {engine};
-    QCOMPARE(WindowRuleModel::sectionFor(activity), WindowRuleModel::Section::Activity);
+    QCOMPARE(RuleModel::sectionFor(activity), RuleModel::Section::Activity);
 }
 
-void TestWindowRuleModel::compositeGraduatesToAdvanced()
+void TestRuleModel::compositeGraduatesToAdvanced()
 {
-    const WindowRule composite = compositeRule(QStringLiteral("VS Code dialogs"));
+    const Rule composite = compositeRule(QStringLiteral("VS Code dialogs"));
     // A nested ANY inside an ALL cannot be edited by any specialized section.
-    QCOMPARE(WindowRuleModel::sectionFor(composite), WindowRuleModel::Section::Advanced);
+    QCOMPARE(RuleModel::sectionFor(composite), RuleModel::Section::Advanced);
 
-    WindowRuleModel model;
+    RuleModel model;
     model.setRules({composite});
-    QCOMPARE(model.data(model.index(0, 0), WindowRuleModel::IsCompositeRole).toBool(), true);
-    QCOMPARE(model.data(model.index(0, 0), WindowRuleModel::SectionRole).value<WindowRuleModel::Section>(),
-             WindowRuleModel::Section::Advanced);
+    QCOMPARE(model.data(model.index(0, 0), RuleModel::IsCompositeRole).toBool(), true);
+    QCOMPARE(model.data(model.index(0, 0), RuleModel::SectionRole).value<RuleModel::Section>(),
+             RuleModel::Section::Advanced);
     // The whole match has three leaf predicates.
-    QCOMPARE(model.data(model.index(0, 0), WindowRuleModel::ConditionCountRole).toInt(), 3);
+    QCOMPARE(model.data(model.index(0, 0), RuleModel::ConditionCountRole).toInt(), 3);
 }
 
-void TestWindowRuleModel::crudByUuid()
+void TestRuleModel::crudByUuid()
 {
-    WindowRuleModel model;
-    WindowRule a = monitorRule(QStringLiteral("DP-1"), QStringLiteral("A"));
-    WindowRule b = applicationRule(QStringLiteral("konsole"), QStringLiteral("B"));
+    RuleModel model;
+    Rule a = monitorRule(QStringLiteral("DP-1"), QStringLiteral("A"));
+    Rule b = applicationRule(QStringLiteral("konsole"), QStringLiteral("B"));
 
     QVERIFY(model.addRule(a));
     QVERIFY(model.addRule(b));
@@ -184,12 +182,12 @@ void TestWindowRuleModel::crudByUuid()
 
     // Update by id — a real change applies.
     a.name = QStringLiteral("A renamed");
-    QCOMPARE(model.updateRule(a), WindowRuleModel::UpdateResult::Applied);
+    QCOMPARE(model.updateRule(a), RuleModel::UpdateResult::Applied);
     QCOMPARE(model.ruleById(a.id).name, QStringLiteral("A renamed"));
 
     // Update of an absent id fails.
-    WindowRule ghost = monitorRule(QStringLiteral("DP-9"), QStringLiteral("Ghost"));
-    QCOMPARE(model.updateRule(ghost), WindowRuleModel::UpdateResult::NotFound);
+    Rule ghost = monitorRule(QStringLiteral("DP-9"), QStringLiteral("Ghost"));
+    QCOMPARE(model.updateRule(ghost), RuleModel::UpdateResult::NotFound);
 
     // Remove by id.
     QVERIFY(model.removeRule(a.id));
@@ -198,68 +196,68 @@ void TestWindowRuleModel::crudByUuid()
     QVERIFY(!model.removeRule(a.id));
 }
 
-void TestWindowRuleModel::updateNoOpDoesNotChurn()
+void TestRuleModel::updateNoOpDoesNotChurn()
 {
-    WindowRuleModel model;
-    const WindowRule a = monitorRule(QStringLiteral("DP-1"), QStringLiteral("A"));
+    RuleModel model;
+    const Rule a = monitorRule(QStringLiteral("DP-1"), QStringLiteral("A"));
     model.setRules({a});
 
     QSignalSpy dataSpy(&model, &QAbstractItemModel::dataChanged);
-    QSignalSpy sectionSpy(&model, &WindowRuleModel::ruleSectionChanged);
+    QSignalSpy sectionSpy(&model, &RuleModel::ruleSectionChanged);
 
     // Updating to an identical rule reports Unchanged and must NOT emit
     // dataChanged or ruleSectionChanged.
-    QCOMPARE(model.updateRule(a), WindowRuleModel::UpdateResult::Unchanged);
+    QCOMPARE(model.updateRule(a), RuleModel::UpdateResult::Unchanged);
     QCOMPARE(dataSpy.count(), 0);
     QCOMPARE(sectionSpy.count(), 0);
 }
 
-void TestWindowRuleModel::reorder()
+void TestRuleModel::reorder()
 {
-    WindowRuleModel model;
-    const WindowRule a = monitorRule(QStringLiteral("DP-1"), QStringLiteral("A"));
-    const WindowRule b = monitorRule(QStringLiteral("DP-2"), QStringLiteral("B"));
-    const WindowRule c = monitorRule(QStringLiteral("DP-3"), QStringLiteral("C"));
+    RuleModel model;
+    const Rule a = monitorRule(QStringLiteral("DP-1"), QStringLiteral("A"));
+    const Rule b = monitorRule(QStringLiteral("DP-2"), QStringLiteral("B"));
+    const Rule c = monitorRule(QStringLiteral("DP-3"), QStringLiteral("C"));
     model.setRules({a, b, c});
 
     // Move C before A — order becomes C, A, B.
     QVERIFY(model.moveRule(c.id, a.id));
-    QCOMPARE(model.index(0, 0).data(WindowRuleModel::IdRole).toString(), c.id.toString());
-    QCOMPARE(model.index(1, 0).data(WindowRuleModel::IdRole).toString(), a.id.toString());
-    QCOMPARE(model.index(2, 0).data(WindowRuleModel::IdRole).toString(), b.id.toString());
+    QCOMPARE(model.index(0, 0).data(RuleModel::IdRole).toString(), c.id.toString());
+    QCOMPARE(model.index(1, 0).data(RuleModel::IdRole).toString(), a.id.toString());
+    QCOMPARE(model.index(2, 0).data(RuleModel::IdRole).toString(), b.id.toString());
 
     // Move A to the end (null beforeId) — order becomes C, B, A.
     QVERIFY(model.moveRule(a.id, QUuid()));
-    QCOMPARE(model.index(2, 0).data(WindowRuleModel::IdRole).toString(), a.id.toString());
+    QCOMPARE(model.index(2, 0).data(RuleModel::IdRole).toString(), a.id.toString());
 
     // An unknown id fails.
     QVERIFY(!model.moveRule(QUuid::createUuid(), QUuid()));
 }
 
-void TestWindowRuleModel::addRuleAtInsertsAtIndexWithSingleSignal()
+void TestRuleModel::addRuleAtInsertsAtIndexWithSingleSignal()
 {
     // Pin the F#5 contract: addRuleAt inserts at the requested slot
     // with EXACTLY one rowsInserted signal (no follow-up moveRows /
     // dataChanged churn). The prior duplicateRule shape fired up to
     // four model signals per click; this test guards against that
     // regressing.
-    WindowRuleModel model;
-    const WindowRule a = monitorRule(QStringLiteral("DP-1"), QStringLiteral("A"));
-    const WindowRule b = monitorRule(QStringLiteral("DP-2"), QStringLiteral("B"));
-    const WindowRule c = monitorRule(QStringLiteral("DP-3"), QStringLiteral("C"));
+    RuleModel model;
+    const Rule a = monitorRule(QStringLiteral("DP-1"), QStringLiteral("A"));
+    const Rule b = monitorRule(QStringLiteral("DP-2"), QStringLiteral("B"));
+    const Rule c = monitorRule(QStringLiteral("DP-3"), QStringLiteral("C"));
     model.setRules({a, b, c});
 
     QSignalSpy insertSpy(&model, &QAbstractItemModel::rowsInserted);
     QSignalSpy moveSpy(&model, &QAbstractItemModel::rowsMoved);
     QSignalSpy dataSpy(&model, &QAbstractItemModel::dataChanged);
-    QSignalSpy countSpy(&model, &WindowRuleModel::countChanged);
+    QSignalSpy countSpy(&model, &RuleModel::countChanged);
 
-    const WindowRule mid = monitorRule(QStringLiteral("DP-4"), QStringLiteral("Mid"));
+    const Rule mid = monitorRule(QStringLiteral("DP-4"), QStringLiteral("Mid"));
     QVERIFY(model.addRuleAt(mid, 1));
 
     // Order is now A, Mid, B, C — Mid lands at the requested slot.
     QCOMPARE(model.rowCount(), 4);
-    QCOMPARE(model.index(1, 0).data(WindowRuleModel::IdRole).toString(), mid.id.toString());
+    QCOMPARE(model.index(1, 0).data(RuleModel::IdRole).toString(), mid.id.toString());
 
     // Exactly one rowsInserted, no moveRows, no dataChanged. countChanged
     // fires once.
@@ -269,30 +267,30 @@ void TestWindowRuleModel::addRuleAtInsertsAtIndexWithSingleSignal()
     QCOMPARE(countSpy.count(), 1);
 
     // Out-of-range indices clamp without erroring.
-    const WindowRule head = monitorRule(QStringLiteral("DP-5"), QStringLiteral("Head"));
+    const Rule head = monitorRule(QStringLiteral("DP-5"), QStringLiteral("Head"));
     QVERIFY(model.addRuleAt(head, -10));
-    QCOMPARE(model.index(0, 0).data(WindowRuleModel::IdRole).toString(), head.id.toString());
+    QCOMPARE(model.index(0, 0).data(RuleModel::IdRole).toString(), head.id.toString());
 
-    const WindowRule tail = monitorRule(QStringLiteral("DP-6"), QStringLiteral("Tail"));
+    const Rule tail = monitorRule(QStringLiteral("DP-6"), QStringLiteral("Tail"));
     QVERIFY(model.addRuleAt(tail, 9999));
-    QCOMPARE(model.index(model.rowCount() - 1, 0).data(WindowRuleModel::IdRole).toString(), tail.id.toString());
+    QCOMPARE(model.index(model.rowCount() - 1, 0).data(RuleModel::IdRole).toString(), tail.id.toString());
 
     // Duplicate id rejected even via addRuleAt.
     QVERIFY(!model.addRuleAt(a, 0));
 }
 
-void TestWindowRuleModel::validationIssueCountRole()
+void TestRuleModel::validationIssueCountRole()
 {
     // A well-formed rule (window-property match + window-domain Float action)
     // reports zero issues. The monitor rule above is a context-only match +
     // context action — also zero. Then the silently-never-fires combination
     // (context-domain SetEngineMode with a window-property match) reports 1.
-    WindowRule cleanWindowRule = applicationRule(QStringLiteral("firefox"), QStringLiteral("clean window rule"));
-    WindowRule cleanContextRule = monitorRule(QStringLiteral("DP-1"), QStringLiteral("clean monitor rule"));
+    Rule cleanRule = applicationRule(QStringLiteral("firefox"), QStringLiteral("clean rule"));
+    Rule cleanContextRule = monitorRule(QStringLiteral("DP-1"), QStringLiteral("clean monitor rule"));
 
     // Construct the bad combination explicitly — same shape as the rule the
     // load-time guard warns about.
-    WindowRule badRule;
+    Rule badRule;
     badRule.id = QUuid::createUuid();
     badRule.name = QStringLiteral("firefox autotile");
     badRule.priority = 200;
@@ -302,34 +300,34 @@ void TestWindowRuleModel::validationIssueCountRole()
     engine.params.insert(ActionParam::Mode, QStringLiteral("autotile"));
     badRule.actions = {engine};
 
-    WindowRuleModel model;
-    model.setRules({cleanWindowRule, cleanContextRule, badRule});
+    RuleModel model;
+    model.setRules({cleanRule, cleanContextRule, badRule});
 
-    QCOMPARE(model.data(model.index(0, 0), WindowRuleModel::ValidationIssueCountRole).toInt(), 0);
-    QCOMPARE(model.data(model.index(1, 0), WindowRuleModel::ValidationIssueCountRole).toInt(), 0);
-    QCOMPARE(model.data(model.index(2, 0), WindowRuleModel::ValidationIssueCountRole).toInt(), 1);
+    QCOMPARE(model.data(model.index(0, 0), RuleModel::ValidationIssueCountRole).toInt(), 0);
+    QCOMPARE(model.data(model.index(1, 0), RuleModel::ValidationIssueCountRole).toInt(), 0);
+    QCOMPARE(model.data(model.index(2, 0), RuleModel::ValidationIssueCountRole).toInt(), 1);
 
     // The role surfaces via its registered name so QML can bind by string.
     QVERIFY(model.roleNames().values().contains(QByteArrayLiteral("validationIssueCount")));
 }
 
-void TestWindowRuleModel::screenIdsOfCollectsOnlyLiteralPinOperators()
+void TestRuleModel::screenIdsOfCollectsOnlyLiteralPinOperators()
 {
     // Only Equals is a literal monitor pin. A substring / regex operator
     // (StartsWith, Contains, …) never equals a real connector id, so collecting
     // its token would silently under-count the rule against every monitor tile.
     // Such rules must contribute NO screen id.
     const auto eq = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"));
-    QCOMPARE(WindowRuleModel::screenIdsOf(eq), QStringList{QStringLiteral("DP-1")});
+    QCOMPARE(RuleModel::screenIdsOf(eq), QStringList{QStringLiteral("DP-1")});
 
     const auto startsWith = MatchExpression::makeLeaf(Field::ScreenId, Operator::StartsWith, QStringLiteral("DP"));
-    QVERIFY(WindowRuleModel::screenIdsOf(startsWith).isEmpty());
+    QVERIFY(RuleModel::screenIdsOf(startsWith).isEmpty());
 
     const auto contains = MatchExpression::makeLeaf(Field::ScreenId, Operator::Contains, QStringLiteral("HDMI"));
-    QVERIFY(WindowRuleModel::screenIdsOf(contains).isEmpty());
+    QVERIFY(RuleModel::screenIdsOf(contains).isEmpty());
 }
 
-void TestWindowRuleModel::actionSummaryRendersAllEngineModes()
+void TestRuleModel::actionSummaryRendersAllEngineModes()
 {
     // Pin that `SetEngineMode` actionLabel renders all three vocabulary
     // tokens (snapping / autotile / scrolling) as their localised display
@@ -337,7 +335,7 @@ void TestWindowRuleModel::actionSummaryRendersAllEngineModes()
     // raw-wire-token fallback would silently revert "Engine: Scrolling"
     // to lowercase "Engine: scrolling" — caught by this assertion.
     const auto buildRule = [](const QString& modeToken) {
-        WindowRule rule;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.priority = 300;
         rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"));
@@ -347,13 +345,13 @@ void TestWindowRuleModel::actionSummaryRendersAllEngineModes()
         rule.actions = {engine};
         return rule;
     };
-    WindowRuleModel model;
+    RuleModel model;
     model.setRules({buildRule(QStringLiteral("snapping")), buildRule(QStringLiteral("autotile")),
                     buildRule(QStringLiteral("scrolling"))});
     QCOMPARE(model.rowCount(), 3);
-    const QString s0 = model.data(model.index(0, 0), WindowRuleModel::ActionSummaryRole).toString();
-    const QString s1 = model.data(model.index(1, 0), WindowRuleModel::ActionSummaryRole).toString();
-    const QString s2 = model.data(model.index(2, 0), WindowRuleModel::ActionSummaryRole).toString();
+    const QString s0 = model.data(model.index(0, 0), RuleModel::ActionSummaryRole).toString();
+    const QString s1 = model.data(model.index(1, 0), RuleModel::ActionSummaryRole).toString();
+    const QString s2 = model.data(model.index(2, 0), RuleModel::ActionSummaryRole).toString();
     // Each summary must end with the properly-cased localised label —
     // the i18n surface may add prefixes ("Engine: ") but the casing of
     // the engine name is the load-bearing contract.
@@ -365,7 +363,7 @@ void TestWindowRuleModel::actionSummaryRendersAllEngineModes()
     QVERIFY2(!s2.contains(QStringLiteral("scrolling")), qPrintable(s2));
 }
 
-void TestWindowRuleModel::disableEngineNamesTheModeBeingDisabled()
+void TestRuleModel::disableEngineNamesTheModeBeingDisabled()
 {
     // Pin that `DisableEngine` actionLabel names the engine being
     // disabled rather than rendering a generic "Disabled" for every mode.
@@ -373,7 +371,7 @@ void TestWindowRuleModel::disableEngineNamesTheModeBeingDisabled()
     // would make two distinct disable rules read identically in the
     // rules list — caught by asserting the labels differ.
     const auto buildRule = [](const QString& modeToken) {
-        WindowRule rule;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.priority = 300;
         rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"));
@@ -383,12 +381,12 @@ void TestWindowRuleModel::disableEngineNamesTheModeBeingDisabled()
         rule.actions = {disable};
         return rule;
     };
-    WindowRuleModel model;
+    RuleModel model;
     model.setRules({buildRule(QStringLiteral("snapping")), buildRule(QStringLiteral("autotile")),
                     buildRule(QStringLiteral("scrolling"))});
-    const QString s0 = model.data(model.index(0, 0), WindowRuleModel::ActionSummaryRole).toString();
-    const QString s1 = model.data(model.index(1, 0), WindowRuleModel::ActionSummaryRole).toString();
-    const QString s2 = model.data(model.index(2, 0), WindowRuleModel::ActionSummaryRole).toString();
+    const QString s0 = model.data(model.index(0, 0), RuleModel::ActionSummaryRole).toString();
+    const QString s1 = model.data(model.index(1, 0), RuleModel::ActionSummaryRole).toString();
+    const QString s2 = model.data(model.index(2, 0), RuleModel::ActionSummaryRole).toString();
     QVERIFY2(s0.contains(QStringLiteral("Snapping")), qPrintable(s0));
     QVERIFY2(s1.contains(QStringLiteral("Autotile")), qPrintable(s1));
     QVERIFY2(s2.contains(QStringLiteral("Scrolling")), qPrintable(s2));
@@ -399,7 +397,7 @@ void TestWindowRuleModel::disableEngineNamesTheModeBeingDisabled()
     QVERIFY(s0 != s2);
 }
 
-void TestWindowRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
+void TestRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
 {
     // Pin that the SetOpacity actionLabel matches every resolver reject
     // path (shader_resolve.cpp::resolveWindowOpacity): valid in-range
@@ -408,7 +406,7 @@ void TestWindowRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
     // "Opacity (invalid)". Without this guard the label would lie about
     // a behaviour the runtime won't honour.
     const auto buildRule = [](std::function<void(RuleAction&)> tweakAction) {
-        WindowRule rule;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.priority = 200;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
@@ -419,7 +417,7 @@ void TestWindowRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
         return rule;
     };
 
-    WindowRuleModel model;
+    RuleModel model;
     model.setRules({
         buildRule([](RuleAction& a) {
             a.params.insert(ActionParam::Value, 0.5);
@@ -437,7 +435,7 @@ void TestWindowRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
     });
 
     const auto labelAt = [&](int row) {
-        return model.data(model.index(row, 0), WindowRuleModel::ActionSummaryRole).toString();
+        return model.data(model.index(row, 0), RuleModel::ActionSummaryRole).toString();
     };
     QVERIFY2(labelAt(0).contains(QStringLiteral("50")), qPrintable(labelAt(0)));
     QVERIFY2(labelAt(1).contains(QStringLiteral("100")), qPrintable(labelAt(1)));
@@ -449,13 +447,13 @@ void TestWindowRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
     QVERIFY2(labelAt(4).contains(QStringLiteral("invalid")), qPrintable(labelAt(4)));
 }
 
-void TestWindowRuleModel::restorePositionRendersValueAwareLabel()
+void TestRuleModel::restorePositionRendersValueAwareLabel()
 {
     // Pin that the RestorePosition actionLabel is value-aware: true and false
     // render distinct, human-readable chips (not the raw "restorePosition" wire
     // string). Guards picker↔model label consistency for the bool action.
     const auto buildRule = [](bool value) {
-        WindowRule rule;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.priority = 200;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("org.kde.dolphin"));
@@ -466,11 +464,11 @@ void TestWindowRuleModel::restorePositionRendersValueAwareLabel()
         return rule;
     };
 
-    WindowRuleModel model;
+    RuleModel model;
     model.setRules({buildRule(true), buildRule(false)});
 
     const auto labelAt = [&](int row) {
-        return model.data(model.index(row, 0), WindowRuleModel::ActionSummaryRole).toString();
+        return model.data(model.index(row, 0), RuleModel::ActionSummaryRole).toString();
     };
     // Never the raw wire token.
     QVERIFY2(!labelAt(0).contains(QStringLiteral("restorePosition")), qPrintable(labelAt(0)));
@@ -483,7 +481,7 @@ void TestWindowRuleModel::restorePositionRendersValueAwareLabel()
     QVERIFY2(labelAt(1).contains(QStringLiteral("Don't")), qPrintable(labelAt(1)));
 }
 
-void TestWindowRuleModel::shaderAndCurveLabelsResolveThroughLookups()
+void TestRuleModel::shaderAndCurveLabelsResolveThroughLookups()
 {
     // The action summary resolves OverrideAnimationShader effect ids and
     // OverrideAnimationCurve wire strings to friendly names through the
@@ -492,7 +490,7 @@ void TestWindowRuleModel::shaderAndCurveLabelsResolveThroughLookups()
     // so a missing resolver degrades gracefully rather than hiding the payload.
     // A null payload uses the dedicated placeholder label (lookup not consulted).
     const auto shaderRuleWith = [](const QString& effectId) {
-        WindowRule rule;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.priority = 100;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
@@ -505,7 +503,7 @@ void TestWindowRuleModel::shaderAndCurveLabelsResolveThroughLookups()
         return rule;
     };
     const auto curveRuleWith = [](const QString& wire) {
-        WindowRule rule;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.priority = 99;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("konsole"));
@@ -518,7 +516,7 @@ void TestWindowRuleModel::shaderAndCurveLabelsResolveThroughLookups()
         return rule;
     };
 
-    WindowRuleModel model;
+    RuleModel model;
     model.setRules({
         shaderRuleWith(QStringLiteral("dissolve")),
         curveRuleWith(QStringLiteral("0.33,1.00,0.68,1.00")),
@@ -528,7 +526,7 @@ void TestWindowRuleModel::shaderAndCurveLabelsResolveThroughLookups()
     });
 
     const auto summaryAt = [&](int row) {
-        return model.data(model.index(row, 0), WindowRuleModel::ActionSummaryRole).toString();
+        return model.data(model.index(row, 0), RuleModel::ActionSummaryRole).toString();
     };
 
     // No lookups wired → the raw id / wire string round-trips behind the label;
@@ -553,7 +551,7 @@ void TestWindowRuleModel::shaderAndCurveLabelsResolveThroughLookups()
 
     QCOMPARE(changedSpy.count(), 1);
     const QList<int> roles = changedSpy.at(0).at(2).value<QList<int>>();
-    QVERIFY(roles.contains(WindowRuleModel::ActionSummaryRole));
+    QVERIFY(roles.contains(RuleModel::ActionSummaryRole));
 
     QCOMPARE(summaryAt(0), QStringLiteral("Shader: Dissolve"));
     QCOMPARE(summaryAt(1), QStringLiteral("Curve: Standard (Cubic)"));
@@ -564,7 +562,7 @@ void TestWindowRuleModel::shaderAndCurveLabelsResolveThroughLookups()
     QCOMPARE(summaryAt(4), QStringLiteral("Shader: mystery"));
 }
 
-void TestWindowRuleModel::routeActionsRenderFriendlyLabels()
+void TestRuleModel::routeActionsRenderFriendlyLabels()
 {
     // Pin that RouteToScreen / RouteToDesktop render human labels in the action
     // summary rather than leaking their raw wire tokens. Both actions are
@@ -575,7 +573,7 @@ void TestWindowRuleModel::routeActionsRenderFriendlyLabels()
     // resolves its target through the injected screen lookup, mirroring the
     // ScreenId match-leaf path, and falls back to the raw id when unresolved.
     const auto screenRuleWith = [](const QString& screenId) {
-        WindowRule rule;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.priority = 200;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
@@ -588,7 +586,7 @@ void TestWindowRuleModel::routeActionsRenderFriendlyLabels()
         return rule;
     };
     const auto desktopRuleWith = [](int desktop) {
-        WindowRule rule;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.priority = 199;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("konsole"));
@@ -601,7 +599,7 @@ void TestWindowRuleModel::routeActionsRenderFriendlyLabels()
         return rule;
     };
 
-    WindowRuleModel model;
+    RuleModel model;
     model.setRules({
         screenRuleWith(QStringLiteral("DP-2")), // resolved through the lookup once installed
         screenRuleWith(QString()), // no target → placeholder, lookup not consulted
@@ -610,7 +608,7 @@ void TestWindowRuleModel::routeActionsRenderFriendlyLabels()
     });
 
     const auto summaryAt = [&](int row) {
-        return model.data(model.index(row, 0), WindowRuleModel::ActionSummaryRole).toString();
+        return model.data(model.index(row, 0), RuleModel::ActionSummaryRole).toString();
     };
 
     // No screen lookup wired → the raw canonical id round-trips behind the label.
@@ -635,6 +633,6 @@ void TestWindowRuleModel::routeActionsRenderFriendlyLabels()
     QCOMPARE(summaryAt(0), QStringLiteral("Open on monitor: LG Ultra HD · DP-2"));
 }
 
-QTEST_MAIN(TestWindowRuleModel)
+QTEST_MAIN(TestRuleModel)
 
 #include "test_window_rule_model.moc"

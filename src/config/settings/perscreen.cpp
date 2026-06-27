@@ -9,8 +9,8 @@
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleStore.h>
 #include <QSet>
 #include <QStringList>
 #include <QUuid>
@@ -122,7 +122,7 @@ const QLatin1String kPerScreenKeys[] = {
 };
 
 // The per-screen autotile inner/outer gap keys are intentionally ABSENT: gaps
-// are rule-backed (per-monitor gap WindowRules) and merged into the accessor's
+// are rule-backed (per-monitor gap Rules) and merged into the accessor's
 // result by perScreenGapRuleOverrides, never stored in this per-screen map.
 // SmartGaps stays — it is a tiling behaviour flag, not a gap dimension.
 const QLatin1String kPerScreenAutotileKeys[] = {
@@ -201,7 +201,7 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     }
     if (k == PerScreenKeys::MasterCount)
         return boundedInt(value, ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax());
-    // Inner/outer gap dimensions are rule-backed (per-monitor gap WindowRules),
+    // Inner/outer gap dimensions are rule-backed (per-monitor gap Rules),
     // not per-screen Settings keys, so they are intentionally not validated here
     // — a write of one is rejected like any unknown key.
     if (k == PerScreenKeys::MaxWindows)
@@ -252,7 +252,7 @@ QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString
 // Per-screen snapping has no Settings-stored keys: snap-assist is global, the
 // zone-selector keys live in their own per-screen map, and the gap dimensions
 // (the only former per-screen snapping keys) are now rule-backed (per-monitor
-// gap WindowRules), read by getPerScreenSnappingSettings via
+// gap Rules), read by getPerScreenSnappingSettings via
 // perScreenGapRuleOverrides. So there is no snapping load/save/validate path.
 
 QVariant readPerScreenZoneSelectorEntry(PhosphorConfig::IGroup& group, const QString& key)
@@ -704,16 +704,15 @@ QStringList perScreenGapConnectorForms(const QString& screenIdOrName)
 }
 } // namespace
 
-// Gap overrides authored on the per-monitor gap WindowRule for @p screenIdOrName,
+// Gap overrides authored on the per-monitor gap Rule for @p screenIdOrName,
 // keyed in the short engine form, or an empty map when no such rule exists.
-QVariantMap Settings::perScreenGapRuleOverrides(const PhosphorWindowRules::WindowRuleStore* store,
-                                                const QString& screenIdOrName)
+QVariantMap Settings::perScreenGapRuleOverrides(const PhosphorRules::RuleStore* store, const QString& screenIdOrName)
 {
     QVariantMap gaps;
     if (store == nullptr) {
         return gaps;
     }
-    namespace AT = PhosphorWindowRules::ActionType;
+    namespace AT = PhosphorRules::ActionType;
     namespace PSK = PhosphorEngine::PerScreenKeys;
     for (const QString& connector : perScreenGapConnectorForms(screenIdOrName)) {
         const QUuid ruleId = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), connector.toUtf8());
@@ -757,7 +756,7 @@ QVariantMap Settings::getPerScreenAutotileSettings(const QString& screenIdOrName
     // Override the gap keys with the per-monitor gap rule's values, if one
     // exists for this screen. When none exists the gap keys stay absent and the
     // consumer falls back to the global (baseline) gaps.
-    const QVariantMap ruleGaps = perScreenGapRuleOverrides(m_windowRuleStore, screenIdOrName);
+    const QVariantMap ruleGaps = perScreenGapRuleOverrides(m_ruleStore, screenIdOrName);
     for (auto g = ruleGaps.constBegin(); g != ruleGaps.constEnd(); ++g) {
         result.insert(g.key(), g.value());
     }
@@ -842,7 +841,7 @@ void Settings::clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOr
 // defaults — writes go through the window-rule store via the Appearance page.
 QVariantMap Settings::getPerScreenSnappingSettings(const QString& screenIdOrName) const
 {
-    return perScreenGapRuleOverrides(m_windowRuleStore, screenIdOrName);
+    return perScreenGapRuleOverrides(m_ruleStore, screenIdOrName);
 }
 
 } // namespace PlasmaZones

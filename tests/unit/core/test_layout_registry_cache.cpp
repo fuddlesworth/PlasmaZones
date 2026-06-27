@@ -178,7 +178,7 @@ private Q_SLOTS:
         const int populated = mgr->contextResolveCacheSize();
         QVERIFY(populated >= 2);
 
-        // Mutating the rule set bumps WindowRuleSet::revision(); the next
+        // Mutating the rule set bumps RuleSet::revision(); the next
         // resolveAssignmentEntry call clears the stale cache and reseeds.
         auto* other = createTestLayout(QStringLiteral("Other"));
         mgr->addLayout(other);

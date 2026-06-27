@@ -122,33 +122,33 @@ set(plasmazones_settings_SRCS
     pageadapter.cpp
     settingsstagingdomain.h
     settingsstagingdomain.cpp
-    # Window Rules page — the unified rule surface. WindowRuleController
-    # owns one WindowRuleModel (QAbstractListModel) and talks to the
-    # daemon's org.plasmazones.WindowRules adaptor.
-    windowrulemodel.h
-    windowrulemodel.cpp
-    windowrulecontroller.h
-    windowrulecontroller.cpp
-    # Read-only / projection methods of WindowRuleController — sections,
+    # Rules page — the unified rule surface. RuleController
+    # owns one RuleModel (QAbstractListModel) and talks to the
+    # daemon's org.plasmazones.Rules adaptor.
+    rulemodel.h
+    rulemodel.cpp
+    rulecontroller.h
+    rulecontroller.cpp
+    # Read-only / projection methods of RuleController — sections,
     # rulesSnapshot, monitorOverview, ruleScreenIds, author surfaces
     # (matchFields/operatorsForField/actionTypes/defaultPayloadFor),
-    # validation entry points. Split out so windowrulecontroller.cpp stays
+    # validation entry points. Split out so rulecontroller.cpp stays
     # under the 800-line cap; same class, separate TU, no API change.
-    windowrulecontroller_views.cpp
-    # WindowRuleController label-lookup setters (screen/activity/layout/
+    rulecontroller_views.cpp
+    # RuleController label-lookup setters (screen/activity/layout/
     # snapping-layout/tiling-algorithm) plus the wiring-completion gate.
-    # Five tiny pass-throughs into WindowRuleModel; split out so
-    # windowrulecontroller.cpp stays under the project's 800-line cap.
-    windowrulecontroller_lookups.cpp
-    # WindowRuleController authoring metadata + templates — pure read-only
-    # helpers split out so windowrulecontroller.cpp stays under the project's
+    # Five tiny pass-throughs into RuleModel; split out so
+    # rulecontroller.cpp stays under the project's 800-line cap.
+    rulecontroller_lookups.cpp
+    # RuleController authoring metadata + templates — pure read-only
+    # helpers split out so rulecontroller.cpp stays under the project's
     # 800-line cap. The controller's Q_INVOKABLE entry points (matchFields,
     # operatorsForField, actionTypes, newEmptyRule, ruleTemplates,
     # newRuleFromTemplate) delegate here.
-    windowruleauthoring.h
-    windowruleauthoring.cpp
-    windowruletemplates.h
-    windowruletemplates.cpp
+    ruleauthoring.h
+    ruleauthoring.cpp
+    ruletemplates.h
+    ruletemplates.cpp
     # QAbstractItemModel adapter that exposes a rule's match expression
     # to QtQuick.Controls.TreeView for read-only preview. Registered as a
     # QML type via the qt_add_qml_module call below.
@@ -215,13 +215,13 @@ qt_add_qml_module(plasmazones-settings
         # the macro and emits the type in plasmazones-settings.qmltypes.
         matchexpressiontreemodel.h
         matchexpressiontreemodel.cpp
-        # WindowRuleModel — exposed as `WindowRuleModel` (uncreatable) so
+        # RuleModel — exposed as `RuleModel` (uncreatable) so
         # QML can reference its `Section` enum (e.g.
-        # `WindowRuleModel.Animation`) and `Roles` enum (e.g.
-        # `WindowRuleModel.SectionRole`) without QML hardcoding the
+        # `RuleModel.Animation`) and `Roles` enum (e.g.
+        # `RuleModel.SectionRole`) without QML hardcoding the
         # integer values.
-        windowrulemodel.h
-        windowrulemodel.cpp
+        rulemodel.h
+        rulemodel.cpp
     QML_FILES
         qml/Main.qml
         qml/Toast.qml
@@ -248,14 +248,14 @@ qt_add_qml_module(plasmazones-settings
         qml/SnappingOrderingPage.qml
         qml/TilingQuickShortcutsPage.qml
         qml/TilingOrderingPage.qml
-        # Window Rules — the unified rule page replacing the five legacy
+        # Rules — the unified rule page replacing the five legacy
         # assignment / app-rule surfaces. Every component (including the
         # recursively-instantiated MatchExpressionEditor) MUST be listed.
-        qml/WindowRulesPage.qml
+        qml/RulesPage.qml
         qml/MonitorOverview.qml
         qml/MonitorOverviewTile.qml
-        qml/WindowRuleRow.qml
-        qml/WindowRuleSectionList.qml
+        qml/RuleRow.qml
+        qml/RuleSectionList.qml
         qml/RuleEditorSheet.qml
         qml/RuleEditorBody.qml
         qml/RuleEditorStatusBar.qml

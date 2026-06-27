@@ -172,7 +172,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Restore untiled windows to their previous position")
                     searchAnchor: "restoreUntiledWindowsPosition"
-                    description: i18n("When an untiled (floated) window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A per-window rule can override this either way, opting individual windows in or out.")
+                    description: i18n("When an untiled (floated) window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A per-rule can override this either way, opting individual windows in or out.")
 
                     SettingsSwitch {
                         checked: appSettings.autotileRestoreFloatedWindowsOnLogin

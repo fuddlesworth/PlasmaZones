@@ -123,5 +123,5 @@ No `Qt6::Gui`, no QObjects, no QML, no D-Bus.
 
 ## See also
 
-- [`phosphor-windowrule`](../phosphor-windowrule/README.md) — rule evaluation. The resolver intentionally does not duplicate priority math.
+- [`phosphor-rule`](../phosphor-rule/README.md) — rule evaluation. The resolver intentionally does not duplicate priority math.
 - [`phosphor-zones`](../phosphor-zones/README.md) — owns `AssignmentEntry::Mode` and the wire vocabulary the handle carries.

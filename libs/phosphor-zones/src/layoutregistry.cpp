@@ -16,8 +16,7 @@
 
 namespace PhosphorZones {
 
-LayoutRegistry::LayoutRegistry(PhosphorWindowRules::WindowRuleStore* ruleStore, QString layoutSubdirectory,
-                               QObject* parent)
+LayoutRegistry::LayoutRegistry(PhosphorRules::RuleStore* ruleStore, QString layoutSubdirectory, QObject* parent)
     : IZoneLayoutRegistry(parent)
     , m_ruleStore(ruleStore)
     , m_layoutSubdirectory(std::move(layoutSubdirectory))
@@ -53,7 +52,7 @@ void LayoutRegistry::initCommon()
 
     // One evaluation model — bound to the store's live rule set. The store
     // owns the set's lifetime; the evaluator holds a reference to it.
-    m_evaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    m_evaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
 
     // Forward the detailed layoutsChanged signal into the unified
     // ILayoutSourceRegistry::contentsChanged notifier so any subscribed

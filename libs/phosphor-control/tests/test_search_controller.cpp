@@ -49,10 +49,10 @@ public:
     {
         SearchEntry e;
         e.kind = SearchEntry::Kind::Entity;
-        e.pageId = QStringLiteral("window-rules");
+        e.pageId = QStringLiteral("rules");
         e.anchor = QStringLiteral("rule:abc");
         e.title = QStringLiteral("Steam");
-        e.subtitle = QStringLiteral("Window Rules");
+        e.subtitle = QStringLiteral("Rules");
         return {e};
     }
 };
@@ -224,7 +224,7 @@ private Q_SLOTS:
         // Find the entity by address rather than assuming it ranks first.
         bool found = false;
         for (const QVariant& v : sc.results()) {
-            if (v.toMap().value(QStringLiteral("address")).toString() == QStringLiteral("window-rules#rule:abc")) {
+            if (v.toMap().value(QStringLiteral("address")).toString() == QStringLiteral("rules#rule:abc")) {
                 found = true;
             }
         }
@@ -244,13 +244,13 @@ private Q_SLOTS:
 
     void providerSubtitleRespectedWhenSet()
     {
-        // A provider-supplied subtitle (e.g. a window rule's match summary) is
+        // A provider-supplied subtitle (e.g. a rule's match summary) is
         // never overwritten by the auto-derive.
         SearchController sc(m_app);
         StubProvider provider;
         sc.registerProvider(&provider);
         sc.setQuery(QStringLiteral("steam"));
-        QCOMPARE(subtitleForTitle(sc, QStringLiteral("Steam")), QStringLiteral("Window Rules"));
+        QCOMPARE(subtitleForTitle(sc, QStringLiteral("Steam")), QStringLiteral("Rules"));
     }
 
     void registerProviderDedupes()
@@ -263,7 +263,7 @@ private Q_SLOTS:
         sc.setQuery(QStringLiteral("steam"));
         int count = 0;
         for (const QVariant& v : sc.results()) {
-            if (v.toMap().value(QStringLiteral("address")).toString() == QStringLiteral("window-rules#rule:abc")) {
+            if (v.toMap().value(QStringLiteral("address")).toString() == QStringLiteral("rules#rule:abc")) {
                 ++count;
             }
         }

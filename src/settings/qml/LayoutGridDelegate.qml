@@ -60,7 +60,7 @@ Item {
     // page's reveal registry so a layouts search result scrolls to and pulses
     // this exact card (expanding its group card if collapsed). Deferred via
     // callLater so the subtree is attached before the parent-chain walk; mirrors
-    // WindowRuleSectionList's per-row registration. No-op when hosted outside a
+    // RuleSectionList's per-row registration. No-op when hosted outside a
     // SettingsFlickable (pageFor returns null).
     Component.onCompleted: Qt.callLater(function () {
         var pg = SearchAnchors.pageFor(root);

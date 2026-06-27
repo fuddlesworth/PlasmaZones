@@ -6,10 +6,10 @@
 #include "dbusutils.h"
 #include "../phosphor_i18n.h"
 
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/MatchTypes.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QDBusMessage>
@@ -153,7 +153,7 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
 
         QJsonArray pZones;
         // app class → 1-based zone number. The per-layout appRules concept was
-        // retired; these become SnapToZone window rules after the layout is
+        // retired; these become SnapToZone rules after the layout is
         // created. First zone wins per app within this layout.
         QHash<QString, int> appToZone;
 
@@ -220,9 +220,9 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
                 // resolves on appId — windowClass is not tracked daemon-side, so a
                 // WindowClass leaf would never fire) and the retired matchAppRule's
                 // segment-aware semantics.
-                namespace PWR = PhosphorWindowRules;
+                namespace PWR = PhosphorRules;
                 for (auto it = appToZone.constBegin(); it != appToZone.constEnd(); ++it) {
-                    PWR::WindowRule rule;
+                    PWR::Rule rule;
                     rule.id = QUuid::createUuid();
                     rule.enabled = true;
                     rule.priority = 0;
@@ -236,9 +236,8 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
                     rule.actions.append(action);
                     const QString ruleJson =
                         QString::fromUtf8(QJsonDocument(rule.toJson()).toJson(QJsonDocument::Compact));
-                    const QDBusMessage ruleReply =
-                        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::WindowRules),
-                                               QStringLiteral("addRule"), {ruleJson});
+                    const QDBusMessage ruleReply = DaemonDBus::callDaemon(
+                        QString(PhosphorProtocol::Service::Interface::Rules), QStringLiteral("addRule"), {ruleJson});
                     // addRule returns false on daemon-side validation/persistence
                     // failure. Surface a dropped app→zone rule rather than reporting
                     // the import as fully successful (the layout still imported).

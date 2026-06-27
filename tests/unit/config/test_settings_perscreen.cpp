@@ -28,24 +28,24 @@
 #include "../helpers/IsolatedConfigGuard.h"
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleStore.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 
-// Build a per-monitor gap WindowRule keyed exactly as the Appearance page keys
+// Build a per-monitor gap Rule keyed exactly as the Appearance page keys
 // it: the deterministic v5 id namespaced under the baseline gap rule
 // from the monitor's connector name, with a `ScreenId Equals <connector>` match
 // and the inner/outer gap actions. The match value is irrelevant to the
 // rule-backed accessors (which look up BY ID), but mirrors the real shape.
-PhosphorWindowRules::WindowRule makePerScreenGapRule(const QString& connector, int innerGap, int outerGap)
+PhosphorRules::Rule makePerScreenGapRule(const QString& connector, int innerGap, int outerGap)
 {
-    using namespace PhosphorWindowRules;
+    using namespace PhosphorRules;
     const auto action = [](QLatin1StringView type, const QJsonValue& value) {
         RuleAction a;
         a.type = QString(type);
@@ -53,7 +53,7 @@ PhosphorWindowRules::WindowRule makePerScreenGapRule(const QString& connector, i
         return a;
     };
 
-    WindowRule rule;
+    Rule rule;
     rule.id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), connector.toUtf8());
     rule.name = QStringLiteral("Gaps (%1)").arg(connector);
     rule.enabled = true;
@@ -443,7 +443,7 @@ private Q_SLOTS:
 
         // Author the per-monitor gap rule directly in a borrowed store, then
         // build Settings over it (mirrors the daemon's shared-store wiring).
-        auto store = std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath());
+        auto store = std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath());
         QVERIFY(store->addRule(makePerScreenGapRule(screen, /*inner=*/13, /*outer=*/21)));
 
         Settings settings(store.get(), nullptr);
@@ -481,7 +481,7 @@ private Q_SLOTS:
         const QString physical = QStringLiteral("DP-virtfb");
         const QString virtualId = PhosphorIdentity::VirtualScreenId::make(physical, 0);
 
-        auto store = std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath());
+        auto store = std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath());
         QVERIFY(store->addRule(makePerScreenGapRule(physical, /*inner=*/7, /*outer=*/9)));
 
         Settings settings(store.get(), nullptr);
@@ -556,8 +556,8 @@ private Q_SLOTS:
     // The earlier "empty excluded lists survive round-trip" test was
     // retired alongside excludedApplications / excludedWindowClasses
     // themselves: the v4 fold removed those QStringList settings from
-    // Settings entirely. The Window Rules round-trip is covered by
-    // test_windowrule_store; the empty-rule-set case is exercised there.
+    // Settings entirely. The Rules round-trip is covered by
+    // test_rule_store; the empty-rule-set case is exercised there.
 };
 
 // NOT guiless: Settings::load → applySystemColorScheme reads

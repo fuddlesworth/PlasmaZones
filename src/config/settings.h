@@ -15,7 +15,7 @@
 #include "configbackends.h"
 
 #include <PhosphorConfig/Store.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/RuleStore.h>
 
 #include <memory>
 #include <optional>
@@ -73,7 +73,7 @@ public:
      *                      through the caller's registry, preserving
      *                      `shared_ptr<const Curve>` identity across the
      *                      Settings ↔ daemon boundary.
-     * @param windowRuleStore Non-owned WindowRuleStore pointer. When non-null,
+     * @param ruleStore Non-owned RuleStore pointer. When non-null,
      *                        Settings shares this store rather than owning a
      *                        second instance pointed at the same file — a
      *                        dual-store setup races on disk (one store's
@@ -81,7 +81,7 @@ public:
      *                        edits because both rebuild `kept` from stale
      *                        in-memory snapshots). The daemon, which already
      *                        owns the canonical store for `LayoutRegistry`
-     *                        and `WindowRuleAdaptor`, passes it in here so
+     *                        and `RuleAdaptor`, passes it in here so
      *                        every in-process consumer mutates the same
      *                        ruleset. Standalone processes (settings app,
      *                        editor) pass nullptr and Settings falls back to
@@ -92,7 +92,7 @@ public:
      * @param parent Parent QObject
      */
     Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
-             PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent);
+             PhosphorRules::RuleStore* ruleStore, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
@@ -150,8 +150,8 @@ public:
     // Zone settings — inner/outer gaps are the single shared model used by BOTH
     // snapping and tiling. The global default is now rule-backed: these are
     // computed READ-ONLY getters reading the managed baseline appearance
-    // WindowRule's gap actions. Editing happens through the rule (the Window
-    // Appearance page writes via WindowRuleController), so there are no setters.
+    // Rule's gap actions. Editing happens through the rule (the Window
+    // Appearance page writes via RuleController), so there are no setters.
     // NOTIFY fires when the baseline rule's gap values change (see
     // onRuleStoreChanged).
     Q_PROPERTY(int innerGap READ innerGap NOTIFY innerGapChanged)
@@ -212,9 +212,9 @@ public:
     // Window filtering — the global knobs. The per-application /
     // per-class exclusion list Q_PROPERTYs (excludedApplications,
     // excludedWindowClasses) retired in v4 along with the standalone
-    // Exclusions settings page; the lists folded into Window Rules and
+    // Exclusions settings page; the lists folded into Rules and
     // the daemon serves the runtime evaluator from
-    // PhosphorWindowRules::ExclusionRules over the unified rule store.
+    // PhosphorRules::ExclusionRules over the unified rule store.
     Q_PROPERTY(bool excludeTransientWindows READ excludeTransientWindows WRITE setExcludeTransientWindows NOTIFY
                    excludeTransientWindowsChanged)
     Q_PROPERTY(
@@ -234,9 +234,9 @@ public:
                    NOTIFY animationMinimumWindowHeightChanged)
     // The animationExcludedApplications / animationExcludedWindowClasses
     // Q_PROPERTYs retired in v4 — the lists folded into `ExcludeAnimations`
-    // WindowRules and the effect's `shouldAnimateWindow` gate now resolves
+    // Rules and the effect's `shouldAnimateWindow` gate now resolves
     // against the slice
-    // `PhosphorWindowRules::ExclusionRules::excludeAnimationsRulesFrom`
+    // `PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom`
     // produces from the unified rule store.
 
     // PhosphorZones::Zone Selector
@@ -483,24 +483,24 @@ public:
 
     /**
      * @brief Standalone ctor that owns its config backend but BORROWS a
-     *        WindowRuleStore.
+     *        RuleStore.
      *
      * Same standalone semantics as Settings(QObject*) — owns a freshly migrated
      * config backend and leaves the CurveRegistry null (animation profiles parse
-     * through the process-static fallback) — but takes its WindowRuleStore from
+     * through the process-static fallback) — but takes its RuleStore from
      * the caller instead of owning one. The settings app uses this so a single
      * store is shared between this Settings instance (per-mode monitor disable
-     * lists, which persist in windowrules.json) and the SettingsController's
+     * lists, which persist in rules.json) and the SettingsController's
      * in-process LayoutRegistry, eliminating the divergence two independent
      * stores over the same file would otherwise allow.
      *
-     * @param windowRuleStore Borrowed store; must outlive this Settings. A null
+     * @param ruleStore Borrowed store; must outlive this Settings. A null
      *        argument degrades to owning a store (same fallback the
      *        backend-injecting ctor uses) so a misuse still yields a working
      *        object.
      * @param parent Parent QObject.
      */
-    Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent);
+    Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent);
     ~Settings() override = default;
 
     // No singleton - use dependency injection instead
@@ -594,10 +594,10 @@ public:
 
     // Zone geometry (shared inner/outer gaps) — the global default is now
     // rule-backed. These getters read the managed baseline appearance
-    // WindowRule's gap actions, falling back to the compile-time defaults when
+    // Rule's gap actions, falling back to the compile-time defaults when
     // no store / rule / action is present. There are no setters: the gap values
     // are edited on the baseline rule directly (Window Appearance page →
-    // WindowRuleController). The autotile* gap forwarders above route through
+    // RuleController). The autotile* gap forwarders above route through
     // these same getters, so the tile engine stays untouched.
     int innerGap() const override;
     int outerGap() const override;
@@ -743,7 +743,7 @@ public:
     void clearPerScreenAutotileGapsSettings(const QString& screenIdOrName);
     void clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName);
 
-    // Per-screen snapping gaps are rule-backed (per-monitor gap WindowRules), so
+    // Per-screen snapping gaps are rule-backed (per-monitor gap Rules), so
     // the only accessor is the reader. There is no per-screen snapping storage
     // and no setter/clear/has: the set/clear/has triplet stays as ISettings
     // no-op defaults (the geometry path only ever reads). Writes go through the
@@ -1136,7 +1136,7 @@ private:
 
     /// Shared writer for the three per-mode disable lists. Replaces the whole
     /// `DisableEngine` context-rule family for (@p mode, @p axisInt) in the
-    /// WindowRule store — @p axisInt is a `DisableAxis` value (file-local enum
+    /// Rule store — @p axisInt is a `DisableAxis` value (file-local enum
     /// in settings.cpp; passed as an int so the header stays decoupled). Drops
     /// malformed composite entries, fires @p signalFn + @c settingsChanged
     /// only on a real (canonical-set) change.
@@ -1144,7 +1144,7 @@ private:
                              DisableModeSignalFn signalFn);
 
     /// Shared reader for the three per-mode disable lists. Enumerates the
-    /// `DisableEngine` context rules in the WindowRule store scoped to
+    /// `DisableEngine` context rules in the Rule store scoped to
     /// @p mode and @p axisInt (a `DisableAxis` value), projecting each rule's
     /// pinned context dimensions back to its list-entry string form. The
     /// monitor variant's connector-name → canonical-id resolution lives in
@@ -1216,12 +1216,12 @@ private:
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Per-mode disable lists are stored as `DisableEngine` context rules in
-    // the unified WindowRule store (windowrules.json), NOT in config.json.
+    // the unified Rule store (rules.json), NOT in config.json.
     //
     // The store can be either owned (standalone settings app / editor / tests
     // that have no daemon counterpart) or borrowed (daemon process — the
     // daemon owns the canonical store for `LayoutRegistry` and
-    // `WindowRuleAdaptor`, and passes that same instance in so every
+    // `RuleAdaptor`, and passes that same instance in so every
     // in-process writer mutates the same in-memory ruleset). Mirroring the
     // existing `LayoutRegistry`-via-borrowed-pointer pattern eliminates the
     // dual-store race where two stores pointed at the same file each rebuild
@@ -1231,10 +1231,10 @@ private:
     // does not — the owner is responsible for having loaded already.
     // load() reloads the active store from disk so cross-process deltas
     // surface; the disabled*/setDisabled*/is*Disabled accessors read/write
-    // through `m_windowRuleStore` (a raw pointer that always tracks the
+    // through `m_ruleStore` (a raw pointer that always tracks the
     // active store — owned or borrowed).
-    std::unique_ptr<PhosphorWindowRules::WindowRuleStore> m_ownedWindowRuleStore;
-    PhosphorWindowRules::WindowRuleStore* m_windowRuleStore = nullptr;
+    std::unique_ptr<PhosphorRules::RuleStore> m_ownedRuleStore;
+    PhosphorRules::RuleStore* m_ruleStore = nullptr;
 
     // Connect the active rule store's rulesChanged to onRuleStoreChanged and
     // seed the gap cache from the current baseline rule. Called once at the end
@@ -1254,10 +1254,10 @@ private:
     // std::nullopt when the store / rule / action is absent. Backs both the
     // global gap getters (the managed baseline rule id) and the per-screen gap
     // accessors (the per-monitor gap rule id).
-    static std::optional<QJsonValue> gapValueFromRule(const PhosphorWindowRules::WindowRuleStore* store,
-                                                      const QUuid& ruleId, QLatin1StringView actionType);
+    static std::optional<QJsonValue> gapValueFromRule(const PhosphorRules::RuleStore* store, const QUuid& ruleId,
+                                                      QLatin1StringView actionType);
 
-    // Gap overrides authored on the per-monitor gap WindowRule for
+    // Gap overrides authored on the per-monitor gap Rule for
     // @p screenIdOrName, keyed in the short engine form the autotile / snapping
     // consumers expect (InnerGap / OuterGap / UsePerSideOuterGap / OuterGap
     // {Top,Bottom,Left,Right}), or an empty map when no such rule exists. The
@@ -1266,8 +1266,7 @@ private:
     // carries) under the deterministic id
     // createUuidV5(baselineGapRuleId, <connector name>); the incoming
     // identifier is resolved to that connector-name form first.
-    static QVariantMap perScreenGapRuleOverrides(const PhosphorWindowRules::WindowRuleStore* store,
-                                                 const QString& screenIdOrName);
+    static QVariantMap perScreenGapRuleOverrides(const PhosphorRules::RuleStore* store, const QString& screenIdOrName);
 
     // Cached snapshot of the baseline rule's gap values, used by
     // onRuleStoreChanged for change detection (the getters read live, so a
@@ -1326,7 +1325,7 @@ private:
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;
 
     // Per-screen snapping gaps are no longer stored here: they are rule-backed
-    // (per-monitor gap WindowRules), read by getPerScreenSnappingSettings via
+    // (per-monitor gap Rules), read by getPerScreenSnappingSettings via
     // perScreenGapRuleOverrides. There are no other per-screen snapping keys.
 
     // Autotiling Settings

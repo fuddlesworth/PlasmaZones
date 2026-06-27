@@ -5,7 +5,7 @@
 // helpers for the LayoutRegistry assignment cascade.
 //
 // These are pure functions with no LayoutRegistry-member dependency: they
-// classify and decode WindowRule / MatchExpression shapes, build the
+// classify and decode Rule / MatchExpression shapes, build the
 // windowless context query, and read an AssignmentEntry straight off a
 // rule's action list. Split out of layoutregistry_assignments.cpp so that
 // translation unit stays under the project's 800-line ceiling, and so any
@@ -20,18 +20,18 @@
 
 #include <PhosphorZones/AssignmentEntry.h>
 
-#include <PhosphorWindowRules/WindowQuery.h>
+#include <PhosphorRules/WindowQuery.h>
 
 #include <QString>
 
-namespace PhosphorWindowRules {
+namespace PhosphorRules {
 class MatchExpression;
-class WindowRule;
-} // namespace PhosphorWindowRules
+class Rule;
+} // namespace PhosphorRules
 
 namespace PhosphorZones::RuleHelpers {
 
-namespace PWR = PhosphorWindowRules;
+namespace PWR = PhosphorRules;
 
 // The decoded (screenId, virtualDesktop, activity) context a context-rule's
 // match expression pins. A non-context / nested-composite match leaves all
@@ -84,14 +84,14 @@ bool matchIsExactContext(const PWR::MatchExpression& match, const QString& scree
 // rules and the provider-default catch-all carry one; callers that must
 // exclude the catch-all do so explicitly (see resolveAssignmentEntry), and
 // the matchIsExactContext* shape filters reject a catch-all anyway.
-bool hasEngineModeAction(const PWR::WindowRule& rule);
+bool hasEngineModeAction(const PWR::Rule& rule);
 
 // True if @p rule carries a SetSnappingLayout / SetTilingAlgorithm action. The
 // per-slot assignment resolver reads each layout slot independently of the
 // engine-mode slot, so a layout-only rule (no SetEngineMode) sets the layout
 // for its engine in a context without forcing the engine mode.
-bool hasSnappingLayoutAction(const PWR::WindowRule& rule);
-bool hasTilingAlgorithmAction(const PWR::WindowRule& rule);
+bool hasSnappingLayoutAction(const PWR::Rule& rule);
+bool hasTilingAlgorithmAction(const PWR::Rule& rule);
 
 // True when every action on @p rule is one of the three assignment slots
 // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). False on an
@@ -100,7 +100,7 @@ bool hasTilingAlgorithmAction(const PWR::WindowRule& rule);
 // carries non-assignment actions (SetOpacity, OverrideAnimation*, Float,
 // Exclude, ...) — admitting it would silently strip those actions
 // through the assignment-rebuild path.
-bool isPureAssignmentRule(const PWR::WindowRule& rule);
+bool isPureAssignmentRule(const PWR::Rule& rule);
 
 // Shape predicates for the per-screen-base / per-desktop / per-activity
 // context rule families — used by the batch setters to drop one family
@@ -121,10 +121,10 @@ bool matchIsExactContextActivity(const PWR::MatchExpression& match);
 // legitimate window-property rule carrying SetSnappingLayout / SetEngineMode
 // actions is never rebuilt — rebuilding force-injects SetEngineMode and
 // drops every other action, which would clobber a window-property rule.
-bool isContextAssignmentRule(const PWR::WindowRule& rule);
+bool isContextAssignmentRule(const PWR::Rule& rule);
 
 // Build the AssignmentEntry encoded directly by a rule's action list (no
 // evaluation — used by introspection helpers like desktopAssignments()).
-AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule);
+AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule);
 
 } // namespace PhosphorZones::RuleHelpers

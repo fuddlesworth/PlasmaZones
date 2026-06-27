@@ -13,7 +13,7 @@ import org.plasmazones.common as QFZCommon
  * @brief Layouts / tiling-algorithms listing page.
  *
  * Uses the standardized card-container pattern (see ShaderBrowserPage /
- * WindowRulesPage): a SettingsFlickable root whose content is the view switch,
+ * RulesPage): a SettingsFlickable root whose content is the view switch,
  * the import card, the search row, the filter/group/sort bar, and one
  * collapsible SettingsCard per group, each hosting a responsive Flow of
  * LayoutGridDelegate cards. Rooting on
@@ -247,7 +247,7 @@ SettingsFlickable {
 
         width: parent.width
         // Uniform large spacing between the toolbar, filter bar, and group cards
-        // — matches the ShaderBrowserPage / WindowRulesPage content rhythm so the
+        // — matches the ShaderBrowserPage / RulesPage content rhythm so the
         // filter-row → first-section gap lines up with the other listing pages.
         spacing: Kirigami.Units.largeSpacing
 

@@ -65,7 +65,7 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     AutotileStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
     AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
 
-    // Title-bar (borderless) state is driven entirely by window rules through
+    // Title-bar (borderless) state is driven entirely by rules through
     // the effect's reconcileRuleHiddenTitleBar → DecorationManager path; this
     // handler only records snap tiled-tracking for border RENDERING.
 

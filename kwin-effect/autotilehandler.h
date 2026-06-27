@@ -41,7 +41,7 @@ class PlasmaZonesEffect;
  * Manages the autotile D-Bus interface, screen tracking, window tiling,
  * monocle mode, tiled-tracking for border rendering, and pre-autotile
  * geometry preservation. Title-bar (borderless) state is owned by the
- * effect's DecorationManager and driven by window rules — this handler does
+ * effect's DecorationManager and driven by rules — this handler does
  * not touch decorations.
  *
  * Delegates window lookups, geometry application, and animation back to the effect.

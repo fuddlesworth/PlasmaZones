@@ -256,7 +256,7 @@ void AnimationsPageController::apply()
     // file restores silently UNDO writes the user wanted to keep,
     // then emit discardResult(true) on a now-clean page. Symmetric
     // to the per-mutator guards added in pass 36 (setOverride etc.)
-    // and to WindowRuleController::m_asyncCommitInFlight.
+    // and to RuleController::m_asyncCommitInFlight.
     if (m_asyncRevertInFlight) {
         Q_EMIT applyResult(false, PhosphorI18n::tr("Cannot save while a discard is in progress."));
         return;

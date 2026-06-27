@@ -160,7 +160,7 @@ public:
     }
 
     /// Resolve the per-context gap override (zone padding + outer gaps) that
-    /// window rules pin for the (@p screenId, @p virtualDesktop, @p activity)
+    /// rules pin for the (@p screenId, @p virtualDesktop, @p activity)
     /// context — the same resolution the daemon's geometry resolver uses on the
     /// snap-commit path. Context-aware geometry consumers (drag preview, empty-
     /// zone overlay, zone-detection query) call this through the interface so
@@ -184,7 +184,7 @@ public:
         return {};
     }
 
-    /// Resolve whether window rules lock the active layout for the
+    /// Resolve whether rules lock the active layout for the
     /// (@p screenId, @p virtualDesktop, @p activity) context — the rule-driven
     /// counterpart to the manual ToggleLayoutLock shortcut. A context rule
     /// carrying an `ActionType::LockContext` action whose `value` is true locks

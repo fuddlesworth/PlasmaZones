@@ -12,13 +12,13 @@
 #include <PhosphorConfig/MigrationRunner.h>
 #include <PhosphorConfig/Schema.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorWindowRules/ContextRuleBridge.h>
-#include <PhosphorWindowRules/IdentityKey.h>
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/MatchTypes.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
-#include <PhosphorWindowRules/WindowRuleSet.h>
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/IdentityKey.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleSet.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
 #include <QColor>
@@ -85,14 +85,14 @@ bool ConfigMigration::runMigrationChain(const QString& jsonPath)
 namespace {
 std::atomic<bool> s_migrated{false};
 
-/// The legacy assignments.json path. windowrules.json supersedes it in v4 —
+/// The legacy assignments.json path. rules.json supersedes it in v4 —
 /// migrateV1ToV2 still writes it (a v2 artifact) and finalizeV4Conversion
 /// reads then deletes it; no live runtime code touches it, so the path lives
 /// here rather than on the public ConfigDefaults surface. It sits beside
-/// windowrules.json (the same plasmazones config directory).
+/// rules.json (the same plasmazones config directory).
 QString legacyAssignmentsFilePath()
 {
-    return QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
+    return QFileInfo(ConfigDefaults::rulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
 }
 
 /// Pre-flight check for the legacy assignments.json sidecar: if the file
@@ -100,7 +100,7 @@ QString legacyAssignmentsFilePath()
 /// the v3→v4 conversion BEFORE anything irreversible runs.
 ///
 /// Rationale (B5 data-loss fix): silently treating a corrupt assignments.json
-/// as "no assignments" would let the conversion write a windowrules.json
+/// as "no assignments" would let the conversion write a rules.json
 /// holding only the provider-default + disable rules, then quarantine the
 /// corrupt original to `.migrated` — the user's pinned assignments AND quick-
 /// layout slots would be lost without warning. The `.migrated` suffix also
@@ -163,17 +163,17 @@ bool prevalidateLegacyAssignmentsFile(const QString& assignmentsPath)
     return false;
 }
 
-/// Mirror of prevalidateLegacyAssignmentsFile for windowrules.json.
+/// Mirror of prevalidateLegacyAssignmentsFile for rules.json.
 ///
 /// finalizeV4Conversion's "already converted" gate probes via
-/// `WindowRuleSet::loadFromFile(...).has_value()`. If the file exists but
+/// `RuleSet::loadFromFile(...).has_value()`. If the file exists but
 /// is corrupt (truncation, hand-edit error, power-loss), that probe returns
 /// nullopt — the gate falls through to the rebuild path, which mints a
 /// provider-default-only rule set and writes it on top of the corrupt-but-
 /// recoverable original. Every user-authored rule is destroyed without
 /// warning and without a backup.
 ///
-/// On detected corruption: quarantine to `windowrules.json.corrupt.bak`,
+/// On detected corruption: quarantine to `rules.json.corrupt.bak`,
 /// log at critical, and return false so the caller aborts before any
 /// stub-rule write happens. Mirrors the assignments.json contract.
 ///
@@ -181,17 +181,17 @@ bool prevalidateLegacyAssignmentsFile(const QString& assignmentsPath)
 /// parses as any JSON object the rule loader will inspect downstream. The
 /// only false case is a file that exists, is non-empty, but fails to parse
 /// as a JSON object — that's the data-loss trigger we exist to prevent.
-bool prevalidateWindowRulesFile(const QString& windowRulesPath)
+bool prevalidateRulesFile(const QString& rulesPath)
 {
-    if (!QFile::exists(windowRulesPath)) {
+    if (!QFile::exists(rulesPath)) {
         return true;
     }
-    QFile wf(windowRulesPath);
+    QFile wf(rulesPath);
     if (!wf.open(QIODevice::ReadOnly)) {
         // Mirrors the assignments prevalidate — we can't read to decide, so
         // surface a warning and let the downstream path's open-failure
         // handling take its course.
-        qWarning("ConfigMigration: could not open %s for prevalidation: %s", qPrintable(windowRulesPath),
+        qWarning("ConfigMigration: could not open %s for prevalidation: %s", qPrintable(rulesPath),
                  qPrintable(wf.errorString()));
         return true;
     }
@@ -206,26 +206,26 @@ bool prevalidateWindowRulesFile(const QString& windowRulesPath)
         return true;
     }
 
-    const QString corruptBak = windowRulesPath + QStringLiteral(".corrupt.bak");
+    const QString corruptBak = rulesPath + QStringLiteral(".corrupt.bak");
     QFile::remove(corruptBak);
-    if (QFile::rename(windowRulesPath, corruptBak)) {
+    if (QFile::rename(rulesPath, corruptBak)) {
         qCritical(
             "ConfigMigration: %s is malformed (%s) — quarantined to %s. "
             "Aborting v4 conversion to prevent destroying user-authored "
             "rules. Inspect/repair the file and rename it back to "
-            "windowrules.json, then re-run.",
-            qPrintable(windowRulesPath), qPrintable(err.errorString()), qPrintable(corruptBak));
+            "rules.json, then re-run.",
+            qPrintable(rulesPath), qPrintable(err.errorString()), qPrintable(corruptBak));
     } else {
         qCritical(
             "ConfigMigration: %s is malformed (%s) — also failed to "
             "quarantine to %s. Aborting v4 conversion. Move or repair "
             "the file by hand.",
-            qPrintable(windowRulesPath), qPrintable(err.errorString()), qPrintable(corruptBak));
+            qPrintable(rulesPath), qPrintable(err.errorString()), qPrintable(corruptBak));
     }
     return false;
 }
 
-/// Retire the superseded assignments.json once windowrules.json holds every
+/// Retire the superseded assignments.json once rules.json holds every
 /// datum it carried. Prefer a rename to `assignments.json.migrated` over an
 /// outright delete: a rename is the same directory-entry operation as a remove
 /// but leaves an inert quarantined copy, and — critically — if it ever fails it
@@ -321,6 +321,25 @@ bool ConfigMigration::ensureJsonConfig()
 
 bool ConfigMigration::ensureJsonConfigImpl()
 {
+    // One-time carry-over: the rule store moved from windowrules.json to
+    // rules.json. A pre-rename install still has windowrules.json on disk; if
+    // the new rules.json is absent, adopt the legacy file under the new name so
+    // existing users keep their rules. This must run before any finalizer probes
+    // rules.json — finalizeV4Conversion's "already converted" gate keys off
+    // rules.json existing, so without the carry-over it would treat a converted
+    // user as un-converted and rebuild from the (now-retired) legacy inputs.
+    {
+        const QString rulesPath = ConfigDefaults::rulesFilePath();
+        const QString legacyRulesPath = QFileInfo(rulesPath).absolutePath() + QStringLiteral("/windowrules.json");
+        if (!QFile::exists(rulesPath) && QFile::exists(legacyRulesPath)) {
+            if (QFile::rename(legacyRulesPath, rulesPath)) {
+                qInfo("ConfigMigration: carried over legacy windowrules.json to rules.json");
+            } else {
+                qWarning("ConfigMigration: failed to carry over legacy windowrules.json to rules.json");
+            }
+        }
+    }
+
     const QString jsonPath = ConfigDefaults::configFilePath();
     if (QFile::exists(jsonPath)) {
         QFile f(jsonPath);
@@ -356,7 +375,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
                         // animation-exclusion data under the four `_v4*Stash`
                         // root keys. The multi-step finalizer (reading
                         // assignments.json + the four stashes, writing
-                        // windowrules.json + quicklayouts.json, stripping the
+                        // rules.json + quicklayouts.json, stripping the
                         // stash keys, retiring assignments.json) happens
                         // here, after the chain. Idempotent — safe to always run.
                         return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
@@ -418,7 +437,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
     if (!QFile::exists(iniPath)) {
         // Fresh install — no old config. Still run the v4 finalizer so a
         // stray assignments.json from a partial earlier conversion is folded
-        // into windowrules.json rather than left orphaned.
+        // into rules.json rather than left orphaned.
         return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
     }
 
@@ -816,7 +835,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 
     // ── Snapping.Gaps ─────────────────────────────────────────────────────────
     // The shared inner/outer gaps are NOT migrated: the global default is now
-    // rule-backed (the managed baseline appearance WindowRule, seeded by the
+    // rule-backed (the managed baseline appearance Rule, seeded by the
     // daemon), so there is no stored "Gaps" group destination. Per the
     // no-ad-hoc-backwards-compat policy the v1 zone-padding / outer-gap values
     // are silently dropped (left in v1Zones, never written out); users fall back
@@ -875,7 +894,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // The v1 autotile border / title-bar appearance keys
     // (AutotileShowBorder / Width / Radius / BorderColor / InactiveBorderColor /
     // UseSystemBorderColors / HideTitleBars) are intentionally dropped: window
-    // appearance is resolved from the managed baseline appearance WindowRule
+    // appearance is resolved from the managed baseline appearance Rule
     // now, so there is no Tiling.Appearance destination group. Per the
     // no-ad-hoc-backwards-compat policy the stale v1 values are silently
     // discarded; users fall back to the baseline rule's defaults.
@@ -1164,7 +1183,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 
     // ── Extract Assignment/QuickLayouts to assignments.json ─────────────────
     // assignments.json is the v3 PhosphorZones::LayoutRegistry persistence file. It is
-    // itself superseded in v4 by windowrules.json (see finalizeV4Conversion),
+    // itself superseded in v4 by rules.json (see finalizeV4Conversion),
     // so this extraction is a stepping-stone that v3→v4 reads back out.
     {
         QJsonObject assignRoot;
@@ -1385,10 +1404,10 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 // ── Schema migration: v3 → v4 ───────────────────────────────────────────────
 // Window-rule consolidation — Phase 3.
 //
-// The v4 conversion produces the new windowrules.json store: every zone
+// The v4 conversion produces the new rules.json store: every zone
 // Assignment, per-mode disable entry, animation app rule, exclusion list
-// entry, AND animation exclusion list entry becomes a WindowRule.
-// windowrules.json SUPERSEDES assignments.json and the config.json
+// entry, AND animation exclusion list entry becomes a Rule.
+// rules.json SUPERSEDES assignments.json and the config.json
 // Display.*Disabled* / Exclusions.* / Animations.AnimationAppRules /
 // Animations.WindowFiltering.{Applications,WindowClasses} keys — the
 // runtime LayoutRegistry, Settings, SnapEngine and effect now read the
@@ -1402,7 +1421,7 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 // root keys (`_v4DisableStash`, `_v4AnimationRulesStash`, `_v4ExclusionStash`,
 // `_v4AnimationExclusionStash`) for finalizeV4Conversion to consume,
 // and stamps `_version = 4`. finalizeV4Conversion (a post-chain step)
-// reads that stash + assignments.json, writes windowrules.json, then deletes
+// reads that stash + assignments.json, writes rules.json, then deletes
 // assignments.json as the irreversible commit.
 
 namespace {
@@ -1416,8 +1435,8 @@ inline QString kV4DisableStashKey()
     return ConfigKeys::Legacy::v4DisableStashKey();
 }
 // Carries the v4 `Animations.AnimationAppRules` array forward to
-// finalizeV4Conversion, which converts each legacy entry into a WindowRule and
-// appends it to windowrules.json. The source key is removed from the
+// finalizeV4Conversion, which converts each legacy entry into a Rule and
+// appends it to rules.json. The source key is removed from the
 // Animations group in migrateV3ToV4 so the unified rule store becomes the sole
 // home for per-window animation overrides.
 inline QString kV4AnimationRulesStashKey()
@@ -1426,7 +1445,7 @@ inline QString kV4AnimationRulesStashKey()
 }
 // Sibling aliases for the v4 exclusion stashes added when the v3 Exclusions /
 // Animations.WindowFiltering lists were folded into Exclude / ExcludeAnimations
-// WindowRules. Same alias-policy as the two above: every stash key reads
+// Rules. Same alias-policy as the two above: every stash key reads
 // through a short shim in this TU so the call sites stay symmetric and the
 // purgeStaleKeys preservation list still resolves through ConfigKeys::Legacy.
 inline QString kV4ExclusionStashKey()
@@ -1479,7 +1498,7 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     QJsonObject display = root.value(ConfigKeys::Legacy::v3DisplayGroup()).toObject();
 
     // Move the disable-list values out of config.json: stash the value, then
-    // REMOVE the key. windowrules.json supersedes them — the runtime Settings
+    // REMOVE the key. rules.json supersedes them — the runtime Settings
     // layer reads DisableEngine rules from the store now, never these keys.
     // finalizeV4Conversion consumes the stash and writes the rules.
     QJsonObject stash;
@@ -1548,10 +1567,10 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     }
 
     // Animation App Rule stash: v4 folds per-window animation overrides into
-    // the unified windowrules.json store as `OverrideAnimationShader` /
+    // the unified rules.json store as `OverrideAnimationShader` /
     // `OverrideAnimationTiming` actions on a `WindowClass Contains <pattern>`
     // matcher. finalizeV4Conversion ports the bridge logic against the
-    // stashed JSON and appends the resulting WindowRules to the same rule
+    // stashed JSON and appends the resulting Rules to the same rule
     // set assignments/disable lists feed.
     QJsonObject animations = root.value(ConfigKeys::Legacy::v4AnimationsGroup()).toObject();
     const QJsonValue rawAnimationRules = animations.value(ConfigKeys::Legacy::v4AnimationAppRulesKey());
@@ -1583,9 +1602,9 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // time via the (now-deleted) legacy bridge — see git history for
     // `ExclusionListBridge` if forensics on the pre-v4 builder are needed.
     // v4 promotes those into
-    // first-class WindowRules: finalizeV4Conversion appends one
+    // first-class Rules: finalizeV4Conversion appends one
     // `AppId AppIdMatches <pattern> → Exclude` rule per surviving pattern to
-    // windowrules.json, so the daemon's runtime exclusion behaviour for an
+    // rules.json, so the daemon's runtime exclusion behaviour for an
     // upgrading user does not change. Read both raw values, surface non-string
     // disk values (same diagnostic shape as the moveDisableKey logger above),
     // strip the keys, and drop the group entirely if it's now empty.
@@ -1634,7 +1653,7 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // `Animations.WindowFiltering.{Applications,WindowClasses}` lists
     // historically fed the effect's `m_animationExclusionRuleSet` via the
     // bridge's `Contains`-leaf builder. v4 promotes those into first-class
-    // `ExcludeAnimations` WindowRules so the effect can drop both the
+    // `ExcludeAnimations` Rules so the effect can drop both the
     // QStringList settings and the per-effect rebuild. Same shape as the
     // snapping-side stash above — read raw, surface non-string disk
     // values, strip the keys, and drop the (dot-path) group if it's now
@@ -1797,12 +1816,11 @@ QStringList parseDisableList(const QString& csv)
 }
 
 /// Build a context rule from a v3 monitor disable-list entry (`screenId`).
-PhosphorWindowRules::WindowRule disableRuleForMonitor(const QString& screenId,
-                                                      PhosphorZones::AssignmentEntry::Mode mode)
+PhosphorRules::Rule disableRuleForMonitor(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode)
 {
     const QString name = disableRulePrefixFor(mode) + screenId;
-    return PhosphorWindowRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(),
-                                                                   PhosphorZones::modeToWireString(mode));
+    return PhosphorRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(),
+                                                             PhosphorZones::modeToWireString(mode));
 }
 
 /// Build a context rule from a v3 desktop disable-list entry (`screenId/N`).
@@ -1812,8 +1830,8 @@ PhosphorWindowRules::WindowRule disableRuleForMonitor(const QString& screenId,
 /// (split on `lastIndexOf('/')`), so a screen id with embedded slashes would be
 /// truncated. This matches the `screenId/desktop` composite-key convention used
 /// by Settings::writeDisableEntries.
-std::optional<PhosphorWindowRules::WindowRule> disableRuleForDesktop(const QString& entry,
-                                                                     PhosphorZones::AssignmentEntry::Mode mode)
+std::optional<PhosphorRules::Rule> disableRuleForDesktop(const QString& entry,
+                                                         PhosphorZones::AssignmentEntry::Mode mode)
 {
     const int slash = entry.lastIndexOf(QLatin1Char('/'));
     if (slash <= 0 || slash == entry.size() - 1) {
@@ -1826,8 +1844,8 @@ std::optional<PhosphorWindowRules::WindowRule> disableRuleForDesktop(const QStri
         return std::nullopt;
     }
     const QString name = disableRulePrefixFor(mode) + screenId + disableRuleDesktopSuffix(desktop);
-    return PhosphorWindowRules::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(),
-                                                                   PhosphorZones::modeToWireString(mode));
+    return PhosphorRules::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(),
+                                                             PhosphorZones::modeToWireString(mode));
 }
 
 /// Build a context rule from a v3 activity disable-list entry
@@ -1841,8 +1859,8 @@ std::optional<PhosphorWindowRules::WindowRule> disableRuleForDesktop(const QStri
 /// to the left is the screen ID (which may carry an embedded `/CONNECTOR`
 /// suffix). Matches the live `Settings::writeDisableEntries` decoder in
 /// src/config/settings.cpp.
-std::optional<PhosphorWindowRules::WindowRule> disableRuleForActivity(const QString& entry,
-                                                                      PhosphorZones::AssignmentEntry::Mode mode)
+std::optional<PhosphorRules::Rule> disableRuleForActivity(const QString& entry,
+                                                          PhosphorZones::AssignmentEntry::Mode mode)
 {
     const int slash = entry.lastIndexOf(QLatin1Char('/'));
     if (slash <= 0 || slash == entry.size() - 1) {
@@ -1851,8 +1869,8 @@ std::optional<PhosphorWindowRules::WindowRule> disableRuleForActivity(const QStr
     const QString screenId = entry.left(slash);
     const QString activity = entry.mid(slash + 1);
     const QString name = disableRulePrefixFor(mode) + screenId + disableRuleActivitySuffix();
-    return PhosphorWindowRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity,
-                                                                   PhosphorZones::modeToWireString(mode));
+    return PhosphorRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity,
+                                                             PhosphorZones::modeToWireString(mode));
 }
 
 /// Parse one Assignment:* group name into (screenId, desktop, activity).
@@ -1917,8 +1935,8 @@ QString assignmentRuleName(const QString& screenId, int desktop, const QString& 
     return name;
 }
 
-// ─── Animation App Rule → WindowRule conversion ─────────────────────────────
-// Ports the (now-deleted) PhosphorWindowRules::AnimationAppRuleBridge logic
+// ─── Animation App Rule → Rule conversion ─────────────────────────────
+// Ports the (now-deleted) PhosphorRules::AnimationAppRuleBridge logic
 // against the raw stash JSON. The legacy AnimationAppRule type is gone in v4+,
 // so the conversion lives here — the migration is its sole remaining caller.
 
@@ -1964,7 +1982,7 @@ bool isValidAnimationAppRuleSource(const QJsonObject& source)
         || kindStr.compare(kKindTiming, Qt::CaseInsensitive) == 0;
 }
 
-/// Build a single WindowRule from a legacy AnimationAppRule JSON object
+/// Build a single Rule from a legacy AnimationAppRule JSON object
 /// already known to pass @ref isValidAnimationAppRuleSource. The caller is
 /// responsible for validating before calling; this function is total on
 /// valid input.
@@ -1973,20 +1991,20 @@ bool isValidAnimationAppRuleSource(const QJsonObject& source)
 ///               list — used to derive `priority = count - i`.
 /// @param count  total VALID source entries (priority floors at 1, reserving
 ///               0 for the provider-default catch-all band).
-PhosphorWindowRules::WindowRule buildAnimationAppRule(const QJsonObject& source, int i, int count)
+PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int count)
 {
-    namespace ActionParam = PhosphorWindowRules::ActionParam;
+    namespace ActionParam = PhosphorRules::ActionParam;
 
     const QString classPattern = source.value(kKeyClassPattern).toString();
     const QString eventPath = source.value(kKeyEventPath).toString();
     const QString kindStr = source.value(kKeyKind).toString();
     const bool isShader = kindStr.compare(kKindShader, Qt::CaseInsensitive) == 0;
 
-    PhosphorWindowRules::RuleAction action;
+    PhosphorRules::RuleAction action;
     QJsonObject params;
     params.insert(ActionParam::Event, eventPath);
     if (isShader) {
-        action.type = QString(PhosphorWindowRules::ActionType::OverrideAnimationShader);
+        action.type = QString(PhosphorRules::ActionType::OverrideAnimationShader);
         // effectId is always written — the empty string is the engaged-blocking
         // sentinel ("disable shader for matching windows"), distinct from an
         // unfilled slot ("no rule matched").
@@ -2012,7 +2030,7 @@ PhosphorWindowRules::WindowRule buildAnimationAppRule(const QJsonObject& source,
                 i, qPrintable(classPattern));
         }
     } else {
-        action.type = QString(PhosphorWindowRules::ActionType::OverrideAnimationTiming);
+        action.type = QString(PhosphorRules::ActionType::OverrideAnimationTiming);
         const QString curve = source.value(kKeyCurve).toString();
         if (!curve.isEmpty()) {
             params.insert(ActionParam::Curve, curve);
@@ -2028,21 +2046,21 @@ PhosphorWindowRules::WindowRule buildAnimationAppRule(const QJsonObject& source,
     }
     action.params = params;
 
-    PhosphorWindowRules::WindowRule rule;
+    PhosphorRules::Rule rule;
     // Deterministic id from the source identity tuple so repeated migrations
     // yield byte-identical rules — keeps the conversion idempotent under
     // crash-and-retry. The third segment uses the canonical lowercase kind
     // ("shader" / "timing"); hand-edited uppercase input on disk still
     // produces the same id since the kind-string compare above is
     // case-insensitive.
-    rule.id = QUuid::createUuidV5(
-        animationAppRuleNamespaceUuid(),
-        PhosphorWindowRules::Detail::encodeSegment(classPattern) + PhosphorWindowRules::Detail::encodeSegment(eventPath)
-            + PhosphorWindowRules::Detail::encodeSegment(isShader ? kKindShader : kKindTiming));
+    rule.id = QUuid::createUuidV5(animationAppRuleNamespaceUuid(),
+                                  PhosphorRules::Detail::encodeSegment(classPattern)
+                                      + PhosphorRules::Detail::encodeSegment(eventPath)
+                                      + PhosphorRules::Detail::encodeSegment(isShader ? kKindShader : kKindTiming));
     rule.enabled = true;
     rule.priority = count - i;
-    rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::WindowClass,
-                                                                PhosphorWindowRules::Operator::Contains, classPattern);
+    rule.match = PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::WindowClass,
+                                                          PhosphorRules::Operator::Contains, classPattern);
     rule.actions.append(action);
     return rule;
 }
@@ -2054,7 +2072,7 @@ PhosphorWindowRules::WindowRule buildAnimationAppRule(const QJsonObject& source,
 /// entries don't leave gaps in the descending-by-list-order priority
 /// sequence (`AnimationAppRuleList::fromJson` filtered first; `toRuleSet`
 /// then used the filtered `entries.size()` as count).
-void appendAnimationRulesFromStash(QList<PhosphorWindowRules::WindowRule>& rules, const QJsonArray& stash)
+void appendAnimationRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJsonArray& stash)
 {
     QList<QJsonObject> valid;
     valid.reserve(stash.size());
@@ -2084,19 +2102,19 @@ void appendAnimationRulesFromStash(QList<PhosphorWindowRules::WindowRule>& rules
 /// the same id post-migration. Two consequences of the deterministic
 /// derivation:
 ///   - within a single rebuild, two source patterns that derive the same
-///     id collapse via `WindowRuleSet::setRules`' id-dedup (so the snapping
+///     id collapse via `RuleSet::setRules`' id-dedup (so the snapping
 ///     fold of identical patterns across both v3 lists yields one rule);
 ///     cross-RUN idempotency is provided separately by the
-///     `windowRulesAlreadyConverted` existence probe in the finalizer, which
-///     refuses to rebuild once windowrules.json exists, so the rebuild path
+///     `rulesAlreadyConverted` existence probe in the finalizer, which
+///     refuses to rebuild once rules.json exists, so the rebuild path
 ///     never runs twice, and
 ///   - the LEGACY runtime bridge's id (pre-v4 daemons that built the
 ///     same rule from the same lists at runtime) matches the migration's
 ///     id, so a v4 store that somehow saw both producers stays consistent.
 /// This is NOT a dedup against hand-authored rules: a user authoring an
-/// `AppId AppIdMatches firefox → Exclude` rule through the Window Rules
+/// `AppId AppIdMatches firefox → Exclude` rule through the Rules
 /// page receives a fresh `QUuid::createUuid()` random id at allocation
-/// time (windowrulecontroller.cpp / WindowRule default-constructed `id`),
+/// time (rulecontroller.cpp / Rule default-constructed `id`),
 /// not the deterministic UUIDv5 the migration derives. The migration's
 /// rule and the user's rule will coexist as two distinct entries with
 /// semantically-equivalent matches — the store dedups on id, not on
@@ -2118,14 +2136,14 @@ inline const QUuid& exclusionMigrationNamespace()
 // ExcludeAnimations wire-string static_assert below guards against. MatchTypes.h
 // already documents "keeping enum values stable across versions"; pin the exact
 // values the derivation depends on so a renumber breaks the build instead.
-static_assert(static_cast<int>(PhosphorWindowRules::Field::AppId) == 0
-                  && static_cast<int>(PhosphorWindowRules::Field::WindowClass) == 1
-                  && static_cast<int>(PhosphorWindowRules::Field::DesktopFile) == 2,
+static_assert(static_cast<int>(PhosphorRules::Field::AppId) == 0
+                  && static_cast<int>(PhosphorRules::Field::WindowClass) == 1
+                  && static_cast<int>(PhosphorRules::Field::DesktopFile) == 2,
               "Field enum values feed migrated exclusion-rule UUIDs — renumbering them silently "
               "changes every migrated rule id. Bump the schema version and write a v4→v5 migration "
               "if a renumber is truly needed.");
-static_assert(static_cast<int>(PhosphorWindowRules::Operator::Contains) == 1
-                  && static_cast<int>(PhosphorWindowRules::Operator::AppIdMatches) == 5,
+static_assert(static_cast<int>(PhosphorRules::Operator::Contains) == 1
+                  && static_cast<int>(PhosphorRules::Operator::AppIdMatches) == 5,
               "Operator enum values feed migrated exclusion-rule UUIDs — renumbering them silently "
               "changes every migrated rule id. Bump the schema version and write a v4→v5 migration "
               "if a renumber is truly needed.");
@@ -2140,16 +2158,16 @@ static_assert(static_cast<int>(PhosphorWindowRules::Operator::Contains) == 1
 /// one `AppId AppIdMatches <pattern>` matcher with a terminal `Exclude`
 /// action. Empty / whitespace-only patterns are dropped, mirroring the
 /// runtime bridge's `pattern.trimmed().isEmpty()` skip.
-void appendExclusionRulesFromStash(QList<PhosphorWindowRules::WindowRule>& rules, const QJsonObject& stash)
+void appendExclusionRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJsonObject& stash)
 {
-    using namespace PhosphorWindowRules;
+    using namespace PhosphorRules;
     const auto appendOne = [&rules](const QString& rawCsv) {
         for (const QString& part : rawCsv.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
             const QString pattern = part.trimmed();
             if (pattern.isEmpty()) {
                 continue;
             }
-            WindowRule rule;
+            Rule rule;
             // Deterministic id keyed off `(field, op, pattern)` — byte-
             // identical namespace + segment encoding to the (now-retired)
             // legacy runtime bridge so any pre-v4 daemon that bridge-built
@@ -2164,7 +2182,7 @@ void appendExclusionRulesFromStash(QList<PhosphorWindowRules::WindowRule>& rules
             rule.enabled = true;
             // priority = 0 leaves the rule at the bottom of the
             // controller-renormalized list within its band. The user can
-            // drag-reorder it in the Window Rules page if precedence matters.
+            // drag-reorder it in the Rules page if precedence matters.
             rule.priority = 0;
             rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);
             RuleAction action;
@@ -2178,7 +2196,7 @@ void appendExclusionRulesFromStash(QList<PhosphorWindowRules::WindowRule>& rules
     appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedWindowClassesKey()).toString());
 }
 
-/// Seed the premade "Steam" Window Rule into a freshly-built v4 rule set.
+/// Seed the premade "Steam" Rule into a freshly-built v4 rule set.
 ///
 /// Steam is a CEF/XWayland client that spawns most of its UI — the Friends
 /// List, the self-drawn `notificationtoasts_<N>_desktop` popups, Settings, and
@@ -2205,10 +2223,10 @@ void appendExclusionRulesFromStash(QList<PhosphorWindowRules::WindowRule>& rules
 /// case-insensitively; the `Title Equals "Steam"` guard is likewise
 /// case-insensitive (see MatchTypes operator semantics). The id is a fixed
 /// deterministic UUIDv5 so a re-run never produces a duplicate.
-void appendSteamDefaultRule(QList<PhosphorWindowRules::WindowRule>& rules)
+void appendSteamDefaultRule(QList<PhosphorRules::Rule>& rules)
 {
-    using namespace PhosphorWindowRules;
-    WindowRule rule;
+    using namespace PhosphorRules;
+    Rule rule;
     rule.id = QUuid::createUuidV5(exclusionMigrationNamespace(),
                                   Detail::encodeSegment(QStringLiteral("steam-default-exclude")));
     rule.name = QStringLiteral("Steam");
@@ -2237,9 +2255,9 @@ void appendSteamDefaultRule(QList<PhosphorWindowRules::WindowRule>& rules)
 /// match-field distinction (unlike the snapping-side migration above,
 /// which folded both into AppId rules because the daemon's runtime
 /// bridge already collapsed the distinction).
-void appendAnimationExclusionRulesFromStash(QList<PhosphorWindowRules::WindowRule>& rules, const QJsonObject& stash)
+void appendAnimationExclusionRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJsonObject& stash)
 {
-    using namespace PhosphorWindowRules;
+    using namespace PhosphorRules;
     // Pin the wire-string for ExcludeAnimations against a future rename.
     // The animation-exclusion rule id is derived as
     // `UUIDv5(namespace, "<field>" + "<op>" + "<pattern>" + "<actionType>")`
@@ -2265,7 +2283,7 @@ void appendAnimationExclusionRulesFromStash(QList<PhosphorWindowRules::WindowRul
             if (pattern.isEmpty()) {
                 continue;
             }
-            WindowRule rule;
+            Rule rule;
             // Deterministic id keyed off `(field, op, pattern, action)` — same
             // namespace + segment encoding as the snapping-side exclusion
             // migration so identical inputs collapse to identical ids on
@@ -2346,7 +2364,7 @@ constexpr std::array<QLatin1String, 14> kLayoutSettingKeys{{
 }};
 
 /// Convert each layout file's legacy per-layout `appRules` into first-class
-/// WindowRules. v3 stored app→zone assignments on the Layout (`Layout::appRules`:
+/// Rules. v3 stored app→zone assignments on the Layout (`Layout::appRules`:
 /// a `{pattern, zoneNumber, targetScreen}` triple, single zone); v4 unifies them
 /// into the window-rule store. Each becomes `AppId AppIdMatches <pattern> →
 /// SnapToZone [zoneNumber]`, plus a `RouteToScreen <targetScreen>` action when the
@@ -2381,9 +2399,9 @@ constexpr std::array<QLatin1String, 14> kLayoutSettingKeys{{
 /// placement; on a same-pattern / different-zone conflict the first wins and the
 /// rest are logged. Layout files are visited in name order for deterministic
 /// "first wins".
-void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& rules, const QString& layoutsDir)
+void appendLayoutAppRulesAsSnapToZone(QList<PhosphorRules::Rule>& rules, const QString& layoutsDir)
 {
-    using namespace PhosphorWindowRules;
+    using namespace PhosphorRules;
     QDir dir(layoutsDir);
     if (!dir.exists()) {
         return;
@@ -2450,7 +2468,7 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& ru
             }
             seenPatterns.insert(patternKey);
 
-            WindowRule rule;
+            Rule rule;
             // Deterministic id from (normalized pattern, zone, target screen) so a
             // crash-and-retry conversion yields byte-identical rules.
             rule.id =
@@ -2565,7 +2583,7 @@ bool relocateLayoutSettingsImpl(const QString& layoutsDir, const QString& sideca
     // file on disk yet. The sidecar is the authoritative copy; it must be durably
     // written BEFORE any source file is slimmed, so a crash (or a sidecar write
     // failure) can never leave settings stripped from the layout file but absent
-    // from the sidecar. Mirrors finalizeV4Conversion's "write windowrules.json
+    // from the sidecar. Mirrors finalizeV4Conversion's "write rules.json
     // before retiring assignments.json" ordering.
     struct PendingStrip
     {
@@ -2639,11 +2657,11 @@ bool ConfigMigration::relocateLayoutSettings(const QString& layoutsDir, const QS
 
 bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 {
-    const QString windowRulesPath = ConfigDefaults::windowRulesFilePath();
+    const QString rulesPath = ConfigDefaults::rulesFilePath();
     const QString assignmentsPath = legacyAssignmentsFilePath();
 
     // ── Relocate per-layout settings out of the layout files (v4) ──────────
-    // Independent of the windowrules/assignments machinery below: split each
+    // Independent of the rules/assignments machinery below: split each
     // layout file's embedded settings into the layout-settings.json sidecar and
     // slim the file. Idempotent (already-slim files are skipped) and best-effort
     // — a relocation failure leaves the settings embedded (still read by the
@@ -2652,7 +2670,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     //
     // Deliberately runs BEFORE — and independent of — the config-version stall
     // gate further down (the `configVersion < ConfigSchemaVersion` guard that
-    // refuses to commit windowrules.json on a stalled chain). The layout file
+    // refuses to commit rules.json on a stalled chain). The layout file
     // format is NOT tied to config.json's `_version`: layouts live in the data
     // dir, the version stamp lives in config.json. Relocating them is correct
     // and safe regardless of whether the config chain advanced, and the step is
@@ -2669,13 +2687,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     }
 
     // ── Conversion-done vs cleanup-done — two SEPARATE concerns ─────────────
-    // The conversion is multi-step: write windowrules.json (the irreversible
+    // The conversion is multi-step: write rules.json (the irreversible
     // commit) → relocate QuickLayouts → strip config.json's `_v4DisableStash`
     // → delete assignments.json. These split into two questions that MUST NOT
     // be conflated:
     //
-    //   "Is the v3→v4 conversion done?"  ⇒ does windowrules.json exist as a
-    //       valid v4 WindowRuleSet? If so the conversion IS done — the rule
+    //   "Is the v3→v4 conversion done?"  ⇒ does rules.json exist as a
+    //       valid v4 RuleSet? If so the conversion IS done — the rule
     //       store is authoritative and may have since been edited by the user
     //       (rule editor) or Settings (disable lists). It must NEVER be
     //       rebuilt-and-overwritten from the dead assignments.json again.
@@ -2688,15 +2706,15 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     //       fs, lock) they are retried on the next run — but the rebuild
     //       is NOT.
     //
-    // Probe "conversion done" by actually loading windowrules.json as a
-    // WindowRuleSet (named SchemaVersion check, not a bare `_version >= 4` on
+    // Probe "conversion done" by actually loading rules.json as a
+    // RuleSet (named SchemaVersion check, not a bare `_version >= 4` on
     // an unrelated version namespace) — a file that parses as a v4 rule set is
     // by definition the completed conversion output.
-    const bool windowRulesAlreadyConverted =
-        QFile::exists(windowRulesPath) && PhosphorWindowRules::WindowRuleSet::loadFromFile(windowRulesPath).has_value();
+    const bool rulesAlreadyConverted =
+        QFile::exists(rulesPath) && PhosphorRules::RuleSet::loadFromFile(rulesPath).has_value();
 
-    if (windowRulesAlreadyConverted) {
-        // The conversion is complete. NEVER rebuild + overwrite windowrules.json
+    if (rulesAlreadyConverted) {
+        // The conversion is complete. NEVER rebuild + overwrite rules.json
         // — doing so would silently destroy every user-authored rule and every
         // disable-list edit made since the first conversion. Only retry the
         // still-pending, idempotent cleanup steps.
@@ -2754,24 +2772,24 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         return ok;
     }
 
-    // From here down: windowrules.json does NOT yet exist as a valid v4 rule
-    // set — a genuine first run, or a crash before windowrules.json was
+    // From here down: rules.json does NOT yet exist as a valid v4 rule
+    // set — a genuine first run, or a crash before rules.json was
     // written. Only this path rebuilds and writes the rule store.
 
-    // Pre-flight windowrules.json itself: the "already converted" probe
-    // above gates on a `WindowRuleSet::loadFromFile(...).has_value()` parse
+    // Pre-flight rules.json itself: the "already converted" probe
+    // above gates on a `RuleSet::loadFromFile(...).has_value()` parse
     // check. If the file EXISTS but the loader returned nullopt (malformed
     // JSON, truncated write, hand-edit error), we'd otherwise fall through
     // to a rebuild that overwrites the corrupt-but-recoverable original
     // with a stub provider-default rule set — destroying every user-authored
     // rule. Quarantine to `.corrupt.bak` and abort instead, mirroring the
     // assignments-prevalidate contract below.
-    if (!prevalidateWindowRulesFile(windowRulesPath)) {
+    if (!prevalidateRulesFile(rulesPath)) {
         return false;
     }
 
     // Pre-flight the legacy assignments.json: a malformed sidecar must abort
-    // BEFORE we write windowrules.json (otherwise we'd commit a
+    // BEFORE we write rules.json (otherwise we'd commit a
     // provider-default-only rule set that silently drops every assignment AND
     // the quick-layout slots, and then quarantine the corrupt original to
     // `.migrated` — masking the failure as a successful migration).
@@ -2797,14 +2815,14 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
     }
 
-    // Refuse to commit a v4 marker (the eventual windowrules.json write
+    // Refuse to commit a v4 marker (the eventual rules.json write
     // below) when config.json has not actually reached v4. If a prior
     // run's migration chain stalled (e.g. migrateV1ToV2's side-effect
     // writes failed, leaving the disk-side _version at 1),
     // `MigrationRunner::runOnFile` returns `true` for a no-op chain —
     // ensureJsonConfigImpl then proceeds here with a still-v1
-    // configRoot. Writing an empty/stub windowrules.json now would set
-    // `windowRulesAlreadyConverted=true` on the next run; the cleanup-
+    // configRoot. Writing an empty/stub rules.json now would set
+    // `rulesAlreadyConverted=true` on the next run; the cleanup-
     // only branch above would then strip all four stash keys
     // (populated by a later successful chain run) without porting them
     // into rules — permanently losing the user's disable lists,
@@ -2814,9 +2832,9 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         const int configVersion = configRoot.value(ConfigKeys::versionKey()).toInt(0);
         if (configVersion < ConfigSchemaVersion) {
             qWarning(
-                "ConfigMigration::finalizeV4Conversion: refusing to commit windowrules.json — "
+                "ConfigMigration::finalizeV4Conversion: refusing to commit rules.json — "
                 "config.json is still at v%d (target v%d). The migration chain did not advance; "
-                "a stub windowrules.json now would mask the stalled chain on the next run and "
+                "a stub rules.json now would mask the stalled chain on the next run and "
                 "silently drop the user's disable lists / animation app rules when the chain "
                 "eventually succeeds.",
                 configVersion, ConfigSchemaVersion);
@@ -2864,13 +2882,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
     }
 
-    // windowrules.json is always written below (see "Write windowrules.json"),
+    // rules.json is always written below (see "Write rules.json"),
     // regardless of how much v3 data was found. When there is nothing to
     // convert (no stash, no assignments file) the `rules` list stays empty and
     // an empty rule set is written — the daemon's store still needs a stable
     // file to exist on disk.
 
-    QList<PhosphorWindowRules::WindowRule> rules;
+    QList<PhosphorRules::Rule> rules;
 
     // ── Assignment rules ───────────────────────────────────────────────────
     QJsonObject quickLayoutsToRelocate;
@@ -2906,7 +2924,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             const QString snappingLayout = grp.value(ConfigKeys::Legacy::v3AssignmentLayout()).toString();
             const QString tilingAlgorithm = grp.value(ConfigKeys::Legacy::v3AssignmentAlgorithm()).toString();
 
-            rules.append(PhosphorWindowRules::ContextRuleBridge::makeAssignmentRule(
+            rules.append(PhosphorRules::ContextRuleBridge::makeAssignmentRule(
                 assignmentRuleName(screenId, desktop, activity), screenId, desktop, activity,
                 PhosphorZones::modeToWireString(mode), snappingLayout, tilingAlgorithm));
         }
@@ -2943,7 +2961,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         const auto defaultMode = (defaultLayoutId.isEmpty() && !defaultAlgorithm.isEmpty())
             ? PhosphorZones::AssignmentEntry::Autotile
             : PhosphorZones::AssignmentEntry::Snapping;
-        rules.append(PhosphorWindowRules::ContextRuleBridge::makeProviderDefaultRule(
+        rules.append(PhosphorRules::ContextRuleBridge::makeProviderDefaultRule(
             QStringLiteral("Default"), PhosphorZones::modeToWireString(defaultMode), defaultLayoutId,
             defaultAlgorithm));
     }
@@ -2954,7 +2972,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // merged into the final set — migrateV2ToV3 duplicates each v2 value into
     // both the snapping and autotile lists, so a stash carried forward from a
     // hand-edited or doubly-migrated config can hold the same entry twice.
-    QList<PhosphorWindowRules::WindowRule> disableRules;
+    QList<PhosphorRules::Rule> disableRules;
     auto appendMonitorRules = [&disableRules](const QString& csv, PhosphorZones::AssignmentEntry::Mode mode) {
         for (const QString& entry : parseDisableList(csv)) {
             disableRules.append(disableRuleForMonitor(entry, mode));
@@ -2986,9 +3004,9 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // (mode-token, screenId, desktop, activity) so the migrated store is no
     // noisier than necessary.
     {
-        namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+        namespace CRB = PhosphorRules::ContextRuleBridge;
         QSet<QString> seen;
-        for (const PhosphorWindowRules::WindowRule& rule : std::as_const(disableRules)) {
+        for (const PhosphorRules::Rule& rule : std::as_const(disableRules)) {
             QString screenId;
             int desktop = 0;
             QString activity;
@@ -3013,16 +3031,16 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
     }
 
-    // ── Animation App Rules → WindowRules ──────────────────────────────────
+    // ── Animation App Rules → Rules ──────────────────────────────────
     // Port the (now-deleted) AnimationAppRuleBridge logic against the stashed
     // legacy JSON. The animation rules target slot prefixes (`anim-shader:`,
     // `anim-timing:`) that no other rule type fills, so they coexist with the
     // assignment/disable rules above regardless of priority interleaving.
     appendAnimationRulesFromStash(rules, animationRulesStash);
 
-    // ── Exclusions → WindowRules ───────────────────────────────────────────
+    // ── Exclusions → Rules ───────────────────────────────────────────
     // Promote the legacy `Exclusions.{Applications,WindowClasses}` lists into
-    // first-class WindowRules so the runtime no longer needs the bridge that
+    // first-class Rules so the runtime no longer needs the bridge that
     // re-built them on every settings change. Each surviving pattern becomes
     // an Application-subject `AppId AppIdMatches <pattern>` matcher with a
     // terminal `Exclude` action — the same shape the legacy runtime bridge
@@ -3031,7 +3049,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // preserved for an upgrading user.
     appendExclusionRulesFromStash(rules, exclusionStash);
 
-    // ── Animation exclusions → WindowRules ────────────────────────────────
+    // ── Animation exclusions → Rules ────────────────────────────────
     // Same fold for the animation-page exclusion lists: each surviving
     // pattern becomes a `DesktopFile`/`WindowClass Contains <pattern>`
     // matcher with a terminal `ExcludeAnimations` action — the new
@@ -3046,20 +3064,20 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // and self-drawn notification-toast top-levels that slip the effect's
     // structural popup filter and get auto-tiled. Seeded once here so every
     // fresh install AND every v3→v4 upgrade gets it; the
-    // `windowRulesAlreadyConverted` gate at the top of this function keeps the
+    // `rulesAlreadyConverted` gate at the top of this function keeps the
     // rebuild path from re-seeding it (or resurrecting it after a user deletes
     // it) on any later run. See `appendSteamDefaultRule` for the match/enforcement
     // rationale.
     appendSteamDefaultRule(rules);
 
-    // ── Per-layout app rules → SnapToZone WindowRules ──────────────────────
+    // ── Per-layout app rules → SnapToZone Rules ──────────────────────
     // v3 stored app→zone assignments on each Layout (`Layout::appRules`); v4
     // unifies them into the window-rule store. Read every layout file's legacy
     // `appRules` array and emit one SnapToZone rule per assignment, so an
     // upgrading user's pinned apps keep snapping to their zone(s) through the
     // new single system. Layouts live in the user-writable data dir (separate
-    // from config.json / windowrules.json), so resolve that path directly. This
-    // runs only on the first conversion (the `windowRulesAlreadyConverted` gate
+    // from config.json / rules.json), so resolve that path directly. This
+    // runs only on the first conversion (the `rulesAlreadyConverted` gate
     // above), which every real v3→v4 upgrade hits exactly once.
     {
         const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
@@ -3068,17 +3086,17 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     }
 
     // ── Relocate QuickLayouts to the quicklayouts.json sidecar (FIRST) ─────
-    // Quick-layout slots are NOT window rules — they belong in the sibling
-    // sidecar LayoutRegistry reads (next to windowrules.json), not in the rule
+    // Quick-layout slots are NOT rules — they belong in the sibling
+    // sidecar LayoutRegistry reads (next to rules.json), not in the rule
     // store and not in config.json. The v3 slots are all snapping (zone-layout)
     // bindings, wrapped below under the snapping key of the mode-nested
     // quicklayouts.json shape — the single format LayoutRegistry reads.
     //
     // Write-order rationale (B4 data-loss fix): the sidecar MUST be durably
-    // written BEFORE windowrules.json — windowrules.json is the irreversible
-    // commit marker (its mere existence flips the `windowRulesAlreadyConverted`
+    // written BEFORE rules.json — rules.json is the irreversible
+    // commit marker (its mere existence flips the `rulesAlreadyConverted`
     // probe on the next run, gating the rebuild path off forever). If the
-    // sidecar write fails AFTER windowrules.json was committed, the next run
+    // sidecar write fails AFTER rules.json was committed, the next run
     // takes the cleanup-only branch and never re-attempts the relocation,
     // while assignments.json gets quarantined to .migrated — the slot data is
     // recoverable only by hand. Writing the sidecar first means a sidecar
@@ -3111,9 +3129,8 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             nested.insert(PhosphorZones::LayoutRegistry::QuickSlotsSnappingKey, quickLayoutsToRelocate);
             nested.insert(PhosphorZones::LayoutRegistry::QuickSlotsAutotileKey, QJsonObject{});
             if (!PhosphorConfig::JsonBackend::writeJsonAtomically(quickLayoutsPath, nested)) {
-                qWarning(
-                    "ConfigMigration: failed to write %s — aborting v4 conversion before committing windowrules.json",
-                    qPrintable(quickLayoutsPath));
+                qWarning("ConfigMigration: failed to write %s — aborting v4 conversion before committing rules.json",
+                         qPrintable(quickLayoutsPath));
                 return false;
             }
             qInfo("ConfigMigration: relocated %d quick-layout slots to %s",
@@ -3121,18 +3138,18 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
     }
 
-    // ── Write windowrules.json (atomic — the irreversible commit) ──────────
-    // This is the marker that gates `windowRulesAlreadyConverted` on the next
+    // ── Write rules.json (atomic — the irreversible commit) ──────────
+    // This is the marker that gates `rulesAlreadyConverted` on the next
     // run. It MUST go after the sidecar relocation (see comment above) — once
     // this file exists as a valid v4 rule set, the cleanup-only branch
     // short-circuits the rebuild forever.
-    PhosphorWindowRules::WindowRuleSet ruleSet;
+    PhosphorRules::RuleSet ruleSet;
     const int inputRuleCount = rules.size();
     ruleSet.setRules(rules);
     const int storedRuleCount = ruleSet.count();
-    QDir().mkpath(QFileInfo(windowRulesPath).absolutePath());
-    if (!ruleSet.saveToFile(windowRulesPath)) {
-        qWarning("ConfigMigration: failed to write %s — aborting v4 conversion", qPrintable(windowRulesPath));
+    QDir().mkpath(QFileInfo(rulesPath).absolutePath());
+    if (!ruleSet.saveToFile(rulesPath)) {
+        qWarning("ConfigMigration: failed to write %s — aborting v4 conversion", qPrintable(rulesPath));
         return false;
     }
     // Log the input-vs-stored delta whenever setRules drops candidates.
@@ -3147,8 +3164,8 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     //      DesktopFile vs WindowClass entries hash distinctly); dedup
     //      only fires there for literal within-list duplicates
     //      ("firefox,firefox" in one list).
-    //   2. Validator rejection. WindowRuleSet::setRules silently drops
-    //      rules whose `WindowRule::isValid()` returns false (null id,
+    //   2. Validator rejection. RuleSet::setRules silently drops
+    //      rules whose `Rule::isValid()` returns false (null id,
     //      invalid match, zero actions, or action-validator failure).
     //      The migration's builders should never produce such rules
     //      today; a non-zero delta with no UUIDv5 collision in the
@@ -3156,11 +3173,11 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // Surfacing the delta makes either case forensically visible.
     if (storedRuleCount != inputRuleCount) {
         qInfo(
-            "ConfigMigration: wrote %d window rules to %s (dropped %d of %d candidates — UUIDv5 collision OR "
+            "ConfigMigration: wrote %d rules to %s (dropped %d of %d candidates — UUIDv5 collision OR "
             "validator rejection; see preceding setRules warnings to discriminate)",
-            storedRuleCount, qPrintable(windowRulesPath), inputRuleCount - storedRuleCount, inputRuleCount);
+            storedRuleCount, qPrintable(rulesPath), inputRuleCount - storedRuleCount, inputRuleCount);
     } else {
-        qInfo("ConfigMigration: wrote %d window rules to %s", storedRuleCount, qPrintable(windowRulesPath));
+        qInfo("ConfigMigration: wrote %d rules to %s", storedRuleCount, qPrintable(rulesPath));
     }
 
     // ── Rewrite config.json: strip the temporary stash keys ────────────────
@@ -3194,11 +3211,11 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     }
 
     // ── Retire assignments.json — the post-conversion cleanup tail ─────────
-    // windowrules.json (and quicklayouts.json) now durably hold every datum
+    // rules.json (and quicklayouts.json) now durably hold every datum
     // assignments.json carried; the runtime LayoutRegistry reads the rule
     // store exclusively. Retiring the legacy file LAST keeps the conversion
     // crash-recoverable. This step is non-fatal and idempotent: if it fails,
-    // the next run sees windowrules.json already at the v4 WindowRuleSet
+    // the next run sees rules.json already at the v4 RuleSet
     // schema, takes the cleanup-only branch, and retries the retire — it does
     // NOT rebuild-and-overwrite the (possibly user-edited) rule store.
     retireLegacyAssignmentsFile(assignmentsPath);
@@ -3211,9 +3228,9 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 // The v4 schema stored per-mode (separate Snapping vs Tiling) window
 // appearance (borders, title bars, colours) and gap settings in config.json
 // PLUS per-screen gap subsets. This branch deleted those settings and routes
-// the same concerns through window rules. migrateV4ToV5 stashes the values
+// the same concerns through rules. migrateV4ToV5 stashes the values
 // that DIFFER from the v4 compile defaults; finalizeV5Conversion turns the
-// stash into override rules in windowrules.json.
+// stash into override rules in rules.json.
 //
 // Schema-migration freeze policy (mirrors migrateV3ToV4): every v4 group/key
 // spelling and every v4 compile-default value the migration depends on is
@@ -3410,21 +3427,21 @@ void stripKeysAtPath(QJsonObject& root, const QStringList& segments, const QList
 }
 
 // ── finalize-side action builders ──────────────────────────────────────────
-PhosphorWindowRules::RuleAction makeValueAction(QLatin1StringView type, const QJsonValue& value)
+PhosphorRules::RuleAction makeValueAction(QLatin1StringView type, const QJsonValue& value)
 {
-    PhosphorWindowRules::RuleAction a;
+    PhosphorRules::RuleAction a;
     a.type = QString(type);
-    a.params.insert(QString(PhosphorWindowRules::ActionParam::Value), value);
+    a.params.insert(QString(PhosphorRules::ActionParam::Value), value);
     return a;
 }
 
 // Convert a normalized stash field object into the matching window-rule
 // actions. Handles both the per-mode (appearance + gaps) and per-screen
 // (gaps-only) cases — absent fields simply contribute no action.
-QList<PhosphorWindowRules::RuleAction> actionsFromFields(const QJsonObject& fields)
+QList<PhosphorRules::RuleAction> actionsFromFields(const QJsonObject& fields)
 {
-    namespace AT = PhosphorWindowRules::ActionType;
-    QList<PhosphorWindowRules::RuleAction> actions;
+    namespace AT = PhosphorRules::ActionType;
+    QList<PhosphorRules::RuleAction> actions;
     const auto addBool = [&](QLatin1String field, QLatin1StringView type) {
         if (fields.value(field).isBool()) {
             actions.append(makeValueAction(type, fields.value(field).toBool()));
@@ -3457,8 +3474,8 @@ QList<PhosphorWindowRules::RuleAction> actionsFromFields(const QJsonObject& fiel
 }
 
 // Non-managed override rule seed priorities. These mirror
-// WindowRuleTemplates::kAdvancedBandBase / kContextBandBase
-// (src/settings/windowruletemplates.h) — duplicated because that header lives
+// RuleTemplates::kAdvancedBandBase / kContextBandBase
+// (src/settings/ruletemplates.h) — duplicated because that header lives
 // in the settings target and the core library cannot link it. The exact seed
 // only needs to place each rule in its band ABOVE the INT_MIN managed
 // baselines; the settings controller re-stamps band priorities on the next
@@ -3622,20 +3639,20 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
     const QJsonObject stash = configRoot.value(ConfigKeys::Legacy::v5AppearanceStashKey()).toObject();
 
     // ── Build the override rules from the stash ────────────────────────────
-    using PhosphorWindowRules::Field;
-    using PhosphorWindowRules::MatchExpression;
-    using PhosphorWindowRules::Operator;
-    using PhosphorWindowRules::WindowRule;
+    using PhosphorRules::Field;
+    using PhosphorRules::MatchExpression;
+    using PhosphorRules::Operator;
+    using PhosphorRules::Rule;
 
-    QList<WindowRule> newRules;
+    QList<Rule> newRules;
 
     const auto appendModeRule = [&newRules](const QJsonObject& fields, const QString& modeToken,
                                             const QByteArray& idSeed, const QString& name) {
-        const QList<PhosphorWindowRules::RuleAction> actions = actionsFromFields(fields);
+        const QList<PhosphorRules::RuleAction> actions = actionsFromFields(fields);
         if (actions.isEmpty()) {
             return;
         }
-        WindowRule rule;
+        Rule rule;
         rule.id = QUuid::createUuidV5(ConfigDefaults::baselineBorderRuleId(), idSeed);
         rule.name = name;
         rule.enabled = true;
@@ -3665,11 +3682,11 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
         if (screenId.isEmpty()) {
             continue;
         }
-        const QList<PhosphorWindowRules::RuleAction> actions = actionsFromFields(it.value().toObject());
+        const QList<PhosphorRules::RuleAction> actions = actionsFromFields(it.value().toObject());
         if (actions.isEmpty()) {
             continue;
         }
-        WindowRule rule;
+        Rule rule;
         rule.id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), screenId.toUtf8());
         rule.name = QStringLiteral("Gaps (%1)").arg(screenId);
         rule.enabled = true;
@@ -3682,35 +3699,35 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
 
     // ── Merge into the existing rule store ─────────────────────────────────
     if (!newRules.isEmpty()) {
-        const QString windowRulesPath = ConfigDefaults::windowRulesFilePath();
-        auto setOpt = PhosphorWindowRules::WindowRuleSet::loadFromFile(windowRulesPath);
+        const QString rulesPath = ConfigDefaults::rulesFilePath();
+        auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
         if (!setOpt.has_value()) {
             // finalizeV4Conversion runs first and guarantees a valid
-            // windowrules.json; a failure to load here means the file is
+            // rules.json; a failure to load here means the file is
             // missing/corrupt. Leave the stash in place so the next run
             // (after finalizeV4Conversion re-establishes the file) retries.
             qWarning(
                 "ConfigMigration::finalizeV5Conversion: %s is missing or invalid — deferring the appearance "
                 "override rules to the next run",
-                qPrintable(windowRulesPath));
+                qPrintable(rulesPath));
             return false;
         }
-        PhosphorWindowRules::WindowRuleSet ruleSet = *setOpt;
+        PhosphorRules::RuleSet ruleSet = *setOpt;
         int added = 0;
-        for (const WindowRule& rule : std::as_const(newRules)) {
+        for (const Rule& rule : std::as_const(newRules)) {
             // addRule rejects colliding ids, so a re-run before the stash strip
             // succeeds cannot duplicate a rule.
             if (ruleSet.addRule(rule)) {
                 ++added;
             }
         }
-        if (added > 0 && !ruleSet.saveToFile(windowRulesPath)) {
+        if (added > 0 && !ruleSet.saveToFile(rulesPath)) {
             qWarning("ConfigMigration::finalizeV5Conversion: failed to write %s — deferring stash strip",
-                     qPrintable(windowRulesPath));
+                     qPrintable(rulesPath));
             return false;
         }
         qInfo("ConfigMigration::finalizeV5Conversion: added %d appearance override rule(s) to %s", added,
-              qPrintable(windowRulesPath));
+              qPrintable(rulesPath));
     }
 
     // ── Strip the scratch stash key ────────────────────────────────────────

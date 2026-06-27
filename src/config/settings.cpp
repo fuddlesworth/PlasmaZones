@@ -15,9 +15,9 @@
 #include "../core/utils.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorWindowRules/ContextRuleBridge.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
 
 #include <QGuiApplication>
 #include <QMetaMethod>
@@ -54,14 +54,13 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
 } // namespace
 
 Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
-                   PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent)
+                   PhosphorRules::RuleStore* ruleStore, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
     , m_store(std::make_unique<PhosphorConfig::Store>(backend, buildSettingsSchema(), this))
-    , m_ownedWindowRuleStore(windowRuleStore ? nullptr
-                                             : std::make_unique<PhosphorWindowRules::WindowRuleStore>(
-                                                   ConfigDefaults::windowRulesFilePath(), this))
-    , m_windowRuleStore(windowRuleStore ? windowRuleStore : m_ownedWindowRuleStore.get())
+    , m_ownedRuleStore(ruleStore ? nullptr
+                                 : std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), this))
+    , m_ruleStore(ruleStore ? ruleStore : m_ownedRuleStore.get())
     , m_curveRegistry(curveRegistry)
 {
     // Contract: @p backend MUST already be pointing at a migrated config
@@ -90,9 +89,8 @@ Settings::Settings(QObject* parent)
     , m_ownedBackend(migrateAndCreateOwnedBackend())
     , m_configBackend(m_ownedBackend.get())
     , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
-    , m_ownedWindowRuleStore(
-          std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), this))
-    , m_windowRuleStore(m_ownedWindowRuleStore.get())
+    , m_ownedRuleStore(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), this))
+    , m_ruleStore(m_ownedRuleStore.get())
 {
     // m_curveRegistry is left null; `animationProfile()` /
     // `setAnimationEasingCurve()` fall back to `fallbackCurveRegistry()`.
@@ -109,7 +107,7 @@ Settings::Settings(QObject* parent)
     connectRuleStoreGapReactivity();
 }
 
-Settings::Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent)
+Settings::Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent)
     : ISettings(parent)
     , m_ownedBackend(migrateAndCreateOwnedBackend())
     , m_configBackend(m_ownedBackend.get())
@@ -117,10 +115,9 @@ Settings::Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObjec
     // Borrow the caller's store when provided; degrade to owning one when null
     // (mirrors the backend-injecting ctor's defensive borrow-or-own so a stray
     // null still yields a usable store rather than a null deref).
-    , m_ownedWindowRuleStore(windowRuleStore ? nullptr
-                                             : std::make_unique<PhosphorWindowRules::WindowRuleStore>(
-                                                   ConfigDefaults::windowRulesFilePath(), this))
-    , m_windowRuleStore(windowRuleStore ? windowRuleStore : m_ownedWindowRuleStore.get())
+    , m_ownedRuleStore(ruleStore ? nullptr
+                                 : std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), this))
+    , m_ruleStore(ruleStore ? ruleStore : m_ownedRuleStore.get())
 {
     // Standalone backend + process-static curve fallback (m_curveRegistry left
     // null), exactly like Settings(QObject*); the only difference is the
@@ -204,7 +201,7 @@ void Settings::load()
 
     m_configBackend->reparseConfiguration();
 
-    // Per-mode disable lists live in windowrules.json, a separate file the
+    // Per-mode disable lists live in rules.json, a separate file the
     // config backend's reparseConfiguration() does not touch. Reload the
     // rule store explicitly so a cross-process write (daemon shortcut, KCM
     // D-Bus call) surfaces — the per-mode signal re-emission below compares
@@ -216,12 +213,12 @@ void Settings::load()
     // and a load() here would clobber unflushed in-memory edits — exactly the
     // dual-store race this borrow pattern exists to avoid. The borrowed-store
     // path relies on the owner to drive reloads (the daemon via its on-startup
-    // load + WindowRuleAdaptor; the settings app via
+    // load + RuleAdaptor; the settings app via
     // SettingsController::reloadLocalRuleStore on the daemon's rulesChanged
-    // D-Bus signal and on Discard, plus a WindowRuleStoreWatcher that reloads
+    // D-Bus signal and on Discard, plus a RuleStoreWatcher that reloads
     // on external file writes when no daemon is running).
-    if (m_ownedWindowRuleStore) {
-        m_ownedWindowRuleStore->load();
+    if (m_ownedRuleStore) {
+        m_ownedRuleStore->load();
     }
 
     // Store-backed groups (Shaders, Appearance, Ordering, Animations,
@@ -322,7 +319,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
-        ConfigDefaults::displayGroup(), // "Display" — dead in v4 (per-mode disable lists moved to windowrules.json);
+        ConfigDefaults::displayGroup(), // "Display" — dead in v4 (per-mode disable lists moved to rules.json);
                                         // listed so reset() drops any partial-v3 migration husk left in this group
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
@@ -358,7 +355,7 @@ void Settings::purgeStaleKeys()
 {
     // Root-level groups that must survive a save() cycle — written
     // independently of Settings::save(). Assignment rules live in
-    // windowrules.json (rule-store sidecar) and QuickLayout slots live
+    // rules.json (rule-store sidecar) and QuickLayout slots live
     // in quicklayouts.json (separate sidecar) — neither is visible to
     // this purge after the v4 migration retired assignments.json.
     //
@@ -1241,7 +1238,7 @@ P_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDispla
 // clampInt validators enforce the same ranges readValidatedInt used to.
 
 // Shared inner/outer gaps — the GLOBAL default is rule-backed (the managed
-// baseline appearance WindowRule). These getters read that rule's gap actions
+// baseline appearance Rule). These getters read that rule's gap actions
 // (SetInnerGap / SetOuterGap / …) through the active window-rule store and fall
 // back to the compile-time ConfigDefaults when no store / rule / action is
 // present (the standalone settings app or a test may construct Settings without
@@ -1252,8 +1249,8 @@ P_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDispla
 // std::nullopt when the store / rule / action is absent. Backs both the global
 // gap getters (the managed baseline rule id) and the per-screen gap accessors
 // (the per-monitor gap rule id, resolved in perScreenGapRuleOverrides).
-std::optional<QJsonValue> Settings::gapValueFromRule(const PhosphorWindowRules::WindowRuleStore* store,
-                                                     const QUuid& ruleId, QLatin1StringView actionType)
+std::optional<QJsonValue> Settings::gapValueFromRule(const PhosphorRules::RuleStore* store, const QUuid& ruleId,
+                                                     QLatin1StringView actionType)
 {
     if (store == nullptr) {
         return std::nullopt;
@@ -1263,9 +1260,9 @@ std::optional<QJsonValue> Settings::gapValueFromRule(const PhosphorWindowRules::
         return std::nullopt;
     }
     const QString type = QString(actionType);
-    for (const PhosphorWindowRules::RuleAction& a : rule->actions) {
+    for (const PhosphorRules::RuleAction& a : rule->actions) {
         if (a.type == type) {
-            return a.params.value(QString(PhosphorWindowRules::ActionParam::Value));
+            return a.params.value(QString(PhosphorRules::ActionParam::Value));
         }
     }
     return std::nullopt;
@@ -1273,56 +1270,56 @@ std::optional<QJsonValue> Settings::gapValueFromRule(const PhosphorWindowRules::
 
 int Settings::innerGap() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorWindowRules::ActionType::SetInnerGap)) {
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetInnerGap)) {
         return v->toInt(ConfigDefaults::innerGap());
     }
     return ConfigDefaults::innerGap();
 }
 int Settings::outerGap() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorWindowRules::ActionType::SetOuterGap)) {
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetOuterGap)) {
         return v->toInt(ConfigDefaults::outerGap());
     }
     return ConfigDefaults::outerGap();
 }
 bool Settings::usePerSideOuterGap() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorWindowRules::ActionType::SetUsePerSideOuterGap)) {
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetUsePerSideOuterGap)) {
         return v->toBool(ConfigDefaults::usePerSideOuterGap());
     }
     return ConfigDefaults::usePerSideOuterGap();
 }
 int Settings::outerGapTop() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorWindowRules::ActionType::SetOuterGapTop)) {
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetOuterGapTop)) {
         return v->toInt(ConfigDefaults::outerGapTop());
     }
     return ConfigDefaults::outerGapTop();
 }
 int Settings::outerGapBottom() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorWindowRules::ActionType::SetOuterGapBottom)) {
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetOuterGapBottom)) {
         return v->toInt(ConfigDefaults::outerGapBottom());
     }
     return ConfigDefaults::outerGapBottom();
 }
 int Settings::outerGapLeft() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorWindowRules::ActionType::SetOuterGapLeft)) {
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetOuterGapLeft)) {
         return v->toInt(ConfigDefaults::outerGapLeft());
     }
     return ConfigDefaults::outerGapLeft();
 }
 int Settings::outerGapRight() const
 {
-    if (const auto v = gapValueFromRule(m_windowRuleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorWindowRules::ActionType::SetOuterGapRight)) {
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetOuterGapRight)) {
         return v->toInt(ConfigDefaults::outerGapRight());
     }
     return ConfigDefaults::outerGapRight();
@@ -1330,7 +1327,7 @@ int Settings::outerGapRight() const
 
 void Settings::connectRuleStoreGapReactivity()
 {
-    if (m_windowRuleStore == nullptr) {
+    if (m_ruleStore == nullptr) {
         return;
     }
     // Seed the change-detection cache from the current baseline rule so the
@@ -1342,7 +1339,7 @@ void Settings::connectRuleStoreGapReactivity()
     m_cachedOuterGapBottom = outerGapBottom();
     m_cachedOuterGapLeft = outerGapLeft();
     m_cachedOuterGapRight = outerGapRight();
-    connect(m_windowRuleStore, &PhosphorWindowRules::WindowRuleStore::rulesChanged, this, [this](bool /*persisted*/) {
+    connect(m_ruleStore, &PhosphorRules::RuleStore::rulesChanged, this, [this](bool /*persisted*/) {
         onRuleStoreChanged();
     });
 }
@@ -1420,7 +1417,7 @@ P_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOn
 // ── Per-mode disable lists — rule-backed (Phase 3b) ─────────────────────────
 //
 // Per-mode disable entries are `DisableEngine` context rules in the unified
-// WindowRule store (windowrules.json), NOT config.json keys. A disable rule
+// Rule store (rules.json), NOT config.json keys. A disable rule
 // pins exactly the context dimensions of its axis:
 //   - monitor  : ScreenId only
 //   - desktop  : ScreenId + VirtualDesktop
@@ -1449,7 +1446,7 @@ enum class DisableAxis {
 // formula lives in one place.
 std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, const QString& activity)
 {
-    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+    namespace CRB = PhosphorRules::ContextRuleBridge;
     switch (CRB::contextAxisOf(screenId, virtualDesktop, activity)) {
     case CRB::ContextAxis::Monitor:
         return DisableAxis::Monitor;
@@ -1471,11 +1468,11 @@ std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, c
 
 QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mode, int axisInt) const
 {
-    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+    namespace CRB = PhosphorRules::ContextRuleBridge;
     const auto axis = static_cast<DisableAxis>(axisInt);
     const QString wantToken = PhosphorZones::modeToWireString(mode);
     QStringList out;
-    for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+    for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
         const auto ruleToken = CRB::disableRuleMode(rule);
         if (!ruleToken || *ruleToken != wantToken) {
             continue; // not a disable rule, or scoped to a different mode
@@ -1506,7 +1503,7 @@ QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mod
 void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, int axisInt, const QStringList& entries,
                                    DisableModeSignalFn signalFn)
 {
-    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+    namespace CRB = PhosphorRules::ContextRuleBridge;
     const auto axis = static_cast<DisableAxis>(axisInt);
     const QString modeToken = PhosphorZones::modeToWireString(mode);
 
@@ -1522,7 +1519,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     // For Monitor axis the entry IS the screen id; for Desktop/Activity the
     // entry is `screenId/desktop` or `screenId/activity` and the leading
     // segment needs the same resolution. Without this, a write that mixes
-    // connector-name and canonical-id forms produces two separate WindowRules
+    // connector-name and canonical-id forms produces two separate Rules
     // (different UUIDs via disableRuleIdFor) covering the same logical
     // context, and the no-op short-circuit below misfires because the
     // pre/post sets look different.
@@ -1568,7 +1565,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     // (makeDisableRule is deterministic via disableRuleIdFor's createUuidV5
     // over (screenId, desktop, activity, modeToken), so the ids match
     // byte-for-byte and setAllRules would correctly detect "no change"),
-    // but walking every rule in the store and allocating fresh WindowRule
+    // but walking every rule in the store and allocating fresh Rule
     // copies just to discover that is wasted work. Pure micro-optimisation,
     // not a correctness guard against UUID churn.
     if (before == after) {
@@ -1577,8 +1574,8 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
 
     // Rebuild the rule list: keep every rule that is NOT a disable rule of
     // this exact (axis, mode) family, then append the new entries.
-    QList<PhosphorWindowRules::WindowRule> kept;
-    for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+    QList<PhosphorRules::Rule> kept;
+    for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
         const auto ruleToken = CRB::disableRuleMode(rule);
         if (ruleToken && *ruleToken == modeToken) {
             QString screenId;
@@ -1653,7 +1650,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, modeToken));
     }
 
-    if (!m_windowRuleStore->setAllRules(kept)) {
+    if (!m_ruleStore->setAllRules(kept)) {
         // Persistence failed — the in-memory rule set still advanced,
         // so consumers wired to `rulesChanged(persisted=false)` already
         // know. Surface it on the settings-side log too so users
@@ -1668,7 +1665,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         // cycle.
         qCWarning(lcConfig) << "writeDisableEntries: failed to persist window-rule store for mode" << mode << "axis"
                             << axisInt;
-        m_windowRuleStore->load();
+        m_ruleStore->load();
         Q_EMIT(this->*signalFn)(mode);
         return;
     }
@@ -1856,9 +1853,9 @@ P_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, fi
 // `excludeTransientWindows` (boolean), `minimumWindowWidth` (int px),
 // `minimumWindowHeight` (int px). Per-app / per-class exclusion lists
 // retired in v4 — the migration in src/config/configmigration.cpp drains
-// the legacy lists into Application-subject WindowRules, and runtime
+// the legacy lists into Application-subject Rules, and runtime
 // evaluators in SnapEngine, the KWin effect, and the WTA
-// pending-restore prune route through `PhosphorWindowRules::ExclusionRules`
+// pending-restore prune route through `PhosphorRules::ExclusionRules`
 // over the unified store.
 //
 // The on-disk group name `"Exclusions"` is INTENTIONALLY kept after the
@@ -1884,7 +1881,7 @@ P_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey,
 // the Exclusions block above (plus a NotificationsAndOsd knob), stored
 // independently so a user can disable animations for an app while still
 // snapping it (or vice versa). Per-app / per-class animation exclusion
-// lists retired in v4 — they fold into ExcludeAnimations WindowRules.
+// lists retired in v4 — they fold into ExcludeAnimations Rules.
 
 P_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
 P_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
@@ -1902,7 +1899,7 @@ P_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup,
 // animationExcludedApplications / animationExcludedWindowClasses (+ their
 // add*/remove* convenience methods) retired in v4 — the v4 migration drains
 // the Animations.WindowFiltering group's Applications / WindowClasses leaves
-// into `ExcludeAnimations` WindowRules. The settings accessors had no
+// into `ExcludeAnimations` Rules. The settings accessors had no
 // consumers after the KWin effect rewired off the loadSettingAsync fetches.
 
 // ── PhosphorZones::Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
@@ -2646,7 +2643,7 @@ void Settings::reset()
     deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();
 
-    // Per-mode disable lists live in windowrules.json as DisableEngine
+    // Per-mode disable lists live in rules.json as DisableEngine
     // context rules — drop every such rule from the store (assignment /
     // animation / exclude rules are untouched: reset() only owns the
     // settings surface). The store persists on setAllRules, so the final
@@ -2673,15 +2670,15 @@ void Settings::reset()
         resetActivitiesBefore.insert(mode, disabledActivities(mode));
     }
     {
-        namespace CRB = PhosphorWindowRules::ContextRuleBridge;
-        QList<PhosphorWindowRules::WindowRule> kept;
-        for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+        namespace CRB = PhosphorRules::ContextRuleBridge;
+        QList<PhosphorRules::Rule> kept;
+        for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
             if (!CRB::disableRuleMode(rule)) {
                 kept.append(rule); // not a DisableEngine rule — preserve
             }
         }
-        if (kept.size() != m_windowRuleStore->count()) {
-            if (!m_windowRuleStore->setAllRules(kept)) {
+        if (kept.size() != m_ruleStore->count()) {
+            if (!m_ruleStore->setAllRules(kept)) {
                 // Persistence failed — the in-memory store advanced but the
                 // on-disk file is stale. Roll back the in-memory state by
                 // reloading from disk so the per-mode re-emit loop below
@@ -2697,7 +2694,7 @@ void Settings::reset()
                 qCWarning(lcConfig)
                     << "reset: failed to persist window-rule store — rolling back in-memory state; disable "
                        "rules will reappear on next launch";
-                m_windowRuleStore->load();
+                m_ruleStore->load();
             }
         }
     }

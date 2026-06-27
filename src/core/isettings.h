@@ -136,9 +136,9 @@ public:
     // ISettings, not IAnimationSettings alone.
     //
     // animationExcludedApplications / animationExcludedWindowClasses virtuals
-    // retired in v4 — the lists folded into ExcludeAnimations WindowRules; the
+    // retired in v4 — the lists folded into ExcludeAnimations Rules; the
     // KWin effect now derives its m_animationExclusionRuleSet from the unified
-    // rule store via PhosphorWindowRules::ExclusionRules::excludeAnimationsRulesFrom.
+    // rule store via PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom.
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
@@ -272,14 +272,14 @@ public:
     // Persistence (unique to ISettings)
     //
     // Borrowed-store contract for load(): when the concrete Settings was
-    // constructed with an externally-owned `WindowRuleStore*` (e.g. the
+    // constructed with an externally-owned `RuleStore*` (e.g. the
     // daemon's shared store), load() MUST NOT reload that store — the owner
     // is the writer and an interleaved load() here would clobber unflushed
     // in-memory edits. Only the owning side (or a future cross-process
     // watcher) drives reloads on the borrowed path. Implementations that
     // own their store (the standard constructor) reload normally. See
     // Settings::load (settings.cpp) for the live guard against
-    // `m_ownedWindowRuleStore`.
+    // `m_ownedRuleStore`.
     virtual void load() = 0;
     virtual void save() = 0;
     virtual void reset() = 0;
@@ -353,8 +353,8 @@ Q_SIGNALS:
     void filterLayoutsByAspectRatioChanged();
     // excludedApplications / excludedWindowClasses signals retired in v4
     // — see settings_interfaces.h for the rationale (lists folded into
-    // unified Exclude WindowRules; consumers subscribe to the rule store
-    // through PhosphorWindowRules::WindowRuleStore::rulesChanged instead).
+    // unified Exclude Rules; consumers subscribe to the rule store
+    // through PhosphorRules::RuleStore::rulesChanged instead).
     void excludeTransientWindowsChanged();
     void minimumWindowWidthChanged();
     void minimumWindowHeightChanged();

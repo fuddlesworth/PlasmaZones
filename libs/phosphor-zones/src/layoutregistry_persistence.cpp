@@ -93,7 +93,7 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // the skip-list as a one-release safety net in case a stale copy lingers
         // in a system data dir the migration didn't delete.
         if (entry == QStringLiteral("assignments.json") || entry == QStringLiteral("autotile-overrides.json")
-            || entry == QStringLiteral("windowrules.json") || entry == QStringLiteral("quicklayouts.json")) {
+            || entry == QStringLiteral("rules.json") || entry == QStringLiteral("quicklayouts.json")) {
             continue;
         }
 
@@ -267,8 +267,8 @@ void LayoutRegistry::saveLayouts()
 
 QString LayoutRegistry::quickLayoutsFilePath() const
 {
-    // Quick-layout slots are NOT window rules — they persist to a sibling
-    // JSON file next to the WindowRuleStore file (so the location is stable
+    // Quick-layout slots are NOT rules — they persist to a sibling
+    // JSON file next to the RuleStore file (so the location is stable
     // and independent of any later setLayoutDirectory() call).
     return QFileInfo(m_ruleStore->filePath()).absolutePath() + QStringLiteral("/quicklayouts.json");
 }
@@ -276,7 +276,7 @@ QString LayoutRegistry::quickLayoutsFilePath() const
 QString LayoutRegistry::layoutSettingsFilePath() const
 {
     // Per-layout settings persist to a sibling JSON file next to the
-    // WindowRuleStore file — same stable, layout-dir-independent location as
+    // RuleStore file — same stable, layout-dir-independent location as
     // the quick-layout sidecar.
     return QFileInfo(m_ruleStore->filePath()).absolutePath() + QStringLiteral("/layout-settings.json");
 }
@@ -353,19 +353,19 @@ void LayoutRegistry::writeQuickLayouts()
 
 void LayoutRegistry::loadAssignments()
 {
-    // Assignments live in the unified WindowRuleStore — (re)load it from disk
+    // Assignments live in the unified RuleStore — (re)load it from disk
     // so cross-process deltas surface, then read the quick-layout sidecar.
     m_ruleStore->load();
     readQuickLayouts();
 
-    qCInfo(lcZonesLib) << "Loaded windowRules=" << m_ruleStore->count()
+    qCInfo(lcZonesLib) << "Loaded rules=" << m_ruleStore->count()
                        << "quickShortcuts: snapping=" << m_quickLayoutSlots[0].size()
                        << "autotile=" << m_quickLayoutSlots[1].size();
 }
 
 void LayoutRegistry::saveAssignments()
 {
-    // The WindowRuleStore persists on every mutation — no separate flush is
+    // The RuleStore persists on every mutation — no separate flush is
     // needed for the rule set. Only the quick-layout sidecar is written here.
     writeQuickLayouts();
 }

@@ -4,8 +4,8 @@
 #include "searchproviders.h"
 
 #include "settingscontroller.h"
-#include "windowrulecontroller.h"
-#include "windowrulemodel.h"
+#include "rulecontroller.h"
+#include "rulemodel.h"
 
 #include <QModelIndex>
 #include <QVariantMap>
@@ -50,17 +50,17 @@ QVector<SearchEntry> LayoutsSearchProvider::searchEntries() const
     return out;
 }
 
-QVector<SearchEntry> WindowRulesSearchProvider::searchEntries() const
+QVector<SearchEntry> RulesSearchProvider::searchEntries() const
 {
     QVector<SearchEntry> out;
     if (m_controller == nullptr) {
         return out;
     }
-    WindowRuleController* page = m_controller->windowRulesPage();
+    RuleController* page = m_controller->rulesPage();
     if (page == nullptr) {
         return out;
     }
-    WindowRuleModel* model = page->model();
+    RuleModel* model = page->model();
     if (model == nullptr) {
         return out;
     }
@@ -69,24 +69,24 @@ QVector<SearchEntry> WindowRulesSearchProvider::searchEntries() const
     out.reserve(rows);
     for (int i = 0; i < rows; ++i) {
         const QModelIndex idx = model->index(i);
-        const QString name = model->data(idx, WindowRuleModel::NameRole).toString();
+        const QString name = model->data(idx, RuleModel::NameRole).toString();
         if (name.isEmpty()) {
             continue;
         }
 
         SearchEntry e;
         e.kind = SearchEntry::Kind::Entity;
-        e.pageId = QStringLiteral("window-rules");
+        e.pageId = QStringLiteral("rules");
         // Per-rule reveal anchor; the rule rows register "rule:<id>" with the
         // page (id is the QUuid-with-braces from IdRole, matching the QML side).
-        const QString id = model->data(idx, WindowRuleModel::IdRole).toString();
+        const QString id = model->data(idx, RuleModel::IdRole).toString();
         if (!id.isEmpty()) {
             e.anchor = QStringLiteral("rule:") + id;
         }
         e.title = name;
         // The match summary is the meaningful per-rule context; when absent, leave
         // the subtitle empty so SearchController auto-derives the page breadcrumb.
-        e.subtitle = model->data(idx, WindowRuleModel::MatchSummaryRole).toString();
+        e.subtitle = model->data(idx, RuleModel::MatchSummaryRole).toString();
         e.icon = QStringLiteral("window-symbolic");
         out.push_back(e);
     }

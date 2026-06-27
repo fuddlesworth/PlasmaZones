@@ -89,14 +89,14 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // Remove existing border for this window first
     removeWindowBorder(windowId);
 
-    // Border appearance is resolved entirely from window rules. The managed
+    // Border appearance is resolved entirely from rules. The managed
     // baseline rule (catch-all, lowest priority) supplies the default for every
-    // window; higher-priority per-window rules override per slot. A window whose
+    // window; higher-priority per-rules override per slot. A window whose
     // resolved appearance does not show a border draws nothing — borders are
     // opt-in, the baseline defaults them off.
     std::optional<ResolvedWindowAppearance> ovr;
     if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
-        ovr = resolveWindowAppearance(resolveWindowRuleActions(w, windowId), m_borderAccentColor);
+        ovr = resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor);
     }
 
     if (!ovr || !ovr->showBorder || !*ovr->showBorder) {
@@ -268,7 +268,7 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     // the old m_ruleHiddenTitleBars/modeBorderless dance approximated, and
     // the geometry re-assert across veto-driven decoration flips.
     const std::optional<ResolvedWindowAppearance> ovr =
-        resolveWindowAppearance(resolveWindowRuleActions(w, windowId), m_borderAccentColor);
+        resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor);
     m_decorationManager->setRuleOverride(windowId, ovr ? ovr->hideTitleBar : std::nullopt);
 }
 

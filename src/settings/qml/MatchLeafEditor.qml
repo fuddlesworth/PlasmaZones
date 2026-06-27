@@ -19,7 +19,7 @@ RowLayout {
 
     /// The leaf JSON object — `{ field: "appId", op: "equals", value: ... }`.
     required property var node
-    /// The WindowRuleController (for operatorsForField).
+    /// The RuleController (for operatorsForField).
     required property var controller
     /// The SettingsController — populates the screen / activity pickers.
     required property var appSettings

@@ -8,32 +8,32 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 // Slim "Window Appearance" page. The window border, title-bar, and gap defaults
-// are resolved from three managed baseline appearance WindowRules (the
+// are resolved from three managed baseline appearance Rules (the
 // catch-all, lowest-priority rules the daemon seeds, one per concern). This page
 // is a friendly editor for those three rules: each action's read/write routes to
-// the matching baseline rule through the Window Rules controller. Per-window
-// overrides are ordinary higher-priority rules edited on the Window Rules page
+// the matching baseline rule through the Rules controller. Per-window
+// overrides are ordinary higher-priority rules edited on the Rules page
 // (the link at the bottom).
 SettingsFlickable {
     id: root
 
     // Bounds + the three baseline rule ids.
     readonly property var bounds: settingsController.windowAppearancePage
-    // The Window Rules controller owns the rule model + the daemon round-trip.
-    readonly property var ruleController: settingsController.windowRulesPage
+    // The Rules controller owns the rule model + the daemon round-trip.
+    readonly property var ruleController: settingsController.rulesPage
     // One managed baseline rule per concern.
     readonly property string borderId: bounds.borderBaselineRuleId
     readonly property string titleBarId: bounds.titleBarBaselineRuleId
     readonly property string gapId: bounds.gapBaselineRuleId
 
-    // Action wire strings (mirrors PhosphorWindowRules::ActionType).
+    // Action wire strings (mirrors PhosphorRules::ActionType).
     readonly property string actBorderVisible: "setBorderVisible"
     readonly property string actBorderWidth: "setBorderWidth"
     readonly property string actBorderRadius: "setBorderRadius"
     readonly property string actBorderColorActive: "setBorderColorActive"
     readonly property string actBorderColorInactive: "setBorderColorInactive"
     readonly property string actHideTitleBar: "setHideTitleBar"
-    // Gap action wire strings (mirrors PhosphorWindowRules::ActionType). The
+    // Gap action wire strings (mirrors PhosphorRules::ActionType). The
     // shared inner/outer gap model is rule-backed too, so the Gaps card edits the
     // same baseline rule as the border controls.
     readonly property string actInnerGap: "setInnerGap"
@@ -43,7 +43,7 @@ SettingsFlickable {
     readonly property string actOuterGapBottom: "setOuterGapBottom"
     readonly property string actOuterGapLeft: "setOuterGapLeft"
     readonly property string actOuterGapRight: "setOuterGapRight"
-    // "Follow the system accent" sentinel (PhosphorWindowRules::BorderColorToken::Accent).
+    // "Follow the system accent" sentinel (PhosphorRules::BorderColorToken::Accent).
     // The effect resolves it to the live system accent colour at apply time, so a
     // border colour written as this token tracks Plasma accent changes without a
     // rule edit.
@@ -714,7 +714,7 @@ SettingsFlickable {
         }
 
         // =================================================================
-        // Per-window overrides — link to the Window Rules page.
+        // Per-window overrides — link to the Rules page.
         // =================================================================
         SettingsCard {
             Layout.fillWidth: true
@@ -727,13 +727,13 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Override per app or monitor")
-                    description: i18n("These settings apply to every window. Add a window rule to override the border or title bar for a specific app or monitor.")
-                    searchAnchor: "perWindowRules"
+                    description: i18n("These settings apply to every window. Add a rule to override the border or title bar for a specific app or monitor.")
+                    searchAnchor: "perRules"
 
                     Button {
-                        text: i18n("Open Window Rules")
+                        text: i18n("Open Rules")
                         icon.name: "view-list-details"
-                        onClicked: settingsController.activePage = "window-rules"
+                        onClicked: settingsController.activePage = "rules"
                     }
                 }
             }

@@ -174,7 +174,7 @@ struct AssignmentEntry
 };
 
 /**
- * @brief Per-context gap override resolved from window rules.
+ * @brief Per-context gap override resolved from rules.
  *
  * Unlike @ref AssignmentEntry (which is engine-mode/layout centric and gated
  * on a SetEngineMode action), gap overrides are independent per-property
@@ -264,12 +264,12 @@ inline QString modeToWireString(AssignmentEntry::Mode mode)
     // (`engineModeOptions().contains(...)`), so a malformed disable rule
     // fails load loudly. NOTE: `SetEngineMode`'s validator only checks
     // `hasNonEmptyString` (open-vocabulary by design — see
-    // `libs/phosphor-window-rules/src/ruleaction.cpp:225-238`), so a
+    // `libs/phosphor-rules/src/ruleaction.cpp:225-238`), so a
     // malformed assignment rule survives load but is silently coerced
     // back to Snapping at consumption via
     // `entryFromRuleMatchActions → modeFromWireString → nullopt`. The
     // sentinel makes the corruption visible to operators inspecting
-    // windowrules.json by eye, but is not a load-time gate for the
+    // rules.json by eye, but is not a load-time gate for the
     // assignment path.
     Q_UNREACHABLE_RETURN(QStringLiteral("invalid"));
 }

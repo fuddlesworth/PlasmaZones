@@ -49,7 +49,7 @@ Phase 0 ──→ Phase 1 ──→ Phase 2 ──→ Phase 3
 - No wlroots, smithay, or aquamarine — direct C library usage only
 - Implements `ICompositorBridge` (23 methods) — consumed in-process by PolicyEngine
 - **No daemon in standalone mode** — compositor owns policy, persistence, and D-Bus service
-- PolicyEngine links phosphor-zones, phosphor-snap-engine, phosphor-placement, phosphor-windowrule directly (zero IPC for frame-critical work)
+- PolicyEngine links phosphor-zones, phosphor-snap-engine, phosphor-placement, phosphor-rule directly (zero IPC for frame-critical work)
 - Compositor claims `org.plasmazones.Service` D-Bus name for settings app / KCM / phosphorctl
 - KWin effect plugin continues as a separate target (talks to daemon, which still runs in KWin mode)
 - SPDX: `LGPL-2.1-or-later` (library), `GPL-3.0-or-later` (compositor binary)

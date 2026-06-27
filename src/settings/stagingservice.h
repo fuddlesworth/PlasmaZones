@@ -61,7 +61,7 @@ public:
     // ── Assignment staging ────────────────────────────────────────────
 
     /// Stage a snapping-layout assignment. The snapping and tiling slots are
-    /// mutually exclusive in the unified Window Rule model — one assignment
+    /// mutually exclusive in the unified Rule model — one assignment
     /// context carries either a snapping layout or a tiling algorithm, not
     /// both — so staging here clears any staged tiling assignment for the
     /// same context. Callers that want to write both atomically must use

@@ -17,11 +17,11 @@ ColumnLayout {
 
     /// JS array of action objects — `[{ type, ...params }, ...]`.
     required property var actions
-    /// The WindowRuleController — drives `defaultPayloadFor` so a freshly
+    /// The RuleController — drives `defaultPayloadFor` so a freshly
     /// appended action and a type-switched action share the same seeding
     /// path. Forwarded to every ActionRow.
     required property var controller
-    /// Registered action types from `WindowRuleController.actionTypes()`.
+    /// Registered action types from `RuleController.actionTypes()`.
     required property var actionTypeOptions
     /// The SettingsController — threaded into ActionRow so the picker-kind
     /// params (snappingLayout / tilingAlgorithm) can populate their dropdowns

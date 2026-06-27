@@ -281,22 +281,22 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // IsSnapped / Zone rule fields without waiting for their next state change.
     m_navigationHandler->syncZonesFromDaemon();
 
-    // One-shot WindowRules subscription. The daemon emits rulesChanged per
-    // per-rule mutation; slotWindowRulesChanged debounces via a 50ms timer to
+    // One-shot Rules subscription. The daemon emits rulesChanged per
+    // per-rule mutation; slotRulesChanged debounces via a 50ms timer to
     // collapse batch edits into a single full-ruleset refetch. Subscribed here
     // (not in loadCachedSettings) because loadCachedSettings re-runs on every
     // settingsChanged broadcast, and QDBusConnection::connect accepts duplicate
     // subscriptions silently — re-subscribing on each broadcast would grow the
     // connection set unbounded across the effect's lifetime.
-    if (!m_windowRulesSubscribed) {
+    if (!m_rulesSubscribed) {
         const bool ok = QDBusConnection::sessionBus().connect(
             QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-            QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged"), this,
-            SLOT(slotWindowRulesChanged()));
+            QString(PhosphorProtocol::Service::Interface::Rules), QStringLiteral("rulesChanged"), this,
+            SLOT(slotRulesChanged()));
         if (ok) {
-            m_windowRulesSubscribed = true;
+            m_rulesSubscribed = true;
         } else {
-            qCWarning(lcEffect) << "Failed to subscribe to WindowRules.rulesChanged — will retry on next bringup";
+            qCWarning(lcEffect) << "Failed to subscribe to Rules.rulesChanged — will retry on next bringup";
         }
     }
 
@@ -580,10 +580,10 @@ void PlasmaZonesEffect::loadCachedSettings()
     m_triggersLoaded = false; // Permissive until new triggers arrive (#175)
 
     // excludedApplications / excludedWindowClasses are GONE — the v4
-    // migration folded those lists into the unified WindowRule store, and
+    // migration folded those lists into the unified Rule store, and
     // the effect's drag-gate exclusion rule set is now derived from the
-    // store-side Exclude rules pulled via WindowRules.rulesChanged →
-    // loadWindowRuleAnimationsFromDbus. No D-Bus settings fetch needed.
+    // store-side Exclude rules pulled via Rules.rulesChanged →
+    // loadRuleAnimationsFromDbus. No D-Bus settings fetch needed.
     // isValid + clamp: a failed/invalid reply would otherwise toInt() to 0
     // and silently disable the min-size gate the permissive member defaults
     // exist to protect across the startup race (same hardening as the
@@ -675,19 +675,19 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     // animationExcludedApplications / animationExcludedWindowClasses are
     // GONE — the v4 migration folded those lists into the unified
-    // WindowRule store as `ExcludeAnimations`-action rules, and
-    // loadWindowRuleAnimationsFromDbus's parse step rebuilds the effect's
+    // Rule store as `ExcludeAnimations`-action rules, and
+    // loadRuleAnimationsFromDbus's parse step rebuilds the effect's
     // m_animationExclusionRuleSet from the same rule-set push that drives
     // the OverrideAnimation* pipeline. No D-Bus settings fetch needed.
 
     loadShaderProfileFromDbus();
     loadMotionProfileTreeFromDbus();
     loadShaderRegistryFromDbus();
-    // Unified WindowRule store — pull in any rules carrying an
+    // Unified Rule store — pull in any rules carrying an
     // OverrideAnimation* action. The subscription below refreshes whenever
     // the daemon broadcasts `rulesChanged`, so an edit in the settings UI
     // lands without restarting the effect.
-    loadWindowRuleAnimationsFromDbus();
+    loadRuleAnimationsFromDbus();
     // Subscription to the daemon's rulesChanged broadcast is installed once from
     // continueDaemonReadySetup() — installing it here would re-subscribe on every
     // slotSettingsChanged callback (QDBusConnection::connect silently accepts
@@ -725,7 +725,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     // Window border / title-bar appearance is no longer pushed as per-mode
-    // settings — it is resolved from window rules (the managed baseline rule
+    // settings — it is resolved from rules (the managed baseline rule
     // plus per-window overrides) inside updateWindowBorder / reconcileRuleHiddenTitleBar.
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {

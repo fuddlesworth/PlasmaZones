@@ -130,7 +130,7 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
 
     const int windowType = static_cast<int>(windowTypeFor(w));
 
-    // Extended window-property snapshot. Built via the SAME windowRuleQueryFor the
+    // Extended window-property snapshot. Built via the SAME ruleQueryFor the
     // effect's live rule path uses, so the daemon resolves byte-identical values —
     // no second, drift-prone accessor copy here. Placement state (isFloating /
     // isSnapped / zone) is intentionally NOT carried: those are resolved at
@@ -145,7 +145,7 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
     // avoiding a per-frame query build + a{sv} marshal for chatty-title windows.
     QVariantMap extended;
     if (includeExtended) {
-        const PhosphorWindowRules::WindowQuery props = windowRuleQueryFor(w, QString(), false, false, false, QString());
+        const PhosphorRules::WindowQuery props = ruleQueryFor(w, QString(), false, false, false, QString());
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
         if (props.isMinimized) {
             extended.insert(Key::IsMinimized, *props.isMinimized);

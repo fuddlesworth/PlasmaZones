@@ -14,7 +14,7 @@ import org.plasmazones.common as PZCommon
  *
  * An action is a `{ type, ...params }` JSON object. The row exposes a type
  * picker and one editor per parameter, both driven entirely by the
- * `actionTypeOptions` metadata from `WindowRuleController.actionTypes()` —
+ * `actionTypeOptions` metadata from `RuleController.actionTypes()` —
  * there is no per-type `if (t === "...")` ladder here. Two-way: edits emit
  * `actionEdited(updatedAction)`; the parent owns the list.
  *
@@ -29,11 +29,11 @@ ColumnLayout {
 
     /// The action JSON object being edited — `{ type, ...params }`.
     required property var action
-    /// The WindowRuleController — exposes `defaultPayloadFor(typeWire)` so a
+    /// The RuleController — exposes `defaultPayloadFor(typeWire)` so a
     /// type switch can pre-seed the new param set in one place (matches the
     /// shape ActionListEditor uses when appending a fresh action).
     required property var controller
-    /// Registered action types from `WindowRuleController.actionTypes()` —
+    /// Registered action types from `RuleController.actionTypes()` —
     /// each entry: `{ value, label, params: [{ key, kind, label, ... }],
     /// domain: "context"|"window" }`. The `domain` field is consulted by the
     /// row-level incompatibility flag below (`_currentTypeIncompatible`).
@@ -64,7 +64,7 @@ ColumnLayout {
     /// Parameter descriptors for the current type (empty when none / unknown).
     readonly property var _params: row._typeEntry !== undefined ? row._typeEntry.params : []
     /// Combined input-format hint(s) for the current params — the optional
-    /// `param.hint` strings from the action metadata (windowruleauthoring's
+    /// `param.hint` strings from the action metadata (ruleauthoring's
     /// paramHint), joined one per line. Empty when no param carries a hint.
     /// Surfaces the accepted syntax (e.g. zone-number lists / ranges) that a
     /// placeholder can't show once the field holds a value; there is no

@@ -9,7 +9,7 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 /**
- * @brief One monitor tile in the WindowRulesPage MONITORS strip.
+ * @brief One monitor tile in the RulesPage MONITORS strip.
  *
  * Visual style mirrors `DisplayMap`'s per-screen tile — monitor
  * icon (rotated for portrait), display label, "Primary" badge — so the
@@ -26,7 +26,7 @@ Rectangle {
     /// connectorName, isPrimary, width/height, etc.).
     required property var screenData
     /// Rule-related data: `{ screenId, layoutName, tilingEnabled, ruleCount,
-    /// assigned, locked }` from `WindowRuleController.monitorOverview(screens)`,
+    /// assigned, locked }` from `RuleController.monitorOverview(screens)`,
     /// which emits a tile for every screen. A screen with no pinned rules carries
     /// `assigned: false` and renders a "Not assigned" caption; `locked` is true
     /// when a LockContext rule pins the monitor's layout; the property only

@@ -35,11 +35,11 @@
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
-// std::make_unique<WindowRuleStore> in the ctor needs the complete
+// std::make_unique<RuleStore> in the ctor needs the complete
 // type. The header forward-declares it to avoid pulling the
 // dependency graph into every consumer of SettingsController.
-#include <PhosphorWindowRules/WindowRuleStore.h>
-#include <PhosphorWindowRules/WindowRuleStoreWatcher.h>
+#include <PhosphorRules/RuleStore.h>
+#include <PhosphorRules/RuleStoreWatcher.h>
 
 #include "../core/shaderregistry.h"
 #include "snappingshaderspagecontroller.h"
@@ -105,34 +105,34 @@ void SettingsController::sortMergedLayoutList(QVariantList& list)
 
 SettingsController::~SettingsController()
 {
-    // Tear down the WindowRuleController's label lookups while the
+    // Tear down the RuleController's label lookups while the
     // captured member containers (m_layouts, m_activities, m_screens,
     // etc.) are still alive. Members destruct in reverse declaration
     // order BEFORE ~QObject tears down child QObjects — so by the time
-    // ~WindowRuleController runs as part of the QObject teardown, those
+    // ~RuleController runs as part of the QObject teardown, those
     // captured containers are already gone. Any model-signal slot that
     // reaches a lookup during teardown would deref destroyed state.
-    // WindowRuleModel::leafLabel/actionLabel treat empty lookups as
+    // RuleModel::leafLabel/actionLabel treat empty lookups as
     // identity, so clearing here is the safe contract.
-    if (m_windowRulesPage) {
-        m_windowRulesPage->setScreenLookup({});
-        m_windowRulesPage->setActivityLookup({});
-        m_windowRulesPage->setZoneLookup({});
-        m_windowRulesPage->setSnappingLayoutLookup({});
-        m_windowRulesPage->setTilingAlgorithmLookup({});
+    if (m_rulesPage) {
+        m_rulesPage->setScreenLookup({});
+        m_rulesPage->setActivityLookup({});
+        m_rulesPage->setZoneLookup({});
+        m_rulesPage->setSnappingLayoutLookup({});
+        m_rulesPage->setTilingAlgorithmLookup({});
         // The shader resolver captures `this` and reaches m_animationShaderRegistry;
         // clear it too so the cleared set stays symmetric with what's installed.
-        m_windowRulesPage->setShaderEffectLookup({});
+        m_rulesPage->setShaderEffectLookup({});
         // The overlay-shader resolver reaches m_overlayShaderRegistry — clear it
         // too for the same symmetry.
-        m_windowRulesPage->setOverlayShaderLookup({});
+        m_rulesPage->setOverlayShaderLookup({});
         // Drain any in-flight `dataChanged` emissions queued against
         // the cleared lookups before the model captures the now-
         // empty resolvers. refreshLabels walks every row once and
         // rebuilds the label cache with the identity (empty) lookups
         // so the next paint reads consistent data.
-        if (m_windowRulesPage->model())
-            m_windowRulesPage->model()->refreshLabels();
+        if (m_rulesPage->model())
+            m_rulesPage->model()->refreshLabels();
     }
 }
 
@@ -141,8 +141,8 @@ SettingsController::SettingsController(QObject* parent)
     // m_localRuleStore is constructed first (declared before m_settings) so the
     // single shared store exists before m_settings borrows it. Parent stays
     // null on m_settings — it is a value member, not a QObject child of `this`.
-    , m_localRuleStore(std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
-    , m_localRuleStoreWatcher(std::make_unique<PhosphorWindowRules::WindowRuleStoreWatcher>(*m_localRuleStore))
+    , m_localRuleStore(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath()))
+    , m_localRuleStoreWatcher(std::make_unique<PhosphorRules::RuleStoreWatcher>(*m_localRuleStore))
     // Comma-expression: install the library-level screen-id resolver, then store
     // `true`. Runs BEFORE m_settings (next) whose constructor load()s and
     // migrates per-screen override keys via idForName — so the very first load
@@ -169,7 +169,7 @@ SettingsController::SettingsController(QObject* parent)
     // service the KCM doesn't already publish.
     buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
 
-    // Begin watching windowrules.json for external writes. Complements the
+    // Begin watching rules.json for external writes. Complements the
     // daemon's rulesChanged D-Bus signal (reloadLocalRuleStore) so the
     // in-process LayoutRegistry's assignment cascade stays fresh even with no
     // daemon running; the store's idempotent load() makes the overlap a no-op.
@@ -274,7 +274,7 @@ SettingsController::SettingsController(QObject* parent)
     m_scriptLoader->scanAndRegister();
 
     // All D-Bus broadcast subscriptions (settings reload, layout
-    // mutations, virtual desktop / activity changes, window-rules mirror)
+    // mutations, virtual desktop / activity changes, rules mirror)
     // are wired in settingscontroller_dbuswire.cpp so this TU stays under
     // the project's 800-line cap. Any subscription that returns false at
     // construction is appended to @c failedSubscriptions so the post-ctor
@@ -380,8 +380,8 @@ SettingsController::SettingsController(QObject* parent)
             &SettingsController::onSettingsPropertyChanged);
 
     // Snapping→Effects + the Window Appearance page — CONSTANT-only bounds
-    // facades. Window Appearance edits the managed baseline appearance WindowRule
-    // through m_windowRulesPage; this controller only carries the slider bounds
+    // facades. Window Appearance edits the managed baseline appearance Rule
+    // through m_rulesPage; this controller only carries the slider bounds
     // (border + the unified gap bounds) and the baseline rule id.
     m_snappingEffectsPage = new SnappingEffectsController(this);
     m_windowAppearancePage = new WindowAppearanceController(this);
@@ -450,7 +450,7 @@ SettingsController::SettingsController(QObject* parent)
         // user viewing the animations page — target the page explicitly
         // so dirty state attaches to the right tab even when the user is
         // currently viewing a different page. Symmetric with the
-        // window-rules handler below.
+        // rules handler below.
         //
         // Prefer the user's current animations sub-page when they're
         // already in the animations branch (animations-windows /
@@ -466,29 +466,28 @@ SettingsController::SettingsController(QObject* parent)
         endExternalEdit();
     });
 
-    // Window Rules page sub-controller — the unified rule surface. It owns
-    // its own WindowRuleModel and talks to the daemon's
-    // org.plasmazones.WindowRules adaptor. Dirty-tracking mirrors the
+    // Rules page sub-controller — the unified rule surface. It owns
+    // its own RuleModel and talks to the daemon's
+    // org.plasmazones.Rules adaptor. Dirty-tracking mirrors the
     // animations page: a staged edit flips needsSave; commit/revert run
     // from this controller's save()/load() so they don't race the
     // setNeedsSave(false) those methods emit.
-    m_windowRulesPage = new WindowRuleController(this);
-    // A per-monitor gap override is a screen-scoped gap WindowRule. Adding or
+    m_rulesPage = new RuleController(this);
+    // A per-monitor gap override is a screen-scoped gap Rule. Adding or
     // removing one changes the rule model's count, so refresh the Gaps card's
     // scope chip (its override dot polls hasPerScreenGapRule on
     // perScreenOverridesChanged) when rules are added/removed.
-    if (m_windowRulesPage->model() != nullptr) {
-        connect(m_windowRulesPage->model(), &WindowRuleModel::countChanged, this,
-                &SettingsController::perScreenOverridesChanged);
+    if (m_rulesPage->model() != nullptr) {
+        connect(m_rulesPage->model(), &RuleModel::countChanged, this, &SettingsController::perScreenOverridesChanged);
     }
-    connect(m_windowRulesPage, &WindowRuleController::dirtyChanged, this, [this]() {
+    connect(m_rulesPage, &RuleController::dirtyChanged, this, [this]() {
         if (m_loading || m_saving)
             return;
-        if (m_windowRulesPage->isDirty()) {
+        if (m_rulesPage->isDirty()) {
             // A window-rule edit can be driven by a background daemon signal, not
-            // just by the user viewing the page — so mark the "window-rules" page
+            // just by the user viewing the page — so mark the "rules" page
             // explicitly rather than letting setNeedsSave() target m_activePage.
-            beginExternalEdit(QStringLiteral("window-rules"));
+            beginExternalEdit(QStringLiteral("rules"));
             setNeedsSave(true);
             endExternalEdit();
             return;
@@ -496,15 +495,15 @@ SettingsController::SettingsController(QObject* parent)
         // Controller transitioned to clean (e.g. a successful fetchAndLoad
         // flipped m_dirty false→true→false during initial async load, or a
         // direct revert from QML). Mirror the dirty-side behaviour: remove
-        // "window-rules" from m_dirtyPages and emit dirtyPagesChanged when
+        // "rules" from m_dirtyPages and emit dirtyPagesChanged when
         // the set actually shrinks. setNeedsSave(false) cannot be used here
         // — it blanket-clears every page, which would wipe other unrelated
         // dirty leaves.
-        if (m_dirtyPages.remove(QStringLiteral("window-rules"))) {
+        if (m_dirtyPages.remove(QStringLiteral("rules"))) {
             Q_EMIT dirtyPagesChanged();
         }
     });
-    // A user-driven Discard fires WindowRuleController::revert() inside our
+    // A user-driven Discard fires RuleController::revert() inside our
     // load() under m_loading=true, which suppresses the dirtyChanged → dirty
     // pages plumbing for the duration of the call. The async re-fetch lands
     // AFTER load() has already done `setNeedsSave(false)` (which blanket-
@@ -513,12 +512,12 @@ SettingsController::SettingsController(QObject* parent)
     // never fires (value didn't change) and the cleared dirty-page entry is
     // never re-added. Listen to revertFinished here so a failed revert can
     // re-mark the page dirty.
-    connect(m_windowRulesPage, &WindowRuleController::revertFinished, this, [this](bool success) {
-        if (success || !m_windowRulesPage->isDirty()) {
+    connect(m_rulesPage, &RuleController::revertFinished, this, [this](bool success) {
+        if (success || !m_rulesPage->isDirty()) {
             return;
         }
         // m_loading is already false by the time this async reply lands.
-        beginExternalEdit(QStringLiteral("window-rules"));
+        beginExternalEdit(QStringLiteral("rules"));
         setNeedsSave(true);
         endExternalEdit();
     });
@@ -531,9 +530,9 @@ SettingsController::SettingsController(QObject* parent)
     // so they need to be installed exactly ONCE — re-installing on every
     // upstream change was wasteful (three model-wide `dataChanged` emits per
     // signal × three signals = nine emits). Upstream changes are now routed
-    // to `WindowRuleModel::refreshLabels()` which emits a single dataChanged
+    // to `RuleModel::refreshLabels()` which emits a single dataChanged
     // covering every label-derived role.
-    m_windowRulesPage->setScreenLookup([this](const QString& screenId) -> QString {
+    m_rulesPage->setScreenLookup([this](const QString& screenId) -> QString {
         const QVariantList all = screens();
         for (const QVariant& sv : all) {
             const QVariantMap m = sv.toMap();
@@ -549,7 +548,7 @@ SettingsController::SettingsController(QObject* parent)
         }
         return screenId;
     });
-    m_windowRulesPage->setActivityLookup([this](const QString& activityId) -> QString {
+    m_rulesPage->setActivityLookup([this](const QString& activityId) -> QString {
         for (const QVariant& av : std::as_const(m_activities)) {
             const QVariantMap m = av.toMap();
             if (m.value(QStringLiteral("id")).toString() == activityId) {
@@ -565,7 +564,7 @@ SettingsController::SettingsController(QObject* parent)
     // data is not in the LayoutPreview list (it carries geometry + numbers, not
     // UUIDs), so this reads the registry's actual Zone objects directly. Unknown
     // ids (deleted layout, hand-edited rule) round-trip verbatim.
-    m_windowRulesPage->setZoneLookup([this](const QString& zoneId) -> QString {
+    m_rulesPage->setZoneLookup([this](const QString& zoneId) -> QString {
         if (zoneId.isEmpty() || !m_localLayoutManager) {
             return zoneId;
         }
@@ -589,7 +588,7 @@ SettingsController::SettingsController(QObject* parent)
     // (UUID-keyed) and autotile entries (algorithm-token-keyed via the
     // "autotile:<token>" or bare-token shape PhosphorTiles ships) — one
     // resolver lambda is sufficient. The typed setters below are about
-    // CONTRACT clarity at the WindowRuleController API surface so a
+    // CONTRACT clarity at the RuleController API surface so a
     // future caller can wire a more restrictive snapping-only lookup
     // without also constraining the tiling resolver.
     auto resolveByLayoutsLookup = [this](const QString& tokenOrId) -> QString {
@@ -618,8 +617,8 @@ SettingsController::SettingsController(QObject* parent)
         const QString label = resolveByLayoutsLookup(prefixed);
         return label == prefixed ? resolveByLayoutsLookup(algorithmToken) : label;
     };
-    m_windowRulesPage->setSnappingLayoutLookup(resolveByLayoutsLookup);
-    m_windowRulesPage->setTilingAlgorithmLookup(resolveTilingAlgorithmLookup);
+    m_rulesPage->setSnappingLayoutLookup(resolveByLayoutsLookup);
+    m_rulesPage->setTilingAlgorithmLookup(resolveTilingAlgorithmLookup);
     // OverrideAnimationShader actions store an effect id ("dissolve"); resolve
     // it to the friendly name via the same animation shader registry the rule
     // editor's shader picker reads (availableShaderEffects), so the list shows
@@ -632,7 +631,7 @@ SettingsController::SettingsController(QObject* parent)
         const QString name = m_animationShaderRegistry->effect(effectId).name;
         return name.isEmpty() ? effectId : name;
     };
-    m_windowRulesPage->setShaderEffectLookup(resolveShaderEffectLookup);
+    m_rulesPage->setShaderEffectLookup(resolveShaderEffectLookup);
     // OverrideOverlayShader stores an overlay/snapping shader id; resolve it to
     // the friendly name via the overlay shader registry (the same source the
     // rule editor's overlay-shader picker reads), so the list shows
@@ -648,10 +647,10 @@ SettingsController::SettingsController(QObject* parent)
         const QString name = m_overlayShaderRegistry->shader(effectId).name;
         return name.isEmpty() ? effectId : name;
     };
-    m_windowRulesPage->setOverlayShaderLookup(resolveOverlayShaderLookup);
+    m_rulesPage->setOverlayShaderLookup(resolveOverlayShaderLookup);
     auto refreshRuleLabels = [this]() {
-        if (m_windowRulesPage && m_windowRulesPage->model()) {
-            m_windowRulesPage->model()->refreshLabels();
+        if (m_rulesPage && m_rulesPage->model()) {
+            m_rulesPage->model()->refreshLabels();
         }
     };
     connect(this, &SettingsController::screensChanged, this, refreshRuleLabels);

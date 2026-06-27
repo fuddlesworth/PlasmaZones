@@ -87,13 +87,13 @@
 #include "../dbus/shaderadaptor.h"
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/controladaptor.h"
-#include "../dbus/windowruleadaptor.h"
+#include "../dbus/ruleadaptor.h"
 #include <PhosphorCompositor/DecorationDefaults.h>
-#include <PhosphorWindowRules/ExclusionRules.h>
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/ExclusionRules.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleStore.h>
 
 #include <limits>
 #include "enginefactory.h"
@@ -127,10 +127,10 @@ namespace {
 // per concern now that the per-mode global appearance settings are gone. The
 // Appearance settings page rewrites these actions; per-window overrides are
 // ordinary higher-priority rules that win per slot.
-PhosphorWindowRules::WindowRule makeBaselineSkeleton(const QUuid& id, const QString& name)
+PhosphorRules::Rule makeBaselineSkeleton(const QUuid& id, const QString& name)
 {
-    using namespace PhosphorWindowRules;
-    WindowRule rule;
+    using namespace PhosphorRules;
+    Rule rule;
     rule.id = id;
     rule.name = name;
     rule.managed = true;
@@ -149,9 +149,9 @@ PhosphorWindowRules::WindowRule makeBaselineSkeleton(const QUuid& id, const QStr
 // on and removes them when it is turned off, so the baseline stays minimal.
 // Consumers that read an absent detail fall back to their own defaults, and a
 // hidden border draws nothing regardless.
-PhosphorWindowRules::WindowRule makeBaselineBorderRule()
+PhosphorRules::Rule makeBaselineBorderRule()
 {
-    using namespace PhosphorWindowRules;
+    using namespace PhosphorRules;
     namespace DD = PhosphorCompositor::DecorationDefaults;
 
     const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
@@ -161,7 +161,7 @@ PhosphorWindowRules::WindowRule makeBaselineBorderRule()
         return a;
     };
 
-    WindowRule rule = makeBaselineSkeleton(ConfigDefaults::baselineBorderRuleId(), PhosphorI18n::tr("Default borders"));
+    Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineBorderRuleId(), PhosphorI18n::tr("Default borders"));
     rule.actions = {
         action(ActionType::SetBorderVisible, ActionParam::Value, DD::ShowBorder),
     };
@@ -170,9 +170,9 @@ PhosphorWindowRules::WindowRule makeBaselineBorderRule()
 
 // Build the managed baseline TITLE BAR rule: the catch-all, lowest-priority
 // rule carrying the default hide-title-bar value.
-PhosphorWindowRules::WindowRule makeBaselineTitleBarRule()
+PhosphorRules::Rule makeBaselineTitleBarRule()
 {
-    using namespace PhosphorWindowRules;
+    using namespace PhosphorRules;
     namespace DD = PhosphorCompositor::DecorationDefaults;
 
     const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
@@ -182,8 +182,7 @@ PhosphorWindowRules::WindowRule makeBaselineTitleBarRule()
         return a;
     };
 
-    WindowRule rule =
-        makeBaselineSkeleton(ConfigDefaults::baselineTitleBarRuleId(), PhosphorI18n::tr("Default title bars"));
+    Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineTitleBarRuleId(), PhosphorI18n::tr("Default title bars"));
     rule.actions = {
         action(ActionType::SetHideTitleBar, ActionParam::Value, DD::HideTitleBars),
     };
@@ -201,9 +200,9 @@ PhosphorWindowRules::WindowRule makeBaselineTitleBarRule()
 // seeded. The four per-side outer gap actions are added by the Appearance page
 // when the user turns per-side gaps on and removed when it is turned off, so an
 // absent per-side action falls back to the uniform outer gap.
-PhosphorWindowRules::WindowRule makeBaselineGapRule()
+PhosphorRules::Rule makeBaselineGapRule()
 {
-    using namespace PhosphorWindowRules;
+    using namespace PhosphorRules;
 
     const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
         RuleAction a;
@@ -212,7 +211,7 @@ PhosphorWindowRules::WindowRule makeBaselineGapRule()
         return a;
     };
 
-    WindowRule rule = makeBaselineSkeleton(ConfigDefaults::baselineGapRuleId(), PhosphorI18n::tr("Default gaps"));
+    Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineGapRuleId(), PhosphorI18n::tr("Default gaps"));
     rule.actions = {
         action(ActionType::SetInnerGap, ActionParam::Value, ConfigDefaults::innerGap()),
         action(ActionType::SetOuterGap, ActionParam::Value, ConfigDefaults::outerGap()),
@@ -268,12 +267,12 @@ Daemon::Daemon(QObject* parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
-    // Unified WindowRule store — loads windowrules.json (written by the v3→v4
-    // migration). Daemon is the sole writer; the WindowRuleAdaptor exposes it.
+    // Unified Rule store — loads rules.json (written by the v3→v4
+    // migration). Daemon is the sole writer; the RuleAdaptor exposes it.
     // Declared/constructed before m_layoutManager so the registry can borrow it.
-    , m_windowRuleStore(std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
-    , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_windowRuleStore.get(),
-                                                                      QStringLiteral("plasmazones/layouts")))
+    , m_ruleStore(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath()))
+    , m_layoutManager(
+          std::make_unique<PhosphorZones::LayoutRegistry>(m_ruleStore.get(), QStringLiteral("plasmazones/layouts")))
     , m_layoutComputeService(std::make_unique<PhosphorZones::LayoutComputeService>(nullptr))
     // m_curveRegistry / m_profileRegistry are default-constructed (no
     // init-list entries) — daemon.h declares them between m_layoutComputeService
@@ -288,16 +287,16 @@ Daemon::Daemon(QObject* parent)
     // m_curveRegistry to be declared BEFORE m_settings in daemon.h —
     // see the DECLARATION ORDER INVARIANT comment there.
     //
-    // Pass m_windowRuleStore.get() so Settings shares the daemon's single
+    // Pass m_ruleStore.get() so Settings shares the daemon's single
     // canonical store rather than constructing a second one over the same
-    // file. Two stores pointed at windowrules.json race on disk: each
+    // file. Two stores pointed at rules.json race on disk: each
     // mutator rebuilds its `kept` list from its own stale in-memory
     // snapshot, so the second writer silently drops rules the first writer
     // added. Mirrors the existing LayoutRegistry-via-borrowed-pointer
     // pattern above. Standalone settings / editor processes that have no
     // daemon-owned store pass nullptr and Settings falls back to owning
     // its own.
-    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_windowRuleStore.get(), nullptr))
+    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_ruleStore.get(), nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
     , m_windowRegistry(std::make_unique<PhosphorEngine::WindowRegistry>(nullptr))
     , m_panelSource(std::make_unique<PhosphorScreens::PlasmaPanelSource>())
@@ -333,24 +332,24 @@ Daemon::Daemon(QObject* parent)
     // Seed the three managed baseline appearance rules (borders, title bars,
     // gaps) if the store doesn't already carry them. The store loaded in its
     // constructor, so this runs every startup (not first-run only) — existing
-    // windowrules.json files predating these rules gain them too. addRule
+    // rules.json files predating these rules gain them too. addRule
     // persists and emits rulesChanged, but the daemon's rulesChanged consumers
     // are wired later (createAdaptors / setup), so the emit at construction is
     // inert. The daemon is the sole writer, so seeding here is the single source
     // for every consumer (effect, settings, editor).
-    if (m_windowRuleStore) {
-        using PhosphorWindowRules::RuleAction;
-        using PhosphorWindowRules::WindowRule;
+    if (m_ruleStore) {
+        using PhosphorRules::Rule;
+        using PhosphorRules::RuleAction;
 
         // Ensure a managed baseline rule exists and carries every action its
         // canonical maker defines: create it from @p desired when absent,
         // otherwise append any action type missing from the canonical template
         // (preserving the user's Appearance-page-edited values for actions
         // already present).
-        const auto ensureManagedRule = [this](const WindowRule& desired) {
-            const auto existing = m_windowRuleStore->ruleSet().ruleById(desired.id);
+        const auto ensureManagedRule = [this](const Rule& desired) {
+            const auto existing = m_ruleStore->ruleSet().ruleById(desired.id);
             if (!existing) {
-                if (!m_windowRuleStore->addRule(desired)) {
+                if (!m_ruleStore->addRule(desired)) {
                     qCWarning(lcDaemon) << "Failed to seed managed baseline rule" << desired.id;
                 }
                 return;
@@ -359,7 +358,7 @@ Daemon::Daemon(QObject* parent)
             for (const RuleAction& a : existing->actions) {
                 present.insert(a.type);
             }
-            WindowRule merged = *existing;
+            Rule merged = *existing;
             bool changed = false;
             for (const RuleAction& a : desired.actions) {
                 if (!present.contains(a.type)) {
@@ -367,7 +366,7 @@ Daemon::Daemon(QObject* parent)
                     changed = true;
                 }
             }
-            if (changed && !m_windowRuleStore->updateRule(merged)) {
+            if (changed && !m_ruleStore->updateRule(merged)) {
                 qCWarning(lcDaemon) << "Failed to reconcile managed baseline rule" << desired.id;
             }
         };
@@ -379,8 +378,8 @@ Daemon::Daemon(QObject* parent)
         // Drop the pre-split single "Default appearance" rule if a dev config
         // still carries it. This branch never shipped, so there is nothing to
         // migrate — the three rules above are seeded fresh.
-        if (m_windowRuleStore->ruleSet().ruleById(ConfigDefaults::baselineAppearanceRuleId())) {
-            m_windowRuleStore->removeRule(ConfigDefaults::baselineAppearanceRuleId());
+        if (m_ruleStore->ruleSet().ruleById(ConfigDefaults::baselineAppearanceRuleId())) {
+            m_ruleStore->removeRule(ConfigDefaults::baselineAppearanceRuleId());
         }
     }
 
@@ -940,7 +939,7 @@ bool Daemon::init()
     // default synthesis above is short-circuited so an unassigned context gets
     // no active layout (no engine activates) until the user assigns one — the
     // same effective state as having no default providers configured. The
-    // per-context DefaultLayoutAssignment window rule overrides this either way.
+    // per-context DefaultLayoutAssignment rule overrides this either way.
     m_layoutManager->setDefaultAssignmentSuppressedProvider([this]() {
         return m_settings && m_settings->suppressDefaultLayoutAssignment();
     });
@@ -1189,10 +1188,10 @@ bool Daemon::init()
     // that owns m_shaderRegistry runs its destructor.
     m_shaderAdaptor = new ShaderAdaptor(m_shaderRegistry.get(), this);
 
-    // Window rule adaptor - the unified org.plasmazones.WindowRules surface.
+    // Rule adaptor - the unified org.plasmazones.Rules surface.
     // Held as a member so stop() can detach() it before the unique_ptr that
-    // owns m_windowRuleStore runs its destructor.
-    m_windowRuleAdaptor = new WindowRuleAdaptor(m_windowRuleStore.get(), this);
+    // owns m_ruleStore runs its destructor.
+    m_ruleAdaptor = new RuleAdaptor(m_ruleStore.get(), this);
 
     // Compositor bridge adaptor - compositor-agnostic window control protocol.
     // Held as a member so the support report and the registration watchdog
@@ -1215,7 +1214,7 @@ bool Daemon::init()
     m_windowTrackingAdaptor->setWindowRegistry(m_windowRegistry.get());
     // Full rule set for per-window RestorePosition evaluation (overrides the
     // per-engine *RestoreFloatedWindowsOnLogin settings for matched windows).
-    m_windowTrackingAdaptor->setWindowRuleStore(m_windowRuleStore.get());
+    m_windowTrackingAdaptor->setRuleStore(m_ruleStore.get());
 
     // Drop closed windows from m_lastAutotileOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would
@@ -1420,7 +1419,7 @@ bool Daemon::init()
     // filtered slice is held as a stable Daemon member (m_excludeRuleSet)
     // and refreshed in-place via setRules so the bound RuleEvaluator's
     // per-revision sort index and resolve cache actually invalidate on
-    // each rules-changed edit (a copy-assigned fresh WindowRuleSet would
+    // each rules-changed edit (a copy-assigned fresh RuleSet would
     // re-import revision=1 every cycle, freezing the cache on the next
     // resolveCached-bearing migration of the call sites). Rebuilt
     // whenever the unified store emits rulesChanged, so a settings-app
@@ -1435,10 +1434,9 @@ bool Daemon::init()
     //     pair seeds the filter and drains any restore queue entries
     //     populated by WTA::loadState above.
     snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
-    m_excludeRuleSet.setRules(
-        PhosphorWindowRules::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules());
+    m_excludeRuleSet.setRules(PhosphorRules::ExclusionRules::excludeRulesFrom(m_ruleStore->ruleSet()).rules());
     m_windowTrackingAdaptor->pruneExcludedPendingRestores(
-        PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+        PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
 
     auto refilterExcludeRules = [this, snapEnginePtr = QPointer(snapEngine)] {
         // QPointer null-checks defend the rulesChanged subscription
@@ -1451,12 +1449,12 @@ bool Daemon::init()
         if (!snapEnginePtr) {
             return;
         }
-        // Symmetric guard for the rule store. `m_windowRuleStore` is a
+        // Symmetric guard for the rule store. `m_ruleStore` is a
         // unique_ptr owned by Daemon, so it currently shares Daemon's
         // lifetime; the guard exists so a future refactor that drops
         // and re-creates the store on the fly (or moves ownership
         // out) can't UAF this lambda.
-        if (!m_windowRuleStore) {
+        if (!m_ruleStore) {
             return;
         }
         // Equality-guard against no-op edits: every rulesChanged emission
@@ -1464,11 +1462,11 @@ bool Daemon::init()
         // this lambda, but only changes that affect the Exclude slice
         // should bump the evaluator's revision and walk the (potentially
         // long) pending-restore queues. The guard below compares the two
-        // `QList<WindowRule>` slices element-wise (the same semantics as
-        // `WindowRuleSet::operator==`, which delegates to this list compare) —
+        // `QList<Rule>` slices element-wise (the same semantics as
+        // `RuleSet::operator==`, which delegates to this list compare) —
         // exactly the rules-list-only comparison we want.
-        const QList<PhosphorWindowRules::WindowRule> newSlice =
-            PhosphorWindowRules::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules();
+        const QList<PhosphorRules::Rule> newSlice =
+            PhosphorRules::ExclusionRules::excludeRulesFrom(m_ruleStore->ruleSet()).rules();
         if (newSlice == m_excludeRuleSet.rules()) {
             return;
         }
@@ -1487,10 +1485,10 @@ bool Daemon::init()
         if (m_windowTrackingAdaptor) {
             // Shutdown-window guard, mirrors snapEnginePtr null-check above.
             m_windowTrackingAdaptor->pruneExcludedPendingRestores(
-                PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+                PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
         }
     };
-    connect(m_windowRuleStore.get(), &PhosphorWindowRules::WindowRuleStore::rulesChanged, this,
+    connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this,
             [refilterExcludeRules](bool /*persisted*/) {
                 refilterExcludeRules();
             });
@@ -1501,7 +1499,7 @@ bool Daemon::init()
     // open zone selectors / the layout picker in sync would miss it. Re-push
     // the lock state to any open overlay on every rule change. QPointer guards
     // the shutdown window (overlay reset before ~Daemon disconnects).
-    connect(m_windowRuleStore.get(), &PhosphorWindowRules::WindowRuleStore::rulesChanged, this,
+    connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this,
             [overlay = QPointer(m_overlayService.get())](bool /*persisted*/) {
                 if (overlay) {
                     overlay->refreshContextLockState();
@@ -1697,7 +1695,7 @@ bool Daemon::init()
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
     // Wire the WTA so the autotile open path can resolve RouteToScreen /
-    // RouteToDesktop window rules (the rule store + evaluator live on the WTA).
+    // RouteToDesktop rules (the rule store + evaluator live on the WTA).
     m_autotileAdaptor->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
 
     // Control adaptor - high-level convenience API for third-party integrations.
@@ -2328,11 +2326,11 @@ void Daemon::stop()
         concreteSnap->setExcludeRuleSet(nullptr);
     }
 
-    // Likewise sever WindowTrackingAdaptor's borrow of m_windowRuleStore (used by
+    // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
     // its restore-position evaluator) before the store is destroyed. Same
     // grep-discoverable teardown contract as the SnapEngine exclude borrow above.
     if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setWindowRuleStore(nullptr);
+        m_windowTrackingAdaptor->setRuleStore(nullptr);
     }
 
     // Clear the autotile context-gap provider, which captures `this` (Daemon, via
@@ -2373,12 +2371,12 @@ void Daemon::stop()
     // (debounced save timer flush). ShaderAdaptor + ControlAdaptor have
     // non-trivial signal wiring + cached state that benefits from
     // explicit teardown for the same "queued D-Bus call lands during
-    // destruction window" defense-in-depth. WindowRuleAdaptor borrows
-    // m_windowRuleStore (a unique_ptr) and m_settings; without detach
+    // destruction window" defense-in-depth. RuleAdaptor borrows
+    // m_ruleStore (a unique_ptr) and m_settings; without detach
     // its slot bodies could deref freed memory during the window after
     // ~Daemon's body returns — that is when the unique_ptr members
-    // (including m_windowRuleStore) run their destructors, and the
-    // raw-Qt-parented WindowRuleAdaptor only runs its own destructor
+    // (including m_ruleStore) run their destructors, and the
+    // raw-Qt-parented RuleAdaptor only runs its own destructor
     // *after* that, as part of QObject child cleanup.
     //
     // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
@@ -2413,8 +2411,8 @@ void Daemon::stop()
     if (m_controlAdaptor) {
         m_controlAdaptor->detach();
     }
-    if (m_windowRuleAdaptor) {
-        m_windowRuleAdaptor->detach();
+    if (m_ruleAdaptor) {
+        m_ruleAdaptor->detach();
     }
 
     // Provider lambdas already cleared at the top of stop() (before the

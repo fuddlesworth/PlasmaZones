@@ -22,7 +22,7 @@
 PlasmaZones is evolving from a window-tiling tool into a full **shell +
 compositor** (a Qt/QML shell has already been started). A shell needs a
 user-facing scripting and configuration surface far larger than tiling:
-keybindings, window rules, widgets, IPC/automation, and compositor plugins. The
+keybindings, rules, widgets, IPC/automation, and compositor plugins. The
 language for that surface is a foundational decision — it gets ~10× more
 expensive to change after those surfaces exist.
 

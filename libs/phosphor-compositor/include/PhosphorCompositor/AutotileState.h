@@ -20,7 +20,7 @@ namespace PhosphorCompositor {
  * Tracks which windows are tile-managed (drives border RENDERING). Title-bar/
  * borderless state lives in the DecorationManager's owner model, not here, and
  * per-window border appearance (width / radius / colour / show) is resolved
- * from window rules in the effect.
+ * from rules in the effect.
  * Per-screen keyed so per-VS retiles can update tracking in isolation
  * without cross-contaminating with windows on sibling virtual screens.
  * Shared across compositor plugins to avoid duplicating state management.

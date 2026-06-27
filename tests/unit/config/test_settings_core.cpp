@@ -27,9 +27,9 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleStore.h>
 #include "config/configbackends.h"
 
 #include <limits>
@@ -709,7 +709,7 @@ private Q_SLOTS:
 
     /**
      * The shared inner/outer gap global default is rule-backed: the getters read
-     * the managed baseline gap WindowRule's gap actions, and a change to
+     * the managed baseline gap Rule's gap actions, and a change to
      * that rule re-emits the per-property NOTIFY + settingsChanged so the daemon
      * retiles / re-spaces. This validates the read path and the reactivity wiring
      * (onRuleStoreChanged) that replaces the old stored-setter signals.
@@ -718,11 +718,11 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
-        namespace PWR = PhosphorWindowRules;
-        PWR::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
+        namespace PWR = PhosphorRules;
+        PWR::RuleStore store(ConfigDefaults::rulesFilePath());
 
         // Seed a minimal managed baseline gap rule carrying an inner-gap action.
-        PWR::WindowRule rule;
+        PWR::Rule rule;
         rule.id = ConfigDefaults::baselineGapRuleId();
         rule.name = QStringLiteral("Default gaps");
         rule.managed = true;
@@ -743,7 +743,7 @@ private Q_SLOTS:
         QVERIFY(generalSpy.isValid());
 
         // Edit the baseline rule's inner gap → rulesChanged → Settings re-emits.
-        PWR::WindowRule updated = rule;
+        PWR::Rule updated = rule;
         updated.actions[0].params.insert(QString(PWR::ActionParam::Value), 24);
         QVERIFY(store.updateRule(updated));
 

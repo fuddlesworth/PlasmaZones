@@ -460,7 +460,7 @@ public:
     // Off by default: every context still gets the synthesized level-1 default
     // layout (today's behavior). When on, no context is assigned an active
     // snapping or autotiling layout until the user explicitly assigns one —
-    // overridable per context by a DefaultLayoutAssignment window rule.
+    // overridable per context by a DefaultLayoutAssignment rule.
     static bool suppressDefaultLayoutAssignment()
     {
         return false;
@@ -677,11 +677,11 @@ public:
     // and high-frequency session state saves.
     PLASMAZONES_EXPORT static QString sessionFilePath();
 
-    // Returns the absolute path to windowrules.json (the unified WindowRule
+    // Returns the absolute path to rules.json (the unified Rule
     // store — schema v4). Separate from config.json so frequent daemon-driven
     // rule writes do not churn the cold user-settings blob. The daemon is the
     // sole writer; see docs/window-rule-refactor-design.md §5.
-    PLASMAZONES_EXPORT static QString windowRulesFilePath();
+    PLASMAZONES_EXPORT static QString rulesFilePath();
 
     // LEGACY id of the old single managed baseline appearance rule that carried
     // ALL default appearance actions (borders + title bar + gaps) on one rule.
@@ -695,7 +695,7 @@ public:
     }
 
     // Stable id of the managed baseline BORDER rule: the catch-all,
-    // lowest-priority WindowRule whose actions hold the default window border
+    // lowest-priority Rule whose actions hold the default window border
     // appearance (visible / width / radius / colour) the Appearance settings
     // page edits. Fixed so the daemon can re-find (and idempotently re-seed) it
     // across restarts and the settings UI can bind to the same rule. See
@@ -706,7 +706,7 @@ public:
     }
 
     // Stable id of the managed baseline TITLE BAR rule: the catch-all,
-    // lowest-priority WindowRule whose single action holds the default
+    // lowest-priority Rule whose single action holds the default
     // hide-title-bar value the Appearance settings page edits.
     static QUuid baselineTitleBarRuleId()
     {
@@ -714,7 +714,7 @@ public:
     }
 
     // Stable id of the managed baseline GAP rule: the catch-all,
-    // lowest-priority WindowRule whose actions hold the global default inner /
+    // lowest-priority Rule whose actions hold the global default inner /
     // outer gap model. Settings reads these actions back as its innerGap() /
     // outerGap*() getters, and per-monitor gap overrides are v5 ids namespaced
     // under this id.
@@ -724,15 +724,15 @@ public:
     }
 
     // Returns the absolute path to quicklayouts.json (the numbered quick-layout
-    // shortcut slots 1..9). Quick-layout slots are NOT window rules, so they
-    // sit in a sibling sidecar next to windowrules.json rather than in the
+    // shortcut slots 1..9). Quick-layout slots are NOT rules, so they
+    // sit in a sibling sidecar next to rules.json rather than in the
     // rule store. LayoutRegistry reads/writes this file directly.
     PLASMAZONES_EXPORT static QString quickLayoutsFilePath();
 
     // Returns the absolute path to layout-settings.json — the per-layout
     // settings sidecar (keyed by layout UUID). Per-layout settings are NOT part
     // of the structural layout definition, so they live in a sibling sidecar
-    // next to windowrules.json rather than inside each layout file.
+    // next to rules.json rather than inside each layout file.
     PLASMAZONES_EXPORT static QString layoutSettingsFilePath();
 
     // Curated default picker visibility, seeded into layout-settings.json on a

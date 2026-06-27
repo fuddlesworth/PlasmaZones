@@ -71,10 +71,10 @@ void SettingsController::buildApplicationController()
     // Top-level entries. The rail reads top → bottom as three blocks split by
     // two dividers: (1) top/global — Overview (status dashboard) + General
     // (global settings); (2) per-feature configuration — Display, Placement,
-    // Animations, Window Rules; (3) tools & meta — Editor, About.
+    // Animations, Rules; (3) tools & meta — Editor, About.
     // `divider` flags mark only those two seams (after General, after Window
     // Rules) plus one inside the feature block (after Placement, to set the
-    // placement categories apart from Animations/Window Rules).
+    // placement categories apart from Animations/Rules).
 
     // ── Block 1: top / global ──
     regVirtual(QStringLiteral("overview"), QString(), PhosphorI18n::tr("Overview"),
@@ -90,7 +90,7 @@ void SettingsController::buildApplicationController()
     // Placement groups the two placement modes (Snapping / Tiling) as an
     // inline-collapsible category, matching Display. Divider after it (i.e.
     // above Animations) sets the placement categories apart from the
-    // Animations / Window Rules pages that follow.
+    // Animations / Rules pages that follow.
     regVirtual(QStringLiteral("placement"), QString(), PhosphorI18n::tr("Placement"), QString(),
                QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
     // Appearance groups the visual surfaces — the window border / title-bar / gap
@@ -99,7 +99,7 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("appearance"), QString(), PhosphorI18n::tr("Appearance"), QString(),
                QStringLiteral("preferences-desktop-theme"), /*collapsible=*/true);
     // Shared, mode-neutral page under Appearance. Edits the single managed
-    // baseline appearance WindowRule — the window border / title bar AND the
+    // baseline appearance Rule — the window border / title bar AND the
     // unified inner/outer gap model (both global, not per-mode).
     regPage(m_windowAppearancePage, QStringLiteral("appearance"), PhosphorI18n::tr("Windows"),
             QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
@@ -117,10 +117,10 @@ void SettingsController::buildApplicationController()
     // to m_domains so applyAllAsync walks it, exactly as registerPage would
     // have, but without claiming a sidebar/registry id of its own.
     m_app->registerDomain(m_animationsPage);
-    // Window Rules is a top-level leaf (its old "Rules" parent retired after
+    // Rules is a top-level leaf (its old "Rules" parent retired after
     // the v4 fold left a single rule surface). Divider after it closes the
     // feature block and opens the tools-and-meta block below.
-    regPage(m_windowRulesPage, QString(), PhosphorI18n::tr("Window Rules"), QStringLiteral("WindowRulesPage.qml"),
+    regPage(m_rulesPage, QString(), PhosphorI18n::tr("Rules"), QStringLiteral("RulesPage.qml"),
             QStringLiteral("view-list-details"), /*collapsible=*/false, /*divider=*/true);
 
     // ── Block 3: tools & meta ──
@@ -374,7 +374,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
         {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
         {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
-        // The "rules" parent virtual retired when Window Rules promoted
+        // The "rules" parent virtual retired when Rules promoted
         // to a top-level entry; no redirect needed because there is no
         // longer a parent id to land on.
         // The *-cat virtual headers (registered as collapsible category
@@ -488,7 +488,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // child page is dirty. Mirrors the registry topology in
         // buildApplicationController() above.
         {QStringLiteral("display"), {QStringLiteral("virtualscreens"), QStringLiteral("layouts")}},
-        // No "rules" entry — Window Rules is a top-level leaf so its
+        // No "rules" entry — Rules is a top-level leaf so its
         // dirty state propagates without a parent-bucket intermediary.
     };
     return groups;
@@ -518,7 +518,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
         QStringLiteral("window-appearance"),
-        QStringLiteral("window-rules"),
+        QStringLiteral("rules"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
         QStringLiteral("about"),

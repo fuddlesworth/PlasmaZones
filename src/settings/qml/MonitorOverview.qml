@@ -6,12 +6,12 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Read-only monitor overview strip at the top of WindowRulesPage.
+ * @brief Read-only monitor overview strip at the top of RulesPage.
  *
  * Iterates `settingsController.screens` so the visual treatment (icon +
  * displayLabel + Primary badge) matches the canonical `DisplayMap`
  * used elsewhere in the app. Per-monitor rule data comes from
- * `WindowRuleController.monitorOverview(screens)`, whose tiles are keyed by each
+ * `RuleController.monitorOverview(screens)`, whose tiles are keyed by each
  * screen's `name`, with a `screenId` fallback for a nameless output (a
  * screen with neither is omitted).
  *
@@ -25,7 +25,7 @@ ColumnLayout {
     /// list of tiles and supplies the rich metadata (displayLabel,
     /// connectorName, isPrimary, width/height).
     required property var screens
-    /// `WindowRuleController.monitorOverview()` output — rule-related summary
+    /// `RuleController.monitorOverview()` output — rule-related summary
     /// per screen.
     required property var tiles
     /// The currently-selected monitor filter (empty = no filter).

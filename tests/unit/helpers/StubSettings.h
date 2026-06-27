@@ -416,7 +416,7 @@ public:
     }
 
     // IWindowExclusionSettings — the per-app / per-class exclusion list
-    // accessors retired in v4 (folded into unified WindowRule store).
+    // accessors retired in v4 (folded into unified Rule store).
     bool excludeTransientWindows() const override
     {
         return false;
@@ -500,7 +500,7 @@ public:
     }
     // animationExcludedApplications / animationExcludedWindowClasses
     // overrides retired in v4 alongside the ISettings virtuals — the
-    // lists folded into ExcludeAnimations WindowRules.
+    // lists folded into ExcludeAnimations Rules.
 
     // IZoneSelectorSettings
     bool zoneSelectorEnabled() const override

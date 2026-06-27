@@ -49,7 +49,7 @@ library provides:
 | `PhosphorControl::PageRegistry`           | Catalogue of registered pages as a tree (`Entry` per page); read-only after startup, supports dynamic add but not removal |
 | `PhosphorControl::SearchController`       | Global settings search: ranked results from page registry, authored anchors, and registered providers |
 | `PhosphorControl::SearchRanker`           | Pure, stateless, typo-tolerant scoring + ranking; headless and Qt-free beyond `QString` |
-| `PhosphorControl::ISearchProvider`        | App-implemented source of dynamic search entries (window rules, shaders, layouts, …) |
+| `PhosphorControl::ISearchProvider`        | App-implemented source of dynamic search entries (rules, shaders, layouts, …) |
 | `PhosphorControl::SearchEntry`            | One searchable item (Page / Section / Setting / Entity), addressed as `"pageId"` or `"pageId#anchor"` |
 | `PhosphorControl::DBusBridge`             | Configured endpoint(s) for daemon calls: sync `call()` / async `asyncCall()`, with explicit-interface variants |
 | `PhosphorControl::LocalizedContext`       | QML i18n context routing `i18n()`/`i18nc()`/`i18np()` through Qt translation, for Qt-only consumers without KF6 |

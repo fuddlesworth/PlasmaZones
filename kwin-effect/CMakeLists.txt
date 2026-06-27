@@ -131,16 +131,16 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # the re-export and this target would break mysteriously. Named
     # here so the link graph matches the include graph.
     PhosphorAnimation::PhosphorAnimation
-    # PhosphorWindowRules: the unified LGPL rule engine. The effect resolves
+    # PhosphorRules: the unified LGPL rule engine. The effect resolves
     # its per-window animation overrides AND its exclusion gates through
-    # RuleEvaluator over slices of windowrules.json — the snap-drag gate
+    # RuleEvaluator over slices of rules.json — the snap-drag gate
     # binds to `ExclusionRules::excludeRulesFrom`, the animation gate to
     # `ExclusionRules::excludeAnimationsRulesFrom`, both filtering the
     # same unified rule-store push that drives the OverrideAnimation*
     # pipeline. Both the effect and the daemon link this one library so
     # there is exactly one match-code implementation (GPL->LGPL link is
     # fine).
-    PhosphorWindowRules::PhosphorWindowRules
+    PhosphorRules::PhosphorRules
     # ShaderIncludeResolver: kwin-effect resolves `#include` directives
     # in animation shader source so the canonical header inlines before
     # the `#define PLASMAZONES_KWIN` injection selects its default-block

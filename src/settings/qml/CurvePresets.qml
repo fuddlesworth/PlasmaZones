@@ -301,7 +301,7 @@ QtObject {
     /// Friendly label for ANY stored curve wire value, including the
     /// `spring:omega,zeta` form. Single source of truth for the name shown
     /// both in the rule editor's curve button (ActionRow) and the rule-list
-    /// action summary (resolved in C++ via WindowRuleController). Easing
+    /// action summary (resolved in C++ via RuleController). Easing
     /// values defer to curveDisplayName; springs format as "Spring (ω, ζ)".
     function curveLabel(curve) {
         if (curve && curve.indexOf("spring:") === 0) {

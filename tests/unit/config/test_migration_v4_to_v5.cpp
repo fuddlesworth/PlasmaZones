@@ -9,8 +9,8 @@
  * The v4 schema stored per-mode (separate Snapping vs Tiling) window
  * appearance (borders, title bars, colours) and gap settings in config.json,
  * plus per-screen gap subsets. This branch deleted those settings and routes
- * the same concerns through window rules. A v4 config.json fixture (plus a
- * pre-existing v4 windowrules.json so finalizeV4Conversion takes its
+ * the same concerns through rules. A v4 config.json fixture (plus a
+ * pre-existing v4 rules.json so finalizeV4Conversion takes its
  * cleanup-only branch, mirroring a real upgrade) is run through
  * ConfigMigration::ensureJsonConfig; the test asserts:
  *   - a clean/default v4 config migrates to ZERO override rules,
@@ -42,7 +42,7 @@
 #include "../../../src/config/configmigration.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
-#include <PhosphorWindowRules/WindowRuleSet.h>
+#include <PhosphorRules/RuleSet.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -69,20 +69,20 @@ private:
         return QJsonDocument::fromJson(f.readAll()).object();
     }
 
-    /// Seed a valid, empty v4 windowrules.json so finalizeV4Conversion takes
+    /// Seed a valid, empty v4 rules.json so finalizeV4Conversion takes
     /// its cleanup-only branch (the rule store already parses as v4) instead of
     /// rebuilding — exactly what a real v4→v5 upgrade encounters, where the
     /// store was written during the user's earlier v3→v4 migration.
-    void seedEmptyWindowRules()
+    void seedEmptyRules()
     {
-        PhosphorWindowRules::WindowRuleSet set;
-        QDir().mkpath(QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath());
-        QVERIFY(set.saveToFile(ConfigDefaults::windowRulesFilePath()));
+        PhosphorRules::RuleSet set;
+        QDir().mkpath(QFileInfo(ConfigDefaults::rulesFilePath()).absolutePath());
+        QVERIFY(set.saveToFile(ConfigDefaults::rulesFilePath()));
     }
 
     QJsonArray rules()
     {
-        return readJson(ConfigDefaults::windowRulesFilePath()).value(QStringLiteral("rules")).toArray();
+        return readJson(ConfigDefaults::rulesFilePath()).value(QStringLiteral("rules")).toArray();
     }
 
     QJsonObject ruleByName(const QString& name)
@@ -164,7 +164,7 @@ private Q_SLOTS:
     void testCleanDefaultV4_producesNoOverrideRules()
     {
         IsolatedConfigGuard guard;
-        seedEmptyWindowRules();
+        seedEmptyRules();
 
         // Every appearance/gap value at its v4 default — nothing to migrate.
         QJsonObject cfg = baseV4Config();
@@ -192,7 +192,7 @@ private Q_SLOTS:
     void testCustomBorderWidthAndInnerGap_perModeRules()
     {
         IsolatedConfigGuard guard;
-        seedEmptyWindowRules();
+        seedEmptyRules();
 
         QJsonObject cfg = baseV4Config();
         // Snapping border width differs (5 != default 2).
@@ -228,10 +228,10 @@ private Q_SLOTS:
         // a context field, so the gap action on the tiling rule resolves through
         // the gap cascade (the whole point of moving off IsTiled, a window-
         // property field on which gap actions were inert).
-        const auto setOpt = PhosphorWindowRules::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
+        const auto setOpt = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
         QVERIFY(setOpt.has_value());
         bool sawTiling = false;
-        for (const PhosphorWindowRules::WindowRule& r : setOpt->rules()) {
+        for (const PhosphorRules::Rule& r : setOpt->rules()) {
             if (r.name != QStringLiteral("Tiling appearance")) {
                 continue;
             }
@@ -239,8 +239,8 @@ private Q_SLOTS:
             QVERIFY2(r.match.isContextOnly(), "the Mode-matched tiling rule must be context-only");
             QVERIFY2(r.isValid(), "the re-pointed tiling rule must be valid");
             bool carriesGap = false;
-            for (const PhosphorWindowRules::RuleAction& a : r.actions) {
-                if (a.type == QLatin1String(PhosphorWindowRules::ActionType::SetInnerGap)) {
+            for (const PhosphorRules::RuleAction& a : r.actions) {
+                if (a.type == QLatin1String(PhosphorRules::ActionType::SetInnerGap)) {
                     carriesGap = true;
                 }
             }
@@ -257,7 +257,7 @@ private Q_SLOTS:
     void testColors_useSystemFalse_carriesHex()
     {
         IsolatedConfigGuard guard;
-        seedEmptyWindowRules();
+        seedEmptyRules();
 
         QJsonObject cfg = baseV4Config();
         setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Appearance"), QStringLiteral("Colors")},
@@ -279,7 +279,7 @@ private Q_SLOTS:
     void testColors_useSystemTrue_noColorAction()
     {
         IsolatedConfigGuard guard;
-        seedEmptyWindowRules();
+        seedEmptyRules();
 
         QJsonObject cfg = baseV4Config();
         // useSystem=true is the v4 default (accent), so it contributes nothing.
@@ -307,7 +307,7 @@ private Q_SLOTS:
     void testPerScreenGap_becomesScreenIdRule()
     {
         IsolatedConfigGuard guard;
-        seedEmptyWindowRules();
+        seedEmptyRules();
 
         QJsonObject cfg = baseV4Config();
         // A snapping per-screen inner-gap override on DP-1 (16 != default 8).
@@ -342,7 +342,7 @@ private Q_SLOTS:
     void testV4GroupsRemoved_survivorsPreserved()
     {
         IsolatedConfigGuard guard;
-        seedEmptyWindowRules();
+        seedEmptyRules();
 
         QJsonObject cfg = baseV4Config();
         setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Appearance"), QStringLiteral("Borders")},
@@ -382,7 +382,7 @@ private Q_SLOTS:
     void testIdempotency_runTwiceIsNoOp()
     {
         IsolatedConfigGuard guard;
-        seedEmptyWindowRules();
+        seedEmptyRules();
 
         QJsonObject cfg = baseV4Config();
         setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Appearance"), QStringLiteral("Borders")},
@@ -392,19 +392,19 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
         const QByteArray firstRun = [&] {
-            QFile f(ConfigDefaults::windowRulesFilePath());
+            QFile f(ConfigDefaults::rulesFilePath());
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
         const int firstCount = rules().size();
         QCOMPARE(firstCount, 2);
 
         // Re-run against the now-v5 tree: no chain step runs, finalizeV5 sees
-        // no stash and no-ops. windowrules.json is byte-identical.
+        // no stash and no-ops. rules.json is byte-identical.
         ConfigMigration::resetMigrationGuardForTesting();
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QByteArray secondRun = [&] {
-            QFile f(ConfigDefaults::windowRulesFilePath());
+            QFile f(ConfigDefaults::rulesFilePath());
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
         QCOMPARE(secondRun, firstRun);

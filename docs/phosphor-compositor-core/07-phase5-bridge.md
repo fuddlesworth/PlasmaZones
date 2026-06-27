@@ -29,7 +29,7 @@ WindowManager
 ├── owns ActivationPolicy (which window is active)
 ├── owns PlacementEngine integration (initial position)
 ├── coordinates with Seat (keyboard focus = active window)
-└── applies WindowRules on map
+└── applies Rules on map
 
 WindowEntry
 ├── XdgToplevel* toplevel
@@ -74,7 +74,7 @@ libs/phosphor-compositor-core/src/bridge/
 ├── session_restore.cpp
 ├── placement_integration.h     — Bridge to phosphor-placement-engine
 ├── placement_integration.cpp
-├── rule_integration.h          — Bridge to phosphor-windowrule
+├── rule_integration.h          — Bridge to phosphor-rule
 └── rule_integration.cpp
 ```
 
@@ -181,7 +181,7 @@ Q_SIGNALS:
                    ┌──────────────┐
                    │  PENDING     │  (no initial configure acked yet)
                    │              │  — WindowEntry created
-                   │              │  — WindowRules evaluated (initial state/geometry)
+                   │              │  — Rules evaluated (initial state/geometry)
                    │              │  — PlacementEngine computes initial position
                    │              │  — configure sent with computed geometry + states
                    └──────┬───────┘
@@ -286,8 +286,8 @@ public:
     PhosphorSnapEngine::SnapEngine& snapEngine();
     PhosphorPlacement::WindowTrackingService& windowTracking();
 
-    // Window Rules
-    PhosphorWindowRule::RuleEvaluator& ruleEvaluator();
+    // Rules
+    PhosphorRule::RuleEvaluator& ruleEvaluator();
     void reloadRules();
 
     // Config
@@ -323,7 +323,7 @@ private:
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutRegistry;
     std::unique_ptr<PhosphorSnapEngine::SnapEngine> m_snapEngine;
     std::unique_ptr<PhosphorPlacement::WindowTrackingService> m_windowTracking;
-    std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_ruleEvaluator;
+    std::unique_ptr<PhosphorRule::RuleEvaluator> m_ruleEvaluator;
     std::unique_ptr<PhosphorConfig::Store> m_configStore;
     Compositor* m_compositor;
 };
@@ -403,7 +403,7 @@ Compositor reads/writes directly (no intermediary):
 ~/.local/share/plasmazones/layouts/     — Zone layout JSON files
 ~/.local/share/plasmazones/session/     — Session restore data
 ~/.config/plasmazones/config.json       — Settings
-~/.config/plasmazones/windowrules.json  — Window rules
+~/.config/plasmazones/rules.json  — Rules
 ```
 
 ### Session Restore
@@ -493,7 +493,7 @@ No IPC. No daemon. Single-process function call chain.
 4. Close window — removed from stacking order
 5. Zone snapping: drag window → zone highlight appears same-frame → drop snaps
 6. Navigation: Meta+H/J/K/L moves focus between zones instantly
-7. Window rules: specific app opens maximized (per rule, in-process evaluation)
+7. Rules: specific app opens maximized (per rule, in-process evaluation)
 8. Settings app changes layout → compositor applies immediately (live-update)
 9. Kill compositor → restart → windows restore to saved zones
 10. Unit tests:

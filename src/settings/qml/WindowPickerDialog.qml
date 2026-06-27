@@ -11,7 +11,7 @@ import org.kde.kirigami as Kirigami
  *
  * Shows a filterable list of running windows with their window class and
  * caption. Emits picked(value) when a window is selected. Hosted by the
- * Window Rules page (WindowRulesPage); MatchLeafEditor calls the
+ * Rules page (RulesPage); MatchLeafEditor calls the
  * appropriate openFor* helper based on the match leaf's Field so the
  * user can pick an AppId / WindowClass / DesktopFile / Title without
  * typing it.

@@ -1,12 +1,12 @@
 <!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# Window Rule Refactor — Implementation Plan
+# Rule Refactor — Implementation Plan
 
 | | |
 |---|---|
 | **Status** | Implemented — under review |
-| **Companion** | `docs/window-rule-refactor-design.md` (architecture), `docs/window-rules-page-mockup.svg` (UI) |
+| **Companion** | `docs/window-rule-refactor-design.md` (architecture), `docs/rules-page-mockup.svg` (UI) |
 | **Branch** | `feature/window-rule-refactor` (off `v3.1`) |
 | **Date** | 2026-05-17 |
 
@@ -21,7 +21,7 @@ code, so nothing is missed during implementation.
 ```
 Phase 0  Metadata plumbing  ─┐
                              ├─►  Phase 2  Window-property matchers ─┐
-Phase 1  phosphor-windowrule ┘                                       ├─► Phase 3 ─► Phase 4
+Phase 1  phosphor-rule ┘                                       ├─► Phase 3 ─► Phase 4
    │                                                                 │
    └──────────────────────────────────────────────────────────────► Phase 3  Context matchers + migration
                                                                           │
@@ -36,7 +36,7 @@ Phase 1  phosphor-windowrule ┘                                       ├─►
 - **Phase 3** needs Phase 1 (hard) and Phase 0 (hard — context rules resolve against live
   windows whose per-window desktop/activity come from Phase 0). It carries the schema
   `v3→v4` migration.
-- **Phase 4** needs Phase 3 (hard — the `windowrules.json` store, the D-Bus adaptor, the
+- **Phase 4** needs Phase 3 (hard — the `rules.json` store, the D-Bus adaptor, the
   migration must exist before the UI points at them).
 - **Phases 3 + 4 land together** (the migration and the UI re-point are atomic). Phases
   0–2 are independently releasable.
@@ -50,10 +50,10 @@ the per-phase sections below assume these.
 
 ### 2.1 `WindowType` enum lives in `phosphor-protocol`
 
-Phase 0 wanted it in `phosphor-protocol`; Phase 1 wanted it in `phosphor-windowrule`.
+Phase 0 wanted it in `phosphor-protocol`; Phase 1 wanted it in `phosphor-rule`.
 **Decision: `phosphor-protocol`.** It is the lowest shared LGPL library, the enum crosses
-D-Bus (as `int`), and `phosphor-windowrule` is a higher-level consumer — the dependency
-arrow must point `phosphor-windowrule → phosphor-protocol`, never the reverse.
+D-Bus (as `int`), and `phosphor-rule` is a higher-level consumer — the dependency
+arrow must point `phosphor-rule → phosphor-protocol`, never the reverse.
 
 Consequence: Phase 0 **task 1** (define `WindowType` in
 `libs/phosphor-protocol/include/PhosphorProtocol/WindowTypeEnum.h`) is a **prerequisite for
@@ -61,26 +61,26 @@ Phase 1's `WindowQuery`**. Phase 1's library gains a `find_package(PhosphorProto
 `target_link_libraries(... PUBLIC PhosphorProtocol::PhosphorProtocol)`. The header must
 stay free of `QtDBus`/`Q_DECLARE_METATYPE` so the effect can include it cheaply.
 
-### 2.2 `WindowRuleStore` is Phase 3, not Phase 2
+### 2.2 `RuleStore` is Phase 3, not Phase 2
 
-Phase 2 uses **in-memory bridges only** — no file, no schema change. The `WindowRuleStore`
-(load/save `windowrules.json`, daemon-sole-writer) is created in **Phase 3** alongside the
+Phase 2 uses **in-memory bridges only** — no file, no schema change. The `RuleStore`
+(load/save `rules.json`, daemon-sole-writer) is created in **Phase 3** alongside the
 migration. Phase 2 does not touch disk.
 
-### 2.3 Bridge helpers — header-only, in `phosphor-windowrule`
+### 2.3 Bridge helpers — header-only, in `phosphor-rule`
 
-`AnimationAppRule → WindowRule` conversion is needed by both Phase 2 (effect, in-memory)
+`AnimationAppRule → Rule` conversion is needed by both Phase 2 (effect, in-memory)
 and Phase 3 (the migration). To avoid duplicating non-trivial conversion logic, it lives in
-`phosphor-windowrule` as **header-only inline free functions** (`AnimationAppRuleBridge.h`,
-`ExclusionListBridge.h`). Header-only means `phosphor-windowrule` takes an *include-time*
+`phosphor-rule` as **header-only inline free functions** (`AnimationAppRuleBridge.h`,
+`ExclusionListBridge.h`). Header-only means `phosphor-rule` takes an *include-time*
 dependency on `phosphor-animation` headers only for consumers that include the bridge
 header — no hard link edge on the core library, no cycle (`phosphor-animation` never links
-`phosphor-windowrule`). The effect and the migration each include the bridge header.
+`phosphor-rule`). The effect and the migration each include the bridge header.
 
 ### 2.4 Daemon-side exclusion enforcement migrates in Phase 3
 
 Phase 2 is **effect-focused**: it wires the animation resolvers and the effect's exclusion
-filtering through the evaluator, and links `phosphor-windowrule` into *both* the effect and
+filtering through the evaluator, and links `phosphor-rule` into *both* the effect and
 the daemon (to establish the shared binary). The daemon's own exclusion checks
 (`navigation_actions.cpp`, `lifecycle.cpp` — which use `appIdMatches`, not `Contains`)
 migrate in **Phase 3**, when the unified store exists and the effect-vs-daemon operator
@@ -159,32 +159,32 @@ wide metadata), `libs/phosphor-protocol/tests/` (enum round-trip), new
 
 ---
 
-## 4. Phase 1 — `phosphor-windowrule` library
+## 4. Phase 1 — `phosphor-rule` library
 
 **Goal:** the LGPL-2.1+ rule engine — linkable by the GPL effect and GPL daemon.
 
 ### Tasks (ordered)
 
-1. Directory skeleton `libs/phosphor-windowrule/{include/PhosphorWindowRule,src,tests}`.
+1. Directory skeleton `libs/phosphor-rule/{include/PhosphorRule,src,tests}`.
 2. `MatchTypes.h` — `Field`/`Operator` enums + string conversion.
 3. `WindowQuery.h` — attribute bag + `valueForField()` accessor (includes `WindowType` from `phosphor-protocol`).
 4. `MatchExpression` — leaf/composite tree, evaluation, JSON, cached compiled regex.
 5. `RuleAction` + `ActionRegistry` — pluggable descriptors, built-in registration.
-6. `WindowRule` — `{id,name,enabled,priority,match,actions}`.
-7. `WindowRuleSet` — ordered collection, revision counter, file (de)serialization.
+6. `Rule` — `{id,name,enabled,priority,match,actions}`.
+7. `RuleSet` — ordered collection, revision counter, file (de)serialization.
 8. `RuleEvaluator` — `resolve()`, slot accumulation, terminal `Exclude`, match cache.
-9. `PhosphorWindowRule.h` umbrella + `windowrulelogging`.
-10. `CMakeLists.txt` + `PhosphorWindowRuleConfig.cmake.in` (mirror `phosphor-zones`).
+9. `PhosphorRule.h` umbrella + `rulelogging`.
+10. `CMakeLists.txt` + `PhosphorRuleConfig.cmake.in` (mirror `phosphor-zones`).
 11. `tests/` + wire into top-level `CMakeLists.txt` after `phosphor-identity`.
 12. Evaluator benchmark test.
 
 ### Files
 
-- **Create:** the full `libs/phosphor-windowrule/` tree — 10 public headers, 8 source files,
-  ~13 test files, `CMakeLists.txt`, `PhosphorWindowRuleConfig.cmake.in`, `README.md`
+- **Create:** the full `libs/phosphor-rule/` tree — 10 public headers, 8 source files,
+  ~13 test files, `CMakeLists.txt`, `PhosphorRuleConfig.cmake.in`, `README.md`
   (see the Phase 1 agent's file-layout table — reproduced in the design doc's library
   section).
-- **Modify:** top-level `CMakeLists.txt` — `add_subdirectory(libs/phosphor-windowrule)`
+- **Modify:** top-level `CMakeLists.txt` — `add_subdirectory(libs/phosphor-rule)`
   after the `phosphor-identity` line.
 - **Delete:** none.
 
@@ -192,12 +192,12 @@ wide metadata), `libs/phosphor-protocol/tests/` (enum round-trip), new
 
 - Dependency surface: `Qt6::Core` + `PhosphorProtocol` (for `WindowType`) + `PhosphorIdentity`
   (PRIVATE — `appIdMatches()`). **No `Qt6::Gui`** — keep the effect's transitive link cost low.
-- `MatchExpression` is a copyable value type (lives in `QList<WindowRule>`); the compiled
+- `MatchExpression` is a copyable value type (lives in `QList<Rule>`); the compiled
   regex cache is `mutable std::shared_ptr<QRegularExpression>`.
 - Empty `All{}` = always-true catch-all (the migrated provider default).
 - Every loader follows the `AnimationAppRule::fromJson` strict-validation precedent:
   `std::optional`, drop-malformed-with-`qCWarning`, canonicalize-on-save.
-- `WindowRuleSet::fromJson` **refuses** a non-v4 `_version` — migration is the config
+- `RuleSet::fromJson` **refuses** a non-v4 `_version` — migration is the config
   layer's job, never the library's.
 - `RuleEvaluator` exposes both `resolve()` and `resolveCached()`, and a `clearCache()` for
   metadata-driven invalidation. The `ResolvedActions` result **must distinguish
@@ -227,9 +227,9 @@ behaviour byte-identical, on-disk format unchanged. Non-breaking.
 
 ### Tasks (ordered)
 
-1. Link `phosphor-windowrule` into the effect and the daemon (`kwin-effect/CMakeLists.txt`,
+1. Link `phosphor-rule` into the effect and the daemon (`kwin-effect/CMakeLists.txt`,
    `src/CMakeLists.txt`) — establishes the shared binary.
-2. Add a `RuleEvaluator` + cached `WindowRuleSet` to `ShaderTransitionManager`, rebuilt
+2. Add a `RuleEvaluator` + cached `RuleSet` to `ShaderTransitionManager`, rebuilt
    whenever `appRules()` changes.
 3. Replace the three resolver call sites (`shader_transitions.cpp:1178/1214`,
    `drag_snap.cpp:475/522`) with `RuleEvaluator::resolve(WindowQuery)` + slot extraction —
@@ -259,7 +259,7 @@ behaviour byte-identical, on-disk format unchanged. Non-breaking.
 
 - **In-memory bridge only** — `Settings::animationAppRules()` and the exclusion `QStringList`s
   load from `config.json` exactly as today; the bridge converts the loaded objects into a
-  `WindowRuleSet` whenever they change.
+  `RuleSet` whenever they change.
 - Animation actions use **event-scoped slots** (`anim-shader:<event>`, `anim-timing:<event>`)
   so the shader axis and timing axis stay independent and `eventPath` exact-match is
   reproduced.
@@ -273,8 +273,8 @@ behaviour byte-identical, on-disk format unchanged. Non-breaking.
 
 ### Tests
 
-New `libs/phosphor-windowrule/tests/test_animationapprulebridge.cpp` /
-`libs/phosphor-windowrule/tests/test_exclusionlistbridge.cpp`;
+New `libs/phosphor-rule/tests/test_animationapprulebridge.cpp` /
+`libs/phosphor-rule/tests/test_exclusionlistbridge.cpp`;
 `libs/phosphor-animation/tests/test_animationappruleresolver.cpp` becomes an
 integration test over bridge+evaluator; net-new effect-filtering parity test
 (none exists today).
@@ -291,21 +291,21 @@ integration test over bridge+evaluator; net-new effect-filtering parity test
 
 ## 6. Phase 3 — Context matchers + schema migration
 
-**Goal:** zone Assignments and per-mode disable lists become context-only `WindowRule`s;
-introduce `windowrules.json` + its D-Bus adaptor; ship `migrateV3ToV4`.
+**Goal:** zone Assignments and per-mode disable lists become context-only `Rule`s;
+introduce `rules.json` + its D-Bus adaptor; ship `migrateV3ToV4`.
 
 ### Tasks (ordered)
 
 1. Context-rule priority formula + shared helper.
-2. `windowRulesFilePath()` in `ConfigDefaults`; `createWindowRulesBackend()` in `configbackends`.
-3. `WindowRuleStore` — load/save `windowrules.json`, daemon-sole-writer.
+2. `rulesFilePath()` in `ConfigDefaults`; `createRulesBackend()` in `configbackends`.
+3. `RuleStore` — load/save `rules.json`, daemon-sole-writer.
 4. `migrateV3ToV4` + `finalizeV4Conversion`; register the step; `ConfigSchemaVersion = 4`.
-5. Reimplement `LayoutRegistry`'s cascade methods on `RuleEvaluator` + `WindowRuleStore`
+5. Reimplement `LayoutRegistry`'s cascade methods on `RuleEvaluator` + `RuleStore`
    — **keep every public signature byte-identical** (27 call sites untouched).
 6. Reimplement `IZoneVisualizationSettings::isMonitorDisabled/isDesktopDisabled/isActivityDisabled`
    on the rule store — `isContextDisabled`/`contextDisabledReason` bodies unchanged (18 call sites untouched).
 7. Migrate the daemon's own exclusion enforcement (`navigation_actions.cpp`, `lifecycle.cpp`).
-8. `WindowRuleAdaptor` D-Bus object (`org.plasmazones.WindowRules`) + register in the daemon.
+8. `RuleAdaptor` D-Bus object (`org.plasmazones.Rules`) + register in the daemon.
 9. Relocate `QuickLayouts` slots into the `quicklayouts.json` sidecar; rename `assignments.json` → `assignments.json.migrated` after conversion.
 10. Tests (cascade-fidelity, migration, store).
 11. Cleanup: delete `createAssignmentsBackend()`, `assignmentsFilePath()`, `Assignment:`/`QuickLayouts` group I/O.
@@ -330,16 +330,16 @@ a query-side retry loop inside the reimplemented `layoutForScreen`.
 
 ### Files
 
-- **Create:** `src/dbus/windowruleadaptor.h` / `.cpp`,
-  `tests/unit/core/test_windowrule_cascade_fidelity.cpp`,
-  `tests/unit/config/test_migration_v3_to_v4.cpp`, `tests/unit/config/test_windowrule_store.cpp`.
+- **Create:** `src/dbus/ruleadaptor.h` / `.cpp`,
+  `tests/unit/core/test_rule_cascade_fidelity.cpp`,
+  `tests/unit/config/test_migration_v3_to_v4.cpp`, `tests/unit/config/test_rule_store.cpp`.
 - **Modify:** `src/config/configmigration.h` / `.cpp` (version bump, step registration,
   `migrateV3ToV4` + `finalizeV4Conversion`, called from `ensureJsonConfigImpl`),
   `src/config/configbackends.h` / `.cpp`, `src/config/configdefaults.h` / `.cpp`,
   `libs/phosphor-zones/src/layoutregistry_assignments.cpp` /
   `layoutregistry_persistence.cpp`, `libs/phosphor-zones/include/PhosphorZones/LayoutRegistry.h`
-  (member/constructor change), `libs/phosphor-zones/CMakeLists.txt` (link `phosphor-windowrule`),
-  `src/daemon/daemon.cpp` (`LayoutRegistry` construction, register `WindowRuleAdaptor`),
+  (member/constructor change), `libs/phosphor-zones/CMakeLists.txt` (link `phosphor-rule`),
+  `src/daemon/daemon.cpp` (`LayoutRegistry` construction, register `RuleAdaptor`),
   `src/config/settings.cpp` (`IZoneVisualizationSettings` impl), `src/CMakeLists.txt`,
   `src/core/settings_interfaces.h` (doc comments).
 - **Delete (cleanup, after migration verified):** `createAssignmentsBackend()`,
@@ -350,25 +350,25 @@ a query-side retry loop inside the reimplemented `layoutForScreen`.
 - The migration touches **two files**, but a `MigrationStep` is `void(QJsonObject&)`.
   Split: `migrateV3ToV4` does the `config.json`-side key removals + stashes the data;
   `finalizeV4Conversion` (a post-chain step) reads `assignments.json`, writes
-  `windowrules.json`, retires `assignments.json` (renamed to `assignments.json.migrated`
+  `rules.json`, retires `assignments.json` (renamed to `assignments.json.migrated`
   so a downgrade can recover the previous schema).
 - The `assignments.json` rename-to-`.migrated` is the **irreversible commit** — do it
-  last, after `windowrules.json` is durably written (temp-write + rename + fsync).
-  Idempotency: skip if `windowrules.json` already exists at `_version ≥ 4`.
+  last, after `rules.json` is durably written (temp-write + rename + fsync).
+  Idempotency: skip if `rules.json` already exists at `_version ≥ 4`.
 - Migrated assignment rules carry **all three** actions (`SetEngineMode`,
   `SetSnappingLayout`, `SetTilingAlgorithm`) to preserve the mode-toggle losslessness
   invariant.
 - `hasExplicitAssignment` becomes an **exact-shape store lookup**, never a
   `RuleEvaluator::resolve` (which always returns the catch-all).
 - `QuickLayouts` slots are *not* rules — relocate them to the `quicklayouts.json` sidecar
-  (the file `LayoutRegistry` reads), a sibling of `windowrules.json`.
-- `WindowRuleAdaptor` is hand-written (`Q_CLASSINFO` + public slots), like every other
+  (the file `LayoutRegistry` reads), a sibling of `rules.json`.
+- `RuleAdaptor` is hand-written (`Q_CLASSINFO` + public slots), like every other
   adaptor in this codebase — no `.xml` codegen. `LayoutAdaptor`'s assignment methods stay
   (now rule-backed); Phase 4 deletes the legacy D-Bus surface.
 
 ### Tests
 
-`test_windowrule_cascade_fidelity.cpp` ports every scenario from
+`test_rule_cascade_fidelity.cpp` ports every scenario from
 `test_layoutmanager_assignment.cpp` against the rule-backed registry — the highest-risk
 correctness work. `test_migration_v3_to_v4.cpp` asserts exact priorities, losslessness,
 `assignments.json` retirement, idempotency. Existing `test_settings_disable_per_mode.cpp`
@@ -384,19 +384,19 @@ must pass unchanged — that is the disable-list parity proof.
 
 ## 7. Phase 4 — Unified settings UI
 
-**Goal:** one Window Rules page replaces five legacy surfaces; one `WindowRuleController` +
-`WindowRuleModel` replaces three controllers/bridges.
+**Goal:** one Rules page replaces five legacy surfaces; one `RuleController` +
+`RuleModel` replaces three controllers/bridges.
 
 ### Tasks (ordered)
 
-1. C++ scaffolding — `WindowRuleModel` (`QAbstractListModel`), `WindowRuleController`.
-2. Wire `WindowRuleController` into `SettingsController` (`Q_PROPERTY ... CONSTANT`,
+1. C++ scaffolding — `RuleModel` (`QAbstractListModel`), `RuleController`.
+2. Wire `RuleController` into `SettingsController` (`Q_PROPERTY ... CONSTANT`,
    construct in ctor, dirty-tracking + revert/commit hooks).
-3. D-Bus client plumbing to the Phase 3 `org.plasmazones.WindowRules` adaptor.
-4. Leaf QML components (bottom-up): `WindowRuleRow`, `MatchExpressionEditor` (recursive),
+3. D-Bus client plumbing to the Phase 3 `org.plasmazones.Rules` adaptor.
+4. Leaf QML components (bottom-up): `RuleRow`, `MatchExpressionEditor` (recursive),
    `MatchLeafEditor`, `ActionListEditor`, `ActionRow`, `MonitorOverviewTile`.
 5. Composite editors: `RuleEditorSheet`, `AddRuleSheet` (guided subject chooser).
-6. `WindowRulesPage` assembly + `MonitorOverview` strip + grouped/filtered list.
+6. `RulesPage` assembly + `MonitorOverview` strip + grouped/filtered list.
 7. `qt_add_qml_module` `QML_FILES` add/remove; C++ sources into `plasmazones_settings_SRCS`.
 8. `Main.qml` navigation re-point (`_pageComponents`, `_childItems`, `_mainItems`).
 9. Relocate the non-rule "Window Filtering" section out of `AnimationsAppRulesPage.qml`
@@ -409,9 +409,9 @@ must pass unchanged — that is the disable-list parity proof.
 
 ### Files
 
-- **Create:** C++ — `src/settings/windowrulecontroller.{h,cpp}`,
-  `src/settings/windowrulemodel.{h,cpp}`. QML — `WindowRulesPage.qml`, `MonitorOverview.qml`,
-  `MonitorOverviewTile.qml`, `WindowRuleRow.qml`, `RuleEditorSheet.qml`, `AddRuleSheet.qml`,
+- **Create:** C++ — `src/settings/rulecontroller.{h,cpp}`,
+  `src/settings/rulemodel.{h,cpp}`. QML — `RulesPage.qml`, `MonitorOverview.qml`,
+  `MonitorOverviewTile.qml`, `RuleRow.qml`, `RuleEditorSheet.qml`, `AddRuleSheet.qml`,
   `MatchExpressionEditor.qml`, `MatchLeafEditor.qml`, `ActionListEditor.qml`, `ActionRow.qml`.
   Tests — `tests/unit/settings/test_window_rule_model.cpp`, `test_window_rule_controller.cpp`.
 - **Modify:** `src/settings/CMakeLists.txt`, `src/settings/qml/Main.qml`,
@@ -427,8 +427,8 @@ must pass unchanged — that is the disable-list parity proof.
 
 ### Key decisions
 
-- **One `WindowRuleModel`, no per-section proxy models.** A C++-computed `SectionRole`
-  buckets each rule; `WindowRulesPage` builds a derived `sectionModel` (JS, reactive on
+- **One `RuleModel`, no per-section proxy models.** A C++-computed `SectionRole`
+  buckets each rule; `RulesPage` builds a derived `sectionModel` (JS, reactive on
   search/chip/monitor-filter) over the single model.
 - Priority is **derived/hidden** in Monitor/Application/Activity sections, **list-order**
   (drag) in Animations, **an explicit SpinBox only** in Advanced/Custom.
@@ -437,7 +437,7 @@ must pass unchanged — that is the disable-list parity proof.
 - `AnimationsPageController` is only *partially* gutted — shader overrides, motion sets,
   presets stay; only the app-rule block leaves.
 - The "Window Filtering" section (min width/height, transient toggles) is animation-global
-  config, **not** per-window rules — relocated, not deleted. Only the animation exclusion
+  config, **not** per-rules — relocated, not deleted. Only the animation exclusion
   *lists* migrate to `Exclude` rules.
 
 ### Tests
@@ -464,7 +464,7 @@ Advanced, summaries), `test_window_rule_controller.cpp` (CRUD by **UUID**, `move
 
 | Risk | Phase | Mitigation |
 |---|---|---|
-| Cascade↔priority fidelity (incl. activity-beats-desktop, provider fallback) | 3 | `test_windowrule_cascade_fidelity.cpp` ports the full `test_layoutmanager_assignment.cpp` suite; the priority formula is written in Phase 1's cascade test as the oracle |
+| Cascade↔priority fidelity (incl. activity-beats-desktop, provider fallback) | 3 | `test_rule_cascade_fidelity.cpp` ports the full `test_layoutmanager_assignment.cpp` suite; the priority formula is written in Phase 1's cascade test as the oracle |
 | Engaged-empty `effectId` sentinel collapses to "no rule" | 1, 2 | `ResolvedActions` distinguishes slot-unfilled from slot-filled-empty; pinned by `test_ruleevaluator.cpp` |
 | Mode-toggle losslessness lost in migration | 3 | migrated rules carry all three engine/layout actions; `assignmentEntryForScreen` reads all three slots |
 | Two-file migration / crash mid-convert | 3 | `migrateV3ToV4` + `finalizeV4Conversion` split; temp-write+rename+fsync; `assignments.json` renamed to `.migrated` last; idempotency guard |
@@ -472,7 +472,7 @@ Advanced, summaries), `test_window_rule_controller.cpp` (CRUD by **UUID**, `move
 | Evaluation cost on hot paths | 1, 2 | match cache keyed `(windowId, revision)`; `!ruleSet.isEmpty()` fast path; Phase 1 benchmark |
 | `WindowType` ownership / dependency direction | 0, 1 | enum in `phosphor-protocol`; Phase 0 lands it before Phase 1 |
 | UI "graduation" of rules a section can't represent | 4 | `SectionRole` → `advanced`; hint shown; specialized views never corrupt an unrepresentable rule |
-| `assignments.json` write-churn re-introduced | 3 | `windowrules.json` is a dedicated file, separate from `config.json`; daemon sole writer |
+| `assignments.json` write-churn re-introduced | 3 | `rules.json` is a dedicated file, separate from `config.json`; daemon sole writer |
 | Legacy test suites | all | become integration tests over the new engine; new unit suites added per phase |
 
 ---
@@ -500,6 +500,6 @@ Advanced, summaries), `test_window_rule_controller.cpp` (CRUD by **UUID**, `move
 ## 10. References
 
 - `docs/window-rule-refactor-design.md` — architecture and rationale.
-- `docs/window-rules-page-mockup.svg` — settings UI mockup.
+- `docs/rules-page-mockup.svg` — settings UI mockup.
 - Discussion #240 — roadmap.
 - Project memory: `project_window_rule_refactor.md`.

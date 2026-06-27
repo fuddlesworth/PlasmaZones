@@ -4,7 +4,7 @@
 #pragma once
 
 #include <PhosphorProtocol/WindowTypeEnum.h>
-#include <PhosphorWindowRules/WindowQuery.h>
+#include <PhosphorRules/WindowQuery.h>
 
 namespace KWin {
 class EffectWindow;
@@ -14,7 +14,7 @@ namespace PlasmaZones {
 
 /// Map KWin's overlapping window-type predicates onto exactly one
 /// PhosphorProtocol::WindowType. Single source of truth for both the rule
-/// engine query (windowRuleQueryFor below) AND the daemon's window metadata
+/// engine query (ruleQueryFor below) AND the daemon's window metadata
 /// push (window_identity.cpp::pushWindowMetadata casts the enum to its
 /// underlying int for D-Bus transport). Ordered most-specific-first because a
 /// window can satisfy several predicates at once (a modal dialog is both a
@@ -22,7 +22,7 @@ namespace PlasmaZones {
 /// WindowType).
 PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w);
 
-/// Build a per-window PhosphorWindowRules::WindowQuery from a live KWin window,
+/// Build a per-window PhosphorRules::WindowQuery from a live KWin window,
 /// populating every window-side field declared on `WindowQuery` so user-
 /// authored rules can match on any of them. The unified shape means a rule
 /// that passes the rule-override gate (hasAnyMatch) also resolves its slot
@@ -66,9 +66,9 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w);
 /// them — a site that silently omitted them would leave IsFloating / IsSnapped /
 /// Zone unmatched in that resolver path only.
 ///
-/// Confined to the effect translation unit so the LGPL phosphor-window-rules
+/// Confined to the effect translation unit so the LGPL phosphor-rules
 /// library never sees a KWin type.
-PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
-                                                    bool isSnapped, bool isTiled, const QString& zoneId);
+PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating, bool isSnapped,
+                                        bool isTiled, const QString& zoneId);
 
 } // namespace PlasmaZones

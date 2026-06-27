@@ -27,7 +27,7 @@
 #include "dbusutils.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/RuleStore.h>
 
 #include <QDBusConnection>
 #include <QString>
@@ -108,20 +108,20 @@ void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscription
     subscribeDaemonSignal(layoutIface, QStringLiteral("currentActivityChanged"), SLOT(onActivitiesChanged()));
 
     // Window-rules → settings-side mirror store. The daemon owns
-    // windowrules.json; when it persists a change via setAllRules() the
+    // rules.json; when it persists a change via setAllRules() the
     // adaptor emits `rulesChanged(persisted)`. Without this hook the
     // settings-app's `m_localRuleStore` (which backs the in-process
     // LayoutRegistry's assignment cascade) keeps serving the snapshot
     // it scanned at process start, so daemon-driven rule edits don't
     // affect the settings-side layout preview computation until the
-    // next launch. WindowRuleStore::load() is idempotent — a no-change
+    // next launch. RuleStore::load() is idempotent — a no-change
     // reload doesn't re-emit rulesChanged (per its documented contract).
     //
-    // The WindowRuleController also subscribes to this same broadcast
+    // The RuleController also subscribes to this same broadcast
     // on its own connection to drive its model reload; the two
     // subscriptions are independent and the daemon delivers each
     // sessionBus().connect target separately.
-    const QString rulesIface = QString(PhosphorProtocol::Service::Interface::WindowRules);
+    const QString rulesIface = QString(PhosphorProtocol::Service::Interface::Rules);
     const bool rulesOk = QDBusConnection::sessionBus().connect(
         QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath), rulesIface,
         QStringLiteral("rulesChanged"), this, SLOT(reloadLocalRuleStore(bool)));
@@ -135,7 +135,7 @@ void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscription
 void SettingsController::reloadLocalRuleStore(bool persisted)
 {
     Q_UNUSED(persisted)
-    // Reload the on-disk windowrules.json mirror. Idempotent — the store's
+    // Reload the on-disk rules.json mirror. Idempotent — the store's
     // load() compares hashes and only emits rulesChanged when the file
     // content actually differs from the in-memory set, so a same-process
     // round-trip (the unlikely case of our own apply triggering this) is

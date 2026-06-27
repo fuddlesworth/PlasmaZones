@@ -208,7 +208,7 @@ SettingsFlickable {
                     Layout.fillWidth: true
                     enabled: animationsCard.toggleChecked
                     // The Global default has no shader leg in this UI — shader
-                    // overrides live on the per-event and Window Rules layers.
+                    // overrides live on the per-event and Rules layers.
                     shaderLegSupported: false
                     showShaderSection: false
                     eventLabel: i18n("Global animation defaults")
@@ -289,11 +289,11 @@ SettingsFlickable {
         // animation at all. Relocated here from the old Animations App
         // Rules page — these are global config toggles, not per-window
         // rules, so they belong on the General page. Per-window
-        // overrides now live on the unified Window Rules page.
+        // overrides now live on the unified Rules page.
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
-            text: i18n("Filtered windows are not animated. Use a Window Rule to keep a specific application animated even when a filter would exclude it.")
+            text: i18n("Filtered windows are not animated. Use a Rule to keep a specific application animated even when a filter would exclude it.")
         }
 
         SettingsCard {

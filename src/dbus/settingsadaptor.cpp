@@ -428,7 +428,7 @@ void SettingsAdaptor::initializeRegistry()
 
     // Zone settings. The shared inner/outer gaps are no longer exposed here:
     // their global default is rule-backed (the managed baseline appearance
-    // WindowRule), edited over the org.plasmazones.WindowRules surface, not the
+    // Rule), edited over the org.plasmazones.Rules surface, not the
     // generic settings get/set map.
     REGISTER_INT_SETTING("adjacentThreshold", adjacentThreshold, setAdjacentThreshold)
     REGISTER_INT_SETTING("pollIntervalMs", pollIntervalMs, setPollIntervalMs)
@@ -497,9 +497,9 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("animationMinimumWindowWidth", animationMinimumWindowWidth, setAnimationMinimumWindowWidth)
     REGISTER_INT_SETTING("animationMinimumWindowHeight", animationMinimumWindowHeight, setAnimationMinimumWindowHeight)
     // animationExcludedApplications / animationExcludedWindowClasses
-    // retired in v4 — folded into ExcludeAnimations WindowRules; the
+    // retired in v4 — folded into ExcludeAnimations Rules; the
     // effect derives its animation exclusion rule set from the unified
-    // store via the WindowRules.rulesChanged subscription instead.
+    // store via the Rules.rulesChanged subscription instead.
 
     // PhosphorZones::Zone selector settings
     REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)
@@ -653,7 +653,7 @@ void SettingsAdaptor::initializeRegistry()
         m_schemas[QStringLiteral("autotilePerAlgorithmSettings")] = QStringLiteral("map");
         // Autotile inner/outer gaps are unified with snapping and rule-backed —
         // their global default lives on the managed baseline appearance
-        // WindowRule (edited over the org.plasmazones.WindowRules surface), so
+        // Rule (edited over the org.plasmazones.Rules surface), so
         // no gap keys are registered on this generic settings map.
         REGISTER_CONCRETE_BOOL("autotileFocusNewWindows", autotileFocusNewWindows, setAutotileFocusNewWindows)
         REGISTER_CONCRETE_BOOL("autotileSmartGaps", autotileSmartGaps, setAutotileSmartGaps)

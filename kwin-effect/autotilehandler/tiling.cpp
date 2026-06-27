@@ -451,7 +451,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // from an autotile VS onto a sibling autotile VS.
             AutotileStateHelpers::removeFromOtherScreens(m_border, snap.windowId, snap.screenId);
             AutotileStateHelpers::addTiledOnScreen(m_border, snap.screenId, snap.windowId);
-            // Title-bar (borderless) state is driven by window rules through the
+            // Title-bar (borderless) state is driven by rules through the
             // effect's reconcileRuleHiddenTitleBar → DecorationManager path.
 
             if (snap.isMonocle) {

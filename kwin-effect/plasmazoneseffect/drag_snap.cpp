@@ -246,7 +246,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     //
     // `shouldAnimateWindow` adds the user's per-animation Window
     // Filtering gate (transient / min-size / app / class) and lets a
-    // WindowRule carrying any OverrideAnimation* action override the
+    // Rule carrying any OverrideAnimation* action override the
     // filter when the rule's class matcher matches. Falling through to
     // the non-animated path just runs the moveResize without the snap
     // motion / shader.
@@ -287,7 +287,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             kw->moveResize(targetFrame);
         }
 
-        // Per-window animation motion-cascade: a Timing WindowRule for
+        // Per-window animation motion-cascade: a Timing Rule for
         // this (windowClass, eventPath) replaces the global animator
         // profile's curve / duration for THIS animation only. No rule →
         // resolver returns the base profile unchanged and no override is
@@ -305,7 +305,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // resolver call below — matches the shape `shouldAnimateWindow`
         // uses for its rule-override gate, so a rule that gates the
         // animation also resolves its curve / timing / shader slots.
-        const PhosphorWindowRules::WindowQuery query = windowRuleQuery(window);
+        const PhosphorRules::WindowQuery query = ruleQuery(window);
         const auto& baseProfile = m_windowAnimator->profile();
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;
@@ -385,7 +385,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // consistent with what the settings UI shows
                 // (resolvedShaderProfile uses the same helper) without
                 // persisting it into config. Gated on `!shaderSlotFromRule`: a
-                // per-app window rule that set "None" (engaged-empty effectId)
+                // per-app rule that set "None" (engaged-empty effectId)
                 // is a deliberate opt-out and must NOT be overridden here.
                 shaderProfile =
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath);

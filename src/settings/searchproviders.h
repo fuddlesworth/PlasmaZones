@@ -34,16 +34,16 @@ private:
 };
 
 /**
- * @brief ISearchProvider feeding window rules into the global search index.
+ * @brief ISearchProvider feeding rules into the global search index.
  *
- * Snapshots the WindowRuleModel (name + match summary); results navigate to the
- * Window Rules page. Re-snapshot is driven by the model's `countChanged` (add /
+ * Snapshots the RuleModel (name + match summary); results navigate to the
+ * Rules page. Re-snapshot is driven by the model's `countChanged` (add /
  * remove) and `dataChanged` (in-place edits like a rename or summary change).
  */
-class WindowRulesSearchProvider : public PhosphorControl::ISearchProvider
+class RulesSearchProvider : public PhosphorControl::ISearchProvider
 {
 public:
-    explicit WindowRulesSearchProvider(SettingsController* controller)
+    explicit RulesSearchProvider(SettingsController* controller)
         : m_controller(controller)
     {
     }

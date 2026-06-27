@@ -155,7 +155,7 @@ void SettingsController::beginExternalEdit(const QString& page)
     // target on pop instead of clearing the wrap entirely. This is
     // genuinely reachable: an animations-page pendingChangesChanged
     // handler can fire synchronously while the controller is inside a
-    // window-rules-driven external-edit envelope, and the inner pair
+    // rules-driven external-edit envelope, and the inner pair
     // must not erase the outer target.
     m_externalEditStack.push(resolved);
 }

@@ -334,7 +334,7 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     // The shared inner/outer gaps are no longer stored config keys: the global
-    // default is rule-backed (the managed baseline appearance WindowRule), so
+    // default is rule-backed (the managed baseline appearance Rule), so
     // there is no "Gaps" group in the schema. Settings reads the values from the
     // rule and the Window Appearance page edits the rule directly.
     // Snapping.Gaps keeps only the snapping-specific adjacency threshold.
@@ -494,7 +494,7 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
 //   2. `Animations.WindowFiltering` — animation-side equivalents plus a
 //      NotificationsAndOsd knob.
 // Both retired their per-app / per-class string lists in v4 (folded into
-// Application-subject WindowRules); only the global behavioural knobs
+// Application-subject Rules); only the global behavioural knobs
 // survive. Ints are clamped via schema validators.
 
 void appendExclusionsSchema(PhosphorConfig::Schema& schema)
@@ -503,7 +503,7 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::exclusionsGroup()] = {
         // The `Applications` / `WindowClasses` leaf keys retired in v4 —
         // the v4 migration drains them into Application-subject Exclude
-        // WindowRules. Re-declaring them here would let the schema-driven
+        // Rules. Re-declaring them here would let the schema-driven
         // backend silently re-write dead defaults under the Exclusions
         // group, re-introducing keys we explicitly migrated out in v3→v4.
         // Only the three global knobs survive in this group.
@@ -526,7 +526,7 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
     // (or vice versa).
     schema.groups[CD::animationsWindowFilteringGroup()] = {
         // The `Applications` / `WindowClasses` leaf keys retired in v4 —
-        // the v4 migration drains them into ExcludeAnimations WindowRules.
+        // the v4 migration drains them into ExcludeAnimations Rules.
         // Only the four global knobs survive in this group.
         {CD::transientWindowsKey(), CD::animationExcludeTransientWindows(), QMetaType::Bool},
         {CD::notificationsAndOsdKey(), CD::animationExcludeNotificationsAndOsd(), QMetaType::Bool},
@@ -550,7 +550,7 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 //
 // Per-mode disable lists (formerly Display.{Snapping,Autotile}Disabled*)
 // are NOT in the schema: as of the window-rule refactor (PR #477) every
-// read/write routes through `windowrules.json` via Settings::disableEntriesFor
+// read/write routes through `rules.json` via Settings::disableEntriesFor
 // / writeDisableEntries. Re-declaring them here would let the schema-driven
 // backend silently re-write dead defaults under the mode-neutral Display
 // group, re-introducing keys we explicitly migrated out in v3→v4. The v3

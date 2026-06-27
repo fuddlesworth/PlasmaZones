@@ -24,7 +24,7 @@
 #include "../../../src/core/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/RuleStore.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -337,12 +337,12 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Borrowed WindowRuleStore ctor — Settings shares the caller's store
+    // Borrowed RuleStore ctor — Settings shares the caller's store
     //
-    // The settings app constructs Settings with a WindowRuleStore it owns
+    // The settings app constructs Settings with a RuleStore it owns
     // elsewhere (SettingsController::m_localRuleStore) so the disable-list
     // writes and the in-process LayoutRegistry read the SAME store instead of
-    // two independent copies over windowrules.json. These tests pin that the
+    // two independent copies over rules.json. These tests pin that the
     // borrow ctor genuinely shares the caller's store (mutations land in it)
     // and that a null argument degrades to owning one.
     // =========================================================================
@@ -353,7 +353,7 @@ private Q_SLOTS:
     void testBorrowedStore_writesLandInCallerStore()
     {
         IsolatedConfigGuard guard;
-        PhosphorWindowRules::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath());
         QCOMPARE(store.count(), 0);
 
         Settings settings(&store, nullptr);
@@ -388,16 +388,16 @@ private Q_SLOTS:
     void testBorrowedStore_settingsLoadDoesNotReloadIt()
     {
         IsolatedConfigGuard guard;
-        PhosphorWindowRules::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath());
         Settings settings(&store, nullptr);
 
         // Establish a known baseline on disk (the Settings ctor's config
-        // migration may have seeded windowrules.json, so don't assume empty).
+        // migration may have seeded rules.json, so don't assume empty).
         QVERIFY(store.setAllRules({}));
         QCOMPARE(store.count(), 0);
 
         // A peer (a separate owned Settings over the same file) writes a disable
-        // rule to windowrules.json.
+        // rule to rules.json.
         {
             Settings peer;
             peer.setDisabledMonitors(Mode::Snapping, {QStringLiteral("DP-1")});

@@ -3,8 +3,8 @@
 
 /**
  * @file test_window_rule_controller.cpp
- * @brief Coverage for WindowRuleController — the staging controller behind
- *        the unified Window Rules page.
+ * @brief Coverage for RuleController — the staging controller behind
+ *        the unified Rules page.
  *
  * The controller talks to the daemon over D-Bus; in a headless unit run the
  * daemon is absent, so `daemonReachable` is false and the model starts empty.
@@ -26,17 +26,17 @@
 #include <QTest>
 #include <QUuid>
 
-#include "settings/windowrulecontroller.h"
-#include "settings/windowrulemodel.h"
+#include "settings/rulecontroller.h"
+#include "settings/rulemodel.h"
 
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
 
 using namespace PlasmaZones;
-using namespace PhosphorWindowRules;
+using namespace PhosphorRules;
 
-class TestWindowRuleController : public QObject
+class TestRuleController : public QObject
 {
     Q_OBJECT
 
@@ -67,9 +67,9 @@ private Q_SLOTS:
     void curveLabelResolverBridgesQmlNaming();
 };
 
-void TestWindowRuleController::newEmptyRuleShapesBySubject()
+void TestRuleController::newEmptyRuleShapesBySubject()
 {
-    WindowRuleController controller;
+    RuleController controller;
 
     const QVariantMap monitor = controller.newEmptyRule(QStringLiteral("monitor"));
     QVERIFY(!monitor.value(QStringLiteral("id")).toString().isEmpty());
@@ -94,9 +94,9 @@ void TestWindowRuleController::newEmptyRuleShapesBySubject()
     QVERIFY(monitor.value(QStringLiteral("id")).toString() != app.value(QStringLiteral("id")).toString());
 }
 
-void TestWindowRuleController::addUpdateRemoveByUuid()
+void TestRuleController::addUpdateRemoveByUuid()
 {
-    WindowRuleController controller;
+    RuleController controller;
 
     // Build a monitor rule, give it a usable action, and add it.
     QVariantMap rule = controller.newEmptyRule(QStringLiteral("application"));
@@ -122,12 +122,12 @@ void TestWindowRuleController::addUpdateRemoveByUuid()
     QVERIFY(!controller.removeRule(id));
 }
 
-void TestWindowRuleController::dirtyTrackingAndRevert()
+void TestRuleController::dirtyTrackingAndRevert()
 {
-    WindowRuleController controller;
+    RuleController controller;
     QVERIFY(!controller.isDirty());
 
-    QSignalSpy dirtySpy(&controller, &WindowRuleController::dirtyChanged);
+    QSignalSpy dirtySpy(&controller, &RuleController::dirtyChanged);
 
     QVariantMap rule = controller.newEmptyRule(QStringLiteral("application"));
     rule[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
@@ -148,7 +148,7 @@ void TestWindowRuleController::dirtyTrackingAndRevert()
     // symmetric so it passes both in a fully headless run (daemon absent →
     // revert fails → dirty stays) and on a dev machine with a live daemon
     // (revert succeeds → dirty clears).
-    QSignalSpy loadedSpy(&controller, &WindowRuleController::rulesLoaded);
+    QSignalSpy loadedSpy(&controller, &RuleController::rulesLoaded);
     controller.revert();
     // Pump the event loop briefly so the QDBusPendingCall reply (success or
     // error) lands. A timeout fall-through is acceptable — that's the
@@ -158,9 +158,9 @@ void TestWindowRuleController::dirtyTrackingAndRevert()
     QCOMPARE(controller.isDirty(), !reverted);
 }
 
-void TestWindowRuleController::monitorOverviewSummarises()
+void TestRuleController::monitorOverviewSummarises()
 {
-    WindowRuleController controller;
+    RuleController controller;
 
     // One rule pinned to DP-2 with an engine action.
     QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
@@ -197,7 +197,7 @@ void TestWindowRuleController::monitorOverviewSummarises()
     QVERIFY(sawEdp1);
 }
 
-void TestWindowRuleController::monitorOverviewReportsLock()
+void TestRuleController::monitorOverviewReportsLock()
 {
     // A LockContext rule pinning a monitor surfaces `locked: true` on its tile
     // (drives the lock badge), independent of any layout assignment — a
@@ -205,7 +205,7 @@ void TestWindowRuleController::monitorOverviewReportsLock()
     // yet it is locked. A rule whose lock value is false reports
     // `locked: false`, proving the tile reads the action's value (not mere
     // presence), mirroring resolveContextLocked.
-    WindowRuleController controller;
+    RuleController controller;
 
     const auto lockRule = [&](const QString& screenId, bool locked) {
         QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
@@ -246,7 +246,7 @@ void TestWindowRuleController::monitorOverviewReportsLock()
     }
 }
 
-void TestWindowRuleController::monitorOverviewLockPriorityResolution()
+void TestRuleController::monitorOverviewLockPriorityResolution()
 {
     // When two opposing LockContext rules pin the SAME monitor, the tile must
     // report the HIGHEST-PRIORITY rule's value (first-wins), not last-wins and
@@ -256,7 +256,7 @@ void TestWindowRuleController::monitorOverviewLockPriorityResolution()
     // rule the higher-priority one within the Context band, so the FIRST rule
     // added for a screen is its winner. Run both value directions so a
     // "true-always-wins" / "false-always-wins" bug fails one of the two.
-    WindowRuleController controller;
+    RuleController controller;
 
     const auto lockRule = [&](const QString& screenId, bool locked) {
         QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
@@ -301,9 +301,9 @@ void TestWindowRuleController::monitorOverviewLockPriorityResolution()
     QVERIFY(sawB);
 }
 
-void TestWindowRuleController::monitorOverviewIgnoresDisabledRules()
+void TestRuleController::monitorOverviewIgnoresDisabledRules()
 {
-    WindowRuleController controller;
+    RuleController controller;
 
     // A monitor-scoped rule that, while enabled, would pin DP-2's engine.
     QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
@@ -329,7 +329,7 @@ void TestWindowRuleController::monitorOverviewIgnoresDisabledRules()
     QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), false);
 }
 
-void TestWindowRuleController::monitorOverviewClassifiesScrollingWithoutLayoutName()
+void TestRuleController::monitorOverviewClassifiesScrollingWithoutLayoutName()
 {
     // Pin that a Scrolling-mode rule, even when carrying a stale snapping
     // layout in its action payload, produces an EMPTY `layoutName` on the
@@ -337,7 +337,7 @@ void TestWindowRuleController::monitorOverviewClassifiesScrollingWithoutLayoutNa
     // classifier silently coerced Scrolling rules into the "no engine pin
     // → prefer snapping layout" fallback, mis-labelling the tile with the
     // leftover layout. A regression to that shape is caught here.
-    WindowRuleController controller;
+    RuleController controller;
 
     QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
     QVariantMap match = rule.value(QStringLiteral("match")).toMap();
@@ -369,7 +369,7 @@ void TestWindowRuleController::monitorOverviewClassifiesScrollingWithoutLayoutNa
              qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
 }
 
-void TestWindowRuleController::monitorOverviewLayoutFollowsWinnerMode()
+void TestRuleController::monitorOverviewLayoutFollowsWinnerMode()
 {
     // The per-screen assignment winner (the rule carrying a SetEngineMode
     // action) supplies the engine mode AND both layout tokens; the tile shows
@@ -377,7 +377,7 @@ void TestWindowRuleController::monitorOverviewLayoutFollowsWinnerMode()
     // resolveContextAssignment + entryFromRuleMatchActions (the AssignmentEntry
     // keeps both layouts, the active mode picks). The same rule shows its
     // snapping layout under Snapping and its algorithm under Autotile.
-    WindowRuleController controller;
+    RuleController controller;
 
     QVariantMap autoRule = controller.newEmptyRule(QStringLiteral("monitor"));
     QVariantMap m1 = autoRule.value(QStringLiteral("match")).toMap();
@@ -421,14 +421,14 @@ void TestWindowRuleController::monitorOverviewLayoutFollowsWinnerMode()
     QCOMPARE(dp2.value(QStringLiteral("layoutName")).toString(), QStringLiteral("grid"));
 }
 
-void TestWindowRuleController::monitorOverviewIgnoresBareLayoutRules()
+void TestRuleController::monitorOverviewIgnoresBareLayoutRules()
 {
     // A layout rule with NO SetEngineMode action is never the assignment winner
     // (the daemon's resolveContextAssignment filters to hasEngineModeAction), so
     // the daemon never applies its layout — and neither does the tile. The rule
     // still counts toward ruleCount/assigned (it targets the monitor), but
     // contributes no layout label, for both a bare tiling and a bare snapping rule.
-    WindowRuleController controller;
+    RuleController controller;
 
     QVariantMap algoRule = controller.newEmptyRule(QStringLiteral("monitor"));
     QVariantMap m1 = algoRule.value(QStringLiteral("match")).toMap();
@@ -466,7 +466,7 @@ void TestWindowRuleController::monitorOverviewIgnoresBareLayoutRules()
              qPrintable(dp2.value(QStringLiteral("layoutName")).toString()));
 }
 
-void TestWindowRuleController::monitorOverviewLayoutFromSingleWinningRule()
+void TestRuleController::monitorOverviewLayoutFromSingleWinningRule()
 {
     // Engine mode and layout must come from the SAME winning rule. An
     // engine-mode-only rule and a separate layout-only rule on one screen: the
@@ -475,7 +475,7 @@ void TestWindowRuleController::monitorOverviewLayoutFromSingleWinningRule()
     // snapping layout never composes in (the daemon takes the whole entry from
     // the one winner). Both rules still count. The pre-fix independent-slot model
     // would have shown "grid" here.
-    WindowRuleController controller;
+    RuleController controller;
 
     QVariantMap engineRule = controller.newEmptyRule(QStringLiteral("monitor"));
     QVariantMap m1 = engineRule.value(QStringLiteral("match")).toMap();
@@ -506,7 +506,7 @@ void TestWindowRuleController::monitorOverviewLayoutFromSingleWinningRule()
              qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
 }
 
-void TestWindowRuleController::monitorOverviewDisableEngineMatchesEffectiveMode()
+void TestRuleController::monitorOverviewDisableEngineMatchesEffectiveMode()
 {
     // Pin that `tilingEnabled` on the overview tile resolves the
     // DisableEngine action against the screen's EFFECTIVE engine mode,
@@ -515,7 +515,7 @@ void TestWindowRuleController::monitorOverviewDisableEngineMatchesEffectiveMode(
     // off — the cascade resolution in the daemon would never treat that
     // rule as disabling autotile. The matching positive case
     // (DisableEngine{mode} == effective mode) must flip it off.
-    WindowRuleController controller;
+    RuleController controller;
     // DP-A: SetEngineMode=autotile + DisableEngine=autotile → engine off.
     {
         QVariantMap modeRule = controller.newEmptyRule(QStringLiteral("monitor"));
@@ -579,17 +579,17 @@ void TestWindowRuleController::monitorOverviewDisableEngineMatchesEffectiveMode(
     QVERIFY(sawB);
 }
 
-void TestWindowRuleController::engineModePickerExposesAllVocabularyTokens()
+void TestRuleController::engineModePickerExposesAllVocabularyTokens()
 {
     // Pin that the SetEngineMode + DisableEngine pickers expose exactly
     // three options — snapping / autotile / scrolling — with non-empty
     // localised labels. A regression that dropped the Scrolling enum
     // option from `engineModeOptions()` or the GPL settings-layer label
     // map would surface here.
-    WindowRuleController controller;
+    RuleController controller;
     const QVariantList types = controller.actionTypes();
     // Each entry in `actionTypes()` carries its own `params` list (see the
-    // descriptor docstring in windowrulecontroller.h:281-291). For each
+    // descriptor docstring in rulecontroller.h:281-291). For each
     // param of kind="enum", the `options` list contains `{value, label}`
     // pairs. We walk to the `mode` param of each action and extract its
     // options to verify the closed engine-mode vocabulary.
@@ -625,7 +625,7 @@ void TestWindowRuleController::engineModePickerExposesAllVocabularyTokens()
     }
 }
 
-void TestWindowRuleController::userAuthorableFilterHidesInternalActions()
+void TestRuleController::userAuthorableFilterHidesInternalActions()
 {
     // Pin that the controller's actionTypes() picker honours the
     // `userAuthorable=false` flag on ActionDescriptor. Without this test the
@@ -636,9 +636,9 @@ void TestWindowRuleController::userAuthorableFilterHidesInternalActions()
     // Register a sentinel descriptor flagged as non-authorable, walk the
     // picker, then restore the descriptor to its prior state so the rest
     // of the test suite isn't disturbed.
-    using PhosphorWindowRules::ActionDescriptor;
-    using PhosphorWindowRules::ActionDomain;
-    using PhosphorWindowRules::ActionRegistry;
+    using PhosphorRules::ActionDescriptor;
+    using PhosphorRules::ActionDomain;
+    using PhosphorRules::ActionRegistry;
 
     static const QString kSentinelType = QStringLiteral("test-sentinel-internal-action");
     auto& registry = ActionRegistry::instance();
@@ -680,7 +680,7 @@ void TestWindowRuleController::userAuthorableFilterHidesInternalActions()
     sentinel.userAuthorable = false;
     registry.registerAction(sentinel);
 
-    WindowRuleController controller;
+    RuleController controller;
     const QVariantList types = controller.actionTypes();
     bool found = false;
     for (const QVariant& t : types) {
@@ -709,9 +709,9 @@ void TestWindowRuleController::userAuthorableFilterHidesInternalActions()
     // RegistryGuard's dtor handles cleanup.
 }
 
-void TestWindowRuleController::moveRuleReorders()
+void TestRuleController::moveRuleReorders()
 {
-    WindowRuleController controller;
+    RuleController controller;
 
     auto makeApp = [&](const QString& appId) {
         QVariantMap rule = controller.newEmptyRule(QStringLiteral("application"));
@@ -729,20 +729,20 @@ void TestWindowRuleController::moveRuleReorders()
 
     // Move C before A — order becomes C, A, B.
     QVERIFY(controller.moveRule(c, a));
-    WindowRuleModel* model = controller.model();
-    QCOMPARE(model->index(0, 0).data(WindowRuleModel::IdRole).toString(), c);
-    QCOMPARE(model->index(1, 0).data(WindowRuleModel::IdRole).toString(), a);
-    QCOMPARE(model->index(2, 0).data(WindowRuleModel::IdRole).toString(), b);
+    RuleModel* model = controller.model();
+    QCOMPARE(model->index(0, 0).data(RuleModel::IdRole).toString(), c);
+    QCOMPARE(model->index(1, 0).data(RuleModel::IdRole).toString(), a);
+    QCOMPARE(model->index(2, 0).data(RuleModel::IdRole).toString(), b);
 
     // moveRule renormalizes priorities — earlier list index ⇒ higher priority.
-    const int prioFirst = model->index(0, 0).data(WindowRuleModel::PriorityRole).toInt();
-    const int prioLast = model->index(2, 0).data(WindowRuleModel::PriorityRole).toInt();
+    const int prioFirst = model->index(0, 0).data(RuleModel::PriorityRole).toInt();
+    const int prioLast = model->index(2, 0).data(RuleModel::PriorityRole).toInt();
     QVERIFY(prioFirst > prioLast);
 }
 
-void TestWindowRuleController::authoringMetadata()
+void TestRuleController::authoringMetadata()
 {
-    WindowRuleController controller;
+    RuleController controller;
 
     const QVariantList fields = controller.matchFields();
     QVERIFY(!fields.isEmpty());
@@ -907,9 +907,9 @@ void TestWindowRuleController::authoringMetadata()
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 4); // Animation
 }
 
-void TestWindowRuleController::inputHints()
+void TestRuleController::inputHints()
 {
-    WindowRuleController controller;
+    RuleController controller;
 
     // Match-condition value hints are keyed on the operator wire token: the
     // operators whose value editor is a plain text box AND whose syntax /
@@ -950,9 +950,9 @@ void TestWindowRuleController::inputHints()
     QVERIFY2(sawSnapToZoneZones, "actionTypes() must expose the SnapToZone zones param");
 }
 
-void TestWindowRuleController::templatesProduceSeededRules()
+void TestRuleController::templatesProduceSeededRules()
 {
-    WindowRuleController controller;
+    RuleController controller;
 
     // The catalogue surfaced to the AddRuleSheet — every template entry
     // must carry the four UI fields the QML grid binds against. A missing
@@ -1032,13 +1032,13 @@ void TestWindowRuleController::templatesProduceSeededRules()
     QVERIFY(bogus.isEmpty());
 }
 
-void TestWindowRuleController::actionTypesCarryDomain()
+void TestRuleController::actionTypesCarryDomain()
 {
     // The action row keys off this field to flag context-domain actions when
     // the match references window-property leaves — a regression that drops
     // the domain would silently lose the warning for the silently-never-fires
     // combination.
-    WindowRuleController controller;
+    RuleController controller;
     const QVariantList actions = controller.actionTypes();
     QVERIFY(!actions.isEmpty());
     QHash<QString, QString> domainOf;
@@ -1061,9 +1061,9 @@ void TestWindowRuleController::actionTypesCarryDomain()
     QCOMPARE(domainOf.value(QStringLiteral("exclude")), QStringLiteral("window"));
 }
 
-void TestWindowRuleController::matchIsContextOnlyClassifies()
+void TestRuleController::matchIsContextOnlyClassifies()
 {
-    WindowRuleController controller;
+    RuleController controller;
 
     // Empty / catch-all match — context-only by definition (no leaves).
     QVERIFY(controller.matchIsContextOnly(QVariantMap{}));
@@ -1095,9 +1095,9 @@ void TestWindowRuleController::matchIsContextOnlyClassifies()
     QVERIFY(!controller.matchIsContextOnly(mixedAll));
 }
 
-void TestWindowRuleController::validationIssuesForJsonFlags()
+void TestRuleController::validationIssuesForJsonFlags()
 {
-    WindowRuleController controller;
+    RuleController controller;
 
     // Clean rule: window match + Float action → no issues.
     QVariantMap clean = controller.newEmptyRule(QStringLiteral("application"));
@@ -1136,13 +1136,13 @@ void TestWindowRuleController::validationIssuesForJsonFlags()
     QCOMPARE(controller.validationIssuesForJson(partial).size(), 0);
 }
 
-void TestWindowRuleController::defaultPayloadForSeedsParams()
+void TestRuleController::defaultPayloadForSeedsParams()
 {
     // The QML action row uses `defaultPayloadFor` when the user switches the
     // type picker to a new action — a stale regression that returned a bare
     // `{type: X}` map would leave SpinBoxes anchored at 0 and `canSave`
     // would gate the rule on params the user never had a chance to fill.
-    WindowRuleController controller;
+    RuleController controller;
 
     // Float carries no params — payload is exactly `{type: float}`.
     const QVariantMap floatPayload = controller.defaultPayloadFor(QStringLiteral("float"));
@@ -1213,31 +1213,31 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
     QCOMPARE(unknownPayload.size(), 1);
 }
 
-void TestWindowRuleController::asyncCommitAndRevertAreInvokable()
+void TestRuleController::asyncCommitAndRevertAreInvokable()
 {
     // Pin the QML-facing commit contract: asyncCommit(bool) is the
     // escape hatch the daemonChangedWhileDirty banner uses, and
     // revert() backs its "Discard and reload" action. Both must
     // stay Q_INVOKABLE or the banner breaks at runtime.
-    WindowRuleController controller;
+    RuleController controller;
     const QMetaObject* mo = controller.metaObject();
     QVERIFY2(mo->indexOfMethod("asyncCommit(bool)") >= 0,
-             "WindowRuleController::asyncCommit must remain Q_INVOKABLE — QML's daemon-changed banner depends on it");
+             "RuleController::asyncCommit must remain Q_INVOKABLE — QML's daemon-changed banner depends on it");
     QVERIFY2(mo->indexOfMethod("revert()") >= 0,
-             "WindowRuleController::revert must remain Q_INVOKABLE — the daemon-changed banner's "
+             "RuleController::revert must remain Q_INVOKABLE — the daemon-changed banner's "
              "'Discard and reload' action calls it directly from QML");
 }
 
-void TestWindowRuleController::curveLabelResolverBridgesQmlNaming()
+void TestRuleController::curveLabelResolverBridgesQmlNaming()
 {
     // The rule-list summary resolves OverrideAnimationCurve wire strings to
     // friendly names through a QML-supplied JS resolver (CurvePresets.curveLabel
     // in production). Exercise the actual QJSValue bridge end-to-end: install a
     // real engine-backed resolver and confirm the summary renders its output,
     // and that a non-callable value clears the resolver back to the raw value.
-    WindowRuleController controller;
+    RuleController controller;
 
-    WindowRule curveRule;
+    Rule curveRule;
     curveRule.id = QUuid::createUuid();
     curveRule.priority = 100;
     curveRule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
@@ -1248,7 +1248,7 @@ void TestWindowRuleController::curveLabelResolverBridgesQmlNaming()
     controller.model()->setRules({curveRule});
 
     const auto summary = [&]() {
-        return controller.model()->data(controller.model()->index(0, 0), WindowRuleModel::ActionSummaryRole).toString();
+        return controller.model()->data(controller.model()->index(0, 0), RuleModel::ActionSummaryRole).toString();
     };
 
     // No resolver wired yet → the raw wire string round-trips behind the label.
@@ -1273,6 +1273,6 @@ void TestWindowRuleController::curveLabelResolverBridgesQmlNaming()
     QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
 }
 
-QTEST_MAIN(TestWindowRuleController)
+QTEST_MAIN(TestRuleController)
 
 #include "test_window_rule_controller.moc"

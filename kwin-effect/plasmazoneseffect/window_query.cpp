@@ -56,10 +56,10 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     return WindowType::Unknown;
 }
 
-PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
-                                                    bool isSnapped, bool isTiled, const QString& zoneId)
+PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating, bool isSnapped,
+                                        bool isTiled, const QString& zoneId)
 {
-    PhosphorWindowRules::WindowQuery query;
+    PhosphorRules::WindowQuery query;
     if (!w) {
         return query;
     }

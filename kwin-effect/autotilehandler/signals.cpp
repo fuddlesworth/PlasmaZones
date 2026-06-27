@@ -841,7 +841,7 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             return;
         }
         AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
-        // Title-bar (borderless) state is driven by window rules.
+        // Title-bar (borderless) state is driven by rules.
         m_effect->updateAllBorders();
         return;
     }

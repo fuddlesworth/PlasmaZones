@@ -52,7 +52,7 @@ struct CachedSnapRestore
  * tracking (m_border, parallel to AutotileHandler::m_border) for
  * snap-committed windows, which drives border RENDERING. Title-bar
  * (borderless) state is owned by the effect's DecorationManager and driven
- * by window rules — this handler does not touch decorations.
+ * by rules — this handler does not touch decorations.
  * Delegates window lookups and border rendering back to the effect through
  * the m_effect back-pointer.
  *
@@ -72,7 +72,7 @@ public:
     // ── Snap border-state lifecycle (mirrors AutotileHandler's set) ──
 
     /// Record @p windowId as snap-committed on @p screenId (idempotent) and
-    /// (re)draw its border. Title-bar hiding is driven by window rules.
+    /// (re)draw its border. Title-bar hiding is driven by rules.
     void markWindowSnapped(const QString& windowId, const QString& screenId);
     /// Drop @p windowId from the snap set on every screen and remove its
     /// border. Title-bar restores flow through the rule path.

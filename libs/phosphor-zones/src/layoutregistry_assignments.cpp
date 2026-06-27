@@ -5,8 +5,8 @@
 // Part of LayoutRegistry — split from layoutregistry.cpp for SRP.
 //
 // Phase 3b: the per-context assignment cascade is reimplemented on the
-// unified WindowRule engine. There is one resolution model: a windowless
-// WindowQuery evaluated through RuleEvaluator against the WindowRuleStore's
+// unified Rule engine. There is one resolution model: a windowless
+// WindowQuery evaluated through RuleEvaluator against the RuleStore's
 // rule set. The deterministic Assignment cascade (exact → activity → desktop
 // → screen → provider default) is reproduced by the ContextRuleBridge
 // priority formula — higher priority pins more context dimensions, so the
@@ -23,18 +23,18 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
 
-#include <PhosphorWindowRules/ContextRuleBridge.h>
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowQuery.h>
-#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/WindowQuery.h>
+#include <PhosphorRules/Rule.h>
 
 #include <algorithm>
 #include <optional>
 
 namespace PhosphorZones {
 
-namespace PWR = PhosphorWindowRules;
+namespace PWR = PhosphorRules;
 
 // The rule-shape classification / context helpers (contextRuleName,
 // decodeDims, the matchIsExactContext* family, hasEngineModeAction,
@@ -142,22 +142,22 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             // Specificity-tiered slot match: a pinned rule wins over a user
             // catch-all, and the synthesized provider-default (priority 0) is
             // excluded so the gated default resolver remains authoritative.
-            const auto tieredMatch = [&](bool (*carriesSlot)(const PWR::WindowRule&)) -> const PWR::WindowRule* {
-                if (const PWR::WindowRule* pinned =
-                        m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::WindowRule& rule) {
+            const auto tieredMatch = [&](bool (*carriesSlot)(const PWR::Rule&)) -> const PWR::Rule* {
+                if (const PWR::Rule* pinned =
+                        m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::Rule& rule) {
                             return carriesSlot(rule) && !rule.match.isCatchAll();
                         })) {
                     return pinned;
                 }
-                return m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::WindowRule& rule) {
+                return m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::Rule& rule) {
                     return carriesSlot(rule) && rule.match.isCatchAll()
                         && rule.priority > PWR::ContextRuleBridge::kProviderDefaultPriority;
                 });
             };
 
-            const PWR::WindowRule* modeRule = tieredMatch(hasEngineModeAction);
-            const PWR::WindowRule* snapRule = tieredMatch(hasSnappingLayoutAction);
-            const PWR::WindowRule* algoRule = tieredMatch(hasTilingAlgorithmAction);
+            const PWR::Rule* modeRule = tieredMatch(hasEngineModeAction);
+            const PWR::Rule* snapRule = tieredMatch(hasSnappingLayoutAction);
+            const PWR::Rule* algoRule = tieredMatch(hasTilingAlgorithmAction);
 
             if (modeRule == nullptr && snapRule == nullptr && algoRule == nullptr) {
                 return std::nullopt; // genuine miss — the caller routes to the default
@@ -257,7 +257,7 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
             const auto winningAction = [this, &query,
                                         &registry](QLatin1StringView slot) -> std::optional<PWR::RuleAction> {
                 const QString slotId = QString(slot);
-                const auto carries = [&registry, &slotId](const PWR::WindowRule& rule) {
+                const auto carries = [&registry, &slotId](const PWR::Rule& rule) {
                     if (rule.managed && rule.match.isCatchAll()) {
                         return false;
                     }
@@ -268,7 +268,7 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
                     }
                     return false;
                 };
-                const PWR::WindowRule* rule = m_evaluator->highestPriorityMatch(query, carries);
+                const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, carries);
                 if (rule == nullptr) {
                     return std::nullopt;
                 }
@@ -414,8 +414,8 @@ bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDes
 {
     return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;
 }
-const PhosphorWindowRules::WindowRule* LayoutRegistry::findExactContextRule(const QString& screenId, int virtualDesktop,
-                                                                            const QString& activity) const
+const PhosphorRules::Rule* LayoutRegistry::findExactContextRule(const QString& screenId, int virtualDesktop,
+                                                                const QString& activity) const
 {
     // The deterministic v5 derivation lets us look up a stored assignment by
     // its identity tuple — the bridge guarantees identical tuples produce
@@ -431,7 +431,7 @@ const PhosphorWindowRules::WindowRule* LayoutRegistry::findExactContextRule(cons
     // this scan compares ids first and only evaluates the context-shape
     // predicate on the unique candidate.
     //
-    // O(N) intentional: a hash lookup would need WindowRuleSet to expose a
+    // O(N) intentional: a hash lookup would need RuleSet to expose a
     // pointer-returning accessor into its in-set storage with a documented
     // dangle-on-setRules contract — too sharp an edge for the win at the
     // rule counts we care about (<= ~1000 rules per profile). Revisit only
@@ -440,7 +440,7 @@ const PhosphorWindowRules::WindowRule* LayoutRegistry::findExactContextRule(cons
     // the canonical shape the bridge produces). If no rule has the
     // canonical id, fall back to a shape-based scan that picks up
     // user-authored PURE-assignment rules whose UUIDs were generated by
-    // the settings UI (windowruletemplates.cpp's `QUuid::createUuid()`
+    // the settings UI (ruletemplates.cpp's `QUuid::createUuid()`
     // path). The shape fallback gates on `isPureAssignmentRule` — a
     // user rule that ALSO carries SetOpacity / OverrideAnimation* /
     // Float / Exclude / LockContext alongside the assignment slots is
@@ -452,8 +452,8 @@ const PhosphorWindowRules::WindowRule* LayoutRegistry::findExactContextRule(cons
     // (the duplicate-shadow at the same cascade band is a known limit;
     // documented at upsertAssignmentRule's contract).
     const QUuid candidateId = PWR::ContextRuleBridge::assignmentRuleIdFor(screenId, virtualDesktop, activity);
-    const PWR::WindowRule* shapeMatch = nullptr;
-    for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
+    const PWR::Rule* shapeMatch = nullptr;
+    for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         if (rule.id == candidateId) {
             if (!hasEngineModeAction(rule) || !matchIsExactContext(rule.match, screenId, virtualDesktop, activity)) {
                 // Deterministic-id rule exists but its match shape was
@@ -475,7 +475,7 @@ const PhosphorWindowRules::WindowRule* LayoutRegistry::findExactContextRule(cons
 
 QUuid LayoutRegistry::exactContextRuleId(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
-    const PWR::WindowRule* rule = findExactContextRule(screenId, virtualDesktop, activity);
+    const PWR::Rule* rule = findExactContextRule(screenId, virtualDesktop, activity);
     return rule ? rule->id : QUuid();
 }
 
@@ -492,10 +492,10 @@ void LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
     // title from the rule's match (with lookup-resolved screen/activity
     // labels). Stamping a raw `screenId · Desktop N · Activity` here would
     // bake connector strings and activity UUIDs into the stored rule.
-    PWR::WindowRule rule = PWR::ContextRuleBridge::makeAssignmentRule(
-        QString(), screenId, virtualDesktop, activity, modeToken, entry.snappingLayout, entry.tilingAlgorithm);
+    PWR::Rule rule = PWR::ContextRuleBridge::makeAssignmentRule(QString(), screenId, virtualDesktop, activity,
+                                                                modeToken, entry.snappingLayout, entry.tilingAlgorithm);
 
-    const PWR::WindowRule* existing = findExactContextRule(screenId, virtualDesktop, activity);
+    const PWR::Rule* existing = findExactContextRule(screenId, virtualDesktop, activity);
     if (existing == nullptr) {
         m_ruleStore->addRule(rule);
     } else {
@@ -542,7 +542,7 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
     //     remove ONLY the matching SetSnappingLayout action and leave all
     //     other actions intact; drop the rule only if nothing meaningful
     //     remains after the removal.
-    QList<PWR::WindowRule> kept;
+    QList<PWR::Rule> kept;
     // De-duplicate (screenId, virtualDesktop) — two distinct rules pinned
     // to the same screen/desktop with different activities would otherwise
     // produce duplicate layoutAssigned emissions at the post-update loop
@@ -554,7 +554,7 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
     // `rulesChanged` signal for their refresh instead of layoutAssigned.
     QSet<QPair<QString, int>> affected;
     bool changed = false;
-    for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
+    for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         const bool referencesDeleted =
             std::any_of(rule.actions.cbegin(), rule.actions.cend(), [&layoutId](const PWR::RuleAction& action) {
                 return action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
@@ -591,7 +591,7 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
                                     << "— only a default Snapping mode remained after clearing the deleted layout";
                 continue;
             }
-            PWR::WindowRule rebuilt = rule;
+            PWR::Rule rebuilt = rule;
             rebuilt.actions = PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(entry.mode), QString(),
                                                                             entry.tilingAlgorithm);
             kept.append(rebuilt);
@@ -603,7 +603,7 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
         // Shape 2: a window-property (or otherwise non-context) rule. Remove
         // only the SetSnappingLayout actions referencing the deleted layout;
         // every other action is preserved verbatim.
-        PWR::WindowRule trimmed = rule;
+        PWR::Rule trimmed = rule;
         trimmed.actions.erase(std::remove_if(trimmed.actions.begin(), trimmed.actions.end(),
                                              [&layoutId](const PWR::RuleAction& action) {
                                                  return action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
@@ -647,7 +647,7 @@ void LayoutRegistry::assignLayout(const QString& screenId, int virtualDesktop, c
         // entry must NOT bleed its tilingAlgorithm into this narrower rule,
         // so only the rule pinning exactly this tuple seeds the entry.
         AssignmentEntry entry;
-        if (const PWR::WindowRule* existing = findExactContextRule(screenId, virtualDesktop, activity)) {
+        if (const PWR::Rule* existing = findExactContextRule(screenId, virtualDesktop, activity)) {
             entry = entryFromRuleMatchActions(*existing);
         }
         entry.mode = AssignmentEntry::Snapping;
@@ -677,7 +677,7 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
         // existing snappingLayout. One exact-shape lookup (see assignLayout)
         // — only the rule pinning exactly this tuple seeds the entry.
         AssignmentEntry entry;
-        if (const PWR::WindowRule* existing = findExactContextRule(screenId, virtualDesktop, activity)) {
+        if (const PWR::Rule* existing = findExactContextRule(screenId, virtualDesktop, activity)) {
             entry = entryFromRuleMatchActions(*existing);
         }
         entry.mode = AssignmentEntry::Autotile;
@@ -865,7 +865,7 @@ bool LayoutRegistry::isContextActiveLayoutSuppressed(const QString& screenId, in
         return false;
     }
     // An enabled PINNED engine-mode assignment rule covers this context — a
-    // window rule that overrides the global suppress setting. The context stays
+    // rule that overrides the global suppress setting. The context stays
     // active even when the rule sets only the mode (no layout): the layout
     // falls back to the default exactly as it did before suppression existed,
     // and the overlay / zone selector show because the mode is on.

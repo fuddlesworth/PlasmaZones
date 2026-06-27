@@ -142,7 +142,7 @@ uniform vec2 iAnchorSize;
 uniform vec2 iAnchorPosInFbo;
 
 // Window's effective rule-resolved opacity in [0, 1] — compositor path
-// only. A `SetOpacity` window rule must dim the window for the whole
+// only. A `SetOpacity` rule must dim the window for the whole
 // transition, but the custom transition shader is compiled
 // `MapTexture`-only (no `Modulate` trait), so KWin never applies
 // `data.opacity()` to it. `surfaceColor()` below multiplies the

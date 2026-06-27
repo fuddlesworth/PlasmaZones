@@ -17,8 +17,8 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
-#include <PhosphorWindowRules/RuleEvaluator.h>
-#include <PhosphorWindowRules/WindowRuleSet.h>
+#include <PhosphorRules/RuleEvaluator.h>
+#include <PhosphorRules/RuleSet.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -328,7 +328,7 @@ private:
      * `Animations.WindowFiltering` cache so the two filter sets can
      * diverge.
      *
-     * A WindowRule carrying any OverrideAnimation* or SetOpacity
+     * A Rule carrying any OverrideAnimation* or SetOpacity
      * action whose match expression resolves for the window OVERRIDES
      * the filter — the existence of even one targeted rule signals
      * deliberate user intent to animate this app, regardless of
@@ -463,20 +463,20 @@ private:
     QString zoneForWindow(const QString& windowId) const;
     /// Build a window-rule match query for @p w with the effect's runtime
     /// placement state (floating / snapped / zone) threaded into the free
-    /// `windowRuleQueryFor` builder. Use this at EVERY rule-evaluation site so
+    /// `ruleQueryFor` builder. Use this at EVERY rule-evaluation site so
     /// IsFloating / IsSnapped / Zone resolve uniformly; the free builder stays
     /// KWin-only and can't reach the effect's caches.
-    PhosphorWindowRules::WindowQuery windowRuleQuery(KWin::EffectWindow* w) const;
+    PhosphorRules::WindowQuery ruleQuery(KWin::EffectWindow* w) const;
 
     /// Resolve the animation rule-action verdict for @p w, skipping the per-frame
-    /// `windowRuleQuery(w)` build (≈30 KWin accessor reads) when the evaluator
+    /// `ruleQuery(w)` build (≈30 KWin accessor reads) when the evaluator
     /// already has a cached verdict for @p windowId. Peek-then-build: a cache hit
     /// returns the memoised actions directly; a miss builds the query and resolves
     /// (caching the result). An empty windowId or a windowless query yields empty
     /// actions (no slots) WITHOUT caching, matching the resolvers' old
     /// short-circuit (avoids churning the cache for sub-surfaces / proxies). The
     /// per-frame opacity / border resolvers consume the returned ResolvedActions.
-    PhosphorWindowRules::ResolvedActions resolveWindowRuleActions(KWin::EffectWindow* w, const QString& windowId) const;
+    PhosphorRules::ResolvedActions resolveRuleActions(KWin::EffectWindow* w, const QString& windowId) const;
 
     /**
      * @brief True if the window is currently snap-managed (tiled into a snap zone).
@@ -686,9 +686,9 @@ private:
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 
-    /// Debounce timer for `WindowRules.rulesChanged`. Single-shot, 50ms;
-    /// timeout fires `loadWindowRuleAnimationsFromDbus`. Re-armed on every
-    /// `slotWindowRulesChanged` invocation so a burst of per-rule mutations
+    /// Debounce timer for `Rules.rulesChanged`. Single-shot, 50ms;
+    /// timeout fires `loadRuleAnimationsFromDbus`. Re-armed on every
+    /// `slotRulesChanged` invocation so a burst of per-rule mutations
     /// (a 50-rule batch edit emits 50 signals) collapses into a single
     /// `getAllRules` fetch at the trailing edge.
     QTimer m_animationRulesRefreshDebounce;
@@ -713,7 +713,7 @@ private:
     void updateAllBorders();
     void clearAllBorders();
 
-    /// Drop the per-window rule match cache and refresh @p windowId's border /
+    /// Drop the per-rule match cache and refresh @p windowId's border /
     /// opacity after its placement state (snapped / floating / zone) changed.
     /// Those are rule MATCH inputs now, so without this a window stays resolved
     /// at its prior state (e.g. a `WHEN isSnapped` border never reverting on
@@ -733,7 +733,7 @@ private:
     /// restore / rebuild path. No-op when there are no animation rules.
     void invalidateAllRuleCaches();
 
-    /// Flush coalesced per-window rule-cache invalidations queued by
+    /// Flush coalesced per-rule-cache invalidations queued by
     /// invalidateRuleCacheForStateChange within one event-loop turn: drops the
     /// match cache once and re-resolves the border / opacity of each affected
     /// window. Posted via a queued single-shot so a float toggle (which emits
@@ -900,15 +900,15 @@ private:
     // optimization is obsolete now that the daemon always knows about the drag.
 
     // Drag-gate exclusion rule set — the Exclude-shaped slice of the
-    // unified WindowRule store the effect mirrors over D-Bus. Filled by
-    // loadWindowRuleAnimationsFromDbus's parse step (which already
+    // unified Rule store the effect mirrors over D-Bus. Filled by
+    // loadRuleAnimationsFromDbus's parse step (which already
     // deserialises the full rule set for the animation override path),
-    // via `PhosphorWindowRules::ExclusionRules::excludeRulesFrom`. The
+    // via `PhosphorRules::ExclusionRules::excludeRulesFrom`. The
     // bound RuleEvaluator drives shouldHandleWindow()'s exclusion gate.
     // Declaration ORDER MATTERS — the rule set must precede (and outlive)
     // the evaluator that binds a reference to it.
-    PhosphorWindowRules::WindowRuleSet m_snappingExclusionRuleSet;
-    PhosphorWindowRules::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
+    PhosphorRules::RuleSet m_snappingExclusionRuleSet;
+    PhosphorRules::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
 
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForAutotileNotify() to prevent small utility
@@ -943,16 +943,16 @@ private:
     int m_animationMinWindowHeight = 0;
 
     // Animation exclusion rule set — the `ExcludeAnimations`-action slice
-    // of the unified WindowRule store the effect mirrors over D-Bus.
-    // Filled by loadWindowRuleAnimationsFromDbus's parse step (which
+    // of the unified Rule store the effect mirrors over D-Bus.
+    // Filled by loadRuleAnimationsFromDbus's parse step (which
     // already deserialises the full rule set for the animation override
     // path), via
-    // `PhosphorWindowRules::ExclusionRules::excludeAnimationsRulesFrom`.
+    // `PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom`.
     // The bound RuleEvaluator drives shouldAnimateWindow()'s exclusion
     // gate. Declaration ORDER MATTERS — the rule set must precede (and
     // outlive) the evaluator that binds a reference to it.
-    PhosphorWindowRules::WindowRuleSet m_animationExclusionRuleSet;
-    PhosphorWindowRules::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
+    PhosphorRules::RuleSet m_animationExclusionRuleSet;
+    PhosphorRules::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end
@@ -1013,7 +1013,7 @@ private:
     // the geometry restore for a drag-floated window.
     QSet<QString> m_dragFloatedWindowIds;
 
-    // Per-window rule-cache invalidations accumulated within one event-loop turn,
+    // Per-rule-cache invalidations accumulated within one event-loop turn,
     // flushed once by flushPendingRuleInvalidations(). Coalesces the double
     // invalidation a float toggle triggers (windowFloatingChanged + windowStateChanged).
     QSet<QString> m_pendingRuleInvalidations;
@@ -1068,12 +1068,12 @@ private:
     /// resolveEffectiveScreenId tagging windows with dead "physId/vs:N" ids.
     QHash<QString, uint64_t> m_vsFetchSeqPerPhysId;
     bool m_daemonReadyWindowStateProcessed = false; ///< re-entrancy guard for processDaemonReadyWindowState
-    /// One-shot guard for the WindowRules rulesChanged D-Bus subscription.
+    /// One-shot guard for the Rules rulesChanged D-Bus subscription.
     /// QDBusConnection::connect silently accepts duplicate subscriptions, so without
     /// this flag the subscription set would grow unbounded across every
     /// slotSettingsChanged broadcast (which re-runs loadCachedSettings()). Set true
     /// after the first successful connect from continueDaemonReadySetup().
-    bool m_windowRulesSubscribed = false;
+    bool m_rulesSubscribed = false;
 
     // Screen ID cache: connector name → EDID screen ID (manufacturer:model:serial).
     // Avoids repeated QScreen iteration and sysfs reads during drag (~30Hz).
@@ -1149,22 +1149,22 @@ private Q_SLOTS:
     /// Settings app's change detection is unaffected.
     void slotMotionProfileTreeChanged();
 
-    /// Fetch the unified WindowRule store via `org.plasmazones.WindowRules.
+    /// Fetch the unified Rule store via `org.plasmazones.Rules.
     /// getAllRules`, filter to rules carrying an OverrideAnimation* action,
     /// and forward them to the shader manager — the sole source of per-window
     /// animation overrides. Called once at bringup; the bringup also
     /// subscribes to the interface's `rulesChanged` signal (via a debounce
     /// timer — see m_animationRulesRefreshDebounce) so a settings-UI edit
     /// takes effect without restarting the effect.
-    void loadWindowRuleAnimationsFromDbus();
+    void loadRuleAnimationsFromDbus();
 
-    /// D-Bus signal handler for `WindowRules.rulesChanged`. Re-arms the
+    /// D-Bus signal handler for `Rules.rulesChanged`. Re-arms the
     /// debounce timer rather than refetching the full ruleset on every
     /// signal — the daemon emits one signal per per-rule mutation, so a
     /// 50-rule batch edit would otherwise drive 50 full-ruleset fetches
     /// and parses. A 50ms single-shot debounce coalesces the burst into a
     /// single fetch at the trailing edge.
-    void slotWindowRulesChanged();
+    void slotRulesChanged();
 };
 
 } // namespace PlasmaZones

@@ -29,15 +29,15 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
-namespace PhosphorWindowRules {
-// Forward-declared for the `std::unique_ptr<WindowRuleStore>` member
+namespace PhosphorRules {
+// Forward-declared for the `std::unique_ptr<RuleStore>` member
 // below. The complete type is needed only in settingscontroller.cpp
 // (where m_localRuleStore is constructed); pulling
-// <PhosphorWindowRules/WindowRuleStore.h> into the header would force
-// every consumer of this controller to re-parse the WindowRuleStore
+// <PhosphorRules/RuleStore.h> into the header would force
+// every consumer of this controller to re-parse the RuleStore
 // dependency graph.
-class WindowRuleStore;
-class WindowRuleStoreWatcher;
+class RuleStore;
+class RuleStoreWatcher;
 }
 
 namespace PlasmaZones {
@@ -74,7 +74,7 @@ class RegistryShaderPreviewBackend;
 #include "tilingalgorithmcontroller.h"
 #include "windowappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
-#include "windowrulecontroller.h"
+#include "rulecontroller.h"
 
 namespace PlasmaZones {
 
@@ -125,10 +125,10 @@ class SettingsController : public QObject
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
     Q_PROPERTY(AnimationsPageController* animationsPage READ animationsPage CONSTANT)
-    // Window Rules page — the unified rule surface. The controller owns one
-    // WindowRuleModel and talks to the daemon's org.plasmazones.WindowRules
-    // adaptor; QML reads `settingsController.windowRulesPage.model`.
-    Q_PROPERTY(WindowRuleController* windowRulesPage READ windowRulesPage CONSTANT)
+    // Rules page — the unified rule surface. The controller owns one
+    // RuleModel and talks to the daemon's org.plasmazones.Rules
+    // adaptor; QML reads `settingsController.rulesPage.model`.
+    Q_PROPERTY(RuleController* rulesPage READ rulesPage CONSTANT)
 
     // PhosphorControl ApplicationController hosting the PageRegistry that
     // SettingsAppWindow's sidebar / breadcrumbs / footer consume. Constructed
@@ -377,9 +377,9 @@ public:
     {
         return m_animationsPage;
     }
-    WindowRuleController* windowRulesPage() const
+    RuleController* rulesPage() const
     {
-        return m_windowRulesPage;
+        return m_rulesPage;
     }
 
     PhosphorControl::ApplicationController* app() const
@@ -472,9 +472,9 @@ public:
     Q_INVOKABLE void clearPerScreenAutotileAlgorithmSettings(const QString& screenName);
 
     // Per-screen gaps are rule-backed: a per-monitor override is a screen-scoped
-    // gap WindowRule (deterministic id from the baseline rule + screen name).
+    // gap Rule (deterministic id from the baseline rule + screen name).
     // The Gaps card's monitor scope chip drives these; the gap controls
-    // read/write the rule's actions via windowRulesPage.
+    // read/write the rule's actions via rulesPage.
     Q_INVOKABLE bool hasPerScreenGapRule(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenGapRule(const QString& screenName);
 
@@ -600,7 +600,7 @@ private Q_SLOTS:
      */
     void onRunningWindowsAvailable(const QString& json);
 
-    /// Daemon WindowRules.rulesChanged → reload m_localRuleStore so the
+    /// Daemon Rules.rulesChanged → reload m_localRuleStore so the
     /// in-process LayoutRegistry assignment cascade sees rule edits.
     void reloadLocalRuleStore(bool persisted);
 
@@ -609,12 +609,12 @@ private:
     void refreshVirtualDesktops();
     void refreshActivities();
 
-    /// Single WindowRule store shared by m_settings (disable lists) and the
+    /// Single Rule store shared by m_settings (disable lists) and the
     /// LayoutRegistry. Declared FIRST so it outlives all borrowers.
-    std::unique_ptr<PhosphorWindowRules::WindowRuleStore> m_localRuleStore;
+    std::unique_ptr<PhosphorRules::RuleStore> m_localRuleStore;
     /// Opt-in cross-process auto-reload of m_localRuleStore on external writes
     /// (mainly the no-daemon case). Declared after the store; tears down first.
-    std::unique_ptr<PhosphorWindowRules::WindowRuleStoreWatcher> m_localRuleStoreWatcher;
+    std::unique_ptr<PhosphorRules::RuleStoreWatcher> m_localRuleStoreWatcher;
     /// Installs the process-global screen-id resolver before `m_settings`, whose
     /// constructor load()s and canonicalises per-screen override keys via
     /// `idForName`. Declared (and initialised) immediately before `m_settings`
@@ -647,10 +647,10 @@ private:
     /// outlives the page through child-destruction order.
     PhosphorAnimationShaders::AnimationShaderRegistry* m_animationShaderRegistry = nullptr;
     AnimationsPageController* m_animationsPage = nullptr;
-    /// Window Rules page sub-controller. Parented to `this`; owns its
-    /// WindowRuleModel internally. Constructed after m_animationsPage so its
+    /// Rules page sub-controller. Parented to `this`; owns its
+    /// RuleModel internally. Constructed after m_animationsPage so its
     /// dirty-tracking connection is wired in the same ctor block.
-    WindowRuleController* m_windowRulesPage = nullptr;
+    RuleController* m_rulesPage = nullptr;
     /// Settings-side mirror of the daemon's overlay-shader registry —
     /// drives the read-only Snapping → Shaders browser. Same parent /
     /// declaration-order rationale as `m_animationShaderRegistry` above.

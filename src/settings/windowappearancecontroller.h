@@ -16,13 +16,13 @@ namespace PlasmaZones {
 /// Q_PROPERTY surface for the slim "Window Appearance" settings page.
 ///
 /// The page is a friendly editor for the three managed baseline appearance
-/// WindowRules (borders, title bars, gaps — the catch-all, lowest-priority
+/// Rules (borders, title bars, gaps — the catch-all, lowest-priority
 /// rules the daemon seeds, one per concern). It reads and writes those rules'
-/// actions through `settingsController.windowRulesPage` (WindowRuleController),
+/// actions through `settingsController.rulesPage` (RuleController),
 /// so this controller only carries the CONSTANT slider bounds and the three
 /// baseline rule ids. It holds no editable state of its own, so it is never
 /// dirty and its apply/discard are no-ops; the dirty/save path runs through the
-/// Window Rules page controller.
+/// Rules page controller.
 class WindowAppearanceController : public PhosphorControl::PageController
 {
     Q_OBJECT
@@ -48,7 +48,7 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int outerGapMax READ outerGapMax CONSTANT)
     /// Stable ids (UUID strings, braces) of the three managed baseline rules the
     /// page edits, one per concern. QML routes each action's read/write to the
-    /// matching rule and passes the id to the WindowRuleController's
+    /// matching rule and passes the id to the RuleController's
     /// ruleJson() / updateRuleFromJson() calls.
     Q_PROPERTY(QString borderBaselineRuleId READ borderBaselineRuleId CONSTANT)
     Q_PROPERTY(QString titleBarBaselineRuleId READ titleBarBaselineRuleId CONSTANT)
@@ -109,14 +109,14 @@ public:
     }
 
     /// Deterministic, reproducible id (UUID string, braces) of the per-monitor
-    /// gap-override WindowRule for @p screenId. A per-monitor gap override is an
+    /// gap-override Rule for @p screenId. A per-monitor gap override is an
     /// ordinary (non-managed) screen-scoped rule whose match is
     /// `ScreenId Equals screenId` and whose actions carry the gap values; it
     /// rides the context-gap cascade so it overrides the global baseline for
     /// that monitor only. The id is a v5 UUID namespaced under the baseline
     /// appearance rule so it is stable across restarts and reproducible from the
     /// screen id alone — QML cannot compute v5, so the page resolves it here and
-    /// then drives find-or-create through the Window Rules controller's
+    /// then drives find-or-create through the Rules controller's
     /// ruleJson() / addRuleFromJson() / updateRuleFromJson() / removeRule().
     /// Returns an empty string for an empty screen id (the "all monitors" /
     /// global scope, which edits the gap baseline rule directly).

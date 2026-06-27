@@ -10,7 +10,7 @@
 namespace PhosphorControl {
 
 /**
- * @brief Source of dynamic (content) search entries — window rules, shaders,
+ * @brief Source of dynamic (content) search entries — rules, shaders,
  *        layouts, virtual screens, etc.
  *
  * Implemented by the consuming app and registered with SearchController. The

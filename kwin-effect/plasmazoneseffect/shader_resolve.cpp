@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Effect-local shims for the per-window animation cascade on top of
-// PhosphorWindowRules::RuleEvaluator. They walk the event-scoped slots
-// (`anim-shader:`, `anim-timing:`, `anim-curve:`) filled by WindowRules
+// PhosphorRules::RuleEvaluator. They walk the event-scoped slots
+// (`anim-shader:`, `anim-timing:`, `anim-curve:`) filled by Rules
 // carrying OverrideAnimation* actions, with the duration clamp, the curve
 // `tryCreate` fallback, the engaged-empty `effectId` sentinel, and the
 // empty-input short-circuits localised here so the evaluator stays generic.
@@ -12,16 +12,16 @@
 // touches no KWin type — it operates purely on the LGPL rule engine and
 // animation library value types, so it could be promoted to an LGPL library
 // in the future without source changes. Per-window context is threaded in
-// via PhosphorWindowRules::WindowQuery built KWin-side by
-// `windowRuleQueryFor()` (window_query.h).
+// via PhosphorRules::WindowQuery built KWin-side by
+// `ruleQueryFor()` (window_query.h).
 
 #include "shader_resolve.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/RuleEvaluator.h>
-#include <PhosphorWindowRules/WindowQuery.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleEvaluator.h>
+#include <PhosphorRules/WindowQuery.h>
 
 #include <QColor>
 #include <QJsonObject>
@@ -33,25 +33,25 @@ namespace PlasmaZones {
 namespace {
 
 // OverrideAnimation* action param keys consumed by the resolvers below come
-// from the shared PhosphorWindowRules::ActionParam vocabulary so the resolver,
+// from the shared PhosphorRules::ActionParam vocabulary so the resolver,
 // the action-registry validators in ruleaction.cpp, the rule-editor UI, and
 // the v3→v4 migration in configmigration.cpp::buildAnimationAppRule all read
 // from one source of truth. A future rename of any of these wire keys flows
 // to every consumer in a single edit.
-namespace ActionParam = PhosphorWindowRules::ActionParam;
+namespace ActionParam = PhosphorRules::ActionParam;
 
 /// The event-scoped shader slot id for @p eventPath. Concatenation through
 /// the `QLatin1StringView + QString` overload allocates a single QString
 /// directly rather than materialising the prefix into its own QString first.
 QString shaderSlotFor(const QString& eventPath)
 {
-    return PhosphorWindowRules::ActionSlot::AnimShaderPrefix + eventPath;
+    return PhosphorRules::ActionSlot::AnimShaderPrefix + eventPath;
 }
 
 /// The event-scoped timing slot id for @p eventPath.
 QString timingSlotFor(const QString& eventPath)
 {
-    return PhosphorWindowRules::ActionSlot::AnimTimingPrefix + eventPath;
+    return PhosphorRules::ActionSlot::AnimTimingPrefix + eventPath;
 }
 
 /// The event-scoped curve-override slot id for @p eventPath. Curve and timing
@@ -59,15 +59,15 @@ QString timingSlotFor(const QString& eventPath)
 /// other so the user can change just the easing or just the duration.
 QString curveSlotFor(const QString& eventPath)
 {
-    return PhosphorWindowRules::ActionSlot::AnimCurvePrefix + eventPath;
+    return PhosphorRules::ActionSlot::AnimCurvePrefix + eventPath;
 }
 
 } // namespace
 
-ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindowRules::RuleEvaluator& evaluator,
+ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorRules::RuleEvaluator& evaluator,
                                                             const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                                             const QString& windowId,
-                                                            const PhosphorWindowRules::WindowQuery& query,
+                                                            const PhosphorRules::WindowQuery& query,
                                                             const QString& eventPath, int defaultDurationMs)
 {
     // Empty-input short-circuit — preserves the standalone resolvers' header
@@ -84,7 +84,7 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
     // cache. `resolveCached` keyed by the composite windowId reuses the
     // result across both slot reads AND across subsequent shader events
     // for the same window until the rule set's revision changes.
-    const PhosphorWindowRules::ResolvedActions resolved = evaluator.resolveCached(windowId, query);
+    const PhosphorRules::ResolvedActions resolved = evaluator.resolveCached(windowId, query);
 
     // Shader slot: rule wins verbatim (engaged-empty effectId is the
     // user's "block tree fallthrough for this app/event" sentinel and
@@ -115,9 +115,9 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
     return ResolvedShaderAndDuration{std::move(profile), durationMs, shaderSlotFromRule};
 }
 
-PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRules::RuleEvaluator& evaluator,
+PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorRules::RuleEvaluator& evaluator,
                                                          const PhosphorAnimation::Profile& base,
-                                                         const PhosphorWindowRules::WindowQuery& query,
+                                                         const PhosphorRules::WindowQuery& query,
                                                          const QString& eventPath, const QString& windowId,
                                                          const PhosphorAnimation::CurveRegistry& curveRegistry)
 {
@@ -129,7 +129,7 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
     // own resolve() against the same query as the sister combined
     // function — wasted work even though motion-profile lookups are
     // per-event, not per-frame.
-    const PhosphorWindowRules::ResolvedActions resolved =
+    const PhosphorRules::ResolvedActions resolved =
         windowId.isEmpty() ? evaluator.resolve(query) : evaluator.resolveCached(windowId, query);
     const auto curveAction = resolved.slot(curveSlotFor(eventPath));
     const auto timingAction = resolved.slot(timingSlotFor(eventPath));
@@ -140,7 +140,7 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
     // Curve cascade: prefer the dedicated `anim-curve:` slot. Fall through to
     // the legacy `anim-timing:` slot's curve field so rules authored before
     // the curve/timing split (including those produced by the v3→v4
-    // migration in configmigration.cpp::animationAppRuleToWindowRule) still
+    // migration in configmigration.cpp::animationAppRuleToRule) still
     // resolve.
     QString curve = curveAction ? curveAction->params.value(ActionParam::Curve).toString() : QString();
     if (curve.isEmpty() && timingAction) {
@@ -166,13 +166,13 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
     return out;
 }
 
-std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRules::ResolvedActions& resolved)
+std::optional<qreal> resolveWindowOpacity(const PhosphorRules::ResolvedActions& resolved)
 {
     // The opacity-slot id is a constant; hoist its QString materialisation
     // out of the per-paint hot path so each `resolveWindowOpacity` call
     // reuses the same heap allocation. `static const` is thread-safe under
     // C++11+ [stmt.dcl] without further synchronisation.
-    static const QString kOpacitySlot = QString(PhosphorWindowRules::ActionSlot::Opacity);
+    static const QString kOpacitySlot = QString(PhosphorRules::ActionSlot::Opacity);
     const auto action = resolved.slot(kOpacitySlot);
     if (!action) {
         return std::nullopt;
@@ -197,7 +197,7 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRules::ResolvedAct
     // returns 0.0 for any non-Double JSON type. A `"value": "0.5"`
     // payload would pass the canConvert gate but `raw.toDouble()` would
     // return 0.0, silently rendering the window completely invisible.
-    const QJsonValue raw = action->params.value(PhosphorWindowRules::ActionParam::Value);
+    const QJsonValue raw = action->params.value(PhosphorRules::ActionParam::Value);
     if (raw.isNull() || raw.isUndefined()) {
         return std::nullopt;
     }
@@ -222,7 +222,7 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRules::ResolvedAct
     return value;
 }
 
-std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRules::ResolvedActions& resolved,
+std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRules::ResolvedActions& resolved,
                                                                 const QColor& accentColor)
 {
     // Each reader re-validates the param type even though the load-time
@@ -234,7 +234,7 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
         if (!action) {
             return std::nullopt;
         }
-        const QJsonValue v = action->params.value(PhosphorWindowRules::ActionParam::Value);
+        const QJsonValue v = action->params.value(PhosphorRules::ActionParam::Value);
         if (!v.isBool()) {
             return std::nullopt;
         }
@@ -251,7 +251,7 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
         if (!action) {
             return std::nullopt;
         }
-        const QJsonValue v = action->params.value(PhosphorWindowRules::ActionParam::Value);
+        const QJsonValue v = action->params.value(PhosphorRules::ActionParam::Value);
         if (!v.isDouble()) {
             return std::nullopt;
         }
@@ -270,12 +270,12 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
         if (!action) {
             return std::nullopt;
         }
-        const QJsonValue v = action->params.value(QString(PhosphorWindowRules::ActionParam::Value));
+        const QJsonValue v = action->params.value(QString(PhosphorRules::ActionParam::Value));
         if (!v.isString()) {
             return std::nullopt;
         }
         const QString s = v.toString();
-        if (s == PhosphorWindowRules::BorderColorToken::Accent) {
+        if (s == PhosphorRules::BorderColorToken::Accent) {
             return accentColor.isValid() ? std::optional<QColor>(accentColor) : std::nullopt;
         }
         const QColor color(s);
@@ -286,12 +286,12 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
     };
 
     ResolvedWindowAppearance out;
-    out.hideTitleBar = boolSlot(PhosphorWindowRules::ActionSlot::HideTitleBar);
-    out.showBorder = boolSlot(PhosphorWindowRules::ActionSlot::BorderVisible);
-    out.borderWidth = intSlot(PhosphorWindowRules::ActionSlot::BorderWidth, kMaxBorderWidth);
-    out.borderRadius = intSlot(PhosphorWindowRules::ActionSlot::BorderRadius, kMaxBorderRadius);
-    out.activeColor = borderColorSlot(PhosphorWindowRules::ActionSlot::BorderColorActive);
-    out.inactiveColor = borderColorSlot(PhosphorWindowRules::ActionSlot::BorderColorInactive);
+    out.hideTitleBar = boolSlot(PhosphorRules::ActionSlot::HideTitleBar);
+    out.showBorder = boolSlot(PhosphorRules::ActionSlot::BorderVisible);
+    out.borderWidth = intSlot(PhosphorRules::ActionSlot::BorderWidth, kMaxBorderWidth);
+    out.borderRadius = intSlot(PhosphorRules::ActionSlot::BorderRadius, kMaxBorderRadius);
+    out.activeColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorActive);
+    out.inactiveColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorInactive);
     // An omitted `inactive` mirrors the active colour, matching the retired
     // global behaviour where a window with no distinct inactive colour kept its
     // active border when unfocused.

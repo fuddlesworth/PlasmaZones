@@ -134,7 +134,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("title bar"), PhosphorI18n::tr("decoration"),
                              PhosphorI18n::tr("appearance"), PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"),
                              PhosphorI18n::tr("spacing"), PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin")});
-    search->setPageKeywords(QStringLiteral("window-rules"),
+    search->setPageKeywords(QStringLiteral("rules"),
                             {PhosphorI18n::tr("rule"), PhosphorI18n::tr("exclude"), PhosphorI18n::tr("float"),
                              PhosphorI18n::tr("monitor"), PhosphorI18n::tr("priority"), PhosphorI18n::tr("activity")});
     search->setPageKeywords(QStringLiteral("editor"),

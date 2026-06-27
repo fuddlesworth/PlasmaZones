@@ -21,7 +21,7 @@ import org.plasmazones.settings
  *
  * Wire → user-label resolution stays on the QML side, keyed off the
  * controller's `matchFields()` / `operatorsForField()` tables already
- * cached on `WindowRulesPage`. The C++ model deliberately exposes only
+ * cached on `RulesPage`. The C++ model deliberately exposes only
  * the raw wire fields so the label-resolution logic lives in exactly
  * one place per axis (this file for the read-only view; the editor
  * components for authoring).
@@ -29,8 +29,8 @@ import org.plasmazones.settings
 ColumnLayout {
     id: root
 
-    /// The WindowRuleController — supplies the wire→label tables for
-    /// fields and operators. Threaded down from `WindowRulesPage`.
+    /// The RuleController — supplies the wire→label tables for
+    /// fields and operators. Threaded down from `RulesPage`.
     required property var controller
     /// Cached `controller.matchFields()` table. Same caching rationale as
     /// `RuleEditorBody` — the Q_INVOKABLE allocates a fresh list per call.
@@ -40,7 +40,7 @@ ColumnLayout {
     /// backing model and re-expands the tree.
     required property var matchJson
     /// Composite app-settings surface (screens + activities), threaded down
-    /// from `WindowRulesPage`. Used by `_valueLabel` to resolve screen-id /
+    /// from `RulesPage`. Used by `_valueLabel` to resolve screen-id /
     /// activity-uuid leaves to the same friendly labels the leaf editor
     /// shows. Optional — when null, screen/activity leaves fall back to the
     /// raw wire value (still better than nothing, mirrors the editor's own
@@ -240,7 +240,7 @@ ColumnLayout {
             /// `hasChildrenRow`.
             required property bool hasChildrenRow
             /// Effective layout depth: the WHEN section header hosted by
-            /// WindowRuleRow is treated as the depth-0 parent, so the model's
+            /// RuleRow is treated as the depth-0 parent, so the model's
             /// root composite renders one level in —
             /// indented under the header with a connector, mirroring how the
             /// THEN action list sits under its pill (ActionListView already

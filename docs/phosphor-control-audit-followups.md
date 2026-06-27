@@ -86,7 +86,7 @@ first, then snapping pair, then tiling pair). For each:
 **Resolved:**
 - Pass 23 (F#2a): `StagingDomain::applyResult(ok, error)` +
   `discardResult(ok, error)` signal foundation.
-- Pass 27 (F#2b): `WindowRuleController::asyncCommit()` Q_INVOKABLE
+- Pass 27 (F#2b): `RuleController::asyncCommit()` Q_INVOKABLE
   dispatches `setAllRules` via `QDBusPendingCallWatcher` and emits
   `applyResult` on the reply. `pushToDaemonAsync()` mirrors the
   client-side validation of the sync path.
@@ -104,7 +104,7 @@ first, then snapping pair, then tiling pair). For each:
   applyAllComplete/discardAllComplete before closing — gated on a
   closeFlow state-pair so footer-driven Saves don't also close
   the window. Existing `apply()`/`discard()` slots on
-  WindowRuleController / AnimationsPageController / SettingsStagingDomain
+  RuleController / AnimationsPageController / SettingsStagingDomain
   bridge to the new contract (sync domains emit the result signals
   inline; async domains emit on their watcher reply). 4 new tests
   pin the async batch contract (complete-once, error collection,
@@ -114,7 +114,7 @@ first, then snapping pair, then tiling pair). For each:
 
 **Finding:**
 
-- `WindowRuleController::commit()` calls `DaemonDBus::callDaemon` synchronously
+- `RuleController::commit()` calls `DaemonDBus::callDaemon` synchronously
   via `setAllRules`. Called from `SettingsController::save()` on the Save
   button's handler. Blocks the UI thread until the daemon acknowledges (or
   the call times out). A stuck/firewalled daemon freezes the Settings window.
@@ -146,7 +146,7 @@ first, then snapping pair, then tiling pair). For each:
    error)` signal that the framework's `ApplicationController::applyAll`
    can wait on (per-domain timeout, fan-in into a single "save complete"
    surface).
-2. Convert `WindowRuleController::commit()` to `QDBusPendingCallWatcher`-
+2. Convert `RuleController::commit()` to `QDBusPendingCallWatcher`-
    based async; on `finished` emit either `applyResult(true, {})` or
    `applyResult(false, errorString)`. Keep the bool-return overload as a
    sync helper for `SettingsController::save()` until the chrome migrates.
@@ -162,11 +162,11 @@ testing but not by automated tests today.
 
 ---
 
-## 3. WindowRuleController commit() force-overwrite reachability (D4 — CLOSED pass 17)
+## 3. RuleController commit() force-overwrite reachability (D4 — CLOSED pass 17)
 
 **Resolution:** Pass 2d added `Q_INVOKABLE bool forceCommit()` on
-`WindowRuleController`. Pass 17 wired the consumer side:
-WindowRulesPage.qml's `daemonChangedWhileDirty` banner now exposes
+`RuleController`. Pass 17 wired the consumer side:
+RulesPage.qml's `daemonChangedWhileDirty` banner now exposes
 "Save anyway" + "Discard and reload" actions; "Save anyway" opens a
 PromptDialog explaining the overwrite, then calls `forceCommit()`.
 Pass 17 also added a unit test pinning the Q_INVOKABLE marker so a
@@ -184,9 +184,9 @@ now does an O(new-layouts) walk on each `contentsChanged`, not O(N).
 
 ---
 
-## 5. WindowRuleController::duplicateRule single-emit (D12 — CLOSED pass 16)
+## 5. RuleController::duplicateRule single-emit (D12 — CLOSED pass 16)
 
-**Resolution:** Pass 16 added `WindowRuleModel::addRuleAt(rule,
+**Resolution:** Pass 16 added `RuleModel::addRuleAt(rule,
 insertIndex)` with a single `beginInsertRows`/`endInsertRows` pair
 plus clamped index. `duplicateRule` now locates the source's index
 once and inserts directly at `sourceIndex + 1`, eliminating the
@@ -207,7 +207,7 @@ emit). Worst case: four model signals per single user "Duplicate" click.
 
 **Suggested approach (unchanged from original):**
 
-1. Add `WindowRuleModel::addRuleAt(const Rule& rule, int insertIndex)`
+1. Add `RuleModel::addRuleAt(const Rule& rule, int insertIndex)`
    that does a single `beginInsertRows` / `endInsertRows` pair.
 2. Replace `duplicateRule()`'s `addRule` + 2 `moveRule` sequence with one
    `addRuleAt` call. The priority renormalization can stay or be folded
@@ -219,7 +219,7 @@ emit). Worst case: four model signals per single user "Duplicate" click.
 ## 6. monitorOverview identity-default for lookups (D13 — CLOSED pass 15)
 
 **Resolution:** Pass 15 added `lookupsReady()` signal on
-`WindowRuleController` that fires exactly once after screen +
+`RuleController` that fires exactly once after screen +
 activity + snapping-layout + tiling-algorithm resolvers are all
 wired. QML pages gate "show raw model" on this so the brief
 startup window where lookups would return raw UUIDs / wire tokens
@@ -239,7 +239,7 @@ was whether QML renders before lookups are wired; the QML page bootstrap
 order needs auditing to confirm this never happens in practice.
 
 **Suggested approach:** Add a `lookupsReady` boolean signal on
-`WindowRuleController` that QML's WindowRulesPage waits on before
+`RuleController` that QML's RulesPage waits on before
 populating its model. If the controller boots without lookups, the QML
 shows a placeholder instead of raw UUIDs.
 
@@ -362,12 +362,12 @@ Lands when the first out-of-tree consumer needs it.
 
 ---
 
-## 13. WindowRule monitorOverview layout-token lookup contract (Pass 10 — CLOSED pass 15)
+## 13. Rule monitorOverview layout-token lookup contract (Pass 10 — CLOSED pass 15)
 
-**Resolution:** Pass 15 split the WindowRuleController lookup into
+**Resolution:** Pass 15 split the RuleController lookup into
 `setSnappingLayoutLookup` (UUIDs) + `setTilingAlgorithmLookup`
 (algorithm tokens). `monitorOverview` picks the appropriate one
-based on `rule.engineMode`. WindowRuleModel mirrors the split:
+based on `rule.engineMode`. RuleModel mirrors the split:
 `setSnappingLayoutLabelLookup` / `setTilingAlgorithmLabelLookup`;
 `actionLabel` takes both and picks per ActionType. The combined
 `setLayoutLookup` / `setLayoutLabelLookup` back-compat shims were
@@ -375,7 +375,7 @@ later removed in favor of the typed pair (no legacy shims).
 
 ### 13.1 Original spec
 
-**Finding:** `WindowRuleController::monitorOverview` resolves both
+**Finding:** `RuleController::monitorOverview` resolves both
 snappingLayout (UUIDs) and tilingAlgorithm (algorithm tokens like
 "bsp") through the same `m_layoutLookup` callable. The header
 docstring scopes the lookup to layoutIds only — if the wired lookup
@@ -383,7 +383,7 @@ fails on algorithm tokens, autotile-pinned monitor tiles show the
 raw token instead of a localised name.
 
 **Suggested approach:** Either widen the lookup contract in
-`windowrulecontroller.h` to cover algorithm tokens (the impl branches
+`rulecontroller.h` to cover algorithm tokens (the impl branches
 on what it sees), or split into two lookups
 (`snappingLayoutLookup` + `tilingAlgorithmLookup`) for explicit
 type-safety. Cross-partition wiring concern — touches

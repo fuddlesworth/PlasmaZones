@@ -87,7 +87,7 @@ public:
 
     /// Wire the WindowTrackingAdaptor (post-construction, to break the
     /// construction-order cycle) so the autotile open path can resolve
-    /// RouteToScreen / RouteToDesktop window rules. Pass nullptr on shutdown.
+    /// RouteToScreen / RouteToDesktop rules. Pass nullptr on shutdown.
     void setWindowTrackingAdaptor(WindowTrackingAdaptor* wta)
     {
         m_windowTrackingAdaptor = wta;
@@ -433,7 +433,7 @@ private:
     PhosphorTileEngine::AutotileEngine* m_engine = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     /// Borrowed; outlives adaptor. Wired post-construction by the daemon so the
-    /// autotile open path can resolve RouteToScreen / RouteToDesktop window rules
+    /// autotile open path can resolve RouteToScreen / RouteToDesktop rules
     /// (the rule store + evaluator live on the WTA). Null in tests / when unset —
     /// routing is then skipped and windows open on their spawn screen.
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr;

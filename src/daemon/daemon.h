@@ -49,15 +49,15 @@ class ActivityManager;
 class VirtualDesktopManager;
 }
 
-// PhosphorWindowRules::WindowRuleSet is held as a value member below
+// PhosphorRules::RuleSet is held as a value member below
 // (m_excludeRuleSet) — needs a complete type, so include the header
-// rather than forward-declare. WindowRuleStore stays in the header by
-// pointer only; including WindowRuleSet.h leaves the store forward
+// rather than forward-declare. RuleStore stays in the header by
+// pointer only; including RuleSet.h leaves the store forward
 // declared here.
-#include <PhosphorWindowRules/WindowRuleSet.h>
+#include <PhosphorRules/RuleSet.h>
 
-namespace PhosphorWindowRules {
-class WindowRuleStore;
+namespace PhosphorRules {
+class RuleStore;
 }
 
 namespace PhosphorZones {
@@ -89,7 +89,7 @@ class OverlayAdaptor;
 class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class WindowDragAdaptor;
-class WindowRuleAdaptor;
+class RuleAdaptor;
 class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
@@ -565,14 +565,14 @@ private:
     void syncModeFromAssignments();
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
-    // Unified WindowRule store (windowrules.json). Declared BEFORE
+    // Unified Rule store (rules.json). Declared BEFORE
     // m_layoutManager because the LayoutRegistry borrows it for its
     // rule-backed assignment cascade — construction order must build the
-    // store first. The WindowRuleAdaptor borrows it too.
-    std::unique_ptr<PhosphorWindowRules::WindowRuleStore> m_windowRuleStore;
-    // Filtered slice of m_windowRuleStore — only rules whose action list
+    // store first. The RuleAdaptor borrows it too.
+    std::unique_ptr<PhosphorRules::RuleStore> m_ruleStore;
+    // Filtered slice of m_ruleStore — only rules whose action list
     // contains a terminal `Exclude`. Built via
-    // `PhosphorWindowRules::ExclusionRules::excludeRulesFrom` and kept in
+    // `PhosphorRules::ExclusionRules::excludeRulesFrom` and kept in
     // lockstep with the unified store via the rulesChanged subscription
     // wired in init(). SnapEngine borrows a pointer into this set for its
     // `isAppIdExcluded` probe; the WindowTrackingAdaptor's
@@ -583,9 +583,9 @@ private:
     // back-to-back resolves. Replaces a legacy QStringList-based settings
     // path that derived the equivalent set from two flat string lists —
     // see configmigration.cpp::migrateV3ToV4 for the schema fold; the
-    // unified `PhosphorWindowRules::ExclusionRules` namespace now does the
+    // unified `PhosphorRules::ExclusionRules` namespace now does the
     // slicing across both the daemon and the kwin-effect.
-    PhosphorWindowRules::WindowRuleSet m_excludeRuleSet;
+    PhosphorRules::RuleSet m_excludeRuleSet;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry. Replaces the old
     // AlgorithmRegistry::instance() singleton — per-process ownership is
@@ -714,12 +714,12 @@ private:
     // window (and any queued D-Bus call landing in that window would UAF).
     ShaderAdaptor* m_shaderAdaptor = nullptr;
     ControlAdaptor* m_controlAdaptor = nullptr;
-    // Unified WindowRule store + its D-Bus adaptor. The store owns
-    // windowrules.json (daemon sole writer); the adaptor exposes it on
-    // org.plasmazones.WindowRules. Adaptor is Qt-parented (raw pointer); it
+    // Unified Rule store + its D-Bus adaptor. The store owns
+    // rules.json (daemon sole writer); the adaptor exposes it on
+    // org.plasmazones.Rules. Adaptor is Qt-parented (raw pointer); it
     // borrows the store, so stop() calls detach() before the store unique_ptr
     // is destroyed.
-    WindowRuleAdaptor* m_windowRuleAdaptor = nullptr;
+    RuleAdaptor* m_ruleAdaptor = nullptr;
     // Compositor bridge adaptor (KWin effect ↔ daemon protocol endpoint).
     // Parented to `this`; holds only plain state, so it needs no detach().
     CompositorBridgeAdaptor* m_compositorBridge = nullptr;

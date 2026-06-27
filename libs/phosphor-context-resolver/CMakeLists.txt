@@ -16,7 +16,7 @@
 #
 # This library does NOT own any QObject / QML / D-Bus surface — those belong
 # to the higher-level GPL settings app and adaptors. It also does NOT
-# implement rule evaluation — that stays in PhosphorWindowRules.
+# implement rule evaluation — that stays in PhosphorRules.
 #
 # Dependency surface: Qt6::Core only (NO Qt6::Gui) + PhosphorZones (PUBLIC
 # — AssignmentEntry::Mode leaks through the API). The library is LGPL so
