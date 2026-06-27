@@ -343,18 +343,15 @@ ItemDelegate {
             }
 
             ToolButton {
-                // Managed System rules (the seeded defaults) are non-deletable.
-                // Stay in the layout (opacity 0 + disabled) rather than
-                // visible:false, so the edit/duplicate buttons keep their column
-                // alignment with the deletable rows in other sections.
-                opacity: row.managed ? 0 : 1
+                // Managed System rules (the seeded defaults) are non-deletable —
+                // shown but disabled, so the button keeps its column alignment
+                // with the deletable rows in other sections.
                 enabled: !row.managed
                 icon.name: "edit-delete"
                 Layout.alignment: Qt.AlignVCenter
-                ToolTip.text: i18n("Delete rule")
-                ToolTip.visible: hovered && !row.managed
+                ToolTip.text: row.managed ? i18n("System rules can't be deleted") : i18n("Delete rule")
+                ToolTip.visible: hovered
                 Accessible.name: i18n("Delete rule %1", row.ruleName)
-                Accessible.ignored: row.managed
                 onClicked: row.deleteRequested()
             }
         }
