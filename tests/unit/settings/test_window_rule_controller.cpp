@@ -887,8 +887,9 @@ void TestRuleController::authoringMetadata()
     QVERIFY(!actions.isEmpty());
     bool sawFloat = false;
     // Every action carries a picker category; collect the order per wire so the
-    // grouping can be spot-checked (Layout & engine=0, Gaps=1, Window=2,
-    // Appearance=3, Animation=4).
+    // grouping can be spot-checked. Context-domain categories come first,
+    // alphabetised (Gaps=0, Layout & engine=1, Overlay=2), then the window-domain
+    // categories, alphabetised (Animation=3, Appearance=4, Window=5).
     QHash<QString, int> actionCategoryOrder;
     for (const QVariant& v : actions) {
         const QVariantMap a = v.toMap();
@@ -900,11 +901,11 @@ void TestRuleController::authoringMetadata()
                                    a.value(QStringLiteral("categoryOrder")).toInt());
     }
     QVERIFY(sawFloat);
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode")), 0); // Layout & engine
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap")), 1); // Gaps
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude")), 2); // Window
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity")), 3); // Appearance
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 4); // Animation
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap")), 0); // Gaps (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode")), 1); // Layout & engine (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 3); // Animation (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity")), 4); // Appearance (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude")), 5); // Window (window)
 }
 
 void TestRuleController::inputHints()

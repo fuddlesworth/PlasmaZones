@@ -191,23 +191,27 @@ PickerCategory actionCategory(const QString& type)
         return {PhosphorI18n::tr("Other"), 99};
     }
     const QString& cat = desc->category;
-    if (cat == QLatin1String("layoutEngine")) {
-        return {PhosphorI18n::tr("Layout & engine"), 0};
-    }
+    // Two groups, alphabetised within each: the context-domain categories
+    // (resolved per screen/desktop/activity/mode) come first (orders 0-2), then
+    // the window-domain categories (orders 3-5). Keep these orders in lockstep
+    // with each category's action domains in RuleAction.cpp.
     if (cat == QLatin1String("gap")) {
-        return {PhosphorI18n::tr("Gaps"), 1};
+        return {PhosphorI18n::tr("Gaps"), 0};
     }
-    if (cat == QLatin1String("windowManagement")) {
-        return {PhosphorI18n::tr("Window"), 2};
-    }
-    if (cat == QLatin1String("appearance") || cat == QLatin1String("borderAppearance")) {
-        return {PhosphorI18n::tr("Appearance"), 3};
-    }
-    if (cat == QLatin1String("animation")) {
-        return {PhosphorI18n::tr("Animation"), 4};
+    if (cat == QLatin1String("layoutEngine")) {
+        return {PhosphorI18n::tr("Layout & engine"), 1};
     }
     if (cat == QLatin1String("overlay")) {
-        return {PhosphorI18n::tr("Overlay"), 5};
+        return {PhosphorI18n::tr("Overlay"), 2};
+    }
+    if (cat == QLatin1String("animation")) {
+        return {PhosphorI18n::tr("Animation"), 3};
+    }
+    if (cat == QLatin1String("appearance") || cat == QLatin1String("borderAppearance")) {
+        return {PhosphorI18n::tr("Appearance"), 4};
+    }
+    if (cat == QLatin1String("windowManagement")) {
+        return {PhosphorI18n::tr("Window"), 5};
     }
     return {PhosphorI18n::tr("Other"), 99};
 }
