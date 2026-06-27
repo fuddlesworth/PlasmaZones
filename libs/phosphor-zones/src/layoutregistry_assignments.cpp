@@ -135,7 +135,7 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // fold-in is a handful of O(1) provider / per-context-slot reads, so the
     // expensive priority walk stays memoized.
     const std::optional<RuleSlotResolution> rules = resolveCachedContext(
-        m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop, activity,
+        m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop, activity, QString(),
         [&]() -> std::optional<RuleSlotResolution> {
             const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
 
@@ -203,7 +203,7 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
 }
 
 ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, int virtualDesktop,
-                                                      const QString& activity) const
+                                                      const QString& activity, const QString& mode) const
 {
     // This returns CONTEXT OVERRIDE rules only — the per-screen, per-desktop and
     // per-activity gap rules that sit ABOVE the per-layout tier in the geometry
@@ -229,9 +229,13 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
     // path resolves the same context twice per op (zone padding + outer gaps)
     // and N× inside a multi-zone snap, all with identical arguments.
     return resolveCachedContext(
-        m_contextGapCache, m_contextGapCacheRevision, screenId, virtualDesktop, activity, [&]() -> ContextGapOverride {
+        m_contextGapCache, m_contextGapCacheRevision, screenId, virtualDesktop, activity, mode,
+        [&]() -> ContextGapOverride {
             ContextGapOverride gaps;
-            const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            // Thread the placement mode into the query so a per-mode `Mode
+            // Equals "snapping"/"tiling"` gap rule resolves for the asking
+            // engine and stays inert for the other.
+            const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, mode);
 
             // Resolve each gap slot from the highest-priority matching rule that
             // carries that slot's action. The CATCH-ALL managed baseline rule is
@@ -311,7 +315,7 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
     // check runs per cursor-move while a selector is open and on every
     // layout-switch attempt.
     return resolveCachedContext(m_contextLockCache, m_contextLockCacheRevision, screenId, virtualDesktop, activity,
-                                [&]() -> bool {
+                                QString(), [&]() -> bool {
                                     const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
                                     const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
                                     if (const auto action = resolved.slot(QString(PWR::ActionSlot::Locked))) {
@@ -337,7 +341,7 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
     }
 
     return resolveCachedContext(m_contextDefaultAssignmentCache, m_contextDefaultAssignmentCacheRevision, screenId,
-                                virtualDesktop, activity, [&]() -> std::optional<bool> {
+                                virtualDesktop, activity, QString(), [&]() -> std::optional<bool> {
                                     const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
                                     const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
                                     if (const auto action =
@@ -376,7 +380,7 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
     }
 
     return resolveCachedContext(
-        m_contextOverlayCache, m_contextOverlayCacheRevision, screenId, virtualDesktop, activity,
+        m_contextOverlayCache, m_contextOverlayCacheRevision, screenId, virtualDesktop, activity, QString(),
         [&]() -> ContextOverlayOverride {
             ContextOverlayOverride overlay;
             const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);

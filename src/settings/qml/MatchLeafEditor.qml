@@ -298,6 +298,9 @@ RowLayout {
             if (leaf._valueKind === "windowType")
                 return windowTypeValueEditor;
 
+            if (leaf._valueKind === "mode")
+                return modeValueEditor;
+
             return stringValueEditor;
         }
     }
@@ -560,6 +563,47 @@ RowLayout {
                 return String(v);
             }
             Accessible.name: i18n("Window type")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
+        }
+    }
+
+    Component {
+        id: modeValueEditor
+
+        WideComboBox {
+            // The field entry's `options` carry {value: token, wire: token,
+            // label: localised} triples. Mode is a string field, so the value
+            // persisted in the rule store IS the wire token ("snapping" /
+            // "tiling" / "floating").
+            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+
+            model: _options
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = leaf.node.value;
+                for (var i = 0; i < _options.length; ++i) {
+                    if (_options[i].value === target)
+                        return i;
+                }
+                return -1;
+            }
+            // Show the raw stored token when no option matches (a hand-edited
+            // rule or a newer schema), mirroring the windowType / screen pickers.
+            // The empty-string sentinel is the "no value yet" state the field
+            // picker seeds when switching in from another field.
+            displayText: {
+                if (currentIndex >= 0)
+                    return currentText;
+                var v = leaf.node.value;
+                if (v === undefined || v === null || v === "")
+                    return i18n("Choose a mode…");
+                return String(v);
+            }
+            Accessible.name: i18n("Placement mode")
             onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);

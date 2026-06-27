@@ -18,7 +18,7 @@ private Q_SLOTS:
         // Canary: the loop bound is derived from FieldCount, not hard-coded.
         // If this fails, an enumerator was added/removed without updating
         // FieldCount in MatchTypes.h.
-        QCOMPARE(FieldCount, 34);
+        QCOMPARE(FieldCount, 35);
         QTest::addColumn<int>("fieldValue");
         for (int v = 0; v < FieldCount; ++v) {
             QTest::addRow("field-%d", v) << v;
@@ -108,6 +108,10 @@ private Q_SLOTS:
         QVERIFY(fieldIsContext(Field::ScreenId));
         QVERIFY(fieldIsContext(Field::VirtualDesktop));
         QVERIFY(fieldIsContext(Field::Activity));
+        // Mode is the placement-mode context field — present during context
+        // resolution so a per-mode gap/appearance rule participates in the
+        // cascade.
+        QVERIFY(fieldIsContext(Field::Mode));
 
         QVERIFY(!fieldIsContext(Field::AppId));
         QVERIFY(!fieldIsContext(Field::WindowClass));
@@ -139,6 +143,7 @@ private Q_SLOTS:
         QVERIFY(!fieldIsContext(Field::IsFloating));
         QVERIFY(!fieldIsContext(Field::IsSnapped));
         QVERIFY(!fieldIsContext(Field::Zone));
+        QVERIFY(!fieldIsContext(Field::IsTiled));
     }
 
     void testFieldTableOrdering()

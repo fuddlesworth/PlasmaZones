@@ -1227,6 +1227,48 @@ private Q_SLOTS:
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, QStringLiteral("{ctx-layout}"));
     }
+
+    // ─── Per-mode gap rule resolves only for its mode ─────────────────────
+    // A `Mode Equals "tiling"` gap rule is context-only (Mode is a context
+    // field), so it participates in the gap cascade. resolveContextGaps must
+    // pick up its inner gap when the asking engine is tiling, and ignore it
+    // when the asking engine is snapping — the whole point of routing per-mode
+    // gaps through the context `Mode` field instead of window-property IsTiled.
+
+    void testPerModeGapRuleResolvesForMatchingModeOnly()
+    {
+        RegistryFixture f = makeRegistryFixture();
+
+        PWR::RuleAction gapAction;
+        gapAction.type = QString(PWR::ActionType::SetInnerGap);
+        gapAction.params.insert(QString(PWR::ActionParam::Value), 14);
+        PWR::WindowRule tilingGap;
+        tilingGap.id = QUuid::createUuid();
+        tilingGap.name = QStringLiteral("Tiling inner gap");
+        tilingGap.enabled = true;
+        tilingGap.priority = 500;
+        tilingGap.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("tiling"));
+        tilingGap.actions = {gapAction};
+        QVERIFY(tilingGap.match.isContextOnly());
+        QVERIFY(f.store->setAllRules({tilingGap}));
+
+        // Tiling engine asks → the per-mode gap applies.
+        const PhosphorZones::ContextGapOverride tiled =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("tiling"));
+        QVERIFY(tiled.innerGap.has_value());
+        QCOMPARE(*tiled.innerGap, 14);
+
+        // Snapping engine asks → the Mode leaf is a non-match, so no override.
+        const PhosphorZones::ContextGapOverride snapped =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("snapping"));
+        QVERIFY(!snapped.innerGap.has_value());
+
+        // No mode supplied (mode-agnostic caller) → also a non-match.
+        const PhosphorZones::ContextGapOverride none =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString());
+        QVERIFY(!none.innerGap.has_value());
+    }
 };
 
 QTEST_MAIN(TestWindowRuleCascadeFidelity)

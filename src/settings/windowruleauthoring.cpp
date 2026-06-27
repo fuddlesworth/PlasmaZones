@@ -93,6 +93,7 @@ PickerCategory fieldCategory(Field f)
     case Field::ScreenId:
     case Field::VirtualDesktop:
     case Field::Activity:
+    case Field::Mode:
         return {PhosphorI18n::tr("Context"), 6};
     }
     return {PhosphorI18n::tr("Other"), 99};
@@ -174,6 +175,8 @@ QString fieldDescription(Field f)
         return PhosphorI18n::tr("The virtual desktop the window is on.");
     case Field::Activity:
         return PhosphorI18n::tr("The KDE Activity the window is on.");
+    case Field::Mode:
+        return PhosphorI18n::tr("The placement mode the window is in (snapping, tiling, or floating).");
     }
     return QString();
 }
@@ -662,6 +665,34 @@ QVariantList matchFields()
             // `settingsController.activities`, so the user sees the activity
             // name not its UUID.
             kind = QStringLiteral("activity");
+        } else if (f == Field::Mode) {
+            // Mode is string-valued on the wire (the placement-mode token), but
+            // the vocabulary is closed — surface a dropdown of the friendly
+            // tokens instead of a free-text box. The `options` carry
+            // {value, wire, label}; unlike WindowType the value IS the wire
+            // string (Mode is a string field, so the rule store keeps the token
+            // verbatim).
+            kind = QStringLiteral("mode");
+            QVariantList options;
+            struct ModeEntry
+            {
+                QLatin1StringView wire;
+                QString label;
+            };
+            const std::array kModes = std::to_array<ModeEntry>({
+                {QLatin1StringView("snapping"), PhosphorI18n::tr("Snapping")},
+                {QLatin1StringView("tiling"), PhosphorI18n::tr("Tiling")},
+                {QLatin1StringView("floating"), PhosphorI18n::tr("Floating")},
+            });
+            for (const auto& opt : kModes) {
+                QVariantMap option;
+                const QString wire = QString(opt.wire);
+                option[QStringLiteral("value")] = wire;
+                option[QStringLiteral("wire")] = wire;
+                option[QStringLiteral("label")] = opt.label;
+                options.append(option);
+            }
+            entry[QStringLiteral("options")] = options;
         }
         entry[QStringLiteral("valueKind")] = kind;
         out.append(entry);
@@ -678,7 +709,12 @@ QVariantList operatorsForField(int fieldValue)
     }
     const Field field = static_cast<Field>(fieldValue);
     QList<Operator> ops;
-    if (PhosphorWindowRules::fieldIsString(field)) {
+    if (field == Field::Mode) {
+        // Mode is string-valued but its vocabulary is a closed dropdown — only
+        // an exact-token Equals is meaningful (a substring / regex against a
+        // three-token set is a footgun). Mirrors the WindowType enum treatment.
+        ops = {Operator::Equals};
+    } else if (PhosphorWindowRules::fieldIsString(field)) {
         ops = {Operator::Equals, Operator::Contains, Operator::StartsWith, Operator::EndsWith, Operator::Regex};
         if (field == Field::AppId) {
             ops.append(Operator::AppIdMatches);

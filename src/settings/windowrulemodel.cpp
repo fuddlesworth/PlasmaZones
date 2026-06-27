@@ -136,6 +136,22 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleM
         return label.isEmpty() ? raw : label;
     };
 
+    // Mode is a closed wire-token vocabulary — render the friendly label
+    // ("Mode: Snapping") rather than the raw token. An unknown token (a
+    // hand-edited rule) round-trips verbatim.
+    if (predicate.field == Field::Mode) {
+        const QString token = predicate.value.toString();
+        QString label = token;
+        if (token == QLatin1String("snapping")) {
+            label = PhosphorI18n::tr("Snapping");
+        } else if (token == QLatin1String("tiling")) {
+            label = PhosphorI18n::tr("Tiling");
+        } else if (token == QLatin1String("floating")) {
+            label = PhosphorI18n::tr("Floating");
+        }
+        return PhosphorI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field), label);
+    }
+
     return PhosphorI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field),
                                           resolveOne(predicate.value.toString()));
 }
@@ -728,6 +744,8 @@ QString WindowRuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Tiled");
     case Field::Zone:
         return PhosphorI18n::tr("Zone");
+    case Field::Mode:
+        return PhosphorI18n::tr("Mode");
     }
     return QString();
 }

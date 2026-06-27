@@ -339,8 +339,8 @@ public:
     /// engine-mode gate. Returns an all-unset @ref ContextGapOverride when no
     /// matching rule fills a gap slot. Same owner-thread affinity as the rest
     /// of the registry.
-    ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop,
-                                          const QString& activity) const override;
+    ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
+                                          const QString& mode = QString()) const override;
 
     /// Resolve whether a context rule locks the active layout for the
     /// (screen, desktop, activity) context by evaluating a windowless
@@ -785,9 +785,16 @@ private:
         QString screenId;
         int virtualDesktop = 0;
         QString activity;
+        // The placement-mode wire token the gap cascade resolves against. Empty
+        // for the mode-agnostic resolvers (assignment / lock / overlay). It is
+        // part of the cache identity because the SAME (screen, desktop, activity)
+        // now resolves DIFFERENT gaps per mode — caching without it would return
+        // the snapping result for a subsequent tiling query.
+        QString mode;
         bool operator==(const ContextResolveKey& other) const noexcept
         {
-            return virtualDesktop == other.virtualDesktop && screenId == other.screenId && activity == other.activity;
+            return virtualDesktop == other.virtualDesktop && screenId == other.screenId && activity == other.activity
+                && mode == other.mode;
         }
     };
     friend size_t qHash(const LayoutRegistry::ContextResolveKey& key, size_t seed) noexcept
@@ -800,6 +807,7 @@ private:
         h = ::qHash(key.screenId, h);
         h = ::qHash(key.virtualDesktop, h);
         h = ::qHash(key.activity, h);
+        h = ::qHash(key.mode, h);
         return h;
     }
 
@@ -816,14 +824,14 @@ private:
     /// that must short-circuit on a null evaluator do so BEFORE calling this.
     template<typename V, typename ComputeFn>
     V resolveCachedContext(QHash<ContextResolveKey, V>& cache, quint64& cacheRevision, const QString& screenId,
-                           int virtualDesktop, const QString& activity, ComputeFn&& compute) const
+                           int virtualDesktop, const QString& activity, const QString& mode, ComputeFn&& compute) const
     {
         const quint64 revision = m_ruleStore->ruleSet().revision();
         if (revision != cacheRevision) {
             cache.clear();
             cacheRevision = revision;
         }
-        const ContextResolveKey key{screenId, virtualDesktop, activity};
+        const ContextResolveKey key{screenId, virtualDesktop, activity, mode};
         const auto cached = cache.constFind(key);
         if (cached != cache.constEnd()) {
             return cached.value();

@@ -65,6 +65,7 @@ struct WindowQuery
     QString screenId;
     int virtualDesktop = 0; ///< 0 = all desktops
     QString activity; ///< empty = all activities
+    QString mode; ///< current placement mode wire token ("snapping" / "tiling" / "floating"); empty = unknown
 
     /// True if any window attribute is set — i.e. this is a per-window query
     /// rather than a windowless context query.
@@ -118,6 +119,8 @@ struct WindowQuery
             return std::optional<QVariant>(virtualDesktop);
         case Field::Activity:
             return std::optional<QVariant>(activity);
+        case Field::Mode:
+            return std::optional<QVariant>(mode);
         case Field::IsMaximized:
             return isMaximized ? std::optional<QVariant>(*isMaximized) : std::nullopt;
         case Field::IsFocused:

@@ -16,12 +16,14 @@ namespace PhosphorZones::RuleHelpers {
 
 namespace CRB = PhosphorWindowRules::ContextRuleBridge;
 
-PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity)
+PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity,
+                                  const QString& mode)
 {
     PWR::WindowQuery query;
     query.screenId = screenId;
     query.virtualDesktop = virtualDesktop;
     query.activity = activity;
+    query.mode = mode;
     return query;
 }
 

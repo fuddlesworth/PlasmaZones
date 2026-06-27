@@ -46,7 +46,13 @@ struct ContextDims
 // Build the windowless context query for a (screen, desktop, activity) tuple.
 // No window attributes are set — window-property predicates evaluate false,
 // so only context-only rules contribute. This reproduces the old cascade.
-PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity);
+// @p mode is the placement-mode wire token ("snapping" / "tiling"); it is set
+// only on the gap-cascade query (the snap engine vs. the autotile engine each
+// know which they are) so a per-mode `Mode Equals "…"` rule resolves. Left
+// empty for the mode-agnostic resolvers (assignment / lock / overlay), where
+// it stays a non-match for any Mode leaf.
+PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity,
+                                  const QString& mode = QString());
 
 // Human-readable label for a context assignment rule's (screen, desktop,
 // activity) tuple — the single place the " · Desktop N" / " · Activity"

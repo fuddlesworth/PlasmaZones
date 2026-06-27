@@ -53,12 +53,14 @@ enum class Field : int {
     IsSnapped = 31, ///< occupies a snap zone
     Zone = 32, ///< the snap zone's UUID the window occupies
     IsTiled = 33, ///< managed by the autotile engine (distinct from IsSnapped)
+    // ── Context placement-mode field [34] ────────────────────────────────
+    Mode = 34, ///< context — current placement mode (snapping / tiling / floating)
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::IsTiled) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::Mode) + 1;
 
 // ── Field descriptor table ──────────────────────────────────────────────────
 // Single source of truth for every field's wire string, value-kind, and
@@ -127,6 +129,12 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     {Field::IsSnapped, QLatin1StringView("isSnapped"), FieldType::Bool, FieldSource::Window},
     {Field::Zone, QLatin1StringView("zone"), FieldType::String, FieldSource::Window},
     {Field::IsTiled, QLatin1StringView("isTiled"), FieldType::Bool, FieldSource::Window},
+    // [34] — Context placement-mode field. String-valued (wire tokens
+    // "snapping" / "tiling" / "floating") so an `Equals` leaf compares the
+    // token directly, and Context-sourced so it is present during windowless
+    // context resolution — which is what lets a per-mode rule participate in
+    // the gap cascade and pass the context-action compatibility check.
+    {Field::Mode, QLatin1StringView("mode"), FieldType::String, FieldSource::Context},
 };
 static_assert(sizeof(kFieldTable) / sizeof(kFieldTable[0]) == static_cast<unsigned>(FieldCount),
               "kFieldTable must have one entry per Field");

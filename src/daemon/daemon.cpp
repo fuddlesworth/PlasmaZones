@@ -1323,8 +1323,11 @@ bool Daemon::init()
             if (!m_layoutManager) {
                 return {};
             }
-            const PhosphorZones::ContextGapOverride gaps =
-                m_layoutManager->resolveContextGaps(screenId, currentDesktopForScreen(screenId), currentActivity());
+            // This is the autotile gap path, so resolve against the "tiling"
+            // placement mode — a per-mode `Mode Equals "tiling"` gap rule then
+            // applies here and a "snapping" one stays inert.
+            const PhosphorZones::ContextGapOverride gaps = m_layoutManager->resolveContextGaps(
+                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling"));
             if (gaps.isEmpty()) {
                 return {};
             }

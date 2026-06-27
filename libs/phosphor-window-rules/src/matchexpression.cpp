@@ -124,6 +124,7 @@ bool MatchExpression::isContextOnly() const
         case Field::ScreenId:
         case Field::VirtualDesktop:
         case Field::Activity:
+        case Field::Mode:
             return true;
         default:
             return false;

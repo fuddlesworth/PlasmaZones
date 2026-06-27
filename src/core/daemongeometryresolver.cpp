@@ -20,8 +20,10 @@ QVariantMap DaemonGeometryResolver::contextGapOverrideFor(const QString& screenI
     const QString activity = m_currentActivity ? m_currentActivity() : QString();
     // Translation to the PerScreenSnappingKey-shaped map is shared with the
     // preview/query geometry helpers via GeometryUtils::contextGapOverrideMap.
+    // This is the snap-commit geometry path, so resolve against the "snapping"
+    // placement mode — a per-mode `Mode Equals "snapping"` gap rule applies here.
     return GeometryUtils::contextGapOverrideMap(
-        m_layoutRegistry->resolveContextGaps(screenId, virtualDesktop, activity));
+        m_layoutRegistry->resolveContextGaps(screenId, virtualDesktop, activity, QStringLiteral("snapping")));
 }
 
 int DaemonGeometryResolver::resolveInnerGap(PhosphorZones::Layout* layout, const QString& screenId) const

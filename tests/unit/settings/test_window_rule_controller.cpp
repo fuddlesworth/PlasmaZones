@@ -753,6 +753,7 @@ void TestWindowRuleController::authoringMetadata()
     bool sawScreenKind = false;
     bool sawActivityKind = false;
     bool sawWindowTypeKind = false;
+    bool sawModeKind = false;
     for (const QVariant& v : fields) {
         const QVariantMap f = v.toMap();
         QVERIFY(f.contains(QStringLiteral("value")));
@@ -760,19 +761,24 @@ void TestWindowRuleController::authoringMetadata()
         const QString kind = f.value(QStringLiteral("valueKind")).toString();
         QVERIFY(kind == QLatin1String("string") || kind == QLatin1String("number") || kind == QLatin1String("bool")
                 || kind == QLatin1String("screen") || kind == QLatin1String("activity")
-                || kind == QLatin1String("windowType") || kind == QLatin1String("virtualDesktop"));
+                || kind == QLatin1String("windowType") || kind == QLatin1String("virtualDesktop")
+                || kind == QLatin1String("mode"));
         if (kind == QLatin1String("screen")) {
             sawScreenKind = true;
         }
         if (kind == QLatin1String("activity")) {
             sawActivityKind = true;
         }
-        if (kind == QLatin1String("windowType")) {
-            sawWindowTypeKind = true;
-            // windowType must carry an `options` array of {value, wire, label}
-            // triples so the editor can render the enum dropdown.
+        if (kind == QLatin1String("windowType") || kind == QLatin1String("mode")) {
+            if (kind == QLatin1String("windowType")) {
+                sawWindowTypeKind = true;
+            } else {
+                sawModeKind = true;
+            }
+            // Enum-style fields must carry an `options` array of {value, wire,
+            // label} triples so the editor can render the dropdown.
             const QVariantList options = f.value(QStringLiteral("options")).toList();
-            QVERIFY2(!options.isEmpty(), "windowType valueKind must expose enum options for the dropdown");
+            QVERIFY2(!options.isEmpty(), "enum valueKind must expose options for the dropdown");
             for (const QVariant& opt : options) {
                 const QVariantMap m = opt.toMap();
                 QVERIFY(m.contains(QStringLiteral("value")));
@@ -784,6 +790,7 @@ void TestWindowRuleController::authoringMetadata()
     QVERIFY(sawScreenKind);
     QVERIFY(sawActivityKind);
     QVERIFY(sawWindowTypeKind);
+    QVERIFY(sawModeKind);
 
     // Picker categories drive the fly-out submenu grouping. Every field carries
     // a non-empty category label + a categoryOrder int. The Field enum

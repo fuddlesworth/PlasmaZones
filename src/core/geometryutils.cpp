@@ -85,8 +85,12 @@ QVariantMap currentContextGapOverride(PhosphorZones::IZoneLayoutRegistry* reg, c
     if (!reg || screenId.isEmpty()) {
         return {};
     }
-    return contextGapOverrideMap(
-        reg->resolveContextGaps(screenId, reg->currentVirtualDesktopForScreen(screenId), reg->currentActivity()));
+    // The preview / query / empty-zone geometry helpers that call this are all
+    // snapping-side, so resolve against the "snapping" placement mode — the
+    // preview geometry then matches the snap-commit path (DaemonGeometryResolver
+    // passes the same token).
+    return contextGapOverrideMap(reg->resolveContextGaps(screenId, reg->currentVirtualDesktopForScreen(screenId),
+                                                         reg->currentActivity(), QStringLiteral("snapping")));
 }
 
 QVariantMap contextGapOverrideMap(const PhosphorZones::ContextGapOverride& gaps)

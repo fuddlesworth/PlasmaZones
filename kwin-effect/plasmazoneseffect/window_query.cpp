@@ -73,6 +73,19 @@ PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const
     if (!zoneId.isEmpty()) {
         query.zone = zoneId;
     }
+    // Placement mode (context field) — derived from the same snapped / tiled /
+    // floated state above so a per-mode rule (`Mode Equals "tiling"`) resolves
+    // this window's border / title / colour the same way the daemon resolves its
+    // per-mode gaps. Tiled and snapped are mutually exclusive placement states;
+    // an unmanaged window left floating reports "floating". Left empty when the
+    // window is in none of those states (no Mode leaf then matches).
+    if (isTiled) {
+        query.mode = QStringLiteral("tiling");
+    } else if (isSnapped) {
+        query.mode = QStringLiteral("snapping");
+    } else if (isFloating) {
+        query.mode = QStringLiteral("floating");
+    }
     // Context fields — let a window-domain rule pin screen / desktop / activity
     // (e.g. "red border on monitor 2"). screenId is resolved by the caller (the
     // effect member getWindowScreenId — not reachable from this free helper);
