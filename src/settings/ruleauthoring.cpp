@@ -178,7 +178,7 @@ QString fieldDescription(Field f)
     case Field::Activity:
         return PhosphorI18n::tr("The KDE Activity the window is on.");
     case Field::Mode:
-        return PhosphorI18n::tr("The placement mode the window is in (snapping, tiling, or floating).");
+        return PhosphorI18n::tr("The engine mode the window is placed by (snapping or tiling).");
     }
     return QString();
 }
@@ -688,7 +688,6 @@ QVariantList matchFields()
             const std::array kModes = std::to_array<ModeEntry>({
                 {QLatin1StringView("snapping"), PhosphorI18n::tr("Snapping")},
                 {QLatin1StringView("tiling"), PhosphorI18n::tr("Tiling")},
-                {QLatin1StringView("floating"), PhosphorI18n::tr("Floating")},
             });
             for (const auto& opt : kModes) {
                 QVariantMap option;
