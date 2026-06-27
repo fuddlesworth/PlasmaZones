@@ -10,6 +10,8 @@
 
 #include "zoneslogging.h"
 
+#include <PhosphorFsLoader/SchemaValidator.h>
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -20,6 +22,32 @@
 #include <algorithm>
 
 namespace PhosphorZones {
+
+namespace {
+
+// Process-wide layout schema validator, compiled once on first use from the
+// RCC-embedded schema (see qt6_add_resources in CMakeLists). Always available
+// — never depends on an installed data path. validate() is const and only
+// reads the compiled schema, so reusing this single instance across the load
+// loop (and across threads) is safe.
+const PhosphorFsLoader::SchemaValidator& layoutSchemaValidator()
+{
+    static const PhosphorFsLoader::SchemaValidator validator = [] {
+        QFile schemaFile(QStringLiteral(":/phosphorzones/schemas/layout.schema.json"));
+        if (!schemaFile.open(QIODevice::ReadOnly)) {
+            // A missing embedded resource is a build error, not a user input
+            // problem. Fail closed: an empty-bytes validator reports invalid
+            // and every layout is rejected with a clear diagnostic rather than
+            // silently loading unvalidated.
+            qCWarning(lcZonesLib) << "Embedded layout schema resource missing — layout files cannot be validated";
+            return PhosphorFsLoader::SchemaValidator(QByteArray());
+        }
+        return PhosphorFsLoader::SchemaValidator(schemaFile.readAll());
+    }();
+    return validator;
+}
+
+} // namespace
 
 void LayoutRegistry::loadLayouts()
 {
@@ -124,11 +152,26 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
             continue;
         }
 
+        const QJsonObject structural = doc.object();
+
+        // Validate the on-disk structural document against the layout schema
+        // before merging sidecar settings. Catches malformed user-authored or
+        // third-party layout files (missing zones, out-of-range relative
+        // geometry, wrong types) up front with a precise diagnostic, rather
+        // than letting them fall through to fromJson and produce broken zones.
+        if (const auto errors = layoutSchemaValidator().validate(structural)) {
+            qCWarning(lcZonesLib) << "Skipping layout file failing schema validation:" << filePath;
+            for (const auto& err : *errors) {
+                qCWarning(lcZonesLib).nospace()
+                    << "  " << (err.path.isEmpty() ? QStringLiteral("(root)") : err.path) << ": " << err.message;
+            }
+            continue;
+        }
+
         // Merge the layout's settings (from the sidecar, keyed by layout UUID)
         // back onto the structural JSON before constructing the Layout. A
         // not-yet-split (full-format) file with no sidecar entry round-trips
         // unchanged — mergeSettings preserves keys the file already carries.
-        const QJsonObject structural = doc.object();
         const QString layoutId = structural.value(::PhosphorZones::ZoneJsonKeys::Id).toString();
         const QJsonObject merged =
             LayoutSettingsStore::mergeSettings(structural, m_layoutSettings.settingsFor(layoutId));

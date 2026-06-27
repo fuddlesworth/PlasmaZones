@@ -214,6 +214,18 @@ add_library(PhosphorAnimation SHARED
 
 add_library(PhosphorAnimation::PhosphorAnimation ALIAS PhosphorAnimation)
 
+# Embed the curve + animation-metadata JSON Schemas so CurveLoader and
+# AnimationShaderRegistry can validate on load without an installed data path.
+# The committed data/schemas/*.json are the single source of truth shared with
+# CI; read at :/phosphoranimation/schemas/<name>.schema.json.
+qt6_add_resources(PhosphorAnimation "phosphoranimation_schemas"
+    PREFIX "/phosphoranimation/schemas"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}/../../data/schemas"
+    FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../data/schemas/curve.schema.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../data/schemas/animation-metadata.schema.json"
+)
+
 generate_export_header(PhosphorAnimation
     EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/PhosphorAnimation/phosphoranimation_export.h
     EXPORT_MACRO_NAME PHOSPHORANIMATION_EXPORT

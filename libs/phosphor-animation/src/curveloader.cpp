@@ -9,8 +9,10 @@
 #include <PhosphorFsLoader/IDirectoryLoaderSink.h>
 #include <PhosphorFsLoader/JsonEnvelopeValidator.h>
 #include <PhosphorFsLoader/ParsedEntry.h>
+#include <PhosphorFsLoader/SchemaValidator.h>
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QHash>
 #include <QJsonObject>
@@ -39,6 +41,24 @@ Q_LOGGING_CATEGORY(lcCurveLoader, "phosphoranimation.curveloader")
 QString makeCurveLoaderOwnerTag()
 {
     return QStringLiteral("curveloader-") + QUuid::createUuid().toString();
+}
+
+// Process-wide curve schema validator, compiled once from the RCC-embedded
+// schema (see qt6_add_resources in CMakeLists). The schema deliberately does
+// not require "name" — the envelope check has already enforced and stripped it
+// — so it validates the envelope-stripped root the same way CI validates the
+// full on-disk file.
+const PhosphorFsLoader::SchemaValidator& curveSchemaValidator()
+{
+    static const PhosphorFsLoader::SchemaValidator validator = [] {
+        QFile schemaFile(QStringLiteral(":/phosphoranimation/schemas/curve.schema.json"));
+        if (!schemaFile.open(QIODevice::ReadOnly)) {
+            qCWarning(lcCurveLoader) << "Embedded curve schema resource missing — curve files cannot be validated";
+            return PhosphorFsLoader::SchemaValidator(QByteArray());
+        }
+        return PhosphorFsLoader::SchemaValidator(schemaFile.readAll());
+    }();
+    return validator;
 }
 
 } // namespace
@@ -96,6 +116,18 @@ public:
         }
         const QJsonObject& obj = envelope->root;
         const QString& name = envelope->name;
+
+        // Structural schema gate: typeId present and non-empty, parameters a
+        // numeric object. Catches malformed curve files up front; the registry
+        // factory below still does the typeId-specific parameter validation.
+        if (const auto errors = curveSchemaValidator().validate(obj)) {
+            qCWarning(lcCurveLoader) << "Skipping curve file failing schema validation:" << filePath;
+            for (const auto& err : *errors) {
+                qCWarning(lcCurveLoader).nospace()
+                    << "  " << (err.path.isEmpty() ? QStringLiteral("(root)") : err.path) << ": " << err.message;
+            }
+            return std::nullopt;
+        }
 
         // Reject user-authored files whose `name` collides with a
         // built-in typeId. CurveRegistry::registerFactory is
