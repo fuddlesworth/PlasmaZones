@@ -160,7 +160,7 @@ PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const
         }
     }
     // isFocused mirrors the live active-window state so a rule like
-    // "isFocused=false ⇒ SetBorderColor(gray)" resolves correctly. The
+    // "isFocused=false ⇒ SetBorderColorActive(gray)" resolves correctly. The
     // evaluator's per-window match cache is keyed on (windowId, ruleSet
     // revision) — neither moves on focus change — so callers MUST invalidate
     // it on KWin's windowActivated signal (see slotWindowActivated), exactly

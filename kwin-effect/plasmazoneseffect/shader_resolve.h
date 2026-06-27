@@ -161,12 +161,13 @@ struct ResolvedWindowAppearance
     std::optional<bool> showBorder;
     std::optional<int> borderWidth;
     std::optional<int> borderRadius;
-    // SetBorderColor carries the focus pair in one action: `activeColor` is the
-    // focused colour, `inactiveColor` the unfocused one (already defaulted to
-    // active when the rule omitted it). The accent sentinel has been resolved to
-    // the live accent by the time it lands here. updateWindowBorder picks by the
-    // window's focus state. A focus-scoped single-colour rule (matching
-    // IsFocused) still works — it just fills activeColor in its matching state.
+    // `activeColor` is the focused colour (from SetBorderColorActive),
+    // `inactiveColor` the unfocused one (from SetBorderColorInactive, already
+    // defaulted to active when that action was omitted). The accent sentinel has
+    // been resolved to the live accent by the time it lands here.
+    // updateWindowBorder picks by the window's focus state. A focus-scoped
+    // single-colour rule (matching IsFocused) still works — it just fills
+    // activeColor in its matching state.
     std::optional<QColor> activeColor;
     std::optional<QColor> inactiveColor;
 

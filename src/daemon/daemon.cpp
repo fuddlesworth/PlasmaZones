@@ -161,15 +161,12 @@ PhosphorWindowRules::WindowRule makeBaselineBorderRule()
     };
 
     WindowRule rule = makeBaselineSkeleton(ConfigDefaults::baselineBorderRuleId(), PhosphorI18n::tr("Default borders"));
-    RuleAction color;
-    color.type = QString(ActionType::SetBorderColor);
-    color.params.insert(QString(ActionParam::Active), QString(BorderColorToken::Accent));
-    color.params.insert(QString(ActionParam::Inactive), QString(BorderColorToken::Accent));
     rule.actions = {
         action(ActionType::SetBorderVisible, ActionParam::Value, DD::ShowBorder),
         action(ActionType::SetBorderWidth, ActionParam::Value, DD::BorderWidth),
         action(ActionType::SetBorderRadius, ActionParam::Value, DD::BorderRadius),
-        color,
+        action(ActionType::SetBorderColorActive, ActionParam::Value, QString(BorderColorToken::Accent)),
+        action(ActionType::SetBorderColorInactive, ActionParam::Value, QString(BorderColorToken::Accent)),
     };
     return rule;
 }

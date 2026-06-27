@@ -71,17 +71,16 @@ inline RuleAction borderWidth(int px)
 inline RuleAction borderColor(const QString& hex)
 {
     RuleAction a;
-    a.type = QString(ActionType::SetBorderColor);
-    a.params.insert(ActionParam::Active, hex);
+    a.type = QString(ActionType::SetBorderColorActive);
+    a.params.insert(ActionParam::Value, hex);
     return a;
 }
 
-inline RuleAction borderColor(const QString& activeHex, const QString& inactiveHex)
+inline RuleAction borderColorInactive(const QString& hex)
 {
     RuleAction a;
-    a.type = QString(ActionType::SetBorderColor);
-    a.params.insert(ActionParam::Active, activeHex);
-    a.params.insert(ActionParam::Inactive, inactiveHex);
+    a.type = QString(ActionType::SetBorderColorInactive);
+    a.params.insert(ActionParam::Value, hex);
     return a;
 }
 

@@ -72,7 +72,8 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::SetBorderVisible,
     ActionType::SetBorderWidth,
     ActionType::SetBorderRadius,
-    ActionType::SetBorderColor,
+    ActionType::SetBorderColorActive,
+    ActionType::SetBorderColorInactive,
 };
 } // namespace
 
@@ -390,43 +391,39 @@ private Q_SLOTS:
 
     void testBorderColorActions_requireHex()
     {
-        // SetBorderColor carries `active` (required) and optional `inactive`,
-        // each a hex shape or the accent sentinel.
-        const QString typeStr = QString::fromLatin1(ActionType::SetBorderColor);
-        QJsonObject o;
-        o.insert(QStringLiteral("type"), typeStr);
-        // Missing `active` — rejected (active is required).
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        o.insert(QStringLiteral("active"), QStringLiteral("red")); // named colour — hex-only boundary rejects
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        o.insert(QStringLiteral("active"), QStringLiteral("#ff00")); // length 5 ∉ {4,7,9}
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        o.insert(QStringLiteral("active"), QStringLiteral("#12345")); // length 6 ∉ {4,7,9}
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        o.insert(QStringLiteral("active"), QStringLiteral("#gg0000")); // non-hex digits
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        // The standard QColor hex shapes the consumer parses are all accepted:
-        // #RGB (4), #RRGGBB (7), #AARRGGBB (9 — QColor reads 9-digit hex alpha-first).
-        for (const QString& good : {QStringLiteral("#abc"), QStringLiteral("#FF0000"), QStringLiteral("#80FF0000")}) {
-            o.insert(QStringLiteral("active"), good);
-            QVERIFY2(RuleAction::fromJson(o).has_value(), qPrintable(good));
+        // SetBorderColorActive and SetBorderColorInactive each carry a single
+        // `value` colour: a hex shape or the accent sentinel. Both share the
+        // validator, so exercise both type strings.
+        for (const QLatin1StringView type : {ActionType::SetBorderColorActive, ActionType::SetBorderColorInactive}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            // Missing `value` — rejected (the colour is required).
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("red")); // named colour — hex-only boundary rejects
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("#ff00")); // length 5 ∉ {4,7,9}
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("#12345")); // length 6 ∉ {4,7,9}
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("#gg0000")); // non-hex digits
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            // The standard QColor hex shapes the consumer parses are all accepted:
+            // #RGB (4), #RRGGBB (7), #AARRGGBB (9 — QColor reads 9-digit hex alpha-first).
+            for (const QString& good :
+                 {QStringLiteral("#abc"), QStringLiteral("#FF0000"), QStringLiteral("#80FF0000")}) {
+                o.insert(QStringLiteral("value"), good);
+                QVERIFY2(RuleAction::fromJson(o).has_value(), qPrintable(good));
+            }
+            // The accent sentinel is accepted.
+            o.insert(QStringLiteral("value"), QString(BorderColorToken::Accent));
+            const auto reloaded = RuleAction::fromJson(o);
+            QVERIFY2(reloaded.has_value(), type.data());
+            // Genuine round-trip: serialise the parsed action back out and re-parse,
+            // asserting toJson→fromJson is stable.
+            const auto roundTripped = RuleAction::fromJson(reloaded->toJson());
+            QVERIFY2(roundTripped.has_value(), type.data());
+            QCOMPARE(*roundTripped, *reloaded);
         }
-        // The accent sentinel is accepted on either colour.
-        o.insert(QStringLiteral("active"), QString(BorderColorToken::Accent));
-        QVERIFY(RuleAction::fromJson(o).has_value());
-        // A malformed `inactive` is rejected; a valid hex / sentinel accepted.
-        o.insert(QStringLiteral("inactive"), QStringLiteral("nope"));
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        o.insert(QStringLiteral("inactive"), QStringLiteral("#222222"));
-        QVERIFY(RuleAction::fromJson(o).has_value());
-        o.insert(QStringLiteral("inactive"), QString(BorderColorToken::Accent));
-        const auto reloaded = RuleAction::fromJson(o);
-        QVERIFY(reloaded.has_value());
-        // Genuine round-trip: serialise the parsed action back out and re-parse,
-        // asserting toJson→fromJson is stable.
-        const auto roundTripped = RuleAction::fromJson(reloaded->toJson());
-        QVERIFY(roundTripped.has_value());
-        QCOMPARE(*roundTripped, *reloaded);
     }
 
     // ── gap actions (context-domain) ──
@@ -478,17 +475,10 @@ private Q_SLOTS:
         };
         rejectsStray(ActionType::SetBorderWidth, QJsonValue(4));
         rejectsStray(ActionType::SetHideTitleBar, QJsonValue(true));
-        // SetBorderColor keys on `active`/`inactive` rather than `value`, so it
-        // can't use the value-shaped rejectsStray helper — check it inline.
-        {
-            QJsonObject ok;
-            ok.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetBorderColor));
-            ok.insert(QStringLiteral("active"), QStringLiteral("#FF0000"));
-            QVERIFY(RuleAction::fromJson(ok).has_value());
-            QJsonObject stray = ok;
-            stray.insert(QStringLiteral("value"), QStringLiteral("#00FF00")); // not in allowedKeys
-            QVERIFY(!RuleAction::fromJson(stray).has_value());
-        }
+        // The border-colour actions key their colour on `value`, so the
+        // value-shaped helper covers them with a valid hex colour.
+        rejectsStray(ActionType::SetBorderColorActive, QJsonValue(QStringLiteral("#FF0000")));
+        rejectsStray(ActionType::SetBorderColorInactive, QJsonValue(QStringLiteral("#FF0000")));
         rejectsStray(ActionType::SetOuterGapTop, QJsonValue(8));
         rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
         rejectsStray(ActionType::LockContext, QJsonValue(true));

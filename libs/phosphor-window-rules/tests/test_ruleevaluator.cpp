@@ -503,6 +503,8 @@ private Q_SLOTS:
         set.addRule(makeRule(QStringLiteral("width-high"), 500, MatchExpression{}, {borderWidth(4)}));
         set.addRule(
             makeRule(QStringLiteral("color-low"), 100, MatchExpression{}, {borderColor(QStringLiteral("#ff0000"))}));
+        set.addRule(makeRule(QStringLiteral("color-inactive"), 90, MatchExpression{},
+                             {borderColorInactive(QStringLiteral("#00ff00"))}));
         set.addRule(makeRule(QStringLiteral("width-lowest"), 50, MatchExpression{}, {borderWidth(9)}));
         RuleEvaluator eval(set);
         const ResolvedActions resolved = eval.resolve(konsoleQuery());
@@ -511,9 +513,14 @@ private Q_SLOTS:
         QVERIFY(width.has_value());
         QCOMPARE(width->params.value(QString(ActionParam::Value)).toInt(), 4); // higher-priority width wins its slot
 
-        const auto color = resolved.slot(QString(ActionSlot::BorderColor));
-        QVERIFY(color.has_value()); // colour slot also filled — not shadowed by the width rules
-        QCOMPARE(color->params.value(QString(ActionParam::Active)).toString(), QStringLiteral("#ff0000"));
+        // The focused and unfocused colours land on independent slots, each
+        // carrying its colour in the single `value` param.
+        const auto activeColor = resolved.slot(QString(ActionSlot::BorderColorActive));
+        QVERIFY(activeColor.has_value());
+        QCOMPARE(activeColor->params.value(QString(ActionParam::Value)).toString(), QStringLiteral("#ff0000"));
+        const auto inactiveColor = resolved.slot(QString(ActionSlot::BorderColorInactive));
+        QVERIFY(inactiveColor.has_value());
+        QCOMPARE(inactiveColor->params.value(QString(ActionParam::Value)).toString(), QStringLiteral("#00ff00"));
     }
 };
 

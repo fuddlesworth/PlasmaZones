@@ -839,25 +839,38 @@ void ActionRegistry::registerBuiltins()
         .displayOrder = 3,
         .tags = {QString(Tag::Border), QString(Tag::Effect)},
     });
+    // Two single-colour border actions, one per focus state, each its own slot.
+    // The colour param is keyed ActionParam::Value: a hex shape or the accent
+    // sentinel. Internal active/inactive naming matches KWin and the effect's
+    // activeColor/inactiveColor; user-facing labels say focused/unfocused.
     registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetBorderColor),
-        .slotFor = constantSlot(ActionSlot::BorderColor),
+        .type = QString(ActionType::SetBorderColorActive),
+        .slotFor = constantSlot(ActionSlot::BorderColorActive),
         .validate =
             [](const QJsonObject& p) {
-                // `active` is required; `inactive` is optional and falls back to
-                // active. Either may be a hex colour or the accent sentinel.
-                if (!hasHexColorOrAccent(p, ActionParam::Active)) {
-                    return false;
-                }
-                return !p.contains(ActionParam::Inactive) || hasHexColorOrAccent(p, ActionParam::Inactive);
+                return hasHexColorOrAccent(p, ActionParam::Value);
             },
         .terminal = false,
-        .allowedKeys = {QString(ActionParam::Active), QString(ActionParam::Inactive)},
+        .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Active), .kind = QStringLiteral("color")},
-                   P{.key = QString(ActionParam::Inactive), .kind = QStringLiteral("color")}},
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
         .category = QStringLiteral("borderAppearance"),
         .displayOrder = 4,
+        .tags = {QString(Tag::Border), QString(Tag::Effect)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetBorderColorInactive),
+        .slotFor = constantSlot(ActionSlot::BorderColorInactive),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasHexColorOrAccent(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+        .category = QStringLiteral("borderAppearance"),
+        .displayOrder = 5,
         .tags = {QString(Tag::Border), QString(Tag::Effect)},
     });
 

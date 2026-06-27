@@ -327,19 +327,16 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         if (action.type == ActionType::SetBorderRadius) {
             return PhosphorI18n::tr("Corner radius: %1 px").arg(raw.toInt());
         }
-        if (action.type == ActionType::SetBorderColor) {
-            // Two colours on one action (active / inactive). The accent sentinel
-            // shows as a word, hex as upper-case. Collapse to one when inactive
-            // is absent or equal to active.
-            const auto fmt = [](const QString& s) {
-                return s == PhosphorWindowRules::BorderColorToken::Accent ? PhosphorI18n::tr("Accent") : s.toUpper();
-            };
-            const QString active = action.params.value(PhosphorWindowRules::ActionParam::Active).toString();
-            const QString inactive = action.params.value(PhosphorWindowRules::ActionParam::Inactive).toString();
-            if (inactive.isEmpty() || inactive == active) {
-                return PhosphorI18n::tr("Border: %1").arg(fmt(active));
+        if (action.type == ActionType::SetBorderColorActive || action.type == ActionType::SetBorderColorInactive) {
+            // Each action carries a single colour in `value`. The accent sentinel
+            // shows as a word, hex as upper-case.
+            const QString value = raw.toString();
+            const QString shown =
+                value == PhosphorWindowRules::BorderColorToken::Accent ? PhosphorI18n::tr("Accent") : value.toUpper();
+            if (action.type == ActionType::SetBorderColorActive) {
+                return PhosphorI18n::tr("Focused border: %1").arg(shown);
             }
-            return PhosphorI18n::tr("Border: %1 / %2").arg(fmt(active), fmt(inactive));
+            return PhosphorI18n::tr("Unfocused border: %1").arg(shown);
         }
         // ── per-context gap overrides ──
         if (action.type == ActionType::SetInnerGap) {

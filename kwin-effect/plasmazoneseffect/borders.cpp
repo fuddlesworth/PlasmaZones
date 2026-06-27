@@ -112,9 +112,10 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         return;
     }
 
-    // Colour comes from the rule's SetBorderColor: `active` when the window is
-    // focused, `inactive` otherwise. The resolver already defaulted inactive to
-    // active when the rule omitted it and resolved the accent sentinel to the
+    // Colour comes from the rules: the SetBorderColorActive colour when the
+    // window is focused, the SetBorderColorInactive colour otherwise. The
+    // resolver already defaulted inactive to active when that action was omitted
+    // and resolved the accent sentinel to the
     // live accent, so this is a straight focus-state pick. A rule can also scope
     // a single colour by matching IsFocused.
     const bool isFocused = (w == KWin::effects->activeWindow());

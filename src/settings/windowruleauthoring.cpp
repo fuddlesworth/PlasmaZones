@@ -257,11 +257,11 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetBorderRadius && key == ActionParam::Value) {
         return PhosphorI18n::tr("Corner radius (px)");
     }
-    if (type == ActionType::SetBorderColor && key == ActionParam::Active) {
-        return PhosphorI18n::tr("Border color (focused)");
-    }
-    if (type == ActionType::SetBorderColor && key == ActionParam::Inactive) {
-        return PhosphorI18n::tr("Border color (unfocused)");
+    if ((type == ActionType::SetBorderColorActive || type == ActionType::SetBorderColorInactive)
+        && key == ActionParam::Value) {
+        // The action label already carries focused/unfocused, so the single
+        // colour param just reads "Border color".
+        return PhosphorI18n::tr("Border color");
     }
     // Per-context gap overrides (all single-value, keyed ActionParam::Value).
     if (type == ActionType::SetInnerGap && key == ActionParam::Value) {
@@ -497,8 +497,11 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetBorderRadius) {
         return PhosphorI18n::tr("Set corner radius");
     }
-    if (type == ActionType::SetBorderColor) {
-        return PhosphorI18n::tr("Set border color");
+    if (type == ActionType::SetBorderColorActive) {
+        return PhosphorI18n::tr("Set focused border color");
+    }
+    if (type == ActionType::SetBorderColorInactive) {
+        return PhosphorI18n::tr("Set unfocused border color");
     }
     if (type == ActionType::SetInnerGap) {
         return PhosphorI18n::tr("Set inner gap");
@@ -853,10 +856,11 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             payload[key] = defaultDisplay.isValid() ? QVariant(defaultDisplay.toBool()) : QVariant(false);
         } else if (kind == QLatin1String("color")) {
             // Colour kind has no numeric `defaultDisplay` (that field is a
-            // double); seed a valid `#AARRGGBB` so a fresh rule passes the
-            // SetBorderColor validator before the user opens the picker.
-            // Neutral KDE accent blue, fully opaque.
-            payload[key] = QStringLiteral("#FF3DAEE9");
+            // double); seed the accent sentinel so a fresh border-colour rule
+            // (SetBorderColorActive / SetBorderColorInactive) passes the
+            // validator and follows the system accent until the user picks a
+            // concrete colour.
+            payload[key] = QString(PhosphorWindowRules::BorderColorToken::Accent);
         } else if (kind == QLatin1String("zoneOrdinals")) {
             // Seed a valid single-zone default ([1]) so a fresh SnapToZone rule
             // passes the validator (non-empty array of positive ordinals) before

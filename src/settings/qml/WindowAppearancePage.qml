@@ -30,7 +30,8 @@ SettingsFlickable {
     readonly property string actBorderVisible: "setBorderVisible"
     readonly property string actBorderWidth: "setBorderWidth"
     readonly property string actBorderRadius: "setBorderRadius"
-    readonly property string actBorderColor: "setBorderColor"
+    readonly property string actBorderColorActive: "setBorderColorActive"
+    readonly property string actBorderColorInactive: "setBorderColorInactive"
     readonly property string actHideTitleBar: "setHideTitleBar"
     // Gap action wire strings (mirrors PhosphorWindowRules::ActionType). The
     // shared inner/outer gap model is rule-backed too, so the Gaps card edits the
@@ -43,9 +44,9 @@ SettingsFlickable {
     readonly property string actOuterGapLeft: "setOuterGapLeft"
     readonly property string actOuterGapRight: "setOuterGapRight"
     // "Follow the system accent" sentinel (PhosphorWindowRules::BorderColorToken::Accent).
-    // Writing it records intent; the effect-side push that resolves the sentinel
-    // to the live accent colour is a pending follow-up (see the daemon's
-    // makeBaselineBorderRule note), so for now it persists as a stored token.
+    // The effect resolves it to the live system accent colour at apply time, so a
+    // border colour written as this token tracks Plasma accent changes without a
+    // rule edit.
     readonly property string accentToken: "accent"
     // Concrete fallback colour written when the user turns the accent toggle off
     // (matches the daemon's seeded baseline default — KDE accent blue, opaque).
@@ -407,24 +408,20 @@ SettingsFlickable {
                     SettingsSwitch {
                         id: useAccentSwitch
 
-                        // True when the active colour carries the accent sentinel.
+                        // True when the focused colour carries the accent sentinel.
                         checked: {
                             root.reloadTick;
-                            return root.actionValue(root.actBorderColor, "active", root.defaultBorderHex) === root.accentToken;
+                            return root.actionValue(root.actBorderColorActive, "value", root.defaultBorderHex) === root.accentToken;
                         }
                         accessibleName: i18n("Use system accent color")
                         onToggled: function (newValue) {
-                            if (newValue) {
-                                root.writeAction(root.actBorderColor, {
-                                    "active": root.accentToken,
-                                    "inactive": root.accentToken
-                                });
-                            } else {
-                                root.writeAction(root.actBorderColor, {
-                                    "active": root.defaultBorderHex,
-                                    "inactive": root.defaultBorderHex
-                                });
-                            }
+                            const colorValue = newValue ? root.accentToken : root.defaultBorderHex;
+                            root.writeAction(root.actBorderColorActive, {
+                                "value": colorValue
+                            });
+                            root.writeAction(root.actBorderColorInactive, {
+                                "value": colorValue
+                            });
                         }
                     }
                 }
@@ -442,10 +439,10 @@ SettingsFlickable {
                     ColorSwatchRow {
                         color: {
                             root.reloadTick;
-                            return root.actionValue(root.actBorderColor, "active", root.defaultBorderHex);
+                            return root.actionValue(root.actBorderColorActive, "value", root.defaultBorderHex);
                         }
                         onClicked: {
-                            activeBorderColorDialog.selectedColor = root.actionValue(root.actBorderColor, "active", root.defaultBorderHex);
+                            activeBorderColorDialog.selectedColor = root.actionValue(root.actBorderColorActive, "value", root.defaultBorderHex);
                             activeBorderColorDialog.open();
                         }
                     }
@@ -464,10 +461,10 @@ SettingsFlickable {
                     ColorSwatchRow {
                         color: {
                             root.reloadTick;
-                            return root.actionValue(root.actBorderColor, "inactive", root.defaultBorderHex);
+                            return root.actionValue(root.actBorderColorInactive, "value", root.defaultBorderHex);
                         }
                         onClicked: {
-                            inactiveBorderColorDialog.selectedColor = root.actionValue(root.actBorderColor, "inactive", root.defaultBorderHex);
+                            inactiveBorderColorDialog.selectedColor = root.actionValue(root.actBorderColorInactive, "value", root.defaultBorderHex);
                             inactiveBorderColorDialog.open();
                         }
                     }
@@ -633,8 +630,8 @@ SettingsFlickable {
 
         options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Active Border Color")
-        onAccepted: root.writeAction(root.actBorderColor, {
-            "active": root.colorToHex(selectedColor)
+        onAccepted: root.writeAction(root.actBorderColorActive, {
+            "value": root.colorToHex(selectedColor)
         })
     }
 
@@ -643,8 +640,8 @@ SettingsFlickable {
 
         options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Inactive Border Color")
-        onAccepted: root.writeAction(root.actBorderColor, {
-            "inactive": root.colorToHex(selectedColor)
+        onAccepted: root.writeAction(root.actBorderColorInactive, {
+            "value": root.colorToHex(selectedColor)
         })
     }
 }

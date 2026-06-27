@@ -189,9 +189,10 @@ ColumnLayout {
     // SetBorderVisible / SetUsePerSideOuterGap / RestorePosition — dispatch is by
     // `kind`, not this list). Stores a JSON bool.
     property Component _boolParamEditor
-    // Colour swatch + picker for `kind == "color"` params (SetBorderColor).
-    // Stores a `#AARRGGBB` wire string (alpha-first, matching QColor::HexArgb and
-    // the global zone/border colours) so transparency set in the picker survives.
+    // Colour swatch + picker for `kind == "color"` params — the single `value`
+    // colour on SetBorderColorActive / SetBorderColorInactive. Stores a
+    // `#AARRGGBB` wire string (alpha-first, matching QColor::HexArgb and the
+    // global zone/border colours) so transparency set in the picker survives.
     // The validator accepts the `#AARRGGBB` shape and the effect-side consumer
     // parses it via `QColor(QString)` (which reads 9-digit hex alpha-first).
     property Component _colorParamEditor
@@ -207,7 +208,7 @@ ColumnLayout {
     property Component _virtualDesktopEditor
 
     /// Encode a QML color to a `#AARRGGBB` wire string (alpha-first) — the form
-    /// the SetBorderColor validator accepts and the consumer parses back via
+    /// the border-colour validator accepts and the consumer parses back via
     /// QColor::HexArgb. Mirrors how general-settings border colours are stored.
     function _toHexArgb(c) {
         function h(v) {
@@ -603,7 +604,7 @@ ColumnLayout {
         RowLayout {
             readonly property var _param: parent.modelData
             readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : "#FF3DAEE9"
-            // SetBorderColor's active/inactive params may carry the "accent"
+            // A border-colour action's single `value` param may carry the "accent"
             // sentinel ("follow the system accent") instead of a hex string. It is
             // not a QColor, so render the live accent colour for the swatch and a
             // word for the label rather than letting QColor("accent") fall to black.

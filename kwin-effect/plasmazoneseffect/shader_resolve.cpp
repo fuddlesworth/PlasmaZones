@@ -261,15 +261,16 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
         }
         return static_cast<int>(d);
     };
-    // Both colours live on the single BorderColor slot action (`active` /
-    // `inactive` params). The accent sentinel resolves to the live accent;
-    // anything else parses as a hex colour.
-    const auto borderColorParam = [&resolved, &accentColor](QLatin1StringView paramKey) -> std::optional<QColor> {
-        const auto action = resolved.slot(QString(PhosphorWindowRules::ActionSlot::BorderColor));
+    // The focused and unfocused colours live on two separate single-colour slots
+    // (SetBorderColorActive / SetBorderColorInactive), each carrying its colour in
+    // the `value` param. The accent sentinel resolves to the live accent; anything
+    // else parses as a hex colour.
+    const auto borderColorSlot = [&resolved, &accentColor](QLatin1StringView slot) -> std::optional<QColor> {
+        const auto action = resolved.slot(QString(slot));
         if (!action) {
             return std::nullopt;
         }
-        const QJsonValue v = action->params.value(QString(paramKey));
+        const QJsonValue v = action->params.value(QString(PhosphorWindowRules::ActionParam::Value));
         if (!v.isString()) {
             return std::nullopt;
         }
@@ -289,8 +290,8 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
     out.showBorder = boolSlot(PhosphorWindowRules::ActionSlot::BorderVisible);
     out.borderWidth = intSlot(PhosphorWindowRules::ActionSlot::BorderWidth, kMaxBorderWidth);
     out.borderRadius = intSlot(PhosphorWindowRules::ActionSlot::BorderRadius, kMaxBorderRadius);
-    out.activeColor = borderColorParam(PhosphorWindowRules::ActionParam::Active);
-    out.inactiveColor = borderColorParam(PhosphorWindowRules::ActionParam::Inactive);
+    out.activeColor = borderColorSlot(PhosphorWindowRules::ActionSlot::BorderColorActive);
+    out.inactiveColor = borderColorSlot(PhosphorWindowRules::ActionSlot::BorderColorInactive);
     // An omitted `inactive` mirrors the active colour, matching the retired
     // global behaviour where a window with no distinct inactive colour kept its
     // active border when unfocused.

@@ -648,7 +648,7 @@ private:
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 
     // Live system accent colour that a `BorderColorToken::Accent` sentinel in a
-    // SetBorderColor rule resolves to. Pushed from the daemon, which tracks the
+    // border-colour rule resolves to. Pushed from the daemon, which tracks the
     // Plasma colour scheme; invalid until the first push (sentinel then yields
     // no colour). See resolveWindowAppearance.
     QColor m_borderAccentColor;

@@ -1175,14 +1175,18 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
     QCOMPARE(curvePayload.value(QStringLiteral("event")).toString(), QString());
     QCOMPARE(curvePayload.value(QStringLiteral("curve")).toString(), QString());
 
-    // SetBorderColor carries two `color`-kind params, `active` and `inactive`,
-    // each seeded with a fully opaque ARGB string (`#AARRGGBB`, alpha-first) so
-    // the picker can edit transparency and the seed round-trips through
-    // QColor::HexArgb.
-    const QVariantMap borderColorPayload = controller.defaultPayloadFor(QStringLiteral("setBorderColor"));
-    QCOMPARE(borderColorPayload.value(QStringLiteral("type")).toString(), QStringLiteral("setBorderColor"));
-    QCOMPARE(borderColorPayload.value(QStringLiteral("active")).toString(), QStringLiteral("#FF3DAEE9"));
-    QCOMPARE(borderColorPayload.value(QStringLiteral("inactive")).toString(), QStringLiteral("#FF3DAEE9"));
+    // SetBorderColorActive / SetBorderColorInactive each carry a single
+    // `color`-kind param keyed `value`, seeded with the accent sentinel so a
+    // fresh border-colour rule follows the system accent until the user picks a
+    // concrete colour.
+    const QVariantMap borderColorActivePayload = controller.defaultPayloadFor(QStringLiteral("setBorderColorActive"));
+    QCOMPARE(borderColorActivePayload.value(QStringLiteral("type")).toString(), QStringLiteral("setBorderColorActive"));
+    QCOMPARE(borderColorActivePayload.value(QStringLiteral("value")).toString(), QStringLiteral("accent"));
+    const QVariantMap borderColorInactivePayload =
+        controller.defaultPayloadFor(QStringLiteral("setBorderColorInactive"));
+    QCOMPARE(borderColorInactivePayload.value(QStringLiteral("type")).toString(),
+             QStringLiteral("setBorderColorInactive"));
+    QCOMPARE(borderColorInactivePayload.value(QStringLiteral("value")).toString(), QStringLiteral("accent"));
 
     // LockContext's `value` is a bool with defaultDisplay=1.0, so a freshly
     // type-switched lock action seeds to `value: true` — the picker opens

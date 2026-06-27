@@ -600,7 +600,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     // System accent colour for window-border rules: the zone highlight colour
     // tracks the Plasma accent (when "use system colours" is on the daemon keeps
-    // it in sync), and it is what a SetBorderColor `accent` sentinel resolves to
+    // it in sync), and it is what a border-colour `accent` sentinel resolves to
     // in updateWindowBorder. Re-fetched on every settingsChanged, so an accent /
     // colour-scheme change repaints accent-following borders without a relog.
     loadSettingAsync(QStringLiteral("highlightColor"), [this](const QVariant& v) {
