@@ -797,7 +797,8 @@ void TestRuleController::authoringMetadata()
     // interleaves state/context, so assert grouping is by CATEGORY (via the
     // language-independent order), not by enum position. The (formerly single,
     // 19-entry) State bucket is split into fine-grained categories:
-    // Identity=0, Type=1, State=2, Taskbar & switcher=3, Tiling=4, Size=5,
+    // Alphabetical by label: Context=0, Identity=1, Size=2, State=3,
+    // Taskbar & switcher=4, Tiling=5, Type=6.
     // Context=6.
     QHash<QString, int> fieldCategoryOrder;
     for (const QVariant& v : fields) {
@@ -812,18 +813,18 @@ void TestRuleController::authoringMetadata()
         fieldCategoryOrder.insert(f.value(QStringLiteral("wire")).toString(),
                                   f.value(QStringLiteral("categoryOrder")).toInt());
     }
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("appId")), 0); // Identity
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("windowType")), 1); // Type
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isTransient")), 1); // Type
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFullscreen")), 2); // State
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isMaximized")), 2); // State (after Context in enum order)
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipTaskbar")), 3); // Taskbar & switcher
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipSwitcher")), 3); // Taskbar & switcher
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFloating")), 4); // Tiling
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("zone")), 4); // Tiling
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width")), 5); // Size
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height")), 5); // Size
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenId")), 6); // Context
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("appId")), 1); // Identity
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("windowType")), 6); // Type
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isTransient")), 6); // Type
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFullscreen")), 3); // State
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isMaximized")), 3); // State
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipTaskbar")), 4); // Taskbar & switcher
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipSwitcher")), 4); // Taskbar & switcher
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFloating")), 5); // Tiling
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("zone")), 5); // Tiling
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width")), 2); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height")), 2); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenId")), 0); // Context
 
     // The four match conditions (IsTransient/IsNotification/Width/Height) must be
     // authorable: present in the picker with the correct value kind, and with

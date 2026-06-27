@@ -43,7 +43,9 @@ struct PickerCategory
 /// is hard to scan, so the window-kind, taskbar/switcher-hint, and
 /// PlasmaZones-tiling concepts each get their own top-level fly-out. Items
 /// within a category are sorted alphabetically by CategoryMenuButton; only the
-/// returned order int controls the relative position of the categories.
+/// returned order int controls the relative position of the categories. The
+/// order ints below are assigned so the category labels sort alphabetically
+/// (Context, Identity, Size, State, Taskbar & switcher, Tiling, Type).
 PickerCategory fieldCategory(Field f)
 {
     switch (f) {
@@ -55,13 +57,13 @@ PickerCategory fieldCategory(Field f)
     case Field::Pid:
     case Field::Title:
     case Field::CaptionNormal:
-        return {PhosphorI18n::tr("Identity"), 0};
+        return {PhosphorI18n::tr("Identity"), 1};
     // What kind of window it is (its role/type), not a toggled runtime state.
     case Field::WindowType:
     case Field::IsTransient:
     case Field::IsModal:
     case Field::IsNotification:
-        return {PhosphorI18n::tr("Type"), 1};
+        return {PhosphorI18n::tr("Type"), 6};
     // Live window-manager state and chrome flags.
     case Field::IsMaximized:
     case Field::IsMinimized:
@@ -72,29 +74,29 @@ PickerCategory fieldCategory(Field f)
     case Field::IsSticky:
     case Field::HasDecoration:
     case Field::IsResizable:
-        return {PhosphorI18n::tr("State"), 2};
+        return {PhosphorI18n::tr("State"), 3};
     // NETWM "skip" hints — whether the window opts out of the taskbar, pager,
     // or Alt+Tab switcher.
     case Field::SkipTaskbar:
     case Field::SkipPager:
     case Field::SkipSwitcher:
-        return {PhosphorI18n::tr("Taskbar & switcher"), 3};
+        return {PhosphorI18n::tr("Taskbar & switcher"), 4};
     // PlasmaZones-owned placement state.
     case Field::IsFloating:
     case Field::IsSnapped:
     case Field::IsTiled:
     case Field::Zone:
-        return {PhosphorI18n::tr("Tiling"), 4};
+        return {PhosphorI18n::tr("Tiling"), 5};
     case Field::Width:
     case Field::Height:
     case Field::PositionX:
     case Field::PositionY:
-        return {PhosphorI18n::tr("Size"), 5};
+        return {PhosphorI18n::tr("Size"), 2};
     case Field::ScreenId:
     case Field::VirtualDesktop:
     case Field::Activity:
     case Field::Mode:
-        return {PhosphorI18n::tr("Context"), 6};
+        return {PhosphorI18n::tr("Context"), 0};
     }
     return {PhosphorI18n::tr("Other"), 99};
 }
