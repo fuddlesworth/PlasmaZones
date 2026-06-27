@@ -66,7 +66,7 @@ namespace PlasmaZones {
 ///     and the runtime LayoutSettingsStore (in phosphor-zones) merges the
 ///     sidecar back onto each layout on load, so the in-memory model is
 ///     unchanged.
-inline constexpr int ConfigSchemaVersion = 4;
+inline constexpr int ConfigSchemaVersion = 5;
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
@@ -193,6 +193,44 @@ public:
     ///                 are derived as siblings via ConfigDefaults).
     /// @return true on success or a clean no-op; false on an I/O failure.
     static bool finalizeV4Conversion(const QString& jsonPath);
+
+    /// v4 → v5 schema step. The v4 schema shipped per-mode (separate Snapping
+    /// vs Tiling) window appearance (borders, title bars, colours) and gap
+    /// settings in config.json; this branch deleted those settings and routes
+    /// the same concerns through window rules instead. This step reads the
+    /// deleted v4 groups (`Snapping.Appearance.*`, `Snapping.Gaps`, the
+    /// `Tiling.*` equivalents, and the per-screen `PerScreen.Snapping` /
+    /// `PerScreen.Autotile` gap subsets), stashes the values that DIFFER from
+    /// the v4 compile defaults under the temporary `_v5AppearanceStash` root
+    /// key, REMOVES the consumed keys/groups from config.json (leaving the
+    /// surviving non-appearance keys such as `Snapping.Gaps.AdjacentThreshold`
+    /// and `Tiling.Gaps.SmartGaps` in place), and stamps `_version = 5`. A
+    /// clean v4 config (everything at its default) stashes nothing. The stash
+    /// feeds @ref finalizeV5Conversion.
+    static void migrateV4ToV5(QJsonObject& root);
+
+    /// Post-chain finalizer for the v5 conversion. Mirrors
+    /// @ref finalizeV4Conversion: the override rules cannot be built inside a
+    /// `void(QJsonObject&)` migration step (they live in windowrules.json), so
+    /// this runs after the chain from @ref ensureJsonConfigImpl, right after
+    /// finalizeV4Conversion (which guarantees windowrules.json exists).
+    ///
+    /// It reads `_v5AppearanceStash` from config.json, converts each differing
+    /// value into a non-managed override WindowRule — two IsTiled-matched rules
+    /// ("Snapping appearance" matching `IsTiled Equals false`, "Tiling
+    /// appearance" matching `IsTiled Equals true`) plus one `ScreenId`-matched
+    /// gap rule per per-screen entry — ADDS them to the existing rule set
+    /// (never clobbering user rules or the managed baselines), saves
+    /// windowrules.json, then strips `_v5AppearanceStash` from config.json.
+    ///
+    /// Idempotent: runs only while the stash is present. Once stripped it is a
+    /// no-op, and the override rule ids are deterministic so a re-run before the
+    /// strip succeeds cannot duplicate rules (addRule rejects colliding ids).
+    ///
+    /// @param jsonPath Path to config.json (windowrules.json is derived as a
+    ///                 sibling via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool finalizeV5Conversion(const QString& jsonPath);
 
     /// Part of the v4 conversion: read every `*.json` layout in @p layoutsDir,
     /// split its embedded per-layout settings into the @p sidecarPath store

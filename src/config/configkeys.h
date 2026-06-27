@@ -751,6 +751,15 @@ public:
         // semantics as the three sibling stash keys above.
         P_CONFIG_KEY(v4AnimationExclusionStashKey, "_v4AnimationExclusionStash")
 
+        // v5 migration scratch-root key — set on the root by `migrateV4ToV5`
+        // from the deleted per-mode appearance / gap groups (and per-screen
+        // gap subsets) and consumed by `finalizeV5Conversion`, which converts
+        // each differing value into a non-managed override WindowRule. Same
+        // purge-protection semantics as the v4 sibling stash keys above: it is
+        // listed in `Settings::purgeStaleKeys`' preserved set so a save() cycle
+        // can't drop it while the conversion is still pending.
+        P_CONFIG_KEY(v5AppearanceStashKey, "_v5AppearanceStash")
+
         // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and
         // finalizeV4Conversion. These mirror the live `displayGroup`,
         // `defaultLayoutIdKey`, `snappingBehaviorWindowHandlingGroup`,

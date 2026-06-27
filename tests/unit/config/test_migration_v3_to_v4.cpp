@@ -305,7 +305,9 @@ private Q_SLOTS:
 
         // config.json stamped v4.
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 4);
+        // The migration chain now runs v3 → v4 → v5, so config.json lands at
+        // the current schema version (the v3→v4 step still stamps 4 mid-chain).
+        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
         // All four temporary stash keys are stripped from config.json.
         // The fixture's `makeV3Config()` doesn't populate the two
@@ -1158,7 +1160,9 @@ private Q_SLOTS:
         // returns false and rebuild retries from the stash). Both paths
         // surface as a follow-up run after the user repairs the quarantine.
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 4);
+        // The migration chain now runs v3 → v4 → v5, so config.json lands at
+        // the current schema version (the v3→v4 step still stamps 4 mid-chain).
+        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
     }
 
     // ─── Data-loss regression (B5): malformed assignments.json aborts ─────
@@ -2360,7 +2364,9 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 4);
+        // The migration chain now runs v3 → v4 → v5, so config.json lands at
+        // the current schema version (the v3→v4 step still stamps 4 mid-chain).
+        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
         const QJsonObject snapping = cfg.value(QStringLiteral("Snapping")).toObject();
 

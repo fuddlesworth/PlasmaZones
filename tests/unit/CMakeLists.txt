@@ -286,6 +286,12 @@ target_link_libraries(test_migration_v3_to_v4
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRules::PhosphorWindowRules)
 add_test(NAME test_migration_v3_to_v4 COMMAND test_migration_v3_to_v4)
 
+# v4 → v5 per-mode appearance + gaps → window-rule override migration.
+add_executable(test_migration_v4_to_v5 config/test_migration_v4_to_v5.cpp)
+target_link_libraries(test_migration_v4_to_v5
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRules::PhosphorWindowRules)
+add_test(NAME test_migration_v4_to_v5 COMMAND test_migration_v4_to_v5)
+
 # WindowRuleStore — daemon-side windowrules.json persistence + mutation API.
 add_executable(test_windowrule_store config/test_windowrule_store.cpp)
 target_link_libraries(test_windowrule_store

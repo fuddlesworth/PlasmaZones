@@ -386,6 +386,7 @@ void Settings::purgeStaleKeys()
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
         ConfigKeys::Legacy::v4ExclusionStashKey(),
         ConfigKeys::Legacy::v4AnimationExclusionStashKey(),
+        ConfigKeys::Legacy::v5AppearanceStashKey(),
     };
 
     // Compute the set of paths the Store claims. These must not be
