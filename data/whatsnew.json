@@ -1,6 +1,19 @@
 {
     "releases": [
         {
+            "version": "3.2.0",
+            "date": "2026-06-27",
+            "highlights": [
+                "Window borders, title bars, and gaps are now window rules. A new Windows page (under Appearance) edits the defaults, and you can override them per window or per context on the Rules page (#699)",
+                "New Mode condition: a rule can match snapped or tiled windows, so snapping and tiling can have different gaps or appearance (#699)",
+                "Per-monitor gaps: pick a monitor on the Gaps card to set its gaps on their own (#699)",
+                "Focused and unfocused border colors are now set separately, each with its own color swatch (#699)",
+                "Window Rules is now just Rules, since rules cover gaps, layout, and animation too. Your rules carry over automatically, and any appearance or gap settings you had customized are migrated into rules on upgrade (#699)",
+                "The managed default rules for borders, title bars, and gaps live in a System section on the Rules page and can't be deleted (#699)",
+                "The rule editor's action and condition pickers are alphabetized and grouped so they are easier to scan (#699)"
+            ]
+        },
+        {
             "version": "3.1.2",
             "date": "2026-06-25",
             "highlights": [
