@@ -332,6 +332,7 @@ ColumnLayout {
                     "name": o.label,
                     "category": o.category,
                     "categoryOrder": o.categoryOrder,
+                    "categoryGroup": o.categoryGroup,
                     "dimmed": incompatible,
                     "dimReason": incompatible ? i18n("This action runs during context resolution and cannot match window properties. Remove the window conditions from the rule's match, or pick a different action.") : ""
                 };
