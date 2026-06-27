@@ -26,6 +26,28 @@ pre-commit:
         for p in "$bins/qmlformat" /usr/lib/qt6/bin/qmlformat; do [ -x "$p" ] && exec "$p" -i "$@"; done;
         echo "qmlformat not found on PATH or under the Qt6 install bins; install the Qt6 declarative tools" >&2; exit 1' sh {staged_files}
       stage_fixed: true
+    json-schema:
+      # Explicit per-type globs mirroring scripts/validate-json-schemas.py's
+      # SCHEMA_MAP (plus the schemas dir, so editing a schema re-checks its
+      # data). A single `data/**/*.json` does NOT match reliably in lefthook's
+      # matcher, so the paths are enumerated.
+      glob:
+        - "data/layouts/*.json"
+        - "data/curves/*.json"
+        - "data/animations/*/metadata.json"
+        - "data/shaders/*/metadata.json"
+        - "data/schemas/*.json"
+        - "data/whatsnew.json"
+      # Hard gate: when a schema-governed data file or a schema itself is
+      # staged, validate the whole mapped set against the committed JSON
+      # Schemas (the same files runtime validation compiles) and fail the
+      # commit on any mismatch, so data and schemas can't drift apart.
+      # Validates the full set rather than just staged files so a schema edit
+      # re-checks every governed document. The script bootstraps a cached venv
+      # with jsonschema on first run (no global install needed), so the gate
+      # always runs; it only exits non-zero if validation fails or the
+      # validator genuinely can't be obtained (e.g. offline first run).
+      run: python3 scripts/validate-json-schemas.py
     shader-validate:
       glob: "data/shaders/**/*.{frag,vert,glsl,json}"
       # When any bundled zone-shader file is staged, validate the whole pack set
