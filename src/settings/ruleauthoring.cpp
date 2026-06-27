@@ -816,8 +816,12 @@ QVariantList actionTypes()
         RuleAction probe;
         probe.type = e.type;
         const auto domain = registry.domainFor(probe);
-        entry[QStringLiteral("domain")] =
+        const QString domainStr =
             domain == PhosphorRules::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");
+        entry[QStringLiteral("domain")] = domainStr;
+        // The picker draws a divider between top-level categories whose group
+        // differs — context-domain categories above, window-domain below.
+        entry[QStringLiteral("categoryGroup")] = domainStr;
         out.append(entry);
     }
     return out;

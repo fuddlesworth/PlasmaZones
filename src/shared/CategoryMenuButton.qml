@@ -132,7 +132,8 @@ ComboBox {
                 tree[top] = {
                     "direct": [],
                     "subcats": {},
-                    "order": Infinity
+                    "order": Infinity,
+                    "group": (s.categoryGroup || "")
                 };
 
             // Track the smallest explicit `categoryOrder` seen for this top
@@ -178,7 +179,8 @@ ComboBox {
             categories.push({
                 "name": keys[k],
                 "items": node.direct,
-                "subcategories": subcategories
+                "subcategories": subcategories,
+                "group": node.group
             });
         }
         return {
@@ -456,6 +458,10 @@ ComboBox {
                     _addSeparator(categoryMenu);
                 }
                 var categories = root._categoryTree.categories;
+                // Draw a divider where the category group changes (hosts that
+                // tag items with `categoryGroup` — e.g. the action picker's
+                // context vs window domains). Empty groups never divide.
+                var lastGroup = "";
                 for (var c = 0; c < categories.length; c++) {
                     var cat = categories[c];
                     var catItems = cat.items || [];
@@ -464,6 +470,11 @@ ComboBox {
                     // submenu the user can hover into for no reason.
                     if (catItems.length === 0 && subcats.length === 0)
                         continue;
+
+                    var group = cat.group || "";
+                    if (lastGroup !== "" && group !== "" && group !== lastGroup)
+                        _addSeparator(categoryMenu);
+                    lastGroup = group;
 
                     var subMenu = _addSubmenu(categoryMenu, {
                         "title": cat.name
