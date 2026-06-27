@@ -3,6 +3,7 @@
 
 #include "configmigration.h"
 
+#include "../phosphor_i18n.h"
 #include "configbackends.h"
 #include "configdefaults.h"
 #include "perscreenresolver.h"
@@ -3651,14 +3652,22 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
     QList<Rule> newRules;
 
     const auto appendModeRule = [&newRules](const QJsonObject& fields, const QString& modeToken,
-                                            const QByteArray& idSeed, const QString& name) {
+                                            const QByteArray& idSeed, const QString& modeDisplayName) {
         const QList<PhosphorRules::RuleAction> actions = actionsFromFields(fields);
         if (actions.isEmpty()) {
             return;
         }
+        // Name the rule from the action kinds present: a stash carrying any
+        // appearance field (border show/width/radius/colour or hide-title-bar)
+        // is an appearance rule; a stash that carries only gap fields is a gaps
+        // rule. A mixed stash keeps the appearance name.
+        const bool hasAppearance = fields.contains(kFieldShowBorder) || fields.contains(kFieldBorderWidth)
+            || fields.contains(kFieldBorderRadius) || fields.contains(kFieldHideTitleBars)
+            || fields.contains(kFieldActiveColor) || fields.contains(kFieldInactiveColor);
         Rule rule;
         rule.id = QUuid::createUuidV5(ConfigDefaults::baselineBorderRuleId(), idSeed);
-        rule.name = name;
+        rule.name = hasAppearance ? PhosphorI18n::tr("%1 appearance").arg(modeDisplayName)
+                                  : PhosphorI18n::tr("%1 gaps").arg(modeDisplayName);
         rule.enabled = true;
         rule.managed = false;
         rule.priority = kAppearanceOverridePriority;
@@ -3673,9 +3682,9 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
     };
 
     appendModeRule(stash.value(kStashSnapping).toObject(), QStringLiteral("snapping"),
-                   QByteArrayLiteral("v5-snapping-appearance"), QStringLiteral("Snapping appearance"));
+                   QByteArrayLiteral("v5-snapping-appearance"), PhosphorI18n::tr("Snapping"));
     appendModeRule(stash.value(kStashTiling).toObject(), QStringLiteral("tiling"),
-                   QByteArrayLiteral("v5-tiling-appearance"), QStringLiteral("Tiling appearance"));
+                   QByteArrayLiteral("v5-tiling-appearance"), PhosphorI18n::tr("Tiling"));
 
     // Per-screen gap overrides: one ScreenId-scoped rule per monitor, keyed by
     // the same deterministic id WindowAppearanceController::perScreenGapRuleId

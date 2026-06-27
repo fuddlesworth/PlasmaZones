@@ -115,11 +115,18 @@ SnapEngine::GapParams SnapEngine::resolveGapParams(const QString& screenId, Phos
                 ::PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap)};
     }
 
-    // Per-screen snapping override with virtual->physical fallback so a
-    // per-monitor gap set on a physical screen still applies on its virtual
-    // sub-screens.
+    // Context gap override (mode / desktop / activity), wired by the daemon.
+    // It already folds in the per-monitor ScreenId rule, so consult it FIRST so
+    // the resnap recompute honours the same context cascade the snap COMMIT path
+    // resolves through DaemonGeometryResolver::contextGapOverrideFor. Fall back
+    // to the direct per-screen snapping read (with virtual->physical fallback so
+    // a per-monitor gap set on a physical screen still applies on its virtual
+    // sub-screens) only when no provider is wired — the unit-test behaviour.
     QVariantMap perScreen;
-    if (!screenId.isEmpty()) {
+    if (m_contextGapProvider) {
+        perScreen = m_contextGapProvider(screenId);
+    }
+    if (perScreen.isEmpty() && !screenId.isEmpty()) {
         perScreen = gs->getPerScreenSnappingSettings(screenId);
         if (perScreen.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
             perScreen =

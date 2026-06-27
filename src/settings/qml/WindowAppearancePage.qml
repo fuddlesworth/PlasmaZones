@@ -309,45 +309,6 @@ SettingsFlickable {
         return false;
     }
 
-    // Remove the action of @p typeWire from the baseline rule that owns it (a
-    // no-op when absent), then push the trimmed rule back through the
-    // controller. Used to drop a dependent action when its parent feature is
-    // turned off so the baseline carries only the actions actually in force.
-    function removeAction(typeWire) {
-        const rule = ruleController.ruleJson(root.baselineFor(typeWire));
-        if (!rule || !rule.id) {
-            return;
-        }
-        const actions = (rule.actions || []).filter(function (a) {
-            return a.type !== typeWire;
-        });
-        rule.actions = actions;
-        ruleController.updateRuleFromJson(rule);
-        root.reloadTick++;
-    }
-
-    // Remove a gap action honouring the current scope, mirroring writeGapAction:
-    // global scope drops it from the gap baseline rule; a monitor scope drops it
-    // from that monitor's gap override rule (a no-op when neither the rule nor
-    // the action exists).
-    function removeGapAction(typeWire) {
-        if (root.gapScope === "") {
-            root.removeAction(typeWire);
-            return;
-        }
-        const id = root.perScreenGapId();
-        var rule = ruleController.ruleJson(id);
-        if (!rule || !rule.id) {
-            return;
-        }
-        const actions = (rule.actions || []).filter(function (a) {
-            return a.type !== typeWire;
-        });
-        rule.actions = actions;
-        ruleController.updateRuleFromJson(rule);
-        root.reloadTick++;
-    }
-
     // Always emit the full 8-digit #AARRGGBB form so the stored value matches
     // what the effect resolves (it parses #AARRGGBB / #RRGGBB / #RGB).
     function colorToHex(c) {
@@ -397,10 +358,13 @@ SettingsFlickable {
             }
             onToggleClicked: checked => {
                 // The baseline border rule carries only the "show border" parent
-                // action. Turning the border on seeds the dependent details
-                // (width, radius, active/inactive colour), seeding any that is
-                // absent from the same defaults the daemon used. Turning it off
-                // removes them again so the baseline stays minimal.
+                // action until the user first enables the border. Turning it on
+                // seeds the dependent details (width, radius, active/inactive
+                // colour), seeding any that is absent from the same defaults the
+                // daemon used. Turning it off keeps those values in place (the
+                // detail controls are visibility-gated on root.borderVisible) so
+                // an off->on cycle preserves the user's customised values instead
+                // of resetting them to defaults.
                 if (checked) {
                     if (!root.hasAction(root.actBorderWidth)) {
                         root.writeAction(root.actBorderWidth, {
@@ -422,11 +386,6 @@ SettingsFlickable {
                             "value": root.accentToken
                         });
                     }
-                } else {
-                    root.removeAction(root.actBorderWidth);
-                    root.removeAction(root.actBorderRadius);
-                    root.removeAction(root.actBorderColorActive);
-                    root.removeAction(root.actBorderColorInactive);
                 }
                 root.writeAction(root.actBorderVisible, {
                     "value": checked
@@ -670,11 +629,13 @@ SettingsFlickable {
                 });
             }
             onUsePerSideOuterGapToggled: checked => {
-                // The gap rule carries only the uniform outer gap by default.
-                // Turning per-side gaps on seeds the four per-side actions,
-                // seeding any that is absent from the current uniform outer gap
-                // so each side starts where the uniform gap left off. Turning it
-                // off removes them again so an absent side falls back to uniform.
+                // The gap rule carries only the uniform outer gap until the user
+                // first enables per-side gaps. Turning them on seeds the four
+                // per-side actions, seeding any that is absent from the current
+                // uniform outer gap so each side starts where the uniform gap
+                // left off. Turning them off keeps those values in place (the
+                // per-side rows are visibility-gated on the per-side toggle) so an
+                // off->on cycle preserves the user's customised per-side values.
                 if (checked) {
                     const seed = root.gapValue(root.actOuterGap, "value", root.bounds.outerGapMin);
                     const sides = [root.actOuterGapTop, root.actOuterGapBottom, root.actOuterGapLeft, root.actOuterGapRight];
@@ -683,11 +644,6 @@ SettingsFlickable {
                             "value": root.gapValue(sides[i], "value", seed)
                         });
                     }
-                } else {
-                    root.removeGapAction(root.actOuterGapTop);
-                    root.removeGapAction(root.actOuterGapBottom);
-                    root.removeGapAction(root.actOuterGapLeft);
-                    root.removeGapAction(root.actOuterGapRight);
                 }
                 root.writeGapAction(root.actUsePerSideOuterGap, {
                     "value": checked

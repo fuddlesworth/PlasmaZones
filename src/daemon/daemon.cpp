@@ -1360,6 +1360,27 @@ bool Daemon::init()
         });
     }
 
+    // Symmetric per-context (window-rule) gap overrides for snapping. The snap
+    // COMMIT path already honours the full context cascade via
+    // DaemonGeometryResolver::contextGapOverrideFor; this wires the resnap
+    // RECOMPUTE (SnapEngine::resolveGapParams) to the same cascade so a per-mode
+    // `Mode Equals "snapping"` gap rule (and per-desktop/activity gap rules)
+    // apply on resnap, not just in preview. setContextGapProvider is derived-only
+    // (SnapEngine); m_snapEngine is held as the base PlacementEngineBase, so the
+    // qobject_cast mirrors the narrowing used at the autotile-toggle branch above.
+    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+        concreteSnap->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
+            if (!m_layoutManager || screenId.isEmpty()) {
+                return {};
+            }
+            // This is the snap gap path, so resolve against the "snapping"
+            // placement mode — a per-mode `Mode Equals "snapping"` gap rule then
+            // applies here and a "tiling" one stays inert.
+            return GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("snapping")));
+        });
+    }
+
     // Build the PhosphorContext::ContextResolver wiring NOW — after the
     // workspace managers, settings, and router exist; before any D-Bus
     // adaptor or OverlayService method that consumes it runs. Three
@@ -2340,6 +2361,14 @@ void Daemon::stop()
     // `PlacementEngineBase*`; setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
+    }
+    // Clear the symmetric snap context-gap provider, which captures `this`
+    // (Daemon, via m_layoutManager / currentDesktopForScreen / currentActivity).
+    // Same teardown contract as the autotile provider above. `m_snapEngine` is
+    // base-typed `PlacementEngineBase*`; setContextGapProvider lives on the
+    // concrete SnapEngine.
+    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+        concreteSnap->setContextGapProvider({});
     }
 
     // Destroy engines now (during stop(), before Qt child destruction order).

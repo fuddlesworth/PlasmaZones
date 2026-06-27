@@ -16,7 +16,8 @@
  *   - a clean/default v4 config migrates to ZERO override rules,
  *   - a customised Snapping border width + Tiling inner gap produce a
  *     "Snapping appearance" rule (Mode=snapping) carrying only SetBorderWidth
- *     and a "Tiling appearance" rule (Mode=tiling) carrying only SetInnerGap,
+ *     and a "Tiling gaps" rule (Mode=tiling) carrying only SetInnerGap (a stash
+ *     with only gap actions is named "<Mode> gaps", not "<Mode> appearance"),
  *   - use-system-border-colours=false + custom hex → SetBorderColorActive /
  *     SetBorderColorInactive carry the hex; =true → no colour action,
  *   - a per-screen gap override becomes a ScreenId-matched gap rule keyed by
@@ -215,9 +216,10 @@ private Q_SLOTS:
         QCOMPARE(snapMatch.value(QStringLiteral("op")).toString(), QStringLiteral("equals"));
         QCOMPARE(snapMatch.value(QStringLiteral("value")).toString(), QStringLiteral("snapping"));
 
-        // "Tiling appearance" rule: Mode=tiling, only SetInnerGap=12.
-        const QJsonObject tiling = ruleByName(QStringLiteral("Tiling appearance"));
-        QVERIFY2(!tiling.isEmpty(), "a Tiling appearance override rule must exist");
+        // "Tiling gaps" rule: Mode=tiling, only SetInnerGap=12. A stash carrying
+        // only gap actions is named "<Mode> gaps", not "<Mode> appearance".
+        const QJsonObject tiling = ruleByName(QStringLiteral("Tiling gaps"));
+        QVERIFY2(!tiling.isEmpty(), "a Tiling gaps override rule must exist");
         QCOMPARE(actionTypes(tiling), (QStringList{QStringLiteral("setInnerGap")}));
         QCOMPARE(actionValue(tiling, QStringLiteral("setInnerGap")).toInt(), 12);
         const QJsonObject tilingMatch = matchOf(tiling);
@@ -232,7 +234,7 @@ private Q_SLOTS:
         QVERIFY(setOpt.has_value());
         bool sawTiling = false;
         for (const PhosphorRules::Rule& r : setOpt->rules()) {
-            if (r.name != QStringLiteral("Tiling appearance")) {
+            if (r.name != QStringLiteral("Tiling gaps")) {
                 continue;
             }
             sawTiling = true;
