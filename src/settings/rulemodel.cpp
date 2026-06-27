@@ -379,6 +379,23 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     return RuleModel::actionTypeFallbackLabel(action.type);
 }
 
+// True when a rule carries only context-domain actions (e.g. gaps). For such a
+// rule a catch-all match means "every context" rather than "any window", so the
+// summary reads "Everywhere" instead of the window-oriented "Any window".
+bool ruleActionsAreContextOnly(const QList<RuleAction>& actions)
+{
+    if (actions.isEmpty()) {
+        return false;
+    }
+    const PhosphorRules::ActionRegistry& registry = PhosphorRules::ActionRegistry::instance();
+    for (const RuleAction& action : actions) {
+        if (registry.domainFor(action) != PhosphorRules::ActionDomain::Context) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 RuleModel::RuleModel(QObject* parent)
@@ -428,6 +445,11 @@ QVariant RuleModel::data(const QModelIndex& index, int role) const
     case SectionRole:
         return QVariant::fromValue(sectionFor(rule));
     case MatchSummaryRole:
+        // A catch-all rule whose actions are all context-domain (gaps) applies to
+        // every context, not "any window" — label it accordingly.
+        if (rule.match.isCatchAll() && ruleActionsAreContextOnly(rule.actions)) {
+            return PhosphorI18n::tr("Everywhere");
+        }
         return matchSummary(rule.match);
     case ActionSummaryRole:
         return actionSummary(rule.actions);
