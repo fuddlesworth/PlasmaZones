@@ -7,7 +7,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Multi-step wizard for creating a new window rule.
+ * @brief Multi-step wizard for creating a new rule.
  *
  * Step 1: Choose a starting point — Quick-start templates + bare subjects
  *         (delegated to `RuleStartPicker`).
@@ -29,7 +29,7 @@ import org.kde.kirigami as Kirigami
 Kirigami.Dialog {
     id: root
 
-    /// The WindowRuleController — threaded into the picker (templates /
+    /// The RuleController — threaded into the picker (templates /
     /// subjects) and the editor body (action types / match fields / Save
     /// gate / validation).
     required property var controller
@@ -58,7 +58,7 @@ Kirigami.Dialog {
     readonly property bool _scrollBarReserved: contentItem ? contentItem.rightPadding > 0 : false
 
     /// Emitted with the final rule JSON when the user clicks Create.
-    /// `WindowRulesPage` wires this into `controller.addRuleFromJson`.
+    /// `RulesPage` wires this into `controller.addRuleFromJson`.
     signal ruleSaved(var ruleJson)
 
     function _onChosen(kind, id, ruleJson) {
@@ -143,7 +143,7 @@ Kirigami.Dialog {
         return JSON.stringify(editorBody.workingRule) === root._initialSnapshot;
     }
 
-    title: i18nc("@title:window", "New Window Rule")
+    title: i18nc("@title:window", "New Rule")
     preferredWidth: Math.min(Kirigami.Units.gridUnit * 40, parent ? parent.width * 0.9 : Kirigami.Units.gridUnit * 40)
     standardButtons: Kirigami.Dialog.NoButton
     padding: Kirigami.Units.largeSpacing

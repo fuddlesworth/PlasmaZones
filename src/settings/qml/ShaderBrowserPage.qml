@@ -341,7 +341,7 @@ SettingsFlickable {
 
         // ── Search row ──────────────────────────────────────────────────
         // Full-width search + a multi-select filter button (source +
-        // categories), mirroring the Window Rules page's search row.
+        // categories), mirroring the Rules page's search row.
         RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
@@ -410,7 +410,7 @@ SettingsFlickable {
 
         // ── Grouped shader catalogue ────────────────────────────────────
         // Each category renders as its own collapsible SettingsCard — the same
-        // grouped-section treatment as the Window Rules page — with the
+        // grouped-section treatment as the Rules page — with the
         // category as the header and the shader count as the trailing hint.
         Repeater {
             model: root._groupedEffects

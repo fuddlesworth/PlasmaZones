@@ -89,10 +89,18 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         // commit path; idempotent vs the daemon broadcast.
                         m_navigationHandler->setWindowFloating(windowId, false);
                         m_snapHandler->markWindowSnapped(windowId, asyncScr);
+                        // Floating → snapped changes the Mode / IsSnapped rule
+                        // match fields. Invalidate the per-window match cache so a
+                        // placement-scoped border / opacity rule re-resolves now,
+                        // rather than waiting for the daemon's windowStateChanged
+                        // broadcast (self-contained, mirrors the autotile path).
+                        invalidateRuleCacheForStateChange(windowId);
                     } else {
                         // Same discriminator epilogue as the other commit
                         // paths: drop stale snap tracking instead of skipping.
                         m_snapHandler->clearWindowSnapped(windowId);
+                        // Symmetric with the snap-tracked branch: re-resolve rules.
+                        invalidateRuleCacheForStateChange(windowId);
                     }
                     // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {
@@ -246,7 +254,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     //
     // `shouldAnimateWindow` adds the user's per-animation Window
     // Filtering gate (transient / min-size / app / class) and lets a
-    // WindowRule carrying any OverrideAnimation* action override the
+    // Rule carrying any OverrideAnimation* action override the
     // filter when the rule's class matcher matches. Falling through to
     // the non-animated path just runs the moveResize without the snap
     // motion / shader.
@@ -287,7 +295,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             kw->moveResize(targetFrame);
         }
 
-        // Per-window animation motion-cascade: a Timing WindowRule for
+        // Per-window animation motion-cascade: a Timing Rule for
         // this (windowClass, eventPath) replaces the global animator
         // profile's curve / duration for THIS animation only. No rule →
         // resolver returns the base profile unchanged and no override is
@@ -305,7 +313,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // resolver call below — matches the shape `shouldAnimateWindow`
         // uses for its rule-override gate, so a rule that gates the
         // animation also resolves its curve / timing / shader slots.
-        const PhosphorWindowRules::WindowQuery query = windowRuleQuery(window);
+        const PhosphorRules::WindowQuery query = ruleQuery(window);
         const auto& baseProfile = m_windowAnimator->profile();
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;
@@ -385,7 +393,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // consistent with what the settings UI shows
                 // (resolvedShaderProfile uses the same helper) without
                 // persisting it into config. Gated on `!shaderSlotFromRule`: a
-                // per-app window rule that set "None" (engaged-empty effectId)
+                // per-app rule that set "None" (engaged-empty effectId)
                 // is a deliberate opt-out and must NOT be overridden here.
                 shaderProfile =
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath);

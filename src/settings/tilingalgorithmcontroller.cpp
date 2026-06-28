@@ -51,12 +51,12 @@ TilingAlgorithmController::TilingAlgorithmController(ISettings& settings, Phosph
 
 int TilingAlgorithmController::autotileGapMin() const
 {
-    return ConfigDefaults::autotileOuterGapMin();
+    return ConfigDefaults::outerGapMin();
 }
 
 int TilingAlgorithmController::autotileGapMax() const
 {
-    return ConfigDefaults::autotileOuterGapMax();
+    return ConfigDefaults::outerGapMax();
 }
 
 int TilingAlgorithmController::autotileMaxWindowsMin() const

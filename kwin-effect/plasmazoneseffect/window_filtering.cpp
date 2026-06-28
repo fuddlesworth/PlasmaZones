@@ -5,8 +5,8 @@
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorWindowRules/MatchTypes.h>
-#include <PhosphorWindowRules/RuleEvaluator.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/RuleEvaluator.h>
 
 #include <effect/effecthandler.h>
 #include <window.h>
@@ -82,25 +82,25 @@ QString PlasmaZonesEffect::zoneForWindow(const QString& windowId) const
     return m_navigationHandler->zoneForWindow(windowId);
 }
 
-PhosphorWindowRules::WindowQuery PlasmaZonesEffect::windowRuleQuery(KWin::EffectWindow* w) const
+PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);
-    return windowRuleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
-                              zoneForWindow(windowId));
+    return ruleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
+                        m_autotileHandler->isTiledWindow(windowId), zoneForWindow(windowId));
 }
 
-PhosphorWindowRules::ResolvedActions PlasmaZonesEffect::resolveWindowRuleActions(KWin::EffectWindow* w,
-                                                                                 const QString& windowId) const
+PhosphorRules::ResolvedActions PlasmaZonesEffect::resolveRuleActions(KWin::EffectWindow* w,
+                                                                     const QString& windowId) const
 {
-    const PhosphorWindowRules::RuleEvaluator& evaluator = m_shaderManager.animationRuleEvaluator();
+    const PhosphorRules::RuleEvaluator& evaluator = m_shaderManager.animationRuleEvaluator();
     // An empty windowId can't key the per-window cache; nothing to resolve.
     if (windowId.isEmpty()) {
         return {};
     }
-    // Cache hit → skip the ≈30-accessor windowRuleQuery(w) build entirely. The
+    // Cache hit → skip the ≈30-accessor ruleQuery(w) build entirely. The
     // cached verdict already reflects whatever query produced it, and resolveCached
     // ignores the query on a hit anyway.
-    if (std::optional<PhosphorWindowRules::ResolvedActions> cached = evaluator.resolveCachedIfPresent(windowId)) {
+    if (std::optional<PhosphorRules::ResolvedActions> cached = evaluator.resolveCachedIfPresent(windowId)) {
         return std::move(*cached);
     }
     // Miss → build the query once and resolve (caching the result). Defensive guard
@@ -108,7 +108,7 @@ PhosphorWindowRules::ResolvedActions PlasmaZonesEffect::resolveWindowRuleActions
     // slot, so return empty actions WITHOUT caching to avoid a useless cache entry.
     // In practice a non-null w always engages placement/state attributes, so this
     // only ever covers the already-handled empty-windowId case — kept as a belt.
-    const PhosphorWindowRules::WindowQuery query = windowRuleQuery(w);
+    const PhosphorRules::WindowQuery query = ruleQuery(w);
     if (!query.hasWindow()) {
         return {};
     }
@@ -200,12 +200,12 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     // daemon also enforces these for keyboard navigation, but the effect
     // must filter for drag operations and lifecycle reporting).
     // `m_snappingExclusionRuleSet` mirrors the Exclude-shaped slice of the
-    // unified WindowRule store, refreshed on every rulesChanged via
-    // loadWindowRuleAnimationsFromDbus (see shader_transitions.cpp). The
+    // unified Rule store, refreshed on every rulesChanged via
+    // loadRuleAnimationsFromDbus (see shader_transitions.cpp). The
     // `!isEmpty()` fast path keeps a no-exclusions user at two pointer
     // reads — same cost as the prior list-derived check.
     if (!m_snappingExclusionRuleSet.isEmpty()) {
-        if (m_snappingExclusionEvaluator.resolve(windowRuleQuery(w)).isExcluded()) {
+        if (m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded()) {
             return rejectedBecause(rejectReason, "user exclusion rule match");
         }
     }
@@ -249,17 +249,17 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // Lazy per-window query — built at most once across the rule-override
     // gate AND the exclusion gate below. Both gates take the same full-
     // context WindowQuery (AppId / WindowClass / Title / WindowRole /
-    // DesktopFile / WindowType / Pid / state flags), and `windowRuleQueryFor`
+    // DesktopFile / WindowType / Pid / state flags), and `ruleQueryFor`
     // walks ~30 KWin accessors plus several QString copies — wasted work
-    // when both rule sets fire (same note as on `resolveWindowRuleActions`
+    // when both rule sets fire (same note as on `resolveRuleActions`
     // above). The std::optional memoises so the function
     // pays at most one build no matter how many gates consult it, while
     // the `!isEmpty()` fast paths below keep the no-rules user's cost at
     // two pointer reads (query never built).
-    std::optional<PhosphorWindowRules::WindowQuery> cachedQuery;
-    auto query = [&]() -> const PhosphorWindowRules::WindowQuery& {
+    std::optional<PhosphorRules::WindowQuery> cachedQuery;
+    auto query = [&]() -> const PhosphorRules::WindowQuery& {
         if (!cachedQuery) {
-            cachedQuery = windowRuleQuery(w);
+            cachedQuery = ruleQuery(w);
         }
         return *cachedQuery;
     };
@@ -278,7 +278,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // a snapping/float rule that merely carries a windowType clause never
     // re-enables animation. These checks sit BEFORE the generic rule-override
     // gate so a class-only match cannot bypass them.
-    const PhosphorWindowRules::RuleEvaluator& animationEvaluator = m_shaderManager.animationRuleEvaluator();
+    const PhosphorRules::RuleEvaluator& animationEvaluator = m_shaderManager.animationRuleEvaluator();
     const bool haveAnimationRules = !m_shaderManager.animationRuleSet().isEmpty();
 
     if (m_animationExcludeNotificationsAndOsd
@@ -286,8 +286,8 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
         // IsNotification covers notification/critical/OSD; WindowType lets a
         // rule target a specific NET type. `!haveAnimationRules` short-circuits
         // so the WindowQuery is never built when there are no rules to probe.
-        static const QSet<PhosphorWindowRules::Field> kOsdTypeFields = {PhosphorWindowRules::Field::IsNotification,
-                                                                        PhosphorWindowRules::Field::WindowType};
+        static const QSet<PhosphorRules::Field> kOsdTypeFields = {PhosphorRules::Field::IsNotification,
+                                                                  PhosphorRules::Field::WindowType};
         if (!haveAnimationRules || !animationEvaluator.hasMatchTargetingFields(query(), kOsdTypeFields)) {
             return false;
         }
@@ -301,9 +301,8 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     if (m_animationExcludeTransientWindows
         && (w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
             || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor())) {
-        static const QSet<PhosphorWindowRules::Field> kTransientTypeFields = {PhosphorWindowRules::Field::IsTransient,
-                                                                              PhosphorWindowRules::Field::WindowType,
-                                                                              PhosphorWindowRules::Field::IsModal};
+        static const QSet<PhosphorRules::Field> kTransientTypeFields = {
+            PhosphorRules::Field::IsTransient, PhosphorRules::Field::WindowType, PhosphorRules::Field::IsModal};
         if (!haveAnimationRules || !animationEvaluator.hasMatchTargetingFields(query(), kTransientTypeFields)) {
             return false;
         }
@@ -317,7 +316,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     //
     // `m_shaderManager.animationRuleSet()` is filtered to OverrideAnimation* /
     // SetOpacity rules at admission (shader_transitions.cpp's
-    // `isEffectRuleAction` loop), so `hasAnyMatch` never surfaces a rule whose
+    // `hasTag(type, Tag::Effect)` loop), so `hasAnyMatch` never surfaces a rule whose
     // actions are EXCLUSIVELY `ExcludeAnimations` — those route through the
     // exclusion gate below.
     if (haveAnimationRules && animationEvaluator.hasAnyMatch(query())) {

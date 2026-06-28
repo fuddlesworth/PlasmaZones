@@ -36,7 +36,7 @@ This library owns:
   carry the `(screenId, desktop, activity)` keys that `LayoutRegistry`
   stores assignments under. The single source of truth for every
   per-context assignment is the injected
-  `PhosphorWindowRule::WindowRuleStore`: each assignment is a context-only
+  `PhosphorRules::RuleStore`: each assignment is a context-only
   rule and the cascade is the evaluator's descending-priority walk.
 
 `LayoutRegistry` is the *concrete* counterpart to `IZoneLayoutRegistry`.
@@ -104,7 +104,7 @@ if (z) {
 - `QtCore`, `QtGui`
 - [`phosphor-layout-api`](../phosphor-layout-api/README.md) — `ILayoutSource` and registry contracts
 - [`phosphor-geometry`](../phosphor-geometry/README.md) — zone clamping, overlap resolution, rect-to-JSON helpers
-- [`phosphor-windowrule`](../phosphor-windowrule/README.md) — `WindowRuleStore` + `RuleEvaluator`, the assignment authority (the `LayoutRegistry` ctor takes a `WindowRuleStore*`)
+- [`phosphor-rules`](../phosphor-rules/README.md) — `RuleStore` + `RuleEvaluator`, the assignment authority (the `LayoutRegistry` ctor takes a `RuleStore*`)
 - [`phosphor-identity`](../phosphor-identity/README.md) — window IDs for assignments (private link)
 - [`phosphor-screens`](../phosphor-screens/README.md) — screen-id normalisation (private link)
 

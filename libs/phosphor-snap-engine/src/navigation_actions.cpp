@@ -38,9 +38,9 @@
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/Zone.h>
 
-#include <PhosphorWindowRules/RuleEvaluator.h>
-#include <PhosphorWindowRules/WindowQuery.h>
-#include <PhosphorWindowRules/WindowRuleSet.h>
+#include <PhosphorRules/RuleEvaluator.h>
+#include <PhosphorRules/WindowQuery.h>
+#include <PhosphorRules/RuleSet.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include "snapenginelogging.h"
@@ -132,7 +132,7 @@ QString effectiveScreenId(const NavigationContext& ctx, INavigationStateProvider
 
 } // namespace
 
-void SnapEngine::setExcludeRuleSet(const PhosphorWindowRules::WindowRuleSet* ruleSet)
+void SnapEngine::setExcludeRuleSet(const PhosphorRules::RuleSet* ruleSet)
 {
     if (m_excludeRuleSet == ruleSet) {
         return;
@@ -148,7 +148,7 @@ void SnapEngine::setExcludeRuleSet(const PhosphorWindowRules::WindowRuleSet* rul
     m_excludeEvaluator.reset();
 }
 
-bool SnapEngine::evaluateExcludeRules(const PhosphorWindowRules::WindowQuery& query) const
+bool SnapEngine::evaluateExcludeRules(const PhosphorRules::WindowQuery& query) const
 {
     // No-wiring fast path: early-init can run before the daemon hands the rule
     // store over; an empty set short-circuits with no evaluator allocation.
@@ -163,7 +163,7 @@ bool SnapEngine::evaluateExcludeRules(const PhosphorWindowRules::WindowQuery& qu
 
 bool SnapEngine::isAppIdExcluded(const QString& appId) const
 {
-    PhosphorWindowRules::WindowQuery query;
+    PhosphorRules::WindowQuery query;
     query.appId = appId;
     return evaluateExcludeRules(query);
 }
@@ -173,12 +173,12 @@ bool SnapEngine::isWindowExcluded(const QString& windowId) const
     // Build the richest query available: the daemon-supplied full attributes
     // (window class / title / frame size / flags) when the provider is wired,
     // else the appId-only query — the historical fallback unit tests rely on.
-    std::optional<PhosphorWindowRules::WindowQuery> query;
+    std::optional<PhosphorRules::WindowQuery> query;
     if (m_exclusionQueryProvider) {
         query = m_exclusionQueryProvider(windowId);
     }
     if (!query) {
-        PhosphorWindowRules::WindowQuery q;
+        PhosphorRules::WindowQuery q;
         q.appId = m_windowTracker ? m_windowTracker->currentAppIdFor(windowId) : QString();
         query = std::move(q);
     }

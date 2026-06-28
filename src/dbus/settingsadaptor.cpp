@@ -426,14 +426,10 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("enableAudioVisualizer", enableAudioVisualizer, setEnableAudioVisualizer)
     REGISTER_INT_SETTING("audioSpectrumBarCount", audioSpectrumBarCount, setAudioSpectrumBarCount)
 
-    // PhosphorZones::Zone settings
-    REGISTER_INT_SETTING("zonePadding", zonePadding, setZonePadding)
-    REGISTER_INT_SETTING("outerGap", outerGap, setOuterGap)
-    REGISTER_BOOL_SETTING("usePerSideOuterGap", usePerSideOuterGap, setUsePerSideOuterGap)
-    REGISTER_INT_SETTING("outerGapTop", outerGapTop, setOuterGapTop)
-    REGISTER_INT_SETTING("outerGapBottom", outerGapBottom, setOuterGapBottom)
-    REGISTER_INT_SETTING("outerGapLeft", outerGapLeft, setOuterGapLeft)
-    REGISTER_INT_SETTING("outerGapRight", outerGapRight, setOuterGapRight)
+    // Zone settings. The shared inner/outer gaps are no longer exposed here:
+    // their global default is rule-backed (the managed baseline appearance
+    // Rule), edited over the org.plasmazones.Rules surface, not the
+    // generic settings get/set map.
     REGISTER_INT_SETTING("adjacentThreshold", adjacentThreshold, setAdjacentThreshold)
     REGISTER_INT_SETTING("pollIntervalMs", pollIntervalMs, setPollIntervalMs)
     REGISTER_INT_SETTING("minimumZoneSizePx", minimumZoneSizePx, setMinimumZoneSizePx)
@@ -501,9 +497,9 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("animationMinimumWindowWidth", animationMinimumWindowWidth, setAnimationMinimumWindowWidth)
     REGISTER_INT_SETTING("animationMinimumWindowHeight", animationMinimumWindowHeight, setAnimationMinimumWindowHeight)
     // animationExcludedApplications / animationExcludedWindowClasses
-    // retired in v4 — folded into ExcludeAnimations WindowRules; the
+    // retired in v4 — folded into ExcludeAnimations Rules; the
     // effect derives its animation exclusion rule set from the unified
-    // store via the WindowRules.rulesChanged subscription instead.
+    // store via the Rules.rulesChanged subscription instead.
 
     // PhosphorZones::Zone selector settings
     REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)
@@ -655,13 +651,40 @@ void SettingsAdaptor::initializeRegistry()
             return true;
         };
         m_schemas[QStringLiteral("autotilePerAlgorithmSettings")] = QStringLiteral("map");
-        REGISTER_CONCRETE_INT("autotileInnerGap", autotileInnerGap, setAutotileInnerGap)
-        REGISTER_CONCRETE_INT("autotileOuterGap", autotileOuterGap, setAutotileOuterGap)
-        REGISTER_CONCRETE_BOOL("autotileUsePerSideOuterGap", autotileUsePerSideOuterGap, setAutotileUsePerSideOuterGap)
-        REGISTER_CONCRETE_INT("autotileOuterGapTop", autotileOuterGapTop, setAutotileOuterGapTop)
-        REGISTER_CONCRETE_INT("autotileOuterGapBottom", autotileOuterGapBottom, setAutotileOuterGapBottom)
-        REGISTER_CONCRETE_INT("autotileOuterGapLeft", autotileOuterGapLeft, setAutotileOuterGapLeft)
-        REGISTER_CONCRETE_INT("autotileOuterGapRight", autotileOuterGapRight, setAutotileOuterGapRight)
+        // Gaps are unified with snapping and rule-backed — their global default
+        // lives on the managed Default gaps Rule, edited over the
+        // org.plasmazones.Rules surface, so they are NOT writable on this generic
+        // settings map. But the editor (a separate process) reads the resolved
+        // global gap values over D-Bus, so register READ-ONLY getters (no setter)
+        // for them; a write attempt still fails because no setter is registered.
+        m_getters[QStringLiteral("innerGap")] = [concrete]() {
+            return concrete->innerGap();
+        };
+        m_schemas[QStringLiteral("innerGap")] = QStringLiteral("int");
+        m_getters[QStringLiteral("outerGap")] = [concrete]() {
+            return concrete->outerGap();
+        };
+        m_schemas[QStringLiteral("outerGap")] = QStringLiteral("int");
+        m_getters[QStringLiteral("usePerSideOuterGap")] = [concrete]() {
+            return concrete->usePerSideOuterGap();
+        };
+        m_schemas[QStringLiteral("usePerSideOuterGap")] = QStringLiteral("bool");
+        m_getters[QStringLiteral("outerGapTop")] = [concrete]() {
+            return concrete->outerGapTop();
+        };
+        m_schemas[QStringLiteral("outerGapTop")] = QStringLiteral("int");
+        m_getters[QStringLiteral("outerGapBottom")] = [concrete]() {
+            return concrete->outerGapBottom();
+        };
+        m_schemas[QStringLiteral("outerGapBottom")] = QStringLiteral("int");
+        m_getters[QStringLiteral("outerGapLeft")] = [concrete]() {
+            return concrete->outerGapLeft();
+        };
+        m_schemas[QStringLiteral("outerGapLeft")] = QStringLiteral("int");
+        m_getters[QStringLiteral("outerGapRight")] = [concrete]() {
+            return concrete->outerGapRight();
+        };
+        m_schemas[QStringLiteral("outerGapRight")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("autotileFocusNewWindows", autotileFocusNewWindows, setAutotileFocusNewWindows)
         REGISTER_CONCRETE_BOOL("autotileSmartGaps", autotileSmartGaps, setAutotileSmartGaps)
         REGISTER_CONCRETE_INT("autotileMaxWindows", autotileMaxWindows, setAutotileMaxWindows)
@@ -680,26 +703,6 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_schemas[QStringLiteral("autotileInsertPosition")] = QStringLiteral("int");
     }
-
-    // Autotile decoration settings (on ISettings interface)
-    REGISTER_BOOL_SETTING("autotileHideTitleBars", autotileHideTitleBars, setAutotileHideTitleBars)
-    REGISTER_BOOL_SETTING("autotileShowBorder", autotileShowBorder, setAutotileShowBorder)
-    REGISTER_INT_SETTING("autotileBorderWidth", autotileBorderWidth, setAutotileBorderWidth)
-    REGISTER_INT_SETTING("autotileBorderRadius", autotileBorderRadius, setAutotileBorderRadius)
-    REGISTER_COLOR_SETTING("autotileBorderColor", autotileBorderColor, setAutotileBorderColor)
-    REGISTER_COLOR_SETTING("autotileInactiveBorderColor", autotileInactiveBorderColor, setAutotileInactiveBorderColor)
-    REGISTER_BOOL_SETTING("autotileUseSystemBorderColors", autotileUseSystemBorderColors,
-                          setAutotileUseSystemBorderColors)
-
-    // Snapping window decoration settings (on ISettings interface)
-    REGISTER_BOOL_SETTING("snappingHideTitleBars", snappingHideTitleBars, setSnappingHideTitleBars)
-    REGISTER_BOOL_SETTING("snappingShowBorder", snappingShowBorder, setSnappingShowBorder)
-    REGISTER_INT_SETTING("snappingBorderWidth", snappingBorderWidth, setSnappingBorderWidth)
-    REGISTER_INT_SETTING("snappingBorderRadius", snappingBorderRadius, setSnappingBorderRadius)
-    REGISTER_COLOR_SETTING("snappingBorderColor", snappingBorderColor, setSnappingBorderColor)
-    REGISTER_COLOR_SETTING("snappingInactiveBorderColor", snappingInactiveBorderColor, setSnappingInactiveBorderColor)
-    REGISTER_BOOL_SETTING("snappingUseSystemBorderColors", snappingUseSystemBorderColors,
-                          setSnappingUseSystemBorderColors)
 
     REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
     m_getters[QStringLiteral("autotileStickyWindowHandling")] = [this]() {
@@ -1099,6 +1102,11 @@ struct PerScreenDispatch
     std::function<QVariantMap(const QString&)> get;
     std::function<void(const QString&, const QString&, const QVariant&)> set;
     std::function<void(const QString&)> clear;
+    /// False for read-only categories (per-screen snapping, whose gaps are
+    /// rule-backed): the getter resolves the live values, but set/clear have no
+    /// backing surface. Writers reject the call instead of reporting a phantom
+    /// success and triggering a pointless save.
+    bool writable = true;
 };
 
 std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString& category)
@@ -1117,16 +1125,18 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
         };
     }
     if (category == QLatin1String("snapping")) {
+        // Per-screen snapping gaps are rule-backed: the getter reads the
+        // resolved gap rules, but there is no per-screen snapping writer
+        // surface. Mark the category read-only so writers reject set/clear
+        // (write per-monitor snapping gaps over org.plasmazones.Rules instead)
+        // rather than silently succeeding.
         return PerScreenDispatch{
             [settings](const QString& id) {
                 return settings->getPerScreenSnappingSettings(id);
             },
-            [settings](const QString& id, const QString& k, const QVariant& v) {
-                settings->setPerScreenSnappingSetting(id, k, v);
-            },
-            [settings](const QString& id) {
-                settings->clearPerScreenSnappingSettings(id);
-            },
+            [](const QString&, const QString&, const QVariant&) { },
+            [](const QString&) { },
+            /*writable=*/false,
         };
     }
     if (category == QLatin1String("zoneSelector")) {
@@ -1157,6 +1167,11 @@ void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString
         qCWarning(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
         return;
     }
+    if (!dispatch->writable) {
+        qCWarning(lcDbusSettings) << "setPerScreenSetting: category" << category
+                                  << "is read-only (rule-backed) — write via org.plasmazones.Rules";
+        return;
+    }
     dispatch->set(screenId, key, value.variant());
     scheduleSave();
 }
@@ -1169,6 +1184,11 @@ void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QStr
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
         qCWarning(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;
+        return;
+    }
+    if (!dispatch->writable) {
+        qCWarning(lcDbusSettings) << "clearPerScreenSettings: category" << category
+                                  << "is read-only (rule-backed) — clear via org.plasmazones.Rules";
         return;
     }
     dispatch->clear(screenId);
@@ -1201,6 +1221,11 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
         qCWarning(lcDbusSettings) << "setPerScreenSettings: unknown category" << category;
+        return false;
+    }
+    if (!dispatch->writable) {
+        qCWarning(lcDbusSettings) << "setPerScreenSettings: category" << category
+                                  << "is read-only (rule-backed) — write via org.plasmazones.Rules";
         return false;
     }
 

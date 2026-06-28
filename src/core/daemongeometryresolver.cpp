@@ -8,6 +8,7 @@
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ZoneDefaults.h>
 
 namespace PlasmaZones {
 
@@ -20,16 +21,18 @@ QVariantMap DaemonGeometryResolver::contextGapOverrideFor(const QString& screenI
     const QString activity = m_currentActivity ? m_currentActivity() : QString();
     // Translation to the PerScreenSnappingKey-shaped map is shared with the
     // preview/query geometry helpers via GeometryUtils::contextGapOverrideMap.
+    // This is the snap-commit geometry path, so resolve against the "snapping"
+    // placement mode — a per-mode `Mode Equals "snapping"` gap rule applies here.
     return GeometryUtils::contextGapOverrideMap(
-        m_layoutRegistry->resolveContextGaps(screenId, virtualDesktop, activity));
+        m_layoutRegistry->resolveContextGaps(screenId, virtualDesktop, activity, QStringLiteral("snapping")));
 }
 
-int DaemonGeometryResolver::resolveZonePadding(PhosphorZones::Layout* layout, const QString& screenId) const
+int DaemonGeometryResolver::resolveInnerGap(PhosphorZones::Layout* layout, const QString& screenId) const
 {
     if (!m_settings) {
-        return PhosphorEngine::GeometryDefaults::ZonePadding;
+        return PhosphorEngine::GeometryDefaults::InnerGap;
     }
-    return GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId, contextGapOverrideFor(screenId));
+    return GeometryUtils::getEffectiveInnerGap(layout, m_settings, contextGapOverrideFor(screenId));
 }
 
 PhosphorLayout::EdgeGaps DaemonGeometryResolver::resolveOuterGaps(PhosphorZones::Layout* layout,
@@ -38,17 +41,19 @@ PhosphorLayout::EdgeGaps DaemonGeometryResolver::resolveOuterGaps(PhosphorZones:
     if (!m_settings) {
         return PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
     }
-    return GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId, contextGapOverrideFor(screenId));
+    return GeometryUtils::getEffectiveOuterGaps(layout, m_settings, contextGapOverrideFor(screenId));
 }
 
 int DaemonGeometryResolver::defaultBorderWidth() const
 {
-    return m_settings ? m_settings->borderWidth() : 2;
+    // Fall back to the canonical zone default (same source GeometryUtils uses)
+    // rather than a magic number, for the degenerate no-settings case.
+    return m_settings ? m_settings->borderWidth() : ::PhosphorZones::ZoneDefaults::BorderWidth;
 }
 
 int DaemonGeometryResolver::defaultBorderRadius() const
 {
-    return m_settings ? m_settings->borderRadius() : 0;
+    return m_settings ? m_settings->borderRadius() : ::PhosphorZones::ZoneDefaults::BorderRadius;
 }
 
 } // namespace PlasmaZones

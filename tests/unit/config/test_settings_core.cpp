@@ -27,7 +27,12 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleStore.h>
 #include "config/configbackends.h"
+
+#include <limits>
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
@@ -116,44 +121,6 @@ private Q_SLOTS:
     }
 
     /**
-     * reset() must restore every snapped-window appearance setting
-     * (Snapping.Appearance.{Borders,Decorations,Colors}) to its ConfigDefaults
-     * value. reset() reverts them via its group-delete + reload path (like every
-     * other store-backed setting), so this pins dedicated reset coverage for them.
-     */
-    void testReset_restoresSnappingWindowAppearanceDefaults()
-    {
-        IsolatedConfigGuard guard;
-
-        Settings settings;
-
-        // Drive every snapping* setting away from its default.
-        settings.setSnappingHideTitleBars(!ConfigDefaults::snappingHideTitleBars());
-        settings.setSnappingShowBorder(!ConfigDefaults::snappingShowBorder());
-        settings.setSnappingUseSystemBorderColors(!ConfigDefaults::snappingUseSystemBorderColors());
-        settings.setSnappingBorderWidth(ConfigDefaults::snappingBorderWidth() + 1);
-        settings.setSnappingBorderRadius(ConfigDefaults::snappingBorderRadius() + 1);
-        settings.setSnappingBorderColor(QColor(10, 20, 30));
-        settings.setSnappingInactiveBorderColor(QColor(40, 50, 60));
-
-        settings.reset();
-
-        QCOMPARE(settings.snappingHideTitleBars(), ConfigDefaults::snappingHideTitleBars());
-        QCOMPARE(settings.snappingShowBorder(), ConfigDefaults::snappingShowBorder());
-        QCOMPARE(settings.snappingUseSystemBorderColors(), ConfigDefaults::snappingUseSystemBorderColors());
-        QCOMPARE(settings.snappingBorderWidth(), ConfigDefaults::snappingBorderWidth());
-        QCOMPARE(settings.snappingBorderRadius(), ConfigDefaults::snappingBorderRadius());
-        // The default snappingUseSystemBorderColors is true, so reset()'s
-        // reload drives the snap border colors to the (also-reset) zone
-        // highlight/inactive colors via applySnappingBorderSystemColor().
-        // Assert against the live zone colors — the actual contract when
-        // system colors are enabled — rather than the static ConfigDefaults
-        // border colors, which only apply when system colors are off.
-        QCOMPARE(settings.snappingBorderColor(), settings.highlightColor());
-        QCOMPARE(settings.snappingInactiveBorderColor(), settings.inactiveColor());
-    }
-
-    /**
      * Snapping focus-behavior settings default off and return to the default on
      * reset(). Both gate runtime focus changes (the daemon focus-new-windows emit
      * and the effect focus-follows-mouse), so a flipped default would silently
@@ -194,9 +161,9 @@ private Q_SLOTS:
 
         Settings settings;
 
-        // Set non-default values across different groups
-        settings.setZonePadding(15);
-        settings.setOuterGap(20);
+        // Set non-default values across different groups. Inner/outer gaps are
+        // no longer stored config keys (the global default is rule-backed), so
+        // they are not part of this config-persistence round-trip.
         settings.setBorderWidth(5);
         settings.setBorderRadius(25);
         settings.setActiveOpacity(0.8);
@@ -211,32 +178,15 @@ private Q_SLOTS:
         settings.setZoneSelectorGridColumns(3);
         settings.setAutotileSplitRatio(0.7);
         settings.setAutotileMasterCount(3);
-        settings.setAutotileInnerGap(12);
         settings.setAnimationDuration(300);
         settings.setAnimationSequenceMode(0);
         settings.setLabelFontWeight(400);
-        // Snapped-window appearance (Snapping.Appearance.{Borders,Decorations,Colors}).
-        // useSystemBorderColors=false so the explicit colors persist instead of
-        // being overwritten by the accent-derived system colors on load.
-        settings.setSnappingShowBorder(false);
-        settings.setSnappingHideTitleBars(false);
-        settings.setSnappingBorderWidth(4);
-        settings.setSnappingBorderRadius(8);
-        settings.setSnappingUseSystemBorderColors(false);
-        settings.setSnappingBorderColor(QColor(10, 20, 30));
-        settings.setSnappingInactiveBorderColor(QColor(40, 50, 60));
 
         settings.save();
 
         // Verify the round-trip by reading from a fresh config backend
         // (re-reads from disk after save() flushed). Uses v2 dot-path groups.
         auto backend = PlasmaZones::createDefaultConfigBackend();
-
-        {
-            auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
-            QCOMPARE(gaps->readInt(ConfigDefaults::innerKey(), 0), 15);
-            QCOMPARE(gaps->readInt(ConfigDefaults::outerKey(), 0), 20);
-        }
 
         {
             auto border = backend->group(ConfigDefaults::snappingZonesBorderGroup());
@@ -284,10 +234,6 @@ private Q_SLOTS:
                      qPrintable(QStringLiteral("SplitRatio: expected 0.7, got %1").arg(readRatio)));
             QCOMPARE(algo->readInt(ConfigDefaults::masterCountKey(), 0), 3);
         }
-        {
-            auto tilingGaps = backend->group(ConfigDefaults::tilingGapsGroup());
-            QCOMPARE(tilingGaps->readInt(ConfigDefaults::innerKey(), 0), 12);
-        }
 
         {
             // Phase 4 sub-commit 6: animation settings persist as a
@@ -302,44 +248,6 @@ private Q_SLOTS:
             const QJsonObject obj = doc.object();
             QCOMPARE(obj.value(QLatin1String("duration")).toInt(), 300);
             QCOMPARE(obj.value(QLatin1String("sequenceMode")).toInt(), 0);
-        }
-
-        {
-            // Snapped-window border decoration (Snapping.Appearance.Borders).
-            auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
-            QCOMPARE(borders->readBool(ConfigDefaults::showBorderKey(), true), false);
-            QCOMPARE(borders->readInt(ConfigDefaults::widthKey(), 0), 4);
-            QCOMPARE(borders->readInt(ConfigDefaults::radiusKey(), 0), 8);
-        }
-        {
-            // Snapped-window title-bar decoration (Snapping.Appearance.Decorations).
-            auto decorations = backend->group(ConfigDefaults::snappingAppearanceDecorationsGroup());
-            QCOMPARE(decorations->readBool(ConfigDefaults::hideTitleBarsKey(), true), false);
-        }
-        {
-            // Snapped-window border colors (Snapping.Appearance.Colors). Read the
-            // stored strings back through QColor so the on-disk serialization
-            // format is irrelevant to the comparison.
-            auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
-            QCOMPARE(colors->readBool(ConfigDefaults::useSystemKey(), true), false);
-            QCOMPARE(QColor(colors->readString(ConfigDefaults::activeKey(), QString())), QColor(10, 20, 30));
-            QCOMPARE(QColor(colors->readString(ConfigDefaults::inactiveKey(), QString())), QColor(40, 50, 60));
-        }
-
-        {
-            // Load-side getter round-trip: a freshly-constructed Settings must
-            // read every snapping* value back through its OWN getter. The
-            // on-disk assertions above only prove save() wrote the right keys;
-            // a getter wired to the wrong group/key would still pass them.
-            // Reading through the getters pins the read path too.
-            Settings reloaded;
-            QCOMPARE(reloaded.snappingShowBorder(), false);
-            QCOMPARE(reloaded.snappingHideTitleBars(), false);
-            QCOMPARE(reloaded.snappingBorderWidth(), 4);
-            QCOMPARE(reloaded.snappingBorderRadius(), 8);
-            QCOMPARE(reloaded.snappingUseSystemBorderColors(), false);
-            QCOMPARE(reloaded.snappingBorderColor(), QColor(10, 20, 30));
-            QCOMPARE(reloaded.snappingInactiveBorderColor(), QColor(40, 50, 60));
         }
     }
 
@@ -374,14 +282,14 @@ private Q_SLOTS:
         Settings settings;
 
         QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::zonePaddingChanged);
+        QSignalSpy specificSpy(&settings, &Settings::adjacentThresholdChanged);
         QVERIFY(generalSpy.isValid());
         QVERIFY(specificSpy.isValid());
 
-        int currentPadding = settings.zonePadding();
-        int newPadding = (currentPadding == 15) ? 20 : 15;
+        int current = settings.adjacentThreshold();
+        int next = (current == 15) ? 20 : 15;
 
-        settings.setZonePadding(newPadding);
+        settings.setAdjacentThreshold(next);
 
         QCOMPARE(specificSpy.count(), 1);
         QVERIFY(generalSpy.count() >= 1);
@@ -395,50 +303,15 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        settings.setZonePadding(15); // force a known value
+        settings.setAdjacentThreshold(15); // force a known value
 
         QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::zonePaddingChanged);
+        QSignalSpy specificSpy(&settings, &Settings::adjacentThresholdChanged);
 
-        settings.setZonePadding(15); // same value again
+        settings.setAdjacentThreshold(15); // same value again
 
         QCOMPARE(specificSpy.count(), 0);
         QCOMPARE(generalSpy.count(), 0);
-    }
-
-    /**
-     * The hand-written setSnappingUseSystemBorderColors setter (not
-     * macro-generated) must emit both its specific
-     * snappingUseSystemBorderColorsChanged signal and settingsChanged() on a
-     * real change, and stay silent on a no-op (set to the same value twice).
-     */
-    void testSetSnappingUseSystemBorderColors_emitsAndGuards()
-    {
-        IsolatedConfigGuard guard;
-
-        Settings settings;
-
-        const bool current = settings.snappingUseSystemBorderColors();
-        const bool toggled = !current;
-        settings.setSnappingUseSystemBorderColors(current); // force known value
-
-        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::snappingUseSystemBorderColorsChanged);
-        QVERIFY(generalSpy.isValid());
-        QVERIFY(specificSpy.isValid());
-
-        // Real change emits both signals.
-        settings.setSnappingUseSystemBorderColors(toggled);
-        QCOMPARE(specificSpy.count(), 1);
-        QVERIFY(generalSpy.count() >= 1);
-
-        const int specificBefore = specificSpy.count();
-        const int generalBefore = generalSpy.count();
-
-        // No-op (same value again) emits nothing.
-        settings.setSnappingUseSystemBorderColors(toggled);
-        QCOMPARE(specificSpy.count(), specificBefore);
-        QCOMPARE(generalSpy.count(), generalBefore);
     }
 
     /**
@@ -619,7 +492,7 @@ private Q_SLOTS:
         Settings settings;
 
         // Mutate one value to ensure save actually writes
-        settings.setZonePadding(99);
+        settings.setAdjacentThreshold(99);
         settings.save();
 
         // Re-read the file and verify stale keys are gone
@@ -818,7 +691,6 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        settings.setZonePadding(42);
         settings.setBorderWidth(7);
         settings.setActiveOpacity(0.65);
         settings.setShowZoneNumbers(false);
@@ -828,12 +700,56 @@ private Q_SLOTS:
 
         // Reload from disk
         Settings reloaded;
-        QCOMPARE(reloaded.zonePadding(), 42);
         QCOMPARE(reloaded.borderWidth(), 7);
         QCOMPARE(reloaded.activeOpacity(), 0.65);
         QCOMPARE(reloaded.showZoneNumbers(), false);
         QCOMPARE(reloaded.autotileEnabled(), true);
         QCOMPARE(reloaded.animationDuration(), 500);
+    }
+
+    /**
+     * The shared inner/outer gap global default is rule-backed: the getters read
+     * the managed baseline gap Rule's gap actions, and a change to
+     * that rule re-emits the per-property NOTIFY + settingsChanged so the daemon
+     * retiles / re-spaces. This validates the read path and the reactivity wiring
+     * (onRuleStoreChanged) that replaces the old stored-setter signals.
+     */
+    void testRuleBackedGap_readsBaselineRule_andReactsToChange()
+    {
+        IsolatedConfigGuard guard;
+
+        namespace PWR = PhosphorRules;
+        PWR::RuleStore store(ConfigDefaults::rulesFilePath());
+
+        // Seed a minimal managed baseline gap rule carrying an inner-gap action.
+        PWR::Rule rule;
+        rule.id = ConfigDefaults::baselineGapRuleId();
+        rule.name = QStringLiteral("Default gaps");
+        rule.managed = true;
+        rule.priority = std::numeric_limits<int>::min();
+        PWR::RuleAction inner;
+        inner.type = QString(PWR::ActionType::SetInnerGap);
+        inner.params.insert(QString(PWR::ActionParam::Value), 8);
+        rule.actions = {inner};
+        QVERIFY(store.addRule(rule));
+
+        Settings settings(&store, nullptr);
+        // Getter reads the rule's action value.
+        QCOMPARE(settings.innerGap(), 8);
+
+        QSignalSpy specificSpy(&settings, &Settings::innerGapChanged);
+        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(specificSpy.isValid());
+        QVERIFY(generalSpy.isValid());
+
+        // Edit the baseline rule's inner gap → rulesChanged → Settings re-emits.
+        PWR::Rule updated = rule;
+        updated.actions[0].params.insert(QString(PWR::ActionParam::Value), 24);
+        QVERIFY(store.updateRule(updated));
+
+        QCOMPARE(settings.innerGap(), 24);
+        QCOMPARE(specificSpy.count(), 1);
+        QVERIFY(generalSpy.count() >= 1);
     }
 };
 

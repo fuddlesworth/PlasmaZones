@@ -484,7 +484,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
-    // A matched "Float this app" window rule opens the window floating, exactly
+    // A matched "Float this app" rule opens the window floating, exactly
     // as if the user had toggled float. Runs after the exclusion gate (excluded
     // windows return earlier), the already-floating guard, and the persisted-
     // placement restore (a window the user previously snapped reopens snapped —

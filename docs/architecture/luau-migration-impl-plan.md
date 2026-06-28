@@ -18,7 +18,7 @@ ADR-0001 holds the *why*; this document holds the *how*.
 ## Library factoring
 
 Two layers, with a deliberate separation so the Luau host is reusable by future
-shell surfaces (keybindings, window rules, widgets, plugins), not bound to
+shell surfaces (keybindings, rules, widgets, plugins), not bound to
 tiling:
 
 ### `libs/phosphor-scripting` (NEW — LGPL-2.1)

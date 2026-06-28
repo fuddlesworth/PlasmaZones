@@ -260,7 +260,7 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
 /// A rule-driven `LockContext` lock is checked FIRST, ahead of the persisted per-mode store: it is
 /// mode-agnostic (locks regardless of @p currentMode) and live-resolved, exactly mirroring the
 /// daemon's resolver-routed `IContextGateSource::isContextLocked`. Without this, a `LockContext`
-/// window rule would block the layout-switch gate but leave the selector/overlay reporting unlocked —
+/// rule would block the layout-switch gate but leave the selector/overlay reporting unlocked —
 /// the same overlay-vs-selector split PR #247 eliminated for manual locks.
 ///
 /// Pass the current mode explicitly when only the active mode's lock is relevant.

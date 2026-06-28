@@ -297,14 +297,14 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-dbus)        # generic, service-agnostic D-Bus client utilities (Client, HasDBusStreaming)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants, needed by phosphor-screens (Resolver endpoint defaults)
-add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader) - Core-only, needed by phosphor-window-rules's store watcher
+add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader) - Core-only, needed by phosphor-rules's store watcher
 # phosphor-registry: generic Registry<T> + 5 factory interfaces + plugin/metadata
 # loaders. Unconditional (third-party hosts + demos consume it without the shell).
 # Moved ahead of phosphor-shaders: ShaderRegistry now composes Registry<T> +
 # MetadataPackLoader<T>, so the in-tree target must exist before shaders configures
 # (else find_package resolves a stale installed copy). Depends on phosphor-fsloader.
 add_subdirectory(libs/phosphor-registry)    # generic Registry<T> + 5 factory interfaces + plugin loader
-add_subdirectory(libs/phosphor-window-rules)  # unified window/context rule engine (MatchExpression, RuleEvaluator) - depends on phosphor-identity + phosphor-protocol + phosphor-fsloader
+add_subdirectory(libs/phosphor-rules)  # unified window/context rule engine (MatchExpression, RuleEvaluator) - depends on phosphor-identity + phosphor-protocol + phosphor-fsloader
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
 add_subdirectory(libs/phosphor-shaders)     # shader-domain primitives (BaseUniforms, IUniformExtension, ShaderRegistry)
@@ -514,7 +514,7 @@ install(FILES
     dbus/org.plasmazones.Shader.xml
     dbus/org.plasmazones.Snap.xml
     dbus/org.plasmazones.WindowDrag.xml
-    dbus/org.plasmazones.WindowRules.xml
+    dbus/org.plasmazones.Rules.xml
     dbus/org.plasmazones.WindowTracking.xml
     dbus/org.plasmazones.ZoneDetection.xml
     DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}

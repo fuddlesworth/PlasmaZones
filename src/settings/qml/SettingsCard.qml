@@ -250,7 +250,7 @@ Item {
                     }
 
                     // Trailing hint label — right-aligned next to the heading.
-                    // Used by the Window Rules sections for the per-section
+                    // Used by the Rules sections for the per-section
                     // rule count (and similar passive metadata callers may add).
                     Label {
                         visible: root.headerTrailingText.length > 0

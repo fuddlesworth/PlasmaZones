@@ -8,7 +8,7 @@
 //     ShaderNodeRhi → BaseUniforms UBO at binding=0). Qt-RHI's SPIR-V
 //     pipeline mandates UBO-bound uniforms; default-block uniforms aren't
 //     supported. The UBO branch below is std140-aligned with
-//     `PhosphorShaders::BaseUniforms` and covers its full 672-byte
+//     `PhosphorShaders::BaseUniforms` and covers its full 720-byte
 //     footprint.
 //
 //   • Compositor window-content execution (kwin-effect → KWin::GLShader,
@@ -142,7 +142,7 @@ uniform vec2 iAnchorSize;
 uniform vec2 iAnchorPosInFbo;
 
 // Window's effective rule-resolved opacity in [0, 1] — compositor path
-// only. A `SetOpacity` window rule must dim the window for the whole
+// only. A `SetOpacity` rule must dim the window for the whole
 // transition, but the custom transition shader is compiled
 // `MapTexture`-only (no `Modulate` trait), so KWin never applies
 // `data.opacity()` to it. `surfaceColor()` below multiplies the
@@ -214,7 +214,8 @@ uniform sampler2D uTexture3;
 // `_pad_after_audioSpectrum[2]` covers. Likewise the struct itself is
 // auto-aligned to a 16-byte multiple at the end, picking up the
 // trailing 12 bytes that C's `_pad_after_iTimeHi[3]` owns and landing
-// total size at 672 bytes — matching `BaseUniforms`.
+// the pre-anchor block at 672 bytes. The iSurfaceScreenPos / iAnchor*
+// fields below then extend the full `BaseUniforms` struct to 720 bytes.
 layout(std140, binding = 0) uniform AnimationUniforms {
     mat4 qt_Matrix;              // offset 0   (64 bytes) — Qt scene-graph transform; daemon-only
     float qt_Opacity;            // offset 64  (4 bytes)  — Qt scene-graph opacity; daemon-only

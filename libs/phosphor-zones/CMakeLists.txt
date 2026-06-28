@@ -4,7 +4,7 @@
 # PhosphorZones — manual zone-layout primitives.
 #
 # Passive data + geometry layer: Zone, Layout, ZoneDetector, ZoneHighlighter,
-# layout JSON serialization, and the IZoneDetector / ILayoutRegistry abstract
+# layout JSON serialization, and the IZoneDetector / IZoneLayoutRegistry abstract
 # contracts. Implements PhosphorLayout::ILayoutSource so editor / settings
 # code can render layout previews without depending on the daemon.
 #
@@ -162,9 +162,9 @@ target_link_libraries(PhosphorZones
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorGeometry::PhosphorGeometry
         # LayoutRegistry resolves the assignment cascade through a
-        # WindowRuleStore + RuleEvaluator; the store type is referenced in
+        # RuleStore + RuleEvaluator; the store type is referenced in
         # the public LayoutRegistry.h ctor signature so the dep is PUBLIC.
-        PhosphorWindowRules::PhosphorWindowRules
+        PhosphorRules::PhosphorRules
     PRIVATE
         # Uses PhosphorIdentity::VirtualScreenId for virtual-screen id parsing
         # (geometryutils / layoutregistry_assignments); PRIVATE because the dep

@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# Window Rule Refactor — Design Document
+# Rule Refactor — Design Document
 
 | | |
 |---|---|
@@ -10,7 +10,7 @@
 | **Author** | — |
 | **Date** | 2026-05-17 |
 | **Schema impact** | Config schema `v3 → v4` |
-| **Companion** | `docs/window-rules-page-mockup.svg` (settings UI mockup) |
+| **Companion** | `docs/rules-page-mockup.svg` (settings UI mockup) |
 
 ---
 
@@ -18,7 +18,7 @@
 
 PlasmaZones has several independent window/context matching subsystems, each with its
 own data shape, settings UI, persistence path, and match semantics. This document
-proposes consolidating them into a **single `WindowRule` framework**: one match-expression
+proposes consolidating them into a **single `Rule` framework**: one match-expression
 language, one pluggable action set, one serialization format, one evaluation pipeline, and
 one settings UI surface.
 
@@ -95,21 +95,21 @@ provider default.
 
 ## 4. Architecture
 
-### 4.1 New library: `phosphor-windowrule` (LGPL-2.1-or-later)
+### 4.1 New library: `phosphor-rule` (LGPL-2.1-or-later)
 
-A new reusable library under `libs/phosphor-windowrule/`, LGPL like the other `phosphor-*`
+A new reusable library under `libs/phosphor-rule/`, LGPL like the other `phosphor-*`
 libraries. Both the GPL KWin effect and the GPL daemon link it (GPL→LGPL linking is
 permitted), so there is exactly **one** evaluator implementation — eliminating the
 daemon/effect match-code duplication.
 
 ```
-libs/phosphor-windowrule/
-  include/PhosphorWindowRule/
+libs/phosphor-rule/
+  include/PhosphorRule/
     MatchExpression.h     — composable predicate tree
     WindowQuery.h         — attribute bag evaluated against an expression
     RuleAction.h          — pluggable action descriptor + ActionRegistry
-    WindowRule.h          — { id, name, enabled, priority, match, actions }
-    WindowRuleSet.h       — ordered collection; serialization; resolution
+    Rule.h          — { id, name, enabled, priority, match, actions }
+    RuleSet.h       — ordered collection; serialization; resolution
     RuleEvaluator.h       — evaluation + match cache
   src/...
   tests/...
@@ -145,7 +145,7 @@ An expression is either a **leaf predicate** or a **composite**:
 A context-only expression (only `ScreenId`/`VirtualDesktop`/`Activity` predicates, no
 window fields) is a fully valid expression — it simply matches every window in that
 context, and matches a windowless context query too. **This is how zone Assignments become
-window rules.**
+rules.**
 
 ### 4.3 `WindowQuery` — the evaluation input
 
@@ -195,7 +195,7 @@ registering one action.** No new matcher, no new file, no new UI page.
 
 ### 4.5 `RuleEvaluator` — one evaluation model
 
-There is a single evaluation model. `RuleEvaluator::resolve(query)` walks `WindowRuleSet`
+There is a single evaluation model. `RuleEvaluator::resolve(query)` walks `RuleSet`
 in **descending priority** (ties broken by list order), accumulates the first action that
 fills each slot, and returns the resolved action set.
 
@@ -218,7 +218,7 @@ nothing is cached.
 
 ## 5. Serialization
 
-### 5.1 New file: `~/.config/plasmazones/windowrules.json`
+### 5.1 New file: `~/.config/plasmazones/rules.json`
 
 A **single dedicated file**, separate from `config.json`. Rationale:
 
@@ -229,7 +229,7 @@ A **single dedicated file**, separate from `config.json`. Rationale:
 - The daemon-is-sole-writer model (settings architecture refactor) means there is no
   cross-process write contention; one file is safe.
 
-`assignments.json` is **superseded** by `windowrules.json`. The `Animations/AnimationAppRules`
+`assignments.json` is **superseded** by `rules.json`. The `Animations/AnimationAppRules`
 array and `Display.*Disabled*` keys are removed from `config.json` by the migration.
 
 ### 5.2 Rule object shape
@@ -319,7 +319,7 @@ to detect schema drift). Never silently corrupt the rule set.
 ## 6. Settings UI
 
 One page replaces all five current surfaces. The page is **approachable by default,
-powerful on disclosure** — not "an advanced editor". See `docs/window-rules-page-mockup.svg`.
+powerful on disclosure** — not "an advanced editor". See `docs/rules-page-mockup.svg`.
 
 ### 6.1 Page structure
 
@@ -352,7 +352,7 @@ edited beyond a section's representable shape "graduates" into *Advanced / Custo
 ### 6.4 Controller / D-Bus consolidation
 
 `AnimationsPageController`, `SnappingBridge`, and `TilingBridge` collapse into a single
-`WindowRuleController` exposing one `WindowRuleModel` (`QAbstractListModel`). The settings
+`RuleController` exposing one `RuleModel` (`QAbstractListModel`). The settings
 app talks to one D-Bus adaptor for the rule store; the daemon remains sole writer.
 
 **Deleted** (superseded, not rewired): `MonitorAssignmentsCard.qml`,
@@ -386,12 +386,12 @@ restructuring; no ad-hoc per-key fallbacks.
 1. `configmigration.h` — `ConfigSchemaVersion = 4`; declare `migrateV3ToV4`.
 2. `configmigration.cpp` — register in `migrationSteps()` and the PhosphorConfig schema;
    implement `migrateV3ToV4`.
-3. `migrateV3ToV4` performs a **lossless** consolidation into `windowrules.json`:
-   - Each `assignments.json` `AssignmentEntry` → a context-only `WindowRule`. Priority
+3. `migrateV3ToV4` performs a **lossless** consolidation into `rules.json`:
+   - Each `assignments.json` `AssignmentEntry` → a context-only `Rule`. Priority
      derived from pinned-dimension count so list resolution reproduces the cascade
      (activity-pinned > desktop-pinned > screen-only). Provider defaults → lowest-priority
      empty-match rules.
-   - Each `AnimationAppRule` → a `WindowRule` (`WindowClass Contains <pattern>` →
+   - Each `AnimationAppRule` → a `Rule` (`WindowClass Contains <pattern>` →
      `OverrideAnimation*` action). List order preserved as priority.
    - Each `Display.*Disabled*` entry → a context rule with a `DisableEngine` action.
    - Each exclusion-list entry → a rule with an `Exclude` action.
@@ -405,10 +405,10 @@ restructuring; no ad-hoc per-key fallbacks.
 | Phase | Scope | Ships |
 |---|---|---|
 | **0** | Metadata plumbing — `windowRole`, `pid`, per-window desktop/activity, `WindowType` enum into `WindowRegistry` + D-Bus | independently |
-| **1** | `phosphor-windowrule` library — `MatchExpression`, `WindowQuery`, `RuleAction` + registry, `WindowRuleSet`, `RuleEvaluator`, match cache, full Qt Test suite | independently |
+| **1** | `phosphor-rule` library — `MatchExpression`, `WindowQuery`, `RuleAction` + registry, `RuleSet`, `RuleEvaluator`, match cache, full Qt Test suite | independently |
 | **2** | Wire window-property matchers (Animation App Rules + effect exclusion lists) through the evaluator; both effect and daemon link the library | independently |
-| **3** | Bring context matchers (Assignments, per-mode disable lists) in as context-only rules; schema `v3→v4` migration; `windowrules.json` becomes the store | with migration |
-| **4** | New unified settings page + `WindowRuleController`; delete the five legacy UIs | with Phase 3 |
+| **3** | Bring context matchers (Assignments, per-mode disable lists) in as context-only rules; schema `v3→v4` migration; `rules.json` becomes the store | with migration |
+| **4** | New unified settings page + `RuleController`; delete the five legacy UIs | with Phase 3 |
 | **5** | New per-window capabilities (per-window engine override, opacity, scroll-width) — each is just a new registered action | incrementally |
 
 Phases 0–2 are non-breaking and independently shippable. Phases 3–4 land together (the
@@ -429,7 +429,7 @@ schema migration and the UI re-point must be atomic). Phase 5 is open-ended upsi
   evaluation it is O(rules) per query. The match cache covers this; context queries are
   not hot. Confirm with a benchmark in Phase 1.
 - **Effect/daemon parity.** Solved by both linking one library — but the build must ensure
-  the effect's GPL target links the LGPL `phosphor-windowrule` cleanly.
+  the effect's GPL target links the LGPL `phosphor-rule` cleanly.
 - **UI graduation UX.** The "rule outgrew its section" case must be communicated clearly,
   never silently corrupt a rule a section cannot fully represent.
 - **Test migration.** The three legacy subsystems have strong test suites; those become
@@ -442,7 +442,7 @@ schema migration and the UI re-point must be atomic). Phase 5 is open-ended upsi
 - Discussion #240 — roadmap.
 - Project memory: `project_window_rule_refactor.md`, `project_per_mode_disable_lists.md`,
   `project_explicit_assignments.md`.
-- `docs/window-rules-page-mockup.svg` — settings UI mockup.
+- `docs/rules-page-mockup.svg` — settings UI mockup.
 - Current subsystems: `libs/phosphor-zones/` (Assignments), `libs/phosphor-animation/`
   (Animation App Rules), `libs/phosphor-tile-engine/PerScreenConfigResolver`,
   `kwin-effect/plasmazoneseffect/window_filtering.cpp`, `src/config/configmigration.cpp`.

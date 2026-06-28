@@ -33,12 +33,12 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/MatchTypes.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/RuleStore.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorZones/Zone.h>
@@ -165,7 +165,10 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        // Detach the borrowed engine from the service before deleting it so the
+        // service never holds a dangling SnapEngine*.
         m_wta->service()->setSnapState(nullptr);
+        m_wta->service()->setSnapEngine(nullptr);
         delete m_snapEngine;
         m_snapEngine = nullptr;
 
@@ -296,28 +299,27 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
 
-        PhosphorWindowRules::WindowRule rule;
+        PhosphorRules::Rule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("no-restore-dolphin");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::AppId,
-                                                                    PhosphorWindowRules::Operator::Equals,
-                                                                    QStringLiteral("org.kde.dolphin"));
-        PhosphorWindowRules::RuleAction action;
-        action.type = QString(PhosphorWindowRules::ActionType::RestorePosition);
-        action.params.insert(QString(PhosphorWindowRules::ActionParam::Value), false);
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(
+            PhosphorRules::Field::AppId, PhosphorRules::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::RestorePosition);
+        action.params.insert(QString(PhosphorRules::ActionParam::Value), false);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
-        m_wta->setWindowRuleStore(&store);
+        m_wta->setRuleStore(&store);
         // Sever the borrow on ANY exit path (incl. an early QVERIFY2 return)
         // before the stack-local store above is destroyed — a dangling borrow
         // would be deref'd during teardown.
         const auto detach = qScopeGuard([this] {
-            m_wta->setWindowRuleStore(nullptr);
+            m_wta->setRuleStore(nullptr);
         });
         m_settings->setSnappingRestoreFloatedWindowsOnLogin(true); // global default ON
 
@@ -360,24 +362,23 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
 
-        PhosphorWindowRules::WindowRule rule;
+        PhosphorRules::Rule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("float-dolphin");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::AppId,
-                                                                    PhosphorWindowRules::Operator::Equals,
-                                                                    QStringLiteral("org.kde.dolphin"));
-        PhosphorWindowRules::RuleAction action;
-        action.type = QString(PhosphorWindowRules::ActionType::Float);
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(
+            PhosphorRules::Field::AppId, PhosphorRules::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Float);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
-        m_wta->setWindowRuleStore(&store);
+        m_wta->setRuleStore(&store);
         const auto detach = qScopeGuard([this] {
-            m_wta->setWindowRuleStore(nullptr);
+            m_wta->setRuleStore(nullptr);
         });
 
         const QString dolphinInstance = QStringLiteral("dolphin-float-1");
@@ -397,7 +398,7 @@ private Q_SLOTS:
 
     void floatRule_falsesWithoutStore()
     {
-        m_wta->setWindowRuleStore(nullptr);
+        m_wta->setRuleStore(nullptr);
         QVERIFY2(!m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(
                      QStringLiteral("org.kde.dolphin"), QStringLiteral("any-uuid"))),
                  "with no rule store, no window is rule-floated");
@@ -421,28 +422,28 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
 
         // "Float any modal dialog narrower than 500px" — a bool field AND an int
         // field, both carried only via the extended a{sv}, combined under All.
-        PhosphorWindowRules::WindowRule rule;
+        PhosphorRules::Rule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("float-narrow-modal");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRules::MatchExpression::makeAll(
-            {PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::IsModal,
-                                                            PhosphorWindowRules::Operator::Equals, true),
-             PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::Width,
-                                                            PhosphorWindowRules::Operator::LessThan, 500)});
-        PhosphorWindowRules::RuleAction action;
-        action.type = QString(PhosphorWindowRules::ActionType::Float);
+        rule.match = PhosphorRules::MatchExpression::makeAll(
+            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::IsModal, PhosphorRules::Operator::Equals,
+                                                      true),
+             PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::Width, PhosphorRules::Operator::LessThan,
+                                                      500)});
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Float);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
-        m_wta->setWindowRuleStore(&store);
+        m_wta->setRuleStore(&store);
         const auto detach = qScopeGuard([this] {
-            m_wta->setWindowRuleStore(nullptr);
+            m_wta->setRuleStore(nullptr);
         });
 
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
@@ -492,23 +493,23 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
 
-        PhosphorWindowRules::WindowRule rule;
+        PhosphorRules::Rule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("float-modal");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::IsModal,
-                                                                    PhosphorWindowRules::Operator::Equals, true);
-        PhosphorWindowRules::RuleAction action;
-        action.type = QString(PhosphorWindowRules::ActionType::Float);
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::IsModal,
+                                                              PhosphorRules::Operator::Equals, true);
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Float);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
-        m_wta->setWindowRuleStore(&store);
+        m_wta->setRuleStore(&store);
         const auto detach = qScopeGuard([this] {
-            m_wta->setWindowRuleStore(nullptr);
+            m_wta->setRuleStore(nullptr);
         });
 
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
@@ -555,7 +556,7 @@ private Q_SLOTS:
         // No store wired → per-engine global setting decides, both polarities. The
         // two engine defaults are independent: Mode::Snapping reads the snapping
         // setting, Mode::Autotile reads the autotile setting.
-        m_wta->setWindowRuleStore(nullptr);
+        m_wta->setRuleStore(nullptr);
         m_settings->setSnappingRestoreFloatedWindowsOnLogin(true);
         m_settings->setAutotileRestoreFloatedWindowsOnLogin(false);
         QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Snapping),
@@ -573,10 +574,10 @@ private Q_SLOTS:
         // still the global setting (no rule can match a window with no query).
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
-        m_wta->setWindowRuleStore(&store);
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
+        m_wta->setRuleStore(&store);
         const auto detach = qScopeGuard([this] {
-            m_wta->setWindowRuleStore(nullptr);
+            m_wta->setRuleStore(nullptr);
         });
         m_settings->setSnappingRestoreFloatedWindowsOnLogin(true);
         QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Snapping),

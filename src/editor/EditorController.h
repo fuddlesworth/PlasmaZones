@@ -32,11 +32,11 @@ namespace PhosphorZones {
 class Layout;
 }
 
-namespace PhosphorWindowRules {
-// Forward-declared for the std::unique_ptr<WindowRuleStoreWatcher> member.
-// (The complete WindowRuleStore type is pulled in transitively via
-// PhosphorZones/LayoutRegistry.h; the .cpp includes WindowRuleStore.h directly.)
-class WindowRuleStoreWatcher;
+namespace PhosphorRules {
+// Forward-declared for the std::unique_ptr<RuleStoreWatcher> member.
+// (The complete RuleStore type is pulled in transitively via
+// PhosphorZones/LayoutRegistry.h; the .cpp includes RuleStore.h directly.)
+class RuleStoreWatcher;
 }
 
 namespace PlasmaZones {
@@ -946,17 +946,17 @@ private:
     //   3. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
-    /// Owned WindowRule store backing the in-process LayoutRegistry's
+    /// Owned Rule store backing the in-process LayoutRegistry's
     /// assignment cascade. Declared before m_localLayoutManager so it
     /// outlives the registry that borrows it (members destruct in reverse
-    /// declaration order). Points at the shared windowrules.json so the
+    /// declaration order). Points at the shared rules.json so the
     /// editor's local registry sees the same rule set the daemon writes.
-    std::unique_ptr<PhosphorWindowRules::WindowRuleStore> m_localRuleStore;
+    std::unique_ptr<PhosphorRules::RuleStore> m_localRuleStore;
     /// Opt-in cross-process auto-reload of m_localRuleStore. The editor has no
     /// daemon D-Bus rules-reload path, so this watcher is its only way to pick
-    /// up another process's windowrules.json writes while it is open. Declared
+    /// up another process's rules.json writes while it is open. Declared
     /// after the store it borrows so it tears down first.
-    std::unique_ptr<PhosphorWindowRules::WindowRuleStoreWatcher> m_localRuleStoreWatcher;
+    std::unique_ptr<PhosphorRules::RuleStoreWatcher> m_localRuleStoreWatcher;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
     PhosphorLayout::LayoutSourceBundle m_localSources;
     /// Owned here (not parented to `this`) so destruction runs via the
@@ -1027,7 +1027,7 @@ private:
     int m_overlayDisplayMode = -1; // -1 = use global setting
     bool m_useFullScreenGeometry = false;
     int m_aspectRatioClass = 0; // 0 = Any (AspectRatioClass::Any)
-    int m_cachedGlobalZonePadding = PlasmaZones::Defaults::ZonePadding; // Cached to avoid D-Bus calls
+    int m_cachedGlobalZonePadding = PlasmaZones::Defaults::InnerGap; // Cached to avoid D-Bus calls
     int m_cachedGlobalOuterGap = PlasmaZones::Defaults::OuterGap; // Cached to avoid D-Bus calls
     int m_cachedGlobalOverlayDisplayMode = 0; // Cached global overlay display mode
     bool m_cachedGlobalUsePerSideOuterGap = false;

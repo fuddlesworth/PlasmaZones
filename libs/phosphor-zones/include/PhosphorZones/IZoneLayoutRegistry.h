@@ -160,23 +160,31 @@ public:
     }
 
     /// Resolve the per-context gap override (zone padding + outer gaps) that
-    /// window rules pin for the (@p screenId, @p virtualDesktop, @p activity)
+    /// rules pin for the (@p screenId, @p virtualDesktop, @p activity)
     /// context — the same resolution the daemon's geometry resolver uses on the
     /// snap-commit path. Context-aware geometry consumers (drag preview, empty-
     /// zone overlay, zone-detection query) call this through the interface so
     /// their geometry matches the committed result. The default returns an empty
     /// override (no rule gaps); a registry that does not model context rules —
     /// e.g. a fixture stub — keeps the legacy per-screen/layout/global cascade.
-    virtual ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop,
-                                                  const QString& activity) const
+    ///
+    /// @p mode is the placement-mode wire token ("snapping" / "tiling") of the
+    /// engine asking. It is matched against a context rule's `Mode` leaf, so a
+    /// per-mode gap rule (e.g. a wider inner gap only while tiling) resolves for
+    /// the matching engine and stays inert for the other. The snapping geometry
+    /// path passes "snapping"; the autotile path passes "tiling". Left empty for
+    /// a mode-agnostic caller (no Mode leaf then matches).
+    virtual ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
+                                                  const QString& mode = QString()) const
     {
         Q_UNUSED(screenId);
         Q_UNUSED(virtualDesktop);
         Q_UNUSED(activity);
+        Q_UNUSED(mode);
         return {};
     }
 
-    /// Resolve whether window rules lock the active layout for the
+    /// Resolve whether rules lock the active layout for the
     /// (@p screenId, @p virtualDesktop, @p activity) context — the rule-driven
     /// counterpart to the manual ToggleLayoutLock shortcut. A context rule
     /// carrying an `ActionType::LockContext` action whose `value` is true locks

@@ -25,7 +25,7 @@ ColumnLayout {
 
     /// The match node JSON — a leaf or a composite.
     required property var node
-    /// The WindowRuleController, threaded down for leaf field/operator lists.
+    /// The RuleController, threaded down for leaf field/operator lists.
     required property var controller
     /// The SettingsController, threaded into MatchLeafEditor so picker-kind
     /// leaves (screen / activity) can populate their dropdowns.

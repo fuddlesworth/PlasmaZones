@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
+#include <QUuid>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QtCore/qnamespace.h>
@@ -19,7 +20,6 @@
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
-#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorTiles/AutotileConstants.h>
 // Animation duration / stagger UI bounds — generic policy, not autotile-specific.
 #include <PhosphorAnimation/AnimationLimits.h>
@@ -282,15 +282,17 @@ public:
     // PhosphorZones::Zone Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static int zonePadding()
+    // Inner gap: the single shared inter-window gap used by BOTH snapping and
+    // tiling (replaces the former snapping zonePadding + tiling autotileInnerGap).
+    static int innerGap()
     {
-        return Defaults::ZonePadding;
+        return Defaults::InnerGap;
     }
-    static constexpr int zonePaddingMin()
+    static constexpr int innerGapMin()
     {
         return 0;
     }
-    static constexpr int zonePaddingMax()
+    static constexpr int innerGapMax()
     {
         return Defaults::MaxGap;
     }
@@ -458,7 +460,7 @@ public:
     // Off by default: every context still gets the synthesized level-1 default
     // layout (today's behavior). When on, no context is assigned an active
     // snapping or autotiling layout until the user explicitly assigns one —
-    // overridable per context by a DefaultLayoutAssignment window rule.
+    // overridable per context by a DefaultLayoutAssignment rule.
     static bool suppressDefaultLayoutAssignment()
     {
         return false;
@@ -675,22 +677,55 @@ public:
     // and high-frequency session state saves.
     PLASMAZONES_EXPORT static QString sessionFilePath();
 
-    // Returns the absolute path to windowrules.json (the unified WindowRule
+    // Returns the absolute path to rules.json (the unified Rule
     // store — schema v4). Separate from config.json so frequent daemon-driven
     // rule writes do not churn the cold user-settings blob. The daemon is the
     // sole writer; see docs/window-rule-refactor-design.md §5.
-    PLASMAZONES_EXPORT static QString windowRulesFilePath();
+    PLASMAZONES_EXPORT static QString rulesFilePath();
+
+    // UUID suffix `...001` is RETIRED — it was the never-shipped single combined
+    // "Default appearance" baseline rule, since split into the three focused
+    // baselines below (`...002`/`...003`/`...004`). Do not reuse it.
+    //
+    // Stable id of the managed baseline BORDER rule: the catch-all,
+    // lowest-priority Rule whose actions hold the default window border
+    // appearance (visible / width / radius / colour) the Appearance settings
+    // page edits. Fixed so the daemon can re-find (and idempotently re-seed) it
+    // across restarts and the settings UI can bind to the same rule. See
+    // docs/window-rule-refactor-design.md.
+    static QUuid baselineBorderRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000002}"));
+    }
+
+    // Stable id of the managed baseline TITLE BAR rule: the catch-all,
+    // lowest-priority Rule whose single action holds the default
+    // hide-title-bar value the Appearance settings page edits.
+    static QUuid baselineTitleBarRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000003}"));
+    }
+
+    // Stable id of the managed baseline GAP rule: the catch-all,
+    // lowest-priority Rule whose actions hold the global default inner /
+    // outer gap model. Settings reads these actions back as its innerGap() /
+    // outerGap*() getters, and per-monitor gap overrides are v5 ids namespaced
+    // under this id.
+    static QUuid baselineGapRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000004}"));
+    }
 
     // Returns the absolute path to quicklayouts.json (the numbered quick-layout
-    // shortcut slots 1..9). Quick-layout slots are NOT window rules, so they
-    // sit in a sibling sidecar next to windowrules.json rather than in the
+    // shortcut slots 1..9). Quick-layout slots are NOT rules, so they
+    // sit in a sibling sidecar next to rules.json rather than in the
     // rule store. LayoutRegistry reads/writes this file directly.
     PLASMAZONES_EXPORT static QString quickLayoutsFilePath();
 
     // Returns the absolute path to layout-settings.json — the per-layout
     // settings sidecar (keyed by layout UUID). Per-layout settings are NOT part
     // of the structural layout definition, so they live in a sibling sidecar
-    // next to windowrules.json rather than inside each layout file.
+    // next to rules.json rather than inside each layout file.
     PLASMAZONES_EXPORT static QString layoutSettingsFilePath();
 
     // Curated default picker visibility, seeded into layout-settings.json on a
@@ -879,82 +914,9 @@ public:
     {
         return PhosphorTiles::AutotileDefaults::MaxMasterCount;
     }
-    static constexpr int autotileInnerGap()
-    {
-        return Defaults::ZonePadding;
-    }
-    static constexpr int autotileInnerGapMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileInnerGapMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static constexpr int autotileOuterGap()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static bool autotileUsePerSideOuterGap()
-    {
-        return false;
-    }
-    static int autotileOuterGapTop()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapTopMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapTopMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static int autotileOuterGapBottom()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapBottomMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapBottomMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static int autotileOuterGapLeft()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapLeftMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapLeftMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static int autotileOuterGapRight()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapRightMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapRightMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
+    // Autotile inner/outer gaps are unified with snapping — see innerGap() /
+    // outerGap*() above. Tiling reads the same shared accessors; no autotile-
+    // specific gap defaults remain.
     static constexpr bool autotileFocusNewWindows()
     {
         return true;
@@ -1074,110 +1036,6 @@ public:
     static bool autotileRespectMinimumSize()
     {
         return true;
-    }
-    // Window-decoration hide/show/width/radius defaults delegate to the
-    // shared PhosphorCompositor::DecorationDefaults constants — the same
-    // symbols the effect's BorderState member-initializers use — so the
-    // daemon's persisted defaults and the effect's pre-settings-load
-    // rendering can't drift. (ZoneDefaults is the zone OVERLAY's constants,
-    // a different visual concept; the old width/radius delegation to it was
-    // an accident of equal values.) The border COLORS below intentionally
-    // remain ZoneDefaults-sourced: DecorationDefaults carries no color
-    // constants because colors are daemon-resolved (system accent) and
-    // pushed via settings — nothing renders pre-load (ShowBorder defaults
-    // false), so there is no drift concern to share symbols over.
-    static bool autotileHideTitleBars()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
-    }
-    static bool autotileShowBorder()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::ShowBorder;
-    }
-    static int autotileBorderWidth()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
-    }
-    static constexpr int autotileBorderWidthMin()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMin;
-    }
-    static constexpr int autotileBorderWidthMax()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMax;
-    }
-    static int autotileBorderRadius()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
-    }
-    static constexpr int autotileBorderRadiusMin()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin;
-    }
-    static constexpr int autotileBorderRadiusMax()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
-    }
-    static QColor autotileBorderColor()
-    {
-        return ::PhosphorZones::ZoneDefaults::HighlightColor;
-    }
-    static QColor autotileInactiveBorderColor()
-    {
-        return ::PhosphorZones::ZoneDefaults::InactiveColor;
-    }
-    static bool autotileUseSystemBorderColors()
-    {
-        return true;
-    }
-
-    // Snapping window appearance — the snapped window's border / title-bar
-    // decoration (stored under Snapping.Appearance.*). Every default delegates to
-    // its autotile* counterpart so the two modes start from identical window
-    // appearance: a single edit to the autotile default moves both in lockstep.
-    static bool snappingHideTitleBars()
-    {
-        return autotileHideTitleBars();
-    }
-    static bool snappingShowBorder()
-    {
-        return autotileShowBorder();
-    }
-    static int snappingBorderWidth()
-    {
-        return autotileBorderWidth();
-    }
-    static constexpr int snappingBorderWidthMin()
-    {
-        return autotileBorderWidthMin();
-    }
-    static constexpr int snappingBorderWidthMax()
-    {
-        return autotileBorderWidthMax();
-    }
-    static int snappingBorderRadius()
-    {
-        return autotileBorderRadius();
-    }
-    static constexpr int snappingBorderRadiusMin()
-    {
-        return autotileBorderRadiusMin();
-    }
-    static constexpr int snappingBorderRadiusMax()
-    {
-        return autotileBorderRadiusMax();
-    }
-    static QColor snappingBorderColor()
-    {
-        return autotileBorderColor();
-    }
-    static QColor snappingInactiveBorderColor()
-    {
-        return autotileInactiveBorderColor();
-    }
-    static bool snappingUseSystemBorderColors()
-    {
-        return autotileUseSystemBorderColors();
     }
     static int autotileStickyWindowHandling()
     {

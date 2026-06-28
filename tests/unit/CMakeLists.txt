@@ -283,14 +283,20 @@ p_add_test(test_configmigration config/test_configmigration.cpp)
 # v3 → v4 window-rule consolidation migration.
 add_executable(test_migration_v3_to_v4 config/test_migration_v3_to_v4.cpp)
 target_link_libraries(test_migration_v3_to_v4
-    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRules::PhosphorWindowRules)
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
 add_test(NAME test_migration_v3_to_v4 COMMAND test_migration_v3_to_v4)
 
-# WindowRuleStore — daemon-side windowrules.json persistence + mutation API.
-add_executable(test_windowrule_store config/test_windowrule_store.cpp)
-target_link_libraries(test_windowrule_store
-    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRules::PhosphorWindowRules)
-add_test(NAME test_windowrule_store COMMAND test_windowrule_store)
+# v4 → v5 per-mode appearance + gaps → window-rule override migration.
+add_executable(test_migration_v4_to_v5 config/test_migration_v4_to_v5.cpp)
+target_link_libraries(test_migration_v4_to_v5
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v4_to_v5 COMMAND test_migration_v4_to_v5)
+
+# RuleStore — daemon-side rules.json persistence + mutation API.
+add_executable(test_rule_store config/test_rule_store.cpp)
+target_link_libraries(test_rule_store
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_rule_store COMMAND test_rule_store)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # daemon/ - Daemon-level Integration Tests (animation profile publication, etc.)
@@ -360,17 +366,17 @@ p_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 p_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
 p_add_test(test_layout_registry_cache core/test_layout_registry_cache.cpp)
 
-# Regression guard for the in-process dual-WindowRuleStore data-loss race
+# Regression guard for the in-process dual-RuleStore data-loss race
 # where Settings used to construct its own store pointed at the same file
 # as the daemon's. Pins the share-via-borrow-ctor wiring in daemon.cpp.
 p_add_test(test_daemon_dual_store_race core/test_daemon_dual_store_race.cpp)
 
 # Cascade-fidelity proof for the window-rule context model — the priority
 # formula reproduces the legacy zone-Assignment cascade.
-add_executable(test_windowrule_cascade_fidelity core/test_windowrule_cascade_fidelity.cpp)
-target_link_libraries(test_windowrule_cascade_fidelity
-    PRIVATE Qt6::Test Qt6::Core PhosphorWindowRules::PhosphorWindowRules PhosphorZones::PhosphorZones plasmazones_core)
-add_test(NAME test_windowrule_cascade_fidelity COMMAND test_windowrule_cascade_fidelity)
+add_executable(test_rule_cascade_fidelity core/test_rule_cascade_fidelity.cpp)
+target_link_libraries(test_rule_cascade_fidelity
+    PRIVATE Qt6::Test Qt6::Core PhosphorRules::PhosphorRules PhosphorZones::PhosphorZones plasmazones_core)
+add_test(NAME test_rule_cascade_fidelity COMMAND test_rule_cascade_fidelity)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Virtual Screen Tests (ID utilities, data model, PhosphorScreens::ScreenManager)
@@ -741,50 +747,50 @@ target_link_libraries(test_animations_shader_overrides
 )
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
 
-# Window Rules page (Phase 4 of the window-rule refactor): WindowRuleModel
-# derives SectionRole / summaries from a rule's shape; WindowRuleController
+# Rules page (Phase 4 of the window-rule refactor): RuleModel
+# derives SectionRole / summaries from a rule's shape; RuleController
 # stages CRUD by UUID and builds the monitor overview. Compiles the model /
 # controller sources directly (they live in the plasmazones-settings
 # executable, not plasmazones_core).
-add_executable(test_window_rule_model
-    settings/test_window_rule_model.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/windowrulemodel.cpp
+add_executable(test_rule_model
+    settings/test_rule_model.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulemodel.cpp
 )
-target_link_libraries(test_window_rule_model
+target_link_libraries(test_rule_model
     PRIVATE
         Qt6::Test
         Qt6::Core
-        PhosphorWindowRules::PhosphorWindowRules
+        PhosphorRules::PhosphorRules
         plasmazones_core
 )
-add_test(NAME test_window_rule_model COMMAND test_window_rule_model)
+add_test(NAME test_rule_model COMMAND test_rule_model)
 
-add_executable(test_window_rule_controller
-    settings/test_window_rule_controller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/windowrulemodel.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller.cpp
+add_executable(test_rule_controller
+    settings/test_rule_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulemodel.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller.cpp
     # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
-    # author surfaces, validation) — split out of windowrulecontroller.cpp
+    # author surfaces, validation) — split out of rulecontroller.cpp
     # to keep that TU under the 800-line cap; the controller's class
     # definition spans both TUs.
-    ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller_views.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_views.cpp
     # Label-lookup setters + wiring-completion gate — split out so
-    # windowrulecontroller.cpp stays under the 800-line cap; the
+    # rulecontroller.cpp stays under the 800-line cap; the
     # controller's class definition spans both TUs.
-    ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller_lookups.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/windowruleauthoring.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/windowruletemplates.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_lookups.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/ruletemplates.cpp
 )
-target_link_libraries(test_window_rule_controller
+target_link_libraries(test_rule_controller
     PRIVATE
         Qt6::Test
         Qt6::Core
         Qt6::DBus
-        PhosphorWindowRules::PhosphorWindowRules
+        PhosphorRules::PhosphorRules
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
-add_test(NAME test_window_rule_controller COMMAND test_window_rule_controller)
+add_test(NAME test_rule_controller COMMAND test_rule_controller)
 
 # Validation methods on D-Bus struct types - pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,
@@ -824,7 +830,6 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 #   test_floating_cache: FloatingCache + ZoneCache + TriggerParser tests
 #   test_autotile_state: AutotileStateHelpers + WindowId tests
 #   test_decoration_manager: DecorationManager ownership/veto behavioral spec
-#   test_decoration_manager_timers: DecorationManager deferred-drain/fallback timers
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_wire_types compositor-common/test_wire_types.cpp)
 target_link_libraries(test_wire_types PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
@@ -844,10 +849,6 @@ add_executable(test_decoration_manager compositor-common/test_decoration_manager
 target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 
-add_executable(test_decoration_manager_timers compositor-common/test_decoration_manager_timers.cpp)
-target_link_libraries(test_decoration_manager_timers PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
-add_test(NAME test_decoration_manager_timers COMMAND test_decoration_manager_timers)
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation
 # Apply a shared environment to every test in this directory so new tests added
@@ -857,7 +858,7 @@ add_test(NAME test_decoration_manager_timers COMMAND test_decoration_manager_tim
 #   QT_QPA_PLATFORM=offscreen — headless rendering.
 #   XDG_{CONFIG,DATA,STATE,CACHE}_HOME — redirect QStandardPaths into a throwaway
 #     build-tree directory so tests that exercise config-writing paths
-#     (LayoutManager assignments, mode toggles, the WindowRule store) never
+#     (LayoutManager assignments, mode toggles, the Rule store) never
 #     mutate the developer's real ~/.config/plasmazones. Without this, running
 #     ctest wrote sample-screen rules (e.g. "eDP-1") into the live config.
 #

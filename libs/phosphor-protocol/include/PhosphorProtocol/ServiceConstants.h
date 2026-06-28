@@ -27,7 +27,7 @@ inline constexpr QLatin1String Screen("org.plasmazones.Screen");
 inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
 inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridge");
 inline constexpr QLatin1String Snap("org.plasmazones.Snap");
-inline constexpr QLatin1String WindowRules("org.plasmazones.WindowRules");
+inline constexpr QLatin1String Rules("org.plasmazones.Rules");
 }
 
 /// D-Bus error names returned via `QDBusMessage::createErrorReply`. Centralised

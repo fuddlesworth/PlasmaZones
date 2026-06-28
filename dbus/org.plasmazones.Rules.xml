@@ -1,0 +1,84 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<node>
+    <!-- Rules Interface -->
+    <interface name="org.plasmazones.Rules">
+        <annotation name="org.gtk.GDBus.DocString" value="Unified window-rule store: query and mutate the rule set that maps windows to zones. Rules cross the wire as JSON strings — a single rule serializes to { id, name, enabled, priority, match, actions } and the whole set is a JSON object { _version, rules }. The daemon's RuleStore stays the sole writer of rules.json."/>
+        <method name="getAllRules">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the whole rule set as a JSON object string ({ _version, rules }). Empty string if the store is unavailable."/>
+            <arg name="rulesJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object string in the { _version, rules } shape."/>
+            </arg>
+        </method>
+        <method name="setAllRules">
+            <annotation name="org.gtk.GDBus.DocString" value="Replace the entire rule set. The payload is a JSON object string in the { _version, rules } shape (or a bare object whose rules array carries the list). Malformed entries are dropped and a warning logs the dropped/accepted/total counts. True if the payload parsed; a genuine change is also persisted."/>
+            <arg name="rulesJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object string carrying the rules array."/>
+            </arg>
+            <arg name="ok" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the payload parsed; a genuine change is also persisted."/>
+            </arg>
+        </method>
+        <method name="addRule">
+            <annotation name="org.gtk.GDBus.DocString" value="Append one rule from its JSON object string. Returns false if the JSON is malformed, the rule fails validation, or its id collides with an existing rule."/>
+            <arg name="ruleJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object string for a single rule ({ id, name, enabled, priority, match, actions })."/>
+            </arg>
+            <arg name="ok" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the rule was added."/>
+            </arg>
+        </method>
+        <method name="updateRule">
+            <annotation name="org.gtk.GDBus.DocString" value="Replace the rule with the same id from its JSON object string. Returns false if the JSON is malformed, the rule fails validation, or no rule with that id exists."/>
+            <arg name="ruleJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object string for a single rule ({ id, name, enabled, priority, match, actions })."/>
+            </arg>
+            <arg name="ok" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the rule was replaced."/>
+            </arg>
+        </method>
+        <method name="removeRule">
+            <annotation name="org.gtk.GDBus.DocString" value="Remove the rule with the given id. Returns false if the id is malformed or no rule with that id exists."/>
+            <arg name="ruleId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Rule UUID string."/>
+            </arg>
+            <arg name="ok" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if a rule was removed."/>
+            </arg>
+        </method>
+        <method name="setRuleEnabled">
+            <annotation name="org.gtk.GDBus.DocString" value="Set the enabled flag of the rule with the given id. Returns false if the id is malformed or no rule with that id exists."/>
+            <arg name="ruleId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Rule UUID string."/>
+            </arg>
+            <arg name="enabled" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True to enable the rule, false to disable it."/>
+            </arg>
+            <arg name="ok" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the rule's enabled flag was updated."/>
+            </arg>
+        </method>
+        <method name="setRulePriority">
+            <annotation name="org.gtk.GDBus.DocString" value="Set the priority of the rule with the given id. Higher priority wins when multiple rules match a window. Returns false if the id is malformed or no rule with that id exists."/>
+            <arg name="ruleId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Rule UUID string."/>
+            </arg>
+            <arg name="priority" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="New priority value."/>
+            </arg>
+            <arg name="ok" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the rule's priority was updated."/>
+            </arg>
+        </method>
+        <signal name="rulesChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted whenever the store's rule set changes (add, update, remove, enable, priority, or full replace)."/>
+            <arg name="persisted" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True when the in-memory change was successfully written to disk. False signals an in-memory mutation whose persist failed — consumers can branch on this to differentiate 'saved' from 'edited but divergent from disk'."/>
+            </arg>
+        </signal>
+    </interface>
+</node>

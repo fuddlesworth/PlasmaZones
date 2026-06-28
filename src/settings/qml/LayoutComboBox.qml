@@ -342,7 +342,7 @@ ComboBox {
     // dropdown appear scrolled to the wrong position.
     // Popup follows the WideComboBox z-stacking pattern so the dropdown
     // renders correctly when LayoutComboBox is hosted inside a
-    // Kirigami.OverlaySheet (e.g. the unified Window Rule editor's
+    // Kirigami.OverlaySheet (e.g. the unified Rule editor's
     // SetSnappingLayout / SetTilingAlgorithm action editors). Reparenting
     // to Overlay.overlay with a high `z` escapes the sheet's modal layer;
     // `popupType: Popup.Item` keeps it in-scene so we don't trigger the

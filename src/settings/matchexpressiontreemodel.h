@@ -15,7 +15,7 @@
 namespace PlasmaZones {
 
 /**
- * @brief `QAbstractItemModel` adapter that exposes a WindowRule match
+ * @brief `QAbstractItemModel` adapter that exposes a Rule match
  *        expression to `QtQuick.Controls.TreeView` for read-only display.
  *
  * The match expression is a tagged-union JSON tree shared with the editor:
@@ -26,7 +26,7 @@ namespace PlasmaZones {
  *
  * Roles expose **raw wire** fields (`fieldWire` / `opWire` / `value` /
  * `kind`); the QML delegate resolves wire → user-facing labels via the
- * existing `WindowRuleController::matchFields` / `operatorsForField`
+ * existing `RuleController::matchFields` / `operatorsForField`
  * tables. Keeping the model dumb (no controller dependency, no label
  * lookups) means a single C++ type with no plumbing — the existing
  * label-resolution logic stays in exactly one place in the QML layer.

@@ -13,12 +13,13 @@
 #include <PhosphorSnapEngine/PlacementDirective.h>
 #include <PhosphorProtocol/NavigationTypes.h>
 #include <PhosphorProtocol/WindowTypes.h>
-#include <PhosphorWindowRules/RuleEvaluator.h>
+#include <PhosphorRules/RuleEvaluator.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 #include <functional>
 #include <optional>
 #include <memory>
@@ -29,10 +30,10 @@ class LayoutRegistry;
 class Layout;
 }
 
-// PhosphorWindowRules::RuleEvaluator is included as a member type of
-// std::optional below (needs a complete type at declaration); WindowRuleSet
+// PhosphorRules::RuleEvaluator is included as a member type of
+// std::optional below (needs a complete type at declaration); RuleSet
 // is referenced only by pointer / reference, so a forward declaration would
-// suffice — but including RuleEvaluator.h pulls in WindowRuleSet.h
+// suffice — but including RuleEvaluator.h pulls in RuleSet.h
 // transitively anyway, so leave the explicit forward decls out and let
 // RuleEvaluator.h provide both.
 
@@ -234,7 +235,7 @@ public:
 
     /**
      * @brief Predicate deciding whether an opening window should start FLOATING
-     *        because a "Float this app" window rule matched it. Daemon-injected,
+     *        because a "Float this app" rule matched it. Daemon-injected,
      *        keyed by the live windowId, evaluated on the window-open path. When
      *        UNSET (default) no window is rule-floated and the engine keeps its
      *        historical open behaviour (path unit tests rely on this). Same
@@ -251,7 +252,7 @@ public:
     /**
      * @brief Resolver yielding the open-placement directive — SnapToZone ordinals
      *        plus an optional RouteToScreen target and an optional RouteToDesktop
-     *        target — for an opening window because a placement window rule matched
+     *        target — for an opening window because a placement rule matched
      *        it. Daemon-injected, keyed by the live windowId plus the screen the
      *        window is opening on (so a rule carrying a `ScreenId` constraint
      *        resolves against the window's current screen), evaluated on the
@@ -269,6 +270,30 @@ public:
     void setPlacementZonesResolver(PlacementZonesResolver resolver)
     {
         m_placementZonesResolver = std::move(resolver);
+    }
+
+    /**
+     * @brief Provider yielding the per-context gap override for a screen.
+     *
+     * Returns a PerScreenSnappingKey-shaped override map for the screen's
+     * CURRENT context (mode / virtual desktop / activity), or an empty map
+     * when no context rule applies. The map already folds in the per-monitor
+     * ScreenId rule, so when a provider is wired the engine consults it FIRST
+     * and only falls back to the direct per-screen snapping read when it
+     * returns empty (preserving unit-test behaviour where no provider is set).
+     *
+     * Mirrors AutotileEngine::setContextGapProvider so the snap resnap recompute
+     * honours the same context-gap cascade the snap COMMIT path resolves through
+     * DaemonGeometryResolver::contextGapOverrideFor. Daemon-injected; the engine
+     * library stays settings-agnostic (LGPL boundary). Same lifetime contract as
+     * the other std::function setters — clear with `{}` before destroying any
+     * captured state.
+     */
+    using ContextGapProvider = std::function<QVariantMap(const QString& screenId)>;
+
+    void setContextGapProvider(ContextGapProvider provider)
+    {
+        m_contextGapProvider = std::move(provider);
     }
 
     void windowClosed(const QString& windowId) override;
@@ -664,7 +689,7 @@ public:
     /// declaration in `Q_SIGNALS:` as a signal and generates a stub body
     /// for it, so placing this setter inside that section makes the
     /// translation unit redefine the function and the link fails.
-    void setExcludeRuleSet(const PhosphorWindowRules::WindowRuleSet* ruleSet);
+    void setExcludeRuleSet(const PhosphorRules::RuleSet* ruleSet);
 
     /// Provider that builds the full WindowQuery (window class / title / role /
     /// frame size / flags) for a live windowId. Daemon-injected, keyed by the
@@ -676,8 +701,7 @@ public:
     /// (default) the engine falls back to the appId-only query — the historical
     /// behaviour unit tests rely on. A null/empty optional from the provider
     /// (metadata not yet known) also falls back to appId-only.
-    using ExclusionQueryProvider =
-        std::function<std::optional<PhosphorWindowRules::WindowQuery>(const QString& windowId)>;
+    using ExclusionQueryProvider = std::function<std::optional<PhosphorRules::WindowQuery>(const QString& windowId)>;
 
     /// Inject the exclusion query provider. See ExclusionQueryProvider. Same
     /// lifetime contract as setExcludeRuleSet — the caller keeps captured state
@@ -687,7 +711,7 @@ public:
         m_exclusionQueryProvider = std::move(provider);
     }
 
-    /// True if @p appId matches an enabled `Exclude`-action WindowRule
+    /// True if @p appId matches an enabled `Exclude`-action Rule
     /// resolved against an appId-ONLY `WindowQuery`. This is a narrow seam:
     /// the runtime exclusion path is @ref isWindowExcluded, which evaluates the
     /// FULL window attributes; this method survives as (a) the early-init /
@@ -836,7 +860,7 @@ private:
     bool tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId);
 
     /// Check whether the window is excluded from the given navigation
-    /// action by a terminal `Exclude` action in the unified WindowRule
+    /// action by a terminal `Exclude` action in the unified Rule
     /// store. Emits navigationFeedback(false, action, "excluded", ...)
     /// and returns true when excluded so callers can early-return. False
     /// otherwise.
@@ -849,7 +873,7 @@ private:
     /// Shared tail of both exclusion entry points: bind the lazy evaluator to
     /// the current Exclude rule set (empty/null set short-circuits) and resolve
     /// @p query. Keeps the rule-set/evaluator invariant in one place.
-    bool evaluateExcludeRules(const PhosphorWindowRules::WindowQuery& query) const;
+    bool evaluateExcludeRules(const PhosphorRules::WindowQuery& query) const;
 
     /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr
     /// in early-init paths (before the daemon wires the store) — the
@@ -863,7 +887,7 @@ private:
     /// must be externally serialised (see RuleEvaluator.h's thread-
     /// safety note). Do not access from another thread without adding
     /// locking.
-    const PhosphorWindowRules::WindowRuleSet* m_excludeRuleSet = nullptr;
+    const PhosphorRules::RuleSet* m_excludeRuleSet = nullptr;
     /// Lazily constructed evaluator bound to @ref m_excludeRuleSet. Reset
     /// in `setExcludeRuleSet` when the pointer changes; the evaluator's
     /// internal prio-sort index and resolve cache key off the bound rule
@@ -872,7 +896,7 @@ private:
     /// a different rule-set pointer needs the explicit reset.
     ///
     /// @note Same daemon-main-thread-only contract as @ref m_excludeRuleSet.
-    mutable std::optional<PhosphorWindowRules::RuleEvaluator> m_excludeEvaluator;
+    mutable std::optional<PhosphorRules::RuleEvaluator> m_excludeEvaluator;
 
     /// Daemon-injected full-query provider for exclusion. Empty until the
     /// daemon wires it; while empty exclusion uses the appId-only query and the
@@ -914,6 +938,12 @@ private:
     // wires it; while empty no window is rule-snapped. See PlacementZonesResolver
     // doc above.
     PlacementZonesResolver m_placementZonesResolver{};
+
+    // Per-context gap override provider. Empty until the daemon wires it; while
+    // empty the engine reads the per-screen snapping override directly (with
+    // virtual->physical fallback) — the historical behaviour unit tests rely on.
+    // See ContextGapProvider doc above.
+    ContextGapProvider m_contextGapProvider{};
 };
 
 } // namespace PhosphorSnapEngine

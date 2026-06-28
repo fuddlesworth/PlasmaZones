@@ -50,14 +50,12 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     if (!w || m_effect->getWindowId(w) != windowId) {
         // Window gone (closed mid-snap — the close often races the async
         // snap reply, so slotWindowClosed's bookkeeping may have ALREADY
-        // run). Recording tiled tracking or acquiring decoration ownership
-        // now would re-create state nothing will ever clean up; drop any
-        // remnants instead. The exact-id check matters: findWindowById's
-        // appId fuzzy fallback can resolve a same-app SIBLING for a dead id,
-        // and hiding the sibling's title bar under the dead key would be
-        // unreleasable.
+        // run). Recording tiled tracking now would re-create state nothing
+        // will ever clean up; drop any remnants instead. The exact-id check
+        // matters: findWindowById's appId fuzzy fallback can resolve a
+        // same-app SIBLING for a dead id, and tracking the sibling under the
+        // dead key would strand it.
         AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-        m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
         return;
     }
     // A window can only be snap-managed by one screen at a time. Strip stale
@@ -66,24 +64,9 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     AutotileStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
     AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
 
-    // Decoration ownership. The manager owns the capability gate
-    // (userCanSetNoBorder — survives the already-borderless autotile→snap
-    // handoff, skips CSD windows), the prior-state capture, and the
-    // AlreadyPlaced sequence (capture moveResizeGeometry → setNoBorder →
-    // re-assert) that keeps the window filling its zone across the
-    // decoration change.
-    if (m_border.hideTitleBars) {
-        // Move any stale snap claim from another screen (no physical flap),
-        // then acquire on this one.
-        m_effect->decorationManager()->releaseOthersOfKind(windowId, DecorationManager::OwnerKind::Snap, screenId);
-        m_effect->decorationManager()->acquire(windowId, DecorationManager::snap(screenId),
-                                               DecorationManager::Placement::AlreadyPlaced);
-    } else {
-        // Hide-title-bars off: no acquire follows, so a bare cross-screen
-        // owner strip could orphan a hidden entry — release the whole kind
-        // instead (restores if a stale claim somehow exists, no-op otherwise).
-        m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
-    }
+    // Title-bar (borderless) state is driven entirely by rules through
+    // the effect's reconcileRuleHiddenTitleBar → DecorationManager path; this
+    // handler only records snap tiled-tracking for border RENDERING.
 
     // Border overlays are visual-only, so skip the off-desktop case (consistent
     // with updateAllBorders): an OutlinedBorderItem for an invisible window is
@@ -100,46 +83,7 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
         return;
     }
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-    // Release snap's decoration ownership. The manager restores the title bar
-    // only when no other owner remains — a window mid-transition between
-    // modes keeps autotile's claim, which replaces the old cross-mode guard.
-    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
     m_effect->removeWindowBorder(windowId);
-}
-
-bool SnapHandler::updateSnapHideTitleBars(bool hide)
-{
-    // Only act on change (mirrors AutotileHandler::updateHideTitleBarsSetting):
-    // a no-op call would otherwise walk an acquire-all / release-all pass and
-    // a full updateAllBorders for nothing.
-    if (m_border.hideTitleBars == hide) {
-        return false;
-    }
-    m_border.hideTitleBars = hide;
-    if (hide) {
-        // Hide on every currently snap-committed window. The windows are
-        // already placed in their zones, so the AlreadyPlaced sequence
-        // re-asserts the zone rect across the decoration change.
-        const auto pairs = AutotileStateHelpers::allTiledPairs(m_border);
-        for (const auto& p : pairs) {
-            m_effect->decorationManager()->acquire(p.first, DecorationManager::snap(p.second),
-                                                   DecorationManager::Placement::AlreadyPlaced);
-        }
-    } else {
-        // Release every snap ownership; the manager restores each title bar
-        // that no other owner (autotile mid-transition, rule hide) still
-        // claims. Deferred + an immediate drain: each restore is a 30-120 ms
-        // synchronous Wayland round-trip, so the drain runs them one per
-        // event-loop tick instead of stalling the compositor for the batch.
-        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Snap,
-                                                        DecorationManager::Restore::Deferred);
-        m_effect->decorationManager()->drainPendingRestores();
-    }
-    // The border refresh is the CALLER's job on a true return — full
-    // symmetry with AutotileHandler::updateHideTitleBarsSetting, so a
-    // caller following either pattern never double-walks the stacking
-    // order.
-    return true;
 }
 
 void SnapHandler::clearSnapTracking()
@@ -465,7 +409,11 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         // so recording it here would double-track the window — same
         // discriminator as slotApplyGeometryRequested / the async snap path.
         if (!screenId.isEmpty() && !isAutotile) {
-            markWindowSnapped(m_effect->getWindowId(targetWindow), screenId);
+            const QString wid = m_effect->getWindowId(targetWindow);
+            markWindowSnapped(wid, screenId);
+            // Snapped — re-resolve Mode / IsSnapped rules now instead of waiting
+            // for the daemon broadcast, consistent with the drag-commit paths.
+            m_effect->invalidateRuleCacheForStateChange(wid);
         }
 
         // Snap Assist continuation: only for manual-mode screens.

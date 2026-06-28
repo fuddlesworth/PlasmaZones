@@ -85,15 +85,12 @@ public:
     P_CONFIG_GROUP(snappingZonesOpacityGroup, "Snapping.Zones.Opacity")
     P_CONFIG_GROUP(snappingZonesBorderGroup, "Snapping.Zones.Border")
     P_CONFIG_GROUP(snappingZonesLabelsGroup, "Snapping.Zones.Labels")
-    // Snapping window appearance — the post-snap window's border / title-bar
-    // decoration (parallel to Tiling.Appearance.*, distinct from the
-    // Snapping.Zones.* drag-time zone overlay above).
-    P_CONFIG_GROUP(snappingAppearanceGroup, "Snapping.Appearance")
-    P_CONFIG_GROUP(snappingAppearanceColorsGroup, "Snapping.Appearance.Colors")
-    P_CONFIG_GROUP(snappingAppearanceDecorationsGroup, "Snapping.Appearance.Decorations")
-    P_CONFIG_GROUP(snappingAppearanceBordersGroup, "Snapping.Appearance.Borders")
     P_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     P_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
+    // Snapping.Gaps holds only the snapping-specific adjacency threshold. The
+    // inner/outer gap values are no longer stored in config at all: they live on
+    // the managed baseline appearance rule and are read back through Settings'
+    // gap getters.
     P_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
 
     // Display (mode-neutral) — per-mode disable lists. Lives outside Snapping.*
@@ -105,13 +102,9 @@ public:
     P_CONFIG_GROUP(animationsWindowFilteringGroup, "Animations.WindowFiltering")
 
     // Tiling sub-groups
-    P_CONFIG_GROUP(tilingAppearanceGroup, "Tiling.Appearance")
     P_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
     P_CONFIG_GROUP(tilingBehaviorGroup, "Tiling.Behavior")
     P_CONFIG_GROUP(tilingBehaviorTriggersGroup, "Tiling.Behavior.Triggers")
-    P_CONFIG_GROUP(tilingAppearanceColorsGroup, "Tiling.Appearance.Colors")
-    P_CONFIG_GROUP(tilingAppearanceDecorationsGroup, "Tiling.Appearance.Decorations")
-    P_CONFIG_GROUP(tilingAppearanceBordersGroup, "Tiling.Appearance.Borders")
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
 
     // Parent groups (for purge enumeration — covers all sub-groups)
@@ -305,13 +298,6 @@ public:
     // Config Keys — Snapping.Gaps
     // ═══════════════════════════════════════════════════════════════════════════
 
-    P_CONFIG_KEY(innerKey, "Inner")
-    P_CONFIG_KEY(outerKey, "Outer")
-    P_CONFIG_KEY(usePerSideKey, "UsePerSide")
-    P_CONFIG_KEY(topKey, "Top")
-    P_CONFIG_KEY(bottomKey, "Bottom")
-    P_CONFIG_KEY(leftKey, "Left")
-    P_CONFIG_KEY(rightKey, "Right")
     P_CONFIG_KEY(adjacentThresholdKey, "AdjacentThreshold")
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -345,29 +331,9 @@ public:
     P_CONFIG_KEY(lockedScreensKey, "LockedScreens")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Colors + Snapping.Appearance.Colors
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // (uses useSystemKey, activeKey, inactiveKey)
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Decorations + Snapping.Appearance.Decorations
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    P_CONFIG_KEY(hideTitleBarsKey, "HideTitleBars")
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Borders + Snapping.Appearance.Borders
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    P_CONFIG_KEY(showBorderKey, "ShowBorder")
-    // (also uses widthKey, radiusKey)
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Gaps
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // (uses innerKey, outerKey, usePerSideKey, topKey, bottomKey, leftKey, rightKey)
     P_CONFIG_KEY(smartGapsKey, "SmartGaps")
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -382,7 +348,7 @@ public:
     // group), so it is declared with the rest of the animation keys below
     // rather than here. Note: the per-list `Applications` / `WindowClasses`
     // leaf-key accessors were retired with the v4 fold of exclusion lists
-    // into Application-subject WindowRules — the migration reads from
+    // into Application-subject Rules — the migration reads from
     // `v3ExcludedApplicationsKey` / `v3ExcludedWindowClassesKey` below,
     // and no live config path remains.
 
@@ -574,7 +540,6 @@ public:
 
     P_CONFIG_GROUP(zoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_ZONE_SELECTOR ":")
     P_CONFIG_GROUP(autotileScreenGroupPrefix, P_PER_SCREEN_PREFIX_AUTOTILE ":")
-    P_CONFIG_GROUP(snappingScreenGroupPrefix, P_PER_SCREEN_PREFIX_SNAPPING ":")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1/v2/v3/v4 accessors — used ONLY by migration code.
@@ -696,7 +661,7 @@ public:
         //
         // Per-mode disable keys (`v3*DisabledMonitorsKey` etc.) lived in the v3
         // Display group; migrateV2ToV3 wrote them there and migrateV3ToV4 reads
-        // and removes them as the values move into windowrules.json. They no
+        // and removes them as the values move into rules.json. They no
         // longer exist on disk at runtime (v4+) — Settings::disableEntriesFor /
         // writeDisableEntries route through the rule store instead.
         //
@@ -736,7 +701,7 @@ public:
         //
         // The `Animations.AnimationAppRules` array carried per-window animation
         // overrides up through v4. migrateV3ToV4 stashes that array for
-        // finalizeV4Conversion to convert into WindowRules, then removes the key
+        // finalizeV4Conversion to convert into Rules, then removes the key
         // permanently. The group name `Animations` is unchanged at runtime (it
         // still hosts ShaderProfileTree), but the key accessor is migration-only:
         // it lives here so the migration is the sole remaining reader of the v4
@@ -774,17 +739,26 @@ public:
         // the legacy `Exclusions.{Applications,WindowClasses}` lists and
         // consumed by `finalizeV4Conversion`, which converts each surviving
         // pattern into an Application-subject `AppId AppIdMatches <pattern>
-        // Exclude` WindowRule. Same purge-protection semantics as the two
+        // Exclude` Rule. Same purge-protection semantics as the two
         // sibling stash keys above.
         P_CONFIG_KEY(v4ExclusionStashKey, "_v4ExclusionStash")
         // Fourth v4 scratch-root key — set on the root by `migrateV3ToV4`
         // from the legacy `Animations.WindowFiltering.{Applications,WindowClasses}`
         // lists and consumed by `finalizeV4Conversion`, which converts each
         // surviving pattern into a `DesktopFile`/`WindowClass Contains
-        // <pattern> → ExcludeAnimations` WindowRule (preserving the
+        // <pattern> → ExcludeAnimations` Rule (preserving the
         // legacy effect-bridge match-field split). Same purge-protection
         // semantics as the three sibling stash keys above.
         P_CONFIG_KEY(v4AnimationExclusionStashKey, "_v4AnimationExclusionStash")
+
+        // v5 migration scratch-root key — set on the root by `migrateV4ToV5`
+        // from the deleted per-mode appearance / gap groups (and per-screen
+        // gap subsets) and consumed by `finalizeV5Conversion`, which converts
+        // each differing value into a non-managed override Rule. Same
+        // purge-protection semantics as the v4 sibling stash keys above: it is
+        // listed in `Settings::purgeStaleKeys`' preserved set so a save() cycle
+        // can't drop it while the conversion is still pending.
+        P_CONFIG_KEY(v5AppearanceStashKey, "_v5AppearanceStash")
 
         // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and
         // finalizeV4Conversion. These mirror the live `displayGroup`,
@@ -865,13 +839,13 @@ private:
 // ─── Disable-rule label helpers ─────────────────────────────────────────────
 // Shared between the live Settings disable-list writer
 // (Settings::writeDisableEntries) and the v3→v4 migration's disable-rule
-// builders. Both call sites must produce the same `WindowRule::name` string for
+// builders. Both call sites must produce the same `Rule::name` string for
 // a given (mode, screen, desktop, activity) tuple so that resaving an existing
 // disable list (e.g. after a UI edit) doesn't fork into two slightly different
 // labels for what is otherwise the same rule.
 //
-// These are NOT translated. `WindowRule::name` is the persisted identity
-// surface in windowrules.json; running the app under different locales must
+// These are NOT translated. `Rule::name` is the persisted identity
+// surface in rules.json; running the app under different locales must
 // not change its on-disk text. The rule editor surfaces the name verbatim,
 // matching the historic behaviour.
 inline QString autotileDisableRulePrefix()
@@ -889,11 +863,11 @@ inline QString scrollingDisableRulePrefix()
     return QStringLiteral("Scrolling off · ");
 }
 
-/// Persistent label-prefix for the WindowRule::name field of a per-mode
+/// Persistent label-prefix for the Rule::name field of a per-mode
 /// disable rule. Exhaustive switch — a future `Mode` enum value added in
 /// `AssignmentEntry.h` without an entry here fires a `Q_UNREACHABLE`
 /// diagnostic rather than silently producing an empty prefix that lands
-/// in the persisted `WindowRule::name` as bare ` · DP-1` (parseable but
+/// in the persisted `Rule::name` as bare ` · DP-1` (parseable but
 /// anonymous, and identical across modes — losing the screen→mode
 /// affinity that makes the rule editor scannable).
 inline QString disableRulePrefixFor(PhosphorZones::AssignmentEntry::Mode mode)

@@ -7,7 +7,7 @@
 
 PlasmaZones needs a standalone Wayland compositor (`phosphor-compositor-core`) to gain full control over window decorations, tabbing, shading, effects, and plugin extensibility — capabilities that the current KWin effect plugin path cannot deliver due to KWin's API constraints.
 
-The existing phosphor-* library stack (50+ libraries, ~100k+ LOC) provides the entire policy/shell layer: placement engines, zone management, snapping, animation, scripting, window rules, shortcuts, config, IPC, and shell UI. All of this connects via `ICompositorBridge` — a 23-method interface that any compositor implements to plug in.
+The existing phosphor-* library stack (50+ libraries, ~100k+ LOC) provides the entire policy/shell layer: placement engines, zone management, snapping, animation, scripting, rules, shortcuts, config, IPC, and shell UI. All of this connects via `ICompositorBridge` — a 23-method interface that any compositor implements to plug in.
 
 The KWin effect plugin remains a separate target. Both share the daemon via D-Bus.
 
@@ -134,14 +134,14 @@ src/compositor/    — The compositor binary (main(), wiring)
 **Technical approach:**
 - `PhosphorCompositorBridge` with `WindowHandle = XdgToplevel*`
 - Window identity: `appId` from `set_app_id()` + monotonic instanceId
-- PolicyEngine links phosphor-zones, phosphor-snap-engine, phosphor-placement, phosphor-windowrule, phosphor-config directly (no IPC for policy decisions)
+- PolicyEngine links phosphor-zones, phosphor-snap-engine, phosphor-placement, phosphor-rule, phosphor-config directly (no IPC for policy decisions)
 - Drag resolution, navigation, autotile all in-process (<1μs per call)
 - Compositor claims `org.plasmazones.Service` on session bus
-- D-Bus interfaces: Settings, Layouts, WindowRules, Windows, Zones, Control
+- D-Bus interfaces: Settings, Layouts, Rules, Windows, Zones, Control
 - No daemon required in standalone mode — compositor handles persistence directly
 - Session restore: save window→zone on shutdown, restore on startup
 
-**Integrates:** `phosphor-compositor` (ICompositorBridge, DecorationManager), `phosphor-zones` (LayoutRegistry, ZoneDetector), `phosphor-snap-engine` (SnapEngine), `phosphor-placement` (WindowTrackingService), `phosphor-windowrule` (RuleEvaluator), `phosphor-config` (Store), `phosphor-protocol` (wire types)
+**Integrates:** `phosphor-compositor` (ICompositorBridge, DecorationManager), `phosphor-zones` (LayoutRegistry, ZoneDetector), `phosphor-snap-engine` (SnapEngine), `phosphor-placement` (WindowTrackingService), `phosphor-rule` (RuleEvaluator), `phosphor-config` (Store), `phosphor-protocol` (wire types)
 
 **Verify:** Zone snapping works in-process (zero D-Bus), `phosphorctl settings set snapping.threshold 20` takes immediate effect, session restore round-trips, settings app live-updates compositor state
 
@@ -180,7 +180,7 @@ src/compositor/    — The compositor binary (main(), wiring)
 - Rounded corners: stencil/alpha clip at corners.
 - Zone-aware state: decoration color/highlight driven by PolicyEngine::zoneAssignmentChanged signal (in-process)
 
-**Integrates:** `phosphor-animation` (curves, spring), `phosphor-rendering` (ShaderNodeRhi for blur/effects), `phosphor-compositor` (DecorationManager, DecorationDefaults), `phosphor-windowrule` (decoration overrides via PolicyEngine), `phosphor-theme`
+**Integrates:** `phosphor-animation` (curves, spring), `phosphor-rendering` (ShaderNodeRhi for blur/effects), `phosphor-compositor` (DecorationManager, DecorationDefaults), `phosphor-rule` (decoration overrides via PolicyEngine), `phosphor-theme`
 
 **Verify:** Title bars render with working buttons, tab groups form/switch, shading animates, blur visible behind transparent terminals, shadows present, rounded corners, zone highlight color matches active zone
 
@@ -207,7 +207,7 @@ src/compositor/    — The compositor binary (main(), wiring)
 ## Phase 9: Tiered Plugin System
 
 **Delivers:** Three-tier plugins:
-1. **Scripts (Luau):** Sandboxed, hot-reload, window rules/placement/events
+1. **Scripts (Luau):** Sandboxed, hot-reload, rules/placement/events
 2. **QML Widgets:** Panel applets, overlay widgets via existing PluginLoader/Registry
 3. **C++ Extensions:** Full-power native plugins with render hooks, protocol extensions, input filters
 

@@ -14,7 +14,7 @@ import org.plasmazones.common as PZCommon
  *
  * An action is a `{ type, ...params }` JSON object. The row exposes a type
  * picker and one editor per parameter, both driven entirely by the
- * `actionTypeOptions` metadata from `WindowRuleController.actionTypes()` —
+ * `actionTypeOptions` metadata from `RuleController.actionTypes()` —
  * there is no per-type `if (t === "...")` ladder here. Two-way: edits emit
  * `actionEdited(updatedAction)`; the parent owns the list.
  *
@@ -29,11 +29,11 @@ ColumnLayout {
 
     /// The action JSON object being edited — `{ type, ...params }`.
     required property var action
-    /// The WindowRuleController — exposes `defaultPayloadFor(typeWire)` so a
+    /// The RuleController — exposes `defaultPayloadFor(typeWire)` so a
     /// type switch can pre-seed the new param set in one place (matches the
     /// shape ActionListEditor uses when appending a fresh action).
     required property var controller
-    /// Registered action types from `WindowRuleController.actionTypes()` —
+    /// Registered action types from `RuleController.actionTypes()` —
     /// each entry: `{ value, label, params: [{ key, kind, label, ... }],
     /// domain: "context"|"window" }`. The `domain` field is consulted by the
     /// row-level incompatibility flag below (`_currentTypeIncompatible`).
@@ -64,7 +64,7 @@ ColumnLayout {
     /// Parameter descriptors for the current type (empty when none / unknown).
     readonly property var _params: row._typeEntry !== undefined ? row._typeEntry.params : []
     /// Combined input-format hint(s) for the current params — the optional
-    /// `param.hint` strings from the action metadata (windowruleauthoring's
+    /// `param.hint` strings from the action metadata (ruleauthoring's
     /// paramHint), joined one per line. Empty when no param carries a hint.
     /// Surfaces the accepted syntax (e.g. zone-number lists / ranges) that a
     /// placeholder can't show once the field holds a value; there is no
@@ -189,9 +189,10 @@ ColumnLayout {
     // SetBorderVisible / SetUsePerSideOuterGap / RestorePosition — dispatch is by
     // `kind`, not this list). Stores a JSON bool.
     property Component _boolParamEditor
-    // Colour swatch + picker for `kind == "color"` params (SetBorderColor).
-    // Stores a `#AARRGGBB` wire string (alpha-first, matching QColor::HexArgb and
-    // the global zone/border colours) so transparency set in the picker survives.
+    // Colour swatch + picker for `kind == "color"` params — the single `value`
+    // colour on SetBorderColorActive / SetBorderColorInactive. Stores a
+    // `#AARRGGBB` wire string (alpha-first, matching QColor::HexArgb and the
+    // global zone/border colours) so transparency set in the picker survives.
     // The validator accepts the `#AARRGGBB` shape and the effect-side consumer
     // parses it via `QColor(QString)` (which reads 9-digit hex alpha-first).
     property Component _colorParamEditor
@@ -207,7 +208,7 @@ ColumnLayout {
     property Component _virtualDesktopEditor
 
     /// Encode a QML color to a `#AARRGGBB` wire string (alpha-first) — the form
-    /// the SetBorderColor validator accepts and the consumer parses back via
+    /// the border-colour validator accepts and the consumer parses back via
     /// QColor::HexArgb. Mirrors how general-settings border colours are stored.
     function _toHexArgb(c) {
         function h(v) {
@@ -331,6 +332,7 @@ ColumnLayout {
                     "name": o.label,
                     "category": o.category,
                     "categoryOrder": o.categoryOrder,
+                    "categoryGroup": o.categoryGroup,
                     "dimmed": incompatible,
                     "dimReason": incompatible ? i18n("This action runs during context resolution and cannot match window properties. Remove the window conditions from the rule's match, or pick a different action.") : ""
                 };
@@ -366,7 +368,7 @@ ColumnLayout {
             source: "dialog-warning"
             Accessible.name: i18n("Action incompatible with the rule's match")
             ToolTip.visible: incompatibleHover.hovered
-            ToolTip.delay: 300
+            ToolTip.delay: Kirigami.Units.toolTipDelay
             ToolTip.text: i18n("This action runs during context resolution, but the rule's match references window properties, so the action would never fire as written.")
 
             HoverHandler {
@@ -603,21 +605,26 @@ ColumnLayout {
         RowLayout {
             readonly property var _param: parent.modelData
             readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : "#FF3DAEE9"
+            // A border-colour action's single `value` param may carry the "accent"
+            // sentinel ("follow the system accent") instead of a hex string. It is
+            // not a QColor, so render the live accent colour for the swatch and a
+            // word for the label rather than letting QColor("accent") fall to black.
+            readonly property bool _isAccent: _hex === "accent"
 
             spacing: Kirigami.Units.smallSpacing
 
             ColorButton {
                 id: swatch
 
-                color: _hex
+                color: parent._isAccent ? Kirigami.Theme.highlightColor : parent._hex
                 Accessible.name: _param.label
                 onClicked: colorDialog.open()
             }
 
             Label {
-                // Show the stored #AARRGGBB wire value (alpha-first), which the
-                // swatch round-trips through QColor::HexArgb.
-                text: parent._hex.toUpperCase()
+                // Show the stored #AARRGGBB wire value (alpha-first), or "Accent"
+                // for the system-accent sentinel.
+                text: parent._isAccent ? i18n("Accent") : parent._hex.toUpperCase()
                 font: Kirigami.Theme.fixedWidthFont
             }
 

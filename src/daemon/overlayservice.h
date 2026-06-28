@@ -398,7 +398,7 @@ public:
     void pickerConfirmSelection();
 
     /// Re-push the context lock state to any open zone selector and the layout
-    /// picker. Called when window rules change at runtime (e.g. a `LockContext`
+    /// picker. Called when rules change at runtime (e.g. a `LockContext`
     /// rule is toggled, re-prioritised or re-matched) so an already-visible
     /// overlay's lock affordance updates in place instead of waiting for the
     /// next show — mirroring how `ISettings::settingsChanged` refreshes the

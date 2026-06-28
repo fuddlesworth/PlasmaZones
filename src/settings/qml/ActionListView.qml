@@ -207,6 +207,12 @@ ColumnLayout {
                 return num + ": " + names[num - 1];
             return num > 0 ? String(num) : rawStr;
         }
+        if (kind === "color") {
+            // "accent" is the follow-the-system-accent sentinel; otherwise a
+            // #AARRGGBB hex string. Show a readable word / upper-cased hex (the
+            // actual swatch is rendered alongside this pill).
+            return rawStr === "accent" ? i18n("Accent") : rawStr.toUpperCase();
+        }
         return rawStr;
     }
 
@@ -348,19 +354,42 @@ ColumnLayout {
 
                         Rectangle {
                             Layout.alignment: Qt.AlignVCenter
-                            implicitWidth: valueLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
-                            implicitHeight: valueLabel.implicitHeight + Kirigami.Units.smallSpacing
+                            implicitWidth: pillContent.implicitWidth + Kirigami.Units.largeSpacing * 2
+                            implicitHeight: pillContent.implicitHeight + Kirigami.Units.smallSpacing
                             radius: Kirigami.Units.smallSpacing
                             color: Kirigami.Theme.alternateBackgroundColor
                             border.width: Math.round(Screen.devicePixelRatio)
                             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
 
-                            Label {
-                                id: valueLabel
+                            RowLayout {
+                                id: pillContent
 
                                 anchors.centerIn: parent
-                                text: root._resolveParamValue(paramRow.modelData, actionDelegate._action)
-                                font.family: Kirigami.Theme.smallFont.family
+                                spacing: Kirigami.Units.smallSpacing
+
+                                // Colour swatch for `color`-kind params — the raw
+                                // value is a #AARRGGBB hex or the "accent" sentinel
+                                // (resolved to the live accent colour for display).
+                                Rectangle {
+                                    readonly property string _rawColor: String(actionDelegate._action[paramRow.modelData.key] || "")
+
+                                    visible: paramRow.modelData.kind === "color"
+                                    Layout.alignment: Qt.AlignVCenter
+                                    implicitWidth: valueLabel.implicitHeight
+                                    implicitHeight: valueLabel.implicitHeight
+                                    radius: Math.round(Kirigami.Units.smallSpacing / 2)
+                                    color: paramRow.modelData.kind !== "color" ? "transparent" : (_rawColor === "accent" ? Kirigami.Theme.highlightColor : _rawColor)
+                                    border.width: Math.round(Screen.devicePixelRatio)
+                                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+                                }
+
+                                Label {
+                                    id: valueLabel
+
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: root._resolveParamValue(paramRow.modelData, actionDelegate._action)
+                                    font.family: Kirigami.Theme.smallFont.family
+                                }
                             }
                         }
                     }

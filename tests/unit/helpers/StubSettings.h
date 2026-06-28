@@ -356,55 +356,35 @@ public:
     {
     }
 
-    // IZoneGeometrySettings
-    int zonePadding() const override
+    // IZoneGeometrySettings — gaps are read-only getters now (the global
+    // default is rule-backed; no setters on the interface).
+    int innerGap() const override
     {
         return 8;
-    }
-    void setZonePadding(int) override
-    {
     }
     int outerGap() const override
     {
         return 8;
     }
-    void setOuterGap(int) override
-    {
-    }
     bool usePerSideOuterGap() const override
     {
         return false;
-    }
-    void setUsePerSideOuterGap(bool) override
-    {
     }
     int outerGapTop() const override
     {
         return 8;
     }
-    void setOuterGapTop(int) override
-    {
-    }
     int outerGapBottom() const override
     {
         return 8;
-    }
-    void setOuterGapBottom(int) override
-    {
     }
     int outerGapLeft() const override
     {
         return 8;
     }
-    void setOuterGapLeft(int) override
-    {
-    }
     int outerGapRight() const override
     {
         return 8;
-    }
-    void setOuterGapRight(int) override
-    {
     }
     int adjacentThreshold() const override
     {
@@ -436,7 +416,7 @@ public:
     }
 
     // IWindowExclusionSettings — the per-app / per-class exclusion list
-    // accessors retired in v4 (folded into unified WindowRule store).
+    // accessors retired in v4 (folded into unified Rule store).
     bool excludeTransientWindows() const override
     {
         return false;
@@ -520,7 +500,7 @@ public:
     }
     // animationExcludedApplications / animationExcludedWindowClasses
     // overrides retired in v4 alongside the ISettings virtuals — the
-    // lists folded into ExcludeAnimations WindowRules.
+    // lists folded into ExcludeAnimations Rules.
 
     // IZoneSelectorSettings
     bool zoneSelectorEnabled() const override
@@ -829,109 +809,6 @@ public:
     void setSnappingFocusFollowsMouse(bool v) override
     {
         m_snappingFocusFollowsMouse = v;
-    }
-    bool autotileHideTitleBars() const override
-    {
-        return false;
-    }
-    void setAutotileHideTitleBars(bool) override
-    {
-    }
-    bool autotileShowBorder() const override
-    {
-        return false;
-    }
-    void setAutotileShowBorder(bool) override
-    {
-    }
-    int autotileBorderWidth() const override
-    {
-        return 2;
-    }
-    void setAutotileBorderWidth(int) override
-    {
-    }
-    int autotileBorderRadius() const override
-    {
-        return 0;
-    }
-    void setAutotileBorderRadius(int) override
-    {
-    }
-    QColor autotileBorderColor() const override
-    {
-        return Qt::white;
-    }
-    void setAutotileBorderColor(const QColor&) override
-    {
-    }
-    QColor autotileInactiveBorderColor() const override
-    {
-        return {};
-    }
-    void setAutotileInactiveBorderColor(const QColor&) override
-    {
-    }
-    bool autotileUseSystemBorderColors() const override
-    {
-        return false;
-    }
-    void setAutotileUseSystemBorderColors(bool) override
-    {
-    }
-    bool snappingHideTitleBars() const override
-    {
-        // Distinct from snappingShowBorder so the D-Bus batch test can detect a
-        // registration swap between the two adjacent bool keys via value-mirroring.
-        return true;
-    }
-    void setSnappingHideTitleBars(bool) override
-    {
-    }
-    bool snappingShowBorder() const override
-    {
-        return false;
-    }
-    void setSnappingShowBorder(bool) override
-    {
-    }
-    int snappingBorderWidth() const override
-    {
-        return 2;
-    }
-    void setSnappingBorderWidth(int) override
-    {
-    }
-    int snappingBorderRadius() const override
-    {
-        return 0;
-    }
-    void setSnappingBorderRadius(int) override
-    {
-    }
-    QColor snappingBorderColor() const override
-    {
-        return Qt::white;
-    }
-    void setSnappingBorderColor(const QColor&) override
-    {
-    }
-    QColor snappingInactiveBorderColor() const override
-    {
-        // A distinct, valid color (active is white) so the D-Bus batch test can
-        // round-trip it through HexArgb and catch an active/inactive swap.
-        return Qt::black;
-    }
-    void setSnappingInactiveBorderColor(const QColor&) override
-    {
-    }
-    bool snappingUseSystemBorderColors() const override
-    {
-        // Distinct from snappingShowBorder for the same batch-test swap detection.
-        return true;
-    }
-    void setSnappingUseSystemBorderColors(bool) override
-    {
     }
     StickyWindowHandling autotileStickyWindowHandling() const override
     {

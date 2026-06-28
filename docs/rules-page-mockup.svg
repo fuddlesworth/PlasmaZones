@@ -1,0 +1,254 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 1372" font-family="Noto Sans, Segoe UI, sans-serif">
+  <style>
+    .bg     { fill: #f4f5f6; }
+    .card   { fill: #ffffff; stroke: #dfe1e2; stroke-width: 1; }
+    .title  { fill: #232629; font-size: 21px; font-weight: 700; }
+    .sub    { fill: #7f8c8d; font-size: 12px; }
+    .ghead  { fill: #7f8c8d; font-size: 11px; font-weight: 700; letter-spacing: 1.2px; }
+    .gcount { fill: #95a5a6; font-size: 11px; }
+    .prim   { fill: #232629; font-size: 13px; }
+    .act    { fill: #232629; font-size: 13px; font-weight: 600; }
+    .actmut { fill: #7f8c8d; font-size: 13px; font-weight: 600; }
+    .mon    { fill: #232629; font-size: 14px; font-weight: 700; }
+    .monst  { fill: #5a6268; font-size: 11.5px; }
+    .monmut { fill: #95a5a6; font-size: 11.5px; }
+    .icn    { fill: #95a5a6; font-size: 14px; }
+    .arrow  { fill: #b3b9bd; font-size: 13px; }
+    .sep    { stroke: #eceeef; stroke-width: 1; }
+    .chip   { fill: #ffffff; stroke: #cfd3d6; stroke-width: 1; }
+    .chipt  { fill: #5a6268; font-size: 12px; }
+    .accent { fill: #3daee9; }
+    .accentt{ fill: #ffffff; font-size: 13px; font-weight: 600; }
+    .guide  { stroke: #d3d7da; stroke-width: 1.2; }
+    .nodet  { font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px; fill: #2980b9; }
+    .field  { fill: #232629; font-size: 12.5px; font-weight: 600; }
+    .op     { fill: #95a5a6; font-size: 10px; letter-spacing: 0.5px; }
+    .valt   { fill: #2c3e50; font-size: 12px; }
+    .secl   { fill: #5a6268; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+    .tag    { fill: #eef2f4; }
+    .tagt   { fill: #7f8c8d; font-size: 9.5px; font-weight: 700; letter-spacing: 0.8px; }
+  </style>
+
+  <rect class="bg" width="920" height="1372"/>
+
+  <!-- ── Header ── -->
+  <rect x="0" y="0" width="920" height="58" fill="#ffffff" stroke="#dfe1e2" stroke-width="1"/>
+  <text class="title" x="24" y="30">Rules</text>
+  <text class="sub"   x="24" y="47">One surface for every window-matching rule — monitors, apps, activities, animations.</text>
+
+  <!-- ── Monitors overview card ── -->
+  <rect class="card" x="24" y="74" width="872" height="138" rx="8"/>
+  <text class="ghead" x="40" y="100">MONITORS</text>
+  <text class="gcount" x="803" y="100" text-anchor="end">read-only · click a monitor to filter the list</text>
+  <rect x="40" y="110" width="266" height="86" rx="6" fill="#f8f9fa" stroke="#e4e6e7"/>
+  <text class="mon"   x="56" y="138">DP-2</text>
+  <text class="monst" x="56" y="159">▦  Grid layout</text>
+  <text class="monmut" x="56" y="180">3 rules</text>
+  <rect x="326" y="110" width="266" height="86" rx="6" fill="#f8f9fa" stroke="#e4e6e7"/>
+  <text class="mon"   x="342" y="138">HDMI-A-1</text>
+  <text class="monst" x="342" y="159">⊘  Tiling off</text>
+  <text class="monmut" x="342" y="180">1 rule</text>
+  <rect x="612" y="110" width="266" height="86" rx="6" fill="#f8f9fa" stroke="#e4e6e7" stroke-dasharray="4 3"/>
+  <text class="mon"   x="628" y="138">eDP-1</text>
+  <text class="monmut" x="628" y="159">— Not assigned —</text>
+  <rect x="628" y="168" width="92" height="22" rx="11" class="chip"/>
+  <text class="chipt" x="674" y="183" text-anchor="middle">+ Add rule</text>
+
+  <!-- ── Search + Add rule ── -->
+  <rect x="24" y="232" width="700" height="38" rx="6" fill="#ffffff" stroke="#cfd3d6"/>
+  <text x="42" y="256" fill="#9aa0a4" font-size="13px">🔍  Search rules…</text>
+  <rect x="740" y="232" width="156" height="38" rx="6" class="accent"/>
+  <text class="accentt" x="818" y="256" text-anchor="middle">+  Add rule</text>
+
+  <!-- ── Filter chips ── -->
+  <text class="sub" x="24" y="304">Filter</text>
+  <rect x="68"  y="290" width="46"  height="24" rx="12" class="accent"/>
+  <text x="91"  y="306" text-anchor="middle" fill="#ffffff" font-size="12px">All</text>
+  <rect x="122" y="290" width="78"  height="24" rx="12" class="chip"/>
+  <text x="161" y="306" text-anchor="middle" class="chipt">Monitor</text>
+  <rect x="208" y="290" width="96"  height="24" rx="12" class="chip"/>
+  <text x="256" y="306" text-anchor="middle" class="chipt">Application</text>
+  <rect x="312" y="290" width="74"  height="24" rx="12" class="chip"/>
+  <text x="349" y="306" text-anchor="middle" class="chipt">Activity</text>
+  <rect x="394" y="290" width="86"  height="24" rx="12" class="chip"/>
+  <text x="437" y="306" text-anchor="middle" class="chipt">Animation</text>
+
+  <!-- ════ GROUP: MONITOR & LAYOUT ════ -->
+  <text class="ghead"  x="24"  y="346">MONITOR &amp; LAYOUT</text>
+  <text class="gcount" x="896" y="346" text-anchor="end">4 rules</text>
+  <rect class="card" x="24" y="356" width="872" height="152" rx="8"/>
+  <line class="sep" x1="24" y1="394" x2="896" y2="394"/>
+  <line class="sep" x1="24" y1="432" x2="896" y2="432"/>
+  <line class="sep" x1="24" y1="470" x2="896" y2="470"/>
+  <circle cx="48" cy="375" r="5" class="accent"/>
+  <text class="prim"  x="68"  y="379">DP-2  ·  Desktop 2  ·  “Work”</text>
+  <text class="arrow" x="540" y="379">→</text>
+  <text class="act"   x="566" y="379">Autotile · dwindle</text>
+  <text class="icn"   x="838" y="380">✎</text><text class="icn" x="866" y="380">⌫</text>
+  <circle cx="48" cy="413" r="5" class="accent"/>
+  <text class="prim"  x="68"  y="417">DP-2</text>
+  <text class="arrow" x="540" y="417">→</text>
+  <text class="act"   x="566" y="417">Snapping · Thirds</text>
+  <text class="icn"   x="838" y="418">✎</text><text class="icn" x="866" y="418">⌫</text>
+  <circle cx="48" cy="451" r="5" class="accent"/>
+  <text class="prim"  x="68"  y="455">HDMI-A-1</text>
+  <text class="arrow" x="540" y="455">→</text>
+  <text class="actmut" x="566" y="455">Tiling disabled</text>
+  <text class="icn"   x="838" y="456">✎</text><text class="icn" x="866" y="456">⌫</text>
+  <circle cx="48" cy="489" r="5" fill="none" stroke="#b3b9bd" stroke-width="1.5"/>
+  <text class="prim"  x="68"  y="493" fill="#9aa0a4">eDP-1  ·  Activity “Travel”</text>
+  <text class="arrow" x="540" y="493">→</text>
+  <text class="actmut" x="566" y="493">Snapping · Single</text>
+  <text class="icn"   x="838" y="494">✎</text><text class="icn" x="866" y="494">⌫</text>
+
+  <!-- ════ GROUP: APPLICATIONS ════ -->
+  <text class="ghead"  x="24"  y="546">APPLICATIONS</text>
+  <text class="gcount" x="896" y="546" text-anchor="end">3 rules</text>
+  <rect class="card" x="24" y="556" width="872" height="114" rx="8"/>
+  <line class="sep" x1="24" y1="594" x2="896" y2="594"/>
+  <line class="sep" x1="24" y1="632" x2="896" y2="632"/>
+  <circle cx="48" cy="575" r="5" class="accent"/>
+  <text class="prim"  x="68"  y="579">Krita  ·  utility / toolbox windows</text>
+  <text class="arrow" x="540" y="579">→</text>
+  <text class="act"   x="566" y="579">Float</text>
+  <text class="icn"   x="838" y="580">✎</text><text class="icn" x="866" y="580">⌫</text>
+  <circle cx="48" cy="613" r="5" class="accent"/>
+  <text class="prim"  x="68"  y="617">KeePassXC</text>
+  <text class="arrow" x="540" y="617">→</text>
+  <text class="actmut" x="566" y="617">Excluded — not managed</text>
+  <text class="icn"   x="838" y="618">✎</text><text class="icn" x="866" y="618">⌫</text>
+  <circle cx="48" cy="651" r="5" class="accent"/>
+  <text class="prim"  x="68"  y="655">Konsole  ·  title  ~  “^scratch:”</text>
+  <text class="arrow" x="540" y="655">→</text>
+  <text class="act"   x="566" y="655">Opacity 92%</text>
+  <text class="icn"   x="838" y="656">✎</text><text class="icn" x="866" y="656">⌫</text>
+
+  <!-- ════ GROUP: ANIMATIONS ════ -->
+  <text class="ghead"  x="24"  y="708">ANIMATIONS</text>
+  <text class="gcount" x="896" y="708" text-anchor="end">2 rules  ·  drag to set precedence</text>
+  <rect class="card" x="24" y="718" width="872" height="76" rx="8"/>
+  <line class="sep" x1="24" y1="756" x2="896" y2="756"/>
+  <g fill="#cfd3d6">
+    <circle cx="38" cy="731" r="1.6"/><circle cx="46" cy="731" r="1.6"/>
+    <circle cx="38" cy="737" r="1.6"/><circle cx="46" cy="737" r="1.6"/>
+    <circle cx="38" cy="743" r="1.6"/><circle cx="46" cy="743" r="1.6"/>
+  </g>
+  <circle cx="66" cy="737" r="5" class="accent"/>
+  <text class="prim"  x="86"  y="741">Firefox  ·  window.open</text>
+  <text class="arrow" x="540" y="741">→</text>
+  <text class="act"   x="566" y="741">Shader “dissolve”</text>
+  <text class="icn"   x="838" y="742">✎</text><text class="icn" x="866" y="742">⌫</text>
+  <g fill="#cfd3d6">
+    <circle cx="38" cy="769" r="1.6"/><circle cx="46" cy="769" r="1.6"/>
+    <circle cx="38" cy="775" r="1.6"/><circle cx="46" cy="775" r="1.6"/>
+    <circle cx="38" cy="781" r="1.6"/><circle cx="46" cy="781" r="1.6"/>
+  </g>
+  <circle cx="66" cy="775" r="5" class="accent"/>
+  <text class="prim"  x="86"  y="779">Spotify  ·  window.minimize</text>
+  <text class="arrow" x="540" y="779">→</text>
+  <text class="act"   x="566" y="779">Timing 450 ms</text>
+  <text class="icn"   x="838" y="780">✎</text><text class="icn" x="866" y="780">⌫</text>
+
+  <!-- ════ GROUP: ADVANCED / CUSTOM (expanded) ════ -->
+  <text class="ghead"  x="24"  y="826">ADVANCED / CUSTOM</text>
+  <text class="gcount" x="896" y="826" text-anchor="end">2 rules  ·  composite match expressions</text>
+  <rect class="card" x="24" y="836" width="872" height="500" rx="8"/>
+
+  <!-- collapsed composite rule -->
+  <circle cx="48" cy="858" r="5" class="accent"/>
+  <text class="prim" x="68" y="862">Firefox  ·  Picture-in-Picture pop-outs</text>
+  <rect x="372" y="850" width="92" height="16" rx="3" class="tag"/>
+  <text class="tagt" x="418" y="861" text-anchor="middle">3 CONDITIONS</text>
+  <text class="arrow" x="540" y="862">→</text>
+  <text class="act" x="566" y="862">Float</text>
+  <rect x="612" y="852" width="78" height="16" rx="8" class="tag"/>
+  <text class="tagt" x="651" y="863" text-anchor="middle">+1 ACTION</text>
+  <text class="icn" x="838" y="863">✎</text><text class="icn" x="866" y="863">⌫</text>
+  <line class="sep" x1="24" y1="880" x2="896" y2="880"/>
+
+  <!-- expanded composite rule -->
+  <circle cx="48" cy="906" r="5" class="accent"/>
+  <text x="68" y="911" fill="#232629" font-size="14px" font-weight="700">Keep VS Code dialogs floating</text>
+  <rect x="312" y="898" width="86" height="16" rx="3" class="tag"/>
+  <text class="tagt" x="355" y="909" text-anchor="middle">COMPOSITE</text>
+  <text class="icn" x="838" y="912">✎</text><text class="icn" x="866" y="912">⌫</text>
+  <text fill="#9aa0a4" font-size="10.5px" x="816" y="912" text-anchor="end">priority 720</text>
+  <line class="sep" x1="24" y1="930" x2="896" y2="930"/>
+
+  <!-- WHEN block -->
+  <text class="secl" x="44" y="962">WHEN</text>
+
+  <!-- guide lines -->
+  <line class="guide" x1="84"  y1="996"  x2="84"  y2="1144"/>
+  <line class="guide" x1="84"  y1="1016" x2="100" y2="1016"/>
+  <line class="guide" x1="84"  y1="1048" x2="100" y2="1048"/>
+  <line class="guide" x1="84"  y1="1144" x2="100" y2="1144"/>
+  <line class="guide" x1="118" y1="1060" x2="118" y2="1112"/>
+  <line class="guide" x1="118" y1="1080" x2="134" y2="1080"/>
+  <line class="guide" x1="118" y1="1112" x2="134" y2="1112"/>
+  <line class="guide" x1="118" y1="1156" x2="118" y2="1176"/>
+  <line class="guide" x1="118" y1="1176" x2="134" y2="1176"/>
+
+  <!-- node: ALL of -->
+  <rect x="64" y="974" width="52" height="20" rx="4" fill="#e8f4fb"/>
+  <text class="nodet" x="90" y="988" text-anchor="middle">ALL of</text>
+
+  <!-- leaf: Application -->
+  <circle cx="104" cy="1016" r="2.5" fill="#3daee9"/>
+  <text class="field" x="116" y="1020">Application</text>
+  <text class="op"    x="372" y="1020">MATCHES APP-ID</text>
+  <rect x="470" y="1007" width="70" height="20" rx="4" class="chip"/>
+  <text class="valt"  x="505" y="1021" text-anchor="middle">code</text>
+
+  <!-- node: ANY of -->
+  <rect x="100" y="1038" width="54" height="20" rx="4" fill="#e8f4fb"/>
+  <text class="nodet" x="127" y="1052" text-anchor="middle">ANY of</text>
+
+  <!-- leaf: Window type -->
+  <circle cx="138" cy="1080" r="2.5" fill="#3daee9"/>
+  <text class="field" x="150" y="1084">Window type</text>
+  <text class="op"    x="372" y="1084">IS</text>
+  <rect x="470" y="1071" width="74" height="20" rx="4" class="chip"/>
+  <text class="valt"  x="507" y="1085" text-anchor="middle">Dialog</text>
+
+  <!-- leaf: Title -->
+  <circle cx="138" cy="1112" r="2.5" fill="#3daee9"/>
+  <text class="field" x="150" y="1116">Title</text>
+  <text class="op"    x="372" y="1116">MATCHES REGEX</text>
+  <rect x="470" y="1103" width="262" height="20" rx="4" class="chip"/>
+  <text class="valt"  x="601" y="1117" text-anchor="middle">Settings|Preferences|About .*</text>
+
+  <!-- node: NONE of -->
+  <rect x="100" y="1134" width="62" height="20" rx="4" fill="#fdeeee"/>
+  <text class="nodet" x="131" y="1148" text-anchor="middle" fill="#c0392b">NONE of</text>
+
+  <!-- leaf: Monitor -->
+  <circle cx="138" cy="1176" r="2.5" fill="#3daee9"/>
+  <text class="field" x="150" y="1180">Monitor</text>
+  <text class="op"    x="372" y="1180">IS</text>
+  <rect x="470" y="1167" width="70" height="20" rx="4" class="chip"/>
+  <text class="valt"  x="505" y="1181" text-anchor="middle">eDP-1</text>
+
+  <!-- add-condition affordance -->
+  <text fill="#3daee9" font-size="11.5px" font-weight="600" x="150" y="1212">+ Add condition</text>
+
+  <line class="sep" x1="24" y1="1232" x2="896" y2="1232"/>
+
+  <!-- THEN block -->
+  <text class="secl" x="44" y="1264">THEN</text>
+  <text class="arrow" x="150" y="1268">→</text>
+  <text class="act"   x="172" y="1268">Float window</text>
+  <text class="arrow" x="150" y="1298">→</text>
+  <text class="act"   x="172" y="1298">Set opacity</text>
+  <rect x="470" y="1285" width="58" height="20" rx="4" class="chip"/>
+  <text class="valt"  x="499" y="1299" text-anchor="middle">95 %</text>
+  <text class="arrow" x="150" y="1328">→</text>
+  <text class="act"   x="172" y="1328">Engine mode</text>
+  <rect x="470" y="1315" width="84" height="20" rx="4" class="chip"/>
+  <text class="valt"  x="512" y="1329" text-anchor="middle">Snapping</text>
+  <text fill="#3daee9" font-size="11.5px" font-weight="600" x="150" y="1360">+ Add action</text>
+
+  <text class="sub" x="24" y="1364" font-style="italic">First rule (by priority) to fill each action slot wins that slot — actions in different slots stack.</text>
+</svg>

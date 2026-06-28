@@ -136,9 +136,9 @@ public:
     // ISettings, not IAnimationSettings alone.
     //
     // animationExcludedApplications / animationExcludedWindowClasses virtuals
-    // retired in v4 — the lists folded into ExcludeAnimations WindowRules; the
+    // retired in v4 — the lists folded into ExcludeAnimations Rules; the
     // KWin effect now derives its m_animationExclusionRuleSet from the unified
-    // rule store via PhosphorWindowRules::ExclusionRules::excludeAnimationsRulesFrom.
+    // rule store via PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom.
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
@@ -150,37 +150,6 @@ public:
     virtual void setSnappingFocusNewWindows(bool enabled) = 0;
     virtual bool snappingFocusFollowsMouse() const = 0;
     virtual void setSnappingFocusFollowsMouse(bool enabled) = 0;
-    virtual bool autotileHideTitleBars() const = 0;
-    virtual void setAutotileHideTitleBars(bool hide) = 0;
-    virtual bool autotileShowBorder() const = 0;
-    virtual void setAutotileShowBorder(bool show) = 0;
-    virtual int autotileBorderWidth() const = 0;
-    virtual void setAutotileBorderWidth(int width) = 0;
-    virtual int autotileBorderRadius() const = 0;
-    virtual void setAutotileBorderRadius(int radius) = 0;
-    virtual QColor autotileBorderColor() const = 0;
-    virtual void setAutotileBorderColor(const QColor& color) = 0;
-    virtual QColor autotileInactiveBorderColor() const = 0;
-    virtual void setAutotileInactiveBorderColor(const QColor& color) = 0;
-    virtual bool autotileUseSystemBorderColors() const = 0;
-    virtual void setAutotileUseSystemBorderColors(bool use) = 0;
-
-    // Snapping window decoration settings (fetched by KWin effect via D-Bus).
-    // Parallel to autotile* — the snapped window's border / title-bar.
-    virtual bool snappingHideTitleBars() const = 0;
-    virtual void setSnappingHideTitleBars(bool hide) = 0;
-    virtual bool snappingShowBorder() const = 0;
-    virtual void setSnappingShowBorder(bool show) = 0;
-    virtual int snappingBorderWidth() const = 0;
-    virtual void setSnappingBorderWidth(int width) = 0;
-    virtual int snappingBorderRadius() const = 0;
-    virtual void setSnappingBorderRadius(int radius) = 0;
-    virtual QColor snappingBorderColor() const = 0;
-    virtual void setSnappingBorderColor(const QColor& color) = 0;
-    virtual QColor snappingInactiveBorderColor() const = 0;
-    virtual void setSnappingInactiveBorderColor(const QColor& color) = 0;
-    virtual bool snappingUseSystemBorderColors() const = 0;
-    virtual void setSnappingUseSystemBorderColors(bool use) = 0;
 
     virtual StickyWindowHandling autotileStickyWindowHandling() const = 0;
     virtual void setAutotileStickyWindowHandling(StickyWindowHandling handling) = 0;
@@ -287,41 +256,30 @@ public:
         return false;
     }
 
-    // NOTE: only the getter `override`s — `getPerScreenSnappingSettings`
+    // NOTE: snapping exposes only the getter — `getPerScreenSnappingSettings`
     // is the lone snapping accessor declared on
     // PhosphorEngine::IGeometrySettings (consumed by the geometry
-    // pipeline). The set/clear/has triplet is ISettings-only (writers
-    // live in settings + KCM, never reached from the geometry path),
-    // so they're plain `virtual` with no base to override. Mirrors the
-    // autotile + zone-selector blocks above where neither side declares
-    // any of the four on IGeometrySettings.
+    // pipeline). Per-screen snapping gaps are rule-backed now, so there
+    // is no set/clear/has triplet: the getter reads the resolved gap
+    // rules and there is no per-screen snapping writer surface (unlike
+    // the autotile + zone-selector blocks above, which still carry
+    // ISettings-only set/clear/has writers).
     QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const override
     {
         return {};
-    }
-    virtual void setPerScreenSnappingSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
-                                             const QVariant& /*value*/)
-    {
-    }
-    virtual void clearPerScreenSnappingSettings(const QString& /*screenIdOrName*/)
-    {
-    }
-    virtual bool hasPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
-    {
-        return false;
     }
 
     // Persistence (unique to ISettings)
     //
     // Borrowed-store contract for load(): when the concrete Settings was
-    // constructed with an externally-owned `WindowRuleStore*` (e.g. the
+    // constructed with an externally-owned `RuleStore*` (e.g. the
     // daemon's shared store), load() MUST NOT reload that store — the owner
     // is the writer and an interleaved load() here would clobber unflushed
     // in-memory edits. Only the owning side (or a future cross-process
     // watcher) drives reloads on the borrowed path. Implementations that
     // own their store (the standard constructor) reload normally. See
     // Settings::load (settings.cpp) for the live guard against
-    // `m_ownedWindowRuleStore`.
+    // `m_ownedRuleStore`.
     virtual void load() = 0;
     virtual void save() = 0;
     virtual void reset() = 0;
@@ -367,7 +325,7 @@ Q_SIGNALS:
     void labelFontItalicChanged();
     void labelFontUnderlineChanged();
     void labelFontStrikeoutChanged();
-    void zonePaddingChanged();
+    void innerGapChanged();
     void outerGapChanged();
     void usePerSideOuterGapChanged();
     void outerGapTopChanged();
@@ -395,8 +353,8 @@ Q_SIGNALS:
     void filterLayoutsByAspectRatioChanged();
     // excludedApplications / excludedWindowClasses signals retired in v4
     // — see settings_interfaces.h for the rationale (lists folded into
-    // unified Exclude WindowRules; consumers subscribe to the rule store
-    // through PhosphorWindowRules::WindowRuleStore::rulesChanged instead).
+    // unified Exclude Rules; consumers subscribe to the rule store
+    // through PhosphorRules::RuleStore::rulesChanged instead).
     void excludeTransientWindowsChanged();
     void minimumWindowWidthChanged();
     void minimumWindowHeightChanged();
@@ -523,13 +481,8 @@ Q_SIGNALS:
     void autotileSplitRatioStepChanged();
     void autotileMasterCountChanged();
     void autotilePerAlgorithmSettingsChanged();
-    void autotileInnerGapChanged();
-    void autotileOuterGapChanged();
-    void autotileUsePerSideOuterGapChanged();
-    void autotileOuterGapTopChanged();
-    void autotileOuterGapBottomChanged();
-    void autotileOuterGapLeftChanged();
-    void autotileOuterGapRightChanged();
+    // Autotile inner/outer gap change signals are unified with snapping —
+    // listeners use innerGapChanged / outerGap*Changed above.
     void autotileSmartGapsChanged();
     void autotileMaxWindowsChanged();
     void autotileFocusNewWindowsChanged();
@@ -538,20 +491,6 @@ Q_SIGNALS:
     void autotileFocusFollowsMouseChanged();
     void snappingFocusNewWindowsChanged();
     void snappingFocusFollowsMouseChanged();
-    void autotileHideTitleBarsChanged();
-    void autotileShowBorderChanged();
-    void autotileBorderWidthChanged();
-    void autotileBorderRadiusChanged();
-    void autotileBorderColorChanged();
-    void autotileInactiveBorderColorChanged();
-    void autotileUseSystemBorderColorsChanged();
-    void snappingHideTitleBarsChanged();
-    void snappingShowBorderChanged();
-    void snappingBorderWidthChanged();
-    void snappingBorderRadiusChanged();
-    void snappingBorderColorChanged();
-    void snappingInactiveBorderColorChanged();
-    void snappingUseSystemBorderColorsChanged();
     void autotileStickyWindowHandlingChanged();
     void autotileDragBehaviorChanged();
     void autotileOverflowBehaviorChanged();

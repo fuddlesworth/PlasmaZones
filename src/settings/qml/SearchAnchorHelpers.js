@@ -4,7 +4,7 @@
 
 // Shared parent-chain walks for the search-reveal registry, used by every
 // component that registers a searchAnchor (SettingsRow, SettingsCard,
-// WindowRuleSectionList, AnimationEventCardList).
+// RuleSectionList, AnimationEventCardList).
 
 // The page's reveal registry: the first ancestor exposing registerSearchAnchor
 // (a SettingsFlickable). Returns null if none is found.

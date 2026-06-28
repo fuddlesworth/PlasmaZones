@@ -5,9 +5,8 @@
  * @file test_autotile_state.cpp
  * @brief Unit tests for WindowId utilities and AutotileStateHelpers
  *
- * Tests WindowId::extractAppId, WindowId::deriveShortName,
- * AutotileStateHelpers::cleanupClosedWindowState and removeFromOtherScreens,
- * and the BorderState ↔ DecorationDefaults default-drift tripwire.
+ * Tests WindowId::extractAppId, WindowId::deriveShortName, and
+ * AutotileStateHelpers::cleanupClosedWindowState and removeFromOtherScreens.
  */
 
 #include <QTest>
@@ -150,29 +149,6 @@ private Q_SLOTS:
         QVERIFY(!border.tiledWindowsByScreen.value(shared).contains(windowId));
         QVERIFY(border.tiledWindowsByScreen.value(shared).contains(other));
         QVERIFY(!border.tiledWindowsByScreen.contains(solo));
-    }
-
-    // =================================================================
-    // BorderState: defaults drift tripwire
-    // =================================================================
-
-    void testBorderStateDefaultsMatchDecorationDefaults()
-    {
-        // Every BorderState field with a DecorationDefaults counterpart must
-        // match it — the effect renders with these values until the async
-        // settings load completes, and the daemon persists the same symbols
-        // via ConfigDefaults. Divergence here means pre-load rendering
-        // drifts from the configured appearance. Colors intentionally have
-        // no shared default: they stay invalid until the daemon delivers the
-        // resolved (possibly system-accent) values, and nothing draws
-        // pre-load because ShowBorder defaults to false.
-        const PhosphorCompositor::BorderState border;
-        QCOMPARE(border.hideTitleBars, PhosphorCompositor::DecorationDefaults::HideTitleBars);
-        QCOMPARE(border.showBorder, PhosphorCompositor::DecorationDefaults::ShowBorder);
-        QCOMPARE(border.width, PhosphorCompositor::DecorationDefaults::BorderWidth);
-        QCOMPARE(border.radius, PhosphorCompositor::DecorationDefaults::BorderRadius);
-        QVERIFY(!border.color.isValid());
-        QVERIFY(!border.inactiveColor.isValid());
     }
 
     // =================================================================

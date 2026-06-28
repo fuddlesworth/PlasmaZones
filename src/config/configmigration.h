@@ -23,16 +23,16 @@ namespace PlasmaZones {
 /// v3: per-mode disable lists — Snapping.Behavior.Display.{Disabled*} relocates
 ///     to Display.{Snapping,Autotile}Disabled{Monitors,Desktops,Activities}.
 /// v4: window-rule consolidation — zone Assignments (assignments.json) and the
-///     per-mode disable lists become context-only WindowRules in the new
-///     windowrules.json store. config.json loses the Display.*Disabled* keys;
+///     per-mode disable lists become context-only Rules in the new
+///     rules.json store. config.json loses the Display.*Disabled* keys;
 ///     assignments.json is superseded. QuickLayouts slots relocate to the
 ///     quicklayouts.json sidecar. The Animations.AnimationAppRules array also
-///     folds into windowrules.json as OverrideAnimation{Shader,Timing} actions
+///     folds into rules.json as OverrideAnimation{Shader,Timing} actions
 ///     on `WindowClass Contains <pattern>` matchers — the legacy
 ///     AnimationAppRule/Bridge types are removed and the runtime reads
 ///     animation overrides exclusively from the unified rule store.
 ///     The legacy `Exclusions` group (`Applications` / `WindowClasses`
-///     comma-joined pattern lists) folds into the same windowrules.json: each
+///     comma-joined pattern lists) folds into the same rules.json: each
 ///     surviving pattern becomes an Application-subject `AppId AppIdMatches
 ///     <pattern>` matcher with a terminal `Exclude` action, matching the
 ///     shape the legacy runtime bridge produced (see
@@ -44,7 +44,7 @@ namespace PlasmaZones {
 ///     minimumWindowHeight) move to the General page. See
 ///     docs/window-rule-refactor-design.md §8.
 ///     Each layout's retired per-layout `appRules` triple
-///     (`{pattern, zoneNumber, targetScreen}`) also folds into windowrules.json
+///     (`{pattern, zoneNumber, targetScreen}`) also folds into rules.json
 ///     as an `AppId AppIdMatches <pattern> → SnapToZone [zoneNumber]` rule,
 ///     deduped by normalized pattern across layouts. A legacy `targetScreen` is
 ///     carried over as a companion `RouteToScreen` action so the app reopens on
@@ -60,13 +60,13 @@ namespace PlasmaZones {
 ///     appearance, gap/padding overrides, showZoneNumbers, overlay display mode,
 ///     auto-assign, shader binding) move into a single layout-settings.json
 ///     sidecar keyed by layout UUID — the same sibling-store pattern as
-///     windowrules.json / quicklayouts.json. Layout files keep only their
+///     rules.json / quicklayouts.json. Layout files keep only their
 ///     structural definition (zones, geometry, identity, matching rules). The
 ///     relocation runs from finalizeV4Conversion (see relocateLayoutSettings),
 ///     and the runtime LayoutSettingsStore (in phosphor-zones) merges the
 ///     sidecar back onto each layout on load, so the in-memory model is
 ///     unchanged.
-inline constexpr int ConfigSchemaVersion = 4;
+inline constexpr int ConfigSchemaVersion = 5;
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
@@ -142,33 +142,33 @@ public:
     static void migrateV3ToV4(QJsonObject& root);
 
     /// Post-chain finalizer for the v4 conversion. The cross-file migration
-    /// (config.json + assignments.json → windowrules.json) cannot live in a
+    /// (config.json + assignments.json → rules.json) cannot live in a
     /// single `void(QJsonObject&)` migration step, so this runs after the
     /// chain, from @ref ensureJsonConfigImpl.
     ///
     /// It reads assignments.json + the four `_v4*` stashes left in
     /// config.json (`_v4DisableStash`, `_v4AnimationRulesStash`,
     /// `_v4ExclusionStash`, `_v4AnimationExclusionStash`), builds the
-    /// WindowRuleSet (assignment rules + disable-list rules + per-window
+    /// RuleSet (assignment rules + disable-list rules + per-window
     /// animation-override rules ported from the legacy AnimationAppRule
     /// JSON + `Exclude`-action rules + `ExcludeAnimations`-action rules),
-    /// writes windowrules.json (atomic), relocates the QuickLayouts slots
+    /// writes rules.json (atomic), relocates the QuickLayouts slots
     /// into the quicklayouts.json sidecar, strips all four stash keys
     /// from config.json, then — as the last, irreversible step — retires
     /// assignments.json (renamed to `.migrated` for forensic recovery; if
     /// the rename fails the file is removed outright).
     ///
-    /// Idempotent: the cleanup-only branch runs whenever windowrules.json
-    /// already exists as a valid v4 `WindowRuleSet` (probed via
-    /// `WindowRuleSet::loadFromFile`, which requires `_version ==
+    /// Idempotent: the cleanup-only branch runs whenever rules.json
+    /// already exists as a valid v4 `RuleSet` (probed via
+    /// `RuleSet::loadFromFile`, which requires `_version ==
     /// ConfigSchemaVersion` exactly). It is NOT a strict no-op — it
     /// retries the still-pending tail steps (strip surviving `_v4*Stash`
     /// keys, retire a still-present assignments.json) so a partial earlier
-    /// run that crashed between windowrules.json commit and the tail
+    /// run that crashed between rules.json commit and the tail
     /// converges to a clean state on the next startup. The rule-rebuild
     /// path itself NEVER runs from the cleanup branch.
     ///
-    /// Rebuild trigger: a missing/invalid windowrules.json triggers a
+    /// Rebuild trigger: a missing/invalid rules.json triggers a
     /// rebuild PROVIDED config.json has reached
     /// `_version == ConfigSchemaVersion`. When assignments.json is absent
     /// the rebuild still runs and writes a rule set carrying only the
@@ -176,9 +176,9 @@ public:
     /// exclusion, and animation-exclusion stash entries from
     /// config.json). If the migration chain stalled below v4 (e.g. a
     /// chain step's side-effect write failed), finalizeV4Conversion
-    /// refuses to commit a stub windowrules.json so the next run can
+    /// refuses to commit a stub rules.json so the next run can
     /// retry the chain without masking the stall. The
-    /// rebuild-vs-cleanup-only decision keys off the windowrules.json
+    /// rebuild-vs-cleanup-only decision keys off the rules.json
     /// probe alone; the config-version gate is layered on top to refuse
     /// the stub case.
     ///
@@ -189,10 +189,48 @@ public:
     /// placeholder. This is accepted degradation — no regression versus the
     /// pre-PR behaviour — and is intentionally not treated as a failure.
     ///
-    /// @param jsonPath Path to config.json (assignments.json / windowrules.json
+    /// @param jsonPath Path to config.json (assignments.json / rules.json
     ///                 are derived as siblings via ConfigDefaults).
     /// @return true on success or a clean no-op; false on an I/O failure.
     static bool finalizeV4Conversion(const QString& jsonPath);
+
+    /// v4 → v5 schema step. The v4 schema shipped per-mode (separate Snapping
+    /// vs Tiling) window appearance (borders, title bars, colours) and gap
+    /// settings in config.json; this branch deleted those settings and routes
+    /// the same concerns through rules instead. This step reads the
+    /// deleted v4 groups (`Snapping.Appearance.*`, `Snapping.Gaps`, the
+    /// `Tiling.*` equivalents, and the per-screen `PerScreen.Snapping` /
+    /// `PerScreen.Autotile` gap subsets), stashes the values that DIFFER from
+    /// the v4 compile defaults under the temporary `_v5AppearanceStash` root
+    /// key, REMOVES the consumed keys/groups from config.json (leaving the
+    /// surviving non-appearance keys such as `Snapping.Gaps.AdjacentThreshold`
+    /// and `Tiling.Gaps.SmartGaps` in place), and stamps `_version = 5`. A
+    /// clean v4 config (everything at its default) stashes nothing. The stash
+    /// feeds @ref finalizeV5Conversion.
+    static void migrateV4ToV5(QJsonObject& root);
+
+    /// Post-chain finalizer for the v5 conversion. Mirrors
+    /// @ref finalizeV4Conversion: the override rules cannot be built inside a
+    /// `void(QJsonObject&)` migration step (they live in rules.json), so
+    /// this runs after the chain from @ref ensureJsonConfigImpl, right after
+    /// finalizeV4Conversion (which guarantees rules.json exists).
+    ///
+    /// It reads `_v5AppearanceStash` from config.json, converts each differing
+    /// value into a non-managed override Rule — two context `Mode`-matched rules
+    /// ("Snapping appearance" matching `Mode Equals "snapping"`, "Tiling
+    /// appearance" matching `Mode Equals "tiling"`) plus one `ScreenId`-matched
+    /// gap rule per per-screen entry — ADDS them to the existing rule set
+    /// (never clobbering user rules or the managed baselines), saves
+    /// rules.json, then strips `_v5AppearanceStash` from config.json.
+    ///
+    /// Idempotent: runs only while the stash is present. Once stripped it is a
+    /// no-op, and the override rule ids are deterministic so a re-run before the
+    /// strip succeeds cannot duplicate rules (addRule rejects colliding ids).
+    ///
+    /// @param jsonPath Path to config.json (rules.json is derived as a
+    ///                 sibling via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool finalizeV5Conversion(const QString& jsonPath);
 
     /// Part of the v4 conversion: read every `*.json` layout in @p layoutsDir,
     /// split its embedded per-layout settings into the @p sidecarPath store

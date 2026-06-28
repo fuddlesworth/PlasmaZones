@@ -8,7 +8,7 @@
 #include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
-#include <PhosphorWindowRules/ExclusionRules.h>
+#include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
@@ -826,11 +826,11 @@ void Daemon::finalizeStartup()
     // priming call (daemon.cpp's setExcludeRuleSet/setRules/prune sequence, run
     // synchronously before the rulesChanged subscription wires) already pruned what
     // was loaded then; this re-run covers records that landed during the later
-    // autotile load. Patterns derive from the unified WindowRule store via
-    // PhosphorWindowRules::ExclusionRules; the WTA prune removeIf's the placement store.
+    // autotile load. Patterns derive from the unified Rule store via
+    // PhosphorRules::ExclusionRules; the WTA prune removeIf's the placement store.
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->pruneExcludedPendingRestores(
-            PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+            PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
     }
 
     // Signal that daemon is fully initialized and ready for queries

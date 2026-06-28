@@ -38,7 +38,7 @@ uniform sampler2D uOldWindow;
 #ifdef PLASMAZONES_KWIN
 // Sample the captured OLD content at card-space uv, mirroring surfaceColor's
 // iAnchorRectInTexture fold + KWin Y-up flip + iWindowOpacity multiply so old
-// and new align AND a SetOpacity window rule dims both equally through the
+// and new align AND a SetOpacity rule dims both equally through the
 // morph (surfaceColor folds iWindowOpacity for the new content; match it here).
 vec4 oldColor(vec2 uv) {
     vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;

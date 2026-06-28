@@ -103,7 +103,7 @@ private:
  * before calling `ISettings::isContextLocked`, mirroring the call shape
  * every migrated site used before (`isContextLocked(contextLockKey(modeInt,
  * screenId), desktop, activity)`), then ORs in the rule-driven lock resolved
- * by `LayoutRegistry::resolveContextLocked` so a `LockContext` window rule
+ * by `LayoutRegistry::resolveContextLocked` so a `LockContext` rule
  * locks the context live without ever touching the persisted lock store.
  *
  * Null `ISettings*` / `LayoutRegistry*` are permitted for headless-test

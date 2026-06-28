@@ -399,11 +399,11 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // newer batch has superseded every screen this one targeted. The
             // superseding cascade captured and re-asserts the current stacking
             // order itself; replaying this batch's stale savedStack would
-            // shuffle windows into a pre-supersession order. drainPendingRestores
-            // and snap-assist below stay unconditional: for the non-resnap
-            // batches (rotate, vs_reconfigure, snap_all) both are no-ops, and a
-            // superseded resnap is still safe because the superseding resnap
-            // re-drains its own queued restores and re-evaluates snap assist.
+            // shuffle windows into a pre-supersession order. Snap-assist below
+            // stays unconditional: for the non-resnap batches (rotate,
+            // vs_reconfigure, snap_all) it is a no-op, and a superseded resnap
+            // is still safe because the superseding resnap re-evaluates snap
+            // assist itself.
             bool fullySuperseded = !genByScreen.isEmpty();
             for (auto it = genByScreen.constBegin(); it != genByScreen.constEnd(); ++it) {
                 if (m_daemonBatchGenByScreen.value(it.key()) == it.value()) {
@@ -422,19 +422,6 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                     }
                 }
             }
-            // Drain any title-bar restores deferred from autotile→snap mode
-            // toggle. slotScreensChanged queues deferred releases in the
-            // DecorationManager instead of running the slow Wayland
-            // decoration round-trips synchronously; by the time onComplete
-            // fires here, animations for all resnapped windows are already
-            // in flight via the animation framework, so borders return
-            // mid-animation rather than after a 250+ ms stall before motion
-            // begins. Windows snap re-acquired during the resnap keep their
-            // title bars hidden (the manager cancels their queued restores).
-            // Unconditional — for non-mode-toggle batches (rotate,
-            // vs_reconfigure, snap_all) the pending set is empty and the
-            // call is a no-op.
-            m_decorationManager->drainPendingRestores();
             // Show snap assist after resnap if applicable.
             //
             // A resnap is a bulk operation (autotile→snap toggle, rotate,
@@ -576,8 +563,21 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
         if (!w) {
             continue;
         }
-        // Recreate this window's border so a state-scoped border colour re-applies.
-        updateWindowBorder(windowId, w);
+        // Recreate this window's border so a state-scoped border colour
+        // re-applies. Border overlays are visual-only, so build them only for a
+        // window on the current desktop — matching updateAllBorders, which gates
+        // the same call this way to avoid building an invisible off-desktop item
+        // that the next desktop switch tears down.
+        if (w->isOnCurrentDesktop()) {
+            updateWindowBorder(windowId, w);
+        }
+        // Re-resolve the hide-title-bar override too: a SetHideTitleBar rule
+        // scoped on a placement field (IsSnapped / IsFloating / Zone / Mode) must
+        // recompute on a snap/unsnap, otherwise a title bar hidden WHEN isSnapped
+        // stays hidden after unsnap until the next updateAllBorders. The
+        // decoration state survives desktop switches, so reconcile it for the
+        // window regardless of which desktop it sits on (as updateAllBorders does).
+        reconcileRuleHiddenTitleBar(windowId, w);
         // An opacity-only (borderless) window needs an explicit repaint for its
         // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
         if (hasOpacity) {

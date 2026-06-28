@@ -7,21 +7,23 @@
 
 #include "layoutregistry_rulehelpers_p.h"
 
-#include <PhosphorWindowRules/ContextRuleBridge.h>
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
 
 namespace PhosphorZones::RuleHelpers {
 
-namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+namespace CRB = PhosphorRules::ContextRuleBridge;
 
-PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity)
+PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity,
+                                  const QString& mode)
 {
     PWR::WindowQuery query;
     query.screenId = screenId;
     query.virtualDesktop = virtualDesktop;
     query.activity = activity;
+    query.mode = mode;
     return query;
 }
 
@@ -29,7 +31,7 @@ QString contextRuleName(const QString& screenId, int virtualDesktop, const QStri
 {
     // Single formula lives in ContextRuleBridge — this private helper stays as
     // a thin forwarder so callers inside phosphor-zones don't need to reach
-    // into the windowrule namespace directly.
+    // into the rule namespace directly.
     return CRB::contextRuleName(screenId, virtualDesktop, activity);
 }
 
@@ -48,7 +50,7 @@ bool matchIsExactContext(const PWR::MatchExpression& match, const QString& scree
     return CRB::matchIsExactContext(match, screenId, virtualDesktop, activity);
 }
 
-bool hasEngineModeAction(const PWR::WindowRule& rule)
+bool hasEngineModeAction(const PWR::Rule& rule)
 {
     for (const PWR::RuleAction& action : rule.actions) {
         if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)) {
@@ -58,7 +60,7 @@ bool hasEngineModeAction(const PWR::WindowRule& rule)
     return false;
 }
 
-bool hasSnappingLayoutAction(const PWR::WindowRule& rule)
+bool hasSnappingLayoutAction(const PWR::Rule& rule)
 {
     for (const PWR::RuleAction& action : rule.actions) {
         if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)) {
@@ -68,7 +70,7 @@ bool hasSnappingLayoutAction(const PWR::WindowRule& rule)
     return false;
 }
 
-bool hasTilingAlgorithmAction(const PWR::WindowRule& rule)
+bool hasTilingAlgorithmAction(const PWR::Rule& rule)
 {
     for (const PWR::RuleAction& action : rule.actions) {
         if (action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
@@ -78,7 +80,7 @@ bool hasTilingAlgorithmAction(const PWR::WindowRule& rule)
     return false;
 }
 
-bool isPureAssignmentRule(const PWR::WindowRule& rule)
+bool isPureAssignmentRule(const PWR::Rule& rule)
 {
     // True when every action belongs to the three assignment slots
     // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). Used by
@@ -118,7 +120,7 @@ bool matchIsExactContextActivity(const PWR::MatchExpression& match)
     return CRB::matchIsExactContextActivity(match);
 }
 
-bool isContextAssignmentRule(const PWR::WindowRule& rule)
+bool isContextAssignmentRule(const PWR::Rule& rule)
 {
     if (!hasEngineModeAction(rule) || rule.match.isCatchAll()) {
         return false;
@@ -127,7 +129,7 @@ bool isContextAssignmentRule(const PWR::WindowRule& rule)
         || matchIsExactContextActivity(rule.match);
 }
 
-AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
+AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule)
 {
     AssignmentEntry entry;
     // A rule with no SetEngineMode action leaves the mode at the Snapping
@@ -139,7 +141,7 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
             // Decode through `modeFromWireString` so every token the
             // ActionRegistry validator accepts round-trips end-to-end.
             // The canonical vocabulary lives at `engineModeOptions()` in
-            // libs/phosphor-window-rules/src/ruleaction.cpp — today
+            // libs/phosphor-rules/src/ruleaction.cpp — today
             // snapping / autotile / scrolling. The previous two-valued
             // `== "autotile"` ternary silently coerced every non-Autotile
             // token to Snapping — including the registered, picker-exposed

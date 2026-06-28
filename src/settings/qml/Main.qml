@@ -338,7 +338,7 @@ PhosphorUi.SettingsAppWindow {
     // confirm dialogs (whatsNewDialog, resetConfirmDialog,
     // defaultsConfirmDialog, sectionToggleDiscardConfirm, daemonStopConfirm),
     // the shortcut
-    // overlay, the active page's own modal stack (WindowRulesPage's
+    // overlay, the active page's own modal stack (RulesPage's
     // forceSaveConfirm / addRuleWizard / ruleEditorSheet /
     // windowPickerDialog), OR a native child window (QtQuick FileDialog,
     // system color picker, etc.) is open. The `window.active` check
@@ -355,7 +355,7 @@ PhosphorUi.SettingsAppWindow {
     // the property contribute false; the guard stays correct.
     /// Cross-cutting flag that pages opt into by writing through
     /// `window._pageOwnedModalOpen` when they open / close their own
-    /// modal stack. WindowRulesPage publishes its
+    /// modal stack. RulesPage publishes its
     /// addRuleWizard / windowPickerDialog / ruleEditorSheet /
     /// forceSaveConfirm aggregate state here so page-navigation
     /// shortcuts (Ctrl+PgUp / PgDown) cannot drag the user off the

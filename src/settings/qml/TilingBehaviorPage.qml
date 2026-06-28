@@ -150,10 +150,29 @@ SettingsFlickable {
 
                 SettingsSeparator {}
 
+                // Smart gaps is tiling-only and is a plain Setting (not part of
+                // the rule-backed shared gap model on the Window Appearance page),
+                // so it lives here on the Tiling behavior page.
+                SettingsRow {
+                    title: i18n("Smart gaps")
+                    searchAnchor: "smartGaps"
+                    description: i18n("Remove all gaps when only one window is tiled")
+
+                    SettingsSwitch {
+                        checked: appSettings.autotileSmartGaps
+                        accessibleName: i18n("Smart gaps")
+                        onToggled: function (newValue) {
+                            appSettings.autotileSmartGaps = newValue;
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
                 SettingsRow {
                     title: i18n("Restore untiled windows to their previous position")
                     searchAnchor: "restoreUntiledWindowsPosition"
-                    description: i18n("When an untiled (floated) window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A per-window rule can override this either way, opting individual windows in or out.")
+                    description: i18n("When an untiled (floated) window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A rule can override this either way, opting individual windows in or out.")
 
                     SettingsSwitch {
                         checked: appSettings.autotileRestoreFloatedWindowsOnLogin

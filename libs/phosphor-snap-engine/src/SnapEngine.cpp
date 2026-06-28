@@ -111,15 +111,22 @@ SnapEngine::GapParams SnapEngine::resolveGapParams(const QString& screenId, Phos
     namespace PSK = PhosphorEngine::PerScreenSnappingKey;
     auto* gs = dynamic_cast<PhosphorEngine::IGeometrySettings*>(engineSettings());
     if (!gs) {
-        return {PhosphorEngine::GeometryDefaults::ZonePadding,
+        return {PhosphorEngine::GeometryDefaults::InnerGap,
                 ::PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap)};
     }
 
-    // Per-screen snapping override with virtual->physical fallback, mirroring
-    // GeometryUtils::getPerScreenSnappingWithFallback so a per-monitor gap set on
-    // a physical screen still applies on its virtual sub-screens.
+    // Context gap override (mode / desktop / activity), wired by the daemon.
+    // It already folds in the per-monitor ScreenId rule, so consult it FIRST so
+    // the resnap recompute honours the same context cascade the snap COMMIT path
+    // resolves through DaemonGeometryResolver::contextGapOverrideFor. Fall back
+    // to the direct per-screen snapping read (with virtual->physical fallback so
+    // a per-monitor gap set on a physical screen still applies on its virtual
+    // sub-screens) only when no provider is wired — the unit-test behaviour.
     QVariantMap perScreen;
-    if (!screenId.isEmpty()) {
+    if (m_contextGapProvider) {
+        perScreen = m_contextGapProvider(screenId);
+    }
+    if (perScreen.isEmpty() && !screenId.isEmpty()) {
         perScreen = gs->getPerScreenSnappingSettings(screenId);
         if (perScreen.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
             perScreen =
@@ -129,13 +136,13 @@ SnapEngine::GapParams SnapEngine::resolveGapParams(const QString& screenId, Phos
 
     // Zone padding precedence: per-screen -> layout override -> global.
     int zonePadding;
-    const auto zpIt = perScreen.constFind(PSK::ZonePadding);
+    const auto zpIt = perScreen.constFind(PSK::InnerGap);
     if (zpIt != perScreen.constEnd()) {
         zonePadding = zpIt->toInt();
     } else if (layout && layout->hasZonePaddingOverride()) {
         zonePadding = layout->zonePadding();
     } else {
-        zonePadding = gs->zonePadding();
+        zonePadding = gs->innerGap();
     }
 
     return {zonePadding, resolveOuterGapsForScreen(perScreen, layout, gs)};
@@ -345,7 +352,10 @@ void SnapEngine::reapplyLayout(const NavigationContext& /*ctx*/)
 
 void SnapEngine::reapplyManagedWindowAppearance()
 {
-    if (!m_snapState) {
+    // Both are dereferenced below (m_snapState for the snapped-window set,
+    // m_windowTracker for resolveZoneGeometry); guard both, matching the rest
+    // of the file.
+    if (!m_snapState || !m_windowTracker) {
         return;
     }
     // Re-emit the current zone geometry for every snapped, non-floating window.

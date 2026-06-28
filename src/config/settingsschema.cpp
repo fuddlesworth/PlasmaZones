@@ -165,13 +165,13 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Appearance ─────────────────────────────────────────────────────────────
-// Declares seven groups. Four zone-overlay sub-groups under Snapping.Zones.*:
-// Colors (system toggle + 3 zone colors), Labels (font family/color/scale/weight
-// + italic/underline/strikeout toggles), Opacity (active + inactive), Border
-// (width + radius). (Effects.Blur is a zone-overlay setting too but shares the
-// Effects container declared in appendDisplaySchema.) Plus three
-// Snapping.Appearance.{Colors,Decorations,Borders} snapped-window decoration
-// groups (parallel to Tiling.Appearance.*).
+// Declares four zone-overlay sub-groups under Snapping.Zones.*: Colors (system
+// toggle + 3 zone colors), Labels (font family/color/scale/weight + italic/
+// underline/strikeout toggles), Opacity (active + inactive), Border (width +
+// radius). (Effects.Blur is a zone-overlay setting too but shares the Effects
+// container declared in appendDisplaySchema.) The per-mode snapped-window
+// decoration groups that used to live here are gone — snapped-window appearance
+// is now rule-backed (the v4→v5 appearance-to-rules move).
 
 void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 {
@@ -226,37 +226,6 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
     // Effects.Blur lives in the Effects group alongside the display-OSD keys;
     // the whole Effects group is declared in one shot by appendDisplaySchema
     // below to avoid split-across-two-call-sites ordering bugs.
-
-    // Snapping.Appearance.* — the snapped window's border / title-bar
-    // decoration (parallel to Tiling.Appearance.* in appendAutotilingSchema;
-    // defaults via snapping* in ConfigDefaults).
-    schema.groups[CD::snappingAppearanceColorsGroup()] = {
-        {CD::activeKey(), CD::snappingBorderColor(), QMetaType::QColor, {}, validColorOr(CD::snappingBorderColor())},
-        {CD::inactiveKey(),
-         CD::snappingInactiveBorderColor(),
-         QMetaType::QColor,
-         {},
-         validColorOr(CD::snappingInactiveBorderColor())},
-        {CD::useSystemKey(), CD::snappingUseSystemBorderColors(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::snappingAppearanceDecorationsGroup()] = {
-        {CD::hideTitleBarsKey(), CD::snappingHideTitleBars(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::snappingAppearanceBordersGroup()] = {
-        {CD::showBorderKey(), CD::snappingShowBorder(), QMetaType::Bool},
-        {CD::widthKey(),
-         CD::snappingBorderWidth(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::snappingBorderWidthMin(), CD::snappingBorderWidthMax())},
-        {CD::radiusKey(),
-         CD::snappingBorderRadius(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::snappingBorderRadiusMin(), CD::snappingBorderRadiusMax())},
-    };
 }
 
 // ─── Ordering ───────────────────────────────────────────────────────────────
@@ -364,22 +333,12 @@ void appendPerformanceSchema(PhosphorConfig::Schema& schema)
 void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
+    // The shared inner/outer gaps are no longer stored config keys: the global
+    // default is rule-backed (the managed baseline appearance Rule), so
+    // there is no "Gaps" group in the schema. Settings reads the values from the
+    // rule and the Window Appearance page edits the rule directly.
+    // Snapping.Gaps keeps only the snapping-specific adjacency threshold.
     schema.groups[CD::snappingGapsGroup()] = {
-        {CD::innerKey(), CD::zonePadding(), QMetaType::Int, {}, clampInt(CD::zonePaddingMin(), CD::zonePaddingMax())},
-        {CD::outerKey(), CD::outerGap(), QMetaType::Int, {}, clampInt(CD::outerGapMin(), CD::outerGapMax())},
-        {CD::usePerSideKey(), CD::usePerSideOuterGap(), QMetaType::Bool},
-        {CD::topKey(), CD::outerGapTop(), QMetaType::Int, {}, clampInt(CD::outerGapTopMin(), CD::outerGapTopMax())},
-        {CD::bottomKey(),
-         CD::outerGapBottom(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::outerGapBottomMin(), CD::outerGapBottomMax())},
-        {CD::leftKey(), CD::outerGapLeft(), QMetaType::Int, {}, clampInt(CD::outerGapLeftMin(), CD::outerGapLeftMax())},
-        {CD::rightKey(),
-         CD::outerGapRight(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::outerGapRightMin(), CD::outerGapRightMax())},
         {CD::adjacentThresholdKey(),
          CD::adjacentThreshold(),
          QMetaType::Int,
@@ -535,7 +494,7 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
 //   2. `Animations.WindowFiltering` — animation-side equivalents plus a
 //      NotificationsAndOsd knob.
 // Both retired their per-app / per-class string lists in v4 (folded into
-// Application-subject WindowRules); only the global behavioural knobs
+// Application-subject Rules); only the global behavioural knobs
 // survive. Ints are clamped via schema validators.
 
 void appendExclusionsSchema(PhosphorConfig::Schema& schema)
@@ -544,7 +503,7 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::exclusionsGroup()] = {
         // The `Applications` / `WindowClasses` leaf keys retired in v4 —
         // the v4 migration drains them into Application-subject Exclude
-        // WindowRules. Re-declaring them here would let the schema-driven
+        // Rules. Re-declaring them here would let the schema-driven
         // backend silently re-write dead defaults under the Exclusions
         // group, re-introducing keys we explicitly migrated out in v3→v4.
         // Only the three global knobs survive in this group.
@@ -567,7 +526,7 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
     // (or vice versa).
     schema.groups[CD::animationsWindowFilteringGroup()] = {
         // The `Applications` / `WindowClasses` leaf keys retired in v4 —
-        // the v4 migration drains them into ExcludeAnimations WindowRules.
+        // the v4 migration drains them into ExcludeAnimations Rules.
         // Only the four global knobs survive in this group.
         {CD::transientWindowsKey(), CD::animationExcludeTransientWindows(), QMetaType::Bool},
         {CD::notificationsAndOsdKey(), CD::animationExcludeNotificationsAndOsd(), QMetaType::Bool},
@@ -591,7 +550,7 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 //
 // Per-mode disable lists (formerly Display.{Snapping,Autotile}Disabled*)
 // are NOT in the schema: as of the window-rule refactor (PR #477) every
-// read/write routes through `windowrules.json` via Settings::disableEntriesFor
+// read/write routes through `rules.json` via Settings::disableEntriesFor
 // / writeDisableEntries. Re-declaring them here would let the schema-driven
 // backend silently re-write dead defaults under the mode-neutral Display
 // group, re-introducing keys we explicitly migrated out in v3→v4. The v3
@@ -742,9 +701,10 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Autotiling ─────────────────────────────────────────────────────────────
-// The biggest group — Tiling.* has six sub-groups: Algorithm, Behavior,
-// Appearance.{Colors,Decorations,Borders}, Gaps. Plus the top-level
-// Tiling.Enabled toggle. PerAlgorithmSettings is a JSON-encoded QVariantMap;
+// Tiling.* has three sub-groups: Algorithm, Behavior, Gaps. Plus the top-level
+// Tiling.Enabled toggle. (The Appearance.{Colors,Decorations,Borders} groups
+// that used to live here are gone — tiled-window appearance is now rule-backed,
+// the v4→v5 appearance-to-rules move.) PerAlgorithmSettings is a JSON-encoded QVariantMap;
 // LockedScreens is a comma list; DragInsert triggers are a JSON list.
 
 void appendAutotilingSchema(PhosphorConfig::Schema& schema)
@@ -814,66 +774,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
     };
 
-    schema.groups[CD::tilingAppearanceColorsGroup()] = {
-        {CD::activeKey(), CD::autotileBorderColor(), QMetaType::QColor, {}, validColorOr(CD::autotileBorderColor())},
-        {CD::inactiveKey(),
-         CD::autotileInactiveBorderColor(),
-         QMetaType::QColor,
-         {},
-         validColorOr(CD::autotileInactiveBorderColor())},
-        {CD::useSystemKey(), CD::autotileUseSystemBorderColors(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::tilingAppearanceDecorationsGroup()] = {
-        {CD::hideTitleBarsKey(), CD::autotileHideTitleBars(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::tilingAppearanceBordersGroup()] = {
-        {CD::showBorderKey(), CD::autotileShowBorder(), QMetaType::Bool},
-        {CD::widthKey(),
-         CD::autotileBorderWidth(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileBorderWidthMin(), CD::autotileBorderWidthMax())},
-        {CD::radiusKey(),
-         CD::autotileBorderRadius(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileBorderRadiusMin(), CD::autotileBorderRadiusMax())},
-    };
-
+    // Tiling.Gaps keeps only the tiling-specific SmartGaps toggle. Inner/outer
+    // gaps are no longer schema-backed at all — they live on the managed
+    // baseline gap rule, edited over the org.plasmazones.Rules surface.
     schema.groups[CD::tilingGapsGroup()] = {
-        {CD::innerKey(),
-         CD::autotileInnerGap(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileInnerGapMin(), CD::autotileInnerGapMax())},
-        {CD::outerKey(),
-         CD::autotileOuterGap(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapMin(), CD::autotileOuterGapMax())},
-        {CD::usePerSideKey(), CD::autotileUsePerSideOuterGap(), QMetaType::Bool},
-        {CD::topKey(),
-         CD::autotileOuterGapTop(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapTopMin(), CD::autotileOuterGapTopMax())},
-        {CD::bottomKey(),
-         CD::autotileOuterGapBottom(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapBottomMin(), CD::autotileOuterGapBottomMax())},
-        {CD::leftKey(),
-         CD::autotileOuterGapLeft(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapLeftMin(), CD::autotileOuterGapLeftMax())},
-        {CD::rightKey(),
-         CD::autotileOuterGapRight(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapRightMin(), CD::autotileOuterGapRightMax())},
         {CD::smartGapsKey(), CD::autotileSmartGaps(), QMetaType::Bool},
     };
 }

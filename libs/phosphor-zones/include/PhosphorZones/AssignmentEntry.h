@@ -36,10 +36,9 @@ struct LayoutAssignmentKey
      * Group names are always constructed internally in this order.
      *
      * @param groupName Full group name from the config backend.
-     * @param prefix    Schema-defined prefix (the lib's own wire format
-     *                  uses @c "Assignment:" — defined as a private
-     *                  constant in @c layoutregistry_persistence.cpp).
-     *                  Passing it explicitly keeps this header free of
+     * @param prefix    Schema-defined prefix the caller supplies (the lib's own
+     *                  wire format uses @c "Assignment:"). Passing it explicitly
+     *                  keeps this header free of
      *                  any cpp-side constant dependency.
      * @return Key with populated fields; screenId is empty on parse failure.
      */
@@ -174,7 +173,7 @@ struct AssignmentEntry
 };
 
 /**
- * @brief Per-context gap override resolved from window rules.
+ * @brief Per-context gap override resolved from rules.
  *
  * Unlike @ref AssignmentEntry (which is engine-mode/layout centric and gated
  * on a SetEngineMode action), gap overrides are independent per-property
@@ -182,11 +181,11 @@ struct AssignmentEntry
  * matching context rule fills the corresponding gap slot, so an unset field
  * falls through to the next precedence layer (per-screen → layout → global).
  * The daemon maps a populated override into a PerScreenSnappingKey-shaped map
- * for @c GeometryUtils::getEffectiveOuterGaps / getEffectiveZonePadding.
+ * for @c GeometryUtils::getEffectiveOuterGaps / getEffectiveInnerGap.
  */
 struct ContextGapOverride
 {
-    std::optional<int> zonePadding;
+    std::optional<int> innerGap;
     std::optional<int> outerGap;
     std::optional<bool> usePerSideOuterGap;
     std::optional<int> outerGapTop;
@@ -196,7 +195,7 @@ struct ContextGapOverride
 
     bool isEmpty() const
     {
-        return !zonePadding && !outerGap && !usePerSideOuterGap && !outerGapTop && !outerGapBottom && !outerGapLeft
+        return !innerGap && !outerGap && !usePerSideOuterGap && !outerGapTop && !outerGapBottom && !outerGapLeft
             && !outerGapRight;
     }
 };
@@ -263,13 +262,13 @@ inline QString modeToWireString(AssignmentEntry::Mode mode)
     // descriptor's closed-vocabulary validator
     // (`engineModeOptions().contains(...)`), so a malformed disable rule
     // fails load loudly. NOTE: `SetEngineMode`'s validator only checks
-    // `hasNonEmptyString` (open-vocabulary by design — see
-    // `libs/phosphor-window-rules/src/ruleaction.cpp:225-238`), so a
+    // `hasNonEmptyString` (open-vocabulary by design — see its descriptor
+    // validator in `libs/phosphor-rules/src/ruleaction.cpp`), so a
     // malformed assignment rule survives load but is silently coerced
     // back to Snapping at consumption via
     // `entryFromRuleMatchActions → modeFromWireString → nullopt`. The
     // sentinel makes the corruption visible to operators inspecting
-    // windowrules.json by eye, but is not a load-time gate for the
+    // rules.json by eye, but is not a load-time gate for the
     // assignment path.
     Q_UNREACHABLE_RETURN(QStringLiteral("invalid"));
 }

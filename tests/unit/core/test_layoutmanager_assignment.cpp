@@ -22,10 +22,10 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include <PhosphorWindowRules/ContextRuleBridge.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleStore.h>
 #include "core/constants.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -65,11 +65,11 @@ private:
     void addDefaultAssignmentRule(PhosphorZones::LayoutRegistry* mgr, const QString& screenId, int virtualDesktop,
                                   const QString& activity, bool allow)
     {
-        namespace PWR = PhosphorWindowRules;
-        auto* store = mgr->findChild<PWR::WindowRuleStore*>();
+        namespace PWR = PhosphorRules;
+        auto* store = mgr->findChild<PWR::RuleStore*>();
         QVERIFY(store != nullptr);
 
-        PWR::WindowRule rule;
+        PWR::Rule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("test-default-assignment");
         rule.enabled = true;
@@ -90,10 +90,10 @@ private:
     void addEngineModeRule(PhosphorZones::LayoutRegistry* mgr, const QString& screenId, int virtualDesktop,
                            const QString& activity, const QString& modeToken)
     {
-        namespace PWR = PhosphorWindowRules;
-        auto* store = mgr->findChild<PWR::WindowRuleStore*>();
+        namespace PWR = PhosphorRules;
+        auto* store = mgr->findChild<PWR::RuleStore*>();
         QVERIFY(store != nullptr);
-        const PWR::WindowRule rule = PWR::ContextRuleBridge::makeAssignmentRule(
+        const PWR::Rule rule = PWR::ContextRuleBridge::makeAssignmentRule(
             QStringLiteral("test-mode"), screenId, virtualDesktop, activity, modeToken, QString(), QString());
         QVERIFY(store->addRule(rule));
     }
@@ -159,7 +159,7 @@ private Q_SLOTS:
     // applyBatchAssignments's OldEntrySnapshot capture (Pass 1 P2 audit
     // finding), so disabled→enabled regression is structurally shared with
     // the Activity / Desktop / Screen batches. A dedicated test would need
-    // a public WindowRuleStore accessor on LayoutRegistry to flip the
+    // a public RuleStore accessor on LayoutRegistry to flip the
     // rule's enabled flag — none exists today, and adding one solely for
     // test scaffolding would be an SRP violation. The shared
     // applyBatchAssignments + OldEntrySnapshot path covers the four
@@ -1019,7 +1019,7 @@ private Q_SLOTS:
 
     void testIsContextSuppressed_pinnedModeOnlyRule_overridesGlobalSuppress()
     {
-        // A window rule that sets only the engine mode (no layout) on a monitor
+        // A rule that sets only the engine mode (no layout) on a monitor
         // must override the global suppress setting — the context stays active so
         // the overlay / zone selector show and the layout falls back to default.
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());

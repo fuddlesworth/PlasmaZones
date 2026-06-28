@@ -70,12 +70,14 @@ private Q_SLOTS:
 
     void testGetSettingSchema_intSetting_returnsTypeInt()
     {
-        QString json = m_adaptor->getSettingSchema(QStringLiteral("zonePadding"));
+        // adjacentThreshold is a registered int setting (the shared gap keys are
+        // no longer on this generic map — their global default is rule-backed).
+        QString json = m_adaptor->getSettingSchema(QStringLiteral("adjacentThreshold"));
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QVERIFY(!doc.isNull());
 
         QJsonObject obj = doc.object();
-        QCOMPARE(obj[QLatin1String("key")].toString(), QStringLiteral("zonePadding"));
+        QCOMPARE(obj[QLatin1String("key")].toString(), QStringLiteral("adjacentThreshold"));
         QCOMPARE(obj[QLatin1String("type")].toString(), QStringLiteral("int"));
     }
 

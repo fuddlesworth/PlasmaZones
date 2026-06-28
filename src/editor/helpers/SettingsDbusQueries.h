@@ -38,7 +38,7 @@ QVariantMap querySettingsBatch(const QStringList& keys);
 
 /**
  * @brief Query an integer setting from the daemon via D-Bus
- * @param settingKey The setting key to query (e.g., "zonePadding", "outerGap")
+ * @param settingKey The setting key to query (e.g., "innerGap", "outerGap")
  * @param defaultValue Value to return if query fails or returns invalid data
  * @return The setting value, or defaultValue if unavailable
  *

@@ -332,7 +332,7 @@ inline constexpr const char* kIToRect = "iToRect";
 inline constexpr const char* kUOldWindow = "uOldWindow";
 
 /// `float iWindowOpacity` — the window's effective rule-resolved opacity
-/// in [0.0, 1.0], COMPOSITOR PATH ONLY. A `SetOpacity` window rule must
+/// in [0.0, 1.0], COMPOSITOR PATH ONLY. A `SetOpacity` rule must
 /// dim the window for the whole duration of a transition, but the custom
 /// transition shader is compiled `MapTexture`-only (no `Modulate` trait),
 /// so KWin never applies `data.opacity()` to it — `surfaceColor()`

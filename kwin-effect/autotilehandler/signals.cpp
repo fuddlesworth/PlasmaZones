@@ -195,18 +195,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 if (wasTracked) {
                     m_notifiedWindowScreens.remove(windowId);
                 }
-                // Release autotile's decoration ownership on every screen.
-                // The manager restores the title bar only when NO owner
-                // remains — a snap takeover or a rule hide simply leaves
-                // their owner in place. Deferred: each physical restore is a
-                // 30-120 ms synchronous Wayland round-trip, and this loop can
-                // visit many windows — restoring synchronously would stall
-                // the compositor through the desktop-switch animation. The
-                // drain after the loop runs them one per event-loop tick
-                // (same policy as the genuine-toggle branch below and
-                // updateHideTitleBarsSetting).
-                m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile,
-                                                           DecorationManager::Restore::Deferred);
+                // Drop autotile tiled tracking on every screen (title-bar
+                // restores flow through the rule path).
                 AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
                 unmaximizeMonocleWindow(windowId);
                 // Drop stale zone-centering tracking so a later
@@ -262,12 +252,6 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     requestDaemonPreTileRestore(w, windowId);
                 }
             }
-            // Drain the deferred releases queued above: the daemon emits no
-            // resnap batch on a desktop switch, so without an explicit drain
-            // the queued title-bar restores would sit until the 500 ms
-            // fallback timer. One restore per event-loop tick, same as the
-            // hide-title-bars toggle path.
-            m_effect->decorationManager()->drainPendingRestores();
             m_effect->updateAllBorders();
         } else {
             QSet<QString> windowsOnRemovedScreens;
@@ -296,24 +280,11 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 m_notifiedWindowScreens.remove(wid);
             }
 
-            // Defer title-bar restores until slotApplyGeometriesBatch calls
-            // DecorationManager::drainPendingRestores() after the daemon's
-            // resnap signal has been dispatched. Each restore is a per-window
-            // Wayland decoration round-trip; restoring synchronously here
-            // would block kwin's event loop and serialize ahead of the queued
-            // applyGeometriesBatch, stalling the snap animation by 250+ ms.
-            // The manager's deferred queue also covers the races the old
-            // hand-rolled drain handled: a window re-acquired mid-drain (snap
-            // takeover or rapid re-toggle back into autotile) keeps its title
-            // bar hidden, and a fallback timer drains if no resnap arrives.
-            // Tiled tracking is cleared at stash time (not drain time as the
-            // old code did), so autotile border OVERLAYS drop at the toggle
-            // instant while the title bars restore during the resnap
-            // animation — intentional: windows leaving autotile should not
-            // keep autotile borders through the transition.
+            // Drop autotile border tracking at the toggle instant so autotile
+            // border OVERLAYS clear immediately — windows leaving autotile
+            // should not keep autotile borders through the transition.
+            // Title-bar restores flow through the rule path.
             for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
-                m_effect->decorationManager()->releaseKind(wid, DecorationManager::OwnerKind::Autotile,
-                                                           DecorationManager::Restore::Deferred);
                 AutotileStateHelpers::removeFromAllScreens(m_border, wid);
             }
 
@@ -861,32 +832,22 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         if (!m_autotileScreens.contains(screenId)) {
             m_notifiedWindows.remove(windowId);
             m_notifiedWindowScreens.remove(windowId);
-            m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
             return;
         }
-        // Floating windows stay released: a window floated while fullscreen
+        // Floating windows stay untracked: a window floated while fullscreen
         // (manual toggle, minimize-float, overflow batch-float — all keep
-        // m_notifiedWindows intact) is free-floating on exit; re-claiming it
-        // would hide its title bar with no retile ever restoring it.
+        // m_notifiedWindows intact) is free-floating on exit.
         if (m_effect->isWindowFloating(windowId)) {
             return;
         }
         AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
-        if (m_border.hideTitleBars) {
-            // AlreadyPlaced: the window is back at its tiled frame — KWin
-            // restores the pre-fullscreen geometry itself; the manager only
-            // needs to re-hide the title bar and re-assert that frame.
-            m_effect->decorationManager()->acquire(windowId, DecorationManager::autotile(screenId),
-                                                   DecorationManager::Placement::AlreadyPlaced);
-        }
+        // Title-bar (borderless) state is driven by rules.
         m_effect->updateAllBorders();
         return;
     }
-    // Clear border tracking and release decoration ownership so borders are
-    // not drawn over fullscreen content (the manager restores the title bar
-    // unless another owner still claims the window).
+    // Clear border tracking so borders are not drawn over fullscreen content
+    // (title-bar restores flow through the rule path).
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
     if (m_monocleMaximizedWindows.remove(windowId)) {
         qCInfo(lcEffect) << "Monocle window went fullscreen:" << windowId << "- removed from tracking";
     }

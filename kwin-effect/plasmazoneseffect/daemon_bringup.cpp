@@ -281,22 +281,22 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // IsSnapped / Zone rule fields without waiting for their next state change.
     m_navigationHandler->syncZonesFromDaemon();
 
-    // One-shot WindowRules subscription. The daemon emits rulesChanged per
-    // per-rule mutation; slotWindowRulesChanged debounces via a 50ms timer to
+    // One-shot Rules subscription. The daemon emits rulesChanged per
+    // per-rule mutation; slotRulesChanged debounces via a 50ms timer to
     // collapse batch edits into a single full-ruleset refetch. Subscribed here
     // (not in loadCachedSettings) because loadCachedSettings re-runs on every
     // settingsChanged broadcast, and QDBusConnection::connect accepts duplicate
     // subscriptions silently — re-subscribing on each broadcast would grow the
     // connection set unbounded across the effect's lifetime.
-    if (!m_windowRulesSubscribed) {
+    if (!m_rulesSubscribed) {
         const bool ok = QDBusConnection::sessionBus().connect(
             QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-            QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged"), this,
-            SLOT(slotWindowRulesChanged()));
+            QString(PhosphorProtocol::Service::Interface::Rules), QStringLiteral("rulesChanged"), this,
+            SLOT(slotRulesChanged()));
         if (ok) {
-            m_windowRulesSubscribed = true;
+            m_rulesSubscribed = true;
         } else {
-            qCWarning(lcEffect) << "Failed to subscribe to WindowRules.rulesChanged — will retry on next bringup";
+            qCWarning(lcEffect) << "Failed to subscribe to Rules.rulesChanged — will retry on next bringup";
         }
     }
 
@@ -580,10 +580,10 @@ void PlasmaZonesEffect::loadCachedSettings()
     m_triggersLoaded = false; // Permissive until new triggers arrive (#175)
 
     // excludedApplications / excludedWindowClasses are GONE — the v4
-    // migration folded those lists into the unified WindowRule store, and
+    // migration folded those lists into the unified Rule store, and
     // the effect's drag-gate exclusion rule set is now derived from the
-    // store-side Exclude rules pulled via WindowRules.rulesChanged →
-    // loadWindowRuleAnimationsFromDbus. No D-Bus settings fetch needed.
+    // store-side Exclude rules pulled via Rules.rulesChanged →
+    // loadRuleAnimationsFromDbus. No D-Bus settings fetch needed.
     // isValid + clamp: a failed/invalid reply would otherwise toInt() to 0
     // and silently disable the min-size gate the permissive member defaults
     // exist to protect across the startup race (same hardening as the
@@ -596,6 +596,18 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("minimumWindowHeight"), [this](const QVariant& v) {
         if (v.isValid()) {
             m_cachedMinWindowHeight = qMax(0, v.toInt());
+        }
+    });
+    // System accent colour for window-border rules: the zone highlight colour
+    // tracks the Plasma accent (when "use system colours" is on the daemon keeps
+    // it in sync), and it is what a border-colour `accent` sentinel resolves to
+    // in updateWindowBorder. Re-fetched on every settingsChanged, so an accent /
+    // colour-scheme change repaints accent-following borders without a relog.
+    loadSettingAsync(QStringLiteral("highlightColor"), [this](const QVariant& v) {
+        const QColor c(v.toString());
+        if (m_borderAccentColor != c) {
+            m_borderAccentColor = c;
+            updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
@@ -663,19 +675,19 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     // animationExcludedApplications / animationExcludedWindowClasses are
     // GONE — the v4 migration folded those lists into the unified
-    // WindowRule store as `ExcludeAnimations`-action rules, and
-    // loadWindowRuleAnimationsFromDbus's parse step rebuilds the effect's
+    // Rule store as `ExcludeAnimations`-action rules, and
+    // loadRuleAnimationsFromDbus's parse step rebuilds the effect's
     // m_animationExclusionRuleSet from the same rule-set push that drives
     // the OverrideAnimation* pipeline. No D-Bus settings fetch needed.
 
     loadShaderProfileFromDbus();
     loadMotionProfileTreeFromDbus();
     loadShaderRegistryFromDbus();
-    // Unified WindowRule store — pull in any rules carrying an
+    // Unified Rule store — pull in any rules carrying an
     // OverrideAnimation* action. The subscription below refreshes whenever
     // the daemon broadcasts `rulesChanged`, so an edit in the settings UI
     // lands without restarting the effect.
-    loadWindowRuleAnimationsFromDbus();
+    loadRuleAnimationsFromDbus();
     // Subscription to the daemon's rulesChanged broadcast is installed once from
     // continueDaemonReadySetup() — installing it here would re-subscribe on every
     // slotSettingsChanged callback (QDBusConnection::connect silently accepts
@@ -712,58 +724,9 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedZoneSelectorEnabled = v.toBool();
     });
 
-    // autotileHideTitleBars needs extra logic when toggled off — delegate to handler
-    loadSettingAsync(QStringLiteral("autotileHideTitleBars"), [this](const QVariant& v) {
-        if (m_autotileHandler->updateHideTitleBarsSetting(v.toBool())) {
-            updateAllBorders();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("autotileShowBorder"), [this](const QVariant& v) {
-        if (m_autotileHandler->updateShowBorderSetting(v.toBool())) {
-            updateAllBorders();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
-        // No retile on width change: borders are OutlinedBorderItem overlays
-        // drawn INSIDE the window frame, so zone geometry is width-independent.
-        // The retileAllScreens this handler used to fire was a leftover from
-        // the geometry-inset border era (windows were once shrunk by the
-        // border width); the inset surface was removed long ago and nothing
-        // daemon-side consumes autotileBorderWidth. updateAllBorders()
-        // rebuilds the overlays at the new thickness — symmetric with the
-        // snapping width handler below, which never retiled.
-        const int bw = qBound(DecorationDefaults::BorderWidthMin, v.toInt(), DecorationDefaults::BorderWidthMax);
-        if (m_autotileHandler->borderWidth() != bw) {
-            m_autotileHandler->setBorderWidth(bw);
-            updateAllBorders();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("autotileBorderRadius"), [this](const QVariant& v) {
-        int br = qBound(DecorationDefaults::BorderRadiusMin, v.toInt(), DecorationDefaults::BorderRadiusMax);
-        if (m_autotileHandler->borderRadius() != br) {
-            m_autotileHandler->setBorderRadius(br);
-            updateAllBorders();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("autotileBorderColor"), [this](const QVariant& v) {
-        const QColor c(v.toString());
-        if (m_autotileHandler->borderColor() != c) {
-            m_autotileHandler->setBorderColor(c);
-            updateAllBorders();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("autotileInactiveBorderColor"), [this](const QVariant& v) {
-        const QColor c(v.toString());
-        if (m_autotileHandler->inactiveBorderColor() != c) {
-            m_autotileHandler->setInactiveBorderColor(c);
-            updateAllBorders();
-        }
-    });
+    // Window border / title-bar appearance is no longer pushed as per-mode
+    // settings — it is resolved from rules (the managed baseline rule
+    // plus per-window overrides) inside updateWindowBorder / reconcileRuleHiddenTitleBar.
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
         m_autotileHandler->setFocusFollowsMouse(v.toBool());
@@ -771,57 +734,6 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {
         m_snapHandler->setFocusFollowsMouse(v.toBool());
-    });
-
-    // Snapped-window border settings — feed SnapHandler's parallel snap
-    // BorderState, mirroring the autotile* block above. When
-    // snappingUseSystemBorderColors is on the daemon writes the resolved
-    // accent into the colour keys, so (like autotile) the effect only reads the
-    // resolved colours and never the use-system flag.
-    // Each setter guards on a changed value before re-walking the stacking
-    // order in updateAllBorders / re-toggling title bars — matching the
-    // "only act on change" convention the autotile width/radius setters use.
-    loadSettingAsync(QStringLiteral("snappingHideTitleBars"), [this](const QVariant& v) {
-        // Value-changed guard lives inside the handler; the border refresh
-        // is the caller's job on true — mirrors autotileHideTitleBars above.
-        if (m_snapHandler->updateSnapHideTitleBars(v.toBool())) {
-            updateAllBorders();
-        }
-    });
-    loadSettingAsync(QStringLiteral("snappingShowBorder"), [this](const QVariant& v) {
-        const bool show = v.toBool();
-        if (m_snapHandler->showBorder() != show) {
-            m_snapHandler->setShowBorder(show);
-            updateAllBorders();
-        }
-    });
-    loadSettingAsync(QStringLiteral("snappingBorderWidth"), [this](const QVariant& v) {
-        const int bw = qBound(DecorationDefaults::BorderWidthMin, v.toInt(), DecorationDefaults::BorderWidthMax);
-        if (m_snapHandler->borderWidth() != bw) {
-            m_snapHandler->setBorderWidth(bw);
-            updateAllBorders();
-        }
-    });
-    loadSettingAsync(QStringLiteral("snappingBorderRadius"), [this](const QVariant& v) {
-        const int br = qBound(DecorationDefaults::BorderRadiusMin, v.toInt(), DecorationDefaults::BorderRadiusMax);
-        if (m_snapHandler->borderRadius() != br) {
-            m_snapHandler->setBorderRadius(br);
-            updateAllBorders();
-        }
-    });
-    loadSettingAsync(QStringLiteral("snappingBorderColor"), [this](const QVariant& v) {
-        const QColor c(v.toString());
-        if (m_snapHandler->borderColor() != c) {
-            m_snapHandler->setBorderColor(c);
-            updateAllBorders();
-        }
-    });
-    loadSettingAsync(QStringLiteral("snappingInactiveBorderColor"), [this](const QVariant& v) {
-        const QColor c(v.toString());
-        if (m_snapHandler->inactiveBorderColor() != c) {
-            m_snapHandler->setInactiveBorderColor(c);
-            updateAllBorders();
-        }
     });
 
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization

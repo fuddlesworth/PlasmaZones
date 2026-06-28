@@ -97,13 +97,13 @@ inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
 
 namespace PerScreenSnappingKey {
 
+using PhosphorEngine::PerScreenSnappingKey::InnerGap;
 using PhosphorEngine::PerScreenSnappingKey::OuterGap;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapBottom;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapLeft;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapRight;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapTop;
 using PhosphorEngine::PerScreenSnappingKey::UsePerSideOuterGap;
-using PhosphorEngine::PerScreenSnappingKey::ZonePadding;
 
 // Only the gap keys above are per-screen. Snap-assist and the zone-selector
 // enable switch are global-only (ISettings::setSnapAssistEnabled /
@@ -252,13 +252,10 @@ class PLASMAZONES_EXPORT IZoneGeometrySettings : public PhosphorEngine::IGeometr
 public:
     ~IZoneGeometrySettings() override = default;
 
-    virtual void setZonePadding(int padding) = 0;
-    virtual void setOuterGap(int gap) = 0;
-    virtual void setUsePerSideOuterGap(bool enabled) = 0;
-    virtual void setOuterGapTop(int gap) = 0;
-    virtual void setOuterGapBottom(int gap) = 0;
-    virtual void setOuterGapLeft(int gap) = 0;
-    virtual void setOuterGapRight(int gap) = 0;
+    // No gap setters: the shared inner/outer gap model's global default is
+    // rule-backed (the managed baseline appearance Rule). The getters
+    // (inherited from PhosphorEngine::IGeometrySettings) read that rule; edits
+    // go through the rule, not through ISettings.
     virtual int adjacentThreshold() const = 0;
     virtual void setAdjacentThreshold(int threshold) = 0;
     virtual int pollIntervalMs() const = 0;
@@ -281,9 +278,9 @@ public:
 
     // The per-application / per-class exclusion lists (excludedApplications,
     // excludedWindowClasses) retired in v4 — the legacy QStringList settings
-    // folded into Application-subject Exclude WindowRules, and all consumers
+    // folded into Application-subject Exclude Rules, and all consumers
     // (snap-engine, KWin effect, WTA pending-restore prune) now route through
-    // PhosphorWindowRules::ExclusionRules over the unified rule store.
+    // PhosphorRules::ExclusionRules over the unified rule store.
 
     virtual bool excludeTransientWindows() const = 0;
     virtual void setExcludeTransientWindows(bool exclude) = 0;
@@ -366,7 +363,7 @@ public:
     /// autotile-floated (untiled) windows are gated independently. The managed
     /// restore (snapped-to-zone / tiled) is governed separately by
     /// @ref restoreWindowsToZonesOnLogin. Per-window overrides via the
-    /// engine-neutral RestorePosition window rule.
+    /// engine-neutral RestorePosition rule.
     virtual bool snappingRestoreFloatedWindowsOnLogin() const = 0;
     virtual void setSnappingRestoreFloatedWindowsOnLogin(bool restore) = 0;
     virtual bool autotileRestoreFloatedWindowsOnLogin() const = 0;
@@ -422,7 +419,7 @@ public:
     /// When true, no context is assigned an active snapping or autotiling layout
     /// by default — the synthesized level-1 default is suppressed and a mode only
     /// activates for a context the user has explicitly assigned (or a
-    /// DefaultLayoutAssignment window rule has re-enabled). Mode-neutral: governs
+    /// DefaultLayoutAssignment rule has re-enabled). Mode-neutral: governs
     /// both engines, since the level-1 default is a single mode-carrying entry.
     /// Off by default (every context gets the default, today's behavior).
     virtual bool suppressDefaultLayoutAssignment() const = 0;

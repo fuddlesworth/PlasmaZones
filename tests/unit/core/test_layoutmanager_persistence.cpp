@@ -267,7 +267,7 @@ private Q_SLOTS:
         mgr->setQuickLayoutSlot(autotile, 2, QStringLiteral("autotile:bsp"));
 
         // A fresh registry on the SAME guard-isolated dirs reloads the sidecar
-        // (quicklayouts.json lives next to windowrules.json, not in the layout
+        // (quicklayouts.json lives next to rules.json, not in the layout
         // dir, so no setLayoutDirectory is needed for quick-slot loading).
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr2(
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));

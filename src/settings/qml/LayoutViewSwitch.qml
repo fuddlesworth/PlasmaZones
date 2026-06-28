@@ -9,7 +9,7 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 /**
- * @brief Snapping / Tiling mode switch styled as the WindowRulesPage monitor
+ * @brief Snapping / Tiling mode switch styled as the RulesPage monitor
  *        switcher.
  *
  * A centered row of soft-highlight, label-only tiles mirroring

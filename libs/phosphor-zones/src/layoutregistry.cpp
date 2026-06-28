@@ -16,14 +16,18 @@
 
 namespace PhosphorZones {
 
-LayoutRegistry::LayoutRegistry(PhosphorWindowRules::WindowRuleStore* ruleStore, QString layoutSubdirectory,
-                               QObject* parent)
+LayoutRegistry::LayoutRegistry(PhosphorRules::RuleStore* ruleStore, QString layoutSubdirectory, QObject* parent)
     : IZoneLayoutRegistry(parent)
     , m_ruleStore(ruleStore)
     , m_layoutSubdirectory(std::move(layoutSubdirectory))
 {
-    Q_ASSERT_X(m_ruleStore != nullptr, "LayoutRegistry",
-               "ruleStore is required — assignment resolution dereferences it");
+    // qFatal, not Q_ASSERT: initCommon() unconditionally dereferences
+    // m_ruleStore (->ruleSet()), so a null store is a developer composition-root
+    // error that would otherwise segfault in release where Q_ASSERT compiles
+    // out. Matches the layoutSubdirectory invariants below.
+    if (m_ruleStore == nullptr) {
+        qFatal("LayoutRegistry: ruleStore is required — assignment resolution dereferences it");
+    }
     Q_ASSERT_X(!m_layoutSubdirectory.isEmpty(), "LayoutRegistry", "layoutSubdirectory is required");
     initCommon();
 }
@@ -53,7 +57,7 @@ void LayoutRegistry::initCommon()
 
     // One evaluation model — bound to the store's live rule set. The store
     // owns the set's lifetime; the evaluator holds a reference to it.
-    m_evaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    m_evaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
 
     // Forward the detailed layoutsChanged signal into the unified
     // ILayoutSourceRegistry::contentsChanged notifier so any subscribed

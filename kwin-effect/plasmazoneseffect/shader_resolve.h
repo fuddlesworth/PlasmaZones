@@ -6,7 +6,7 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
-#include <PhosphorWindowRules/WindowQuery.h>
+#include <PhosphorRules/WindowQuery.h>
 
 #include <QColor>
 #include <QString>
@@ -17,7 +17,7 @@ namespace PhosphorAnimation {
 class CurveRegistry;
 }
 
-namespace PhosphorWindowRules {
+namespace PhosphorRules {
 class RuleEvaluator;
 class ResolvedActions;
 }
@@ -27,21 +27,21 @@ namespace PlasmaZones {
 /**
  * @file shader_resolve.h
  * @brief Effect-local per-window animation cascade shims, built on
- *        PhosphorWindowRules::RuleEvaluator.
+ *        PhosphorRules::RuleEvaluator.
  *
  * These walk the event-scoped action slots (`anim-shader:<event>`,
- * `anim-timing:<event>`, `anim-curve:<event>`) populated by `WindowRule`s
+ * `anim-timing:<event>`, `anim-curve:<event>`) populated by `Rule`s
  * carrying `OverrideAnimation{Shader,Timing,Curve}` actions, falling back to
  * the per-event ShaderProfileTree / motion-profile defaults when no rule
  * matches. The duration clamp, the curve `tryCreate` fallback, the
  * engaged-empty `effectId` sentinel, and the empty-input short-circuits all
  * live in these shims — the evaluator stays generic.
  *
- * Every resolver takes a `PhosphorWindowRules::WindowQuery` carrying the FULL
+ * Every resolver takes a `PhosphorRules::WindowQuery` carrying the FULL
  * window context (AppId / WindowClass / Title / WindowRole / DesktopFile /
  * WindowType / Pid / state flags / placement state), built once per window by
- * the GPL-side caller via `PlasmaZonesEffect::windowRuleQuery(w)`, which threads
- * the effect's floating / snapped / zone caches into the free `windowRuleQueryFor`
+ * the GPL-side caller via `PlasmaZonesEffect::ruleQuery(w)`, which threads
+ * the effect's floating / snapped / zone caches into the free `ruleQueryFor`
  * builder. Pre-PR the resolvers took a bare `windowClass` and the rule layer
  * matched exclusively on `WindowClass Contains <pattern>`; v4 widened the match
  * shape so a user-authored rule may pin to `AppId` / `DesktopFile` / `Title` / etc.
@@ -85,10 +85,10 @@ struct ResolvedShaderAndDuration
     /// opt-out, so the default only applies when no rule matched.
     bool shaderSlotFromRule = false;
 };
-ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindowRules::RuleEvaluator& evaluator,
+ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorRules::RuleEvaluator& evaluator,
                                                             const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                                             const QString& windowId,
-                                                            const PhosphorWindowRules::WindowQuery& query,
+                                                            const PhosphorRules::WindowQuery& query,
                                                             const QString& eventPath, int defaultDurationMs);
 
 /**
@@ -108,9 +108,9 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
  * tree (no rules, no profile overrides) the result is the unchanged
  * base profile and the cache reads are O(1).
  */
-PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRules::RuleEvaluator& evaluator,
+PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorRules::RuleEvaluator& evaluator,
                                                          const PhosphorAnimation::Profile& base,
-                                                         const PhosphorWindowRules::WindowQuery& query,
+                                                         const PhosphorRules::WindowQuery& query,
                                                          const QString& eventPath, const QString& windowId,
                                                          const PhosphorAnimation::CurveRegistry& curveRegistry);
 
@@ -126,13 +126,13 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
  * SetOpacity semantics are "make the window THIS opaque," not "scale by this
  * factor").
  *
- * @p resolved comes from the effect's `resolveWindowRuleActions` helper, which
+ * @p resolved comes from the effect's `resolveRuleActions` helper, which
  * peeks the evaluator's per-window cache and only builds the WindowQuery on a
  * miss — so this pure extractor stays off the per-frame query-build hot path. An
  * empty `resolved` (windowless / unmatched window) simply has no opacity slot →
  * `nullopt`.
  */
-std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRules::ResolvedActions& resolved);
+std::optional<qreal> resolveWindowOpacity(const PhosphorRules::ResolvedActions& resolved);
 
 /**
  * @brief Per-window border / title-bar appearance override — the runtime
@@ -161,17 +161,26 @@ struct ResolvedWindowAppearance
     std::optional<bool> showBorder;
     std::optional<int> borderWidth;
     std::optional<int> borderRadius;
-    // Focus-dependent colour is resolved by the rule cascade itself: the
-    // WindowQuery carries the window's live `isFocused` state, so a
-    // focus-scoped colour rule only fills this slot in its matching state.
-    std::optional<QColor> borderColor;
+    // `activeColor` is the focused colour (from SetBorderColorActive),
+    // `inactiveColor` the unfocused one (from SetBorderColorInactive, already
+    // defaulted to active when that action was omitted). The accent sentinel has
+    // been resolved to the live accent by the time it lands here.
+    // updateWindowBorder picks by the window's focus state. A focus-scoped
+    // single-colour rule (matching IsFocused) still works — it just fills
+    // activeColor in its matching state.
+    std::optional<QColor> activeColor;
+    std::optional<QColor> inactiveColor;
 
     bool any() const
     {
-        return hideTitleBar || showBorder || borderWidth || borderRadius || borderColor;
+        return hideTitleBar || showBorder || borderWidth || borderRadius || activeColor || inactiveColor;
     }
 };
 
-std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRules::ResolvedActions& resolved);
+/// @p accentColor is the live system accent the `BorderColorToken::Accent`
+/// sentinel resolves to; pass an invalid QColor when none is known (the
+/// sentinel then contributes no colour).
+std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRules::ResolvedActions& resolved,
+                                                                const QColor& accentColor);
 
 } // namespace PlasmaZones

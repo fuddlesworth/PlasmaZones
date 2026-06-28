@@ -56,10 +56,10 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     return WindowType::Unknown;
 }
 
-PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
-                                                    bool isSnapped, const QString& zoneId)
+PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating, bool isSnapped,
+                                        bool isTiled, const QString& zoneId)
 {
-    PhosphorWindowRules::WindowQuery query;
+    PhosphorRules::WindowQuery query;
     if (!w) {
         return query;
     }
@@ -69,8 +69,19 @@ PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const
     // (the engaged-empty foot-gun the string fields below also avoid).
     query.isFloating = isFloating;
     query.isSnapped = isSnapped;
+    query.isTiled = isTiled;
     if (!zoneId.isEmpty()) {
         query.zone = zoneId;
+    }
+    // Engine mode (context field) — derived from the snapped / tiled state above
+    // so a per-mode rule (`Mode Equals "tiling"`) resolves this window's border /
+    // title / colour the same way the daemon resolves its per-mode gaps. Snapping
+    // and tiling are the only engine modes; a floating (unmanaged) window has no
+    // mode, so query.mode is left empty and no Mode leaf matches it.
+    if (isTiled) {
+        query.mode = QStringLiteral("tiling");
+    } else if (isSnapped) {
+        query.mode = QStringLiteral("snapping");
     }
     // Context fields — let a window-domain rule pin screen / desktop / activity
     // (e.g. "red border on monitor 2"). screenId is resolved by the caller (the
@@ -159,7 +170,7 @@ PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const
         }
     }
     // isFocused mirrors the live active-window state so a rule like
-    // "isFocused=false ⇒ SetBorderColor(gray)" resolves correctly. The
+    // "isFocused=false ⇒ SetBorderColorActive(gray)" resolves correctly. The
     // evaluator's per-window match cache is keyed on (windowId, ruleSet
     // revision) — neither moves on focus change — so callers MUST invalidate
     // it on KWin's windowActivated signal (see slotWindowActivated), exactly

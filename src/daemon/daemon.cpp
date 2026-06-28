@@ -87,9 +87,15 @@
 #include "../dbus/shaderadaptor.h"
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/controladaptor.h"
-#include "../dbus/windowruleadaptor.h"
-#include <PhosphorWindowRules/ExclusionRules.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include "../dbus/ruleadaptor.h"
+#include <PhosphorCompositor/DecorationDefaults.h>
+#include <PhosphorRules/ExclusionRules.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleStore.h>
+
+#include <limits>
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
@@ -102,19 +108,116 @@
 
 namespace PlasmaZones {
 
-// Snapping and autotile gaps are the SAME two quantities under different names:
-// snapping's per-zone "zonePadding" is the full inter-region gap (each zone's
-// interior edge insets by zonePadding/2, so two neighbours leave a zonePadding
-// gap — see GeometryUtils::applyGapsToZoneGeometry), exactly like autotile's
-// "innerGap" (the single gap between two tiles). Snapping "outerGap" and
-// autotile "outerGap" both inset the content area from the screen edge per side.
+// Snapping and autotile share one unified gap model: a single innerGap (the
+// gap between two adjacent regions — each zone's interior edge insets by
+// innerGap/2 so two neighbours leave an innerGap gap, see
+// GeometryUtils::applyGapsToZoneGeometry) and a single outerGap (insets the
+// content area from the screen edge per side), with one default for each.
 // A context gap-override rule must therefore clamp to the same range in both
 // modes; these assertions fail the build if the two ranges ever drift apart.
-// (The defaults may legitimately differ per mode, so only the range is tied.)
 static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
               "Snapping and autotile gap clamp ceilings must match — they are the same gap quantity");
 
 namespace {
+
+// Common skeleton for the three managed baseline rules: catch-all, lowest
+// priority, managed. Each is a focused fallback every window resolves against
+// per concern now that the per-mode global appearance settings are gone. The
+// Appearance settings page rewrites these actions; per-window overrides are
+// ordinary higher-priority rules that win per slot.
+PhosphorRules::Rule makeBaselineSkeleton(const QUuid& id, const QString& name)
+{
+    using namespace PhosphorRules;
+    Rule rule;
+    rule.id = id;
+    rule.name = name;
+    rule.managed = true;
+    // Lowest possible precedence — any user rule (all of which carry a higher
+    // priority) overrides the baseline per slot. renormalizePriorities in the
+    // settings controller deliberately leaves managed rules pinned here.
+    rule.priority = std::numeric_limits<int>::min();
+    rule.match = MatchExpression{}; // empty All{} — matches every window
+    return rule;
+}
+
+// Build the managed baseline BORDER rule: the catch-all, lowest-priority rule
+// carrying only the "show border" parent action, which defaults OFF (opt-in).
+// The dependent border details (width, radius, active/inactive colour) are not
+// seeded here. The Appearance page adds them when the user turns "show border"
+// on and removes them when it is turned off, so the baseline stays minimal.
+// Consumers that read an absent detail fall back to their own defaults, and a
+// hidden border draws nothing regardless.
+PhosphorRules::Rule makeBaselineBorderRule()
+{
+    using namespace PhosphorRules;
+    namespace DD = PhosphorCompositor::DecorationDefaults;
+
+    const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
+        RuleAction a;
+        a.type = QString(type);
+        a.params.insert(QString(key), value);
+        return a;
+    };
+
+    Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineBorderRuleId(), PhosphorI18n::tr("Default borders"));
+    rule.actions = {
+        action(ActionType::SetBorderVisible, ActionParam::Value, DD::ShowBorder),
+    };
+    return rule;
+}
+
+// Build the managed baseline TITLE BAR rule: the catch-all, lowest-priority
+// rule carrying the default hide-title-bar value.
+PhosphorRules::Rule makeBaselineTitleBarRule()
+{
+    using namespace PhosphorRules;
+    namespace DD = PhosphorCompositor::DecorationDefaults;
+
+    const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
+        RuleAction a;
+        a.type = QString(type);
+        a.params.insert(QString(key), value);
+        return a;
+    };
+
+    Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineTitleBarRuleId(), PhosphorI18n::tr("Default title bars"));
+    rule.actions = {
+        action(ActionType::SetHideTitleBar, ActionParam::Value, DD::HideTitleBars),
+    };
+    return rule;
+}
+
+// Build the managed baseline GAP rule: the catch-all, lowest-priority rule that
+// is the single source of truth for the shared inner/outer gap model (Settings
+// reads these actions back as its innerGap()/outerGap*() getters). These are
+// Context-domain actions; resolveContextGaps EXCLUDES this managed rule so the
+// values surface only as the level-4 global default, never as a top-tier
+// context override. Seeded from the same ConfigDefaults accessors the schema
+// validators and the compile-time defaults use. Only the parent actions
+// (inner gap, outer gap, and the per-side toggle, which defaults off) are
+// seeded. The four per-side outer gap actions are added by the Appearance page
+// when the user turns per-side gaps on and removed when it is turned off, so an
+// absent per-side action falls back to the uniform outer gap.
+PhosphorRules::Rule makeBaselineGapRule()
+{
+    using namespace PhosphorRules;
+
+    const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
+        RuleAction a;
+        a.type = QString(type);
+        a.params.insert(QString(key), value);
+        return a;
+    };
+
+    Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineGapRuleId(), PhosphorI18n::tr("Default gaps"));
+    rule.actions = {
+        action(ActionType::SetInnerGap, ActionParam::Value, ConfigDefaults::innerGap()),
+        action(ActionType::SetOuterGap, ActionParam::Value, ConfigDefaults::outerGap()),
+        action(ActionType::SetUsePerSideOuterGap, ActionParam::Value, ConfigDefaults::usePerSideOuterGap()),
+    };
+    return rule;
+}
+
 // Debounce interval (ms): coalesce rapid geometry changes (multi-screen, panel editor) into one update.
 // Conceptually distinct from DELAYED_PANEL_REQUERY_MS in autotile.cpp (which schedules a
 // follow-up panel geometry requery after the debounced update completes).
@@ -162,12 +265,12 @@ Daemon::Daemon(QObject* parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
-    // Unified WindowRule store — loads windowrules.json (written by the v3→v4
-    // migration). Daemon is the sole writer; the WindowRuleAdaptor exposes it.
+    // Unified Rule store — loads rules.json (written by the v3→v4
+    // migration). Daemon is the sole writer; the RuleAdaptor exposes it.
     // Declared/constructed before m_layoutManager so the registry can borrow it.
-    , m_windowRuleStore(std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
-    , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_windowRuleStore.get(),
-                                                                      QStringLiteral("plasmazones/layouts")))
+    , m_ruleStore(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath()))
+    , m_layoutManager(
+          std::make_unique<PhosphorZones::LayoutRegistry>(m_ruleStore.get(), QStringLiteral("plasmazones/layouts")))
     , m_layoutComputeService(std::make_unique<PhosphorZones::LayoutComputeService>(nullptr))
     // m_curveRegistry / m_profileRegistry are default-constructed (no
     // init-list entries) — daemon.h declares them between m_layoutComputeService
@@ -182,16 +285,16 @@ Daemon::Daemon(QObject* parent)
     // m_curveRegistry to be declared BEFORE m_settings in daemon.h —
     // see the DECLARATION ORDER INVARIANT comment there.
     //
-    // Pass m_windowRuleStore.get() so Settings shares the daemon's single
+    // Pass m_ruleStore.get() so Settings shares the daemon's single
     // canonical store rather than constructing a second one over the same
-    // file. Two stores pointed at windowrules.json race on disk: each
+    // file. Two stores pointed at rules.json race on disk: each
     // mutator rebuilds its `kept` list from its own stale in-memory
     // snapshot, so the second writer silently drops rules the first writer
     // added. Mirrors the existing LayoutRegistry-via-borrowed-pointer
     // pattern above. Standalone settings / editor processes that have no
     // daemon-owned store pass nullptr and Settings falls back to owning
     // its own.
-    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_windowRuleStore.get(), nullptr))
+    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_ruleStore.get(), nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
     , m_windowRegistry(std::make_unique<PhosphorEngine::WindowRegistry>(nullptr))
     , m_panelSource(std::make_unique<PhosphorScreens::PlasmaPanelSource>())
@@ -223,6 +326,57 @@ Daemon::Daemon(QObject* parent)
     // `QObject((ensureScreenIdResolver(), parent))` comma-operator trick
     // because that idiom reads as an accidental typo.
     ensureScreenIdResolver();
+
+    // Seed the three managed baseline appearance rules (borders, title bars,
+    // gaps) if the store doesn't already carry them. The store loaded in its
+    // constructor, so this runs every startup (not first-run only) — existing
+    // rules.json files predating these rules gain them too. addRule
+    // persists and emits rulesChanged, but the daemon's rulesChanged consumers
+    // are wired later (createAdaptors / setup), so the emit at construction is
+    // inert. The daemon is the sole writer, so seeding here is the single source
+    // for every consumer (effect, settings, editor).
+    if (m_ruleStore) {
+        using PhosphorRules::Rule;
+        using PhosphorRules::RuleAction;
+
+        // Ensure a managed baseline rule exists and carries every action its
+        // canonical maker defines: create it from @p desired when absent,
+        // otherwise append any action type missing from the canonical template
+        // (preserving the user's Appearance-page-edited values for actions
+        // already present). This reconciles the ACTION SET only — it deliberately
+        // does NOT re-pin an existing rule's values, managed flag, priority, or
+        // match. Those are intentionally left as-is so an Appearance-page edit
+        // survives a daemon restart; a future change to a baseline's intended
+        // priority/match would need an explicit migration, not this seeder.
+        const auto ensureManagedRule = [this](const Rule& desired) {
+            const auto existing = m_ruleStore->ruleSet().ruleById(desired.id);
+            if (!existing) {
+                if (!m_ruleStore->addRule(desired)) {
+                    qCWarning(lcDaemon) << "Failed to seed managed baseline rule" << desired.id;
+                }
+                return;
+            }
+            QSet<QString> present;
+            for (const RuleAction& a : existing->actions) {
+                present.insert(a.type);
+            }
+            Rule merged = *existing;
+            bool changed = false;
+            for (const RuleAction& a : desired.actions) {
+                if (!present.contains(a.type)) {
+                    merged.actions.append(a);
+                    changed = true;
+                }
+            }
+            if (changed && !m_ruleStore->updateRule(merged)) {
+                qCWarning(lcDaemon) << "Failed to reconcile managed baseline rule" << desired.id;
+            }
+        };
+
+        ensureManagedRule(makeBaselineBorderRule());
+        ensureManagedRule(makeBaselineTitleBarRule());
+        ensureManagedRule(makeBaselineGapRule());
+    }
 
     // Configure geometry update debounce timer
     // This prevents cascading recalculations when multiple geometry changes occur rapidly.
@@ -780,7 +934,7 @@ bool Daemon::init()
     // default synthesis above is short-circuited so an unassigned context gets
     // no active layout (no engine activates) until the user assigns one — the
     // same effective state as having no default providers configured. The
-    // per-context DefaultLayoutAssignment window rule overrides this either way.
+    // per-context DefaultLayoutAssignment rule overrides this either way.
     m_layoutManager->setDefaultAssignmentSuppressedProvider([this]() {
         return m_settings && m_settings->suppressDefaultLayoutAssignment();
     });
@@ -996,7 +1150,7 @@ bool Daemon::init()
     const auto scheduleGapResnap = [this]() {
         m_gapResnapTimer.start();
     };
-    connect(m_settings.get(), &Settings::zonePaddingChanged, this, scheduleGapResnap);
+    connect(m_settings.get(), &Settings::innerGapChanged, this, scheduleGapResnap);
     connect(m_settings.get(), &Settings::outerGapChanged, this, scheduleGapResnap);
     connect(m_settings.get(), &Settings::usePerSideOuterGapChanged, this, scheduleGapResnap);
     connect(m_settings.get(), &Settings::outerGapTopChanged, this, scheduleGapResnap);
@@ -1029,10 +1183,10 @@ bool Daemon::init()
     // that owns m_shaderRegistry runs its destructor.
     m_shaderAdaptor = new ShaderAdaptor(m_shaderRegistry.get(), this);
 
-    // Window rule adaptor - the unified org.plasmazones.WindowRules surface.
+    // Rule adaptor - the unified org.plasmazones.Rules surface.
     // Held as a member so stop() can detach() it before the unique_ptr that
-    // owns m_windowRuleStore runs its destructor.
-    m_windowRuleAdaptor = new WindowRuleAdaptor(m_windowRuleStore.get(), this);
+    // owns m_ruleStore runs its destructor.
+    m_ruleAdaptor = new RuleAdaptor(m_ruleStore.get(), this);
 
     // Compositor bridge adaptor - compositor-agnostic window control protocol.
     // Held as a member so the support report and the registration watchdog
@@ -1055,7 +1209,7 @@ bool Daemon::init()
     m_windowTrackingAdaptor->setWindowRegistry(m_windowRegistry.get());
     // Full rule set for per-window RestorePosition evaluation (overrides the
     // per-engine *RestoreFloatedWindowsOnLogin settings for matched windows).
-    m_windowTrackingAdaptor->setWindowRuleStore(m_windowRuleStore.get());
+    m_windowTrackingAdaptor->setRuleStore(m_ruleStore.get());
 
     // Drop closed windows from m_lastAutotileOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would
@@ -1160,43 +1314,38 @@ bool Daemon::init()
     // ownership but not the pointee, so it still points at the live engine.
     if (autotileEngine) {
         autotileEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
-            if (!m_layoutManager) {
+            if (!m_layoutManager || screenId.isEmpty()) {
                 return {};
             }
-            const PhosphorZones::ContextGapOverride gaps =
-                m_layoutManager->resolveContextGaps(screenId, currentDesktopForScreen(screenId), currentActivity());
-            if (gaps.isEmpty()) {
+            // This is the autotile gap path, so resolve against the "tiling"
+            // placement mode — a per-mode `Mode Equals "tiling"` gap rule then
+            // applies here and a "snapping" one stays inert. The same
+            // GeometryUtils::contextGapOverrideMap shaping the snap provider uses
+            // below keeps the two paths byte-identical (PerScreenKeys form, with
+            // the per-side toggle gating the per-side entries).
+            return GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling")));
+        });
+    }
+
+    // Symmetric per-context (window-rule) gap overrides for snapping. The snap
+    // COMMIT path already honours the full context cascade via
+    // DaemonGeometryResolver::contextGapOverrideFor; this wires the resnap
+    // RECOMPUTE (SnapEngine::resolveGapParams) to the same cascade so a per-mode
+    // `Mode Equals "snapping"` gap rule (and per-desktop/activity gap rules)
+    // apply on resnap, not just in preview. setContextGapProvider is derived-only
+    // (SnapEngine); m_snapEngine is held as the base PlacementEngineBase, so the
+    // qobject_cast mirrors the narrowing used at the autotile-toggle branch above.
+    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+        concreteSnap->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
+            if (!m_layoutManager || screenId.isEmpty()) {
                 return {};
             }
-            namespace PSK = PhosphorEngine::PerScreenKeys;
-            QVariantMap map;
-            // zonePadding is snapping's inner spacing — the autotile inner gap.
-            if (gaps.zonePadding) {
-                map.insert(QString(PSK::InnerGap), *gaps.zonePadding);
-            }
-            if (gaps.outerGap) {
-                map.insert(QString(PSK::OuterGap), *gaps.outerGap);
-            }
-            // The per-side toggle gates whether the resolver honours the per-side
-            // values below — without it, stale per-side entries (left from when
-            // the rule had per-side enabled) would apply on autotile but not on
-            // snapping, which checks this flag (resolveOuterGapsFromMap).
-            if (gaps.usePerSideOuterGap) {
-                map.insert(QString(PSK::UsePerSideOuterGap), *gaps.usePerSideOuterGap);
-            }
-            if (gaps.outerGapTop) {
-                map.insert(QString(PSK::OuterGapTop), *gaps.outerGapTop);
-            }
-            if (gaps.outerGapBottom) {
-                map.insert(QString(PSK::OuterGapBottom), *gaps.outerGapBottom);
-            }
-            if (gaps.outerGapLeft) {
-                map.insert(QString(PSK::OuterGapLeft), *gaps.outerGapLeft);
-            }
-            if (gaps.outerGapRight) {
-                map.insert(QString(PSK::OuterGapRight), *gaps.outerGapRight);
-            }
-            return map;
+            // This is the snap gap path, so resolve against the "snapping"
+            // placement mode — a per-mode `Mode Equals "snapping"` gap rule then
+            // applies here and a "tiling" one stays inert.
+            return GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("snapping")));
         });
     }
 
@@ -1257,7 +1406,7 @@ bool Daemon::init()
     // filtered slice is held as a stable Daemon member (m_excludeRuleSet)
     // and refreshed in-place via setRules so the bound RuleEvaluator's
     // per-revision sort index and resolve cache actually invalidate on
-    // each rules-changed edit (a copy-assigned fresh WindowRuleSet would
+    // each rules-changed edit (a copy-assigned fresh RuleSet would
     // re-import revision=1 every cycle, freezing the cache on the next
     // resolveCached-bearing migration of the call sites). Rebuilt
     // whenever the unified store emits rulesChanged, so a settings-app
@@ -1272,10 +1421,9 @@ bool Daemon::init()
     //     pair seeds the filter and drains any restore queue entries
     //     populated by WTA::loadState above.
     snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
-    m_excludeRuleSet.setRules(
-        PhosphorWindowRules::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules());
+    m_excludeRuleSet.setRules(PhosphorRules::ExclusionRules::excludeRulesFrom(m_ruleStore->ruleSet()).rules());
     m_windowTrackingAdaptor->pruneExcludedPendingRestores(
-        PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+        PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
 
     auto refilterExcludeRules = [this, snapEnginePtr = QPointer(snapEngine)] {
         // QPointer null-checks defend the rulesChanged subscription
@@ -1288,12 +1436,12 @@ bool Daemon::init()
         if (!snapEnginePtr) {
             return;
         }
-        // Symmetric guard for the rule store. `m_windowRuleStore` is a
+        // Symmetric guard for the rule store. `m_ruleStore` is a
         // unique_ptr owned by Daemon, so it currently shares Daemon's
         // lifetime; the guard exists so a future refactor that drops
         // and re-creates the store on the fly (or moves ownership
         // out) can't UAF this lambda.
-        if (!m_windowRuleStore) {
+        if (!m_ruleStore) {
             return;
         }
         // Equality-guard against no-op edits: every rulesChanged emission
@@ -1301,11 +1449,11 @@ bool Daemon::init()
         // this lambda, but only changes that affect the Exclude slice
         // should bump the evaluator's revision and walk the (potentially
         // long) pending-restore queues. The guard below compares the two
-        // `QList<WindowRule>` slices element-wise (the same semantics as
-        // `WindowRuleSet::operator==`, which delegates to this list compare) —
+        // `QList<Rule>` slices element-wise (the same semantics as
+        // `RuleSet::operator==`, which delegates to this list compare) —
         // exactly the rules-list-only comparison we want.
-        const QList<PhosphorWindowRules::WindowRule> newSlice =
-            PhosphorWindowRules::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules();
+        const QList<PhosphorRules::Rule> newSlice =
+            PhosphorRules::ExclusionRules::excludeRulesFrom(m_ruleStore->ruleSet()).rules();
         if (newSlice == m_excludeRuleSet.rules()) {
             return;
         }
@@ -1324,10 +1472,10 @@ bool Daemon::init()
         if (m_windowTrackingAdaptor) {
             // Shutdown-window guard, mirrors snapEnginePtr null-check above.
             m_windowTrackingAdaptor->pruneExcludedPendingRestores(
-                PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+                PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
         }
     };
-    connect(m_windowRuleStore.get(), &PhosphorWindowRules::WindowRuleStore::rulesChanged, this,
+    connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this,
             [refilterExcludeRules](bool /*persisted*/) {
                 refilterExcludeRules();
             });
@@ -1338,7 +1486,7 @@ bool Daemon::init()
     // open zone selectors / the layout picker in sync would miss it. Re-push
     // the lock state to any open overlay on every rule change. QPointer guards
     // the shutdown window (overlay reset before ~Daemon disconnects).
-    connect(m_windowRuleStore.get(), &PhosphorWindowRules::WindowRuleStore::rulesChanged, this,
+    connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this,
             [overlay = QPointer(m_overlayService.get())](bool /*persisted*/) {
                 if (overlay) {
                     overlay->refreshContextLockState();
@@ -1534,7 +1682,7 @@ bool Daemon::init()
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
     // Wire the WTA so the autotile open path can resolve RouteToScreen /
-    // RouteToDesktop window rules (the rule store + evaluator live on the WTA).
+    // RouteToDesktop rules (the rule store + evaluator live on the WTA).
     m_autotileAdaptor->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
 
     // Control adaptor - high-level convenience API for third-party integrations.
@@ -2165,11 +2313,11 @@ void Daemon::stop()
         concreteSnap->setExcludeRuleSet(nullptr);
     }
 
-    // Likewise sever WindowTrackingAdaptor's borrow of m_windowRuleStore (used by
+    // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
     // its restore-position evaluator) before the store is destroyed. Same
     // grep-discoverable teardown contract as the SnapEngine exclude borrow above.
     if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setWindowRuleStore(nullptr);
+        m_windowTrackingAdaptor->setRuleStore(nullptr);
     }
 
     // Clear the autotile context-gap provider, which captures `this` (Daemon, via
@@ -2181,6 +2329,14 @@ void Daemon::stop()
     // `PlacementEngineBase*`; setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
+    }
+    // Clear the symmetric snap context-gap provider, which captures `this`
+    // (Daemon, via m_layoutManager / currentDesktopForScreen / currentActivity).
+    // Same teardown contract as the autotile provider above. `m_snapEngine` is
+    // base-typed `PlacementEngineBase*`; setContextGapProvider lives on the
+    // concrete SnapEngine.
+    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+        concreteSnap->setContextGapProvider({});
     }
 
     // Destroy engines now (during stop(), before Qt child destruction order).
@@ -2210,12 +2366,12 @@ void Daemon::stop()
     // (debounced save timer flush). ShaderAdaptor + ControlAdaptor have
     // non-trivial signal wiring + cached state that benefits from
     // explicit teardown for the same "queued D-Bus call lands during
-    // destruction window" defense-in-depth. WindowRuleAdaptor borrows
-    // m_windowRuleStore (a unique_ptr) and m_settings; without detach
+    // destruction window" defense-in-depth. RuleAdaptor borrows
+    // m_ruleStore (a unique_ptr) and m_settings; without detach
     // its slot bodies could deref freed memory during the window after
     // ~Daemon's body returns — that is when the unique_ptr members
-    // (including m_windowRuleStore) run their destructors, and the
-    // raw-Qt-parented WindowRuleAdaptor only runs its own destructor
+    // (including m_ruleStore) run their destructors, and the
+    // raw-Qt-parented RuleAdaptor only runs its own destructor
     // *after* that, as part of QObject child cleanup.
     //
     // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
@@ -2250,8 +2406,8 @@ void Daemon::stop()
     if (m_controlAdaptor) {
         m_controlAdaptor->detach();
     }
-    if (m_windowRuleAdaptor) {
-        m_windowRuleAdaptor->detach();
+    if (m_ruleAdaptor) {
+        m_ruleAdaptor->detach();
     }
 
     // Provider lambdas already cleared at the top of stop() (before the

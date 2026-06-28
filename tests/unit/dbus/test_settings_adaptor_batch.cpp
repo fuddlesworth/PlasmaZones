@@ -53,18 +53,20 @@ PhosphorAnimation::Profile profileWithDuration(qreal ms)
 // distinguish "setter not invoked" (guard hit) from "setter invoked,
 // returned true" (guard missed). StubSettings' getters are hard-coded
 // (setters are no-ops), so this subclass keeps the getter unchanged
-// and only adds a hit counter for setZonePadding.
+// and only adds a hit counter for setAdjacentThreshold (a registered int
+// scalar — the shared gap keys are no longer on this generic settings map
+// since their global default is rule-backed).
 class CountingStubSettings : public StubSettings
 {
 public:
     using StubSettings::StubSettings;
-    void setZonePadding(int v) override
+    void setAdjacentThreshold(int v) override
     {
-        ++setZonePaddingCalls;
-        lastZonePadding = v;
+        ++setAdjacentThresholdCalls;
+        lastAdjacentThreshold = v;
     }
-    int setZonePaddingCalls = 0;
-    int lastZonePadding = -1;
+    int setAdjacentThresholdCalls = 0;
+    int lastAdjacentThreshold = -1;
 };
 
 class TestSettingsAdaptorBatch : public QObject
@@ -91,14 +93,21 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Happy path: every gap/overlay key the editor startup batches for.
+    // Happy path: a representative batch of scalar keys is all returned. (The
+    // shared gap keys are no longer on this generic map — their global default
+    // is rule-backed — so this uses other registered scalars.)
     // ─────────────────────────────────────────────────────────────────────
-    void testGetSettings_gapOverlayKeys_allReturned()
+    void testGetSettings_scalarKeys_allReturned()
     {
         const QStringList keys{
-            QStringLiteral("zonePadding"),   QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
-            QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),
-            QStringLiteral("outerGapRight"), QStringLiteral("overlayDisplayMode"),
+            QStringLiteral("borderWidth"),
+            QStringLiteral("borderRadius"),
+            QStringLiteral("useSystemColors"),
+            QStringLiteral("adjacentThreshold"),
+            QStringLiteral("pollIntervalMs"),
+            QStringLiteral("minimumZoneSizePx"),
+            QStringLiteral("minimumZoneDisplaySizePx"),
+            QStringLiteral("overlayDisplayMode"),
         };
 
         const QVariantMap result = m_adaptor->getSettings(keys);
@@ -111,9 +120,9 @@ private Q_SLOTS:
         // Int-typed keys should land on disk as ints, not coerced strings —
         // readInt() on the editor side checks toInt(&ok) so a wrong type
         // would be silently replaced by the default. Pin the type here.
-        QCOMPARE(result.value(QStringLiteral("zonePadding")).metaType().id(), QMetaType::Int);
-        QCOMPARE(result.value(QStringLiteral("outerGap")).metaType().id(), QMetaType::Int);
-        QCOMPARE(result.value(QStringLiteral("usePerSideOuterGap")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("borderWidth")).metaType().id(), QMetaType::Int);
+        QCOMPARE(result.value(QStringLiteral("adjacentThreshold")).metaType().id(), QMetaType::Int);
+        QCOMPARE(result.value(QStringLiteral("useSystemColors")).metaType().id(), QMetaType::Bool);
         QCOMPARE(result.value(QStringLiteral("overlayDisplayMode")).metaType().id(), QMetaType::Int);
     }
 
@@ -126,16 +135,16 @@ private Q_SLOTS:
     void testGetSettings_mixedKnownUnknown_unknownsOmitted()
     {
         const QStringList keys{
-            QStringLiteral("zonePadding"),
+            QStringLiteral("borderWidth"),
             QStringLiteral("definitelyNotARealSettingKey_xyzzy"),
-            QStringLiteral("outerGap"),
+            QStringLiteral("borderRadius"),
         };
 
         const QVariantMap result = m_adaptor->getSettings(keys);
 
         QCOMPARE(result.size(), 2);
-        QVERIFY(result.contains(QStringLiteral("zonePadding")));
-        QVERIFY(result.contains(QStringLiteral("outerGap")));
+        QVERIFY(result.contains(QStringLiteral("borderWidth")));
+        QVERIFY(result.contains(QStringLiteral("borderRadius")));
         QVERIFY(!result.contains(QStringLiteral("definitelyNotARealSettingKey_xyzzy")));
     }
 
@@ -159,14 +168,14 @@ private Q_SLOTS:
     void testGetSettings_emptyStringKeysSkipped()
     {
         const QStringList keys{
-            QString(), QStringLiteral("zonePadding"), QString(), QStringLiteral("outerGap"), QString(),
+            QString(), QStringLiteral("borderWidth"), QString(), QStringLiteral("borderRadius"), QString(),
         };
 
         const QVariantMap result = m_adaptor->getSettings(keys);
 
         QCOMPARE(result.size(), 2);
-        QVERIFY(result.contains(QStringLiteral("zonePadding")));
-        QVERIFY(result.contains(QStringLiteral("outerGap")));
+        QVERIFY(result.contains(QStringLiteral("borderWidth")));
+        QVERIFY(result.contains(QStringLiteral("borderRadius")));
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -191,14 +200,14 @@ private Q_SLOTS:
     // return-value-only assertions can't distinguish guard-fires from
     // setter-runs-and-returns-true.
     //
-    // StubSettings::zonePadding() returns 8 — supply 8 and the guard fires.
+    // StubSettings::adjacentThreshold() returns 20 — supply 20 and the guard fires.
     // ─────────────────────────────────────────────────────────────────────
     void testSetSetting_unchangedScalar_guardShortCircuits()
     {
-        m_settings->setZonePaddingCalls = 0;
-        const bool ok = m_adaptor->setSetting(QStringLiteral("zonePadding"), QDBusVariant(QVariant(8)));
+        m_settings->setAdjacentThresholdCalls = 0;
+        const bool ok = m_adaptor->setSetting(QStringLiteral("adjacentThreshold"), QDBusVariant(QVariant(20)));
         QVERIFY(ok);
-        QCOMPARE(m_settings->setZonePaddingCalls, 0);
+        QCOMPARE(m_settings->setAdjacentThresholdCalls, 0);
     }
 
     // Value-equality guard must NOT intercept changing writes — setter
@@ -206,11 +215,11 @@ private Q_SLOTS:
     // return code.
     void testSetSetting_changedScalar_invokesSetter()
     {
-        m_settings->setZonePaddingCalls = 0;
-        const bool ok = m_adaptor->setSetting(QStringLiteral("zonePadding"), QDBusVariant(QVariant(42)));
+        m_settings->setAdjacentThresholdCalls = 0;
+        const bool ok = m_adaptor->setSetting(QStringLiteral("adjacentThreshold"), QDBusVariant(QVariant(42)));
         QVERIFY(ok);
-        QCOMPARE(m_settings->setZonePaddingCalls, 1);
-        QCOMPARE(m_settings->lastZonePadding, 42);
+        QCOMPARE(m_settings->setAdjacentThresholdCalls, 1);
+        QCOMPARE(m_settings->lastAdjacentThreshold, 42);
     }
 
     // Empty-string matches StubSettings::defaultLayoutId() default — guard fires.
@@ -237,64 +246,6 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Snap-window decoration keys (per-mode window appearance). The KWin
-    // effect fetches these via the D-Bus getSettings batch to decorate
-    // snap-managed windows; they are registered with REGISTER_BOOL/INT/
-    // COLOR_SETTING in initializeRegistry(), so they resolve on a stub
-    // backend. If the adaptor allow-list dropped any of the seven the effect
-    // would silently fall back to defaults — pin the whole set here so an
-    // omission breaks the build's test gate. Mirrors the gap/overlay batch
-    // test above: every requested key must come back, valid, with the right
-    // wire type (color keys serialize to a HexArgb string).
-    // ─────────────────────────────────────────────────────────────────────
-    void testGetSettings_snappingKeys_allReturnedWithTypes()
-    {
-        const QStringList keys{
-            QStringLiteral("snappingHideTitleBars"),         QStringLiteral("snappingShowBorder"),
-            QStringLiteral("snappingBorderWidth"),           QStringLiteral("snappingBorderRadius"),
-            QStringLiteral("snappingBorderColor"),           QStringLiteral("snappingInactiveBorderColor"),
-            QStringLiteral("snappingUseSystemBorderColors"),
-        };
-
-        const QVariantMap result = m_adaptor->getSettings(keys);
-
-        QCOMPARE(result.size(), keys.size());
-        for (const QString& k : keys) {
-            QVERIFY2(result.contains(k), qPrintable(QStringLiteral("missing key: %1").arg(k)));
-            QVERIFY2(result.value(k).isValid(), qPrintable(QStringLiteral("invalid variant for: %1").arg(k)));
-        }
-        // Bool / int / color wire types — color keys serialize to a string via
-        // the REGISTER_COLOR_SETTING getter (QColor::name(HexArgb)).
-        QCOMPARE(result.value(QStringLiteral("snappingHideTitleBars")).metaType().id(), QMetaType::Bool);
-        QCOMPARE(result.value(QStringLiteral("snappingShowBorder")).metaType().id(), QMetaType::Bool);
-        QCOMPARE(result.value(QStringLiteral("snappingUseSystemBorderColors")).metaType().id(), QMetaType::Bool);
-        QCOMPARE(result.value(QStringLiteral("snappingBorderWidth")).metaType().id(), QMetaType::Int);
-        QCOMPARE(result.value(QStringLiteral("snappingBorderRadius")).metaType().id(), QMetaType::Int);
-        QCOMPARE(result.value(QStringLiteral("snappingBorderColor")).metaType().id(), QMetaType::QString);
-        QCOMPARE(result.value(QStringLiteral("snappingInactiveBorderColor")).metaType().id(), QMetaType::QString);
-
-        // Values mirror the stub's snapping* getters, proving each key is
-        // wired to its own accessor rather than collapsed onto a neighbour. The
-        // int (width 2 / radius 0) and color (white / black) keys hold mutually
-        // distinct values, so any swap among them flips a mirror. Among the three
-        // bools only showBorder (false) differs from hideTitleBars/useSystem
-        // (both true) — two booleans cannot encode three distinct values — so the
-        // bool mirrors catch any swap involving showBorder; a hideTitleBars↔
-        // useSystem swap is instead pinned by the verified-correct production
-        // registration and the per-key metaType assertions above.
-        QCOMPARE(result.value(QStringLiteral("snappingBorderWidth")).toInt(), m_settings->snappingBorderWidth());
-        QCOMPARE(result.value(QStringLiteral("snappingBorderRadius")).toInt(), m_settings->snappingBorderRadius());
-        QCOMPARE(QColor(result.value(QStringLiteral("snappingBorderColor")).toString()),
-                 m_settings->snappingBorderColor());
-        QCOMPARE(QColor(result.value(QStringLiteral("snappingInactiveBorderColor")).toString()),
-                 m_settings->snappingInactiveBorderColor());
-        QCOMPARE(result.value(QStringLiteral("snappingHideTitleBars")).toBool(), m_settings->snappingHideTitleBars());
-        QCOMPARE(result.value(QStringLiteral("snappingShowBorder")).toBool(), m_settings->snappingShowBorder());
-        QCOMPARE(result.value(QStringLiteral("snappingUseSystemBorderColors")).toBool(),
-                 m_settings->snappingUseSystemBorderColors());
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
     // Drag-activation toggle keys. The KWin effect fetches these three bools
     // (via loadSettingAsync → getSetting, the singular form of this batch) to
     // decide whether to keep streaming drag-cursor ticks while no trigger is
@@ -302,9 +253,8 @@ private Q_SLOTS:
     // If the adaptor registry drops any registration the effect silently reads
     // false and that toggle feature dies — zoneSpanToggleMode shipped
     // unregistered until PR #595's audit caught it, so pin the whole set here
-    // to break the test gate on any future omission. Mirrors the snap-window
-    // batch test above: every requested key must come back, valid, Bool-typed,
-    // and wired to its own ISettings accessor.
+    // to break the test gate on any future omission. Every requested key must
+    // come back, valid, Bool-typed, and wired to its own ISettings accessor.
     // ─────────────────────────────────────────────────────────────────────
     void testGetSettings_dragToggleKeys_allReturnedWithTypes()
     {
@@ -445,8 +395,8 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     CountingStubSettings* m_settings = nullptr;
-    // CountingStubSettings publicly inherits StubSettings, whose snapping*
-    // getters back the value assertions in testGetSettings_snappingKeys_*.
+    // CountingStubSettings publicly inherits StubSettings, whose getters back
+    // the value assertions in the batch get-settings tests.
     QObject* m_parent = nullptr;
     SettingsAdaptor* m_adaptor = nullptr;
 };

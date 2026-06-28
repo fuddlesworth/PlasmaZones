@@ -473,7 +473,7 @@ public:
 
     /**
      * Predicate deciding whether an opening window should start FLOATING because a
-     * "Float this app" window rule matched it. Daemon-injected, keyed by the live
+     * "Float this app" rule matched it. Daemon-injected, keyed by the live
      * windowId. The window is still inserted (so it stays managed and Meta+F can
      * re-tile it); it is just marked floating, identical to a manual float. When
      * UNSET (default) no window is rule-floated. Clear with `{}` before destroying

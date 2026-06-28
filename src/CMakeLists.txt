@@ -63,7 +63,7 @@ set(plasmazones_core_SRCS
     # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutRegistry,
     # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ -
     # consumers include <PhosphorZones/...> directly and construct the registry
-    # with a borrowed PhosphorWindowRules::WindowRuleStore* + the
+    # with a borrowed PhosphorRules::RuleStore* + the
     # "plasmazones/layouts" subdir inline.
     core/unifiedlayoutlist.cpp
     core/unifiedlayoutlist.h
@@ -123,8 +123,8 @@ set(plasmazones_core_SRCS
     dbus/overlayadaptor.h
     dbus/zonedetectionadaptor.cpp
     dbus/zonedetectionadaptor.h
-    dbus/windowruleadaptor.cpp
-    dbus/windowruleadaptor.h
+    dbus/ruleadaptor.cpp
+    dbus/ruleadaptor.h
     # snapnavigationtargets moved to libs/phosphor-snap-engine/
     dbus/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
@@ -218,12 +218,12 @@ target_link_libraries(plasmazones_core
         # default constants ConfigDefaults delegates to (PUBLIC because
         # configdefaults.h includes the header).
         PhosphorCompositor::PhosphorCompositor
-        # PhosphorWindowRules: the unified LGPL rule engine. PUBLIC since
-        # Phase 3 — config/settings.h owns a WindowRuleStore for the per-mode
-        # disable lists, the WindowRuleAdaptor exposes the store on D-Bus, and
+        # PhosphorRules: the unified LGPL rule engine. PUBLIC since
+        # Phase 3 — config/settings.h owns a RuleStore for the per-mode
+        # disable lists, the RuleAdaptor exposes the store on D-Bus, and
         # config/configmigration.cpp builds rules during the v3→v4 conversion,
         # so consumers of plasmazones_core need the include path + link edge.
-        PhosphorWindowRules::PhosphorWindowRules
+        PhosphorRules::PhosphorRules
         # Frozen-snapshot per-screen mode + disable/lock resolver. PUBLIC
         # because D-Bus adaptors compiled into plasmazones_core
         # (windowdragadaptor / windowtrackingadaptor / snapadaptor) hold

@@ -15,11 +15,14 @@
 #include "configbackends.h"
 
 #include <PhosphorConfig/Store.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/RuleStore.h>
 
 #include <memory>
+#include <optional>
 #include <QFont>
 #include <QHash>
+#include <QJsonValue>
+#include <QUuid>
 #include <QVariantMap>
 
 namespace PlasmaZones {
@@ -70,7 +73,7 @@ public:
      *                      through the caller's registry, preserving
      *                      `shared_ptr<const Curve>` identity across the
      *                      Settings ↔ daemon boundary.
-     * @param windowRuleStore Non-owned WindowRuleStore pointer. When non-null,
+     * @param ruleStore Non-owned RuleStore pointer. When non-null,
      *                        Settings shares this store rather than owning a
      *                        second instance pointed at the same file — a
      *                        dual-store setup races on disk (one store's
@@ -78,7 +81,7 @@ public:
      *                        edits because both rebuild `kept` from stale
      *                        in-memory snapshots). The daemon, which already
      *                        owns the canonical store for `LayoutRegistry`
-     *                        and `WindowRuleAdaptor`, passes it in here so
+     *                        and `RuleAdaptor`, passes it in here so
      *                        every in-process consumer mutates the same
      *                        ruleset. Standalone processes (settings app,
      *                        editor) pass nullptr and Settings falls back to
@@ -89,7 +92,7 @@ public:
      * @param parent Parent QObject
      */
     Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
-             PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent);
+             PhosphorRules::RuleStore* ruleStore, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
@@ -144,15 +147,20 @@ public:
     Q_PROPERTY(
         bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
 
-    // PhosphorZones::Zone settings
-    Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
-    Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
-    Q_PROPERTY(
-        bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
-    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapTopChanged)
-    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapBottomChanged)
-    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
-    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
+    // Zone settings — inner/outer gaps are the single shared model used by BOTH
+    // snapping and tiling. The global default is now rule-backed: these are
+    // computed READ-ONLY getters reading the managed "Default gaps" rule's
+    // (baselineGapRuleId) gap actions. Editing happens through the rule (the
+    // Window Appearance page writes via RuleController), so there are no setters.
+    // NOTIFY fires when the baseline gap rule's values change (see
+    // onRuleStoreChanged).
+    Q_PROPERTY(int innerGap READ innerGap NOTIFY innerGapChanged)
+    Q_PROPERTY(int outerGap READ outerGap NOTIFY outerGapChanged)
+    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop NOTIFY outerGapTopChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom NOTIFY outerGapBottomChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft NOTIFY outerGapLeftChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight NOTIFY outerGapRightChanged)
     Q_PROPERTY(int adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
 
     // Performance and behavior (configurable constants)
@@ -204,9 +212,9 @@ public:
     // Window filtering — the global knobs. The per-application /
     // per-class exclusion list Q_PROPERTYs (excludedApplications,
     // excludedWindowClasses) retired in v4 along with the standalone
-    // Exclusions settings page; the lists folded into Window Rules and
+    // Exclusions settings page; the lists folded into Rules and
     // the daemon serves the runtime evaluator from
-    // PhosphorWindowRules::ExclusionRules over the unified rule store.
+    // PhosphorRules::ExclusionRules over the unified rule store.
     Q_PROPERTY(bool excludeTransientWindows READ excludeTransientWindows WRITE setExcludeTransientWindows NOTIFY
                    excludeTransientWindowsChanged)
     Q_PROPERTY(
@@ -226,9 +234,9 @@ public:
                    NOTIFY animationMinimumWindowHeightChanged)
     // The animationExcludedApplications / animationExcludedWindowClasses
     // Q_PROPERTYs retired in v4 — the lists folded into `ExcludeAnimations`
-    // WindowRules and the effect's `shouldAnimateWindow` gate now resolves
+    // Rules and the effect's `shouldAnimateWindow` gate now resolves
     // against the slice
-    // `PhosphorWindowRules::ExclusionRules::excludeAnimationsRulesFrom`
+    // `PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom`
     // produces from the unified rule store.
 
     // PhosphorZones::Zone Selector
@@ -265,18 +273,9 @@ public:
         int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
     Q_PROPERTY(QVariantMap autotilePerAlgorithmSettings READ autotilePerAlgorithmSettings WRITE
                    setAutotilePerAlgorithmSettings NOTIFY autotilePerAlgorithmSettingsChanged)
-    Q_PROPERTY(int autotileInnerGap READ autotileInnerGap WRITE setAutotileInnerGap NOTIFY autotileInnerGapChanged)
-    Q_PROPERTY(int autotileOuterGap READ autotileOuterGap WRITE setAutotileOuterGap NOTIFY autotileOuterGapChanged)
-    Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap
-                   NOTIFY autotileUsePerSideOuterGapChanged)
-    Q_PROPERTY(
-        int autotileOuterGapTop READ autotileOuterGapTop WRITE setAutotileOuterGapTop NOTIFY autotileOuterGapTopChanged)
-    Q_PROPERTY(int autotileOuterGapBottom READ autotileOuterGapBottom WRITE setAutotileOuterGapBottom NOTIFY
-                   autotileOuterGapBottomChanged)
-    Q_PROPERTY(int autotileOuterGapLeft READ autotileOuterGapLeft WRITE setAutotileOuterGapLeft NOTIFY
-                   autotileOuterGapLeftChanged)
-    Q_PROPERTY(int autotileOuterGapRight READ autotileOuterGapRight WRITE setAutotileOuterGapRight NOTIFY
-                   autotileOuterGapRightChanged)
+    // Autotile inner/outer gaps are unified with snapping — the settings UI binds
+    // the shared innerGap / outerGap* properties above for both modes. The
+    // IAutotileSettings gap getters (autotileInnerGap(), …) forward to them.
     Q_PROPERTY(bool autotileFocusNewWindows READ autotileFocusNewWindows WRITE setAutotileFocusNewWindows NOTIFY
                    autotileFocusNewWindowsChanged)
     Q_PROPERTY(bool autotileSmartGaps READ autotileSmartGaps WRITE setAutotileSmartGaps NOTIFY autotileSmartGapsChanged)
@@ -316,34 +315,6 @@ public:
                    snappingFocusFollowsMouseChanged)
     Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize
                    NOTIFY autotileRespectMinimumSizeChanged)
-    Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY
-                   autotileHideTitleBarsChanged)
-    Q_PROPERTY(
-        bool autotileShowBorder READ autotileShowBorder WRITE setAutotileShowBorder NOTIFY autotileShowBorderChanged)
-    Q_PROPERTY(
-        int autotileBorderWidth READ autotileBorderWidth WRITE setAutotileBorderWidth NOTIFY autotileBorderWidthChanged)
-    Q_PROPERTY(int autotileBorderRadius READ autotileBorderRadius WRITE setAutotileBorderRadius NOTIFY
-                   autotileBorderRadiusChanged)
-    Q_PROPERTY(QColor autotileBorderColor READ autotileBorderColor WRITE setAutotileBorderColor NOTIFY
-                   autotileBorderColorChanged)
-    Q_PROPERTY(QColor autotileInactiveBorderColor READ autotileInactiveBorderColor WRITE setAutotileInactiveBorderColor
-                   NOTIFY autotileInactiveBorderColorChanged)
-    Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE
-                   setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
-    Q_PROPERTY(bool snappingHideTitleBars READ snappingHideTitleBars WRITE setSnappingHideTitleBars NOTIFY
-                   snappingHideTitleBarsChanged)
-    Q_PROPERTY(
-        bool snappingShowBorder READ snappingShowBorder WRITE setSnappingShowBorder NOTIFY snappingShowBorderChanged)
-    Q_PROPERTY(
-        int snappingBorderWidth READ snappingBorderWidth WRITE setSnappingBorderWidth NOTIFY snappingBorderWidthChanged)
-    Q_PROPERTY(int snappingBorderRadius READ snappingBorderRadius WRITE setSnappingBorderRadius NOTIFY
-                   snappingBorderRadiusChanged)
-    Q_PROPERTY(QColor snappingBorderColor READ snappingBorderColor WRITE setSnappingBorderColor NOTIFY
-                   snappingBorderColorChanged)
-    Q_PROPERTY(QColor snappingInactiveBorderColor READ snappingInactiveBorderColor WRITE setSnappingInactiveBorderColor
-                   NOTIFY snappingInactiveBorderColorChanged)
-    Q_PROPERTY(bool snappingUseSystemBorderColors READ snappingUseSystemBorderColors WRITE
-                   setSnappingUseSystemBorderColors NOTIFY snappingUseSystemBorderColorsChanged)
     Q_PROPERTY(int autotileStickyWindowHandling READ autotileStickyWindowHandlingInt WRITE
                    setAutotileStickyWindowHandlingInt NOTIFY autotileStickyWindowHandlingChanged)
     Q_PROPERTY(int autotileDragBehavior READ autotileDragBehaviorInt WRITE setAutotileDragBehaviorInt NOTIFY
@@ -512,27 +483,35 @@ public:
 
     /**
      * @brief Standalone ctor that owns its config backend but BORROWS a
-     *        WindowRuleStore.
+     *        RuleStore.
      *
      * Same standalone semantics as Settings(QObject*) — owns a freshly migrated
      * config backend and leaves the CurveRegistry null (animation profiles parse
-     * through the process-static fallback) — but takes its WindowRuleStore from
+     * through the process-static fallback) — but takes its RuleStore from
      * the caller instead of owning one. The settings app uses this so a single
      * store is shared between this Settings instance (per-mode monitor disable
-     * lists, which persist in windowrules.json) and the SettingsController's
+     * lists, which persist in rules.json) and the SettingsController's
      * in-process LayoutRegistry, eliminating the divergence two independent
      * stores over the same file would otherwise allow.
      *
-     * @param windowRuleStore Borrowed store; must outlive this Settings. A null
+     * @param ruleStore Borrowed store; must outlive this Settings. A null
      *        argument degrades to owning a store (same fallback the
      *        backend-injecting ctor uses) so a misuse still yields a working
      *        object.
      * @param parent Parent QObject.
      */
-    Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent);
+    Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent);
     ~Settings() override = default;
 
     // No singleton - use dependency injection instead
+
+    // Canonical storage-key form of a screen identifier: resolve a connector
+    // name (e.g. "DP-2") to its stable EDID id (e.g. "Dell:U2722D:115107"),
+    // preserving any virtual "/vs:N" suffix. Identifiers already in id form, and
+    // connectors that don't currently resolve to a connected screen, pass
+    // through unchanged. Per-screen overrides (gaps, autotile) are keyed by this
+    // stable form so reads/writes/migration agree across connector renumbering.
+    static QString canonicalPerScreenKey(const QString& screenIdOrName);
 
     // Activation — PhosphorConfig::Store-backed.
     QVariantList dragActivationTriggers() const override;
@@ -621,21 +600,20 @@ public:
     bool labelFontStrikeout() const override;
     void setLabelFontStrikeout(bool strikeout) override;
 
-    // PhosphorZones::Zone geometry (Snapping.Gaps) — PhosphorConfig::Store-backed.
-    int zonePadding() const override;
-    void setZonePadding(int padding) override;
+    // Zone geometry (shared inner/outer gaps) — the global default is now
+    // rule-backed. These getters read the managed "Default gaps" rule's
+    // (baselineGapRuleId) gap actions, falling back to the compile-time defaults
+    // when no store / rule / action is present. There are no setters: the gap
+    // values are edited on the baseline gap rule directly (Window Appearance
+    // page → RuleController). The autotile* gap forwarders above route through
+    // these same getters, so the tile engine stays untouched.
+    int innerGap() const override;
     int outerGap() const override;
-    void setOuterGap(int gap) override;
     bool usePerSideOuterGap() const override;
-    void setUsePerSideOuterGap(bool enabled) override;
     int outerGapTop() const override;
-    void setOuterGapTop(int gap) override;
     int outerGapBottom() const override;
-    void setOuterGapBottom(int gap) override;
     int outerGapLeft() const override;
-    void setOuterGapLeft(int gap) override;
     int outerGapRight() const override;
-    void setOuterGapRight(int gap) override;
     int adjacentThreshold() const override;
     void setAdjacentThreshold(int threshold) override;
 
@@ -773,12 +751,12 @@ public:
     void clearPerScreenAutotileGapsSettings(const QString& screenIdOrName);
     void clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName);
 
-    // Per-screen snapping config (override > global fallback)
+    // Per-screen snapping gaps are rule-backed (per-monitor gap Rules), so
+    // the only accessor is the reader. There is no per-screen snapping storage
+    // and no setter/clear/has: the set/clear/has triplet stays as ISettings
+    // no-op defaults (the geometry path only ever reads). Writes go through the
+    // window-rule store via the Appearance page.
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
-    Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenIdOrName, const QString& key,
-                                                 const QVariant& value) override;
-    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenIdOrName) override;
-    Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenIdOrName) const override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (ISettings interface)
@@ -797,20 +775,37 @@ public:
     void setAutotileMasterCount(int count) override;
     QVariantMap autotilePerAlgorithmSettings() const override;
     void setAutotilePerAlgorithmSettings(const QVariantMap& settings) override;
-    int autotileInnerGap() const override;
-    void setAutotileInnerGap(int gap);
-    int autotileOuterGap() const override;
-    void setAutotileOuterGap(int gap);
-    bool autotileUsePerSideOuterGap() const override;
-    void setAutotileUsePerSideOuterGap(bool enabled);
-    int autotileOuterGapTop() const override;
-    void setAutotileOuterGapTop(int gap);
-    int autotileOuterGapBottom() const override;
-    void setAutotileOuterGapBottom(int gap);
-    int autotileOuterGapLeft() const override;
-    void setAutotileOuterGapLeft(int gap);
-    int autotileOuterGapRight() const override;
-    void setAutotileOuterGapRight(int gap);
+    // Autotile gap getters forward to the shared inner/outer gap model so tiling
+    // and snapping always resolve the same values. There are no autotile-specific
+    // gap setters: the settings UI writes the shared setInnerGap()/setOuterGap*().
+    int autotileInnerGap() const override
+    {
+        return innerGap();
+    }
+    int autotileOuterGap() const override
+    {
+        return outerGap();
+    }
+    bool autotileUsePerSideOuterGap() const override
+    {
+        return usePerSideOuterGap();
+    }
+    int autotileOuterGapTop() const override
+    {
+        return outerGapTop();
+    }
+    int autotileOuterGapBottom() const override
+    {
+        return outerGapBottom();
+    }
+    int autotileOuterGapLeft() const override
+    {
+        return outerGapLeft();
+    }
+    int autotileOuterGapRight() const override
+    {
+        return outerGapRight();
+    }
     bool autotileFocusNewWindows() const override;
     void setAutotileFocusNewWindows(bool focus);
     bool autotileSmartGaps() const override;
@@ -892,34 +887,6 @@ public:
     void setSnappingFocusFollowsMouse(bool focus) override;
     bool autotileRespectMinimumSize() const override;
     void setAutotileRespectMinimumSize(bool respect);
-    bool autotileHideTitleBars() const override;
-    void setAutotileHideTitleBars(bool hide) override;
-    bool autotileShowBorder() const override;
-    void setAutotileShowBorder(bool show) override;
-    int autotileBorderWidth() const override;
-    void setAutotileBorderWidth(int width) override;
-    int autotileBorderRadius() const override;
-    void setAutotileBorderRadius(int radius) override;
-    QColor autotileBorderColor() const override;
-    void setAutotileBorderColor(const QColor& color) override;
-    QColor autotileInactiveBorderColor() const override;
-    void setAutotileInactiveBorderColor(const QColor& color) override;
-    bool autotileUseSystemBorderColors() const override;
-    void setAutotileUseSystemBorderColors(bool use) override;
-    bool snappingHideTitleBars() const override;
-    void setSnappingHideTitleBars(bool hide) override;
-    bool snappingShowBorder() const override;
-    void setSnappingShowBorder(bool show) override;
-    int snappingBorderWidth() const override;
-    void setSnappingBorderWidth(int width) override;
-    int snappingBorderRadius() const override;
-    void setSnappingBorderRadius(int radius) override;
-    QColor snappingBorderColor() const override;
-    void setSnappingBorderColor(const QColor& color) override;
-    QColor snappingInactiveBorderColor() const override;
-    void setSnappingInactiveBorderColor(const QColor& color) override;
-    bool snappingUseSystemBorderColors() const override;
-    void setSnappingUseSystemBorderColors(bool use) override;
     StickyWindowHandling autotileStickyWindowHandling() const override;
     void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
     int autotileStickyWindowHandlingInt() const;
@@ -1132,8 +1099,6 @@ public:
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
     Q_INVOKABLE void applySystemColorScheme();
-    void applyAutotileBorderSystemColor();
-    void applySnappingBorderSystemColor();
 
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via
@@ -1179,7 +1144,7 @@ private:
 
     /// Shared writer for the three per-mode disable lists. Replaces the whole
     /// `DisableEngine` context-rule family for (@p mode, @p axisInt) in the
-    /// WindowRule store — @p axisInt is a `DisableAxis` value (file-local enum
+    /// Rule store — @p axisInt is a `DisableAxis` value (file-local enum
     /// in settings.cpp; passed as an int so the header stays decoupled). Drops
     /// malformed composite entries, fires @p signalFn + @c settingsChanged
     /// only on a real (canonical-set) change.
@@ -1187,7 +1152,7 @@ private:
                              DisableModeSignalFn signalFn);
 
     /// Shared reader for the three per-mode disable lists. Enumerates the
-    /// `DisableEngine` context rules in the WindowRule store scoped to
+    /// `DisableEngine` context rules in the Rule store scoped to
     /// @p mode and @p axisInt (a `DisableAxis` value), projecting each rule's
     /// pinned context dimensions back to its list-entry string form. The
     /// monitor variant's connector-name → canonical-id resolution lives in
@@ -1259,12 +1224,12 @@ private:
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Per-mode disable lists are stored as `DisableEngine` context rules in
-    // the unified WindowRule store (windowrules.json), NOT in config.json.
+    // the unified Rule store (rules.json), NOT in config.json.
     //
     // The store can be either owned (standalone settings app / editor / tests
     // that have no daemon counterpart) or borrowed (daemon process — the
     // daemon owns the canonical store for `LayoutRegistry` and
-    // `WindowRuleAdaptor`, and passes that same instance in so every
+    // `RuleAdaptor`, and passes that same instance in so every
     // in-process writer mutates the same in-memory ruleset). Mirroring the
     // existing `LayoutRegistry`-via-borrowed-pointer pattern eliminates the
     // dual-store race where two stores pointed at the same file each rebuild
@@ -1274,10 +1239,61 @@ private:
     // does not — the owner is responsible for having loaded already.
     // load() reloads the active store from disk so cross-process deltas
     // surface; the disabled*/setDisabled*/is*Disabled accessors read/write
-    // through `m_windowRuleStore` (a raw pointer that always tracks the
+    // through `m_ruleStore` (a raw pointer that always tracks the
     // active store — owned or borrowed).
-    std::unique_ptr<PhosphorWindowRules::WindowRuleStore> m_ownedWindowRuleStore;
-    PhosphorWindowRules::WindowRuleStore* m_windowRuleStore = nullptr;
+    std::unique_ptr<PhosphorRules::RuleStore> m_ownedRuleStore;
+    PhosphorRules::RuleStore* m_ruleStore = nullptr;
+
+    // Connect the active rule store's rulesChanged to onRuleStoreChanged and
+    // seed the gap cache from the current baseline rule. Called once at the end
+    // of every constructor (after load()), so both the owned and borrowed store
+    // paths get the reactive wiring.
+    void connectRuleStoreGapReactivity();
+
+    // Recompute the rule-backed global gap values; emit the per-property NOTIFY
+    // signals for those that changed and a single settingsChanged if any did.
+    // Driven by the baseline rule's gap actions, so a gap edit on the Window
+    // Appearance page retiles autotiled windows and re-spaces snapped zones
+    // exactly as the old stored-setting setters did. Bound to the store's
+    // rulesChanged signal.
+    void onRuleStoreChanged();
+
+    // Fingerprint of every gap action across the rule set, used to gate the
+    // per-screen gap re-sync in onRuleStoreChanged so only real gap edits fire it.
+    QString gapRulesFingerprint() const;
+
+    // Read one gap action's Value param from the rule @p ruleId in @p store, or
+    // std::nullopt when the store / rule / action is absent. Backs both the
+    // global gap getters (the managed baseline rule id) and the per-screen gap
+    // accessors (the per-monitor gap rule id).
+    static std::optional<QJsonValue> gapValueFromRule(const PhosphorRules::RuleStore* store, const QUuid& ruleId,
+                                                      QLatin1StringView actionType);
+
+    // Gap overrides authored on the per-monitor gap Rule for
+    // @p screenIdOrName, keyed in the short engine form the autotile / snapping
+    // consumers expect (InnerGap / OuterGap / UsePerSideOuterGap / OuterGap
+    // {Top,Bottom,Left,Right}), or an empty map when no such rule exists. The
+    // rule is keyed by the screen's STABLE EDID id (the form the v4→v5 migration
+    // writes and the Appearance page derives) under the deterministic id
+    // createUuidV5(baselineGapRuleId, <stable id>); the incoming identifier is
+    // resolved to that canonical form first, with the raw and physical-parent
+    // forms tried as fallbacks for rules written under an alternate form.
+    static QVariantMap perScreenGapRuleOverrides(const PhosphorRules::RuleStore* store, const QString& screenIdOrName);
+
+    // Cached snapshot of the baseline rule's gap values, used by
+    // onRuleStoreChanged for change detection (the getters read live, so a
+    // pre-change snapshot must be retained here). Seeded in
+    // connectRuleStoreGapReactivity.
+    int m_cachedInnerGap = 0;
+    int m_cachedOuterGap = 0;
+    bool m_cachedUsePerSideOuterGap = false;
+    int m_cachedOuterGapTop = 0;
+    int m_cachedOuterGapBottom = 0;
+    int m_cachedOuterGapLeft = 0;
+    int m_cachedOuterGapRight = 0;
+    // Snapshot of all gap actions across the rule set; gates the per-screen gap
+    // re-sync so non-gap rule writes (mode/assignment toggles) don't fire it.
+    QString m_cachedGapFingerprint;
 
     // Activation
     // Activation is stored in m_store.
@@ -1323,8 +1339,9 @@ private:
     // Per-screen autotile overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;
 
-    // Per-screen snapping overrides (screenIdOrName -> settings map)
-    QHash<QString, QVariantMap> m_perScreenSnappingSettings;
+    // Per-screen snapping gaps are no longer stored here: they are rule-backed
+    // (per-monitor gap Rules), read by getPerScreenSnappingSettings via
+    // perScreenGapRuleOverrides. There are no other per-screen snapping keys.
 
     // Autotiling Settings
     // Autotiling stored in m_store.

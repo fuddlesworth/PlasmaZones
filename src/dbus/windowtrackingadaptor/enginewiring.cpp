@@ -22,10 +22,10 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/RuleEvaluator.h>
-#include <PhosphorWindowRules/WindowQuery.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleEvaluator.h>
+#include <PhosphorRules/WindowQuery.h>
+#include <PhosphorRules/RuleStore.h>
 
 #include <QJsonArray>
 
@@ -35,7 +35,7 @@ namespace {
 // Defined further down in this TU's anonymous namespace; forward-declared here
 // so setEngines() (above that definition) can reference it from the snap
 // engine's exclusion-query-provider closure.
-std::optional<PhosphorWindowRules::WindowQuery>
+std::optional<PhosphorRules::WindowQuery>
 buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry, const QString& windowId);
 } // namespace
 
@@ -188,10 +188,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // autotile engine, which sees the live window in the effect, honoured
         // them). Supplying the same full WindowQuery the float / restore
         // predicates use brings snapping to parity.
-        snap->setExclusionQueryProvider(
-            [this](const QString& windowId) -> std::optional<PhosphorWindowRules::WindowQuery> {
-                return buildRuleQueryForWindow(m_windowRegistry, windowId);
-            });
+        snap->setExclusionQueryProvider([this](const QString& windowId) -> std::optional<PhosphorRules::WindowQuery> {
+            return buildRuleQueryForWindow(m_windowRegistry, windowId);
+        });
 
         // Open-floating gate (snap). A matched "Float this app" rule opens the
         // window floating instead of auto-snapping it. Purely rule-driven (no
@@ -358,15 +357,15 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     }
 }
 
-void WindowTrackingAdaptor::setWindowRuleStore(PhosphorWindowRules::WindowRuleStore* store)
+void WindowTrackingAdaptor::setRuleStore(PhosphorRules::RuleStore* store)
 {
-    if (m_windowRuleStore == store) {
+    if (m_ruleStore == store) {
         return;
     }
-    m_windowRuleStore = store;
+    m_ruleStore = store;
     // Drop the evaluator bound to the previous set; it rebuilds lazily against
     // the new one on the next per-window resolve.
-    m_windowRuleEvaluator.reset();
+    m_ruleEvaluator.reset();
 }
 
 namespace {
@@ -383,7 +382,7 @@ namespace {
 // values the effect path resolves live. Placement state (IsFloating / IsSnapped /
 // Zone) is deliberately absent: these resolvers run at window-open, before any
 // placement exists, so a predicate over them must stay inert.
-std::optional<PhosphorWindowRules::WindowQuery>
+std::optional<PhosphorRules::WindowQuery>
 buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry, const QString& windowId)
 {
     if (registry.isNull()) {
@@ -398,7 +397,7 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     if (!meta) {
         return std::nullopt;
     }
-    PhosphorWindowRules::WindowQuery query;
+    PhosphorRules::WindowQuery query;
     query.appId = meta->appId;
     if (!meta->title.isEmpty()) {
         query.title = meta->title;
@@ -453,27 +452,27 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
         : m_settings->snappingRestoreFloatedWindowsOnLogin();
 
     // No rule store / metadata → the global setting is the whole policy.
-    if (!m_windowRuleStore) {
+    if (!m_ruleStore) {
         return globalDefault;
     }
-    const std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
         return globalDefault;
     }
 
-    if (!m_windowRuleEvaluator) {
-        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    // Shares m_windowRuleEvaluator with shouldFloatByRule; resolveCached is keyed on
+    // Shares m_ruleEvaluator with shouldFloatByRule; resolveCached is keyed on
     // (windowId, ruleSet revision) and ignores the query on a hit. Safe because both
     // are open-path (resolved once per window lifetime — see shouldFloatByRule) and
     // the effect pushes the window's full metadata before the engine's open-path
     // resolve, so the first (and only) resolve for a window sees complete metadata.
-    const PhosphorWindowRules::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
-    if (const std::optional<PhosphorWindowRules::RuleAction> action =
-            resolved.slot(QString(PhosphorWindowRules::ActionSlot::RestorePosition))) {
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    if (const std::optional<PhosphorRules::RuleAction> action =
+            resolved.slot(QString(PhosphorRules::ActionSlot::RestorePosition))) {
         // A matched RestorePosition rule overrides the global setting.
-        return action->params.value(QString(PhosphorWindowRules::ActionParam::Value)).toBool();
+        return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
     }
     return globalDefault;
 }
@@ -482,16 +481,16 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
 {
     // Float is purely rule-driven: there is no global "float on open" setting, so
     // absent a matching rule the answer is "do not float".
-    if (!m_windowRuleStore) {
+    if (!m_ruleStore) {
         return false;
     }
-    const std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
         return false;
     }
 
-    if (!m_windowRuleEvaluator) {
-        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
     // resolveCached is keyed on (windowId, ruleSet revision); on a cache hit the
     // freshly built `query` is ignored. That is safe because windowId is both
@@ -499,10 +498,10 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
     // key → miss) and a mid-session appId rename changes the composite key too, so
     // a cached verdict can never outlive the metadata it was built from. Both the
     // float and restore predicates are open-path (resolved once per lifetime).
-    const PhosphorWindowRules::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
     // The Float action carries free-form params (no Value key), so the verdict is
     // the PRESENCE of the filled slot, not a bool payload.
-    return resolved.slot(QString(PhosphorWindowRules::ActionSlot::Float)).has_value();
+    return resolved.slot(QString(PhosphorRules::ActionSlot::Float)).has_value();
 }
 
 PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRule(const QString& windowId,
@@ -510,10 +509,10 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
 {
     // Placement is purely rule-driven: absent a matching SnapToZone / RouteToScreen
     // rule there is nothing to snap or route, so the answer is empty.
-    if (!m_windowRuleStore) {
+    if (!m_ruleStore) {
         return {};
     }
-    std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
         return {};
     }
@@ -532,14 +531,14 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // and a screen-constrained rule resolves correctly.
     query->screenId = screenId;
 
-    if (!m_windowRuleEvaluator) {
-        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    // Shares m_windowRuleEvaluator with shouldFloatByRule / shouldRestoreFloatedPosition;
+    // Shares m_ruleEvaluator with shouldFloatByRule / shouldRestoreFloatedPosition;
     // resolveCached is keyed on (windowId, ruleSet revision) and returns every matched
     // slot, so reading the Placement slot off the same verdict is free. Same open-path
     // lifetime guarantee (resolved once per window lifetime) as the sibling predicates.
-    const PhosphorWindowRules::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
 
     PhosphorSnapEngine::PlacementDirective directive;
 
@@ -549,9 +548,8 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // the runtime both use; the snap engine declines the route if the target is not
     // currently a snapping-mode screen, so an absent / autotile / disabled target is
     // safe here.
-    if (const auto route = resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteScreen))) {
-        directive.targetScreenId =
-            route->params.value(QString(PhosphorWindowRules::ActionParam::TargetScreenId)).toString();
+    if (const auto route = resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen))) {
+        directive.targetScreenId = route->params.value(QString(PhosphorRules::ActionParam::TargetScreenId)).toString();
     }
 
     // RouteToDesktop target (optional): when set, the zones resolve on this
@@ -559,15 +557,15 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // combined SnapToZone + RouteToDesktop rule lands the window in the right zone
     // of the destination desktop. The desktop MOVE itself is emitted separately by
     // applyOpenDesktopRouting (engine-neutral); this only steers the snap placement.
-    if (const auto route = resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteDesktop))) {
-        const int desktop = route->params.value(QString(PhosphorWindowRules::ActionParam::TargetDesktop)).toInt(0);
+    if (const auto route = resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop))) {
+        const int desktop = route->params.value(QString(PhosphorRules::ActionParam::TargetDesktop)).toInt(0);
         if (desktop >= 1) {
             directive.targetDesktop = desktop;
         }
     }
 
-    const std::optional<PhosphorWindowRules::RuleAction> action =
-        resolved.slot(QString(PhosphorWindowRules::ActionSlot::Placement));
+    const std::optional<PhosphorRules::RuleAction> action =
+        resolved.slot(QString(PhosphorRules::ActionSlot::Placement));
     if (!action) {
         // No SnapToZone: return the (possibly route-only) directive. With no ordinals
         // the snap engine treats it as "nothing to snap", so a RouteToScreen WITHOUT
@@ -580,29 +578,29 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // 1-based ordinals at load; re-validate defensively against the SAME bound
     // (1..MaxZoneOrdinal) so a future loader change can never feed a bad ordinal
     // into zone resolution.
-    const QJsonArray arr = action->params.value(QString(PhosphorWindowRules::ActionParam::Zones)).toArray();
+    const QJsonArray arr = action->params.value(QString(PhosphorRules::ActionParam::Zones)).toArray();
     directive.zoneOrdinals.reserve(arr.size());
     for (const QJsonValue& v : arr) {
         const int n = v.toInt(0);
-        if (n >= 1 && n <= PhosphorWindowRules::MaxZoneOrdinal) {
+        if (n >= 1 && n <= PhosphorRules::MaxZoneOrdinal) {
             directive.zoneOrdinals.append(n);
         }
     }
     return directive;
 }
 
-void WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorWindowRules::ResolvedActions& resolved,
+void WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::ResolvedActions& resolved,
                                                         const QString& windowId)
 {
-    const std::optional<PhosphorWindowRules::RuleAction> route =
-        resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteDesktop));
+    const std::optional<PhosphorRules::RuleAction> route =
+        resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop));
     if (!route) {
         return;
     }
     // The descriptor validator already guaranteed a 1-based desktop in range; the
     // effect-side slot re-guards (rejects < 1, out-of-range, and sticky windows),
     // so moving to the desktop the window already occupies is a harmless no-op.
-    const int desktop = route->params.value(QString(PhosphorWindowRules::ActionParam::TargetDesktop)).toInt(0);
+    const int desktop = route->params.value(QString(PhosphorRules::ActionParam::TargetDesktop)).toInt(0);
     if (desktop >= 1) {
         qCInfo(lcDbusWindow) << "open-routing: routing" << windowId << "to virtual desktop" << desktop;
         Q_EMIT windowDesktopMoveRequested(windowId, desktop);
@@ -616,10 +614,10 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
     // snapping/tiling — the desktop move composes with the window's placement.
     // Called from the snap open-path facade (the autotile path uses
     // applyOpenRoutingForAutotile, which also handles the screen redirect).
-    if (!m_windowRuleStore) {
+    if (!m_ruleStore) {
         return;
     }
-    std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
         return;
     }
@@ -627,41 +625,41 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
     // resolveCached is keyed on windowId (+ rule-set revision), so on the snap open path
     // this reuses the verdict placementZonesByRule already seeded — no second evaluation.
     query->screenId = screenId;
-    if (!m_windowRuleEvaluator) {
-        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    emitRouteToDesktopIfMatched(m_windowRuleEvaluator->resolveCached(windowId, *query), windowId);
+    emitRouteToDesktopIfMatched(m_ruleEvaluator->resolveCached(windowId, *query), windowId);
 }
 
 void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, const QString& screenId)
 {
-    if (!m_windowRuleStore) {
+    if (!m_ruleStore) {
         return;
     }
-    std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
         return;
     }
     // Pin the screen so a ScreenId-scoped rule resolves, mirroring placementZonesByRule.
     query->screenId = screenId;
-    if (!m_windowRuleEvaluator) {
-        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    const PhosphorWindowRules::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
 
     // Bare RouteToScreen only. A rule that ALSO carries SnapToZone routes AND snaps
     // via the placement directive (calculateSnapToPlacementRule resolves the zones
     // ON the target screen and returns shouldSnap, so the facade never reaches the
     // no-snap branch that calls this); moving here too would double-place the window.
-    if (resolved.slot(QString(PhosphorWindowRules::ActionSlot::Placement))) {
+    if (resolved.slot(QString(PhosphorRules::ActionSlot::Placement))) {
         return;
     }
-    const std::optional<PhosphorWindowRules::RuleAction> route =
-        resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteScreen));
+    const std::optional<PhosphorRules::RuleAction> route =
+        resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen));
     if (!route) {
         return;
     }
-    const QString target = route->params.value(QString(PhosphorWindowRules::ActionParam::TargetScreenId)).toString();
+    const QString target = route->params.value(QString(PhosphorRules::ActionParam::TargetScreenId)).toString();
     if (target.isEmpty() || target == screenId) {
         return;
     }
@@ -715,18 +713,18 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
 
 QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& windowId, const QString& screenId)
 {
-    if (!m_windowRuleStore) {
+    if (!m_ruleStore) {
         return QString();
     }
-    std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
         return QString();
     }
     query->screenId = screenId;
-    if (!m_windowRuleEvaluator) {
-        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    const PhosphorWindowRules::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
 
     // RouteToDesktop is engine-neutral — emit it for autotile windows too.
     emitRouteToDesktopIfMatched(resolved, windowId);
@@ -738,12 +736,12 @@ QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& window
     // routing is out of scope). Returning the target tells the caller to insert
     // the window into that screen's tiling state; the output-move marker stops the
     // effect from re-processing the resulting outputChanged as a fresh open.
-    const std::optional<PhosphorWindowRules::RuleAction> route =
-        resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteScreen));
+    const std::optional<PhosphorRules::RuleAction> route =
+        resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen));
     if (!route) {
         return QString();
     }
-    const QString target = route->params.value(QString(PhosphorWindowRules::ActionParam::TargetScreenId)).toString();
+    const QString target = route->params.value(QString(PhosphorRules::ActionParam::TargetScreenId)).toString();
     if (target.isEmpty() || target == screenId || !m_layoutManager) {
         return QString();
     }
@@ -753,8 +751,8 @@ QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& window
     // the snap path (calculateSnapToPlacementRule), which gates modeForScreen on the
     // routed desktop. Absent / 0 ⇒ the target screen's current desktop.
     int destDesktop = currentDesktopForScreen(target);
-    if (const auto desktopRoute = resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteDesktop))) {
-        const int d = desktopRoute->params.value(QString(PhosphorWindowRules::ActionParam::TargetDesktop)).toInt(0);
+    if (const auto desktopRoute = resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop))) {
+        const int d = desktopRoute->params.value(QString(PhosphorRules::ActionParam::TargetDesktop)).toInt(0);
         if (d >= 1) {
             destDesktop = d;
         }

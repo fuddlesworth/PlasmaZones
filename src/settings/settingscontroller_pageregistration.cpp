@@ -71,10 +71,10 @@ void SettingsController::buildApplicationController()
     // Top-level entries. The rail reads top → bottom as three blocks split by
     // two dividers: (1) top/global — Overview (status dashboard) + General
     // (global settings); (2) per-feature configuration — Display, Placement,
-    // Animations, Window Rules; (3) tools & meta — Editor, About.
+    // Animations, Rules; (3) tools & meta — Editor, About.
     // `divider` flags mark only those two seams (after General, after Window
     // Rules) plus one inside the feature block (after Placement, to set the
-    // placement categories apart from Animations/Window Rules).
+    // placement categories apart from Animations/Rules).
 
     // ── Block 1: top / global ──
     regVirtual(QStringLiteral("overview"), QString(), PhosphorI18n::tr("Overview"),
@@ -90,27 +90,37 @@ void SettingsController::buildApplicationController()
     // Placement groups the two placement modes (Snapping / Tiling) as an
     // inline-collapsible category, matching Display. Divider after it (i.e.
     // above Animations) sets the placement categories apart from the
-    // Animations / Window Rules pages that follow.
+    // Animations / Rules pages that follow.
     regVirtual(QStringLiteral("placement"), QString(), PhosphorI18n::tr("Placement"), QString(),
                QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
-    // "animations" is a no-QML drill-down parent — register it as a virtual
-    // navigation node (like display / placement / snapping / tiling), NOT as
-    // m_animationsPage's own id. The AnimationsPageController is the staging
-    // controller for animation edits; it carries the distinct id
+    // Appearance groups the visual surfaces — the window border / title-bar / gap
+    // page and the Animations tree — as an inline-collapsible category (matching
+    // Display / Placement). No QML of its own; redirects to its first leaf.
+    regVirtual(QStringLiteral("appearance"), QString(), PhosphorI18n::tr("Appearance"), QString(),
+               QStringLiteral("preferences-desktop-theme"), /*collapsible=*/true);
+    // Shared, mode-neutral page under Appearance. Edits the single managed
+    // baseline appearance Rule — the window border / title bar AND the
+    // unified inner/outer gap model (both global, not per-mode).
+    regPage(m_windowAppearancePage, QStringLiteral("appearance"), PhosphorI18n::tr("Windows"),
+            QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
+    // "animations" is a no-QML drill-down parent under Appearance — register it as
+    // a virtual navigation node (like display / placement / snapping / tiling),
+    // NOT as m_animationsPage's own id. The AnimationsPageController is the
+    // staging controller for animation edits; it carries the distinct id
     // "animations-staging" and is wired into the framework's dirty/apply
     // machinery as a headless domain below. Splitting the two means the nav
     // handle ("animations", redirected to "animations-general") and the
     // staging controller are independently addressable by QML / D-Bus.
-    regVirtual(QStringLiteral("animations"), QString(), PhosphorI18n::tr("Animations"), QString(),
+    regVirtual(QStringLiteral("animations"), QStringLiteral("appearance"), PhosphorI18n::tr("Animations"), QString(),
                QStringLiteral("media-playback-start"));
     // Headless staging domain — trackDomain() connects dirtyChanged + appends
     // to m_domains so applyAllAsync walks it, exactly as registerPage would
     // have, but without claiming a sidebar/registry id of its own.
     m_app->registerDomain(m_animationsPage);
-    // Window Rules is a top-level leaf (its old "Rules" parent retired after
+    // Rules is a top-level leaf (its old "Rules" parent retired after
     // the v4 fold left a single rule surface). Divider after it closes the
     // feature block and opens the tools-and-meta block below.
-    regPage(m_windowRulesPage, QString(), PhosphorI18n::tr("Window Rules"), QStringLiteral("WindowRulesPage.qml"),
+    regPage(m_rulesPage, QString(), PhosphorI18n::tr("Rules"), QStringLiteral("RulesPage.qml"),
             QStringLiteral("view-list-details"), /*collapsible=*/false, /*divider=*/true);
 
     // ── Block 3: tools & meta ──
@@ -163,16 +173,12 @@ void SettingsController::buildApplicationController()
                QStringLiteral("SnappingZoneSelectorPage.qml"), QStringLiteral("view-choose"), /*collapsible=*/false,
                /*divider=*/true);
 
-    regVirtual(QStringLiteral("snapping-window-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Window"), QString(),
-               QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
-    regVirtual(QStringLiteral("snapping-window-behavior"), QStringLiteral("snapping-window-cat"),
-               PhosphorI18n::tr("Behavior"), QStringLiteral("SnappingWindowBehaviorPage.qml"),
-               QStringLiteral("preferences-system"));
-    // Window Appearance keeps its dedicated controller (border-width/radius
-    // bounds + the snapping gap bounds the moved Gaps card now reads), so it
-    // stays a regPage.
-    regPage(m_snappingWindowAppearancePage, QStringLiteral("snapping-window-cat"), PhosphorI18n::tr("Appearance"),
-            QStringLiteral("SnappingWindowAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
+    // Snapping → Window holds just the per-mode Behavior page now. The window
+    // border / title-bar appearance moved to the shared, top-level Window
+    // Appearance page (one baseline rule, mode-neutral).
+    regVirtual(QStringLiteral("snapping-window-behavior"), QStringLiteral("snapping"), PhosphorI18n::tr("Window"),
+               QStringLiteral("SnappingWindowBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
+               /*collapsible=*/false, /*divider=*/true);
 
     regVirtual(QStringLiteral("snapping-config-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Configuration"),
                QString(), QStringLiteral("configure"), /*collapsible=*/true);
@@ -191,12 +197,12 @@ void SettingsController::buildApplicationController()
     // onto Window → Appearance. Page IDs are unchanged (tiling has a single
     // Behavior/Appearance pair, so they need no overlay/selector disambiguation) —
     // only the parents changed, keeping the per-page controller ids stable.
-    regVirtual(QStringLiteral("tiling-window-cat"), QStringLiteral("tiling"), PhosphorI18n::tr("Window"), QString(),
-               QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
-    regPage(m_tilingBehaviorPage, QStringLiteral("tiling-window-cat"), PhosphorI18n::tr("Behavior"),
-            QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system"));
-    regPage(m_tilingAppearancePage, QStringLiteral("tiling-window-cat"), PhosphorI18n::tr("Appearance"),
-            QStringLiteral("TilingAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
+    // Tiling → Window holds just the per-mode Behavior page now. The window
+    // border / title-bar appearance moved to the shared, top-level Window
+    // Appearance page (one baseline rule, mode-neutral).
+    regPage(m_tilingBehaviorPage, QStringLiteral("tiling"), PhosphorI18n::tr("Window"),
+            QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
+            /*collapsible=*/false, /*divider=*/true);
 
     // Algorithm is a top-level leaf under Tiling (no snapping peer — snapping's
     // layout equivalent lives under Display → Layouts). Divider after it sets the
@@ -355,6 +361,9 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     // the generic "Unknown settings page" warning.
     static const QHash<QString, QString> redirects{
         {QStringLiteral("display"), QStringLiteral("virtualscreens")},
+        // "appearance" is the inline-collapsible parent of the Windows page +
+        // the Animations tree; land on its first leaf (the Windows page).
+        {QStringLiteral("appearance"), QStringLiteral("window-appearance")},
         // "placement" is the inline-collapsible parent of snapping/tiling; it
         // has no page of its own, so a --page=placement / D-Bus call lands on
         // the first leaf of its first child (snapping → snapping-overlay-behavior).
@@ -365,7 +374,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
         {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
         {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
-        // The "rules" parent virtual retired when Window Rules promoted
+        // The "rules" parent virtual retired when Rules promoted
         // to a top-level entry; no redirect needed because there is no
         // longer a parent id to land on.
         // The *-cat virtual headers (registered as collapsible category
@@ -377,9 +386,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         // each *-cat to its first leaf so the active-page state stays
         // coherent regardless of how the id was reached.
         {QStringLiteral("snapping-overlay-cat"), QStringLiteral("snapping-overlay-behavior")},
-        {QStringLiteral("snapping-window-cat"), QStringLiteral("snapping-window-behavior")},
         {QStringLiteral("snapping-config-cat"), QStringLiteral("snapping-ordering")},
-        {QStringLiteral("tiling-window-cat"), QStringLiteral("tiling-behavior")},
         {QStringLiteral("tiling-config-cat"), QStringLiteral("tiling-ordering")},
     };
     return redirects;
@@ -434,34 +441,31 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("snapping-overlay-behavior"),
         QStringLiteral("snapping-overlay-appearance"),
     };
-    // Zone Selector is a standalone top leaf under "snapping" (no category, no
-    // Behavior/Appearance split) — folded directly into the parent sets below.
+    // Zone Selector and Window are standalone top leaves under "snapping" (no
+    // category split) — folded directly into the parent sets below. The window
+    // border / title-bar appearance moved to the shared top-level Window
+    // Appearance page, so Snapping → Window is just the Behavior leaf now.
     static const QString kSnappingZoneSelector = QStringLiteral("snapping-zoneselector");
-    static const QSet<QString> kSnappingWindowChildren{
-        QStringLiteral("snapping-window-behavior"),
-        QStringLiteral("snapping-window-appearance"),
-    };
+    static const QString kSnappingWindowBehavior = QStringLiteral("snapping-window-behavior");
     static const QSet<QString> kSnappingConfigChildren{
         QStringLiteral("snapping-ordering"),
         QStringLiteral("snapping-shortcuts"),
         QStringLiteral("snapping-shaders"),
     };
-    static const QSet<QString> kSnappingAllLeaves = kSnappingOverlayChildren + QSet<QString>{kSnappingZoneSelector}
-        + kSnappingWindowChildren + kSnappingConfigChildren;
-    static const QSet<QString> kTilingWindowChildren{
-        QStringLiteral("tiling-behavior"),
-        QStringLiteral("tiling-appearance"),
-    };
-    // Algorithm is a standalone top leaf under "tiling" (no category), so it has
-    // no *-cat group of its own; it is folded directly into the tiling/placement
-    // parent sets below.
+    static const QSet<QString> kSnappingAllLeaves = kSnappingOverlayChildren
+        + QSet<QString>{kSnappingZoneSelector, kSnappingWindowBehavior} + kSnappingConfigChildren;
+    // Window (Behavior) and Algorithm are standalone top leaves under "tiling"
+    // (no category), so they fold directly into the tiling/placement parent
+    // sets below. The window border / title-bar appearance moved to the shared
+    // top-level Window Appearance page.
+    static const QString kTilingBehavior = QStringLiteral("tiling-behavior");
     static const QString kTilingAlgorithm = QStringLiteral("tiling-algorithm");
     static const QSet<QString> kTilingConfigChildren{
         QStringLiteral("tiling-ordering"),
         QStringLiteral("tiling-shortcuts"),
     };
     static const QSet<QString> kTilingAllLeaves =
-        kTilingWindowChildren + QSet<QString>{kTilingAlgorithm} + kTilingConfigChildren;
+        QSet<QString>{kTilingBehavior, kTilingAlgorithm} + kTilingConfigChildren;
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
@@ -470,20 +474,21 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // leaf is dirty, so its leaf set is the union of both modes' leaves.
         {QStringLiteral("placement"), kSnappingAllLeaves + kTilingAllLeaves},
         {QStringLiteral("snapping-overlay-cat"), kSnappingOverlayChildren},
-        {QStringLiteral("snapping-window-cat"), kSnappingWindowChildren},
         {QStringLiteral("snapping-config-cat"), kSnappingConfigChildren},
-        {QStringLiteral("tiling-window-cat"), kTilingWindowChildren},
         {QStringLiteral("tiling-config-cat"), kTilingConfigChildren},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
+        // "appearance" wraps the Windows page + the whole Animations tree; its
+        // collapsed badge lights if either is dirty.
+        {QStringLiteral("appearance"), QSet<QString>{QStringLiteral("window-appearance")} + kAnimationsAllLeaves},
         // Top-level inline-collapsible parents must also propagate
         // dirty state from their leaves — without these entries the
         // sidebar's collapsed dirty badge stays cold even when a
         // child page is dirty. Mirrors the registry topology in
         // buildApplicationController() above.
         {QStringLiteral("display"), {QStringLiteral("virtualscreens"), QStringLiteral("layouts")}},
-        // No "rules" entry — Window Rules is a top-level leaf so its
+        // No "rules" entry — Rules is a top-level leaf so its
         // dirty state propagates without a parent-bucket intermediary.
     };
     return groups;
@@ -505,16 +510,15 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-overlay-appearance"),
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-window-behavior"),
-        QStringLiteral("snapping-window-appearance"),
         QStringLiteral("snapping-shaders"),
         QStringLiteral("snapping-shortcuts"),
-        QStringLiteral("tiling-appearance"),
         QStringLiteral("tiling-behavior"),
         QStringLiteral("tiling-algorithm"),
         QStringLiteral("tiling-shortcuts"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
-        QStringLiteral("window-rules"),
+        QStringLiteral("window-appearance"),
+        QStringLiteral("rules"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
         QStringLiteral("about"),

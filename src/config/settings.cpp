@@ -15,7 +15,9 @@
 #include "../core/utils.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
 
 #include <QGuiApplication>
 #include <QMetaMethod>
@@ -25,8 +27,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QSet>
 #include <QUuid>
+
+#include <optional>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -49,14 +54,13 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
 } // namespace
 
 Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
-                   PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent)
+                   PhosphorRules::RuleStore* ruleStore, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
     , m_store(std::make_unique<PhosphorConfig::Store>(backend, buildSettingsSchema(), this))
-    , m_ownedWindowRuleStore(windowRuleStore ? nullptr
-                                             : std::make_unique<PhosphorWindowRules::WindowRuleStore>(
-                                                   ConfigDefaults::windowRulesFilePath(), this))
-    , m_windowRuleStore(windowRuleStore ? windowRuleStore : m_ownedWindowRuleStore.get())
+    , m_ownedRuleStore(ruleStore ? nullptr
+                                 : std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), this))
+    , m_ruleStore(ruleStore ? ruleStore : m_ownedRuleStore.get())
     , m_curveRegistry(curveRegistry)
 {
     // Contract: @p backend MUST already be pointing at a migrated config
@@ -77,6 +81,7 @@ Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRe
     // (The owning ctor below routes through migrateAndCreateOwnedBackend
     // which performs the migration itself for standalone tools and tests.)
     load();
+    connectRuleStoreGapReactivity();
 }
 
 Settings::Settings(QObject* parent)
@@ -84,9 +89,8 @@ Settings::Settings(QObject* parent)
     , m_ownedBackend(migrateAndCreateOwnedBackend())
     , m_configBackend(m_ownedBackend.get())
     , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
-    , m_ownedWindowRuleStore(
-          std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), this))
-    , m_windowRuleStore(m_ownedWindowRuleStore.get())
+    , m_ownedRuleStore(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), this))
+    , m_ruleStore(m_ownedRuleStore.get())
 {
     // m_curveRegistry is left null; `animationProfile()` /
     // `setAnimationEasingCurve()` fall back to `fallbackCurveRegistry()`.
@@ -100,9 +104,10 @@ Settings::Settings(QObject* parent)
     // fixture and standalone-settings launch.
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
+    connectRuleStoreGapReactivity();
 }
 
-Settings::Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent)
+Settings::Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent)
     : ISettings(parent)
     , m_ownedBackend(migrateAndCreateOwnedBackend())
     , m_configBackend(m_ownedBackend.get())
@@ -110,10 +115,9 @@ Settings::Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObjec
     // Borrow the caller's store when provided; degrade to owning one when null
     // (mirrors the backend-injecting ctor's defensive borrow-or-own so a stray
     // null still yields a usable store rather than a null deref).
-    , m_ownedWindowRuleStore(windowRuleStore ? nullptr
-                                             : std::make_unique<PhosphorWindowRules::WindowRuleStore>(
-                                                   ConfigDefaults::windowRulesFilePath(), this))
-    , m_windowRuleStore(windowRuleStore ? windowRuleStore : m_ownedWindowRuleStore.get())
+    , m_ownedRuleStore(ruleStore ? nullptr
+                                 : std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), this))
+    , m_ruleStore(ruleStore ? ruleStore : m_ownedRuleStore.get())
 {
     // Standalone backend + process-static curve fallback (m_curveRegistry left
     // null), exactly like Settings(QObject*); the only difference is the
@@ -121,6 +125,7 @@ Settings::Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObjec
     // preserved across the Settings ↔ daemon boundary in this configuration.
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
+    connectRuleStoreGapReactivity();
 }
 
 // ── Helper Methods ───────────────────────────────────────────────────────────
@@ -196,7 +201,7 @@ void Settings::load()
 
     m_configBackend->reparseConfiguration();
 
-    // Per-mode disable lists live in windowrules.json, a separate file the
+    // Per-mode disable lists live in rules.json, a separate file the
     // config backend's reparseConfiguration() does not touch. Reload the
     // rule store explicitly so a cross-process write (daemon shortcut, KCM
     // D-Bus call) surfaces — the per-mode signal re-emission below compares
@@ -208,12 +213,12 @@ void Settings::load()
     // and a load() here would clobber unflushed in-memory edits — exactly the
     // dual-store race this borrow pattern exists to avoid. The borrowed-store
     // path relies on the owner to drive reloads (the daemon via its on-startup
-    // load + WindowRuleAdaptor; the settings app via
+    // load + RuleAdaptor; the settings app via
     // SettingsController::reloadLocalRuleStore on the daemon's rulesChanged
-    // D-Bus signal and on Discard, plus a WindowRuleStoreWatcher that reloads
+    // D-Bus signal and on Discard, plus a RuleStoreWatcher that reloads
     // on external file writes when no daemon is running).
-    if (m_ownedWindowRuleStore) {
-        m_ownedWindowRuleStore->load();
+    if (m_ownedRuleStore) {
+        m_ownedRuleStore->load();
     }
 
     // Store-backed groups (Shaders, Appearance, Ordering, Animations,
@@ -228,24 +233,19 @@ void Settings::load()
     // so per-monitor gaps never take effect on save (discussion #661).
     const QHash<QString, QVariantMap> perScreenZoneSelectorBefore = m_perScreenZoneSelectorSettings;
     const QHash<QString, QVariantMap> perScreenAutotileBefore = m_perScreenAutotileSettings;
-    const QHash<QString, QVariantMap> perScreenSnappingBefore = m_perScreenSnappingSettings;
 
     loadPerScreenOverrides(m_configBackend);
     loadVirtualScreenConfigs(m_configBackend);
 
     const bool perScreenZoneSelectorChanged = perScreenZoneSelectorBefore != m_perScreenZoneSelectorSettings;
     const bool perScreenAutotileChanged = perScreenAutotileBefore != m_perScreenAutotileSettings;
-    const bool perScreenSnappingChanged = perScreenSnappingBefore != m_perScreenSnappingSettings;
-    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged || perScreenSnappingChanged;
+    // Per-screen snapping gaps are rule-backed now (no Settings storage); their
+    // change signal is driven by the rule store via onRuleStoreChanged, not by
+    // this config reload.
+    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged;
 
     if (useSystemColors()) {
         applySystemColorScheme();
-    }
-    if (autotileUseSystemBorderColors()) {
-        applyAutotileBorderSystemColor();
-    }
-    if (snappingUseSystemBorderColors()) {
-        applySnappingBorderSystemColor();
     }
 
     qCInfo(lcConfig) << "Settings loaded";
@@ -302,8 +302,6 @@ void Settings::load()
         Q_EMIT perScreenZoneSelectorSettingsChanged();
     if (perScreenAutotileChanged)
         Q_EMIT perScreenAutotileSettingsChanged();
-    if (perScreenSnappingChanged)
-        Q_EMIT perScreenSnappingSettingsChanged();
 
     if (anyChanged || anyDisableChanged || perScreenChanged)
         Q_EMIT settingsChanged();
@@ -321,7 +319,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
-        ConfigDefaults::displayGroup(), // "Display" — dead in v4 (per-mode disable lists moved to windowrules.json);
+        ConfigDefaults::displayGroup(), // "Display" — dead in v4 (per-mode disable lists moved to rules.json);
                                         // listed so reset() drops any partial-v3 migration husk left in this group
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
@@ -357,7 +355,7 @@ void Settings::purgeStaleKeys()
 {
     // Root-level groups that must survive a save() cycle — written
     // independently of Settings::save(). Assignment rules live in
-    // windowrules.json (rule-store sidecar) and QuickLayout slots live
+    // rules.json (rule-store sidecar) and QuickLayout slots live
     // in quicklayouts.json (separate sidecar) — neither is visible to
     // this purge after the v4 migration retired assignments.json.
     //
@@ -385,6 +383,7 @@ void Settings::purgeStaleKeys()
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
         ConfigKeys::Legacy::v4ExclusionStashKey(),
         ConfigKeys::Legacy::v4AnimationExclusionStashKey(),
+        ConfigKeys::Legacy::v5AppearanceStashKey(),
     };
 
     // Compute the set of paths the Store claims. These must not be
@@ -1238,20 +1237,202 @@ P_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDispla
 // Inner/outer gaps (uniform + per-side) plus adjacency threshold. Schema
 // clampInt validators enforce the same ranges readValidatedInt used to.
 
-P_STORE_GET(int, zonePadding, snappingGapsGroup, innerKey, int)
-P_STORE_SET_INT(setZonePadding, snappingGapsGroup, innerKey, zonePaddingChanged)
-P_STORE_GET(int, outerGap, snappingGapsGroup, outerKey, int)
-P_STORE_SET_INT(setOuterGap, snappingGapsGroup, outerKey, outerGapChanged)
-P_STORE_GET(bool, usePerSideOuterGap, snappingGapsGroup, usePerSideKey, bool)
-P_STORE_SET_BOOL(setUsePerSideOuterGap, snappingGapsGroup, usePerSideKey, usePerSideOuterGapChanged)
-P_STORE_GET(int, outerGapTop, snappingGapsGroup, topKey, int)
-P_STORE_SET_INT(setOuterGapTop, snappingGapsGroup, topKey, outerGapTopChanged)
-P_STORE_GET(int, outerGapBottom, snappingGapsGroup, bottomKey, int)
-P_STORE_SET_INT(setOuterGapBottom, snappingGapsGroup, bottomKey, outerGapBottomChanged)
-P_STORE_GET(int, outerGapLeft, snappingGapsGroup, leftKey, int)
-P_STORE_SET_INT(setOuterGapLeft, snappingGapsGroup, leftKey, outerGapLeftChanged)
-P_STORE_GET(int, outerGapRight, snappingGapsGroup, rightKey, int)
-P_STORE_SET_INT(setOuterGapRight, snappingGapsGroup, rightKey, outerGapRightChanged)
+// Shared inner/outer gaps — the GLOBAL default is rule-backed (the managed
+// "Default gaps" rule, baselineGapRuleId). These getters read that rule's gap
+// actions (SetInnerGap / SetOuterGap / …) through the active window-rule store
+// and fall back to the compile-time ConfigDefaults when no store / rule / action
+// is present (the standalone settings app or a test may construct Settings
+// without a daemon-seeded store). There are no setters — the values are edited on
+// the rule directly. KEEP these accessors in lockstep with makeBaselineGapRule
+// (daemon.cpp) and with the autotile* gap forwarders in settings.h.
+// Read one gap action's Value param from the rule @p ruleId in @p store, or
+// std::nullopt when the store / rule / action is absent. Backs both the global
+// gap getters (the managed baseline rule id) and the per-screen gap accessors
+// (the per-monitor gap rule id, resolved in perScreenGapRuleOverrides).
+std::optional<QJsonValue> Settings::gapValueFromRule(const PhosphorRules::RuleStore* store, const QUuid& ruleId,
+                                                     QLatin1StringView actionType)
+{
+    if (store == nullptr) {
+        return std::nullopt;
+    }
+    const auto rule = store->ruleSet().ruleById(ruleId);
+    if (!rule) {
+        return std::nullopt;
+    }
+    const QString type = QString(actionType);
+    for (const PhosphorRules::RuleAction& a : rule->actions) {
+        if (a.type == type) {
+            return a.params.value(QString(PhosphorRules::ActionParam::Value));
+        }
+    }
+    return std::nullopt;
+}
+
+int Settings::innerGap() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetInnerGap)) {
+        return v->toInt(ConfigDefaults::innerGap());
+    }
+    return ConfigDefaults::innerGap();
+}
+int Settings::outerGap() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetOuterGap)) {
+        return v->toInt(ConfigDefaults::outerGap());
+    }
+    return ConfigDefaults::outerGap();
+}
+bool Settings::usePerSideOuterGap() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetUsePerSideOuterGap)) {
+        return v->toBool(ConfigDefaults::usePerSideOuterGap());
+    }
+    return ConfigDefaults::usePerSideOuterGap();
+}
+int Settings::outerGapTop() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetOuterGapTop)) {
+        return v->toInt(ConfigDefaults::outerGapTop());
+    }
+    return ConfigDefaults::outerGapTop();
+}
+int Settings::outerGapBottom() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetOuterGapBottom)) {
+        return v->toInt(ConfigDefaults::outerGapBottom());
+    }
+    return ConfigDefaults::outerGapBottom();
+}
+int Settings::outerGapLeft() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetOuterGapLeft)) {
+        return v->toInt(ConfigDefaults::outerGapLeft());
+    }
+    return ConfigDefaults::outerGapLeft();
+}
+int Settings::outerGapRight() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
+                                        PhosphorRules::ActionType::SetOuterGapRight)) {
+        return v->toInt(ConfigDefaults::outerGapRight());
+    }
+    return ConfigDefaults::outerGapRight();
+}
+
+void Settings::connectRuleStoreGapReactivity()
+{
+    if (m_ruleStore == nullptr) {
+        return;
+    }
+    // Seed the change-detection cache from the current baseline rule so the
+    // first rulesChanged emit compares against a real snapshot.
+    m_cachedInnerGap = innerGap();
+    m_cachedOuterGap = outerGap();
+    m_cachedUsePerSideOuterGap = usePerSideOuterGap();
+    m_cachedOuterGapTop = outerGapTop();
+    m_cachedOuterGapBottom = outerGapBottom();
+    m_cachedOuterGapLeft = outerGapLeft();
+    m_cachedOuterGapRight = outerGapRight();
+    m_cachedGapFingerprint = gapRulesFingerprint();
+    connect(m_ruleStore, &PhosphorRules::RuleStore::rulesChanged, this, [this](bool /*persisted*/) {
+        onRuleStoreChanged();
+    });
+}
+
+void Settings::onRuleStoreChanged()
+{
+    // A baseline-rule gap edit changes the rule-backed global gaps. Mirror the
+    // old stored-setter emissions: one per-property NOTIFY per changed value,
+    // plus a single settingsChanged so the autotile engine re-syncs (daemon's
+    // settingsChanged handler → refreshConfigFromSettings) and snapped zones
+    // re-space (daemon's innerGap*Changed → scheduleGapResnap). Only emit on a
+    // real change so unrelated rule edits (a new border rule, a rename) don't
+    // trigger spurious retiles.
+    const auto detect = [](auto& cached, auto current, auto emitSignal) {
+        if (cached != current) {
+            cached = current;
+            emitSignal();
+        }
+    };
+    detect(m_cachedInnerGap, innerGap(), [this]() {
+        Q_EMIT innerGapChanged();
+    });
+    detect(m_cachedOuterGap, outerGap(), [this]() {
+        Q_EMIT outerGapChanged();
+    });
+    detect(m_cachedUsePerSideOuterGap, usePerSideOuterGap(), [this]() {
+        Q_EMIT usePerSideOuterGapChanged();
+    });
+    detect(m_cachedOuterGapTop, outerGapTop(), [this]() {
+        Q_EMIT outerGapTopChanged();
+    });
+    detect(m_cachedOuterGapBottom, outerGapBottom(), [this]() {
+        Q_EMIT outerGapBottomChanged();
+    });
+    detect(m_cachedOuterGapLeft, outerGapLeft(), [this]() {
+        Q_EMIT outerGapLeftChanged();
+    });
+    detect(m_cachedOuterGapRight, outerGapRight(), [this]() {
+        Q_EMIT outerGapRightChanged();
+    });
+
+    // A rule edit can also change a per-monitor (or per-mode) gap rule, which
+    // feeds the rule-backed getPerScreenAutotileSettings / getPerScreenSnapping-
+    // Settings. Re-sync those consumers — the daemon's perScreenSnappingSettings-
+    // Changed handler reschedules the gap resnap, and its settingsChanged handler
+    // re-runs the per-screen autotile config (updateAutotileScreens) plus
+    // refreshConfigFromSettings — but ONLY when a gap action somewhere in the rule
+    // set actually changed. Emitting on every rulesChanged made a mode/assignment
+    // toggle (also a rule write) fire settingsChanged, which drove the daemon to
+    // re-resolve the default assignment and immediately revert the toggle. The
+    // fingerprint covers every gap action across all rules (baseline + per-screen
+    // + per-mode), so non-gap rule writes no longer trigger a gap re-sync.
+    const QString gapFingerprint = gapRulesFingerprint();
+    if (gapFingerprint != m_cachedGapFingerprint) {
+        m_cachedGapFingerprint = gapFingerprint;
+        Q_EMIT perScreenAutotileSettingsChanged();
+        Q_EMIT perScreenSnappingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+// Fingerprint of every gap action across the whole rule set (baseline + per-
+// screen + per-mode gap rules), used to gate the per-screen gap re-sync in
+// onRuleStoreChanged so only real gap edits fire it — never a mode/assignment/
+// border rule write.
+QString Settings::gapRulesFingerprint() const
+{
+    if (m_ruleStore == nullptr) {
+        return QString();
+    }
+    static const QSet<QString> gapTypes = {
+        QString(PhosphorRules::ActionType::SetInnerGap),           QString(PhosphorRules::ActionType::SetOuterGap),
+        QString(PhosphorRules::ActionType::SetUsePerSideOuterGap), QString(PhosphorRules::ActionType::SetOuterGapTop),
+        QString(PhosphorRules::ActionType::SetOuterGapBottom),     QString(PhosphorRules::ActionType::SetOuterGapLeft),
+        QString(PhosphorRules::ActionType::SetOuterGapRight)};
+    QString fingerprint;
+    const QString valueKey = QString(PhosphorRules::ActionParam::Value);
+    for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
+        for (const PhosphorRules::RuleAction& action : rule.actions) {
+            if (gapTypes.contains(action.type)) {
+                fingerprint += rule.id.toString();
+                fingerprint += QLatin1Char('|');
+                fingerprint += action.type;
+                fingerprint += QLatin1Char('=');
+                fingerprint += action.params.value(valueKey).toVariant().toString();
+                fingerprint += QLatin1Char(';');
+            }
+        }
+    }
+    return fingerprint;
+}
+
 P_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)
 P_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, adjacentThresholdChanged)
 
@@ -1268,7 +1449,7 @@ P_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOn
 // ── Per-mode disable lists — rule-backed (Phase 3b) ─────────────────────────
 //
 // Per-mode disable entries are `DisableEngine` context rules in the unified
-// WindowRule store (windowrules.json), NOT config.json keys. A disable rule
+// Rule store (rules.json), NOT config.json keys. A disable rule
 // pins exactly the context dimensions of its axis:
 //   - monitor  : ScreenId only
 //   - desktop  : ScreenId + VirtualDesktop
@@ -1297,7 +1478,7 @@ enum class DisableAxis {
 // formula lives in one place.
 std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, const QString& activity)
 {
-    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+    namespace CRB = PhosphorRules::ContextRuleBridge;
     switch (CRB::contextAxisOf(screenId, virtualDesktop, activity)) {
     case CRB::ContextAxis::Monitor:
         return DisableAxis::Monitor;
@@ -1319,11 +1500,11 @@ std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, c
 
 QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mode, int axisInt) const
 {
-    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+    namespace CRB = PhosphorRules::ContextRuleBridge;
     const auto axis = static_cast<DisableAxis>(axisInt);
     const QString wantToken = PhosphorZones::modeToWireString(mode);
     QStringList out;
-    for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+    for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
         const auto ruleToken = CRB::disableRuleMode(rule);
         if (!ruleToken || *ruleToken != wantToken) {
             continue; // not a disable rule, or scoped to a different mode
@@ -1354,7 +1535,7 @@ QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mod
 void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, int axisInt, const QStringList& entries,
                                    DisableModeSignalFn signalFn)
 {
-    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+    namespace CRB = PhosphorRules::ContextRuleBridge;
     const auto axis = static_cast<DisableAxis>(axisInt);
     const QString modeToken = PhosphorZones::modeToWireString(mode);
 
@@ -1370,7 +1551,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     // For Monitor axis the entry IS the screen id; for Desktop/Activity the
     // entry is `screenId/desktop` or `screenId/activity` and the leading
     // segment needs the same resolution. Without this, a write that mixes
-    // connector-name and canonical-id forms produces two separate WindowRules
+    // connector-name and canonical-id forms produces two separate Rules
     // (different UUIDs via disableRuleIdFor) covering the same logical
     // context, and the no-op short-circuit below misfires because the
     // pre/post sets look different.
@@ -1416,7 +1597,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     // (makeDisableRule is deterministic via disableRuleIdFor's createUuidV5
     // over (screenId, desktop, activity, modeToken), so the ids match
     // byte-for-byte and setAllRules would correctly detect "no change"),
-    // but walking every rule in the store and allocating fresh WindowRule
+    // but walking every rule in the store and allocating fresh Rule
     // copies just to discover that is wasted work. Pure micro-optimisation,
     // not a correctness guard against UUID churn.
     if (before == after) {
@@ -1425,8 +1606,8 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
 
     // Rebuild the rule list: keep every rule that is NOT a disable rule of
     // this exact (axis, mode) family, then append the new entries.
-    QList<PhosphorWindowRules::WindowRule> kept;
-    for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+    QList<PhosphorRules::Rule> kept;
+    for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
         const auto ruleToken = CRB::disableRuleMode(rule);
         if (ruleToken && *ruleToken == modeToken) {
             QString screenId;
@@ -1501,7 +1682,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, modeToken));
     }
 
-    if (!m_windowRuleStore->setAllRules(kept)) {
+    if (!m_ruleStore->setAllRules(kept)) {
         // Persistence failed — the in-memory rule set still advanced,
         // so consumers wired to `rulesChanged(persisted=false)` already
         // know. Surface it on the settings-side log too so users
@@ -1516,7 +1697,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         // cycle.
         qCWarning(lcConfig) << "writeDisableEntries: failed to persist window-rule store for mode" << mode << "axis"
                             << axisInt;
-        m_windowRuleStore->load();
+        m_ruleStore->load();
         Q_EMIT(this->*signalFn)(mode);
         return;
     }
@@ -1704,9 +1885,9 @@ P_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, fi
 // `excludeTransientWindows` (boolean), `minimumWindowWidth` (int px),
 // `minimumWindowHeight` (int px). Per-app / per-class exclusion lists
 // retired in v4 — the migration in src/config/configmigration.cpp drains
-// the legacy lists into Application-subject WindowRules, and runtime
+// the legacy lists into Application-subject Rules, and runtime
 // evaluators in SnapEngine, the KWin effect, and the WTA
-// pending-restore prune route through `PhosphorWindowRules::ExclusionRules`
+// pending-restore prune route through `PhosphorRules::ExclusionRules`
 // over the unified store.
 //
 // The on-disk group name `"Exclusions"` is INTENTIONALLY kept after the
@@ -1732,7 +1913,7 @@ P_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey,
 // the Exclusions block above (plus a NotificationsAndOsd knob), stored
 // independently so a user can disable animations for an app while still
 // snapping it (or vice versa). Per-app / per-class animation exclusion
-// lists retired in v4 — they fold into ExcludeAnimations WindowRules.
+// lists retired in v4 — they fold into ExcludeAnimations Rules.
 
 P_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
 P_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
@@ -1750,7 +1931,7 @@ P_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup,
 // animationExcludedApplications / animationExcludedWindowClasses (+ their
 // add*/remove* convenience methods) retired in v4 — the v4 migration drains
 // the Animations.WindowFiltering group's Applications / WindowClasses leaves
-// into `ExcludeAnimations` WindowRules. The settings accessors had no
+// into `ExcludeAnimations` Rules. The settings accessors had no
 // consumers after the KWin effect rewired off the loadSettingAsync fetches.
 
 // ── PhosphorZones::Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
@@ -2225,20 +2406,9 @@ void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
 }
 
 // Tiling.Gaps
-P_STORE_GET(int, autotileInnerGap, tilingGapsGroup, innerKey, int)
-P_STORE_SET_INT(setAutotileInnerGap, tilingGapsGroup, innerKey, autotileInnerGapChanged)
-P_STORE_GET(int, autotileOuterGap, tilingGapsGroup, outerKey, int)
-P_STORE_SET_INT(setAutotileOuterGap, tilingGapsGroup, outerKey, autotileOuterGapChanged)
-P_STORE_GET(bool, autotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, bool)
-P_STORE_SET_BOOL(setAutotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, autotileUsePerSideOuterGapChanged)
-P_STORE_GET(int, autotileOuterGapTop, tilingGapsGroup, topKey, int)
-P_STORE_SET_INT(setAutotileOuterGapTop, tilingGapsGroup, topKey, autotileOuterGapTopChanged)
-P_STORE_GET(int, autotileOuterGapBottom, tilingGapsGroup, bottomKey, int)
-P_STORE_SET_INT(setAutotileOuterGapBottom, tilingGapsGroup, bottomKey, autotileOuterGapBottomChanged)
-P_STORE_GET(int, autotileOuterGapLeft, tilingGapsGroup, leftKey, int)
-P_STORE_SET_INT(setAutotileOuterGapLeft, tilingGapsGroup, leftKey, autotileOuterGapLeftChanged)
-P_STORE_GET(int, autotileOuterGapRight, tilingGapsGroup, rightKey, int)
-P_STORE_SET_INT(setAutotileOuterGapRight, tilingGapsGroup, rightKey, autotileOuterGapRightChanged)
+// Autotile inner/outer gaps are unified with snapping — the IAutotileSettings
+// gap getters forward to the shared innerGap()/outerGap*() accessors (see
+// settings.h). Only the tiling-specific SmartGaps remains stored here.
 P_STORE_GET(bool, autotileSmartGaps, tilingGapsGroup, smartGapsKey, bool)
 P_STORE_SET_BOOL(setAutotileSmartGaps, tilingGapsGroup, smartGapsKey, autotileSmartGapsChanged)
 
@@ -2490,69 +2660,6 @@ void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
 P_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, bool)
 P_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, autotileDragInsertToggleChanged)
 
-// Tiling.Appearance
-P_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
-P_STORE_SET_COLOR(setAutotileBorderColor, tilingAppearanceColorsGroup, activeKey, autotileBorderColorChanged)
-P_STORE_GET(QColor, autotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey, QColor)
-P_STORE_SET_COLOR(setAutotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey,
-                  autotileInactiveBorderColorChanged)
-
-P_STORE_GET(bool, autotileUseSystemBorderColors, tilingAppearanceColorsGroup, useSystemKey, bool)
-void Settings::setAutotileUseSystemBorderColors(bool use)
-{
-    if (autotileUseSystemBorderColors() == use) {
-        return;
-    }
-    m_store->write(ConfigDefaults::tilingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
-    if (use) {
-        applyAutotileBorderSystemColor();
-    }
-    Q_EMIT autotileUseSystemBorderColorsChanged();
-    Q_EMIT settingsChanged();
-}
-
-P_STORE_GET(bool, autotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
-P_STORE_SET_BOOL(setAutotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey,
-                 autotileHideTitleBarsChanged)
-P_STORE_GET(bool, autotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, bool)
-P_STORE_SET_BOOL(setAutotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, autotileShowBorderChanged)
-P_STORE_GET(int, autotileBorderWidth, tilingAppearanceBordersGroup, widthKey, int)
-P_STORE_SET_INT(setAutotileBorderWidth, tilingAppearanceBordersGroup, widthKey, autotileBorderWidthChanged)
-P_STORE_GET(int, autotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, int)
-P_STORE_SET_INT(setAutotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, autotileBorderRadiusChanged)
-
-// Snapping.Appearance — the snapped window's border / title-bar (parallel to
-// Tiling.Appearance above; distinct from the Snapping.Zones.* drag overlay).
-P_STORE_GET(QColor, snappingBorderColor, snappingAppearanceColorsGroup, activeKey, QColor)
-P_STORE_SET_COLOR(setSnappingBorderColor, snappingAppearanceColorsGroup, activeKey, snappingBorderColorChanged)
-P_STORE_GET(QColor, snappingInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
-P_STORE_SET_COLOR(setSnappingInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey,
-                  snappingInactiveBorderColorChanged)
-
-P_STORE_GET(bool, snappingUseSystemBorderColors, snappingAppearanceColorsGroup, useSystemKey, bool)
-void Settings::setSnappingUseSystemBorderColors(bool use)
-{
-    if (snappingUseSystemBorderColors() == use) {
-        return;
-    }
-    m_store->write(ConfigDefaults::snappingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
-    if (use) {
-        applySnappingBorderSystemColor();
-    }
-    Q_EMIT snappingUseSystemBorderColorsChanged();
-    Q_EMIT settingsChanged();
-}
-
-P_STORE_GET(bool, snappingHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
-P_STORE_SET_BOOL(setSnappingHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey,
-                 snappingHideTitleBarsChanged)
-P_STORE_GET(bool, snappingShowBorder, snappingAppearanceBordersGroup, showBorderKey, bool)
-P_STORE_SET_BOOL(setSnappingShowBorder, snappingAppearanceBordersGroup, showBorderKey, snappingShowBorderChanged)
-P_STORE_GET(int, snappingBorderWidth, snappingAppearanceBordersGroup, widthKey, int)
-P_STORE_SET_INT(setSnappingBorderWidth, snappingAppearanceBordersGroup, widthKey, snappingBorderWidthChanged)
-P_STORE_GET(int, snappingBorderRadius, snappingAppearanceBordersGroup, radiusKey, int)
-P_STORE_SET_INT(setSnappingBorderRadius, snappingAppearanceBordersGroup, radiusKey, snappingBorderRadiusChanged)
-
 // ── reset / color helpers ────────────────────────────────────────────────────
 
 void Settings::reset()
@@ -2568,7 +2675,7 @@ void Settings::reset()
     deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();
 
-    // Per-mode disable lists live in windowrules.json as DisableEngine
+    // Per-mode disable lists live in rules.json as DisableEngine
     // context rules — drop every such rule from the store (assignment /
     // animation / exclude rules are untouched: reset() only owns the
     // settings surface). The store persists on setAllRules, so the final
@@ -2595,15 +2702,15 @@ void Settings::reset()
         resetActivitiesBefore.insert(mode, disabledActivities(mode));
     }
     {
-        namespace CRB = PhosphorWindowRules::ContextRuleBridge;
-        QList<PhosphorWindowRules::WindowRule> kept;
-        for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+        namespace CRB = PhosphorRules::ContextRuleBridge;
+        QList<PhosphorRules::Rule> kept;
+        for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
             if (!CRB::disableRuleMode(rule)) {
                 kept.append(rule); // not a DisableEngine rule — preserve
             }
         }
-        if (kept.size() != m_windowRuleStore->count()) {
-            if (!m_windowRuleStore->setAllRules(kept)) {
+        if (kept.size() != m_ruleStore->count()) {
+            if (!m_ruleStore->setAllRules(kept)) {
                 // Persistence failed — the in-memory store advanced but the
                 // on-disk file is stale. Roll back the in-memory state by
                 // reloading from disk so the per-mode re-emit loop below
@@ -2619,7 +2726,7 @@ void Settings::reset()
                 qCWarning(lcConfig)
                     << "reset: failed to persist window-rule store — rolling back in-memory state; disable "
                        "rules will reappear on next launch";
-                m_windowRuleStore->load();
+                m_ruleStore->load();
             }
         }
     }
@@ -2946,25 +3053,6 @@ void Settings::applySystemColorScheme()
 
     const QColor fontColor = pal.color(QPalette::Active, QPalette::Text);
     setLabelFontColor(fontColor);
-}
-
-void Settings::applyAutotileBorderSystemColor()
-{
-    // Use the exact snapping zone highlight/inactive colors including their
-    // alpha. Route through the setters so the Store stays the source of
-    // truth (and the NOTIFY signals fire as a side effect).
-    setAutotileBorderColor(highlightColor());
-    setAutotileInactiveBorderColor(inactiveColor());
-}
-
-void Settings::applySnappingBorderSystemColor()
-{
-    // Mirror applyAutotileBorderSystemColor: adopt the zone highlight/inactive
-    // colors (which themselves track the system accent) so the snapped-window
-    // border follows the system accent. Route through the setters so the Store
-    // stays the source of truth and NOTIFY signals fire.
-    setSnappingBorderColor(highlightColor());
-    setSnappingInactiveBorderColor(inactiveColor());
 }
 
 #undef P_STORE_GET

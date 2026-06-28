@@ -112,7 +112,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Don't assign a layout by default")
                     searchAnchor: "suppressDefaultLayoutAssignment"
-                    description: i18n("Snapping and tiling stay off until you assign a layout. A window rule can re-enable the default per monitor.")
+                    description: i18n("Snapping and tiling stay off until you assign a layout. A rule can re-enable the default per monitor.")
 
                     SettingsSwitch {
                         checked: appSettings.suppressDefaultLayoutAssignment
@@ -130,7 +130,7 @@ SettingsFlickable {
         // =====================================================================
         // The three global filters previously hosted on the standalone
         // "Exclusions" page. The per-app and per-class lists that used to
-        // live there have folded into Window Rules (Application-subject
+        // live there have folded into Rules (Application-subject
         // Exclude rules), so the page itself was deleted; these three global
         // knobs survive here because they apply to ALL windows uniformly
         // rather than matching specific applications.

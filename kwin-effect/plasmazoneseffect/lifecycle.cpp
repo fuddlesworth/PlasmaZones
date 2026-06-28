@@ -200,15 +200,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     m_frameGeometryFlushTimer->setInterval(50);
     connect(m_frameGeometryFlushTimer, &QTimer::timeout, this, &PlasmaZonesEffect::flushPendingFrameGeometry);
 
-    // WindowRules.rulesChanged debounce. See slotWindowRulesChanged: the
+    // Rules.rulesChanged debounce. See slotRulesChanged: the
     // daemon emits one signal per per-rule mutation, so without coalescing a
     // 50-rule batch edit fires 50 full-ruleset fetches + parses. 50ms matches
     // the frame-geometry flush above — single edits feel instant, bursts
     // collapse to a single fetch at the trailing edge.
     m_animationRulesRefreshDebounce.setSingleShot(true);
     m_animationRulesRefreshDebounce.setInterval(50);
-    connect(&m_animationRulesRefreshDebounce, &QTimer::timeout, this,
-            &PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus);
+    connect(&m_animationRulesRefreshDebounce, &QTimer::timeout, this, &PlasmaZonesEffect::loadRuleAnimationsFromDbus);
 
     // Connect DragTracker signals
     //
@@ -746,14 +745,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // daemonReady serviceRegistered handler addresses); without this
         // disconnect, every daemon restart accumulates one extra match
         // rule, and each rulesChanged emission then dispatches N times
-        // to slotWindowRulesChanged across N restarts. The debounce
+        // to slotRulesChanged across N restarts. The debounce
         // collapses the work to a single fetch, but each dispatch still
         // pays D-Bus delivery + Qt slot invocation.
         QDBusConnection::sessionBus().disconnect(QString(PhosphorProtocol::Service::Name),
                                                  QString(PhosphorProtocol::Service::ObjectPath),
-                                                 QString(PhosphorProtocol::Service::Interface::WindowRules),
-                                                 QStringLiteral("rulesChanged"), this, SLOT(slotWindowRulesChanged()));
-        m_windowRulesSubscribed = false;
+                                                 QString(PhosphorProtocol::Service::Interface::Rules),
+                                                 QStringLiteral("rulesChanged"), this, SLOT(slotRulesChanged()));
+        m_rulesSubscribed = false;
         // Release any pending first-frame open suppression. Without the
         // daemon there is no `resolveWindowRestore` reply coming and no
         // autotile reposition either, so the suppression entry would just
@@ -771,9 +770,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // windowDecorationRestored per window, and the rebuild-on-restore
         // handler would otherwise recreate a border item for every still-
         // tracked window only for clearAllBorders() to destroy it moments
-        // later. With tracking cleared, resolveBorderStateFor returns null
-        // for mode-tracked windows during the restore burst and the handler
-        // drops their items. Windows matched by a still-live SetBorder rule
+        // later. With tracking cleared, the IsSnapped / IsTiled / Zone rule
+        // fields flip off for those windows during the restore burst, so the
+        // handler resolves no placement-scoped border and drops their items.
+        // Windows matched by a still-live SetBorder rule
         // (the rule sets deliberately survive daemon loss, see below) can
         // still get an item recreated and immediately torn down by
         // clearAllBorders() — bounded, invisible churn that is cheaper than
@@ -807,7 +807,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // exclusion / animation override during the bringup race, flashing
         // un-filtered animations and unstyled snaps until the new daemon
         // replays its rulesChanged broadcast. The sets get refreshed once
-        // the new daemon's `loadWindowRuleAnimationsFromDbus` reply lands.
+        // the new daemon's `loadRuleAnimationsFromDbus` reply lands.
     });
     connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon registered: waiting for daemonReady signal";

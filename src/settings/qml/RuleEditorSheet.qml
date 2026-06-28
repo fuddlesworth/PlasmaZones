@@ -36,7 +36,7 @@ import org.kde.kirigami as Kirigami
 Kirigami.Dialog {
     id: sheet
 
-    /// The WindowRuleController — passed through to the body.
+    /// The RuleController — passed through to the body.
     required property var controller
     /// The SettingsController bridge — passed through to the body.
     required property var appSettings
@@ -89,7 +89,7 @@ Kirigami.Dialog {
         discardConfirm.open();
     }
 
-    title: i18nc("@title:window", "Edit Window Rule")
+    title: i18nc("@title:window", "Edit Rule")
     preferredWidth: Math.min(Kirigami.Units.gridUnit * 40, parent ? parent.width * 0.9 : Kirigami.Units.gridUnit * 40)
     // Bound the dialog height. Kirigami.Dialog centers itself with
     // `y: (parent.height - height) / 2` (Dialog.qml:300), so `y` depends on

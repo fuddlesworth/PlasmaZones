@@ -24,7 +24,7 @@ import org.kde.kirigami as Kirigami
 ColumnLayout {
     id: root
 
-    /// The WindowRuleController — threaded into the recursive editors.
+    /// The RuleController — threaded into the recursive editors.
     required property var controller
     /// The SettingsController bridge — threaded into the leaf and action
     /// editors so the picker-kind params (screen / activity / layout) can
@@ -196,7 +196,7 @@ ColumnLayout {
         // Priority + band-name hint. Bare integers like "610" are
         // meaningless without the band scheme; the inline label maps the
         // current value back to its semantic band. Bands defined in
-        // windowrulecontroller.cpp.
+        // rulecontroller.cpp.
         RowLayout {
             id: priorityRow
 
@@ -207,7 +207,7 @@ ColumnLayout {
 
             SpinBox {
                 Accessible.name: i18n("Rule priority. Higher rules are evaluated first.")
-                ToolTip.delay: 500
+                ToolTip.delay: Kirigami.Units.toolTipDelay
                 ToolTip.text: i18n("Priority bands. 100: Animation, 200: Application, 300: Context, 500: Advanced. Higher numbers win within a band.")
                 ToolTip.visible: hovered
                 from: 0
