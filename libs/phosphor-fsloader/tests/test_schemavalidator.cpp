@@ -179,6 +179,32 @@ private Q_SLOTS:
         const auto doc = parse(R"({"id":"{abc}","zones":[{"geometry":{"x":0,"width":0.5}}]})");
         QVERIFY(!validator.validate(doc).has_value());
     }
+
+    void moveAssignmentPreservesCompiledSchema()
+    {
+        SchemaValidator source(sampleSchema());
+        SchemaValidator target(QByteArrayLiteral("{}")); // empty schema, matches anything
+        target = std::move(source);
+        QVERIFY(target.isValid());
+        const auto doc = parse(R"({"id":"{abc}","zones":[{"geometry":{"x":0,"width":0.5}}]})");
+        QVERIFY(!target.validate(doc).has_value());
+        const auto bad = parse(R"({"zones":[]})");
+        QVERIFY(target.validate(bad).has_value());
+    }
+
+    void invalidPatternFailsClosedWithoutThrowing()
+    {
+        // valijson compiles `pattern` regexes lazily at validate() time, so an
+        // invalid ECMAScript pattern only fails when a string is checked. It
+        // must fail closed (a returned error list), never throw — an escaping
+        // throw would terminate, since callers are built under -fno-exceptions.
+        // NOTE: a plain (non-raw) string literal — an unbalanced '[' inside a
+        // raw string confuses moc's lexer and hides this Q_OBJECT class.
+        const SchemaValidator validator(QByteArrayLiteral("{\"type\":\"string\",\"pattern\":\"[\"}"));
+        const auto errors = validator.validate(parse("\"abc\""));
+        QVERIFY(errors.has_value());
+        QVERIFY(!errors->isEmpty());
+    }
 };
 
 QTEST_MAIN(TestSchemaValidator)

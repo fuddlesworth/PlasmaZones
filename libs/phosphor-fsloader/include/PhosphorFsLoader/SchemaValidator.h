@@ -94,4 +94,14 @@ private:
     std::unique_ptr<Private> d;
 };
 
+/**
+ * @brief Log each schema violation at @p category, one per line.
+ *
+ * Each error is logged as "  <json-pointer>: <message>" (or "(root)" for a
+ * document-root failure). Centralizes the per-error diagnostic format every
+ * loader shares; callers emit their own "skipping X" headline first.
+ */
+PHOSPHORFSLOADER_EXPORT void logSchemaErrors(const QLoggingCategory& category,
+                                             const QList<SchemaValidator::Error>& errors);
+
 } // namespace PhosphorFsLoader

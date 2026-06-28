@@ -98,26 +98,49 @@ std::optional<QList<SchemaValidator::Error>> SchemaValidator::validate(const QJs
         return QList<Error>{Error{QString(), d->compileError}};
     }
 
-    valijson::ValidationResults results;
-    const valijson::adapters::QtJsonAdapter targetAdapter(document);
-    valijson::Validator validator;
+    // valijson compiles `pattern`/`patternProperties` regexes lazily during
+    // validation (not at schema-compile time), so a schema with an invalid
+    // ECMAScript pattern throws std::regex_error here even though it compiled
+    // cleanly. Catch it: this TU is built with exceptions, but every caller is
+    // compiled under KDE's default -fno-exceptions, so an escaping throw would
+    // unwind through a -fno-exceptions frame and std::terminate. Fail closed
+    // instead, honoring the same contract as the constructor.
+    try {
+        valijson::ValidationResults results;
+        const valijson::adapters::QtJsonAdapter targetAdapter(document);
+        valijson::Validator validator;
 
-    if (validator.validate(d->schema, targetAdapter, &results)) {
-        return std::nullopt;
-    }
+        if (validator.validate(d->schema, targetAdapter, &results)) {
+            return std::nullopt;
+        }
 
-    QList<Error> errors;
-    errors.reserve(static_cast<int>(results.numErrors()));
-    valijson::ValidationResults::Error result;
-    while (results.popError(result)) {
-        errors.append(Error{QString::fromStdString(result.jsonPointer), QString::fromStdString(result.description)});
+        QList<Error> errors;
+        errors.reserve(static_cast<int>(results.numErrors()));
+        valijson::ValidationResults::Error result;
+        while (results.popError(result)) {
+            errors.append(
+                Error{QString::fromStdString(result.jsonPointer), QString::fromStdString(result.description)});
+        }
+        // valijson always enqueues at least one error on a failed validate(),
+        // but guarantee the contract (a failure returns a non-empty list).
+        if (errors.isEmpty()) {
+            errors.append(Error{QString(), QStringLiteral("document failed schema validation")});
+        }
+        return errors;
+    } catch (const std::exception& e) {
+        return QList<Error>{
+            Error{QString(), QStringLiteral("schema validation error: %1").arg(QString::fromUtf8(e.what()))}};
+    } catch (...) {
+        return QList<Error>{Error{QString(), QStringLiteral("schema validation error: unknown")}};
     }
-    // valijson always enqueues at least one error on a failed validate(), but
-    // guarantee the contract (a failure returns a non-empty list) regardless.
-    if (errors.isEmpty()) {
-        errors.append(Error{QString(), QStringLiteral("document failed schema validation")});
+}
+
+void logSchemaErrors(const QLoggingCategory& category, const QList<SchemaValidator::Error>& errors)
+{
+    for (const auto& error : errors) {
+        qCWarning(category).nospace() << "  " << (error.path.isEmpty() ? QStringLiteral("(root)") : error.path) << ": "
+                                      << error.message;
     }
-    return errors;
 }
 
 } // namespace PhosphorFsLoader

@@ -151,10 +151,7 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // than letting them fall through to fromJson and produce broken zones.
         if (const auto errors = layoutSchemaValidator().validate(structural)) {
             qCWarning(lcZonesLib) << "Skipping layout file failing schema validation:" << filePath;
-            for (const auto& err : *errors) {
-                qCWarning(lcZonesLib).nospace()
-                    << "  " << (err.path.isEmpty() ? QStringLiteral("(root)") : err.path) << ": " << err.message;
-            }
+            PhosphorFsLoader::logSchemaErrors(lcZonesLib(), *errors);
             continue;
         }
 
@@ -435,6 +432,15 @@ void LayoutRegistry::importLayout(const QString& filePath)
         return;
     }
 
+    // Import is an untrusted-input load path (a user-picked file), so gate it on
+    // the same schema as the directory scan rather than letting a malformed file
+    // reach fromJson and produce broken zones.
+    if (const auto errors = layoutSchemaValidator().validate(doc.object())) {
+        qCWarning(lcZonesLib) << "Cannot import layout: file failing schema validation:" << filePath;
+        PhosphorFsLoader::logSchemaErrors(lcZonesLib(), *errors);
+        return;
+    }
+
     auto* parsed = PhosphorZones::Layout::fromJson(doc.object(), this);
     if (!parsed) {
         qCWarning(lcZonesLib) << "Failed to create layout from imported JSON:" << filePath;
@@ -509,6 +515,14 @@ PhosphorZones::Layout* LayoutRegistry::restoreSystemLayout(const QUuid& id, cons
     const auto doc = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError) {
         qCWarning(lcZonesLib) << "System layout parse error:" << systemPath << parseError.errorString();
+        return nullptr;
+    }
+
+    // Gate on the same schema as the scan/import paths so a corrupt system file
+    // is refused rather than restored as broken zones.
+    if (const auto errors = layoutSchemaValidator().validate(doc.object())) {
+        qCWarning(lcZonesLib) << "System layout failing schema validation:" << systemPath;
+        PhosphorFsLoader::logSchemaErrors(lcZonesLib(), *errors);
         return nullptr;
     }
 

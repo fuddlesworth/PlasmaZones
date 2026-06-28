@@ -22,7 +22,9 @@
 #
 # Depends on Qt6::Core only. No Gui / Qml / DBus coupling.
 
-cmake_minimum_required(VERSION 3.16)
+# 3.18 floor: the vendored-valijson acquisition below uses file(ARCHIVE_EXTRACT),
+# introduced in CMake 3.18.
+cmake_minimum_required(VERSION 3.18)
 
 set(PHOSPHORFSLOADER_VERSION "0.1.0")
 

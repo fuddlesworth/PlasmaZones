@@ -310,10 +310,7 @@ std::optional<ShaderRegistry::ShaderInfo> parseShader(const QString& shaderDir, 
     // rather than registering a shader with unbindable parameters.
     if (const auto errors = shaderMetadataValidator().validate(root)) {
         qCWarning(lcShaderRegistry) << "Skipping shader pack failing schema validation:" << shaderDir;
-        for (const auto& err : *errors) {
-            qCWarning(lcShaderRegistry).nospace()
-                << "  " << (err.path.isEmpty() ? QStringLiteral("(root)") : err.path) << ": " << err.message;
-        }
+        PhosphorFsLoader::logSchemaErrors(lcShaderRegistry(), *errors);
         return std::nullopt;
     }
 

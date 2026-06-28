@@ -789,10 +789,7 @@ SettingsController::SettingsController(QObject* parent)
             QJsonArray releases;
             if (const auto errors = validator.validate(doc.object())) {
                 qCWarning(PlasmaZones::lcCore) << "whatsnew.json failed schema validation; skipping What's New entries";
-                for (const auto& err : *errors) {
-                    qCWarning(PlasmaZones::lcCore).nospace()
-                        << "  " << (err.path.isEmpty() ? QStringLiteral("(root)") : err.path) << ": " << err.message;
-                }
+                PhosphorFsLoader::logSchemaErrors(PlasmaZones::lcCore(), *errors);
             } else {
                 releases = doc.object().value(QLatin1String("releases")).toArray();
             }

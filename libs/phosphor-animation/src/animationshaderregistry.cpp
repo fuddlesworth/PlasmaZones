@@ -169,10 +169,7 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
         QStringLiteral(":/phosphoranimation/schemas/animation-metadata.schema.json"), lcRegistry());
     if (const auto errors = validator.validate(root)) {
         qCWarning(lcRegistry) << "Skipping animation pack failing schema validation:" << effectDir;
-        for (const auto& err : *errors) {
-            qCWarning(lcRegistry).nospace()
-                << "  " << (err.path.isEmpty() ? QStringLiteral("(root)") : err.path) << ": " << err.message;
-        }
+        PhosphorFsLoader::logSchemaErrors(lcRegistry(), *errors);
         return std::nullopt;
     }
 

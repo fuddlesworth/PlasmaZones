@@ -114,10 +114,7 @@ public:
         // factory below still does the typeId-specific parameter validation.
         if (const auto errors = curveSchemaValidator().validate(obj)) {
             qCWarning(lcCurveLoader) << "Skipping curve file failing schema validation:" << filePath;
-            for (const auto& err : *errors) {
-                qCWarning(lcCurveLoader).nospace()
-                    << "  " << (err.path.isEmpty() ? QStringLiteral("(root)") : err.path) << ": " << err.message;
-            }
+            PhosphorFsLoader::logSchemaErrors(lcCurveLoader(), *errors);
             return std::nullopt;
         }
 

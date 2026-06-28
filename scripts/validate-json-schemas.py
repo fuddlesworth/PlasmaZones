@@ -55,15 +55,22 @@ def load_json(path: Path) -> object:
         return json.load(handle)
 
 
+# Keywords whose values are literal data instances, not subschemas, so a
+# "format" key nested inside them is a data field rather than the JSON Schema
+# format keyword and must not be collected.
+_NON_SCHEMA_KEYWORDS = frozenset({"default", "const", "examples", "enum"})
+
+
 def formats_used(node: object) -> set[str]:
-    """Collect every JSON Schema `format` string used anywhere in a schema."""
+    """Collect every JSON Schema `format` keyword string used in a schema."""
     found: set[str] = set()
     if isinstance(node, dict):
         fmt = node.get("format")
         if isinstance(fmt, str):
             found.add(fmt)
-        for value in node.values():
-            found |= formats_used(value)
+        for key, value in node.items():
+            if key not in _NON_SCHEMA_KEYWORDS:
+                found |= formats_used(value)
     elif isinstance(node, list):
         for item in node:
             found |= formats_used(item)
@@ -216,6 +223,16 @@ def main() -> int:
         targets: list[Path] = []
         for pattern in globs:
             targets.extend(sorted(root.glob(pattern)))
+
+        # In full-set mode (no explicit files), a mapped glob that matches
+        # nothing means a data directory was renamed/emptied out from under the
+        # schema and validation silently stopped covering it. Fail rather than
+        # report a misleading green. (Skipped in explicit-files mode, where a
+        # schema legitimately has no staged files.)
+        if requested is None and not targets:
+            fail(f"{schema_rel}: no data files matched {', '.join(globs)} (mapping is stale?)")
+            failures += 1
+            continue
 
         for target in targets:
             if requested is not None and target.resolve() not in requested:
