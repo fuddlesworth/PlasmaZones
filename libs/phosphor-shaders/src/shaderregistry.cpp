@@ -295,16 +295,8 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
 /// RCC-embedded schema (see qt6_add_resources in CMakeLists).
 const PhosphorFsLoader::SchemaValidator& shaderMetadataValidator()
 {
-    static const PhosphorFsLoader::SchemaValidator validator =
-        [] {
-            QFile schemaFile(QStringLiteral(":/phosphorshaders/schemas/shader-metadata.schema.json"));
-            if (!schemaFile.open(QIODevice::ReadOnly)) {
-                qCWarning(lcShaderRegistry)
-                    << "Embedded shader-metadata schema resource missing — packs cannot be validated";
-                return PhosphorFsLoader::SchemaValidator(QByteArray());
-            }
-            return PhosphorFsLoader::SchemaValidator(schemaFile.readAll());
-        }();
+    static const PhosphorFsLoader::SchemaValidator validator = PhosphorFsLoader::SchemaValidator::fromResource(
+        QStringLiteral(":/phosphorshaders/schemas/shader-metadata.schema.json"), lcShaderRegistry());
     return validator;
 }
 

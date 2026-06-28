@@ -12,7 +12,6 @@
 #include <PhosphorFsLoader/SchemaValidator.h>
 
 #include <QDir>
-#include <QFile>
 #include <QFileInfo>
 #include <QHash>
 #include <QJsonObject>
@@ -50,14 +49,8 @@ QString makeCurveLoaderOwnerTag()
 // full on-disk file.
 const PhosphorFsLoader::SchemaValidator& curveSchemaValidator()
 {
-    static const PhosphorFsLoader::SchemaValidator validator = [] {
-        QFile schemaFile(QStringLiteral(":/phosphoranimation/schemas/curve.schema.json"));
-        if (!schemaFile.open(QIODevice::ReadOnly)) {
-            qCWarning(lcCurveLoader) << "Embedded curve schema resource missing — curve files cannot be validated";
-            return PhosphorFsLoader::SchemaValidator(QByteArray());
-        }
-        return PhosphorFsLoader::SchemaValidator(schemaFile.readAll());
-    }();
+    static const PhosphorFsLoader::SchemaValidator validator = PhosphorFsLoader::SchemaValidator::fromResource(
+        QStringLiteral(":/phosphoranimation/schemas/curve.schema.json"), lcCurveLoader());
     return validator;
 }
 

@@ -81,21 +81,40 @@ def ensure_jsonschema() -> None:
         fail("jsonschema still unavailable after bootstrap")
         sys.exit(2)
 
-    cache_root = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache"))
+    cache_root_env = os.environ.get("XDG_CACHE_HOME")
+    try:
+        cache_root = Path(cache_root_env) if cache_root_env else (Path.home() / ".cache")
+    except RuntimeError:
+        # Neither XDG_CACHE_HOME nor a resolvable home dir: nowhere to cache a
+        # venv, so fail closed rather than crash with an uncaught traceback.
+        fail("cannot locate a cache directory to bootstrap jsonschema (set XDG_CACHE_HOME or HOME)")
+        sys.exit(2)
     venv_dir = cache_root / "plasmazones" / "jsonschema-venv"
     venv_py = venv_dir / "bin" / "python"
+    # Success stamp written only AFTER pip install returns 0. Gating on the
+    # stamp (not venv_py.exists()) means a partially-built venv — e.g. an
+    # offline run where venv creation succeeds but pip install fails — is
+    # rebuilt on the next run instead of leaving the cache permanently wedged
+    # (re-execing into a Python that has no jsonschema, failing at exit 2
+    # forever). Mirrors the extract-once stamp used for vendored Luau.
+    ready_stamp = venv_dir / ".jsonschema-installed"
 
-    if not venv_py.exists():
+    if not ready_stamp.exists():
         print("validate-json-schemas: bootstrapping JSON-schema validator (one-time)...", file=sys.stderr)
+        import shutil
         import subprocess
         import venv as venv_module
 
         try:
+            # Clear any partial/stale venv left by a prior failed attempt.
+            if venv_dir.exists():
+                shutil.rmtree(venv_dir)
             venv_module.create(venv_dir, with_pip=True)
             subprocess.run(
                 [str(venv_py), "-m", "pip", "install", "--quiet", "jsonschema[format]"],
                 check=True,
             )
+            ready_stamp.touch()
         except Exception as exc:  # noqa: BLE001 - any failure means we cannot validate
             fail(f"could not bootstrap jsonschema ({exc}); install it manually or connect to a network")
             sys.exit(2)
@@ -137,7 +156,7 @@ def main() -> int:
     # membership testing against each schema's matched set.
     requested: set[Path] | None = None
     if args.files:
-        requested = {(p if p.is_absolute() else (Path.cwd() / p)).resolve() for p in args.files}
+        requested = {(p if p.is_absolute() else (root / p)).resolve() for p in args.files}
 
     failures = 0
     checked = 0

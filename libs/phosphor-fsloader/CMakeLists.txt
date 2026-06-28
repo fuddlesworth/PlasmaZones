@@ -149,14 +149,18 @@ target_compile_features(PhosphorFsLoader PUBLIC cxx_std_20)
 # SYSTEM keeps the project's -Wall/-Wextra/-Wpedantic from flagging the
 # third-party headers.
 target_include_directories(PhosphorFsLoader SYSTEM PRIVATE "${VALIJSON_INCLUDE_DIR}")
-target_compile_definitions(PhosphorFsLoader PRIVATE VALIJSON_USE_EXCEPTIONS=1)
 
 # valijson's schema parser throws on a malformed schema; schemavalidator.cpp
 # catches it to fail closed. KDECompilerSettings disables exceptions by
 # default (see the -fexceptions override on vendored Luau), so re-enable them
-# on just this translation unit.
+# on just this translation unit. The VALIJSON_USE_EXCEPTIONS define (which tells
+# valijson to `throw` rather than abort) is scoped to the SAME TU so the
+# throwing macro and the exceptions flag always travel together — a future TU
+# that includes a valijson header without this scope compiles under
+# -fno-exceptions and would be unable to build the throwing code.
 set_source_files_properties(src/schemavalidator.cpp PROPERTIES
-    COMPILE_OPTIONS "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-fexceptions>")
+    COMPILE_OPTIONS "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-fexceptions>"
+    COMPILE_DEFINITIONS "VALIJSON_USE_EXCEPTIONS=1")
 
 target_link_libraries(PhosphorFsLoader
     PUBLIC

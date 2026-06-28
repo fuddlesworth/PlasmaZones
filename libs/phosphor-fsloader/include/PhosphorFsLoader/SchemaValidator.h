@@ -13,6 +13,8 @@
 #include <memory>
 #include <optional>
 
+class QLoggingCategory;
+
 namespace PhosphorFsLoader {
 
 /**
@@ -61,6 +63,18 @@ public:
     SchemaValidator& operator=(SchemaValidator&&) noexcept;
     SchemaValidator(const SchemaValidator&) = delete;
     SchemaValidator& operator=(const SchemaValidator&) = delete;
+
+    /**
+     * @brief Build a validator from a Qt resource (or file) path, failing closed.
+     *
+     * Opens @p resourcePath and compiles the schema from its bytes. If the
+     * resource cannot be opened — for an RCC-embedded schema this means a build
+     * regression — it logs a warning at @p category and returns a validator
+     * whose @c isValid() is false, so every @c validate() call rejects rather
+     * than silently passing documents through unvalidated. The single place the
+     * embed-and-fail-closed contract lives, shared by every loader.
+     */
+    [[nodiscard]] static SchemaValidator fromResource(const QString& resourcePath, const QLoggingCategory& category);
 
     /// True when the schema compiled successfully and the validator is usable.
     [[nodiscard]] bool isValid() const;

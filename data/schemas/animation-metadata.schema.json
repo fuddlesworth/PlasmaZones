@@ -2,9 +2,9 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "https://plasmazones.kde.org/schemas/animation-metadata.schema.json",
     "title": "PlasmaZones Animation Shader Metadata",
-    "description": "metadata.json for a bundled or user animation-shader pack. Core identity and the parameter contract are enforced; optional rendering keys (vertexShader, fboExtent, textures, appliesTo, geometryGrid) are allowed through.",
+    "description": "metadata.json for a bundled or user animation-shader pack. Core identity and the parameter contract are enforced. Optional rendering keys (vertexShader, fboExtent, textures, appliesTo, geometryGrid) and descriptive metadata (description, author, version, category) are allowed through.",
     "type": "object",
-    "required": ["id", "name", "description", "author", "version", "category", "fragmentShader", "parameters"],
+    "required": ["id", "name", "fragmentShader", "parameters"],
     "properties": {
         "id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 },
@@ -30,11 +30,11 @@
                 "type": {
                     "type": "string",
                     "enum": ["float", "int", "bool", "color"],
-                    "description": "Marshalling type of the uniform; an unknown type cannot be bound, so it is rejected."
+                    "description": "Marshalling type of the uniform. An unknown type cannot be bound, so it is rejected."
                 },
                 "default": {
                     "type": ["number", "string", "boolean"],
-                    "description": "Default value; a string for color (#rrggbb), number for float/int, boolean for bool."
+                    "description": "Default value. Use a string for color (#rrggbb), a number for float or int, and a boolean for bool."
                 },
                 "min": { "type": "number" },
                 "max": { "type": "number" }

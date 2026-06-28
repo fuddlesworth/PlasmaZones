@@ -334,7 +334,10 @@ jobs:
           python-version: "3.x"
 
       - name: Install jsonschema
-        run: pip install jsonschema
+        # The [format] extra matches the lefthook bootstrap venv and enables
+        # string-format checks (e.g. format:"date"), so CI and the local hook
+        # validate identical surfaces.
+        run: pip install "jsonschema[format]"
 
       - name: Validate bundled data against schemas
         run: python3 scripts/validate-json-schemas.py

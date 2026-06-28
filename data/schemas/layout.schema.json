@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "https://plasmazones.kde.org/schemas/layout.schema.json",
     "title": "PlasmaZones Layout",
-    "description": "A tiling layout: identity metadata plus a list of zones with relative geometry. Structural invariants are enforced here; the rich set of optional appearance, shader, gap, geometry-mode, and visibility keys is allowed through so editor-produced and future layouts are not rejected.",
+    "description": "A tiling layout with identity metadata and a list of zones with relative geometry. Structural invariants are enforced here. The optional appearance, shader, gap, geometry-mode, and visibility keys are allowed through so editor-produced and future layouts are not rejected.",
     "type": "object",
     "required": ["id", "name", "zones"],
     "properties": {
@@ -14,7 +14,7 @@
         "name": {
             "type": "string",
             "minLength": 1,
-            "description": "Display name; the loader rejects layouts with an empty name."
+            "description": "Display name. The loader rejects layouts with an empty name."
         },
         "description": { "type": "string" },
         "type": {
@@ -33,7 +33,7 @@
         "zones": {
             "type": "array",
             "minItems": 1,
-            "description": "At least one zone; the loader rejects zero-zone layouts.",
+            "description": "At least one zone. The loader rejects zero-zone layouts.",
             "items": { "$ref": "#/definitions/zone" }
         }
     },
@@ -43,7 +43,6 @@
             "required": ["relativeGeometry"],
             "properties": {
                 "id": { "type": "string", "minLength": 1 },
-                "zoneId": { "type": "string", "minLength": 1 },
                 "name": { "type": "string" },
                 "zoneNumber": { "type": "integer" },
                 "relativeGeometry": { "$ref": "#/definitions/relativeGeometry" }

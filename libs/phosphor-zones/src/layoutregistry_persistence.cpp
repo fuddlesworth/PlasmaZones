@@ -26,24 +26,14 @@ namespace PhosphorZones {
 namespace {
 
 // Process-wide layout schema validator, compiled once on first use from the
-// RCC-embedded schema (see qt6_add_resources in CMakeLists). Always available
-// — never depends on an installed data path. validate() is const and only
-// reads the compiled schema, so reusing this single instance across the load
-// loop (and across threads) is safe.
+// RCC-embedded schema (see qt6_add_resources in CMakeLists). Always available,
+// never depends on an installed data path. validate() is const and only reads
+// the compiled schema, so reusing this single instance across the load loop
+// (and across threads) is safe.
 const PhosphorFsLoader::SchemaValidator& layoutSchemaValidator()
 {
-    static const PhosphorFsLoader::SchemaValidator validator = [] {
-        QFile schemaFile(QStringLiteral(":/phosphorzones/schemas/layout.schema.json"));
-        if (!schemaFile.open(QIODevice::ReadOnly)) {
-            // A missing embedded resource is a build error, not a user input
-            // problem. Fail closed: an empty-bytes validator reports invalid
-            // and every layout is rejected with a clear diagnostic rather than
-            // silently loading unvalidated.
-            qCWarning(lcZonesLib) << "Embedded layout schema resource missing — layout files cannot be validated";
-            return PhosphorFsLoader::SchemaValidator(QByteArray());
-        }
-        return PhosphorFsLoader::SchemaValidator(schemaFile.readAll());
-    }();
+    static const PhosphorFsLoader::SchemaValidator validator = PhosphorFsLoader::SchemaValidator::fromResource(
+        QStringLiteral(":/phosphorzones/schemas/layout.schema.json"), lcZonesLib());
     return validator;
 }
 

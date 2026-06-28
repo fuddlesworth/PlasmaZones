@@ -3,8 +3,11 @@
 
 #include <PhosphorFsLoader/SchemaValidator.h>
 
+#include <QtCore/QFile>
+#include <QtCore/QIODevice>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
+#include <QtCore/QLoggingCategory>
 #include <QtCore/QString>
 
 // valijson is vendored and confined to this translation unit. Including its
@@ -24,8 +27,9 @@ namespace PhosphorFsLoader {
 struct SchemaValidator::Private
 {
     // The compiled schema. Populated once at construction; reused by every
-    // validate() call. Wrapped in optional so a failed compile leaves it
-    // empty and validate() can fail closed.
+    // validate() call. A failed compile leaves `compiled` false (valijson::Schema
+    // has no clean empty/re-assignable state, so the bool is the fail-closed
+    // guard, checked by isValid() and validate()).
     valijson::Schema schema;
     bool compiled = false;
 
@@ -65,6 +69,20 @@ SchemaValidator::SchemaValidator(const QByteArray& schemaJson)
     }
 }
 
+SchemaValidator SchemaValidator::fromResource(const QString& resourcePath, const QLoggingCategory& category)
+{
+    QFile file(resourcePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        // A missing embedded resource is a build error, not user input. Fail
+        // closed: an empty-bytes validator reports invalid and rejects every
+        // document, rather than silently passing them through unvalidated.
+        qCWarning(category) << "JSON schema resource missing:" << resourcePath
+                            << "- all documents will be rejected (fail-closed)";
+        return SchemaValidator(QByteArray());
+    }
+    return SchemaValidator(file.readAll());
+}
+
 SchemaValidator::~SchemaValidator() = default;
 SchemaValidator::SchemaValidator(SchemaValidator&&) noexcept = default;
 SchemaValidator& SchemaValidator::operator=(SchemaValidator&&) noexcept = default;
@@ -93,6 +111,11 @@ std::optional<QList<SchemaValidator::Error>> SchemaValidator::validate(const QJs
     valijson::ValidationResults::Error result;
     while (results.popError(result)) {
         errors.append(Error{QString::fromStdString(result.jsonPointer), QString::fromStdString(result.description)});
+    }
+    // valijson always enqueues at least one error on a failed validate(), but
+    // guarantee the contract (a failure returns a non-empty list) regardless.
+    if (errors.isEmpty()) {
+        errors.append(Error{QString(), QStringLiteral("document failed schema validation")});
     }
     return errors;
 }

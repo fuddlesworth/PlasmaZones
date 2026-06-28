@@ -780,26 +780,22 @@ SettingsController::SettingsController(QObject* parent)
             const auto doc = QJsonDocument::fromJson(whatsNewFile.readAll());
 
             // Validate against the embedded schema before consuming. The same
-            // schema CI validates the file against; a bundled resource failing
-            // here is a build error, so log and skip rather than surfacing
-            // malformed entries (the page simply shows nothing).
-            bool valid = true;
-            QFile schemaFile(QStringLiteral(":/schemas/whatsnew.schema.json"));
-            if (schemaFile.open(QIODevice::ReadOnly)) {
-                const PhosphorFsLoader::SchemaValidator validator(schemaFile.readAll());
-                if (const auto errors = validator.validate(doc.object())) {
-                    valid = false;
-                    qCWarning(PlasmaZones::lcCore)
-                        << "whatsnew.json failed schema validation; skipping What's New entries";
-                    for (const auto& err : *errors) {
-                        qCWarning(PlasmaZones::lcCore).nospace()
-                            << "  " << (err.path.isEmpty() ? QStringLiteral("(root)") : err.path) << ": "
-                            << err.message;
-                    }
+            // schema CI validates the file against. fromResource fails closed if
+            // the resource is missing (a build error), so malformed or
+            // unvalidatable data is skipped rather than surfaced (the page
+            // simply shows nothing).
+            const auto validator = PhosphorFsLoader::SchemaValidator::fromResource(
+                QStringLiteral(":/schemas/whatsnew.schema.json"), PlasmaZones::lcCore());
+            QJsonArray releases;
+            if (const auto errors = validator.validate(doc.object())) {
+                qCWarning(PlasmaZones::lcCore) << "whatsnew.json failed schema validation; skipping What's New entries";
+                for (const auto& err : *errors) {
+                    qCWarning(PlasmaZones::lcCore).nospace()
+                        << "  " << (err.path.isEmpty() ? QStringLiteral("(root)") : err.path) << ": " << err.message;
                 }
+            } else {
+                releases = doc.object().value(QLatin1String("releases")).toArray();
             }
-
-            const auto releases = valid ? doc.object().value(QLatin1String("releases")).toArray() : QJsonArray();
             for (const auto& entry : releases) {
                 const auto obj = entry.toObject();
                 QVariantMap release;

@@ -161,27 +161,13 @@ std::optional<QString> validateTexturePathWithinEffectDir(const QString& rawPath
 /// frag is unreachable through the normal kwin pipeline, so the
 /// missed wakeup is academic — but flagged here so a future schema
 /// change that defaults the field can pin the contract.
-// Process-wide animation-metadata schema validator, compiled once from the
-// RCC-embedded schema (see qt6_add_resources in CMakeLists).
-const PhosphorFsLoader::SchemaValidator& animationMetadataValidator()
-{
-    static const PhosphorFsLoader::SchemaValidator validator = [] {
-        QFile schemaFile(QStringLiteral(":/phosphoranimation/schemas/animation-metadata.schema.json"));
-        if (!schemaFile.open(QIODevice::ReadOnly)) {
-            qCWarning(lcRegistry) << "Embedded animation-metadata schema resource missing — packs cannot be validated";
-            return PhosphorFsLoader::SchemaValidator(QByteArray());
-        }
-        return PhosphorFsLoader::SchemaValidator(schemaFile.readAll());
-    }();
-    return validator;
-}
-
 std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const QJsonObject& root, bool isUserDir)
 {
-    // Validate the metadata.json structure (identity + parameter contract)
-    // before building the effect, so a malformed pack is skipped with a clear
-    // diagnostic rather than producing an effect with unbindable parameters.
-    if (const auto errors = animationMetadataValidator().validate(root)) {
+    // Validate metadata.json (identity + parameter contract) before building it,
+    // so a malformed pack is skipped. Compiled once on first parse, fail-closed.
+    static const PhosphorFsLoader::SchemaValidator validator = PhosphorFsLoader::SchemaValidator::fromResource(
+        QStringLiteral(":/phosphoranimation/schemas/animation-metadata.schema.json"), lcRegistry());
+    if (const auto errors = validator.validate(root)) {
         qCWarning(lcRegistry) << "Skipping animation pack failing schema validation:" << effectDir;
         for (const auto& err : *errors) {
             qCWarning(lcRegistry).nospace()

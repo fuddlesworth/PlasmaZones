@@ -19,7 +19,7 @@
                 "version": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "Release version; compared as a QVersionNumber to pick the latest."
+                    "description": "Release version. It is compared as a QVersionNumber to pick the latest."
                 },
                 "date": {
                     "type": "string",
