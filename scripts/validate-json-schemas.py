@@ -16,10 +16,10 @@ with the `jsonschema` package's Draft7Validator so the two engines agree.
 Usage:
     validate-json-schemas.py [--root DIR] [FILE ...]
 
-With no FILE arguments, every data file covered by the SCHEMA_MAP is
-validated (CI mode). With explicit FILEs (lefthook passes staged files),
-only those that fall under a mapped directory are validated; unmapped
-files are ignored so the hook stays silent for unrelated commits.
+Both CI and the lefthook hook run with no FILE arguments, so every data file
+covered by the SCHEMA_MAP is validated (a schema edit re-checks all of its
+data). Passing explicit FILEs is a manual convenience: only those that fall
+under a mapped directory are validated, and unmapped files are ignored.
 """
 
 from __future__ import annotations
@@ -53,6 +53,21 @@ def fail(msg: str) -> None:
 def load_json(path: Path) -> object:
     with path.open(encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def formats_used(node: object) -> set[str]:
+    """Collect every JSON Schema `format` string used anywhere in a schema."""
+    found: set[str] = set()
+    if isinstance(node, dict):
+        fmt = node.get("format")
+        if isinstance(fmt, str):
+            found.add(fmt)
+        for value in node.values():
+            found |= formats_used(value)
+    elif isinstance(node, list):
+        for item in node:
+            found |= formats_used(item)
+    return found
 
 
 def ensure_jsonschema() -> None:
@@ -181,6 +196,18 @@ def main() -> int:
             Draft7Validator.check_schema(schema)
         except Exception as exc:  # noqa: BLE001 - report any schema defect (parse or schema error)
             fail(f"invalid schema {schema_rel}: {exc}")
+            failures += 1
+            continue
+
+        # Fail closed if the schema uses a `format` this environment can't
+        # actually check (the jsonschema[format] extra supplies date-time, email,
+        # uri, etc.; "date" is built in). Without this, an unenforceable format
+        # would be silently skipped, letting a bad value pass locally while CI
+        # (which installs the extra) rejects it. The bootstrap venv and CI both
+        # have the extra, so this only guards a manual run on a bare jsonschema.
+        unenforceable = sorted(f for f in formats_used(schema) if f not in format_checker.checkers)
+        if unenforceable:
+            fail(f"{schema_rel}: cannot enforce format(s) {', '.join(unenforceable)}; install jsonschema[format]")
             failures += 1
             continue
 
