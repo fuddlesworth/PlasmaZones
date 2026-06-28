@@ -149,11 +149,14 @@ public:
         NotFound, ///< no rule with that id, or @p rule is invalid
         Unchanged, ///< the rule was already identical — nothing applied
         Applied, ///< the rule was replaced and a change signal emitted
+        AppliedSectionChanged, ///< replaced AND the edit moved it to a different section/band
     };
 
     /// Replace the rule with the same id. Returns `NotFound` for an unknown id
-    /// or an invalid rule, `Unchanged` for an identical rule (no signal), and
-    /// `Applied` when the rule was replaced.
+    /// or an invalid rule, `Unchanged` for an identical rule (no signal),
+    /// `Applied` when the rule was replaced in place, and
+    /// `AppliedSectionChanged` when the replacement also moved the rule into a
+    /// different section (its priority band must be re-stamped by the caller).
     UpdateResult updateRule(const PhosphorRules::Rule& rule);
 
     /// Remove the rule with @p id. Returns false if no such rule.
@@ -180,7 +183,7 @@ public:
     static QString sectionLabel(Section section);
 
     /// Localized human label for a match Field. Shared with
-    /// `RuleController` so the 14-case table lives in exactly one place.
+    /// `RuleController` so the per-Field label table lives in exactly one place.
     static QString fieldLabel(PhosphorRules::Field field);
 
     /// Every non-empty `ScreenId` leaf value found anywhere in @p match.

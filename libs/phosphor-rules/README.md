@@ -19,7 +19,7 @@ permitted).
 | `WindowQuery.h` | the attribute bag an expression is evaluated against |
 | `MatchExpression.h` | composable leaf/composite predicate tree, JSON, cached regex |
 | `RuleAction.h` | pluggable slot-based action descriptors + `ActionRegistry` |
-| `Rule.h` | `{ id, name, enabled, priority, match, actions }` |
+| `Rule.h` | `{ id, name, enabled, priority, match, actions, managed }` |
 | `RuleSet.h` | ordered collection, monotonic revision, `rules.json` I/O |
 | `RuleEvaluator.h` | descending-priority resolution + `(windowId, revision)` match cache |
 

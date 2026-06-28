@@ -199,6 +199,7 @@ private Q_SLOTS:
         q.zone = QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}");
         q.isFloating = true;
         q.isSnapped = false;
+        q.isTiled = true;
 
         // Numeric position fields (including a negative coordinate).
         QVERIFY(MatchExpression::makeLeaf(Field::PositionX, Operator::GreaterThan, 1000).evaluate(q));
@@ -211,6 +212,8 @@ private Q_SLOTS:
         QVERIFY(MatchExpression::makeLeaf(Field::KeepAbove, Operator::Equals, false).evaluate(q));
         QVERIFY(MatchExpression::makeLeaf(Field::IsFloating, Operator::Equals, true).evaluate(q));
         QVERIFY(MatchExpression::makeLeaf(Field::IsSnapped, Operator::Equals, false).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::IsTiled, Operator::Equals, true).evaluate(q));
+        QVERIFY(!MatchExpression::makeLeaf(Field::IsTiled, Operator::Equals, false).evaluate(q));
 
         // String fields.
         QVERIFY(
@@ -223,6 +226,7 @@ private Q_SLOTS:
         WindowQuery bare;
         bare.appId = QStringLiteral("firefox");
         QVERIFY(!MatchExpression::makeLeaf(Field::IsModal, Operator::Equals, true).evaluate(bare));
+        QVERIFY(!MatchExpression::makeLeaf(Field::IsTiled, Operator::Equals, true).evaluate(bare));
         QVERIFY(!MatchExpression::makeLeaf(Field::PositionX, Operator::GreaterThan, 0).evaluate(bare));
         QVERIFY(!MatchExpression::makeLeaf(Field::Zone, Operator::Equals,
                                            QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"))

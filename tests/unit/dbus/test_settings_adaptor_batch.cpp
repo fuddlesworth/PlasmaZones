@@ -253,9 +253,8 @@ private Q_SLOTS:
     // If the adaptor registry drops any registration the effect silently reads
     // false and that toggle feature dies — zoneSpanToggleMode shipped
     // unregistered until PR #595's audit caught it, so pin the whole set here
-    // to break the test gate on any future omission. Mirrors the snap-window
-    // batch test above: every requested key must come back, valid, Bool-typed,
-    // and wired to its own ISettings accessor.
+    // to break the test gate on any future omission. Every requested key must
+    // come back, valid, Bool-typed, and wired to its own ISettings accessor.
     // ─────────────────────────────────────────────────────────────────────
     void testGetSettings_dragToggleKeys_allReturnedWithTypes()
     {
@@ -396,8 +395,8 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     CountingStubSettings* m_settings = nullptr;
-    // CountingStubSettings publicly inherits StubSettings, whose snapping*
-    // getters back the value assertions in testGetSettings_snappingKeys_*.
+    // CountingStubSettings publicly inherits StubSettings, whose getters back
+    // the value assertions in the batch get-settings tests.
     QObject* m_parent = nullptr;
     SettingsAdaptor* m_adaptor = nullptr;
 };

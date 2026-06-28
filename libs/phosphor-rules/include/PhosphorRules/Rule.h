@@ -42,6 +42,14 @@ struct PHOSPHORRULES_EXPORT ValidationIssue
         /// resolution (window fields are absent on the windowless query), so
         /// the action's slot is never filled.
         ContextActionWithWindowMatch = 0,
+        /// A terminal action (Exclude) on the same rule as one or more
+        /// `Tag::Effect` slot-filling actions (border / opacity / animation
+        /// override). When such a rule is admitted to the effect's appearance /
+        /// animation evaluator, the terminal Exclude truncates the resolve walk,
+        /// so the Effect action's slot may be dropped (and lower-priority rules
+        /// suppressed for the window). Split the exclusion and the appearance
+        /// into separate rules.
+        TerminalActionWithEffectActions = 1,
     };
 
     Code code = Code::ContextActionWithWindowMatch;
@@ -61,7 +69,7 @@ struct PHOSPHORRULES_EXPORT ValidationIssue
 };
 
 /**
- * @brief One rule — `{ id, name, enabled, priority, match, actions }`.
+ * @brief One rule — `{ id, name, enabled, priority, match, actions, managed }`.
  *
  * A copyable value type living inside `RuleSet`'s ordered list. The
  * `id` is a stable QUuid (serialized `toString()` with braces). `priority`

@@ -48,7 +48,7 @@ enum class Field : int {
     PositionX = 27,
     PositionY = 28,
     CaptionNormal = 29,
-    // ── PlasmaZones extension fields [30, 32] ────────────────────────────
+    // ── PlasmaZones extension fields [30, 33] ────────────────────────────
     IsFloating = 30, ///< floated out of tiling (snap or autotile)
     IsSnapped = 31, ///< occupies a snap zone
     Zone = 32, ///< the snap zone's UUID the window occupies
@@ -124,7 +124,7 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     {Field::PositionX, QLatin1StringView("positionX"), FieldType::Int, FieldSource::Window},
     {Field::PositionY, QLatin1StringView("positionY"), FieldType::Int, FieldSource::Window},
     {Field::CaptionNormal, QLatin1StringView("captionNormal"), FieldType::String, FieldSource::Window},
-    // [30, 32] — PlasmaZones extension fields
+    // [30, 33] — PlasmaZones extension fields
     {Field::IsFloating, QLatin1StringView("isFloating"), FieldType::Bool, FieldSource::Window},
     {Field::IsSnapped, QLatin1StringView("isSnapped"), FieldType::Bool, FieldSource::Window},
     {Field::Zone, QLatin1StringView("zone"), FieldType::String, FieldSource::Window},

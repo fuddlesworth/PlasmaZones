@@ -741,9 +741,6 @@ private:
     /// instead of twice.
     void flushPendingRuleInvalidations();
 
-    /// Resolve which mode's BorderState manages @p windowId — autotile first,
-    /// then snap — or nullptr if neither draws a border for it.
-
     /// Resolve the per-window-rule SetHideTitleBar override for @p windowId
     /// and forward it to the DecorationManager as a tri-state rule override
     /// (unset = mode decides, true = rule hides, false = force-show veto).

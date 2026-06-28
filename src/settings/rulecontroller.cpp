@@ -566,6 +566,16 @@ bool RuleController::updateRuleFromJson(const QVariantMap& ruleJson)
     case RuleModel::UpdateResult::Applied:
         setDirty(true);
         return true;
+    case RuleModel::UpdateResult::AppliedSectionChanged:
+        // The edit moved the rule into a different section, so its stored
+        // priority is now in the wrong band (e.g. adding an animation action
+        // reclassifies a Monitor rule to Animation). Re-stamp band priorities so
+        // evaluation order matches the rule's new section. This runs only on a
+        // section change, so a same-section Advanced edit still keeps its
+        // explicitly chosen priority verbatim.
+        renormalizePriorities();
+        setDirty(true);
+        return true;
     }
     return false;
 }

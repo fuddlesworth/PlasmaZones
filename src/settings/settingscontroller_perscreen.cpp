@@ -86,19 +86,22 @@ void SettingsController::clearPerScreenAutotileAlgorithmSettings(const QString& 
 
 // ── Per-screen gap overrides (rule-backed) ───────────────────────────────
 // A per-monitor gap override is a screen-scoped gap Rule whose id is
-// derived deterministically from the baseline gap rule + the screen
-// name (matching WindowAppearanceController::perScreenGapRuleId). The Gaps
-// card's monitor scope chip drives has/clear through these; the gap controls
-// themselves read/write the rule's actions via rulesPage. Mirrors the
-// autotile per-screen has/clear shape so the shared MonitorScopeChip can drive
-// it uniformly.
+// derived deterministically from the baseline gap rule + the screen's STABLE
+// EDID id (matching WindowAppearanceController::perScreenGapRuleId, the v4→v5
+// migration, and Settings::perScreenGapRuleOverrides, all of which key by the
+// canonical stable form). The Gaps card's monitor scope chip drives has/clear
+// through these; the gap controls themselves read/write the rule's actions via
+// rulesPage. Mirrors the autotile per-screen has/clear shape so the shared
+// MonitorScopeChip can drive it uniformly.
 
 bool SettingsController::hasPerScreenGapRule(const QString& screenName) const
 {
     if (screenName.isEmpty() || m_rulesPage == nullptr) {
         return false;
     }
-    const QString id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), screenName.toUtf8()).toString();
+    const QString id =
+        QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), Settings::canonicalPerScreenKey(screenName).toUtf8())
+            .toString();
     return !m_rulesPage->ruleJson(id).isEmpty();
 }
 
@@ -107,7 +110,9 @@ void SettingsController::clearPerScreenGapRule(const QString& screenName)
     if (screenName.isEmpty() || m_rulesPage == nullptr) {
         return;
     }
-    const QString id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), screenName.toUtf8()).toString();
+    const QString id =
+        QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), Settings::canonicalPerScreenKey(screenName).toUtf8())
+            .toString();
     // removeRule drives RuleModel::countChanged → perScreenOverridesChanged
     // (wired in settingscontroller.cpp), so no manual emit is needed here.
     m_rulesPage->removeRule(id);

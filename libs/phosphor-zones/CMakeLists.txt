@@ -4,7 +4,7 @@
 # PhosphorZones — manual zone-layout primitives.
 #
 # Passive data + geometry layer: Zone, Layout, ZoneDetector, ZoneHighlighter,
-# layout JSON serialization, and the IZoneDetector / ILayoutRegistry abstract
+# layout JSON serialization, and the IZoneDetector / IZoneLayoutRegistry abstract
 # contracts. Implements PhosphorLayout::ILayoutSource so editor / settings
 # code can render layout previews without depending on the daemon.
 #

@@ -752,21 +752,21 @@ add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_ov
 # stages CRUD by UUID and builds the monitor overview. Compiles the model /
 # controller sources directly (they live in the plasmazones-settings
 # executable, not plasmazones_core).
-add_executable(test_window_rule_model
-    settings/test_window_rule_model.cpp
+add_executable(test_rule_model
+    settings/test_rule_model.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rulemodel.cpp
 )
-target_link_libraries(test_window_rule_model
+target_link_libraries(test_rule_model
     PRIVATE
         Qt6::Test
         Qt6::Core
         PhosphorRules::PhosphorRules
         plasmazones_core
 )
-add_test(NAME test_window_rule_model COMMAND test_window_rule_model)
+add_test(NAME test_rule_model COMMAND test_rule_model)
 
-add_executable(test_window_rule_controller
-    settings/test_window_rule_controller.cpp
+add_executable(test_rule_controller
+    settings/test_rule_controller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rulemodel.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller.cpp
     # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
@@ -781,7 +781,7 @@ add_executable(test_window_rule_controller
     ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/ruletemplates.cpp
 )
-target_link_libraries(test_window_rule_controller
+target_link_libraries(test_rule_controller
     PRIVATE
         Qt6::Test
         Qt6::Core
@@ -790,7 +790,7 @@ target_link_libraries(test_window_rule_controller
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
-add_test(NAME test_window_rule_controller COMMAND test_window_rule_controller)
+add_test(NAME test_rule_controller COMMAND test_rule_controller)
 
 # Validation methods on D-Bus struct types - pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,

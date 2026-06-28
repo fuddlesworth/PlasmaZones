@@ -638,7 +638,6 @@ private:
     /// One-time idempotent fold of the retired autotile-overrides.json into the
     /// unified layout-settings.json sidecar; deletes the legacy file when done.
     void migrateLegacyAutotileOverrides();
-    Layout* resolveConfiguredDefault() const;
 
     // ─── Rule-backed assignment resolution ────────────────────────────────
     // The unified RuleStore is the single source of truth for every

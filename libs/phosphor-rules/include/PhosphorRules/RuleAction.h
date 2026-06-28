@@ -126,8 +126,8 @@ struct PHOSPHORRULES_EXPORT ParamSchema
 // `ActionRegistry::hasTag()` / `typesWithTag()` instead of maintaining
 // parallel type-list helpers. Adding a tag to a new action is one descriptor
 // field edit; no consumer call-site changes. Tags compose via intersection:
-// e.g. the set that `isAnimationOverrideAction` covers (the 3 Override*
-// actions, NOT ExcludeAnimations) = Tag::Animation ∩ Tag::Effect.
+// e.g. the animation-override actions (the 3 Override* actions, NOT
+// ExcludeAnimations) are exactly Tag::Animation ∩ Tag::Effect.
 namespace Tag {
 /// Actions consumed by the KWin effect's rule set (shader manager +
 /// border appearance). ExcludeAnimations deliberately omits this tag.
@@ -392,41 +392,6 @@ inline constexpr QLatin1StringView SetOuterGapTop{"setOuterGapTop"};
 inline constexpr QLatin1StringView SetOuterGapBottom{"setOuterGapBottom"};
 inline constexpr QLatin1StringView SetOuterGapLeft{"setOuterGapLeft"};
 inline constexpr QLatin1StringView SetOuterGapRight{"setOuterGapRight"};
-
-/// @deprecated Use `ActionRegistry::hasTag(type, Tag::Animation) && hasTag(type, Tag::Effect)` instead.
-[[deprecated("use ActionRegistry::hasTag with Tag::Animation ∩ Tag::Effect")]]
-inline bool isAnimationOverrideAction(const QString& type)
-{
-    return type == OverrideAnimationShader || type == OverrideAnimationTiming || type == OverrideAnimationCurve;
-}
-
-/// @deprecated Use `ActionRegistry::hasTag(type, Tag::Border)` instead.
-[[deprecated("use ActionRegistry::hasTag with Tag::Border")]]
-inline bool isBorderAppearanceAction(const QString& type)
-{
-    return type == SetHideTitleBar || type == SetBorderVisible || type == SetBorderWidth || type == SetBorderRadius
-        || type == SetBorderColorActive || type == SetBorderColorInactive;
-}
-
-/// @deprecated Use `ActionRegistry::hasTag(type, Tag::Effect)` instead.
-/// Note: ExcludeAnimations deliberately omits Tag::Effect — it flows into the
-/// effect's separate `m_animationExclusionRuleSet`.
-[[deprecated("use ActionRegistry::hasTag with Tag::Effect")]]
-inline bool isEffectRuleAction(const QString& type)
-{
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    return isAnimationOverrideAction(type) || type == SetOpacity || isBorderAppearanceAction(type);
-#pragma GCC diagnostic pop
-}
-
-/// @deprecated Use `ActionRegistry::hasTag(type, Tag::LayoutEngine)` instead.
-[[deprecated("use ActionRegistry::hasTag with Tag::LayoutEngine")]]
-inline bool isLayoutEngineContextAction(const QString& type)
-{
-    return type == SetEngineMode || type == SetSnappingLayout || type == SetTilingAlgorithm || type == DisableEngine
-        || type == LockContext || type == DefaultLayoutAssignment;
-}
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──

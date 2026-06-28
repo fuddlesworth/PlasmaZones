@@ -1295,7 +1295,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     }
     // A surface-extent transition paints across the whole output. The
     // off-frame band the shader sweeps is covered by the unconditional
-    // `effects->addRepaintFull()` immediately below (line 1247) —
+    // `effects->addRepaintFull()` issued below —
     // `addLayerRepaint` itself clips its argument back to the window-
     // item's bounding rect via the scene's `mapFromScene` (see
     // paint_pipeline.cpp's commentary), so widening `repaintRect` to
@@ -1715,7 +1715,7 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
             }
             // Admit the rule to the evaluator if ANY action is effect-consumed
             // (the OverrideAnimation* triple, SetOpacity, or a SetBorder* /
-            // SetHideTitleBar appearance action — see isEffectRuleAction).
+            // SetHideTitleBar appearance action — Tag::Effect via hasTag below).
             bool admitted = false;
             for (const PhosphorRules::RuleAction& action : rule.actions) {
                 if (PhosphorRules::ActionRegistry::instance().hasTag(action.type, PhosphorRules::Tag::Effect)) {
@@ -1736,7 +1736,7 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
                           << "total animation rules to the evaluator";
 
         // Per-window border / title-bar rules ride the same animation rule set
-        // (isEffectRuleAction admits them). Refresh borders so an edited /
+        // (Tag::Effect admits them). Refresh borders so an edited /
         // added / removed SetBorder* / SetHideTitleBar rule applies immediately
         // — updateAllBorders re-merges every window and reconciles rule-hidden
         // title bars against the fresh evaluator.

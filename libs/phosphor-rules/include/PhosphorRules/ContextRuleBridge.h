@@ -523,8 +523,11 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
             sawActivity = true;
             activity = leaf.predicate().value.toString();
         }
-        // A non-context or non-equality leaf is ignored — a flat mixed rule
-        // still yields its context projection, per the contract above.
+        // Any leaf that is not a ScreenId / VirtualDesktop / Activity equality
+        // leaf is ignored here — a flat mixed rule still yields its context
+        // projection, per the contract above. This includes a Mode equality leaf:
+        // Mode IS a context field, but it is not one of the three decomposed
+        // dimensions, so it is deliberately projected out of contextDimsOf.
     }
     // If no context-equality leaf was matched, the input was either a
     // context-axis-empty mixed rule (e.g. `ScreenId NotEquals "DP-1"`) or

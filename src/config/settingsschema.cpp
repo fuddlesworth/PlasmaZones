@@ -165,13 +165,13 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Appearance ─────────────────────────────────────────────────────────────
-// Declares seven groups. Four zone-overlay sub-groups under Snapping.Zones.*:
-// Colors (system toggle + 3 zone colors), Labels (font family/color/scale/weight
-// + italic/underline/strikeout toggles), Opacity (active + inactive), Border
-// (width + radius). (Effects.Blur is a zone-overlay setting too but shares the
-// Effects container declared in appendDisplaySchema.) Plus three
-// Snapping.Appearance.{Colors,Decorations,Borders} snapped-window decoration
-// groups (parallel to Tiling.Appearance.*).
+// Declares four zone-overlay sub-groups under Snapping.Zones.*: Colors (system
+// toggle + 3 zone colors), Labels (font family/color/scale/weight + italic/
+// underline/strikeout toggles), Opacity (active + inactive), Border (width +
+// radius). (Effects.Blur is a zone-overlay setting too but shares the Effects
+// container declared in appendDisplaySchema.) The per-mode snapped-window
+// decoration groups that used to live here are gone — snapped-window appearance
+// is now rule-backed (the v4→v5 appearance-to-rules move).
 
 void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 {
@@ -701,9 +701,10 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Autotiling ─────────────────────────────────────────────────────────────
-// The biggest group — Tiling.* has six sub-groups: Algorithm, Behavior,
-// Appearance.{Colors,Decorations,Borders}, Gaps. Plus the top-level
-// Tiling.Enabled toggle. PerAlgorithmSettings is a JSON-encoded QVariantMap;
+// Tiling.* has three sub-groups: Algorithm, Behavior, Gaps. Plus the top-level
+// Tiling.Enabled toggle. (The Appearance.{Colors,Decorations,Borders} groups
+// that used to live here are gone — tiled-window appearance is now rule-backed,
+// the v4→v5 appearance-to-rules move.) PerAlgorithmSettings is a JSON-encoded QVariantMap;
 // LockedScreens is a comma list; DragInsert triggers are a JSON list.
 
 void appendAutotilingSchema(PhosphorConfig::Schema& schema)
@@ -773,8 +774,9 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
     };
 
-    // Tiling.Gaps keeps only the tiling-specific SmartGaps toggle — inner/outer
-    // gaps are unified into the shared gapsGroup ("Gaps").
+    // Tiling.Gaps keeps only the tiling-specific SmartGaps toggle. Inner/outer
+    // gaps are no longer schema-backed at all — they live on the managed
+    // baseline gap rule, edited over the org.plasmazones.Rules surface.
     schema.groups[CD::tilingGapsGroup()] = {
         {CD::smartGapsKey(), CD::autotileSmartGaps(), QMetaType::Bool},
     };

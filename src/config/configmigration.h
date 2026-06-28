@@ -216,9 +216,9 @@ public:
     /// finalizeV4Conversion (which guarantees rules.json exists).
     ///
     /// It reads `_v5AppearanceStash` from config.json, converts each differing
-    /// value into a non-managed override Rule — two IsTiled-matched rules
-    /// ("Snapping appearance" matching `IsTiled Equals false`, "Tiling
-    /// appearance" matching `IsTiled Equals true`) plus one `ScreenId`-matched
+    /// value into a non-managed override Rule — two context `Mode`-matched rules
+    /// ("Snapping appearance" matching `Mode Equals "snapping"`, "Tiling
+    /// appearance" matching `Mode Equals "tiling"`) plus one `ScreenId`-matched
     /// gap rule per per-screen entry — ADDS them to the existing rule set
     /// (never clobbering user rules or the managed baselines), saves
     /// rules.json, then strips `_v5AppearanceStash` from config.json.

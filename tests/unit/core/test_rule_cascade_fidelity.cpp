@@ -932,8 +932,8 @@ private Q_SLOTS:
         // gaps (inner = 4). It is pinned to lowest precedence and is the level-4
         // default tier, NOT a context override — resolveContextGaps excludes it.
         PWR::Rule baseline;
-        baseline.id = ConfigDefaults::baselineAppearanceRuleId();
-        baseline.name = QStringLiteral("Default appearance");
+        baseline.id = ConfigDefaults::baselineGapRuleId();
+        baseline.name = QStringLiteral("Default gaps");
         baseline.enabled = true;
         baseline.managed = true;
         baseline.priority = std::numeric_limits<int>::min();
@@ -942,9 +942,9 @@ private Q_SLOTS:
 
         // A non-managed per-monitor gap override for DP-1 (inner = 20), the shape
         // the Appearance page's monitor scope authors. Its deterministic id is
-        // namespaced under the baseline (mirrors perScreenGapRuleId).
+        // namespaced under the baseline gap rule (mirrors perScreenGapRuleId).
         PWR::Rule perScreen;
-        perScreen.id = QUuid::createUuidV5(ConfigDefaults::baselineAppearanceRuleId(), QByteArrayLiteral("DP-1"));
+        perScreen.id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), QByteArrayLiteral("DP-1"));
         perScreen.name = QStringLiteral("Gaps (DP-1)");
         perScreen.enabled = true;
         perScreen.managed = false;
@@ -1264,6 +1264,69 @@ private Q_SLOTS:
         const PhosphorZones::ContextGapOverride none =
             f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString());
         QVERIFY(!none.innerGap.has_value());
+    }
+
+    // ─── Per-monitor gap beats a global per-mode gap (specificity, not priority) ─
+    // A per-monitor (ScreenId-pinned) gap override and a global per-mode
+    // (Mode-pinned) gap rule can both match the same window/slot. The v4 cascade
+    // had the monitor-specific value win; the v4→v5 migration even seeds the
+    // per-mode rule at a HIGHER raw priority (500) than the per-screen rule (300).
+    // resolveContextGaps must therefore order the slot by MATCH SPECIFICITY
+    // (ScreenId-pinned > Mode-pinned), so the per-monitor override wins despite its
+    // lower priority — while a slot the per-monitor rule does NOT carry still falls
+    // through to the per-mode rule.
+    void testPerScreenGapBeatsPerModeGap()
+    {
+        const auto intGapAction = [](QLatin1StringView type, int value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), value);
+            return a;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+
+        // Global per-mode gap (the migrated snapping/tiling gap): higher raw
+        // priority, carries both inner and outer gap.
+        PWR::Rule perMode;
+        perMode.id = QUuid::createUuid();
+        perMode.name = QStringLiteral("Tiling gaps");
+        perMode.enabled = true;
+        perMode.priority = 500; // migration's per-mode seed — deliberately higher
+        perMode.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("tiling"));
+        perMode.actions = {intGapAction(PWR::ActionType::SetInnerGap, 14),
+                           intGapAction(PWR::ActionType::SetOuterGap, 30)};
+
+        // Per-monitor override for DP-1: lower raw priority, carries ONLY inner gap.
+        PWR::Rule perScreen;
+        perScreen.id = QUuid::createUuid();
+        perScreen.name = QStringLiteral("Gaps (DP-1)");
+        perScreen.enabled = true;
+        perScreen.priority = 300; // migration's per-screen seed — deliberately lower
+        perScreen.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
+        perScreen.actions = {intGapAction(PWR::ActionType::SetInnerGap, 20)};
+
+        QVERIFY(f.store->setAllRules({perMode, perScreen}));
+
+        // DP-1 in tiling mode: both rules match the inner-gap slot. The
+        // ScreenId-pinned rule is more specific, so its value (20) wins even
+        // though the Mode-pinned rule has the higher priority (500 > 300).
+        const PhosphorZones::ContextGapOverride dp1 =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("tiling"));
+        QVERIFY(dp1.innerGap.has_value());
+        QCOMPARE(*dp1.innerGap, 20);
+        // The outer-gap slot is carried only by the per-mode rule, so it still
+        // surfaces from there (per-slot composition is preserved).
+        QVERIFY(dp1.outerGap.has_value());
+        QCOMPARE(*dp1.outerGap, 30);
+
+        // DP-2 in tiling mode: no per-monitor rule, so the per-mode gap applies.
+        const PhosphorZones::ContextGapOverride dp2 =
+            f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString(), QStringLiteral("tiling"));
+        QVERIFY(dp2.innerGap.has_value());
+        QCOMPARE(*dp2.innerGap, 14);
     }
 };
 

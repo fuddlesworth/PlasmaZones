@@ -19,13 +19,13 @@
 
 namespace PlasmaZones {
 
-// Forward-declared so migrateConnectorNames (in the anonymous namespace below)
-// can reuse the write-side key canonicalization, defined among the file-scope
-// helpers further down. Load and write MUST use the same transform: gating on
-// isConnectorName(wholeKey) would skip a virtual-suffixed connector key like
-// "DP-2/vs:0" (isConnectorName rejects it for the ':' in "vs:0") on load, while
-// a later write canonicalizes it to EDID form — leaving a stale duplicate.
-static QString canonicalPerScreenKey(const QString& screenIdOrName);
+// Settings::canonicalPerScreenKey (declared in settings.h, defined among the
+// file-scope helpers further down) is the write-side key canonicalization that
+// migrateConnectorNames (in the anonymous namespace below) reuses. Load and
+// write MUST use the same transform: gating on isConnectorName(wholeKey) would
+// skip a virtual-suffixed connector key like "DP-2/vs:0" (isConnectorName
+// rejects it for the ':' in "vs:0") on load, while a later write canonicalizes
+// it to EDID form — leaving a stale duplicate.
 
 namespace {
 
@@ -312,13 +312,13 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
     // collision so the dropped override is surfaced.
     QStringList connectorKeys;
     for (auto it = settings.constBegin(); it != settings.constEnd(); ++it) {
-        if (canonicalPerScreenKey(it.key()) != it.key())
+        if (Settings::canonicalPerScreenKey(it.key()) != it.key())
             connectorKeys.append(it.key());
     }
     std::sort(connectorKeys.begin(), connectorKeys.end());
 
     for (const QString& key : connectorKeys) {
-        const QString canonical = canonicalPerScreenKey(key);
+        const QString canonical = Settings::canonicalPerScreenKey(key);
         const QVariantMap value = settings.take(key);
         if (settings.contains(canonical)) {
             // The slot's existing entry wins — either a pre-existing
@@ -462,7 +462,7 @@ void Settings::saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend)
 // translated, e.g. "DP-2/vs:0" → "Dell:U2722D:115107/vs:0". Identifiers already
 // in id form (physical or virtual) pass through unchanged, as do connectors
 // that don't currently resolve to a connected screen.
-static QString canonicalPerScreenKey(const QString& screenIdOrName)
+QString Settings::canonicalPerScreenKey(const QString& screenIdOrName)
 {
     namespace VS = PhosphorIdentity::VirtualScreenId;
     namespace SI = PhosphorScreens::ScreenIdentity;
@@ -594,7 +594,7 @@ static bool applyPerScreenSetting(QHash<QString, QVariantMap>& hash, const QStri
             return false;
         it.value()[key] = validated;
     } else {
-        hash[canonicalPerScreenKey(screenIdOrName)][key] = validated;
+        hash[Settings::canonicalPerScreenKey(screenIdOrName)][key] = validated;
     }
     return true;
 }
@@ -672,17 +672,17 @@ bool Settings::hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) c
 // ── Per-Screen Gap Rule Resolution (rule-backed gaps) ────────────────────────
 
 namespace {
-// Ordered, de-duplicated CONNECTOR-NAME identifier forms the per-monitor gap
-// rule could be keyed under, derived from an incoming screen identifier
-// (connector name, stable id, or virtual id). The Appearance page's monitor
-// scope chooser keys the rule by the screen's connector name, so resolve a
-// stable id to its connector and strip any virtual "/vs:N" suffix to its
-// physical parent first — mirroring the virtual->physical fallback the rest of
-// the per-screen reads use.
-QStringList perScreenGapConnectorForms(const QString& screenIdOrName)
+// Ordered, de-duplicated identifier forms the per-monitor gap rule could be
+// keyed under, derived from an incoming screen identifier (connector name,
+// stable id, or virtual id). Per-monitor gap rules are keyed by the stable EDID
+// form: both the Appearance page (WindowAppearanceController::perScreenGapRuleId)
+// and the v4→v5 migration derive the key via canonicalPerScreenKey, so a rule
+// written by either lands under the same id. Resolve to that canonical form
+// first, then fall back to the physical parent and the raw identifier so a rule
+// written under an older/alternate form is still found.
+QStringList perScreenGapKeyForms(const QString& screenIdOrName)
 {
     namespace VS = PhosphorIdentity::VirtualScreenId;
-    namespace SI = PhosphorScreens::ScreenIdentity;
     QStringList forms;
     if (screenIdOrName.isEmpty()) {
         return forms;
@@ -692,14 +692,12 @@ QStringList perScreenGapConnectorForms(const QString& screenIdOrName)
             forms.append(s);
         }
     };
-    // The raw identifier (covers a rule keyed exactly as queried) and its
-    // physical parent (a virtual sub-screen inherits the physical monitor's
-    // override).
+    // The canonical stable form is the keying convention; the raw identifier
+    // covers a rule keyed exactly as queried, and the physical parent lets a
+    // virtual sub-screen inherit the physical monitor's override.
+    add(Settings::canonicalPerScreenKey(screenIdOrName));
     add(screenIdOrName);
-    const QString physical = VS::extractPhysicalId(screenIdOrName);
-    add(physical);
-    // The connector-name form of the physical parent — the form the UI keys by.
-    add(SI::isConnectorName(physical) ? physical : SI::nameForId(physical));
+    add(VS::extractPhysicalId(screenIdOrName));
     return forms;
 }
 } // namespace
@@ -714,8 +712,8 @@ QVariantMap Settings::perScreenGapRuleOverrides(const PhosphorRules::RuleStore* 
     }
     namespace AT = PhosphorRules::ActionType;
     namespace PSK = PhosphorEngine::PerScreenKeys;
-    for (const QString& connector : perScreenGapConnectorForms(screenIdOrName)) {
-        const QUuid ruleId = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), connector.toUtf8());
+    for (const QString& keyForm : perScreenGapKeyForms(screenIdOrName)) {
+        const QUuid ruleId = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), keyForm.toUtf8());
         if (!store->ruleSet().ruleById(ruleId)) {
             continue;
         }

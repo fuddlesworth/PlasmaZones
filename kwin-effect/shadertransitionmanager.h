@@ -90,15 +90,15 @@ public:
 
     /// Rebuild the effect-rule `RuleSet` from `m_ruleAnimationRules`
     /// — the rules from `rules.json` that carry any effect-consumed
-    /// action (the `OverrideAnimation*` triple plus `SetOpacity`; see
-    /// `PhosphorRules::ActionType::isEffectRuleAction`). Call after
+    /// action (the `OverrideAnimation*` triple plus `SetOpacity`; admitted
+    /// via `ActionRegistry::hasTag(type, Tag::Effect)`). Call after
     /// every mutation of that list. The bound `RuleEvaluator` picks up
     /// the new revision transparently and its match cache is invalidated.
     void rebuildAnimationRuleSet();
 
     /// Replace the set of `rules.json` rules that carry any
     /// effect-consumed action (`OverrideAnimation*` or `SetOpacity` —
-    /// see `isEffectRuleAction`). The effect refreshes this on the
+    /// admitted via `ActionRegistry::hasTag(type, Tag::Effect)`). The effect refreshes this on the
     /// `org.plasmazones.Rules.rulesChanged` D-Bus signal so a new
     /// effect rule authored in the settings UI fires without a restart.
     /// Triggers `rebuildAnimationRuleSet()` only when the list actually
@@ -317,8 +317,8 @@ private:
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorAnimation::ProfileTree m_motionProfileTree;
     // Rules from rules.json that carry any effect-consumed action
-    // (`OverrideAnimation*` triple OR `SetOpacity` — see
-    // `PhosphorRules::ActionType::isEffectRuleAction`). Refreshed
+    // (`OverrideAnimation*` triple OR `SetOpacity` — admitted via
+    // `ActionRegistry::hasTag(type, Tag::Effect)`). Refreshed
     // from the daemon's org.plasmazones.Rules interface on every
     // `rulesChanged` signal; mirrored into `m_animationRuleSet` so the
     // bound RuleEvaluator picks up the new revision.

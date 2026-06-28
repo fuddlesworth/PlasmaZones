@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * @file test_window_rule_controller.cpp
+ * @file test_rule_controller.cpp
  * @brief Coverage for RuleController — the staging controller behind
  *        the unified Rules page.
  *
@@ -799,7 +799,6 @@ void TestRuleController::authoringMetadata()
     // 19-entry) State bucket is split into fine-grained categories:
     // Alphabetical by label: Context=0, Identity=1, Size=2, State=3,
     // Taskbar & switcher=4, Tiling=5, Type=6.
-    // Context=6.
     QHash<QString, int> fieldCategoryOrder;
     for (const QVariant& v : fields) {
         const QVariantMap f = v.toMap();
@@ -1277,4 +1276,4 @@ void TestRuleController::curveLabelResolverBridgesQmlNaming()
 
 QTEST_MAIN(TestRuleController)
 
-#include "test_window_rule_controller.moc"
+#include "test_rule_controller.moc"

@@ -79,11 +79,11 @@ public:
     /// invalidate the cached label cells — re-installing the lookups would
     /// just churn the closures without changing behaviour.
     ///
-    /// All FOUR lookups (screen + activity + snappingLayout +
-    /// tilingAlgorithm) must be wired for the model to render rich
+    /// All lookups (screen, activity, zone, snappingLayout, tilingAlgorithm,
+    /// shaderEffect, overlayShader) must be wired for the model to render rich
     /// `matchSummary` / `actionSummary` cells — a missing lookup falls
     /// back to printing the raw id/UUID. SettingsController is the
-    /// single intended caller and installs all four during page
+    /// single intended caller and installs all of them during page
     /// registration via the typed snappingLayout/tilingAlgorithm pair.
     void setScreenLookup(RuleModel::LabelLookup fn);
     void setActivityLookup(RuleModel::LabelLookup fn);
@@ -249,7 +249,7 @@ public:
     /// A snapshot of every rule as a map keyed by the model's role names
     /// (`ruleId`, `name`, `enabled`, `priority`, `section`, `matchSummary`,
     /// `actionSummary`, `conditionCount`, `actionCount`, `isComposite`,
-    /// `screenIds`, `validationIssueCount`). Lets the page bucket / filter
+    /// `screenIds`, `validationIssueCount`, `managed`). Lets the page bucket / filter
     /// rules without ever referencing raw `Qt.UserRole + N` integers.
     Q_INVOKABLE QVariantList rulesSnapshot() const;
 

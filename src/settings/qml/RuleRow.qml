@@ -48,7 +48,8 @@ ItemDelegate {
     /// priority is visible regardless of section.
     required property int priority
     /// True for app-managed System rules (the seeded baseline defaults). They
-    /// are non-deletable and pinned, so the delete affordance is hidden.
+    /// are non-deletable and pinned, so the delete affordance is shown but
+    /// disabled (kept visible to preserve column alignment).
     property bool managed: false
     /// RuleController — needed to resolve a rule's match JSON
     /// on-demand for the expansion view (`controller.ruleJson(ruleId).match`).
@@ -165,7 +166,7 @@ ItemDelegate {
                 source: "dialog-warning"
                 Accessible.name: i18np("%n validation issue", "%n validation issues", row.validationIssueCount)
                 ToolTip.visible: warningHover.hovered
-                ToolTip.delay: 300
+                ToolTip.delay: Kirigami.Units.toolTipDelay
                 ToolTip.text: i18np("This rule has %n validation issue. Open the editor to see the details. The rule will not fire as written.", "This rule has %n validation issues. Open the editor to see the details. The rule will not fire as written.", row.validationIssueCount)
 
                 HoverHandler {

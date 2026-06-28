@@ -73,6 +73,20 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         return;
     }
 
+    // A tile / reflow / overflow-float changes each window's placement mode
+    // (tiling ↔ floating) and tiled state, which are rule MATCH fields (Mode,
+    // IsTiled). The effect's per-window rule match cache is keyed on
+    // (windowId, ruleSet revision) and does not move on a placement change, and
+    // unlike the snap path the autotile engine emits no per-window
+    // windowStateChanged for the effect to key off. Invalidate here so a
+    // `Mode == "tiling"` / `IsTiled` border / title-bar / opacity rule
+    // re-resolves for every window this batch touches. Each call coalesces into
+    // a single end-of-turn flush, so this is cheap and is a no-op when no
+    // appearance/animation rules are loaded.
+    for (const auto& req : validatedRequests) {
+        m_effect->invalidateRuleCacheForStateChange(req.windowId);
+    }
+
     // Stagger generations are bumped PER SCREEN below, once this batch's target
     // screens are known (see m_autotileStaggerGenByScreen). A blanket global
     // bump here would let a cross-output move's destination batch cancel the

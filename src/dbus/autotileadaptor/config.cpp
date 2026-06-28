@@ -98,36 +98,12 @@ int AutotileAdaptor::innerGap() const
     return m_engine->config()->innerGap;
 }
 
-void AutotileAdaptor::setInnerGap(int gap)
-{
-    if (!ensureEngineAndConfig("setInnerGap")) {
-        return;
-    }
-    const int oldGap = m_engine->config()->innerGap;
-    m_engine->setInnerGap(gap);
-    if (m_engine->config()->innerGap != oldGap) {
-        Q_EMIT configChanged();
-    }
-}
-
 int AutotileAdaptor::outerGap() const
 {
     if (!m_engine || !m_engine->config()) {
         return ConfigDefaults::outerGap();
     }
     return m_engine->config()->outerGap;
-}
-
-void AutotileAdaptor::setOuterGap(int gap)
-{
-    if (!ensureEngineAndConfig("setOuterGap")) {
-        return;
-    }
-    const int oldGap = m_engine->config()->outerGap;
-    m_engine->setOuterGap(gap);
-    if (m_engine->config()->outerGap != oldGap) {
-        Q_EMIT configChanged();
-    }
 }
 
 bool AutotileAdaptor::smartGaps() const

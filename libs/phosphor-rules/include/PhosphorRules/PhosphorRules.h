@@ -15,7 +15,7 @@
  *   - WindowQuery       — the attribute bag an expression is evaluated against
  *   - MatchExpression   — the composable leaf/composite predicate tree
  *   - RuleAction        — pluggable slot-based action descriptors + registry
- *   - Rule        — { id, name, enabled, priority, match, actions }
+ *   - Rule        — { id, name, enabled, priority, match, actions, managed }
  *   - RuleSet     — ordered collection; revision counter; (de)serialization
  *   - RuleEvaluator     — descending-priority resolution + match cache
  *   - RuleStore   — QObject persistent store over rules.json

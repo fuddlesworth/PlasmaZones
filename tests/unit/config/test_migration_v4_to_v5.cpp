@@ -41,6 +41,7 @@
 
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/config/configmigration.h"
+#include "../../../src/config/settings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 #include <PhosphorRules/RuleSet.h>
@@ -304,6 +305,78 @@ private Q_SLOTS:
         QCOMPARE(actionTypes(snap), (QStringList{QStringLiteral("setBorderWidth")}));
     }
 
+    // ─── Decoration fields (show-border / radius / hide-title-bars) ────────
+
+    void testDecorationFields_perModeRule()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        // Snapping: show-border on (default off) and border radius 12 (default 8)
+        // live in the Borders group; hide-title-bars on (default off) lives in
+        // the Decorations group. These three are the headline "appearance to
+        // rules" decoration fields and were previously untested.
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Appearance"), QStringLiteral("Borders")},
+                  {{QStringLiteral("ShowBorder"), true}, {QStringLiteral("Radius"), 12}});
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Appearance"), QStringLiteral("Decorations")},
+                  {{QStringLiteral("HideTitleBars"), true}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // The three decoration fields become SetBorderVisible / SetBorderRadius /
+        // SetHideTitleBar on the Mode=snapping appearance rule.
+        const QJsonObject snap = ruleByName(QStringLiteral("Snapping appearance"));
+        QVERIFY2(!snap.isEmpty(), "a Snapping appearance override rule must exist");
+        QVERIFY(!snap.value(QStringLiteral("managed")).toBool());
+        QCOMPARE(actionTypes(snap),
+                 (QStringList{QStringLiteral("setBorderRadius"), QStringLiteral("setBorderVisible"),
+                              QStringLiteral("setHideTitleBar")}));
+        QCOMPARE(actionValue(snap, QStringLiteral("setBorderVisible")).toBool(), true);
+        QCOMPARE(actionValue(snap, QStringLiteral("setBorderRadius")).toInt(), 12);
+        QCOMPARE(actionValue(snap, QStringLiteral("setHideTitleBar")).toBool(), true);
+        const QJsonObject snapMatch = matchOf(snap);
+        QCOMPARE(snapMatch.value(QStringLiteral("field")).toString(), QStringLiteral("mode"));
+        QCOMPARE(snapMatch.value(QStringLiteral("value")).toString(), QStringLiteral("snapping"));
+
+        // Exactly the one appearance rule.
+        QCOMPARE(rules().size(), 1);
+    }
+
+    void testOutOfRangeValues_clampedNotDropped()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        // A v4 config (hand-edited, or from a wider-range older slider) carrying
+        // values ABOVE the rule-action validator maxima. The migration must CLAMP
+        // them (border width→10, radius→20, gap→500), not emit them verbatim:
+        // an out-of-range action fails Rule::isValid(), addRule drops the whole
+        // rule, and the stash is stripped, permanently losing every override for
+        // that mode. This test fails if the qBound clamp in actionsFromFields is
+        // removed (the rule would vanish and rules().size() would be 0).
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Appearance"), QStringLiteral("Borders")},
+                  {{QStringLiteral("Width"), 999}, {QStringLiteral("Radius"), 99}});
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Gaps")}, {{QStringLiteral("Inner"), 9999}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject snap = ruleByName(QStringLiteral("Snapping appearance"));
+        QVERIFY2(!snap.isEmpty(), "the rule must survive — clamped, not dropped");
+        QCOMPARE(actionValue(snap, QStringLiteral("setBorderWidth")).toInt(), 10);
+        QCOMPARE(actionValue(snap, QStringLiteral("setBorderRadius")).toInt(), 20);
+        QCOMPARE(actionValue(snap, QStringLiteral("setInnerGap")).toInt(), 500);
+        // The rule loads as valid (clamped values are inside the validator range).
+        const auto setOpt = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
+        QVERIFY(setOpt.has_value());
+        for (const PhosphorRules::Rule& r : setOpt->rules()) {
+            QVERIFY2(r.isValid(), "the clamped rule must be valid");
+        }
+    }
+
     // ─── Per-screen gaps ──────────────────────────────────────────────────
 
     void testPerScreenGap_becomesScreenIdRule()
@@ -319,9 +392,14 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        // The rule id matches WindowAppearanceController::perScreenGapRuleId.
+        // The rule id must be derived the SAME way the settings UI derives it
+        // (WindowAppearanceController::perScreenGapRuleId), i.e. seeded from the
+        // canonical per-screen key — route the expected id through the very same
+        // contract function so a divergence between the migration and the
+        // controller's key derivation is caught here (orphaned/duplicate rules).
+        const QString canonicalKey = Settings::canonicalPerScreenKey(QStringLiteral("DP-1"));
         const QString expectedId =
-            QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), QByteArrayLiteral("DP-1")).toString();
+            QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), canonicalKey.toUtf8()).toString();
         QJsonObject screenRule;
         for (const QJsonValue& v : rules()) {
             const QJsonObject r = v.toObject();
@@ -336,7 +414,98 @@ private Q_SLOTS:
         const QJsonObject m = matchOf(screenRule);
         QCOMPARE(m.value(QStringLiteral("field")).toString(), QStringLiteral("screenId"));
         QCOMPARE(m.value(QStringLiteral("op")).toString(), QStringLiteral("equals"));
-        QCOMPARE(m.value(QStringLiteral("value")).toString(), QStringLiteral("DP-1"));
+        // The match value is the canonical key, matching the id derivation and the
+        // runtime ScreenId the daemon resolves against.
+        QCOMPARE(m.value(QStringLiteral("value")).toString(), canonicalKey);
+    }
+
+    // The snapping and autotile per-screen gap sets for the SAME monitor collapse
+    // onto ONE ScreenId rule; autotile is processed second so its value wins on a
+    // conflicting slot. Non-gap autotile per-screen keys (algorithm, etc.) are NOT
+    // gaps and must survive in the config rather than being swept into the rule.
+    void testPerScreenGap_snappingAndAutotileMerge_survivorsPreserved()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        // Snapping per-screen inner gap 16 (key "InnerGap"); autotile per-screen
+        // inner gap 24 (key "AutotileInnerGap") for the SAME screen — a conflict
+        // on the same gap slot — plus a non-gap autotile key ("Algorithm").
+        setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Snapping"), QStringLiteral("DP-1")},
+                  {{QStringLiteral("InnerGap"), 16}});
+        setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Autotile"), QStringLiteral("DP-1")},
+                  {{QStringLiteral("AutotileInnerGap"), 24}, {QStringLiteral("Algorithm"), QStringLiteral("bsp")}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QString canonicalKey = Settings::canonicalPerScreenKey(QStringLiteral("DP-1"));
+        const QString expectedId =
+            QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), canonicalKey.toUtf8()).toString();
+        QJsonObject screenRule;
+        int screenRuleCount = 0;
+        for (const QJsonValue& v : rules()) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("id")).toString() == expectedId) {
+                screenRule = r;
+                ++screenRuleCount;
+            }
+        }
+        // Exactly ONE merged ScreenId rule (not one per mode).
+        QCOMPARE(screenRuleCount, 1);
+        QVERIFY2(!screenRule.isEmpty(), "the merged per-screen gap rule must exist");
+        // Autotile processed second → its InnerGap (24) wins the conflicting slot.
+        QCOMPARE(actionValue(screenRule, QStringLiteral("setInnerGap")).toInt(), 24);
+
+        // The non-gap autotile per-screen key survives in the config (only gap
+        // keys are swept into the rule).
+        const QJsonObject autoScreen = readJson(ConfigDefaults::configFilePath())
+                                           .value(QStringLiteral("PerScreen"))
+                                           .toObject()
+                                           .value(QStringLiteral("Autotile"))
+                                           .toObject()
+                                           .value(QStringLiteral("DP-1"))
+                                           .toObject();
+        QCOMPARE(autoScreen.value(QStringLiteral("Algorithm")).toString(), QStringLiteral("bsp"));
+        QVERIFY2(!autoScreen.contains(QStringLiteral("AutotileInnerGap")),
+                 "the gap key must be stripped from the config");
+    }
+
+    // finalizeV5 defer path: if rules.json is unreadable/corrupt when the
+    // override rules are merged in, the conversion must DEFER — return false and
+    // leave `_v5AppearanceStash` in place so a later run (after rules.json is
+    // re-established) retries, rather than stripping the stash and permanently
+    // losing the user's appearance/gap overrides. This guards the data-loss
+    // failure mode of finalizeV5Conversion's load-failure branch.
+    void testFinalizeV5_deferredWhenRulesFileCorrupt()
+    {
+        IsolatedConfigGuard guard;
+
+        // Run the in-place v4→v5 transform on a config carrying a snapping
+        // appearance override, producing the _v5AppearanceStash + version 5.
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Appearance"), QStringLiteral("Borders")},
+                  {{QStringLiteral("Width"), 5}});
+        ConfigMigration::migrateV4ToV5(cfg);
+        QVERIFY2(cfg.contains(QStringLiteral("_v5AppearanceStash")),
+                 "the transform must stash the differing appearance values");
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        // Corrupt rules.json so RuleSet::loadFromFile fails inside finalizeV5.
+        {
+            const QString rulesPath = ConfigDefaults::rulesFilePath();
+            QDir().mkpath(QFileInfo(rulesPath).absolutePath());
+            QFile rf(rulesPath);
+            QVERIFY(rf.open(QIODevice::WriteOnly));
+            rf.write(QByteArrayLiteral("{ this is not valid json"));
+        }
+
+        // The finalizer must DEFER: return false and preserve the stash.
+        QVERIFY2(!ConfigMigration::finalizeV5Conversion(ConfigDefaults::configFilePath()),
+                 "finalizeV5 must report failure when rules.json cannot be loaded");
+        QVERIFY2(readJson(ConfigDefaults::configFilePath()).contains(QStringLiteral("_v5AppearanceStash")),
+                 "the stash must be preserved for a later retry, not stripped");
     }
 
     // ─── Consumed v4 groups removed, survivors preserved ──────────────────

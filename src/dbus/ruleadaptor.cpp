@@ -66,14 +66,17 @@ bool RuleAdaptor::setAllRules(const QString& rulesJson)
     }
     // Reject oversize payloads at the D-Bus boundary rather than letting
     // QJsonDocument::fromJson allocate megabytes for a malformed/malicious
-    // caller. The settings app pushes the whole rule set on every save, but
-    // even an aggressively-large user rule set stays well under 1 MiB — the
-    // cap is a generous order-of-magnitude headroom above realistic use,
-    // not a tight bound.
-    static constexpr qsizetype kMaxRuleSetBytes = 1 * 1024 * 1024; // 1 MiB
-    if (rulesJson.size() > kMaxRuleSetBytes) {
-        qCWarning(lcDbus) << "RuleAdaptor::setAllRules: rejecting payload of" << rulesJson.size() << "bytes (cap"
-                          << kMaxRuleSetBytes << ")";
+    // caller. The check is on QString::size() (UTF-16 code units) so it stays
+    // O(1) and does not itself allocate a UTF-8 copy of a hostile payload; a
+    // code unit is at most 4 UTF-8 bytes, so this bounds the byte size within a
+    // small factor. The settings app pushes the whole rule set on every save,
+    // but even an aggressively-large user rule set stays well under 1 Mi code
+    // units — the cap is generous headroom above realistic use, not a tight
+    // bound.
+    static constexpr qsizetype kMaxRuleSetChars = 1 * 1024 * 1024; // ~1 MiB
+    if (rulesJson.size() > kMaxRuleSetChars) {
+        qCWarning(lcDbus) << "RuleAdaptor::setAllRules: rejecting payload of" << rulesJson.size() << "code units (cap"
+                          << kMaxRuleSetChars << ")";
         return false;
     }
     const auto obj = parseObject(rulesJson);
@@ -106,6 +109,15 @@ bool RuleAdaptor::setAllRules(const QString& rulesJson)
     if (accepted != total) {
         qCWarning(lcDbus) << "RuleAdaptor::setAllRules: dropped" << (total - accepted) << "malformed rule(s) —"
                           << accepted << "accepted of" << total << "— possible settings-app/daemon schema skew";
+    }
+    // A non-empty payload that parsed to ZERO accepted rules is a rejected
+    // payload (whole-set schema skew), NOT an intentional clear — committing it
+    // would wipe every persisted rule. A genuine clear sends an empty `rules`
+    // array, which makes total == 0 and skips this guard.
+    if (total > 0 && accepted == 0) {
+        qCWarning(lcDbus) << "RuleAdaptor::setAllRules: refusing to commit — all" << total
+                          << "rule(s) were malformed; treating as a rejected payload, not a clear";
+        return false;
     }
     // Propagate a persist failure to the D-Bus caller — a false return means
     // the in-memory set changed but the file write failed.

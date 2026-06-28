@@ -299,6 +299,12 @@ ActionDescriptor::SlotResolver constantSlot(QLatin1StringView slot)
 /// process and the validator's `contains` cheap.
 const QStringList& engineModeOptions()
 {
+    // NOTE: this is the engine-mode ACTION vocabulary (SetEngineMode param) and
+    // is DELIBERATELY distinct from the Mode MATCH-field vocabulary in
+    // MatchTypes.h, which uses "snapping" / "tiling" (no "autotile"). The action
+    // names the engine ("autotile"); the match field names the placement mode a
+    // window is in ("tiling"). Do not unify them — a Mode match rule authored
+    // with "autotile" would silently never match.
     static const QStringList s_options{
         QStringLiteral("snapping"),
         QStringLiteral("autotile"),

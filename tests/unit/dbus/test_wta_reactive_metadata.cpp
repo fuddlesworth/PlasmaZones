@@ -165,7 +165,10 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        // Detach the borrowed engine from the service before deleting it so the
+        // service never holds a dangling SnapEngine*.
         m_wta->service()->setSnapState(nullptr);
+        m_wta->service()->setSnapEngine(nullptr);
         delete m_snapEngine;
         m_snapEngine = nullptr;
 

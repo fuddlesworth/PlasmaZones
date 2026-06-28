@@ -89,6 +89,12 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         // commit path; idempotent vs the daemon broadcast.
                         m_navigationHandler->setWindowFloating(windowId, false);
                         m_snapHandler->markWindowSnapped(windowId, asyncScr);
+                        // Floating → snapped changes the Mode / IsSnapped rule
+                        // match fields. Invalidate the per-window match cache so a
+                        // placement-scoped border / opacity rule re-resolves now,
+                        // rather than waiting for the daemon's windowStateChanged
+                        // broadcast (self-contained, mirrors the autotile path).
+                        invalidateRuleCacheForStateChange(windowId);
                     } else {
                         // Same discriminator epilogue as the other commit
                         // paths: drop stale snap tracking instead of skipping.

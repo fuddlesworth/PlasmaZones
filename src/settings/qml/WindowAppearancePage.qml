@@ -203,7 +203,11 @@ SettingsFlickable {
             "match": {
                 "field": "screenId",
                 "op": "equals",
-                "value": scope
+                // Match on the stable EDID form so a UI-authored rule matches the
+                // same way a v4→v5-migrated one does (the daemon's gap cascade
+                // resolves the window's screen through the connector↔stable
+                // fallback either way).
+                "value": root.bounds.canonicalScreenId(scope)
             },
             "actions": [
                 {
@@ -403,16 +407,27 @@ SettingsFlickable {
                     description: i18n("Thickness of the colored border around windows")
 
                     SettingsSpinBox {
+                        id: borderWidthSpin
+
                         from: root.bounds.borderWidthMin
                         to: root.bounds.borderWidthMax
-                        value: {
-                            root.reloadTick;
-                            return root.actionValue(root.actBorderWidth, "value", root.bounds.borderWidthMin);
-                        }
                         onValueModified: value => {
                             return root.writeAction(root.actBorderWidth, {
                                 "value": value
                             });
+                        }
+                        // Feed value through a guarded Binding so a daemon-side
+                        // reload (reloadTick) keeps refreshing the control: a plain
+                        // `value:` binding is destroyed by SettingsSpinBox's own
+                        // edit echo after the first edit. RestoreNone + the focus
+                        // gate keeps a live edit from being clobbered.
+                        Binding on value {
+                            value: {
+                                root.reloadTick;
+                                return root.actionValue(root.actBorderWidth, "value", root.bounds.borderWidthMin);
+                            }
+                            when: !borderWidthSpin.editing
+                            restoreMode: Binding.RestoreNone
                         }
                     }
                 }
@@ -428,16 +443,24 @@ SettingsFlickable {
                     description: i18n("Roundness of the border corners (0 for square)")
 
                     SettingsSpinBox {
+                        id: borderRadiusSpin
+
                         from: root.bounds.borderRadiusMin
                         to: root.bounds.borderRadiusMax
-                        value: {
-                            root.reloadTick;
-                            return root.actionValue(root.actBorderRadius, "value", root.bounds.borderRadiusMin);
-                        }
                         onValueModified: value => {
                             return root.writeAction(root.actBorderRadius, {
                                 "value": value
                             });
+                        }
+                        // See borderWidthSpin: guarded Binding so reloadTick keeps
+                        // refreshing after the first edit destroys a plain binding.
+                        Binding on value {
+                            value: {
+                                root.reloadTick;
+                                return root.actionValue(root.actBorderRadius, "value", root.bounds.borderRadiusMin);
+                            }
+                            when: !borderRadiusSpin.editing
+                            restoreMode: Binding.RestoreNone
                         }
                     }
                 }
@@ -497,7 +520,11 @@ SettingsFlickable {
                     ColorSwatchRow {
                         color: {
                             root.reloadTick;
-                            return root.actionValue(root.actBorderColorActive, "value", root.defaultBorderHex);
+                            // Map the accent sentinel to the live accent colour,
+                            // mirroring the inactive swatch — a stored "accent"
+                            // value would otherwise coerce to black.
+                            const raw = root.actionValue(root.actBorderColorActive, "value", root.defaultBorderHex);
+                            return raw === root.accentToken ? Kirigami.Theme.highlightColor : raw;
                         }
                         onClicked: {
                             activeBorderColorDialog.selectedColor = root.actionValue(root.actBorderColorActive, "value", root.defaultBorderHex);

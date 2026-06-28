@@ -174,8 +174,12 @@ private Q_SLOTS:
             m_snapAdaptor->clearEngine();
         }
         m_snapAdaptor = nullptr;
-        // WTA is owned by m_parent (QDBusAbstractAdaptor parent)
+        // WTA is owned by m_parent (QDBusAbstractAdaptor parent). Detach the
+        // borrowed engine from the service BEFORE deleting it so the service
+        // never holds a dangling SnapEngine* (the local-WTA tests below detach
+        // symmetrically).
         m_wta->service()->setSnapState(nullptr);
+        m_wta->service()->setSnapEngine(nullptr);
         delete m_snapEngine;
         m_snapEngine = nullptr;
         delete m_parent;

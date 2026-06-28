@@ -259,14 +259,13 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     if (!w || windowId.isEmpty()) {
         return;
     }
-    // Tri-state rule override, forwarded to the DecorationManager:
-    //   unset → no opinion (mode owners decide)
-    //   true  → rule hides (a Rule owner joins the mode owners)
-    //   false → rule FORCE-SHOWS (a veto that pins the decoration visible
-    //           over any mode owner; owners re-assert when the rule changes)
-    // The manager owns the capability gate, the mode-ownership coordination
-    // the old m_ruleHiddenTitleBars/modeBorderless dance approximated, and
-    // the geometry re-assert across veto-driven decoration flips.
+    // Tri-state rule override, forwarded to the DecorationManager (Rule is the
+    // only owner kind now — there are no mode owners to defer to):
+    //   unset → no owner, the title bar shows
+    //   true  → the rule hides the title bar
+    //   false → the rule FORCE-SHOWS (a veto pinning the decoration visible)
+    // The manager owns the capability gate and the geometry re-assert across
+    // veto-driven decoration flips.
     const std::optional<ResolvedWindowAppearance> ovr =
         resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor);
     m_decorationManager->setRuleOverride(windowId, ovr ? ovr->hideTitleBar : std::nullopt);
@@ -280,9 +279,8 @@ bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
 void PlasmaZonesEffect::restoreAllRuleHiddenTitleBars()
 {
     // The authoritative window-rule state is gone (rule set emptied, daemon
-    // loss, effect teardown): clear every Rule owner and force-show veto. The
-    // manager restores a title bar only where no mode owner remains, so the
-    // modes' decoration management is never fought.
+    // loss, effect teardown): clear every Rule owner and force-show veto so the
+    // manager restores each title bar to its native state.
     m_decorationManager->clearAllRuleOverrides();
 }
 

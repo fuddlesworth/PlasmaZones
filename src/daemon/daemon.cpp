@@ -372,13 +372,6 @@ Daemon::Daemon(QObject* parent)
         ensureManagedRule(makeBaselineBorderRule());
         ensureManagedRule(makeBaselineTitleBarRule());
         ensureManagedRule(makeBaselineGapRule());
-
-        // Drop the pre-split single "Default appearance" rule if a dev config
-        // still carries it. This branch never shipped, so there is nothing to
-        // migrate — the three rules above are seeded fresh.
-        if (m_ruleStore->ruleSet().ruleById(ConfigDefaults::baselineAppearanceRuleId())) {
-            m_ruleStore->removeRule(ConfigDefaults::baselineAppearanceRuleId());
-        }
     }
 
     // Configure geometry update debounce timer
@@ -1317,46 +1310,17 @@ bool Daemon::init()
     // ownership but not the pointee, so it still points at the live engine.
     if (autotileEngine) {
         autotileEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
-            if (!m_layoutManager) {
+            if (!m_layoutManager || screenId.isEmpty()) {
                 return {};
             }
             // This is the autotile gap path, so resolve against the "tiling"
             // placement mode — a per-mode `Mode Equals "tiling"` gap rule then
-            // applies here and a "snapping" one stays inert.
-            const PhosphorZones::ContextGapOverride gaps = m_layoutManager->resolveContextGaps(
-                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling"));
-            if (gaps.isEmpty()) {
-                return {};
-            }
-            namespace PSK = PhosphorEngine::PerScreenKeys;
-            QVariantMap map;
-            // innerGap is the single shared inner spacing for snapping and tiling.
-            if (gaps.innerGap) {
-                map.insert(QString(PSK::InnerGap), *gaps.innerGap);
-            }
-            if (gaps.outerGap) {
-                map.insert(QString(PSK::OuterGap), *gaps.outerGap);
-            }
-            // The per-side toggle gates whether the resolver honours the per-side
-            // values below — without it, stale per-side entries (left from when
-            // the rule had per-side enabled) would apply on autotile but not on
-            // snapping, which checks this flag (resolveOuterGapsFromMap).
-            if (gaps.usePerSideOuterGap) {
-                map.insert(QString(PSK::UsePerSideOuterGap), *gaps.usePerSideOuterGap);
-            }
-            if (gaps.outerGapTop) {
-                map.insert(QString(PSK::OuterGapTop), *gaps.outerGapTop);
-            }
-            if (gaps.outerGapBottom) {
-                map.insert(QString(PSK::OuterGapBottom), *gaps.outerGapBottom);
-            }
-            if (gaps.outerGapLeft) {
-                map.insert(QString(PSK::OuterGapLeft), *gaps.outerGapLeft);
-            }
-            if (gaps.outerGapRight) {
-                map.insert(QString(PSK::OuterGapRight), *gaps.outerGapRight);
-            }
-            return map;
+            // applies here and a "snapping" one stays inert. The same
+            // GeometryUtils::contextGapOverrideMap shaping the snap provider uses
+            // below keeps the two paths byte-identical (PerScreenKeys form, with
+            // the per-side toggle gating the per-side entries).
+            return GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling")));
         });
     }
 

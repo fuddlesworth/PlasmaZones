@@ -200,6 +200,12 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         // broadcast already landed.
                         m_navigationHandler->setWindowFloating(windowId, false);
                         m_snapHandler->markWindowSnapped(windowId, scr);
+                        // Floating → snapped changes the Mode / IsSnapped rule
+                        // match fields. Invalidate the per-window match cache so a
+                        // placement-scoped border / opacity rule re-resolves now,
+                        // rather than waiting for the daemon's windowStateChanged
+                        // broadcast (self-contained, mirrors the autotile path).
+                        invalidateRuleCacheForStateChange(windowId);
                     } else {
                         // Unresolved or autotile-owned screen: this commit is
                         // not snap-tracked — drop any stale snap entry +

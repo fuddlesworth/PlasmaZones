@@ -3,10 +3,10 @@
 
 #include "configmigration.h"
 
-#include "../phosphor_i18n.h"
 #include "configbackends.h"
 #include "configdefaults.h"
 #include "perscreenresolver.h"
+#include "settings.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
@@ -2820,8 +2820,9 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
     }
 
-    // Refuse to commit a v4 marker (the eventual rules.json write
-    // below) when config.json has not actually reached v4. If a prior
+    // Refuse to commit the rules.json write below when config.json has
+    // not actually reached the current schema version (the gate checks
+    // configVersion < ConfigSchemaVersion). If a prior
     // run's migration chain stalled (e.g. migrateV1ToV2's side-effect
     // writes failed, leaving the disk-side _version at 1),
     // `MigrationRunner::runOnFile` returns `true` for a no-op chain —
@@ -3446,15 +3447,27 @@ PhosphorRules::RuleAction makeValueAction(QLatin1StringView type, const QJsonVal
 QList<PhosphorRules::RuleAction> actionsFromFields(const QJsonObject& fields)
 {
     namespace AT = PhosphorRules::ActionType;
+    // Upper bounds the rule-action validators enforce (ruleaction.cpp:
+    // kMaxBorderWidth / kMaxBorderRadius / kMaxGap). An out-of-range value from
+    // a hand-edited or older v4 config must be CLAMPED here, not emitted
+    // verbatim: Rule::isValid() fails the whole rule if any one action is out of
+    // range, addRule then silently drops it, and the stash is stripped
+    // unconditionally — so a single bad value would permanently lose every
+    // appearance/gap override for that mode/screen. Clamping preserves the
+    // override at the boundary, mirroring migrateV1ToV2's qBound of animation
+    // fields.
+    constexpr int kMaxBorderWidth = 10;
+    constexpr int kMaxBorderRadius = 20;
+    constexpr int kMaxGap = 500;
     QList<PhosphorRules::RuleAction> actions;
     const auto addBool = [&](QLatin1String field, QLatin1StringView type) {
         if (fields.value(field).isBool()) {
             actions.append(makeValueAction(type, fields.value(field).toBool()));
         }
     };
-    const auto addInt = [&](QLatin1String field, QLatin1StringView type) {
+    const auto addInt = [&](QLatin1String field, QLatin1StringView type, int max) {
         if (fields.value(field).isDouble()) {
-            actions.append(makeValueAction(type, fields.value(field).toInt()));
+            actions.append(makeValueAction(type, qBound(0, fields.value(field).toInt(), max)));
         }
     };
     const auto addString = [&](QLatin1String field, QLatin1StringView type) {
@@ -3463,18 +3476,18 @@ QList<PhosphorRules::RuleAction> actionsFromFields(const QJsonObject& fields)
         }
     };
     addBool(kFieldShowBorder, AT::SetBorderVisible);
-    addInt(kFieldBorderWidth, AT::SetBorderWidth);
-    addInt(kFieldBorderRadius, AT::SetBorderRadius);
+    addInt(kFieldBorderWidth, AT::SetBorderWidth, kMaxBorderWidth);
+    addInt(kFieldBorderRadius, AT::SetBorderRadius, kMaxBorderRadius);
     addBool(kFieldHideTitleBars, AT::SetHideTitleBar);
     addString(kFieldActiveColor, AT::SetBorderColorActive);
     addString(kFieldInactiveColor, AT::SetBorderColorInactive);
-    addInt(kFieldInnerGap, AT::SetInnerGap);
-    addInt(kFieldOuterGap, AT::SetOuterGap);
+    addInt(kFieldInnerGap, AT::SetInnerGap, kMaxGap);
+    addInt(kFieldOuterGap, AT::SetOuterGap, kMaxGap);
     addBool(kFieldUsePerSideOuterGap, AT::SetUsePerSideOuterGap);
-    addInt(kFieldOuterGapTop, AT::SetOuterGapTop);
-    addInt(kFieldOuterGapBottom, AT::SetOuterGapBottom);
-    addInt(kFieldOuterGapLeft, AT::SetOuterGapLeft);
-    addInt(kFieldOuterGapRight, AT::SetOuterGapRight);
+    addInt(kFieldOuterGapTop, AT::SetOuterGapTop, kMaxGap);
+    addInt(kFieldOuterGapBottom, AT::SetOuterGapBottom, kMaxGap);
+    addInt(kFieldOuterGapLeft, AT::SetOuterGapLeft, kMaxGap);
+    addInt(kFieldOuterGapRight, AT::SetOuterGapRight, kMaxGap);
     return actions;
 }
 
@@ -3666,8 +3679,12 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
             || fields.contains(kFieldActiveColor) || fields.contains(kFieldInactiveColor);
         Rule rule;
         rule.id = QUuid::createUuidV5(ConfigDefaults::baselineBorderRuleId(), idSeed);
-        rule.name = hasAppearance ? PhosphorI18n::tr("%1 appearance").arg(modeDisplayName)
-                                  : PhosphorI18n::tr("%1 gaps").arg(modeDisplayName);
+        // Rule::name is the persisted identity surface in rules.json and must NOT
+        // be translated (same convention as the disable-rule prefixes and the
+        // per-screen gap rule name below): running under a different locale must
+        // not fork the on-disk text. See configkeys.h.
+        rule.name = hasAppearance ? QStringLiteral("%1 appearance").arg(modeDisplayName)
+                                  : QStringLiteral("%1 gaps").arg(modeDisplayName);
         rule.enabled = true;
         rule.managed = false;
         rule.priority = kAppearanceOverridePriority;
@@ -3682,9 +3699,9 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
     };
 
     appendModeRule(stash.value(kStashSnapping).toObject(), QStringLiteral("snapping"),
-                   QByteArrayLiteral("v5-snapping-appearance"), PhosphorI18n::tr("Snapping"));
+                   QByteArrayLiteral("v5-snapping-appearance"), QStringLiteral("Snapping"));
     appendModeRule(stash.value(kStashTiling).toObject(), QStringLiteral("tiling"),
-                   QByteArrayLiteral("v5-tiling-appearance"), PhosphorI18n::tr("Tiling"));
+                   QByteArrayLiteral("v5-tiling-appearance"), QStringLiteral("Tiling"));
 
     // Per-screen gap overrides: one ScreenId-scoped rule per monitor, keyed by
     // the same deterministic id WindowAppearanceController::perScreenGapRuleId
@@ -3699,13 +3716,20 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
         if (actions.isEmpty()) {
             continue;
         }
+        // Key the rule (id + ScreenId match) by the canonical stable form, the
+        // SAME derivation WindowAppearanceController::perScreenGapRuleId and the
+        // per-screen gap reader use, so the settings UI find-or-creates this very
+        // rule and the runtime ScreenId match resolves against the live EDID id.
+        // canonicalPerScreenKey is idempotent on an already-canonical key, so a v4
+        // key written in canonical form passes through unchanged.
+        const QString canonicalScreenId = Settings::canonicalPerScreenKey(screenId);
         Rule rule;
-        rule.id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), screenId.toUtf8());
-        rule.name = QStringLiteral("Gaps (%1)").arg(screenId);
+        rule.id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), canonicalScreenId.toUtf8());
+        rule.name = QStringLiteral("Gaps (%1)").arg(canonicalScreenId);
         rule.enabled = true;
         rule.managed = false;
         rule.priority = kPerScreenGapPriority;
-        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QVariant(screenId));
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QVariant(canonicalScreenId));
         rule.actions = actions;
         newRules.append(rule);
     }

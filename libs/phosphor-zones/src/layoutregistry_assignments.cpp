@@ -46,6 +46,33 @@ using namespace RuleHelpers;
 
 namespace {
 
+/// True if @p match POSITIVELY pins @p field to a value — an `Equals` leaf on
+/// the field reachable without passing through a negation. Used to rank gap-rule
+/// specificity (a per-monitor ScreenId pin beats a per-mode Mode pin). Unlike
+/// `MatchExpression::referencesAnyField`, this deliberately does NOT count a leaf
+/// inside a `None{}` negation: a rule matching "every screen EXCEPT X" does not
+/// pin THIS screen, so it must not be ranked as a per-monitor override. Recurses
+/// through All/Any (a positive composite still constrains the field) but stops at
+/// None. Exotic non-`Equals` shapes fall through to the generic priority tier.
+bool matchPinsFieldPositively(const PWR::MatchExpression& match, PWR::Field field)
+{
+    switch (match.kind()) {
+    case PWR::MatchExpression::Kind::Leaf:
+        return match.predicate().field == field && match.predicate().op == PWR::Operator::Equals;
+    case PWR::MatchExpression::Kind::All:
+    case PWR::MatchExpression::Kind::Any:
+        for (const PWR::MatchExpression& child : match.children()) {
+            if (matchPinsFieldPositively(child, field)) {
+                return true;
+            }
+        }
+        return false;
+    case PWR::MatchExpression::Kind::None:
+        return false; // a negation does not positively pin the field
+    }
+    return false;
+}
+
 /// Run @p tryOne against the query-side screen-id fallback chain — the original
 /// id, then its connector-name → stable-id rewrite, then a virtual screen's
 /// physical id — and return the first engaged optional, or an empty optional if
@@ -246,13 +273,15 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
             // override layer and that default. Were the baseline included here, its
             // catch-all match would fill every gap slot with the global default and
             // masquerade as a top-tier context override, shadowing the per-layout
-            // tier that must sit below context overrides. Managed SCREEN-scoped gap
-            // rules (per-monitor overrides authored via the Appearance page's
-            // monitor scope) have a SPECIFIC match, so they are NOT catch-all and DO
-            // participate here as context overrides. The per-slot,
-            // first-matching-rule-wins semantics the old resolve() walk produced are
-            // reproduced by highestPriorityMatch with a per-slot "carries this slot,
-            // not the catch-all baseline" filter.
+            // tier that must sit below context overrides. SCREEN-scoped gap rules
+            // (per-monitor overrides authored via the Appearance page's monitor
+            // scope) have a SPECIFIC match, so they are NOT catch-all and DO
+            // participate here as context overrides. Per slot, the winner is chosen
+            // by MATCH SPECIFICITY first (ScreenId-pinned > Mode-pinned > other),
+            // with priority breaking ties within a tier — so a per-monitor override
+            // outranks a global per-mode gap regardless of their raw priorities (see
+            // winningAction below). The catch-all baseline is excluded by the
+            // per-slot "carries this slot, not the catch-all baseline" filter.
             const PWR::ActionRegistry& registry = PWR::ActionRegistry::instance();
             const auto winningAction = [this, &query,
                                         &registry](QLatin1StringView slot) -> std::optional<PWR::RuleAction> {
@@ -268,7 +297,31 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
                     }
                     return false;
                 };
-                const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, carries);
+                // Resolve the slot by MATCH SPECIFICITY, not raw priority: a
+                // per-monitor (ScreenId-pinned) gap override is more specific than
+                // a per-mode (Mode-pinned) one, which is more specific than any
+                // other context rule carrying the slot. Try each tier in turn so a
+                // per-monitor override beats a global per-mode gap (the v4 cascade,
+                // where the monitor-specific value won), with priority breaking ties
+                // within a tier. Specificity uses matchPinsFieldPositively (an Equals
+                // leaf not under a negation), so a "every screen except X" negated
+                // rule is NOT mis-ranked as a per-monitor override and instead falls
+                // through to the generic priority tier. Only the gap cascade is
+                // specificity-ordered; appearance slots resolve by priority alone in
+                // the effect.
+                const auto carriesScreenPinned = [&carries](const PWR::Rule& rule) {
+                    return carries(rule) && matchPinsFieldPositively(rule.match, PWR::Field::ScreenId);
+                };
+                const auto carriesModePinned = [&carries](const PWR::Rule& rule) {
+                    return carries(rule) && matchPinsFieldPositively(rule.match, PWR::Field::Mode);
+                };
+                const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, carriesScreenPinned);
+                if (rule == nullptr) {
+                    rule = m_evaluator->highestPriorityMatch(query, carriesModePinned);
+                }
+                if (rule == nullptr) {
+                    rule = m_evaluator->highestPriorityMatch(query, carries);
+                }
                 if (rule == nullptr) {
                     return std::nullopt;
                 }

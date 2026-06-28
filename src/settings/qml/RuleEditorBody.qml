@@ -207,7 +207,7 @@ ColumnLayout {
 
             SpinBox {
                 Accessible.name: i18n("Rule priority. Higher rules are evaluated first.")
-                ToolTip.delay: 500
+                ToolTip.delay: Kirigami.Units.toolTipDelay
                 ToolTip.text: i18n("Priority bands. 100: Animation, 200: Application, 300: Context, 500: Advanced. Higher numbers win within a band.")
                 ToolTip.visible: hovered
                 from: 0

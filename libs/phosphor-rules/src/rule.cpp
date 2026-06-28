@@ -86,6 +86,32 @@ QList<ValidationIssue> Rule::validationIssues() const
             issues.append(issue);
         }
     }
+
+    // A terminal action (Exclude) co-located with Tag::Effect slot-filling
+    // actions (border / opacity / animation override): if such a rule reaches
+    // the effect's appearance/animation evaluator, the terminal Exclude
+    // truncates the resolve walk, dropping the Effect slot and suppressing
+    // lower-priority rules for the window. Flag each Effect action so the author
+    // splits exclusion and appearance into separate rules.
+    if (hasTerminalAction()) {
+        const ActionRegistry& registry = ActionRegistry::instance();
+        for (int i = 0; i < actions.size(); ++i) {
+            const RuleAction& action = actions.at(i);
+            if (!registry.hasTag(action.type, Tag::Effect)) {
+                continue;
+            }
+            ValidationIssue issue;
+            issue.code = ValidationIssue::Code::TerminalActionWithEffectActions;
+            issue.actionIndex = i;
+            issue.actionType = action.type;
+            issue.message = QStringLiteral(
+                                "Action `%1` fills an appearance/animation slot, but the rule also has a terminal "
+                                "Exclude action that stops appearance resolution, so this action may not take effect. "
+                                "Put the exclusion on a separate rule.")
+                                .arg(action.type);
+            issues.append(issue);
+        }
+    }
     return issues;
 }
 

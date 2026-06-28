@@ -7,8 +7,8 @@ include(CMakeFindDependencyMacro)
 
 # Mirror the PUBLIC link set in CMakeLists.txt — every entry here is
 # resolvable by find_package consumers so the exported targets file can wire
-# transitively. PhosphorIdentity is PRIVATE, so it rides in the exported
-# targets as `$<LINK_ONLY:...>` and needs no find_dependency.
+# transitively. PhosphorIdentity and PhosphorFsLoader are PRIVATE, so they ride
+# in the exported targets as `$<LINK_ONLY:...>` and need no find_dependency.
 find_dependency(Qt6 6.6 COMPONENTS Core)
 find_dependency(PhosphorProtocol)
 

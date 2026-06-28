@@ -347,7 +347,7 @@ RowLayout {
                 ToolButton {
                     Accessible.name: leaf._pickTooltip(leaf.node.field)
                     Layout.alignment: Qt.AlignVCenter
-                    ToolTip.delay: 500
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
                     ToolTip.text: leaf._pickTooltip(leaf.node.field)
                     ToolTip.visible: hovered
                     icon.name: "window-duplicate"
@@ -577,7 +577,7 @@ RowLayout {
             // The field entry's `options` carry {value: token, wire: token,
             // label: localised} triples. Mode is a string field, so the value
             // persisted in the rule store IS the wire token ("snapping" /
-            // "tiling" / "floating").
+            // "tiling"; Floating was dropped from the Mode condition).
             readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
 
             model: _options

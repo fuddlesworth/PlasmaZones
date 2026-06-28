@@ -483,7 +483,13 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("getValidatedPreTileGeometry"), {windowId}),
             m_effect);
-        connect(watcher, &QDBusPendingCallWatcher::finished, m_effect,
+        // Context is `this` (the handler), not m_effect: the lambda captures and
+        // dereferences AutotileHandler members (m_autotileScreens,
+        // m_pendingCrossScreenRestore), and the handler is a unique_ptr member of
+        // the effect destroyed before its sibling watcher. A `this` context auto-
+        // disconnects the callback when the handler dies, matching the sibling
+        // watchers above.
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
                 [this, safeW, wid, fallbackW, fallbackH](QDBusPendingCallWatcher* pw) {
                     pw->deleteLater();
 
@@ -528,7 +534,10 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                     // after firing once — preventing subsequent user resizes from
                     // snapping the window back to the pre-autotile size.
                     auto sharedConn = std::make_shared<QMetaObject::Connection>();
-                    *sharedConn = connect(safeW.data(), &KWin::EffectWindow::windowFinishUserMovedResized, m_effect,
+                    // Context is `this` (the handler), not m_effect: the lambda
+                    // mutates m_pendingCrossScreenRestore, so the connection must
+                    // die with the handler.
+                    *sharedConn = connect(safeW.data(), &KWin::EffectWindow::windowFinishUserMovedResized, this,
                                           [this, safeW, wid, restoreW, restoreH, sharedConn](KWin::EffectWindow*) {
                                               // Disconnect immediately so this only fires once (the drop),
                                               // not on every subsequent user resize.
@@ -705,8 +714,7 @@ void AutotileHandler::onDaemonReady()
     // m_centeredWaylandZones entry that happens to equal the first
     // post-restart tile request would trip the skipMoveResize short-circuit
     // in slotWindowsTileRequested against a freshly-restored decoration,
-    // leaving a title-bar-height gap (the CallerWillPlace acquire there
-    // expects the caller to re-assert geometry).
+    // leaving a title-bar-height gap because the geometry is never re-asserted.
     m_autotileTargetZones.clear();
     m_centeredWaylandZones.clear();
     // Per-screen stagger generations describe the dead session's in-flight

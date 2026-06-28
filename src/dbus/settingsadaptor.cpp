@@ -1102,6 +1102,11 @@ struct PerScreenDispatch
     std::function<QVariantMap(const QString&)> get;
     std::function<void(const QString&, const QString&, const QVariant&)> set;
     std::function<void(const QString&)> clear;
+    /// False for read-only categories (per-screen snapping, whose gaps are
+    /// rule-backed): the getter resolves the live values, but set/clear have no
+    /// backing surface. Writers reject the call instead of reporting a phantom
+    /// success and triggering a pointless save.
+    bool writable = true;
 };
 
 std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString& category)
@@ -1122,13 +1127,16 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
     if (category == QLatin1String("snapping")) {
         // Per-screen snapping gaps are rule-backed: the getter reads the
         // resolved gap rules, but there is no per-screen snapping writer
-        // surface, so set/clear are no-ops on this category.
+        // surface. Mark the category read-only so writers reject set/clear
+        // (write per-monitor snapping gaps over org.plasmazones.Rules instead)
+        // rather than silently succeeding.
         return PerScreenDispatch{
             [settings](const QString& id) {
                 return settings->getPerScreenSnappingSettings(id);
             },
             [](const QString&, const QString&, const QVariant&) { },
             [](const QString&) { },
+            /*writable=*/false,
         };
     }
     if (category == QLatin1String("zoneSelector")) {
@@ -1159,6 +1167,11 @@ void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString
         qCWarning(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
         return;
     }
+    if (!dispatch->writable) {
+        qCWarning(lcDbusSettings) << "setPerScreenSetting: category" << category
+                                  << "is read-only (rule-backed) — write via org.plasmazones.Rules";
+        return;
+    }
     dispatch->set(screenId, key, value.variant());
     scheduleSave();
 }
@@ -1171,6 +1184,11 @@ void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QStr
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
         qCWarning(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;
+        return;
+    }
+    if (!dispatch->writable) {
+        qCWarning(lcDbusSettings) << "clearPerScreenSettings: category" << category
+                                  << "is read-only (rule-backed) — clear via org.plasmazones.Rules";
         return;
     }
     dispatch->clear(screenId);
@@ -1203,6 +1221,11 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
         qCWarning(lcDbusSettings) << "setPerScreenSettings: unknown category" << category;
+        return false;
+    }
+    if (!dispatch->writable) {
+        qCWarning(lcDbusSettings) << "setPerScreenSettings: category" << category
+                                  << "is read-only (rule-backed) — write via org.plasmazones.Rules";
         return false;
     }
 

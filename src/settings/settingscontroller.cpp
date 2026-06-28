@@ -386,8 +386,8 @@ SettingsController::SettingsController(QObject* parent)
     m_snappingEffectsPage = new SnappingEffectsController(this);
     m_windowAppearancePage = new WindowAppearanceController(this);
 
-    // Tiling→Algorithm page sub-controller. Owns 7 slider bounds + the
-    // custom-parameter CRUD surface. Borrows the algorithm registry this
+    // Tiling→Algorithm page sub-controller. Owns the algorithm slider bounds +
+    // the custom-parameter CRUD surface. Borrows the algorithm registry this
     // controller already owns; declared as a unique_ptr AFTER
     // m_localAlgorithmRegistry so reverse-order member destruction tears the
     // sub-controller down BEFORE the registry resets.
@@ -517,6 +517,20 @@ SettingsController::SettingsController(QObject* parent)
             return;
         }
         // m_loading is already false by the time this async reply lands.
+        beginExternalEdit(QStringLiteral("rules"));
+        setNeedsSave(true);
+        endExternalEdit();
+    });
+    // Same asymmetry on the SAVE path: a failed/partial daemon rules push keeps
+    // RuleController m_dirty=true per its contract, but its dirtyChanged signal
+    // never fires (the value didn't change false→true), so the "rules" entry
+    // that save()'s setNeedsSave(false) blanket-cleared is never re-added — the
+    // per-page badge wrongly clears while the domain stays dirty. Re-mark on a
+    // failed apply so isPageDirty("rules") stays true, mirroring revertFinished.
+    connect(m_rulesPage, &RuleController::applyResult, this, [this](bool ok, const QString&) {
+        if (ok || !m_rulesPage->isDirty()) {
+            return;
+        }
         beginExternalEdit(QStringLiteral("rules"));
         setNeedsSave(true);
         endExternalEdit();

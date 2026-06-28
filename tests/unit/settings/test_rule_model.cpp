@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * @file test_window_rule_model.cpp
+ * @file test_rule_model.cpp
  * @brief Coverage for RuleModel — the single flat model behind the
  *        unified Rules page.
  *
@@ -635,4 +635,4 @@ void TestRuleModel::routeActionsRenderFriendlyLabels()
 
 QTEST_MAIN(TestRuleModel)
 
-#include "test_window_rule_model.moc"
+#include "test_rule_model.moc"

@@ -505,6 +505,14 @@ public:
 
     // No singleton - use dependency injection instead
 
+    // Canonical storage-key form of a screen identifier: resolve a connector
+    // name (e.g. "DP-2") to its stable EDID id (e.g. "Dell:U2722D:115107"),
+    // preserving any virtual "/vs:N" suffix. Identifiers already in id form, and
+    // connectors that don't currently resolve to a connected screen, pass
+    // through unchanged. Per-screen overrides (gaps, autotile) are keyed by this
+    // stable form so reads/writes/migration agree across connector renumbering.
+    static QString canonicalPerScreenKey(const QString& screenIdOrName);
+
     // Activation — PhosphorConfig::Store-backed.
     QVariantList dragActivationTriggers() const override;
     void setDragActivationTriggers(const QVariantList& triggers) override;
@@ -1265,11 +1273,11 @@ private:
     // @p screenIdOrName, keyed in the short engine form the autotile / snapping
     // consumers expect (InnerGap / OuterGap / UsePerSideOuterGap / OuterGap
     // {Top,Bottom,Left,Right}), or an empty map when no such rule exists. The
-    // rule is keyed by the screen's CONNECTOR NAME (the id the Appearance page's
-    // monitor scope chooser stores and the rule's `ScreenId Equals` match
-    // carries) under the deterministic id
-    // createUuidV5(baselineGapRuleId, <connector name>); the incoming
-    // identifier is resolved to that connector-name form first.
+    // rule is keyed by the screen's STABLE EDID id (the form the v4→v5 migration
+    // writes and the Appearance page derives) under the deterministic id
+    // createUuidV5(baselineGapRuleId, <stable id>); the incoming identifier is
+    // resolved to that canonical form first, with the raw and physical-parent
+    // forms tried as fallbacks for rules written under an alternate form.
     static QVariantMap perScreenGapRuleOverrides(const PhosphorRules::RuleStore* store, const QString& screenIdOrName);
 
     // Cached snapshot of the baseline rule's gap values, used by

@@ -683,17 +683,6 @@ public:
     // sole writer; see docs/window-rule-refactor-design.md §5.
     PLASMAZONES_EXPORT static QString rulesFilePath();
 
-    // LEGACY id of the old single managed baseline appearance rule that carried
-    // ALL default appearance actions (borders + title bar + gaps) on one rule.
-    // It has been split into three focused managed rules (see the three ids
-    // below). This accessor is retained ONLY so the daemon's startup migration
-    // can find and remove the old single rule, distributing its values into the
-    // three replacements. No new code should seed or read this id.
-    static QUuid baselineAppearanceRuleId()
-    {
-        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000001}"));
-    }
-
     // Stable id of the managed baseline BORDER rule: the catch-all,
     // lowest-priority Rule whose actions hold the default window border
     // appearance (visible / width / radius / colour) the Appearance settings

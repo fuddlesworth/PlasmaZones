@@ -36,10 +36,9 @@ struct LayoutAssignmentKey
      * Group names are always constructed internally in this order.
      *
      * @param groupName Full group name from the config backend.
-     * @param prefix    Schema-defined prefix (the lib's own wire format
-     *                  uses @c "Assignment:" — defined as a private
-     *                  constant in @c layoutregistry_persistence.cpp).
-     *                  Passing it explicitly keeps this header free of
+     * @param prefix    Schema-defined prefix the caller supplies (the lib's own
+     *                  wire format uses @c "Assignment:"). Passing it explicitly
+     *                  keeps this header free of
      *                  any cpp-side constant dependency.
      * @return Key with populated fields; screenId is empty on parse failure.
      */
@@ -263,8 +262,8 @@ inline QString modeToWireString(AssignmentEntry::Mode mode)
     // descriptor's closed-vocabulary validator
     // (`engineModeOptions().contains(...)`), so a malformed disable rule
     // fails load loudly. NOTE: `SetEngineMode`'s validator only checks
-    // `hasNonEmptyString` (open-vocabulary by design — see
-    // `libs/phosphor-rules/src/ruleaction.cpp:225-238`), so a
+    // `hasNonEmptyString` (open-vocabulary by design — see its descriptor
+    // validator in `libs/phosphor-rules/src/ruleaction.cpp`), so a
     // malformed assignment rule survives load but is silently coerced
     // back to Snapping at consumption via
     // `entryFromRuleMatchActions → modeFromWireString → nullopt`. The

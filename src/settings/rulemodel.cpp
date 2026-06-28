@@ -552,6 +552,7 @@ RuleModel::UpdateResult RuleModel::updateRule(const Rule& rule)
     Q_EMIT dataChanged(idx, idx);
     if (sectionFor(rule) != before) {
         Q_EMIT ruleSectionChanged();
+        return UpdateResult::AppliedSectionChanged;
     }
     return UpdateResult::Applied;
 }

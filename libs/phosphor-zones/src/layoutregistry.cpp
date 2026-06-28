@@ -21,8 +21,13 @@ LayoutRegistry::LayoutRegistry(PhosphorRules::RuleStore* ruleStore, QString layo
     , m_ruleStore(ruleStore)
     , m_layoutSubdirectory(std::move(layoutSubdirectory))
 {
-    Q_ASSERT_X(m_ruleStore != nullptr, "LayoutRegistry",
-               "ruleStore is required — assignment resolution dereferences it");
+    // qFatal, not Q_ASSERT: initCommon() unconditionally dereferences
+    // m_ruleStore (->ruleSet()), so a null store is a developer composition-root
+    // error that would otherwise segfault in release where Q_ASSERT compiles
+    // out. Matches the layoutSubdirectory invariants below.
+    if (m_ruleStore == nullptr) {
+        qFatal("LayoutRegistry: ruleStore is required — assignment resolution dereferences it");
+    }
     Q_ASSERT_X(!m_layoutSubdirectory.isEmpty(), "LayoutRegistry", "layoutSubdirectory is required");
     initCommon();
 }

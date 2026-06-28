@@ -33,7 +33,7 @@ surface rather than linking this library directly.
 #include <PhosphorPlacement/PlacementConfig.h>
 
 class MyResolver : public PhosphorPlacement::IGeometryResolver {
-    int resolveZonePadding(PhosphorZones::Layout* layout, const QString& screenId) const override {
+    int resolveInnerGap(PhosphorZones::Layout* layout, const QString& screenId) const override {
         return 8;
     }
     PhosphorLayout::EdgeGaps resolveOuterGaps(PhosphorZones::Layout* layout, const QString& screenId) const override {

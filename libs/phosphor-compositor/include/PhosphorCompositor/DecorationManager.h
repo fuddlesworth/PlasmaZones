@@ -79,6 +79,14 @@ public:
     explicit DecorationManager(ICompositorBridge& bridge, QObject* parent = nullptr);
 
     // ── Ownership ──────────────────────────────────────────────────────
+    /// Low-level primitive: take ownership of @p windowId's decoration and hide
+    /// it per @p placement. This is the public seam the higher-level
+    /// `setRuleOverride` is built on (it calls `acquire(.., rule(), AlreadyPlaced)`).
+    /// `Placement::CallerWillPlace` is provided for a caller that applies the zone
+    /// geometry itself right after acquiring; the in-tree effect only ever uses
+    /// `AlreadyPlaced` via `setRuleOverride`, so `CallerWillPlace` is currently
+    /// exercised only by direct callers and tests. Kept public deliberately as the
+    /// reusable primitive, not dead code.
     void acquire(const QString& windowId, const Owner& owner, Placement placement = Placement::AlreadyPlaced);
 
     // ── Bulk operations ────────────────────────────────────────────────

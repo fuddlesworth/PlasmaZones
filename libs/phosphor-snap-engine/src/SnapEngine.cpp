@@ -352,7 +352,10 @@ void SnapEngine::reapplyLayout(const NavigationContext& /*ctx*/)
 
 void SnapEngine::reapplyManagedWindowAppearance()
 {
-    if (!m_snapState) {
+    // Both are dereferenced below (m_snapState for the snapped-window set,
+    // m_windowTracker for resolveZoneGeometry); guard both, matching the rest
+    // of the file.
+    if (!m_snapState || !m_windowTracker) {
         return;
     }
     // Re-emit the current zone geometry for every snapped, non-floating window.

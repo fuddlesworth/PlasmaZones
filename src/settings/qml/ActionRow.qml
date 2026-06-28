@@ -368,7 +368,7 @@ ColumnLayout {
             source: "dialog-warning"
             Accessible.name: i18n("Action incompatible with the rule's match")
             ToolTip.visible: incompatibleHover.hovered
-            ToolTip.delay: 300
+            ToolTip.delay: Kirigami.Units.toolTipDelay
             ToolTip.text: i18n("This action runs during context resolution, but the rule's match references window properties, so the action would never fire as written.")
 
             HoverHandler {

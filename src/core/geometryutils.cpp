@@ -95,6 +95,13 @@ QVariantMap currentContextGapOverride(PhosphorZones::IZoneLayoutRegistry* reg, c
 
 QVariantMap contextGapOverrideMap(const PhosphorZones::ContextGapOverride& gaps)
 {
+    // CONTRACT: this map is consumed by BOTH the snap engine (which reads
+    // PerScreenSnappingKey) and the autotile engine (which reads the separate
+    // PerScreenKeys namespace). Those two namespaces define byte-identical key
+    // strings ("InnerGap", "OuterGap", …); they MUST stay in lockstep or
+    // autotile context-gap rules silently become no-ops. Keep any key rename
+    // synchronized across both PhosphorEngine::PerScreenKeys and
+    // PhosphorEngine::PerScreenSnappingKey.
     namespace PSK = PhosphorEngine::PerScreenSnappingKey;
     QVariantMap map;
     if (gaps.isEmpty()) {

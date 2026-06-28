@@ -8,6 +8,9 @@
 #include <QJsonArray>
 #include <QJsonValue>
 
+#include <cmath>
+#include <limits>
+
 #include "rulelogging.h"
 
 namespace PhosphorRules {
@@ -202,6 +205,17 @@ bool MatchExpression::isValid() const
     if (operatorIsStringOnly(op) && !fieldIsString(field)) {
         return false;
     }
+    // A context string field (Mode / ScreenId / Activity) with an empty `Equals`
+    // value matches a window whose context value is empty — e.g. `Mode Equals ""`
+    // matches every FLOATING window (a floating window carries an empty mode).
+    // That is never an authored rule (the pickers only offer real values), so
+    // reject it rather than let a hand-edited or corrupt store silently match
+    // everything in that empty-context state. (The Contains/StartsWith/EndsWith/
+    // Regex branches already reject empty patterns for the same reason.)
+    if (op == Operator::Equals && fieldIsContext(field) && fieldIsString(field)
+        && m_predicate.value.toString().isEmpty()) {
+        return false;
+    }
     // Numeric comparisons require a numeric field.
     if (operatorIsNumeric(op) && !fieldIsNumeric(field)) {
         return false;
@@ -230,9 +244,22 @@ bool MatchExpression::isValid() const
         const int valueTypeId = m_predicate.value.metaType().id();
         if (valueTypeId == QMetaType::Double) {
             const double d = m_predicate.value.toDouble();
+            // Numeric leaves evaluate via subject.toInt() / value.toInt() (int),
+            // so the value must be a finite, integer-valued number inside int
+            // range. Reject non-finite or out-of-range values FIRST: casting
+            // such a double to an integer is undefined behaviour, and toInt()
+            // would otherwise overflow at evaluation and match the wrong subject
+            // (e.g. a value above INT_MAX collapsing to 0, which reads as "pid 0").
+            if (!std::isfinite(d) || d < static_cast<double>(std::numeric_limits<int>::min())
+                || d > static_cast<double>(std::numeric_limits<int>::max())) {
+                qCWarning(lcRule) << "MatchExpression: rejecting numeric leaf with out-of-range value" << d
+                                  << "— numeric fields require an integer within int range.";
+                return false;
+            }
             // A bit-for-bit integer-valued double is fine (JSON has no int);
-            // only a genuine fractional part is the authoring mistake.
-            if (d != static_cast<double>(static_cast<qint64>(d))) {
+            // only a genuine fractional part is the authoring mistake (a Pid 12.7
+            // leaf would otherwise match pid 12).
+            if (d != std::trunc(d)) {
                 qCWarning(lcRule) << "MatchExpression: rejecting numeric leaf with fractional value" << d
                                   << "— numeric fields require integer values.";
                 return false;

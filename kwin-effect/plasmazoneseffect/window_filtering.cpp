@@ -316,7 +316,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     //
     // `m_shaderManager.animationRuleSet()` is filtered to OverrideAnimation* /
     // SetOpacity rules at admission (shader_transitions.cpp's
-    // `isEffectRuleAction` loop), so `hasAnyMatch` never surfaces a rule whose
+    // `hasTag(type, Tag::Effect)` loop), so `hasAnyMatch` never surfaces a rule whose
     // actions are EXCLUSIVELY `ExcludeAnimations` — those route through the
     // exclusion gate below.
     if (haveAnimationRules && animationEvaluator.hasAnyMatch(query())) {

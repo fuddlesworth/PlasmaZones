@@ -113,20 +113,23 @@ public:
     /// ordinary (non-managed) screen-scoped rule whose match is
     /// `ScreenId Equals screenId` and whose actions carry the gap values; it
     /// rides the context-gap cascade so it overrides the global baseline for
-    /// that monitor only. The id is a v5 UUID namespaced under the baseline
-    /// appearance rule so it is stable across restarts and reproducible from the
-    /// screen id alone — QML cannot compute v5, so the page resolves it here and
-    /// then drives find-or-create through the Rules controller's
-    /// ruleJson() / addRuleFromJson() / updateRuleFromJson() / removeRule().
-    /// Returns an empty string for an empty screen id (the "all monitors" /
-    /// global scope, which edits the gap baseline rule directly).
-    Q_INVOKABLE QString perScreenGapRuleId(const QString& screenId) const
-    {
-        if (screenId.isEmpty()) {
-            return QString();
-        }
-        return QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), screenId.toUtf8()).toString();
-    }
+    /// that monitor only. The incoming identifier is resolved to its stable EDID
+    /// form (Settings::canonicalPerScreenKey) before hashing, so the id agrees
+    /// with the v4→v5 migration and the gap reader regardless of whether the
+    /// scope chooser passed a connector name or a stable id. The id is a v5 UUID
+    /// namespaced under the baseline gap rule so it is stable across restarts and
+    /// reproducible from the screen id alone — QML cannot compute v5, so the page
+    /// resolves it here and then drives find-or-create through the Rules
+    /// controller's ruleJson() / addRuleFromJson() / updateRuleFromJson() /
+    /// removeRule(). Returns an empty string for an empty screen id (the "all
+    /// monitors" / global scope, which edits the gap baseline rule directly).
+    Q_INVOKABLE QString perScreenGapRuleId(const QString& screenId) const;
+
+    /// Stable EDID form of @p screenId (Settings::canonicalPerScreenKey), or the
+    /// input unchanged when it is already a stable id or cannot be resolved.
+    /// QML uses this to author a per-monitor gap rule's `ScreenId Equals` match
+    /// in the same canonical form the rule id is keyed by.
+    Q_INVOKABLE QString canonicalScreenId(const QString& screenId) const;
     int innerGapMin() const
     {
         return ConfigDefaults::innerGapMin();
