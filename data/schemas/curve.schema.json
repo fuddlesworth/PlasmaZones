@@ -1,6 +1,6 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "$id": "https://plasmazones.kde.org/schemas/curve.schema.json",
+    "$id": "urn:plasmazones:schema:curve",
     "title": "PlasmaZones Animation Curve",
     "description": "A named easing curve with a factory typeId and its numeric parameters. The 'name' field is enforced separately by the loader's filename-envelope check (it must equal the file's base name), so it is optional here and the schema validates both the on-disk file and the envelope-stripped root.",
     "type": "object",

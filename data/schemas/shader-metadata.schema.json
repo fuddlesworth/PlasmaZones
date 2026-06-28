@@ -1,6 +1,6 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "$id": "https://plasmazones.kde.org/schemas/shader-metadata.schema.json",
+    "$id": "urn:plasmazones:schema:shader-metadata",
     "title": "PlasmaZones Wallpaper Shader Metadata",
     "description": "metadata.json for a bundled or user wallpaper-shader pack. Core identity and the parameter contract are enforced. Optional multipass, buffer, and wallpaper rendering keys, plus descriptive metadata (category, description, author, version), are allowed through.",
     "type": "object",

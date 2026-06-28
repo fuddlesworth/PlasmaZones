@@ -1,6 +1,6 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "$id": "https://plasmazones.kde.org/schemas/whatsnew.schema.json",
+    "$id": "urn:plasmazones:schema:whatsnew",
     "title": "PlasmaZones What's New",
     "description": "Release highlights shown in the settings What's New page.",
     "type": "object",

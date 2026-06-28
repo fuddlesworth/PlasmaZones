@@ -1,6 +1,6 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "$id": "https://plasmazones.kde.org/schemas/layout.schema.json",
+    "$id": "urn:plasmazones:schema:layout",
     "title": "PlasmaZones Layout",
     "description": "A tiling layout with identity metadata and a list of zones with relative geometry. Structural invariants are enforced here. The optional appearance, shader, gap, geometry-mode, and visibility keys are allowed through so editor-produced and future layouts are not rejected.",
     "type": "object",
