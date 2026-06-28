@@ -91,15 +91,16 @@ def ensure_jsonschema() -> None:
         sys.exit(2)
     venv_dir = cache_root / "plasmazones" / "jsonschema-venv"
     venv_py = venv_dir / "bin" / "python"
-    # Success stamp written only AFTER pip install returns 0. Gating on the
-    # stamp (not venv_py.exists()) means a partially-built venv — e.g. an
-    # offline run where venv creation succeeds but pip install fails — is
-    # rebuilt on the next run instead of leaving the cache permanently wedged
-    # (re-execing into a Python that has no jsonschema, failing at exit 2
-    # forever). Mirrors the extract-once stamp used for vendored Luau.
+    # Success stamp written only AFTER pip install returns 0. Gate on BOTH the
+    # stamp and the interpreter: the stamp catches a partially-built venv (e.g.
+    # an offline run where venv creation succeeds but pip install fails), and
+    # venv_py.exists() catches a venv whose interpreter went missing or dangling
+    # (a rolling-distro Python minor bump leaves bin/python a broken symlink).
+    # Either condition rebuilds the venv rather than re-execing into a dead
+    # interpreter. Mirrors the extract-once stamp used for vendored Luau.
     ready_stamp = venv_dir / ".jsonschema-installed"
 
-    if not ready_stamp.exists():
+    if not (ready_stamp.exists() and venv_py.exists()):
         print("validate-json-schemas: bootstrapping JSON-schema validator (one-time)...", file=sys.stderr)
         import shutil
         import subprocess
@@ -121,7 +122,14 @@ def ensure_jsonschema() -> None:
 
     # Re-exec this script under the bootstrapped interpreter, preserving args.
     os.environ[_BOOTSTRAP_ENV] = "1"
-    os.execv(str(venv_py), [str(venv_py), os.path.abspath(__file__), *sys.argv[1:]])
+    try:
+        os.execv(str(venv_py), [str(venv_py), os.path.abspath(__file__), *sys.argv[1:]])
+    except OSError as exc:
+        # Defense in depth: the gate above rebuilds a missing/dangling venv, so
+        # this should be unreachable, but a dead interpreter must fail closed at
+        # exit 2 rather than surface an uncaught traceback at exit 1.
+        fail(f"could not run the bootstrapped jsonschema interpreter ({exc})")
+        sys.exit(2)
 
 
 def main() -> int:

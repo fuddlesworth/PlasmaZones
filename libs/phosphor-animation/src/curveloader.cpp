@@ -12,7 +12,6 @@
 #include <PhosphorFsLoader/SchemaValidator.h>
 
 #include <QDir>
-#include <QFileInfo>
 #include <QHash>
 #include <QJsonObject>
 #include <QJsonValue>

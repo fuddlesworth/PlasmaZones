@@ -10,6 +10,8 @@
 
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLoggingCategory>
+#include <QTemporaryFile>
 #include <QTest>
 
 #include <utility>
@@ -151,6 +153,31 @@ private Q_SLOTS:
         QVERIFY(moved.isValid());
         const auto doc = parse(R"({"id":"{abc}","zones":[{"geometry":{"x":0,"width":0.5}}]})");
         QVERIFY(!moved.validate(doc).has_value());
+    }
+
+    void fromResourceMissingFailsClosed()
+    {
+        // A missing resource (e.g. a build regression dropping the embedded
+        // schema) must fail closed: invalid validator, every document rejected.
+        const QLoggingCategory cat("test.schemavalidator.fromresource");
+        const auto validator = SchemaValidator::fromResource(QStringLiteral("/no/such/schema.json"), cat);
+        QVERIFY(!validator.isValid());
+        const auto errors = validator.validate(parse(R"({"id":"{abc}","zones":[{"geometry":{"x":0,"width":0.5}}]})"));
+        QVERIFY(errors.has_value());
+        QCOMPARE(errors->size(), 1);
+    }
+
+    void fromResourceValidFileCompiles()
+    {
+        QTemporaryFile file;
+        QVERIFY(file.open());
+        file.write(sampleSchema());
+        QVERIFY(file.flush());
+        const QLoggingCategory cat("test.schemavalidator.fromresource");
+        const auto validator = SchemaValidator::fromResource(file.fileName(), cat);
+        QVERIFY(validator.isValid());
+        const auto doc = parse(R"({"id":"{abc}","zones":[{"geometry":{"x":0,"width":0.5}}]})");
+        QVERIFY(!validator.validate(doc).has_value());
     }
 };
 
