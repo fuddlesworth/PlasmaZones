@@ -40,6 +40,7 @@ PhosphorLayout::AlgorithmMetadata buildMetadata(PhosphorTiles::TilingAlgorithm* 
     // split ratios) or scripted algorithms with the onWindowResized hook.
     meta.reflowsOnResize = algorithm->supportsMemory() || algorithm->supportsResizeHook();
     meta.supportsScriptState = algorithm->supportsScriptState();
+    meta.supportsSingleWindow = algorithm->supportsSingleWindow();
     meta.isScripted = algorithm->isScripted();
     meta.isUserScript = algorithm->isUserScript();
     meta.zoneNumberDisplay = PhosphorLayout::zoneNumberDisplayFromString(algorithm->zoneNumberDisplay());

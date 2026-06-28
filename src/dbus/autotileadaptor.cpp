@@ -404,6 +404,7 @@ PhosphorProtocol::AlgorithmInfoEntry AutotileAdaptor::algorithmInfo(const QStrin
     entry.zoneNumberDisplay = algo->zoneNumberDisplay();
     entry.isUserScript = algo->isUserScript();
     entry.supportsMemory = algo->supportsMemory();
+    entry.supportsSingleWindow = algo->supportsSingleWindow();
 
     return entry;
 }

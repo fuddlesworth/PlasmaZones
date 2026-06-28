@@ -24,7 +24,7 @@ Row {
     spacing: Kirigami.Units.smallSpacing
     // Hidden (and space-free in the enclosing positioner) when the layout
     // advertises no capabilities — i.e. every manual layout.
-    visible: layoutData.supportsMemory === true || layoutData.reflowsOnResize === true || layoutData.supportsScriptState === true
+    visible: layoutData.supportsMemory === true || layoutData.reflowsOnResize === true || layoutData.supportsScriptState === true || layoutData.supportsSingleWindow === true
 
     // Shared icon-badge primitive: a small masked symbolic icon with a hover
     // tooltip. Each instance sets only visible/source/color/text.
@@ -78,5 +78,15 @@ Row {
         color: Kirigami.Theme.neutralTextColor
         Accessible.name: i18n("Persistent script state")
         tooltipText: i18n("Remembers script-managed layout state across window changes")
+    }
+
+    // Single-window indicator for algorithms that lay out a lone window
+    // themselves (centering or sizing it) instead of letting it fill the screen.
+    CapabilityBadge {
+        visible: root.layoutData.supportsSingleWindow === true
+        source: "view-restore-symbolic"
+        color: Kirigami.Theme.activeTextColor
+        Accessible.name: i18n("Single-window layout")
+        tooltipText: i18n("Lays out a single window itself instead of filling the screen")
     }
 }

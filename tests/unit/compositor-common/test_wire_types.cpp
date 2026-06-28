@@ -407,10 +407,11 @@ private Q_SLOTS:
                                                    false,
                                                    QStringLiteral("sequential"),
                                                    false,
+                                                   true,
                                                    true};
 
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(sssbbbbdibsbb)"));
+        QCOMPARE(sig, QStringLiteral("(sssbbbbdibsbbb)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::AlgorithmInfoEntry>();
         QVERIFY(typeId != QMetaType::UnknownType);
@@ -428,6 +429,7 @@ private Q_SLOTS:
         QCOMPARE(entry.zoneNumberDisplay, QStringLiteral("sequential"));
         QCOMPARE(entry.isUserScript, false);
         QCOMPARE(entry.supportsMemory, true);
+        QCOMPARE(entry.supportsSingleWindow, true);
     }
 
     // =================================================================

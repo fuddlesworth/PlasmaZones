@@ -148,9 +148,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="algorithmId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Algorithm ID to query."/>
             </arg>
-            <arg name="info" type="(sssbbbbdibsbb)" direction="out">
+            <arg name="info" type="(sssbbbbdibsbbb)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::AlgorithmInfoEntry"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Struct: (id, name, description, supportsMasterCount, supportsSplitRatio, centerLayout, producesOverlappingZones, defaultSplitRatio, defaultMaxWindows, isScripted, zoneNumberDisplay, isUserScript, supportsMemory)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Struct: (id, name, description, supportsMasterCount, supportsSplitRatio, centerLayout, producesOverlappingZones, defaultSplitRatio, defaultMaxWindows, isScripted, zoneNumberDisplay, isUserScript, supportsMemory, supportsSingleWindow)."/>
             </arg>
         </method>
 

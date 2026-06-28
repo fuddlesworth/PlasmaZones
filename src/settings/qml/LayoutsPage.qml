@@ -96,6 +96,14 @@ SettingsFlickable {
             "test": a => {
                 return a.supportsScriptState === true;
             }
+        },
+        {
+            "key": "singleWindow",
+            "label": i18n("Single Window"),
+            "order": 7,
+            "test": a => {
+                return a.supportsSingleWindow === true;
+            }
         }
     ]
 

@@ -194,7 +194,7 @@ QDBusArgument& operator<<(QDBusArgument& arg, const AlgorithmInfoEntry& e)
     arg.beginStructure();
     arg << e.id << e.name << e.description << e.supportsMasterCount << e.supportsSplitRatio << e.centerLayout
         << e.producesOverlappingZones << e.defaultSplitRatio << e.defaultMaxWindows << e.isScripted
-        << e.zoneNumberDisplay << e.isUserScript << e.supportsMemory;
+        << e.zoneNumberDisplay << e.isUserScript << e.supportsMemory << e.supportsSingleWindow;
     arg.endStructure();
     return arg;
 }
@@ -204,7 +204,7 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, AlgorithmInfoEntry& e)
     arg.beginStructure();
     arg >> e.id >> e.name >> e.description >> e.supportsMasterCount >> e.supportsSplitRatio >> e.centerLayout
         >> e.producesOverlappingZones >> e.defaultSplitRatio >> e.defaultMaxWindows >> e.isScripted
-        >> e.zoneNumberDisplay >> e.isUserScript >> e.supportsMemory;
+        >> e.zoneNumberDisplay >> e.isUserScript >> e.supportsMemory >> e.supportsSingleWindow;
     arg.endStructure();
     return arg;
 }

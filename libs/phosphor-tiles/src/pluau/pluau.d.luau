@@ -75,6 +75,7 @@ export type Metadata = {
     supportsMinSizes: boolean?,
     producesOverlappingZones: boolean?,
     centerLayout: boolean?,
+    supportsSingleWindow: boolean?, -- algorithm lays out the lone window itself (else the engine fills the work area)
     defaultSplitRatio: number?,
     defaultMaxWindows: number?,
     minimumWindows: number?,

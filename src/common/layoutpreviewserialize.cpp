@@ -63,6 +63,7 @@ constexpr QLatin1String SupportsCustomParams{"supportsCustomParams"};
 constexpr QLatin1String SupportsMemory{"supportsMemory"};
 constexpr QLatin1String ReflowsOnResize{"reflowsOnResize"};
 constexpr QLatin1String SupportsScriptState{"supportsScriptState"};
+constexpr QLatin1String SupportsSingleWindow{"supportsSingleWindow"};
 constexpr QLatin1String IsScripted{"isScripted"};
 constexpr QLatin1String IsUserScript{"isUserScript"};
 constexpr QLatin1String ZoneNumberDisplay{"zoneNumberDisplay"};
@@ -100,6 +101,7 @@ void writeAlgorithmFlat(Container& dst, const PhosphorLayout::AlgorithmMetadata&
     dst[K::SupportsMemory] = meta.supportsMemory;
     dst[K::ReflowsOnResize] = meta.reflowsOnResize;
     dst[K::SupportsScriptState] = meta.supportsScriptState;
+    dst[K::SupportsSingleWindow] = meta.supportsSingleWindow;
     dst[K::IsScripted] = meta.isScripted;
     dst[K::IsUserScript] = meta.isUserScript;
     const QString zoneNumberDisplay = PhosphorLayout::zoneNumberDisplayToString(meta.zoneNumberDisplay);
