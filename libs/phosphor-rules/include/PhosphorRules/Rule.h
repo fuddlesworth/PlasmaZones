@@ -42,13 +42,14 @@ struct PHOSPHORRULES_EXPORT ValidationIssue
         /// resolution (window fields are absent on the windowless query), so
         /// the action's slot is never filled.
         ContextActionWithWindowMatch = 0,
-        /// A terminal action (Exclude) on the same rule as one or more
-        /// `Tag::Effect` slot-filling actions (border / opacity / animation
-        /// override). When such a rule is admitted to the effect's appearance /
-        /// animation evaluator, the terminal Exclude truncates the resolve walk,
-        /// so the Effect action's slot may be dropped (and lower-priority rules
-        /// suppressed for the window). Split the exclusion and the appearance
-        /// into separate rules.
+        /// A terminal action (Exclude / ExcludeAnimations) on the same rule as
+        /// one or more non-terminal slot-filling actions (border / opacity /
+        /// animation override, but also gap / overlay / engine actions). A
+        /// terminal action stops the evaluator's resolve walk the moment it
+        /// matches, so the co-located action's slot may be dropped (and
+        /// lower-priority rules suppressed for the window). Split the exclusion
+        /// onto its own rule. (Name kept for wire stability; the check is not
+        /// limited to Tag::Effect actions.)
         TerminalActionWithEffectActions = 1,
     };
 
@@ -107,12 +108,15 @@ struct PHOSPHORRULES_EXPORT Rule
      * action's @ref ActionDomain against the match expression's domain and
      * surfaces combinations that compile and load but silently never fire.
      *
-     * Currently produces one code:
+     * Produces two codes:
      *  - @ref ValidationIssue::Code::ContextActionWithWindowMatch — a
      *    context-domain action paired with a match that references any
      *    window-property field. Detected via
      *    `MatchExpression::isContextOnly()`; an empty catch-all match is
      *    context-only and so is compatible.
+     *  - @ref ValidationIssue::Code::TerminalActionWithEffectActions — a terminal
+     *    action (Exclude / ExcludeAnimations) co-located with any non-terminal
+     *    slot-filling action, which the terminal action's early-out may drop.
      *
      * An empty list means no issues — the rule is well-formed at both layers.
      */

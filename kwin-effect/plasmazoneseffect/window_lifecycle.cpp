@@ -325,8 +325,8 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // needed here (the border item is removed just below and the title bar
     // dies with the window).
     m_snapHandler->onWindowClosed(closedWindowId);
-    // Drop the window's decoration ownership state (mode owners, rule
-    // overrides, vetoes). forgetWindow makes zero compositor calls — the
+    // Drop the window's decoration ownership state (the Rule owner and any
+    // force-show veto). forgetWindow makes zero compositor calls — the
     // decoration dies with the window.
     m_decorationManager->forgetWindow(closedWindowId);
 

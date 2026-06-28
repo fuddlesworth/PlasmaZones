@@ -46,8 +46,9 @@ void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, Q
                      (pos == ZoneSelectorPosition::Left || pos == ZoneSelectorPosition::Right));
 
     // Compute scaled zone appearance values. Zone padding honors per-monitor gap
-    // RULES (cascade: context-rule override → layout → global → default) via the
-    // layout registry's current context; border width/radius are global-only
+    // RULES (cascade: context-rule override → global → default) via the layout
+    // registry's current context. This preview passes no layout, so the
+    // per-layout tier does not apply here; border width/radius are global-only
     // settings (no per-screen key exists).
     if (settings) {
         const int zonePadding = GeometryUtils::getEffectiveInnerGap(
@@ -148,8 +149,9 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     if (m_settings) {
         writeColorSettings(window, m_settings);
         // PhosphorZones::Zone appearance for the scaled preview. Zone padding
-        // honors per-monitor gap RULES (context-rule override → layout → global →
-        // default) via the layout registry's current context; border width/radius
+        // honors per-monitor gap RULES (context-rule override → global → default)
+        // via the layout registry's current context. This preview passes no
+        // layout, so the per-layout tier does not apply here; border width/radius
         // are global-only (no per-screen key exists).
         writeQmlProperty(window, QStringLiteral("zonePadding"),
                          GeometryUtils::getEffectiveInnerGap(

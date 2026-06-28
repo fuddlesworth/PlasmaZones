@@ -121,6 +121,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 case PhosphorProtocol::DragOutcome::NotifyDragOutUnsnap:
                     // Window was dragged out of its zone — no longer snap-managed.
                     m_snapHandler->clearWindowSnapped(windowId);
+                    // Snapped → unsnapped flips the Mode / IsSnapped rule fields;
+                    // re-resolve now (symmetric with the snap-commit path below).
+                    invalidateRuleCacheForStateChange(windowId);
                     break;
 
                 case PhosphorProtocol::DragOutcome::ApplyFloat: {
@@ -149,6 +152,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     m_autotileHandler->handleDragToFloat(safeWindow, windowId);
                     // Window is now floating — drop it from snapping's set.
                     m_snapHandler->clearWindowSnapped(windowId);
+                    // Now floating — flips the Mode / IsSnapped / IsFloating rule
+                    // fields; re-resolve now instead of waiting for the broadcast.
+                    invalidateRuleCacheForStateChange(windowId);
                     // Note: m_dragFloatedWindowIds is intentionally NOT re-set here.
                     // See dragStopped handler — the marker is cleared at drag end
                     // because the daemon's drag-end float path (setWindowFloat →
@@ -213,6 +219,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         // discriminator epilogue as the single-window and
                         // batch apply paths.
                         m_snapHandler->clearWindowSnapped(windowId);
+                        // Symmetric with the snap-tracked branch above: the
+                        // window's snap state changed, so re-resolve its rules.
+                        invalidateRuleCacheForStateChange(windowId);
                     }
                     break;
                 }
@@ -243,6 +252,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                                         PhosphorAnimation::ProfilePaths::WindowSnapOut);
                     // Drag-to-unsnap: window left zone-managed sizing.
                     m_snapHandler->clearWindowSnapped(windowId);
+                    // Unsnapped — flips the Mode / IsSnapped rule fields; re-resolve.
+                    invalidateRuleCacheForStateChange(windowId);
                     break;
                 }
                 }

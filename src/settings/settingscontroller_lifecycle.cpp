@@ -276,17 +276,18 @@ void SettingsController::defaults()
     // a spurious `dirtyPagesChanged`, matching the emit-on-change
     // discipline used by `setNeedsSave` everywhere else in this file.
     //
-    // "rules" is INTENTIONALLY excluded from the blanket-mark:
-    // its source of truth is the daemon's `rules.json` (not the
-    // KConfig store reset() clears), and `RuleController::asyncCommit()`
-    // is a no-op when the controller is clean. Marking the page dirty
-    // here would surface a stale "unsaved changes" indicator that a
-    // subsequent Save would never actually clear (asyncCommit short-circuits,
-    // leaving the page dirty in perpetuity until the user touches it).
-    // Window-rule defaults are out of scope for this entry point —
-    // resetting them requires a separate daemon-side "reset rules" path.
+    // "rules" and "window-appearance" are INTENTIONALLY excluded from the
+    // blanket-mark: both are rule-backed (their source of truth is the daemon's
+    // `rules.json`, not the KConfig store reset() clears), and their commit is a
+    // no-op when clean (RuleController::asyncCommit short-circuits; the appearance
+    // page edits managed baseline rules directly). Marking them dirty here would
+    // surface a stale "unsaved changes" indicator that a subsequent Save could
+    // never clear, leaving the page dirty in perpetuity until the user touches it.
+    // Resetting rule-backed defaults (window appearance / gaps) is out of scope
+    // for this entry point — it requires a separate daemon-side "reset rules" path.
     QSet<QString> fullSet = validPageNames();
     fullSet.remove(QStringLiteral("rules"));
+    fullSet.remove(QStringLiteral("window-appearance"));
     m_loading = false;
     if (m_dirtyPages != fullSet) {
         m_dirtyPages = fullSet;

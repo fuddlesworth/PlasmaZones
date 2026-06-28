@@ -241,6 +241,28 @@ private Q_SLOTS:
         QCOMPARE(issues.at(1).actionType, QString(ActionType::SetSnappingLayout));
         // The window-domain floatAction at index 2 must not be flagged.
     }
+
+    void testValidationIssues_terminalWithSlotActionFlagged()
+    {
+        // A terminal Exclude co-located with a slot-filling action: the terminal
+        // action truncates the evaluator's resolve walk, so the border action may
+        // be dropped. Flag the non-terminal action (not the Exclude itself).
+        const Rule r =
+            makeRule(QStringLiteral("exclude + border"), 500, MatchExpression{}, {excludeAction(), borderWidth(4)});
+        const auto issues = r.validationIssues();
+        QCOMPARE(issues.size(), 1);
+        QCOMPARE(issues.first().code, ValidationIssue::Code::TerminalActionWithEffectActions);
+        QCOMPARE(issues.first().actionType, QString(ActionType::SetBorderWidth));
+        QCOMPARE(issues.first().actionIndex, 1);
+    }
+
+    void testValidationIssues_pureExcludeNotFlagged()
+    {
+        // A rule that is ONLY a terminal Exclude has no co-located slot-filling
+        // action, so the terminal co-location check produces nothing.
+        const Rule r = makeRule(QStringLiteral("pure exclude"), 500, MatchExpression{}, {excludeAction()});
+        QVERIFY(r.validationIssues().isEmpty());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestRule)

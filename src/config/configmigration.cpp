@@ -3282,7 +3282,12 @@ constexpr QLatin1String kV4KeyRight{"Right"};
 constexpr QLatin1String kV4PerScreen{"PerScreen"};
 constexpr QLatin1String kV4PerScreenSnapping{"Snapping"};
 constexpr QLatin1String kV4PerScreenAutotile{"Autotile"};
-constexpr QLatin1String kV4SnapInnerGap{"InnerGap"};
+// v4 persisted the per-screen SNAPPING inner gap under the legacy on-disk key
+// "ZonePadding" (PerScreenSnappingKey::ZonePadding in v3.2). The rename to
+// "InnerGap" happened in v5, so the migration must READ the historical spelling
+// or the per-monitor snapping inner gap is silently lost on upgrade. (Outer/
+// per-side snapping keys kept their names; only the inner gap was "ZonePadding".)
+constexpr QLatin1String kV4SnapInnerGap{"ZonePadding"};
 constexpr QLatin1String kV4SnapOuterGap{"OuterGap"};
 constexpr QLatin1String kV4SnapUsePerSide{"UsePerSideOuterGap"};
 constexpr QLatin1String kV4SnapOuterGapTop{"OuterGapTop"};

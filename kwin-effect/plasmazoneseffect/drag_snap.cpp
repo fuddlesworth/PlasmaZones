@@ -99,6 +99,8 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         // Same discriminator epilogue as the other commit
                         // paths: drop stale snap tracking instead of skipping.
                         m_snapHandler->clearWindowSnapped(windowId);
+                        // Symmetric with the snap-tracked branch: re-resolve rules.
+                        invalidateRuleCacheForStateChange(windowId);
                     }
                     // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {

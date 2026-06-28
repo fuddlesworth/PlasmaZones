@@ -87,26 +87,28 @@ QList<ValidationIssue> Rule::validationIssues() const
         }
     }
 
-    // A terminal action (Exclude) co-located with Tag::Effect slot-filling
-    // actions (border / opacity / animation override): if such a rule reaches
-    // the effect's appearance/animation evaluator, the terminal Exclude
-    // truncates the resolve walk, dropping the Effect slot and suppressing
-    // lower-priority rules for the window. Flag each Effect action so the author
-    // splits exclusion and appearance into separate rules.
+    // A terminal action (Exclude / ExcludeAnimations) co-located with any
+    // non-terminal slot-filling action: a terminal action stops the evaluator's
+    // resolve walk the moment it matches, so any other action on the same rule
+    // may be dropped (the appearance/animation evaluator drops border / opacity /
+    // animation slots; the daemon context evaluator drops gap / overlay / engine
+    // slots) and lower-priority rules are suppressed for the window. Flag each
+    // co-located non-terminal action so the author splits the exclusion onto its
+    // own rule.
     if (hasTerminalAction()) {
         const ActionRegistry& registry = ActionRegistry::instance();
         for (int i = 0; i < actions.size(); ++i) {
             const RuleAction& action = actions.at(i);
-            if (!registry.hasTag(action.type, Tag::Effect)) {
-                continue;
+            if (registry.isTerminal(action)) {
+                continue; // the terminal action itself is the intended effect
             }
             ValidationIssue issue;
             issue.code = ValidationIssue::Code::TerminalActionWithEffectActions;
             issue.actionIndex = i;
             issue.actionType = action.type;
             issue.message = QStringLiteral(
-                                "Action `%1` fills an appearance/animation slot, but the rule also has a terminal "
-                                "Exclude action that stops appearance resolution, so this action may not take effect. "
+                                "Action `%1` may not take effect: the rule also has a terminal action "
+                                "(Exclude / ExcludeAnimations) that stops resolution before later actions apply. "
                                 "Put the exclusion on a separate rule.")
                                 .arg(action.type);
             issues.append(issue);

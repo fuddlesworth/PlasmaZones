@@ -187,17 +187,12 @@ public:
         }
     }
 
-    // Border rendering accessors — delegate to shared AutotileStateHelpers
+    // Tiled-membership accessor — delegates to shared AutotileStateHelpers. The
+    // membership set feeds the IsTiled rule field; per-window border appearance
+    // and title-bar hiding are resolved from rules, not from this state.
     bool isTiledWindow(const QString& windowId) const
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);
-    }
-    /// Read-only view of the autotile border state. Carries the tiled-window
-    /// set (border rendering membership + the IsTiled rule field); per-window
-    /// border appearance and title-bar hiding are resolved from rules.
-    const BorderState& borderState() const
-    {
-        return m_border;
     }
 
     // Set a window to re-activate after the next autotile raise loop completes.

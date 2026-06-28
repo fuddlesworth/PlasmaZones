@@ -25,7 +25,7 @@ void PlasmaZonesEffect::setupDecorationManager()
 {
     connect(m_decorationManager.get(), &DecorationManager::windowDecorationRestored, this,
             [this](const QString& windowId) {
-                // A veto-driven restore leaves the window mode-owned and
+                // A veto-driven restore leaves the window rule-owned and
                 // still border-eligible — rebuild its overlay instead of
                 // dropping it. updateWindowBorder self-gates on the merged
                 // appearance (it removes first and re-creates only when

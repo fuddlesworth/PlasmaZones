@@ -409,7 +409,11 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         // so recording it here would double-track the window — same
         // discriminator as slotApplyGeometryRequested / the async snap path.
         if (!screenId.isEmpty() && !isAutotile) {
-            markWindowSnapped(m_effect->getWindowId(targetWindow), screenId);
+            const QString wid = m_effect->getWindowId(targetWindow);
+            markWindowSnapped(wid, screenId);
+            // Snapped — re-resolve Mode / IsSnapped rules now instead of waiting
+            // for the daemon broadcast, consistent with the drag-commit paths.
+            m_effect->invalidateRuleCacheForStateChange(wid);
         }
 
         // Snap Assist continuation: only for manual-mode screens.

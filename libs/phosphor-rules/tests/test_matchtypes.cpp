@@ -168,10 +168,11 @@ private Q_SLOTS:
     {
         QFETCH(int, fieldValue);
         const Field field = static_cast<Field>(fieldValue);
-        // The call alone is the check — the test fails if a new field crashes
-        // a switch that grew an unhandled case (none today, but the data-driven
-        // shape is the canary).
-        (void)fieldIsContext(field);
+        // The classifier must agree with the authoritative table source for every
+        // field. This catches a new enumerator whose `fieldIsContext` answer
+        // diverges from its `kFieldTable` FieldSource (the canary the data-driven
+        // shape exists for).
+        QCOMPARE(fieldIsContext(field), kFieldTable[fieldValue].source == FieldSource::Context);
     }
 };
 

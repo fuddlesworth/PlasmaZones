@@ -167,7 +167,7 @@ ItemDelegate {
                 Accessible.name: i18np("%n validation issue", "%n validation issues", row.validationIssueCount)
                 ToolTip.visible: warningHover.hovered
                 ToolTip.delay: Kirigami.Units.toolTipDelay
-                ToolTip.text: i18np("This rule has %n validation issue. Open the editor to see the details. The rule will not fire as written.", "This rule has %n validation issues. Open the editor to see the details. The rule will not fire as written.", row.validationIssueCount)
+                ToolTip.text: i18np("This rule has %n validation issue. Open the editor to see the details.", "This rule has %n validation issues. Open the editor to see the details.", row.validationIssueCount)
 
                 HoverHandler {
                     id: warningHover

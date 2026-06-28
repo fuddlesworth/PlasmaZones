@@ -8,6 +8,7 @@
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ZoneDefaults.h>
 
 namespace PlasmaZones {
 
@@ -45,12 +46,14 @@ PhosphorLayout::EdgeGaps DaemonGeometryResolver::resolveOuterGaps(PhosphorZones:
 
 int DaemonGeometryResolver::defaultBorderWidth() const
 {
-    return m_settings ? m_settings->borderWidth() : 2;
+    // Fall back to the canonical zone default (same source GeometryUtils uses)
+    // rather than a magic number, for the degenerate no-settings case.
+    return m_settings ? m_settings->borderWidth() : ::PhosphorZones::ZoneDefaults::BorderWidth;
 }
 
 int DaemonGeometryResolver::defaultBorderRadius() const
 {
-    return m_settings ? m_settings->borderRadius() : 0;
+    return m_settings ? m_settings->borderRadius() : ::PhosphorZones::ZoneDefaults::BorderRadius;
 }
 
 } // namespace PlasmaZones

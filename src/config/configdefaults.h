@@ -683,6 +683,10 @@ public:
     // sole writer; see docs/window-rule-refactor-design.md §5.
     PLASMAZONES_EXPORT static QString rulesFilePath();
 
+    // UUID suffix `...001` is RETIRED — it was the never-shipped single combined
+    // "Default appearance" baseline rule, since split into the three focused
+    // baselines below (`...002`/`...003`/`...004`). Do not reuse it.
+    //
     // Stable id of the managed baseline BORDER rule: the catch-all,
     // lowest-priority Rule whose actions hold the default window border
     // appearance (visible / width / radius / colour) the Appearance settings

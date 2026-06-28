@@ -770,9 +770,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // windowDecorationRestored per window, and the rebuild-on-restore
         // handler would otherwise recreate a border item for every still-
         // tracked window only for clearAllBorders() to destroy it moments
-        // later. With tracking cleared, resolveBorderStateFor returns null
-        // for mode-tracked windows during the restore burst and the handler
-        // drops their items. Windows matched by a still-live SetBorder rule
+        // later. With tracking cleared, the IsSnapped / IsTiled / Zone rule
+        // fields flip off for those windows during the restore burst, so the
+        // handler resolves no placement-scoped border and drops their items.
+        // Windows matched by a still-live SetBorder rule
         // (the rule sets deliberately survive daemon loss, see below) can
         // still get an item recreated and immediately torn down by
         // clearAllBorders() — bounded, invisible churn that is cheaper than

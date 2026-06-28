@@ -50,17 +50,14 @@ struct CachedSnapRestore
  *
  * The snap-mode counterpart to AutotileHandler. Owns the snap-side tiled
  * tracking (m_border, parallel to AutotileHandler::m_border) for
- * snap-committed windows, which drives border RENDERING. Title-bar
- * (borderless) state is owned by the effect's DecorationManager and driven
- * by rules — this handler does not touch decorations.
- * Delegates window lookups and border rendering back to the effect through
- * the m_effect back-pointer.
+ * snap-committed windows. The tracking set feeds the IsSnapped rule field;
+ * per-window border appearance and title-bar (borderless) state are resolved
+ * from rules and applied via the effect's DecorationManager — this handler
+ * does not touch decorations or resolve appearance itself.
+ * Delegates window lookups back to the effect through the m_effect back-pointer.
  *
  * Built on the shared PhosphorCompositor BorderState + AutotileStateHelpers so
- * snap and autotile share one standardized border mechanism. The effect's
- * mode-aware border resolver (resolveBorderStateFor) reads borderState() here
- * alongside AutotileHandler's so each window draws with the settings of the
- * mode that manages it.
+ * snap and autotile share one standardized tracking mechanism.
  */
 class SnapHandler : public QObject
 {
@@ -162,16 +159,12 @@ public:
         return m_minimizeFloatedWindows.remove(windowId);
     }
 
-    // ── Border rendering accessors — delegate to shared AutotileStateHelpers ──
+    // ── Tiled-membership accessor — delegates to shared AutotileStateHelpers ──
+    // The snapped-window set feeds the IsSnapped rule field; per-window border
+    // appearance and title-bar hiding are resolved from rules, not this state.
     bool isTiledWindow(const QString& windowId) const
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);
-    }
-    /// Read-only view of the snap border state. Carries the snapped-window set;
-    /// per-window border appearance and title-bar hiding are resolved from rules.
-    const BorderState& borderState() const
-    {
-        return m_border;
     }
 
 public Q_SLOTS:

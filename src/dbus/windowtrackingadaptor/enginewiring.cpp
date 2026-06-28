@@ -369,7 +369,7 @@ void WindowTrackingAdaptor::setRuleStore(PhosphorRules::RuleStore* store)
 }
 
 namespace {
-// Build a per-rule query from the registry metadata, or nullopt when no
+// Build a per-window rule query from the registry metadata, or nullopt when no
 // metadata is tracked (the caller falls back to its own default). Shared by the
 // RestorePosition and Float resolvers so the metadata→query derivation lives in
 // one place. windowClass is not tracked daemon-side (the compositor reports

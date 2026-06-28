@@ -377,6 +377,30 @@ private Q_SLOTS:
         }
     }
 
+    // Outer gap + per-side toggle + a per-side value (defaults: outer 8,
+    // usePerSide false). These outer/per-side fields share the field→action
+    // mapping with inner gap but were previously untested, so a mis-mapping of
+    // any of them would have shipped undetected.
+    void testOuterAndPerSideGaps_perModeRule()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Gaps")},
+                  {{QStringLiteral("Outer"), 20}, {QStringLiteral("UsePerSide"), true}, {QStringLiteral("Top"), 5}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject snap = ruleByName(QStringLiteral("Snapping gaps"));
+        QVERIFY2(!snap.isEmpty(), "a Snapping gaps rule must exist");
+        QVERIFY(!snap.value(QStringLiteral("managed")).toBool());
+        QCOMPARE(actionValue(snap, QStringLiteral("setOuterGap")).toInt(), 20);
+        QCOMPARE(actionValue(snap, QStringLiteral("setUsePerSideOuterGap")).toBool(), true);
+        QCOMPARE(actionValue(snap, QStringLiteral("setOuterGapTop")).toInt(), 5);
+    }
+
     // ─── Per-screen gaps ──────────────────────────────────────────────────
 
     void testPerScreenGap_becomesScreenIdRule()
@@ -385,9 +409,13 @@ private Q_SLOTS:
         seedEmptyRules();
 
         QJsonObject cfg = baseV4Config();
-        // A snapping per-screen inner-gap override on DP-1 (16 != default 8).
+        // A snapping per-screen inner-gap override on DP-1 (16 != default 8). v4
+        // persisted the per-screen snapping inner gap under the legacy on-disk key
+        // "ZonePadding" (renamed to "InnerGap" in v5), so the fixture must use the
+        // historical spelling — otherwise this test silently passes against a
+        // migration that never reads the real upgrade data.
         setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Snapping"), QStringLiteral("DP-1")},
-                  {{QStringLiteral("InnerGap"), 16}});
+                  {{QStringLiteral("ZonePadding"), 16}});
         writeJson(ConfigDefaults::configFilePath(), cfg);
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -429,11 +457,12 @@ private Q_SLOTS:
         seedEmptyRules();
 
         QJsonObject cfg = baseV4Config();
-        // Snapping per-screen inner gap 16 (key "InnerGap"); autotile per-screen
-        // inner gap 24 (key "AutotileInnerGap") for the SAME screen — a conflict
-        // on the same gap slot — plus a non-gap autotile key ("Algorithm").
+        // Snapping per-screen inner gap 16 (legacy on-disk key "ZonePadding");
+        // autotile per-screen inner gap 24 (key "AutotileInnerGap") for the SAME
+        // screen — a conflict on the same gap slot — plus a non-gap autotile key
+        // ("Algorithm").
         setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Snapping"), QStringLiteral("DP-1")},
-                  {{QStringLiteral("InnerGap"), 16}});
+                  {{QStringLiteral("ZonePadding"), 16}});
         setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Autotile"), QStringLiteral("DP-1")},
                   {{QStringLiteral("AutotileInnerGap"), 24}, {QStringLiteral("Algorithm"), QStringLiteral("bsp")}});
         writeJson(ConfigDefaults::configFilePath(), cfg);
