@@ -147,6 +147,32 @@ private Q_SLOTS:
         QVERIFY(!eval.resolve(firefox).hasSlot(QString(ActionSlot::RestorePosition)));
     }
 
+    void testModeConditionResolvesPerMode()
+    {
+        // The flagship per-mode behavior, end-to-end through resolve(): a
+        // `Mode Equals "tiling"` gap rule fills its slot only when the query's
+        // placement mode is "tiling", and stays inert for "snapping" / no mode.
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("tiling inner gap"), 100,
+                             MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QStringLiteral("tiling")),
+                             {innerGap(14)}));
+        RuleEvaluator eval(set);
+
+        WindowQuery tiled = konsoleQuery();
+        tiled.mode = QStringLiteral("tiling");
+        const ResolvedActions tiledResult = eval.resolve(tiled);
+        QVERIFY(tiledResult.hasSlot(QString(ActionSlot::InnerGap)));
+        QCOMPARE(tiledResult.slot(QString(ActionSlot::InnerGap))->params.value(QString(ActionParam::Value)).toInt(),
+                 14);
+
+        WindowQuery snapped = konsoleQuery();
+        snapped.mode = QStringLiteral("snapping");
+        QVERIFY(!eval.resolve(snapped).hasSlot(QString(ActionSlot::InnerGap)));
+
+        // No placement mode (floating / mode-agnostic) → also inert.
+        QVERIFY(!eval.resolve(konsoleQuery()).hasSlot(QString(ActionSlot::InnerGap)));
+    }
+
     void testActionsInDifferentSlotsStack()
     {
         RuleSet set;

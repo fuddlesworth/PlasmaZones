@@ -242,6 +242,26 @@ private Q_SLOTS:
         QVERIFY(act.isEmpty());
     }
 
+    void testContextDimsOf_modeLeafProjectedOut()
+    {
+        // A flat All{ScreenId, Mode} decodes the screen dimension and projects
+        // the Mode leaf OUT: Mode is a context field but NOT one of the three
+        // decomposed dimensions (screen/desktop/activity), so decomposition still
+        // succeeds with only the screen pinned and the Mode leaf ignored.
+        const MatchExpression m = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+            MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QStringLiteral("tiling")),
+        });
+        QString sid;
+        int desk = 0;
+        QString act;
+        const bool ok = CRB::contextDimsOf(m, sid, desk, act);
+        QVERIFY(ok);
+        QCOMPARE(sid, QStringLiteral("DP-1"));
+        QCOMPARE(desk, 0);
+        QVERIFY(act.isEmpty());
+    }
+
     void testContextDimsOf_nonFlatCompositeYieldsDefaults()
     {
         // An Any{} composite is outside the bridge contract — contextDimsOf

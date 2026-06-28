@@ -152,6 +152,22 @@ private Q_SLOTS:
         QCOMPARE(reloaded->revision(), quint64(0));
     }
 
+    void testJson_roundTripWithAppearanceActions()
+    {
+        // The new appearance/gap action family must survive a full RuleSet JSON
+        // round-trip at the container level (per-action serialization is covered
+        // in test_ruleaction; this pins the multi-action container shape).
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("appearance"), 500,
+                             MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QStringLiteral("tiling")),
+                             {borderWidth(3), borderColor(QStringLiteral("#ff0000ff")),
+                              borderColorInactive(QStringLiteral("#8000ff00")), innerGap(12)}));
+
+        const auto reloaded = RuleSet::fromJson(set.toJson());
+        QVERIFY(reloaded.has_value());
+        QCOMPARE(*reloaded, set);
+    }
+
     void testJson_refusesNonV4()
     {
         QJsonObject o;

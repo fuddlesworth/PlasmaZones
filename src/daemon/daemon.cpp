@@ -343,7 +343,11 @@ Daemon::Daemon(QObject* parent)
         // canonical maker defines: create it from @p desired when absent,
         // otherwise append any action type missing from the canonical template
         // (preserving the user's Appearance-page-edited values for actions
-        // already present).
+        // already present). This reconciles the ACTION SET only — it deliberately
+        // does NOT re-pin an existing rule's values, managed flag, priority, or
+        // match. Those are intentionally left as-is so an Appearance-page edit
+        // survives a daemon restart; a future change to a baseline's intended
+        // priority/match would need an explicit migration, not this seeder.
         const auto ensureManagedRule = [this](const Rule& desired) {
             const auto existing = m_ruleStore->ruleSet().ruleById(desired.id);
             if (!existing) {

@@ -40,13 +40,16 @@ bool hasAnimationAction(const QList<RuleAction>& actions)
     return false;
 }
 
-/// True if @p actions carry a context-targeting action (layout / engine /
-/// disable / lock) — the kind a Monitor & Layout rule produces.
+/// True if @p actions carry a context-domain action (layout / engine / disable /
+/// lock / gap / overlay) — the actions resolved during the windowless context
+/// pass, and the kind a Monitor & Layout / per-monitor rule produces. Classify by
+/// ActionDomain rather than a single tag so a gap-only or overlay-only context
+/// rule (e.g. a per-monitor gap override) is recognized too, not just LayoutEngine.
 bool hasContextAction(const QList<RuleAction>& actions)
 {
     const auto& registry = PhosphorRules::ActionRegistry::instance();
     for (const RuleAction& a : actions) {
-        if (registry.hasTag(a.type, Tag::LayoutEngine)) {
+        if (registry.domainFor(a) == PhosphorRules::ActionDomain::Context) {
             return true;
         }
     }

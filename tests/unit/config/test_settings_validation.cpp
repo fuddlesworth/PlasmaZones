@@ -53,7 +53,7 @@ private Q_SLOTS:
      * default is rule-backed), so this exercises the validator on a key that is
      * still schema-backed.
      */
-    void testReadValidatedInt_outOfRange_returnsDefault()
+    void testReadValidatedInt_outOfRange_clampsToMax()
     {
         IsolatedConfigGuard guard;
 

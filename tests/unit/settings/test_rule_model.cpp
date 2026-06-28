@@ -149,6 +149,19 @@ void TestRuleModel::sectionDerivation()
     engine.params.insert(ActionParam::Mode, QStringLiteral("snapping"));
     activity.actions = {engine};
     QCOMPARE(RuleModel::sectionFor(activity), RuleModel::Section::Activity);
+
+    // A per-monitor gap-only override (ScreenId leaf + a gap action, NO
+    // LayoutEngine action) is still a Monitor & Layout rule: gap actions are
+    // context-domain, so the classifier must not drop it to Advanced. This is
+    // the shape the Appearance page's monitor scope authors.
+    Rule screenGap;
+    screenGap.id = QUuid::createUuid();
+    screenGap.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-2"));
+    RuleAction gap;
+    gap.type = QString(ActionType::SetInnerGap);
+    gap.params.insert(ActionParam::Value, 12);
+    screenGap.actions = {gap};
+    QCOMPARE(RuleModel::sectionFor(screenGap), RuleModel::Section::Monitor);
 }
 
 void TestRuleModel::compositeGraduatesToAdvanced()

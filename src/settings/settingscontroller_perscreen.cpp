@@ -96,23 +96,24 @@ void SettingsController::clearPerScreenAutotileAlgorithmSettings(const QString& 
 
 bool SettingsController::hasPerScreenGapRule(const QString& screenName) const
 {
-    if (screenName.isEmpty() || m_rulesPage == nullptr) {
+    if (screenName.isEmpty() || m_rulesPage == nullptr || m_windowAppearancePage == nullptr) {
         return false;
     }
-    const QString id =
-        QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), Settings::canonicalPerScreenKey(screenName).toUtf8())
-            .toString();
-    return !m_rulesPage->ruleJson(id).isEmpty();
+    // Single source of truth for the per-monitor gap rule id — delegate to the
+    // controller that authors it rather than re-deriving the UUID here.
+    const QString id = m_windowAppearancePage->perScreenGapRuleId(screenName);
+    return !id.isEmpty() && !m_rulesPage->ruleJson(id).isEmpty();
 }
 
 void SettingsController::clearPerScreenGapRule(const QString& screenName)
 {
-    if (screenName.isEmpty() || m_rulesPage == nullptr) {
+    if (screenName.isEmpty() || m_rulesPage == nullptr || m_windowAppearancePage == nullptr) {
         return;
     }
-    const QString id =
-        QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), Settings::canonicalPerScreenKey(screenName).toUtf8())
-            .toString();
+    const QString id = m_windowAppearancePage->perScreenGapRuleId(screenName);
+    if (id.isEmpty()) {
+        return;
+    }
     // removeRule drives RuleModel::countChanged → perScreenOverridesChanged
     // (wired in settingscontroller.cpp), so no manual emit is needed here.
     m_rulesPage->removeRule(id);

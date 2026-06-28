@@ -741,7 +741,7 @@ void EditorController::refreshGlobalGapOverlaySettings()
         return it == values.constEnd() ? fallback : it.value().toBool();
     };
 
-    // zonePadding
+    // innerGap
     {
         const int newValue = readInt(QStringLiteral("innerGap"), Defaults::InnerGap);
         if (m_cachedGlobalZonePadding != newValue) {

@@ -97,7 +97,7 @@ private Q_SLOTS:
     // shared gap keys are no longer on this generic map — their global default
     // is rule-backed — so this uses other registered scalars.)
     // ─────────────────────────────────────────────────────────────────────
-    void testGetSettings_gapOverlayKeys_allReturned()
+    void testGetSettings_scalarKeys_allReturned()
     {
         const QStringList keys{
             QStringLiteral("borderWidth"),
