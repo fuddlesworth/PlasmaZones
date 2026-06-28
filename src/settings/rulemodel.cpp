@@ -45,6 +45,13 @@ bool hasAnimationAction(const QList<RuleAction>& actions)
 /// pass, and the kind a Monitor & Layout / per-monitor rule produces. Classify by
 /// ActionDomain rather than a single tag so a gap-only or overlay-only context
 /// rule (e.g. a per-monitor gap override) is recognized too, not just LayoutEngine.
+///
+/// A mixed rule that carries BOTH a window-domain action (e.g. a border) and a
+/// context-domain action (e.g. a gap) classifies as a context rule, so it lands in
+/// the Monitor band rather than Advanced. That is intentional: the migrated
+/// per-mode "appearance" rule (border + gap) reads naturally as a Monitor & Layout
+/// rule. Its gap slots still resolve by specificity (band-independent), and its
+/// border slot resolving at the Monitor band is the desired ordering.
 bool hasContextAction(const QList<RuleAction>& actions)
 {
     const auto& registry = PhosphorRules::ActionRegistry::instance();

@@ -77,7 +77,7 @@ ColumnLayout {
                 if (issue.code === 1) {
                     lines.push("• " + i18n("Action “%1” may not take effect because this rule also excludes the window. Put the exclusion on a separate rule.", issue.actionType));
                 } else {
-                    lines.push("• " + i18n("Action “%1” never fires: it is a context action, but the rule matches window properties.", issue.actionType));
+                    lines.push("• " + i18n("Action “%1” is a context action, but the rule matches window properties, so it never fires.", issue.actionType));
                 }
             }
             var heading = root.validationIssues.length === 1 ? i18n("This rule has a problem:") : i18n("This rule has problems:");
