@@ -313,6 +313,35 @@ jobs:
             echo "No QML files changed — skipping qmlformat"
           fi
 
+  # ─── JSON Schema: validate every bundled data file against the committed
+  # schemas under data/schemas/. These are the same schema files runtime
+  # validation compiles (phosphor-fsloader's SchemaValidator via valijson), so
+  # this is the author-time gate that keeps malformed layouts (and future
+  # document types) out of the tree. Mirrors the lefthook `json-schema` hook;
+  # hard gate here, best-effort there. Validates the full set on every run
+  # (cheap) so a schema change re-checks all governed documents.
+  json-schema:
+    name: JSON Schema
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install jsonschema
+        # The [format] extra matches the lefthook bootstrap venv and enables
+        # string-format checks (e.g. format:"date"), so CI and the local hook
+        # validate identical surfaces.
+        run: pip install "jsonschema[format]"
+
+      - name: Validate bundled data against schemas
+        run: python3 scripts/validate-json-schemas.py
+
   # ─── Luau static analysis: type-check + lint the bundled tiling algorithms
   # and the pluau standard library with luau-analyze. Catches parse and type
   # errors (a broken bundled .luau would otherwise only surface at runtime as

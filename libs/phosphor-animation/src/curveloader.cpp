@@ -9,9 +9,9 @@
 #include <PhosphorFsLoader/IDirectoryLoaderSink.h>
 #include <PhosphorFsLoader/JsonEnvelopeValidator.h>
 #include <PhosphorFsLoader/ParsedEntry.h>
+#include <PhosphorFsLoader/SchemaValidator.h>
 
 #include <QDir>
-#include <QFileInfo>
 #include <QHash>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -39,6 +39,18 @@ Q_LOGGING_CATEGORY(lcCurveLoader, "phosphoranimation.curveloader")
 QString makeCurveLoaderOwnerTag()
 {
     return QStringLiteral("curveloader-") + QUuid::createUuid().toString();
+}
+
+// Process-wide curve schema validator, compiled once from the RCC-embedded
+// schema (see qt6_add_resources in CMakeLists). The schema deliberately does
+// not require "name" — the envelope check has already enforced and stripped it
+// — so it validates the envelope-stripped root the same way CI validates the
+// full on-disk file.
+const PhosphorFsLoader::SchemaValidator& curveSchemaValidator()
+{
+    static const PhosphorFsLoader::SchemaValidator validator = PhosphorFsLoader::SchemaValidator::fromResource(
+        QStringLiteral(":/phosphoranimation/schemas/curve.schema.json"), lcCurveLoader());
+    return validator;
 }
 
 } // namespace
@@ -97,6 +109,15 @@ public:
         const QJsonObject& obj = envelope->root;
         const QString& name = envelope->name;
 
+        // Structural schema gate: typeId present and non-empty, parameters a
+        // numeric object. Catches malformed curve files up front; the registry
+        // factory below still does the typeId-specific parameter validation.
+        if (const auto errors = curveSchemaValidator().validate(obj)) {
+            qCWarning(lcCurveLoader) << "Skipping curve file failing schema validation:" << filePath;
+            PhosphorFsLoader::logSchemaErrors(lcCurveLoader(), *errors);
+            return std::nullopt;
+        }
+
         // Reject user-authored files whose `name` collides with a
         // built-in typeId. CurveRegistry::registerFactory is
         // replace-semantic, so letting one through would permanently
@@ -109,11 +130,9 @@ public:
             return std::nullopt;
         }
 
+        // typeId is guaranteed present and non-empty by the schema gate above
+        // (required, minLength 1), which fails closed, so no empty-check here.
         const QString typeId = obj.value(QLatin1String("typeId")).toString();
-        if (typeId.isEmpty()) {
-            qCWarning(lcCurveLoader) << "Skipping" << filePath << ": missing required 'typeId' field";
-            return std::nullopt;
-        }
         const QJsonObject params = obj.value(QLatin1String("parameters")).toObject();
 
         // Delegate parameter-shape validation to the CurveRegistry's

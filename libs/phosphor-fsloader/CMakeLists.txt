@@ -22,7 +22,9 @@
 #
 # Depends on Qt6::Core only. No Gui / Qml / DBus coupling.
 
-cmake_minimum_required(VERSION 3.16)
+# 3.18 floor: the vendored-valijson acquisition below uses file(ARCHIVE_EXTRACT),
+# introduced in CMake 3.18.
+cmake_minimum_required(VERSION 3.18)
 
 set(PHOSPHORFSLOADER_VERSION "0.1.0")
 
@@ -37,10 +39,72 @@ include(GenerateExportHeader)
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Core)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# valijson acquisition — header-only JSON Schema (Draft 7) validator.
+#
+# Committed source tarball by default (offline builds, mirroring the vendored
+# Luau in phosphor-scripting); system headers opt-in. valijson is header-only
+# and used only inside src/schemavalidator.cpp, so it is exposed as a PRIVATE
+# SYSTEM include (its warnings stay out of our -Wall/-Wextra build, and it
+# never leaks into the public ABI). No add_subdirectory: we want the headers,
+# not valijson's own install/export rules.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+option(PHOSPHORFSLOADER_USE_SYSTEM_VALIJSON
+    "Use system-provided valijson headers instead of the committed extern/valijson-*.tar.gz" OFF)
+
+set(PHOSPHORFSLOADER_VALIJSON_VERSION "1.1.0")
+set(PHOSPHORFSLOADER_VALIJSON_SHA256 "bb37d86f5fe78f559f108517f30ce587c960ea5bd23d71413b7493cda6c3a4cc")
+
+if(PHOSPHORFSLOADER_USE_SYSTEM_VALIJSON)
+    find_path(VALIJSON_INCLUDE_DIR
+        NAMES valijson/validator.hpp
+        DOC "Directory containing valijson/validator.hpp")
+    if(NOT VALIJSON_INCLUDE_DIR)
+        message(FATAL_ERROR
+            "PHOSPHORFSLOADER_USE_SYSTEM_VALIJSON=ON but valijson headers "
+            "(valijson/validator.hpp) were not found. Install valijson dev files "
+            "or unset the option to use the committed vendored tarball.")
+    endif()
+else()
+    # extern/ lives at the repository root; ../../extern resolves there whether
+    # this lib is configured as a subdirectory of the main project or built
+    # standalone for its own tests.
+    set(_pz_valijson_tarball
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../extern/valijson-${PHOSPHORFSLOADER_VALIJSON_VERSION}.tar.gz")
+    if(NOT EXISTS "${_pz_valijson_tarball}")
+        message(FATAL_ERROR
+            "Vendored valijson tarball missing at ${_pz_valijson_tarball}. It is "
+            "committed in the repository, so an incomplete checkout is the likely "
+            "cause — or pass -DPHOSPHORFSLOADER_USE_SYSTEM_VALIJSON=ON to use system headers.")
+    endif()
+    # Verify the committed blob before extracting unknown source from it.
+    file(SHA256 "${_pz_valijson_tarball}" _pz_valijson_actual_sha)
+    if(NOT _pz_valijson_actual_sha STREQUAL "${PHOSPHORFSLOADER_VALIJSON_SHA256}")
+        message(FATAL_ERROR
+            "Vendored valijson tarball SHA256 mismatch:\n  expected ${PHOSPHORFSLOADER_VALIJSON_SHA256}\n"
+            "  got      ${_pz_valijson_actual_sha}\nThe committed ${_pz_valijson_tarball} is corrupt or was swapped.")
+    endif()
+    # Extract once. The re-extract guard keys on a stamp written AFTER a
+    # successful extraction (not on a file the archiver writes early), so an
+    # aborted extract repairs itself on the next configure rather than passing
+    # the guard with a half-populated tree.
+    set(_pz_valijson_root "${CMAKE_CURRENT_BINARY_DIR}/_valijson")
+    set(_pz_valijson_stamp "${_pz_valijson_root}/.extracted-${PHOSPHORFSLOADER_VALIJSON_VERSION}")
+    if(NOT EXISTS "${_pz_valijson_stamp}")
+        file(MAKE_DIRECTORY "${_pz_valijson_root}")
+        file(ARCHIVE_EXTRACT INPUT "${_pz_valijson_tarball}" DESTINATION "${_pz_valijson_root}")
+        file(TOUCH "${_pz_valijson_stamp}")
+    endif()
+    set(VALIJSON_INCLUDE_DIR
+        "${_pz_valijson_root}/valijson-${PHOSPHORFSLOADER_VALIJSON_VERSION}/include")
+endif()
+
 set(phosphorfsloader_SRCS
     src/directoryloader.cpp
     src/metadatapackregistrybase.cpp
     src/metadatapackscanstrategy.cpp
+    src/schemavalidator.cpp
     src/watcheddirectoryset.cpp
 )
 
@@ -52,6 +116,7 @@ set(phosphorfsloader_public_HDRS
     include/PhosphorFsLoader/MetadataPackRegistryBase.h
     include/PhosphorFsLoader/MetadataPackScanStrategy.h
     include/PhosphorFsLoader/ParsedEntry.h
+    include/PhosphorFsLoader/SchemaValidator.h
     include/PhosphorFsLoader/WatchedDirectorySet.h
 )
 
@@ -81,6 +146,23 @@ target_include_directories(PhosphorFsLoader
 )
 
 target_compile_features(PhosphorFsLoader PUBLIC cxx_std_20)
+
+# valijson headers are a PRIVATE implementation detail of schemavalidator.cpp.
+# SYSTEM keeps the project's -Wall/-Wextra/-Wpedantic from flagging the
+# third-party headers.
+target_include_directories(PhosphorFsLoader SYSTEM PRIVATE "${VALIJSON_INCLUDE_DIR}")
+
+# valijson's schema parser throws on a malformed schema; schemavalidator.cpp
+# catches it to fail closed. KDECompilerSettings disables exceptions by
+# default (see the -fexceptions override on vendored Luau), so re-enable them
+# on just this translation unit. The VALIJSON_USE_EXCEPTIONS define (which tells
+# valijson to `throw` rather than abort) is scoped to the SAME TU so the
+# throwing macro and the exceptions flag always travel together — a future TU
+# that includes a valijson header without this scope compiles under
+# -fno-exceptions and would be unable to build the throwing code.
+set_source_files_properties(src/schemavalidator.cpp PROPERTIES
+    COMPILE_OPTIONS "$<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-fexceptions>"
+    COMPILE_DEFINITIONS "VALIJSON_USE_EXCEPTIONS=1")
 
 target_link_libraries(PhosphorFsLoader
     PUBLIC

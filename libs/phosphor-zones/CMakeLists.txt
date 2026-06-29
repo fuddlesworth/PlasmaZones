@@ -121,6 +121,17 @@ add_library(PhosphorZones SHARED
 
 add_library(PhosphorZones::PhosphorZones ALIAS PhosphorZones)
 
+# Embed the layout JSON Schema so LayoutRegistry can validate layout files on
+# load without depending on an installed data path. The committed
+# data/schemas/layout.schema.json is the single source of truth — the same
+# file CI validates the bundled layouts against — compiled in here via RCC and
+# read at :/phosphorzones/schemas/layout.schema.json.
+qt6_add_resources(PhosphorZones "phosphorzones_schemas"
+    PREFIX "/phosphorzones/schemas"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}/../../data/schemas"
+    FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../data/schemas/layout.schema.json"
+)
+
 generate_export_header(PhosphorZones
     EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/phosphorzones_export.h
     EXPORT_MACRO_NAME PHOSPHORZONES_EXPORT
@@ -166,6 +177,10 @@ target_link_libraries(PhosphorZones
         # the public LayoutRegistry.h ctor signature so the dep is PUBLIC.
         PhosphorRules::PhosphorRules
     PRIVATE
+        # LayoutRegistry validates layout files against the embedded JSON Schema
+        # via PhosphorFsLoader::SchemaValidator on load. PRIVATE — validation is
+        # an internal load-path detail, not part of any public header.
+        PhosphorFsLoader::PhosphorFsLoader
         # Uses PhosphorIdentity::VirtualScreenId for virtual-screen id parsing
         # (geometryutils / layoutregistry_assignments); PRIVATE because the dep
         # doesn't leak through any public PhosphorZones header.

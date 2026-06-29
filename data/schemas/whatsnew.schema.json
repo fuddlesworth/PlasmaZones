@@ -1,0 +1,37 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "urn:plasmazones:schema:whatsnew",
+    "title": "PlasmaZones What's New",
+    "description": "Release highlights shown in the settings What's New page.",
+    "type": "object",
+    "required": ["releases"],
+    "properties": {
+        "releases": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/release" }
+        }
+    },
+    "definitions": {
+        "release": {
+            "type": "object",
+            "required": ["version", "date", "highlights"],
+            "properties": {
+                "version": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Release version. It is compared as a QVersionNumber to pick the latest."
+                },
+                "date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Release date in ISO 8601 (YYYY-MM-DD)."
+                },
+                "highlights": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string", "minLength": 1 }
+                }
+            }
+        }
+    }
+}
