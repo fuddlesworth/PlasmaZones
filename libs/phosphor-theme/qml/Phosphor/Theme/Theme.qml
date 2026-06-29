@@ -19,8 +19,9 @@
 // real bugs (typo'd token names, partial matugen output). Magenta is
 // loud enough to spot during development without crashing the shell.
 
-import QtQuick
 pragma Singleton
+
+import QtQuick
 
 QtObject {
     id: theme
@@ -49,6 +50,15 @@ QtObject {
     readonly property color surface_variant: _t("surface_variant")
     readonly property color on_surface: _t("on_surface")
     readonly property color on_surface_variant: _t("on_surface_variant")
+    // M3 surface tint: the colour blended over elevated surfaces, rising
+    // in opacity with elevation. M3 defaults this to the primary accent,
+    // and matugen emits it as a distinct token. Prefer an explicit
+    // surface_tint from the palette when present (so generated palettes
+    // are honoured), otherwise fall back to primary so a palette without
+    // the token still tints elevation correctly. Indexes `palette`
+    // directly (not _t) to keep the primary fallback instead of the
+    // missing-token magenta sentinel; both reads stay binding-tracked.
+    readonly property color surface_tint: palette["surface_tint"] !== undefined ? palette["surface_tint"] : primary
     // ─── Accents ─────────────────────────────────────────────────────────
     readonly property color primary: _t("primary")
     readonly property color on_primary: _t("on_primary")
@@ -89,5 +99,4 @@ QtObject {
         const v = palette[name];
         return v !== undefined ? v : theme.missingTokenColor;
     }
-
 }
