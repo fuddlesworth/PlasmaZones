@@ -231,7 +231,7 @@ QVariantList AlgorithmService::availableAlgorithms() const
 }
 
 QVariantList AlgorithmService::generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,
-                                                        int masterCount) const
+                                                        int masterCount, const QVariantMap& customParams) const
 {
     auto* registry = m_registry;
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
@@ -239,10 +239,10 @@ QVariantList AlgorithmService::generateAlgorithmPreview(const QString& algorithm
         return {};
     }
 
-    // Custom-param-aware preview: the settings KCM's preview slider passes
-    // live master/split values without persisting them, and bundles saved
-    // custom params for the algorithm. That path diverges from
-    // previewFromAlgorithm (which reads the registry's configured params),
+    // Custom-param-aware preview: the settings KCM's preview passes the live
+    // master/split values and the live custom-param map as explicit inputs, so
+    // the diagram is a pure function of what the UI shows. That path diverges
+    // from previewFromAlgorithm (which reads the registry's configured params),
     // so we build the TilingParams explicitly here. The relative-space
     // projection mirrors LayoutPreview's contract (0..1 against the shared
     // preview canvas size).
@@ -255,16 +255,7 @@ QVariantList AlgorithmService::generateAlgorithmPreview(const QString& algorithm
 
     const int count = qMax(1, windowCount);
     PhosphorTiles::TilingParams params = PhosphorTiles::TilingParams::forPreview(count, previewRect, &state);
-    // Inline the saved-custom-params lookup (previously a private helper; full
-    // surface now lives on TilingAlgorithmController).
-    const QVariantMap perAlgo = m_settings->autotilePerAlgorithmSettings();
-    const QVariant algoEntry = perAlgo.value(algorithmId);
-    if (algoEntry.isValid()) {
-        const QVariant customVar = algoEntry.toMap().value(PhosphorTiles::AutotileJsonKeys::CustomParams);
-        if (customVar.isValid()) {
-            params.customParams = customVar.toMap();
-        }
-    }
+    params.customParams = customParams;
 
     const QVector<QRect> zones = algo->calculateZones(params);
 
@@ -292,8 +283,16 @@ QVariantList AlgorithmService::generateAlgorithmDefaultPreview(const QString& al
     if (!algo) {
         return {};
     }
+    // Default thumbnails reflect any custom params the user has saved for the
+    // algorithm (the live KCM preview supplies its own map; this caller reads
+    // the persisted one).
+    QVariantMap savedCustom;
+    const QVariant algoEntry = m_settings->autotilePerAlgorithmSettings().value(algorithmId);
+    if (algoEntry.isValid()) {
+        savedCustom = algoEntry.toMap().value(PhosphorTiles::AutotileJsonKeys::CustomParams).toMap();
+    }
     return generateAlgorithmPreview(algorithmId, algo->defaultMaxWindows(), algo->defaultSplitRatio(),
-                                    PhosphorTiles::AutotileDefaults::DefaultMasterCount);
+                                    PhosphorTiles::AutotileDefaults::DefaultMasterCount, savedCustom);
 }
 
 void AlgorithmService::openAlgorithmsFolder()

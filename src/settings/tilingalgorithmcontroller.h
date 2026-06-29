@@ -81,15 +81,38 @@ public:
     /// `changed()` drives page dirty tracking via SettingsController.
     Q_INVOKABLE void setCustomParam(const QString& algorithmId, const QString& paramName, const QVariant& value);
 
+    /// Per-algorithm built-in tuning (split ratio, master count, max windows).
+    /// Each algorithm keeps its own values, mirroring the daemon's
+    /// per-algorithm save/restore (AutotileConfig::AlgorithmSettings). Returns
+    /// a map with keys "splitRatio", "masterCount", "maxWindows". Split ratio
+    /// and max windows fall back to the algorithm's declared defaults; master
+    /// count falls back to the global default (algorithms don't declare one).
+    /// All values are clamped to their configured ranges.
+    Q_INVOKABLE QVariantMap algorithmSettingsFor(const QString& algorithmId) const;
+
+    /// Persist a per-algorithm built-in value (clamped to its allowed range),
+    /// writing ONLY the per-algorithm entry — never the global current value.
+    /// The daemon restores the per-algorithm entry into the active config, so
+    /// writing the global here would let the daemon's switch-time save clobber
+    /// a sibling algorithm's slot. Emits `changed` for dirty tracking.
+    Q_INVOKABLE void setAlgorithmSplitRatio(const QString& algorithmId, qreal value);
+    Q_INVOKABLE void setAlgorithmMasterCount(const QString& algorithmId, int value);
+    Q_INVOKABLE void setAlgorithmMaxWindows(const QString& algorithmId, int value);
+
 Q_SIGNALS:
     void customParamChanged(const QString& algorithmId, const QString& paramName);
 
     /// Generic "something changed" — SettingsController hooks this to its
-    /// dirty-tracking slot so custom-param writes flip needsSave.
+    /// dirty-tracking slot so custom-param and per-algorithm writes flip
+    /// needsSave.
     void changed();
 
 private:
     QVariantMap savedCustomParams(const QString& algorithmId) const;
+    /// Read-modify-write a single key in the per-algorithm settings entry,
+    /// preserving the other keys (incl. customParams). Returns false (no-op)
+    /// when the coerced value already matches what's stored.
+    bool writeAlgorithmField(const QString& algorithmId, QLatin1String key, const QVariant& value);
 
     ISettings* m_settings = nullptr;
     PhosphorTiles::AlgorithmRegistry* m_registry = nullptr;
