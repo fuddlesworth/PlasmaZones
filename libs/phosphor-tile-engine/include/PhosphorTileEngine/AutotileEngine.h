@@ -1243,16 +1243,6 @@ private:
     PhosphorTiles::TilingState* stateForKey(const PhosphorEngine::TilingStateKey& key);
 
     /**
-     * @brief Reset maxWindows when switching algorithms (DRY helper)
-     *
-     * If the current maxWindows matches the old algorithm's default, reset
-     * it to the new algorithm's default. Shared by setAlgorithm() and
-     * syncFromSettings().
-     */
-    void resetMaxWindowsForAlgorithmSwitch(PhosphorTiles::TilingAlgorithm* oldAlgo,
-                                           PhosphorTiles::TilingAlgorithm* newAlgo);
-
-    /**
      * @brief Propagate global split ratio to screens without per-screen overrides
      */
     void propagateGlobalSplitRatio();

@@ -478,9 +478,11 @@ QVariantList SettingsController::availableAlgorithms() const
 }
 
 QVariantList SettingsController::generateAlgorithmPreview(const QString& algorithmId, int windowCount,
-                                                          double splitRatio, int masterCount) const
+                                                          double splitRatio, int masterCount,
+                                                          const QVariantMap& customParams) const
 {
-    return m_algorithmService->generateAlgorithmPreview(algorithmId, windowCount, splitRatio, masterCount);
+    return m_algorithmService->generateAlgorithmPreview(algorithmId, windowCount, splitRatio, masterCount,
+                                                        customParams);
 }
 
 QVariantList SettingsController::generateAlgorithmDefaultPreview(const QString& algorithmId) const

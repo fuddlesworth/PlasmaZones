@@ -8,9 +8,8 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.control as PhosphorUi
 
 // PhosphorUi.AboutPageShell hosts the standard chrome (icon + name +
-// version + description + license + homepage); PlasmaZones-specific
-// content (daemon toggle on top, link / license / credits cards in
-// extras) is injected through the shell's slots.
+// version + description + license + homepage). PlasmaZones-specific content
+// (the Links and Credits cards) is injected through the shell's extras slot.
 PhosphorUi.AboutPageShell {
     id: root
 
@@ -128,36 +127,6 @@ PhosphorUi.AboutPageShell {
             }
         }
     ]
-
-    // ── Daemon enable/disable toggle, anchored above the header ──
-    topContent: Component {
-        RowLayout {
-            spacing: Kirigami.Units.smallSpacing
-
-            Label {
-                text: i18n("Enable PlasmaZones")
-                font.weight: Font.DemiBold
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            Label {
-                text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
-                opacity: 0.7
-            }
-
-            SettingsSwitch {
-                checked: settingsController.daemonRunning
-                enabled: !settingsController.daemonController.busy
-                onToggled: function (newValue) {
-                    settingsController.daemonController.setEnabled(newValue);
-                }
-                accessibleName: i18n("Enable PlasmaZones")
-            }
-        }
-    }
 
     component LinkButton: Button {
         id: linkButton
