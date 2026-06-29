@@ -52,7 +52,7 @@ public:
     // ── Catalog queries ─────────────────────────────────────────────────
     QVariantList availableAlgorithms() const;
     QVariantList generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,
-                                          int masterCount) const;
+                                          int masterCount, const QVariantMap& customParams) const;
     QVariantList generateAlgorithmDefaultPreview(const QString& algorithmId) const;
 
     // ── Filesystem CRUD ─────────────────────────────────────────────────

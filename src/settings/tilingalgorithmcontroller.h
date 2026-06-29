@@ -81,8 +81,25 @@ public:
     /// `changed()` drives page dirty tracking via SettingsController.
     Q_INVOKABLE void setCustomParam(const QString& algorithmId, const QString& paramName, const QVariant& value);
 
+    /// Per-algorithm built-in tuning (split ratio, master count, max windows).
+    /// Each algorithm keeps its own values, mirroring the daemon's
+    /// per-algorithm save/restore (AutotileConfig::AlgorithmSettings). Returns
+    /// a map with keys "splitRatio", "masterCount", "maxWindows", falling back
+    /// to the algorithm's declared defaults for any key not yet saved.
+    Q_INVOKABLE QVariantMap algorithmSettingsFor(const QString& algorithmId) const;
+
+    /// Persist a per-algorithm built-in value (clamped to its allowed range),
+    /// writing ONLY the per-algorithm entry — never the global current value.
+    /// The daemon restores the per-algorithm entry into the active config, so
+    /// writing the global here would let the daemon's switch-time save clobber
+    /// a sibling algorithm's slot. Emits `algorithmSettingsChanged` + `changed`.
+    Q_INVOKABLE void setAlgorithmSplitRatio(const QString& algorithmId, qreal value);
+    Q_INVOKABLE void setAlgorithmMasterCount(const QString& algorithmId, int value);
+    Q_INVOKABLE void setAlgorithmMaxWindows(const QString& algorithmId, int value);
+
 Q_SIGNALS:
     void customParamChanged(const QString& algorithmId, const QString& paramName);
+    void algorithmSettingsChanged(const QString& algorithmId);
 
     /// Generic "something changed" — SettingsController hooks this to its
     /// dirty-tracking slot so custom-param writes flip needsSave.
@@ -90,6 +107,10 @@ Q_SIGNALS:
 
 private:
     QVariantMap savedCustomParams(const QString& algorithmId) const;
+    /// Read-modify-write a single key in the per-algorithm settings entry,
+    /// preserving the other keys (incl. customParams). Returns false (no-op)
+    /// when the coerced value already matches what's stored.
+    bool writeAlgorithmField(const QString& algorithmId, QLatin1String key, const QVariant& value);
 
     ISettings* m_settings = nullptr;
     PhosphorTiles::AlgorithmRegistry* m_registry = nullptr;

@@ -264,4 +264,80 @@ void TilingAlgorithmController::setCustomParam(const QString& algorithmId, const
     Q_EMIT changed();
 }
 
+QVariantMap TilingAlgorithmController::algorithmSettingsFor(const QString& algorithmId) const
+{
+    // Seed with the algorithm's declared defaults so an algorithm with no
+    // saved entry still shows its own sensible values (e.g. BSP's default
+    // max windows, not a global constant).
+    qreal splitRatio = PhosphorTiles::AutotileDefaults::DefaultSplitRatio;
+    int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
+    int maxWindows = PhosphorTiles::AutotileDefaults::DefaultMaxWindows;
+    if (PhosphorTiles::TilingAlgorithm* algo = m_registry->algorithm(algorithmId)) {
+        splitRatio = algo->defaultSplitRatio();
+        maxWindows = algo->defaultMaxWindows();
+    }
+
+    const QVariantMap entry = m_settings->autotilePerAlgorithmSettings().value(algorithmId).toMap();
+    const QVariant srVar = entry.value(PhosphorTiles::AutotileJsonKeys::SplitRatio);
+    if (srVar.isValid())
+        splitRatio = srVar.toDouble();
+    const QVariant mcVar = entry.value(PhosphorTiles::AutotileJsonKeys::MasterCount);
+    if (mcVar.isValid())
+        masterCount = mcVar.toInt();
+    const QVariant mwVar = entry.value(PhosphorTiles::AutotileJsonKeys::MaxWindows);
+    if (mwVar.isValid())
+        maxWindows = mwVar.toInt();
+
+    QVariantMap result;
+    result[PhosphorTiles::AutotileJsonKeys::SplitRatio] = splitRatio;
+    result[PhosphorTiles::AutotileJsonKeys::MasterCount] = masterCount;
+    result[PhosphorTiles::AutotileJsonKeys::MaxWindows] = maxWindows;
+    return result;
+}
+
+bool TilingAlgorithmController::writeAlgorithmField(const QString& algorithmId, QLatin1String key,
+                                                    const QVariant& value)
+{
+    if (algorithmId.isEmpty())
+        return false;
+    QVariantMap perAlgo = m_settings->autotilePerAlgorithmSettings();
+    QVariantMap entry = perAlgo.value(algorithmId).toMap();
+    if (entry.contains(key) && entry.value(key) == value)
+        return false;
+    entry[key] = value;
+    perAlgo[algorithmId] = entry;
+    m_settings->setAutotilePerAlgorithmSettings(perAlgo);
+    return true;
+}
+
+void TilingAlgorithmController::setAlgorithmSplitRatio(const QString& algorithmId, qreal value)
+{
+    const qreal clamped =
+        std::clamp(value, ConfigDefaults::autotileSplitRatioMin(), ConfigDefaults::autotileSplitRatioMax());
+    if (writeAlgorithmField(algorithmId, PhosphorTiles::AutotileJsonKeys::SplitRatio, clamped)) {
+        Q_EMIT algorithmSettingsChanged(algorithmId);
+        Q_EMIT changed();
+    }
+}
+
+void TilingAlgorithmController::setAlgorithmMasterCount(const QString& algorithmId, int value)
+{
+    const int clamped =
+        std::clamp(value, ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax());
+    if (writeAlgorithmField(algorithmId, PhosphorTiles::AutotileJsonKeys::MasterCount, clamped)) {
+        Q_EMIT algorithmSettingsChanged(algorithmId);
+        Q_EMIT changed();
+    }
+}
+
+void TilingAlgorithmController::setAlgorithmMaxWindows(const QString& algorithmId, int value)
+{
+    const int clamped =
+        std::clamp(value, ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax());
+    if (writeAlgorithmField(algorithmId, PhosphorTiles::AutotileJsonKeys::MaxWindows, clamped)) {
+        Q_EMIT algorithmSettingsChanged(algorithmId);
+        Q_EMIT changed();
+    }
+}
+
 } // namespace PlasmaZones

@@ -963,23 +963,27 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         auto& entry = m_config->savedAlgorithmSettings[m_algorithmId];
         entry.splitRatio = m_config->splitRatio;
         entry.masterCount = m_config->masterCount;
-        // customParams are not touched here — only splitRatio/masterCount are engine-managed
+        entry.maxWindows = m_config->maxWindows;
+        // customParams are not touched here — only splitRatio/masterCount/maxWindows are engine-managed
     }
 
     // Look up saved settings AFTER the save above — insertion may rehash the
     // QHash, invalidating any iterator obtained before the insert.
     auto savedIt = m_config->savedAlgorithmSettings.constFind(newId);
 
-    // Restore per-algorithm split ratio and master count from saved settings,
-    // falling back to the algorithm's defaults when no saved entry exists.
+    // Restore per-algorithm split ratio, master count, and max windows from
+    // saved settings, falling back to the algorithm's defaults when no saved
+    // entry exists. Each algorithm keeps its own tuning across switches.
     auto restorePerAlgoSettings = [this](PhosphorTiles::TilingAlgorithm* algo,
                                          QHash<QString, AlgorithmSettings>::const_iterator it) {
         if (it != m_config->savedAlgorithmSettings.constEnd()) {
             m_config->splitRatio = it->splitRatio;
             m_config->masterCount = it->masterCount;
+            m_config->maxWindows = it->maxWindows;
         } else {
             m_config->splitRatio = algo->defaultSplitRatio();
             m_config->masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
+            m_config->maxWindows = algo->defaultMaxWindows();
         }
     };
 
@@ -987,16 +991,10 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         restorePerAlgoSettings(newAlgo, savedIt);
         propagateGlobalSplitRatio();
         propagateGlobalMasterCount();
-
-        // Same pattern for maxWindows: if the user hasn't customized it away
-        // from the old algorithm's default, reset to the new algorithm's default.
-        // Without this, switching from MasterStack (4) to BSP (5) keeps maxWindows=4.
-        resetMaxWindowsForAlgorithmSwitch(oldAlgo, newAlgo);
     } else if (newAlgo) {
         // oldAlgo is nullptr (first-ever call or corrupted m_algorithmId).
         // Initialize config from the new algorithm's defaults or saved settings.
         restorePerAlgoSettings(newAlgo, savedIt);
-        m_config->maxWindows = newAlgo->defaultMaxWindows();
         propagateGlobalSplitRatio();
         propagateGlobalMasterCount();
     }
@@ -1445,6 +1443,7 @@ void AutotileEngine::refreshConfigFromSettings()
         if (savedIt != m_config->savedAlgorithmSettings.constEnd()) {
             m_config->splitRatio = savedIt->splitRatio;
             m_config->masterCount = savedIt->masterCount;
+            m_config->maxWindows = savedIt->maxWindows;
         }
     }
 
@@ -4089,16 +4088,6 @@ bool AutotileEngine::isKnownScreen(const QString& screenId) const
         return true;
     }
     return PhosphorScreens::ScreenIdentity::findByIdOrName(screenId) != nullptr;
-}
-
-void AutotileEngine::resetMaxWindowsForAlgorithmSwitch(PhosphorTiles::TilingAlgorithm* oldAlgo,
-                                                       PhosphorTiles::TilingAlgorithm* newAlgo)
-{
-    if (!oldAlgo || !newAlgo)
-        return;
-    if (m_config->maxWindows == oldAlgo->defaultMaxWindows()) {
-        m_config->maxWindows = newAlgo->defaultMaxWindows();
-    }
 }
 
 void AutotileEngine::propagateGlobalSplitRatio()

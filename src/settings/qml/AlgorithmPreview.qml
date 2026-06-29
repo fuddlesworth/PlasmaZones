@@ -25,6 +25,10 @@ Item {
     property int windowCount: 4
     property real splitRatio: 0.6
     property int masterCount: 1
+    // Per-algorithm custom param values (name → value). Just another layout
+    // input, on equal footing with windowCount / splitRatio / masterCount: a
+    // change re-runs the C++ preview through the same recalc path.
+    property var customParams: ({})
     // Color customization (passed through to ZonePreview)
     property color windowColor: Kirigami.Theme.highlightColor
     property color windowBorder: Kirigami.Theme.textColor
@@ -63,11 +67,11 @@ Item {
 
     function recalcZones() {
         if (root.algorithmId !== "") {
-            root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount);
+            root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount, root.customParams);
             // Retry once if a stale watchdog interrupt caused empty results —
             // the first call clears the interrupt flag, so the second succeeds.
             if (root.zones.length === 0 && root.windowCount > 0)
-                root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount);
+                root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount, root.customParams);
         } else {
             root.zones = [];
         }
@@ -77,6 +81,7 @@ Item {
     onWindowCountChanged: recalcTimer.restart()
     onSplitRatioChanged: recalcTimer.restart()
     onMasterCountChanged: recalcTimer.restart()
+    onCustomParamsChanged: recalcTimer.restart()
     Component.onCompleted: recalcTimer.start()
 
     Connections {

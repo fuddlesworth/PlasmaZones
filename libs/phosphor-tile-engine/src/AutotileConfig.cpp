@@ -85,7 +85,13 @@ QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QV
         const int masterCount =
             std::clamp(mcVar.isValid() ? mcVar.toInt() : PhosphorTiles::AutotileDefaults::DefaultMasterCount,
                        MinMasterCount, MaxMasterCount);
-        AlgorithmSettings settings{ratio, masterCount, {}};
+        const QVariant mwVar = entry.value(PhosphorTiles::AutotileJsonKeys::MaxWindows);
+        const int maxWindows =
+            std::clamp(mwVar.isValid() ? mwVar.toInt() : DefaultMaxWindows, MinMaxWindows, MaxMaxWindows);
+        AlgorithmSettings settings;
+        settings.splitRatio = ratio;
+        settings.masterCount = masterCount;
+        settings.maxWindows = maxWindows;
         // Load custom params if present
         const QVariant customVar = entry.value(PhosphorTiles::AutotileJsonKeys::CustomParams);
         if (customVar.isValid() && customVar.typeId() == QMetaType::QVariantMap) {
@@ -103,6 +109,7 @@ QVariantMap AutotileConfig::perAlgoToVariantMap(const QHash<QString, AlgorithmSe
         QVariantMap entry;
         entry[PhosphorTiles::AutotileJsonKeys::SplitRatio] = it.value().splitRatio;
         entry[PhosphorTiles::AutotileJsonKeys::MasterCount] = it.value().masterCount;
+        entry[PhosphorTiles::AutotileJsonKeys::MaxWindows] = it.value().maxWindows;
         if (!it.value().customParams.isEmpty()) {
             entry[PhosphorTiles::AutotileJsonKeys::CustomParams] = it.value().customParams;
         }
