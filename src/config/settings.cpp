@@ -1509,6 +1509,12 @@ QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mod
         if (!ruleToken || *ruleToken != wantToken) {
             continue; // not a disable rule, or scoped to a different mode
         }
+        if (CRB::pinsNonDimensionContextField(rule.match)) {
+            continue; // a rule that also pins a non-dimension context field (e.g.
+                      // TiledWindowCount) is more specific than a pure (screen,
+                      // desktop, activity) disable; it cannot be represented by
+                      // the disable-axis key, so it is not a managed disable entry.
+        }
         QString screenId;
         int desktop = 0;
         QString activity;
@@ -1609,7 +1615,10 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     QList<PhosphorRules::Rule> kept;
     for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
         const auto ruleToken = CRB::disableRuleMode(rule);
-        if (ruleToken && *ruleToken == modeToken) {
+        // Keep a disable rule that also pins a non-dimension context field (e.g.
+        // TiledWindowCount): it is not the pure (screen, desktop, activity) shape
+        // this (axis, mode) rewrite owns, so dropping it would lose that leaf.
+        if (ruleToken && *ruleToken == modeToken && !CRB::pinsNonDimensionContextField(rule.match)) {
             QString screenId;
             int desktop = 0;
             QString activity;

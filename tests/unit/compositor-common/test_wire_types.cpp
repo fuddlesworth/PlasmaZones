@@ -11,6 +11,8 @@
  */
 
 #include <QDBusArgument>
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <QTest>
 
 #include <PhosphorProtocol/AutotileMarshalling.h>
@@ -19,6 +21,20 @@
 #include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
+
+/// A trivial bus-exported echo object used by testAlgorithmInfoEntryBusRoundtrip
+/// to force a real marshal/demarshal of AlgorithmInfoEntry over the session bus
+/// (a write-only in-process QDBusArgument cannot be read back).
+class AlgorithmInfoEcho : public QObject
+{
+    Q_OBJECT
+
+public Q_SLOTS:
+    PhosphorProtocol::AlgorithmInfoEntry echoEntry(const PhosphorProtocol::AlgorithmInfoEntry& entry) const
+    {
+        return entry;
+    }
+};
 
 namespace {
 
@@ -430,6 +446,64 @@ private Q_SLOTS:
         QCOMPARE(entry.isUserScript, false);
         QCOMPARE(entry.supportsMemory, true);
         QCOMPARE(entry.supportsSingleWindow, true);
+    }
+
+    // A genuine marshal-then-demarshal round-trip over the bus, exercising BOTH
+    // operator<< and operator>> (the signature check above only exercises <<, so
+    // a >>-only field-order divergence would slip through it). A QDBusArgument
+    // written in-process is "write-only" and cannot be read back without a real
+    // peer, so this routes a self-call through the session bus and skips when no
+    // bus is present (e.g. a headless CI runner).
+    void testAlgorithmInfoEntryBusRoundtrip()
+    {
+        PhosphorProtocol::registerWireTypes();
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected()) {
+            QSKIP("No session bus available for a wire round-trip");
+        }
+        AlgorithmInfoEcho echo;
+        const QString path = QStringLiteral("/test/wiretypes/algoinfoecho");
+        QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+
+        const PhosphorProtocol::AlgorithmInfoEntry sent{QStringLiteral("centered-single"),
+                                                        QStringLiteral("Centered"),
+                                                        QStringLiteral("Centered single-window column"),
+                                                        false,
+                                                        true,
+                                                        true,
+                                                        false,
+                                                        0.6,
+                                                        6,
+                                                        true,
+                                                        QStringLiteral("all"),
+                                                        true,
+                                                        false,
+                                                        true};
+
+        QDBusMessage call =
+            QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
+        call << QVariant::fromValue(sent);
+        const QDBusMessage reply = bus.call(call);
+        bus.unregisterObject(path);
+
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(reply.arguments().size(), 1);
+        const auto got = qdbus_cast<PhosphorProtocol::AlgorithmInfoEntry>(reply.arguments().at(0));
+
+        QCOMPARE(got.id, sent.id);
+        QCOMPARE(got.name, sent.name);
+        QCOMPARE(got.description, sent.description);
+        QCOMPARE(got.supportsMasterCount, sent.supportsMasterCount);
+        QCOMPARE(got.supportsSplitRatio, sent.supportsSplitRatio);
+        QCOMPARE(got.centerLayout, sent.centerLayout);
+        QCOMPARE(got.producesOverlappingZones, sent.producesOverlappingZones);
+        QVERIFY(qAbs(got.defaultSplitRatio - sent.defaultSplitRatio) < 0.001);
+        QCOMPARE(got.defaultMaxWindows, sent.defaultMaxWindows);
+        QCOMPARE(got.isScripted, sent.isScripted);
+        QCOMPARE(got.zoneNumberDisplay, sent.zoneNumberDisplay);
+        QCOMPARE(got.isUserScript, sent.isUserScript);
+        QCOMPARE(got.supportsMemory, sent.supportsMemory);
+        QCOMPARE(got.supportsSingleWindow, sent.supportsSingleWindow);
     }
 
     // =================================================================

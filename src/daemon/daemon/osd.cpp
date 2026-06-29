@@ -32,6 +32,8 @@
 #include "phosphor_i18n.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
+#include <utility>
+
 namespace PlasmaZones {
 
 namespace {
@@ -287,7 +289,10 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             int windowCount = 0;
             int masterCount = 1;
             if (m_autotileEngine) {
-                const auto* state = m_autotileEngine->stateForScreen(screenId);
+                // const overload: a non-creating lookup. The non-const overload
+                // would lazily allocate an empty TilingState for a known screen
+                // during this read-only OSD preview build.
+                const auto* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
                 if (state) {
                     windowCount = state->tiledWindowCount();
                     masterCount = state->masterCount();
