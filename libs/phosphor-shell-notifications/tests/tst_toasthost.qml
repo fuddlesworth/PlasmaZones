@@ -66,7 +66,7 @@ TestCase {
 
     function test_dismiss_emits_signal() {
         const h = createTemporaryObject(hostComp, testCase);
-        const spy = spyComp.createObject(testCase, {
+        const spy = createTemporaryObject(spyComp, testCase, {
             "target": h,
             "signalName": "toastDismissed"
         });
@@ -128,7 +128,7 @@ TestCase {
         const h = createTemporaryObject(hostComp, testCase, {
             "maxVisible": 1
         });
-        const spy = spyComp.createObject(testCase, {
+        const spy = createTemporaryObject(spyComp, testCase, {
             "target": h,
             "signalName": "toastDismissed"
         });
@@ -145,11 +145,35 @@ TestCase {
         compare(spy.signalArguments[0][0], queuedId, "carries the dismissed queued id");
     }
 
+    function test_dismiss_visible_with_queued_emits_once() {
+        // Regression guard: dismissing a visible toast while another is
+        // queued behind it must emit toastDismissed exactly once (promote()
+        // brings the queued one in but must NOT also emit).
+        const h = createTemporaryObject(hostComp, testCase, {
+            "maxVisible": 1
+        });
+        const spy = createTemporaryObject(spyComp, testCase, {
+            "target": h,
+            "signalName": "toastDismissed"
+        });
+        const a = h.show({
+            "summary": "a"
+        });
+        h.show({
+            "summary": "b"
+        }); // queued
+        h.dismiss(a);
+        compare(spy.count, 1, "exactly one toastDismissed for the visible toast (promote does not emit)");
+        compare(spy.signalArguments[0][0], a, "carries the dismissed visible id");
+        compare(h.activeCount, 1, "the queued toast was promoted");
+        compare(h.queuedCount, 0, "queue drained");
+    }
+
     function test_clear_emits_for_each() {
         const h = createTemporaryObject(hostComp, testCase, {
             "maxVisible": 1
         });
-        const spy = spyComp.createObject(testCase, {
+        const spy = createTemporaryObject(spyComp, testCase, {
             "target": h,
             "signalName": "toastDismissed"
         });

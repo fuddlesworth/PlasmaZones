@@ -60,9 +60,11 @@ function buildBarPath(w, h, cornerRadius, connectorRadius, sockets) {
             // two pocket-bottom corners always fit: r <= depth/2 keeps a
             // (possibly zero) wall between the concave top and convex
             // bottom corners; r <= width/2 keeps the bottom edge from
-            // crossing itself. As depth -> 0, r -> 0 and the pocket
+            // crossing itself. The outer Math.max(0, ...) guards a negative
+            // connectorRadius (mirrors the R clamp above) so the arcs never
+            // get a negative radius. As depth -> 0, r -> 0 and the pocket
             // collapses to a flat edge.
-            var r = Math.min(connectorRadius, depth / 2, s.width / 2);
+            var r = Math.max(0, Math.min(connectorRadius, depth / 2, s.width / 2));
             pockets.push({ left: left, right: right, depth: depth, r: r });
         }
         pockets.sort(function (a, b) { return b.left - a.left; });

@@ -106,7 +106,7 @@ TestCase {
         h.show("volume", 50, undefined, "");
         // Capture the first delegate; a var property nulls out when the
         // referenced QObject is destroyed.
-        const holder = holderComp.createObject(testCase, {
+        const holder = createTemporaryObject(holderComp, testCase, {
             "ref": fakeProvider.lastItem
         });
         verify(holder.ref, "captured the first delegate");
@@ -136,7 +136,7 @@ TestCase {
 
     function test_shown_signal_fires() {
         const h = createTemporaryObject(hostComp, testCase);
-        const spy = spyComp.createObject(testCase, {
+        const spy = createTemporaryObject(spyComp, testCase, {
             "target": h,
             "signalName": "shown"
         });
@@ -177,7 +177,7 @@ TestCase {
 
     function test_hidden_signal_on_auto_hide() {
         const h = createTemporaryObject(hostComp, testCase);
-        const spy = spyComp.createObject(testCase, {
+        const spy = createTemporaryObject(spyComp, testCase, {
             "target": h,
             "signalName": "hidden"
         });
@@ -188,7 +188,7 @@ TestCase {
 
     function test_swap_emits_hidden_for_previous() {
         const h = createTemporaryObject(hostComp, testCase);
-        const spy = spyComp.createObject(testCase, {
+        const spy = createTemporaryObject(spyComp, testCase, {
             "target": h,
             "signalName": "hidden"
         });

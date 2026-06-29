@@ -8,6 +8,7 @@
 #include <QDebug>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QStringList>
 #include <QStringLiteral>
 
 #include <memory>

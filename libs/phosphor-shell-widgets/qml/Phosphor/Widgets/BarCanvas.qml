@@ -34,9 +34,9 @@ Item {
     // Closed bar height (the strip). Sockets extend below this.
     property real barHeight: 48
     // The bar's own four outer corners.
-    property real cornerRadius: 16
+    property real cornerRadius: Tokens.radius_l
     // Fillet radius for socket corners (concave joins + pocket floor).
-    property real connectorRadius: 16
+    property real connectorRadius: Tokens.radius_l
     // Surface fill. Tinted/animated by ConnectedShape.
     property color color: Theme.surface_container
 

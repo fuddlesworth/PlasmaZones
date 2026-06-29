@@ -68,11 +68,12 @@ Item {
         };
 
         if (activeModel.count < host.maxVisible)
+            // Newest shown on top of the visible stack.
             activeModel.insert(0, row);
         else
-            // newest on top
-            // Reassign (not push) so the queuedCount binding re-evaluates;
-            // an in-place Array.push doesn't notify QML.
+            // Overflow queues FIFO (promoted to the bottom later). Reassign
+            // (not push) so the queuedCount binding re-evaluates; an
+            // in-place Array.push doesn't notify QML.
             priv.queue = priv.queue.concat([row]);
 
         return row.toastId;

@@ -28,8 +28,11 @@ import Phosphor.Theme
 Item {
     id: root
 
-    // This host's screen identifier, for routing. Empty = unrouted
-    // (matches every targetScreen).
+    // This host's screen identifier, for routing. A show() with a specific
+    // targetScreen reaches only the host whose screenName matches it; a
+    // show() with an empty/omitted targetScreen broadcasts to every host.
+    // The wildcard is the empty targetScreen, NOT the empty screenName: a
+    // host left at the default "" therefore reacts only to broadcast shows.
     property string screenName: ""
     // How long the OSD stays fully shown before it fades out (ms).
     property int holdDuration: 1500

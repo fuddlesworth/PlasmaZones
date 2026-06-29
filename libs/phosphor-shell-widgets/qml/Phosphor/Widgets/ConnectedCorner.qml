@@ -32,7 +32,7 @@ import Phosphor.Theme
 Item {
     id: root
 
-    property real radius: 16
+    property real radius: Tokens.radius_l
     property bool concave: false
     property color fillColor: Theme.surface_container
 

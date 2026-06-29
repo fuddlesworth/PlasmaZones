@@ -78,7 +78,9 @@ same trigger to all; `show()`'s `targetScreen` argument routes it
 - **Lifecycle via states.** `OSDHost` drives a `shown`/`hidden` state
   pair; the transitions animate opacity + scale with `phosphor-theme`
   Motion tokens, and the hide transition's tail destroys the delegate and
-  emits `hidden(kind)`. The hold timer is what flips `shown -> hidden`.
+  emits `hidden(kind)`. The hold timer is what flips `shown -> hidden`. A
+  kind swap also emits `hidden(previousKind)` synchronously from `show()`
+  for the outgoing OSD, so the `shown`/`hidden` pairing stays symmetric.
 - **Provider seam, not a hard registry dependency.** `OSDHost` takes a
   `provider` object, so the framework is testable with a fake and the
   registry wiring (IOSDFactory) lives in the host/demo, not the QML.

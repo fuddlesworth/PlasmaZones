@@ -7,7 +7,6 @@
 
 #include <QObject>
 #include <QString>
-#include <QStringList>
 
 QT_BEGIN_NAMESPACE
 class QQuickItem;
