@@ -104,21 +104,32 @@ return pluau.algorithm {
         return zones
     end,
 
-    -- Remember what the user dragged the lone window to, in pixels, on THIS
-    -- screen. The returned table becomes this state's persistent bag (kept
-    -- because metadata.supportsScriptState is set); the next tile() converts it
-    -- back to a fraction of the current work area. Only the single-window case
-    -- feeds the remembered width; multi-window resizes are left to the split
-    -- ratio so a master drag does not redefine the column width.
+    -- React to a drag of the top window on THIS screen. A width change updates
+    -- the remembered centered width (in pixels), and in the multi-window column
+    -- a height change on the top window is a divider drag that rescales the split
+    -- ratio. The returned table becomes this state's persistent bag (kept because
+    -- metadata.supportsScriptState is set); the reserved splitRatio key is
+    -- applied to the engine state and stripped from the bag. The next tile()
+    -- converts the stored width back to a fraction of the current work area.
     onWindowResized = function(state, resize)
         if resize.index ~= 0 then
             return nil
         end
-        if state and type(state.windowCount) == "number" and state.windowCount > 1 then
-            return nil
+        local result = (state and state.scriptState) or {}
+        if type(resize.newRect.width) == "number" and resize.newRect.width > 0 then
+            result.singleW = resize.newRect.width
         end
-        local bag = (state and state.scriptState) or {}
-        bag.singleW = resize.newRect.width
-        return bag
+        -- The top window's bottom edge is the column divider (its top edge is the
+        -- screen edge, so only the divider moves it). The band height is fixed,
+        -- so the new ratio is the old ratio scaled by the height change.
+        if state and type(state.windowCount) == "number" and state.windowCount > 1 then
+            local oldH = resize.oldRect and resize.oldRect.height or 0
+            local newH = resize.newRect and resize.newRect.height or 0
+            local oldRatio = (type(state.splitRatio) == "number") and state.splitRatio or 0.6
+            if oldH > 0 and newH > 0 then
+                result.splitRatio = pluau.clampSplitRatio(oldRatio * newH / oldH)
+            end
+        end
+        return result
     end,
 }

@@ -101,10 +101,10 @@ private Q_SLOTS:
 
     void testFieldIsContext()
     {
-        // Exactly the four context fields are context (screen / desktop /
-        // activity plus the placement Mode) — everything else is a window
-        // property. Action/match compatibility hinges on this split, so
-        // pin it down explicitly rather than re-deriving it from
+        // Exactly the five context fields are context (screen / desktop /
+        // activity, the placement Mode, and the tiled-window count) — everything
+        // else is a window property. Action/match compatibility hinges on this
+        // split, so pin it down explicitly rather than re-deriving it from
         // fieldIsString/fieldIsBool/fieldIsNumeric.
         QVERIFY(fieldIsContext(Field::ScreenId));
         QVERIFY(fieldIsContext(Field::VirtualDesktop));

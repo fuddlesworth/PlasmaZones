@@ -9,12 +9,14 @@ import org.kde.kirigami as Kirigami
  * Autotile capability badges for layout cards.
  *
  * Shows a compact icon per capability an autotile algorithm advertises
- * (persistent split memory, resize reflow, persistent script state). Manual
- * layouts leave every flag false, so the whole row hides and reserves no space.
+ * (persistent split memory, resize reflow, persistent script state, single-window
+ * layout). Manual layouts leave every flag false, so the whole row hides and
+ * reserves no space.
  *
  * Driven by the serialized LayoutPreview shape (flattened autotile metadata):
- * supportsMemory, reflowsOnResize, supportsScriptState. Shared by the settings
- * layout grid and the overlay layout card so the badge set stays identical.
+ * supportsMemory, reflowsOnResize, supportsScriptState, supportsSingleWindow.
+ * Shared by the settings layout grid and the overlay layout card so the badge
+ * set stays identical.
  */
 Row {
     id: root

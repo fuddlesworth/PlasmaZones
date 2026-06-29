@@ -254,7 +254,7 @@ public:
      *
      * @return true if the algorithm owns the single-window layout (default: false)
      */
-    virtual bool supportsSingleWindow() const;
+    virtual bool supportsSingleWindow() const noexcept;
 
     /**
      * @brief Whether this algorithm is a user-provided scripted algorithm

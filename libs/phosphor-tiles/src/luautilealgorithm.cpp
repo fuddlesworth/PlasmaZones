@@ -482,7 +482,7 @@ bool LuauTileAlgorithm::centerLayout() const
     return m_cachedCenterLayout;
 }
 
-bool LuauTileAlgorithm::supportsSingleWindow() const
+bool LuauTileAlgorithm::supportsSingleWindow() const noexcept
 {
     return m_metadata.supportsSingleWindow;
 }
