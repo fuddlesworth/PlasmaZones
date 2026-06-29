@@ -362,6 +362,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-ipc)     # JSON-over-Unix-socket IpcRouter + IpcTarget QML type
     add_subdirectory(cli/phosphorctl)       # phosphorctl call / list / schema / subscribe
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types
+    add_subdirectory(libs/phosphor-shell-widgets)  # Phosphor.Widgets M3 atom library (Phase 3.1); depends on phosphor-theme
 endif()
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
@@ -663,12 +664,15 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
 #   phosphor-registry-demo — in-process IBarWidgetFactory registration
 #                            (registry + theme).
 #   phosphor-ipc-demo    — three IpcTargets driven via phosphorctl.
+#   phosphor-widgets-kitchen-sink — every Phosphor.Widgets atom in its
+#                            enabled/disabled states (widgets + theme).
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-theme-demo)
     add_subdirectory(examples/phosphor-theme-cli)
     add_subdirectory(examples/phosphor-popout-demo)
     add_subdirectory(examples/phosphor-registry-demo)
     add_subdirectory(examples/phosphor-ipc-demo)
+    add_subdirectory(examples/phosphor-widgets-kitchen-sink)
 endif()
 
 # phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell

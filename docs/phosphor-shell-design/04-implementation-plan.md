@@ -890,14 +890,23 @@ A bounded timeout guards step 3 (see Risks) so a missing or slow lock never wedg
 
 **Goal:** end-user-visible building blocks that we'll glue together in Phase 4. Each is a runnable demo, not a real shell surface yet.
 
-### 3.1: `Phosphor*` atom library
+### 3.1: `Phosphor*` atom library *(in progress)*
 
-| Deliverable                                                                  | Notes                                                                            |
-|------------------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| `qml/Phosphor/Widgets/` (or `libs/phosphor-shell-widgets/qml/`)              | `PhosphorButton`, `PhosphorSlider`, `PhosphorTextField`, `PhosphorCard`, `PhosphorRipple`, `PhosphorPill`, `ElevationShadow`, `StateLayer`, `Motion`-aware transitions |
-| `examples/phosphor-widgets-kitchen-sink/`                                    | One window listing every atom in every state (default / hover / pressed / focused / disabled). Theme-switch button at top. |
+Lives in a dedicated `libs/phosphor-shell-widgets/` library shipping the `Phosphor.Widgets` QML module (chosen over folding the atoms into `phosphor-shell` so the seam stays clean and the library-first philosophy holds). `StateLayer` and `Motion` are NOT re-created here: they already ship as singletons in `phosphor-theme`'s `Phosphor.Theme` module, and the atoms consume them directly. The new components are the seven below.
+
+| Deliverable                                                                  | Status | Notes                                                                            |
+|------------------------------------------------------------------------------|--------|----------------------------------------------------------------------------------|
+| `libs/phosphor-shell-widgets/qml/Phosphor/Widgets/`                          | scaffolded | `PhosphorButton` (4 variants), `PhosphorSlider`, `PhosphorTextField`, `PhosphorCard`, `PhosphorPill`, `PhosphorRipple` (shared hover/press state-layer + touch ripple), `ElevationShadow` (M3 levels 0-5, used as a `layer.effect`). Pure QML; all colours via `Theme.*`, all timing via `Motion.*`, all state opacities via `StateLayer.*`. |
+| `libs/phosphor-shell-widgets/{CMakeLists.txt, …Config.cmake.in, README.md}`  | scaffolded | Static QML module mirroring the `phosphor-theme` / `phosphor-popout` split (glue TU + `qt_add_qml_module`, `IMPORTS Phosphor.Theme QtQuick.Effects`, links the theme QML plugin). Canonical phosphor-* README. |
+| `libs/phosphor-shell-widgets/tests/`                                         | scaffolded | QtQuickTest harness (`tst_atoms.qml`) pinning each atom's default property surface + the pure logic (slider ratio clamp, `from == to` safety, elevation level clamp). Offscreen QPA, ctest-integrated. |
+| `examples/phosphor-widgets-kitchen-sink/`                                    | scaffolded | One scrollable window listing every atom in enabled/disabled states; hover/press/focus are live on the enabled specimens. Header cycles the accent token (`applyTokens`) and resets the palette to prove live retinting. |
 
 **Acceptance:** every atom respects the theme tokens; states use M3 state-layer opacities; ripple uses Motion timing.
+- [ ] Build + kitchen-sink demo runnable (pending a `-DBUILD_PHOSPHOR_SHELL=ON` build on a KDE/Qt host)
+- [ ] Accent cycle retints every atom live
+- [x] All colours/timing/state opacities route through `Theme` / `Motion` / `StateLayer` (no literals)
+
+**Known limitation:** `PhosphorRipple`'s expanding circle is not rounded-clipped (`Item.clip` is rectangular); the resting state-layer tint honours `radius`. Adopts the shared rounded-clip primitive when 3.2 lands.
 
 **Effort:** M (~2 weeks)
 
