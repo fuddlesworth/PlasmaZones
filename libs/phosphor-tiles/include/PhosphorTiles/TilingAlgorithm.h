@@ -249,13 +249,25 @@ public:
      *
      * By default an algorithm does not own the single-window case: a scripted
      * algorithm's calculateZones() fills the work area for a lone window without
-     * invoking its tile(). An algorithm that opts in (e.g. a centered-single
-     * layout) receives the single-window case in its tile() computation and is
+     * invoking its tile(). An algorithm that opts in (e.g. a centered
+     * single-window layout) receives the single-window case in its tile() computation and is
      * responsible for the resulting geometry.
      *
      * @return true if the algorithm owns the single-window layout (default: false)
      */
     virtual bool supportsSingleWindow() const noexcept;
+
+    /**
+     * @brief Whether the layout must be recomputed when focus moves
+     *
+     * Most layouts place a window by its tiled index, so a focus change alone
+     * does not move anything and the engine skips retiling. Focus-driven layouts
+     * (e.g. Theater, where the focused window occupies the centered spotlight)
+     * opt in so the engine reflows when focus moves between tiled windows.
+     *
+     * @return true if a focus change should trigger a retile (default: false)
+     */
+    virtual bool retilesOnFocusChange() const noexcept;
 
     /**
      * @brief Whether this algorithm is a user-provided scripted algorithm

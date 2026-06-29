@@ -93,6 +93,11 @@ bool TilingAlgorithm::supportsSingleWindow() const noexcept
     return false;
 }
 
+bool TilingAlgorithm::retilesOnFocusChange() const noexcept
+{
+    return false;
+}
+
 bool TilingAlgorithm::isScripted() const noexcept
 {
     return false;

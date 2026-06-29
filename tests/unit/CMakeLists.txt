@@ -180,6 +180,12 @@ target_compile_definitions(test_luau_ratio_reflow PRIVATE "P_SOURCE_DIR=\"${PROJ
 target_link_libraries(test_luau_ratio_reflow PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 add_test(NAME test_luau_ratio_reflow COMMAND test_luau_ratio_reflow)
 
+add_executable(test_luau_theater scripting/test_luau_theater.cpp)
+set_target_properties(test_luau_theater PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_luau_theater PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_luau_theater PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_luau_theater COMMAND test_luau_theater)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Autotile Engine Tests (core, master, minsize, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -481,6 +487,15 @@ target_include_directories(test_navigation_retile
 target_compile_definitions(test_navigation_retile PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 target_link_libraries(test_navigation_retile PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_navigation_retile COMMAND test_navigation_retile)
+
+add_executable(test_autotile_focus_retile
+               autotile/test_autotile_focus_retile.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_autotile_focus_retile
+               PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_compile_definitions(test_autotile_focus_retile PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_autotile_focus_retile PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_autotile_focus_retile COMMAND test_autotile_focus_retile)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Engine Settings Tests (replaces deleted test_settings_bridge)

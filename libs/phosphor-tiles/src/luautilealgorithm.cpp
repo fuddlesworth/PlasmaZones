@@ -75,6 +75,7 @@ ScriptedHelpers::ScriptMetadata parseMetadata(const QVariantMap& m)
     md.producesOverlappingZones = m.value(QStringLiteral("producesOverlappingZones")).toBool();
     md.centerLayout = m.value(QStringLiteral("centerLayout")).toBool();
     md.supportsSingleWindow = m.value(QStringLiteral("supportsSingleWindow")).toBool();
+    md.retileOnFocus = m.value(QStringLiteral("retileOnFocus")).toBool();
     if (m.contains(QStringLiteral("supportsMinSizes"))) {
         md.supportsMinSizes = m.value(QStringLiteral("supportsMinSizes")).toBool();
     }
@@ -487,6 +488,11 @@ bool LuauTileAlgorithm::supportsSingleWindow() const noexcept
     return m_metadata.supportsSingleWindow;
 }
 
+bool LuauTileAlgorithm::retilesOnFocusChange() const noexcept
+{
+    return m_metadata.retileOnFocus;
+}
+
 bool LuauTileAlgorithm::isScripted() const noexcept
 {
     return true;
@@ -618,7 +624,7 @@ QVector<QRect> LuauTileAlgorithm::calculateZones(const TilingParams& params) con
         return zones;
     }
     // Fill the work area for a lone window unless the algorithm opts into laying
-    // out the single-window case itself (e.g. a centered-single layout). Opted-in
+    // out the single-window case itself (e.g. a centered single-window layout). Opted-in
     // scripts get tile() called with windowCount == 1.
     if (params.windowCount == 1 && !m_metadata.supportsSingleWindow) {
         return {area};

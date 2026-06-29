@@ -10,13 +10,13 @@ import org.kde.kirigami as Kirigami
  *
  * Shows a compact icon per capability an autotile algorithm advertises
  * (persistent split memory, resize reflow, persistent script state, single-window
- * layout). Manual layouts leave every flag false, so the whole row hides and
- * reserves no space.
+ * layout, follows focus). Manual layouts leave every flag false, so the whole row
+ * hides and reserves no space.
  *
  * Driven by the serialized LayoutPreview shape (flattened autotile metadata):
- * supportsMemory, reflowsOnResize, supportsScriptState, supportsSingleWindow.
- * Shared by the settings layout grid and the overlay layout card so the badge
- * set stays identical.
+ * supportsMemory, reflowsOnResize, supportsScriptState, supportsSingleWindow,
+ * reflowsOnFocus. Shared by the settings layout grid and the overlay layout card
+ * so the badge set stays identical.
  */
 Row {
     id: root
@@ -26,7 +26,7 @@ Row {
     spacing: Kirigami.Units.smallSpacing
     // Hidden (and space-free in the enclosing positioner) when the layout
     // advertises no capabilities — i.e. every manual layout.
-    visible: layoutData.supportsMemory === true || layoutData.reflowsOnResize === true || layoutData.supportsScriptState === true || layoutData.supportsSingleWindow === true
+    visible: layoutData.supportsMemory === true || layoutData.reflowsOnResize === true || layoutData.supportsScriptState === true || layoutData.supportsSingleWindow === true || layoutData.reflowsOnFocus === true
 
     // Shared icon-badge primitive: a small masked symbolic icon with a hover
     // tooltip. Each instance sets only visible/source/color/text.
@@ -90,5 +90,16 @@ Row {
         color: Kirigami.Theme.activeTextColor
         Accessible.name: i18n("Single-window layout")
         tooltipText: i18n("Lays out a single window itself instead of filling the screen")
+    }
+
+    // Follows-focus indicator for algorithms that rearrange as focus moves
+    // between tiled windows (e.g. a spotlight that brings the focused window
+    // to the center).
+    CapabilityBadge {
+        visible: root.layoutData.reflowsOnFocus === true
+        source: "find-location-symbolic"
+        color: Kirigami.Theme.linkColor
+        Accessible.name: i18n("Follows focus")
+        tooltipText: i18n("Rearranges to follow the focused window")
     }
 }

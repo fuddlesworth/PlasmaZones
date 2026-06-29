@@ -104,6 +104,14 @@ SettingsFlickable {
             "test": a => {
                 return a.supportsSingleWindow === true;
             }
+        },
+        {
+            "key": "reflowsOnFocus",
+            "label": i18n("Follows Focus"),
+            "order": 8,
+            "test": a => {
+                return a.reflowsOnFocus === true;
+            }
         }
     ]
 

@@ -2746,7 +2746,21 @@ void AutotileEngine::onWindowFocused(const QString& windowId)
     // to avoid non-deterministic QHash iteration when multiple screens have focused windows)
     m_activeScreen = m_windowToStateKey.value(windowId).screenId;
 
+    const QString previousFocus = state->focusedWindow();
     state->setFocusedWindow(windowId);
+
+    // Most layouts place a window by its tiled index, so a focus change moves
+    // nothing and there is no reason to recompute. Focus-driven layouts (e.g.
+    // Theater) opt in via retilesOnFocusChange(): reflow when focus actually
+    // moves to a different tiled window so the layout can follow it. Guard on a
+    // real change and on the target being tiled — focusing a floating window
+    // must not disturb the current layout.
+    if (previousFocus != windowId && state->tiledWindows().contains(windowId)) {
+        PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(m_activeScreen);
+        if (algo && algo->retilesOnFocusChange()) {
+            retileAfterOperation(m_activeScreen, true);
+        }
+    }
 }
 
 void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& oldFrame, const QRect& newFrame,

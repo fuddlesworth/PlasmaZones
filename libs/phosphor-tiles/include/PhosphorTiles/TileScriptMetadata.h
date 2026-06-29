@@ -68,6 +68,7 @@ struct ScriptMetadata
     bool centerLayout = false;
     bool supportsSingleWindow = false; ///< Owns the single-window case (else calculateZones() fills the work area)
     bool supportsMinSizes = true; ///< Default true — most algorithms support min sizes
+    bool retileOnFocus = false; ///< Re-run the layout when focus moves between tiled windows (focus-driven layouts)
     QString id; ///< Optional algorithm id (else "script:filename")
     QVector<CustomParamDef> customParams;
 };
