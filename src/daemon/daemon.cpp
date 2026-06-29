@@ -1540,6 +1540,21 @@ bool Daemon::init()
                 }
             });
 
+    // A rule edit that changes the ACTIVE context's resolved assignment (engine
+    // mode / snapping layout / tiling algorithm) must move live windows — resnap
+    // snapping screens, retile autotile screens. The legacy assignment-apply path
+    // (assignmentChangesApplied) only fires for setAssignmentEntry-driven edits,
+    // so rule-driven changes were silently not applied. reconcileActiveAssignments
+    // diffs the per-screen active assignment and drives the same apply path for
+    // the screens that actually changed (a no-op for appearance/exclude/lock
+    // edits, which don't alter the active assignment).
+    connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this](bool /*persisted*/) {
+        reconcileActiveAssignments();
+    });
+    // Prime the snapshot from the initial rule set so the first real rule edit
+    // diffs against the live assignments rather than an empty baseline.
+    diffActiveAssignments();
+
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
     snapEngine->setPersistenceDelegate(
@@ -1856,6 +1871,12 @@ bool Daemon::init()
                         showLayoutOsd(layout, osd.screenId);
                 }
             }
+
+            // Refresh the active-assignment snapshot to what was just applied,
+            // so a later rule edit diffs against reality (this path also runs
+            // for legacy setAssignmentEntry-driven applies, which bypass
+            // reconcileActiveAssignments and would otherwise leave it stale).
+            diffActiveAssignments();
         });
 
     // Register D-Bus service and object with error handling and retry logic

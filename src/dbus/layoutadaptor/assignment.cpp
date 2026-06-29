@@ -731,6 +731,11 @@ void LayoutAdaptor::setSaveBatchMode(bool enabled)
     m_suppressScreenLayoutSignal = enabled;
 }
 
+void LayoutAdaptor::markScreensChanged(const QSet<QString>& screenIds)
+{
+    m_changedScreenIds.unite(screenIds);
+}
+
 void LayoutAdaptor::applyAssignmentChanges()
 {
     QSet<QString> changed = std::move(m_changedScreenIds);

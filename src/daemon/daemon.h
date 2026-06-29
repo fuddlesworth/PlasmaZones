@@ -497,6 +497,30 @@ private:
     void updateAutotileScreens();
 
     /**
+     * @brief React to a rule change that may have altered active assignments.
+     *
+     * The unified rule store emits rulesChanged on any rule edit, but only a
+     * change to the ACTIVE context's resolved assignment needs windows moved.
+     * Diffs each screen's resolved assignment id against the snapshot; for the
+     * screens that changed, retiles autotile screens (updateAutotileScreens
+     * self-diffs) and drives the legacy resnap/OSD path via the LayoutAdaptor
+     * (markScreensChanged + applyAssignmentChanges). A no-op when nothing
+     * assignment-affecting changed (appearance / exclude / lock edits, etc.).
+     */
+    void reconcileActiveAssignments();
+
+    /**
+     * @brief Recompute each effective screen's active assignment id and return
+     *        the set whose id differs from @ref m_activeAssignmentByScreen,
+     *        updating the snapshot to the new values (dropping removed screens).
+     *
+     * Called by reconcileActiveAssignments (with apply) and, with the result
+     * discarded, to refresh the snapshot after a context switch or a legacy
+     * apply so a later rule edit doesn't falsely re-resnap those screens.
+     */
+    QSet<QString> diffActiveAssignments();
+
+    /**
      * @brief Respond to a PhosphorScreens::ScreenManager VS cache change for a physical screen
      *
      * Wired to PhosphorScreens::ScreenManager::virtualScreensChanged. Performs the post-change
@@ -921,6 +945,13 @@ private:
     // Keyed by TilingStateKey (not plain screen name) so cross-desktop toggles
     // don't overwrite each other's ordering.
     QHash<TilingStateKey, QStringList> m_lastAutotileOrders;
+
+    // Last-applied active assignment id per effective screen (resolved for that
+    // screen's current desktop/activity). Diffed on rulesChanged to find the
+    // screens a rule edit actually moved; refreshed on context switches and
+    // after any apply so a later edit doesn't falsely re-resnap. See
+    // reconcileActiveAssignments / diffActiveAssignments.
+    QHash<QString, QString> m_activeAssignmentByScreen;
 
     // Last observed tiled-window count per screen, tracked so the engine's
     // placementChanged stream only re-resolves the per-screen tiling algorithm

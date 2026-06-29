@@ -17,6 +17,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorContext/ContextResolver.h>
 #include "../../config/settings.h"
+#include "../../dbus/layoutadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -220,6 +221,52 @@ void Daemon::updateAutotileScreens()
     }
 
     qCDebug(lcDaemon) << "Updated autotile screens=" << autotileScreens;
+}
+
+QSet<QString> Daemon::diffActiveAssignments()
+{
+    QSet<QString> changed;
+    if (!m_screenManager || !m_layoutManager) {
+        return changed;
+    }
+    const QString activity = currentActivity();
+    QHash<QString, QString> next;
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    next.reserve(effectiveIds.size());
+    for (const QString& screenId : effectiveIds) {
+        // Per-output virtual desktops (#648): each screen resolves its own desktop.
+        const int desktop = currentDesktopForScreen(screenId);
+        // assignmentIdForScreen returns the ACTIVE id (snapping layout uuid, or
+        // "autotile:<algo>"), so this fires only when the visible layout changes
+        // — e.g. a tiling-algorithm edit while the screen is in snapping mode
+        // resolves to the same snapping id and is correctly ignored.
+        const QString id = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        next.insert(screenId, id);
+        if (m_activeAssignmentByScreen.value(screenId) != id) {
+            changed.insert(screenId);
+        }
+    }
+    // Replace wholesale so screens that went away drop out of the snapshot.
+    m_activeAssignmentByScreen = std::move(next);
+    return changed;
+}
+
+void Daemon::reconcileActiveAssignments()
+{
+    const QSet<QString> changed = diffActiveAssignments();
+    if (changed.isEmpty()) {
+        return;
+    }
+    // Autotile screens retile inside updateAutotileScreens() (it self-diffs each
+    // screen's resolved algorithm/overrides). Snapping screens resnap via the
+    // shared legacy apply path: mark the changed screens on the adaptor and
+    // trigger the same assignmentChangesApplied handler the KCM batch uses, so
+    // rule-driven and assignment-driven changes run identical code.
+    updateAutotileScreens();
+    if (m_layoutAdaptor) {
+        m_layoutAdaptor->markScreensChanged(changed);
+        m_layoutAdaptor->applyAssignmentChanges();
+    }
 }
 
 /**
