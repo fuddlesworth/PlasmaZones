@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-FileCopyrightText: 2026 arinl
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../windowdragadaptor.h"
@@ -59,7 +60,6 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         m_overlayService->hideSnapAssist();
     }
 
-    registerCancelOverlayShortcut();
     m_draggedWindowId = windowId;
     m_originalGeometry = QRect(qRound(x), qRound(y), qRound(width), qRound(height));
     m_currentZoneId.clear();
@@ -575,7 +575,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             // Trigger released and re-pressed: clear cancel, resume zone snapping
             m_snapCancelled = false;
             m_triggerReleasedAfterCancel = false;
-            registerCancelOverlayShortcut();
+            // No re-grab: the effect's keyboard grab persists until dragStopped,
+            // so Escape is still caught after a cancel->retrigger. See dragStarted.
             // Fall through to normal processing
         } else {
             return; // Trigger still held from before Escape — stay cancelled

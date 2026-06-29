@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-FileCopyrightText: 2026 arinl
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../windowdragadaptor.h"
@@ -463,9 +464,14 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     }
 
     // Reset drag state for next operation.
-    // If snap assist will be shown, keep the Escape shortcut registered so
-    // KGlobalAccel can still dismiss it (the snap assist window may not have
-    // Wayland keyboard focus yet when the user presses Escape).
+    // Snap assist runs after drag end, once the effect has ungrabbed the
+    // keyboard (at dragStopped), so it needs its own Escape grab to be
+    // dismissable. Register it only when assist will show and keep it across
+    // the reset for onSnapAssistDismissed to release. The drag itself relies on
+    // the effect grab instead (see drag.cpp::dragStarted).
+    if (snapAssistRequestedOut) {
+        registerCancelOverlayShortcut();
+    }
     resetDragState(/*keepEscapeShortcut=*/snapAssistRequestedOut);
 }
 
