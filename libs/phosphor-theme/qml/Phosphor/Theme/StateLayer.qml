@@ -8,8 +8,9 @@
 // reduced-motion accessibility profiles can override the singleton in
 // one place.
 
-import QtQuick
 pragma Singleton
+
+import QtQuick
 
 QtObject {
     // M3 spec values, decimal opacity from 0 to 1.
@@ -21,4 +22,16 @@ QtObject {
     // rather than as a state layer painted over the surface.
     readonly property real disabled_content: 0.38
     readonly property real disabled_container: 0.12
+
+    // Disabled-state tints: the given foreground colour at the M3 disabled
+    // opacity. Pass the colour in (rather than reading a Theme role here) so
+    // the caller's binding still tracks the source colour and retints live
+    // on a palette change. Use disabledContent for text/icons/handles and
+    // disabledContainer for fills/outlines.
+    function disabledContent(color) {
+        return Qt.rgba(color.r, color.g, color.b, disabled_content);
+    }
+    function disabledContainer(color) {
+        return Qt.rgba(color.r, color.g, color.b, disabled_container);
+    }
 }

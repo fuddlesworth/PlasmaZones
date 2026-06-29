@@ -39,6 +39,10 @@ Item {
     // Gate for the whole interaction. A disabled host sets this false:
     // no hover tint, no ripple, no tap.
     property bool interactive: true
+    // Keyboard focus: a host that is activeFocus sets this so the resting
+    // state layer shows the M3 focus tint (the visible focus indicator for
+    // a Tab-focused control).
+    property bool focused: false
     // Corner radius for the resting state-layer overlay. Match the host
     // container's radius so the hover / press tint is rounded.
     property real radius: 0
@@ -73,6 +77,8 @@ Item {
                 return StateLayer.pressed;
             if (hover.hovered)
                 return StateLayer.hover;
+            if (root.focused)
+                return StateLayer.focus;
             return 0;
         }
 

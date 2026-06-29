@@ -32,6 +32,10 @@ FocusScope {
     implicitWidth: 220
     implicitHeight: 48
 
+    // Tab-focusable when enabled; focus lands on the inner TextInput (which
+    // declares focus: true within this scope) so typing works immediately.
+    activeFocusOnTab: enabled
+
     Accessible.role: Accessible.EditableText
     // Announce the entered text once there is any, falling back to the
     // placeholder while empty. Password fields keep the placeholder so the
@@ -39,14 +43,14 @@ FocusScope {
     Accessible.name: (input.text !== "" && input.echoMode === TextInput.Normal) ? input.text : root.placeholderText
 
     readonly property bool _focused: input.activeFocus
-    readonly property color _disabledTint: Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_content)
+    readonly property color _disabledTint: StateLayer.disabledContent(Theme.on_surface)
 
     Rectangle {
         anchors.fill: parent
         radius: Tokens.radius_s
         color: "transparent"
         border.width: root._focused ? 2 : 1
-        border.color: !root.enabled ? Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_container) : (root._focused ? Theme.primary : Theme.outline)
+        border.color: !root.enabled ? StateLayer.disabledContainer(Theme.on_surface) : (root._focused ? Theme.primary : Theme.outline)
 
         Behavior on border.color {
             ColorAnimation {
@@ -65,6 +69,9 @@ FocusScope {
         verticalAlignment: TextInput.AlignVCenter
         clip: true
         enabled: root.enabled
+        // The focused item within the scope, so the field's activeFocusOnTab
+        // delegates Tab focus here.
+        focus: true
         color: root.enabled ? Theme.on_surface : root._disabledTint
         selectionColor: Theme.primary
         selectedTextColor: Theme.on_primary

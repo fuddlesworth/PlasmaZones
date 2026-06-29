@@ -41,11 +41,15 @@ ApplicationWindow {
         function onNotificationAdded(notification) {
             const icon = notification.appIcon;
             const isPath = icon && (icon.indexOf("/") === 0 || icon.indexOf(":") > 0);
+            // Prefer the decoded inline image (image-data hint), served by the
+            // C++ NotificationImageProvider under image://notification/<id>;
+            // fall back to an appIcon path when there's no rich image.
+            const image = notification.hasImage ? ("image://notification/" + notification.id) : (isPath ? icon : "");
             toastHost.show({
                 "appName": notification.appName,
                 "summary": notification.summary,
                 "body": notification.body,
-                "imageSource": isPath ? icon : "",
+                "imageSource": image,
                 "urgency": notification.urgency,
                 // freedesktop: 0 = never expire (sticky), >0 = that many ms,
                 // -1 = "server decides". 0 and explicit values pass through;

@@ -104,6 +104,17 @@ content drop to the M3 disabled opacities (`StateLayer.disabled_container`
   convention: set `value` as the initial position and respond to `moved`
   (dragging writes `value` imperatively, so a one-way `value:` binding does
   not survive interaction). Re-drive `value` from the `moved` handler.
+- **Keyboard and focus.** Every interactive atom is Tab-focusable when
+  enabled (and skipped in the tab order when disabled). `PhosphorButton`
+  and `PhosphorPill` activate on Space / Enter / Return (with a ripple from
+  the centre); `PhosphorSlider` moves on Left/Right/Up/Down by `stepSize`
+  (default a twentieth of the range) and jumps to the ends on Home/End;
+  `PhosphorTextField` delegates focus to its inner input. The focus
+  indicator is the M3 focus state layer (`StateLayer.focus`): the ripple
+  tint on buttons/pills, a halo behind the slider handle, and the existing
+  thickened outline on the text field. Disabled-state tints route through
+  `StateLayer.disabledContent` / `disabledContainer` so the M3 opacities
+  live in one place.
 - **Connected-corner geometry is a path string, not declarative arcs.**
   `ConnectorGeometry.js` builds the outline as an SVG `d` string and
   `ConnectedShape` renders it via `PathSvg`, because a `Shape` cannot

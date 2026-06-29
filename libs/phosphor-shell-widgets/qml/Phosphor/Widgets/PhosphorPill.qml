@@ -35,20 +35,37 @@ Item {
     Accessible.role: Accessible.CheckBox
     Accessible.name: root.text
     Accessible.checked: root.selected
-    Accessible.onPressAction: if (root.enabled) {
+    Accessible.onPressAction: root._activate()
+
+    // Keyboard: Tab-focusable when enabled; Space / Enter / Return toggle it
+    // (with a ripple from the centre), matching the pointer path.
+    activeFocusOnTab: enabled
+    Keys.onSpacePressed: event => root._activateFromKey(event)
+    Keys.onReturnPressed: event => root._activateFromKey(event)
+    Keys.onEnterPressed: event => root._activateFromKey(event)
+
+    function _activate() {
+        if (!root.enabled)
+            return;
         root.clicked();
         root.toggled();
+    }
+    function _activateFromKey(event) {
+        if (event.isAutoRepeat || !root.enabled)
+            return;
+        ripple.start(root.width / 2, root.height / 2);
+        root._activate();
     }
 
     readonly property color _container: {
         if (!enabled)
-            return Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_container);
+            return StateLayer.disabledContainer(Theme.on_surface);
         return selected ? Theme.secondary_container : "transparent";
     }
 
     readonly property color _content: {
         if (!enabled)
-            return Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_content);
+            return StateLayer.disabledContent(Theme.on_surface);
         return selected ? Theme.on_surface : Theme.on_surface_variant;
     }
 
@@ -69,14 +86,14 @@ Item {
         }
 
         PhosphorRipple {
+            id: ripple
+
             anchors.fill: parent
             radius: parent.radius
             interactive: root.enabled
+            focused: root.activeFocus
             rippleColor: root._content
-            onTapped: {
-                root.clicked();
-                root.toggled();
-            }
+            onTapped: root._activate()
         }
     }
 

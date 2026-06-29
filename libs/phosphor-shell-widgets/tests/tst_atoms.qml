@@ -140,6 +140,72 @@ TestCase {
         compare(e.shadowEnabled, false, "level 0 disables the shadow");
     }
 
+    function test_button_space_and_enter_activate() {
+        const b = createTemporaryObject(buttonComp, testCase, {
+            "text": "Go"
+        });
+        const spy = signalSpyComp.createObject(testCase, {
+            "target": b,
+            "signalName": "clicked"
+        });
+        b.forceActiveFocus();
+        verify(b.activeFocus, "button takes keyboard focus");
+        keyClick(Qt.Key_Space);
+        compare(spy.count, 1, "Space activates the button");
+        keyClick(Qt.Key_Return);
+        compare(spy.count, 2, "Return activates the button");
+    }
+
+    function test_disabled_button_skips_tab_order() {
+        const b = createTemporaryObject(buttonComp, testCase, {
+            "enabled": false
+        });
+        compare(b.activeFocusOnTab, false, "a disabled button is not Tab-focusable");
+    }
+
+    function test_pill_space_toggles() {
+        const p = createTemporaryObject(pillComp, testCase, {
+            "text": "Wi-Fi"
+        });
+        const clickSpy = signalSpyComp.createObject(testCase, {
+            "target": p,
+            "signalName": "clicked"
+        });
+        const toggleSpy = signalSpyComp.createObject(testCase, {
+            "target": p,
+            "signalName": "toggled"
+        });
+        p.forceActiveFocus();
+        keyClick(Qt.Key_Space);
+        compare(clickSpy.count, 1, "Space emits clicked");
+        compare(toggleSpy.count, 1, "Space emits toggled");
+    }
+
+    function test_slider_arrow_keys_move_value() {
+        const s = createTemporaryObject(sliderComp, testCase, {
+            "from": 0,
+            "to": 100,
+            "value": 50,
+            "width": 200
+        });
+        const spy = signalSpyComp.createObject(testCase, {
+            "target": s,
+            "signalName": "moved"
+        });
+        s.forceActiveFocus();
+        verify(s.activeFocus, "slider takes keyboard focus");
+        compare(s._step, 5, "default step is a twentieth of the range");
+        keyClick(Qt.Key_Right);
+        compare(s.value, 55, "Right arrow nudges up one step");
+        compare(spy.count, 1, "moved emitted on the arrow nudge");
+        keyClick(Qt.Key_Left);
+        compare(s.value, 50, "Left arrow nudges down one step");
+        keyClick(Qt.Key_Home);
+        compare(s.value, 0, "Home jumps to from");
+        keyClick(Qt.Key_End);
+        compare(s.value, 100, "End jumps to to");
+    }
+
     Component {
         id: signalSpyComp
 

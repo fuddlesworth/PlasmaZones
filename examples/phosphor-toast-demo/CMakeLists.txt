@@ -41,6 +41,7 @@ target_compile_features(phosphor_toast_demo_qml PRIVATE cxx_std_20)
 
 add_executable(phosphor-toast-demo
     main.cpp
+    NotificationImageProvider.h
 )
 
 target_compile_features(phosphor-toast-demo PRIVATE cxx_std_20)

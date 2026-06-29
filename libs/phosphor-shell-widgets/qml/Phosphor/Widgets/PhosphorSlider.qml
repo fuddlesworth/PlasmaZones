@@ -24,13 +24,59 @@ Item {
     property real from: 0
     property real to: 1
     property real value: 0
+    // Arrow-key step. 0 means "derive a sensible default" (a twentieth of
+    // the range), so a keyboard user gets reasonable increments without the
+    // host having to set one per range.
+    property real stepSize: 0
 
-    // Emitted with the new value on every user-driven change (drag or
-    // track tap), not on programmatic `value` assignments.
+    // Emitted with the new value on every user-driven change (drag, track
+    // tap, or arrow key), not on programmatic `value` assignments.
     signal moved(real value)
 
     implicitWidth: 200
     implicitHeight: 40
+
+    readonly property real _step: stepSize > 0 ? stepSize : (to - from) / 20
+
+    // Keyboard: Tab-focusable when enabled; Left/Down nudge down, Right/Up
+    // nudge up, Home/End jump to the ends.
+    activeFocusOnTab: enabled
+    Keys.onPressed: event => {
+        if (!root.enabled)
+            return;
+        switch (event.key) {
+        case Qt.Key_Left:
+        case Qt.Key_Down:
+            root._setValue(root.value - root._step);
+            event.accepted = true;
+            break;
+        case Qt.Key_Right:
+        case Qt.Key_Up:
+            root._setValue(root.value + root._step);
+            event.accepted = true;
+            break;
+        case Qt.Key_Home:
+            root._setValue(root.from);
+            event.accepted = true;
+            break;
+        case Qt.Key_End:
+            root._setValue(root.to);
+            event.accepted = true;
+            break;
+        }
+    }
+
+    // Clamp to [from, to] and emit moved() only on a real change. Shared by
+    // the keyboard path; pointer drag/tap go through _setFromX.
+    function _setValue(v) {
+        if (to <= from)
+            return;
+        const clamped = Math.max(from, Math.min(to, v));
+        if (clamped !== value) {
+            value = clamped;
+            moved(clamped);
+        }
+    }
 
     Accessible.role: Accessible.Slider
     // Include the value in the name: QML's Accessible attached type exposes
@@ -63,7 +109,7 @@ Item {
         }
     }
 
-    readonly property color _disabledTint: Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_content)
+    readonly property color _disabledTint: StateLayer.disabledContent(Theme.on_surface)
 
     // Inactive track.
     Rectangle {
@@ -72,7 +118,7 @@ Item {
         width: root._trackWidth
         height: 4
         radius: height / 2
-        color: root.enabled ? Theme.surface_variant : Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_container)
+        color: root.enabled ? Theme.surface_variant : StateLayer.disabledContainer(Theme.on_surface)
     }
 
     // Active (filled) track.
@@ -83,6 +129,25 @@ Item {
         height: 4
         radius: height / 2
         color: root.enabled ? Theme.primary : root._disabledTint
+    }
+
+    // Focus halo behind the handle: the M3 focus indicator when the slider
+    // is reached by Tab. Declared before the handle so it paints behind it.
+    Rectangle {
+        anchors.centerIn: handle
+        width: handle.width + 2 * Tokens.spacing_s
+        height: width
+        radius: width / 2
+        color: Theme.primary
+        opacity: root.activeFocus ? StateLayer.focus : 0
+        visible: opacity > 0
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Motion.duration_short_2
+                easing: Motion.standard
+            }
+        }
     }
 
     Rectangle {

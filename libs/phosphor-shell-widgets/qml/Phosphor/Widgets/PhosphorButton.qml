@@ -44,6 +44,20 @@ Item {
     Accessible.onPressAction: if (root.enabled)
         root.clicked()
 
+    // Keyboard: Tab-focusable when enabled; Space / Enter / Return activate
+    // it (with a ripple from the centre), matching the pointer path.
+    activeFocusOnTab: enabled
+    Keys.onSpacePressed: event => root._activateFromKey(event)
+    Keys.onReturnPressed: event => root._activateFromKey(event)
+    Keys.onEnterPressed: event => root._activateFromKey(event)
+
+    function _activateFromKey(event) {
+        if (event.isAutoRepeat || !root.enabled)
+            return;
+        ripple.start(root.width / 2, root.height / 2);
+        root.clicked();
+    }
+
     // True for the two variants that paint a filled container; false for
     // Outlined / Text, which sit on transparent.
     readonly property bool _hasContainer: variant === PhosphorButton.Filled || variant === PhosphorButton.Tonal
@@ -53,7 +67,7 @@ Item {
     // stay transparent.
     readonly property color _container: {
         if (!enabled)
-            return _hasContainer ? Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_container) : "transparent";
+            return _hasContainer ? StateLayer.disabledContainer(Theme.on_surface) : "transparent";
         switch (variant) {
         case PhosphorButton.Filled:
             return Theme.primary;
@@ -68,7 +82,7 @@ Item {
     // disabled-content opacity regardless of variant.
     readonly property color _content: {
         if (!enabled)
-            return Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_content);
+            return StateLayer.disabledContent(Theme.on_surface);
         switch (variant) {
         case PhosphorButton.Filled:
             return Theme.on_primary;
@@ -88,7 +102,7 @@ Item {
         // Outlined keeps its outline when disabled, at the M3 disabled
         // opacity, rather than vanishing to a borderless invisible box.
         border.width: root.variant === PhosphorButton.Outlined ? 1 : 0
-        border.color: root.enabled ? Theme.outline : Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_container)
+        border.color: root.enabled ? Theme.outline : StateLayer.disabledContainer(Theme.on_surface)
 
         Behavior on color {
             ColorAnimation {
@@ -98,9 +112,12 @@ Item {
         }
 
         PhosphorRipple {
+            id: ripple
+
             anchors.fill: parent
             radius: parent.radius
             interactive: root.enabled
+            focused: root.activeFocus
             rippleColor: root._content
             onTapped: root.clicked()
         }
