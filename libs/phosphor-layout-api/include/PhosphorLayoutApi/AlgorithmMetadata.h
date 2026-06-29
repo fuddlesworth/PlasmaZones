@@ -114,8 +114,8 @@ struct AlgorithmMetadata
     bool supportsScriptState = false;
 
     /// True when the algorithm lays out the single-window case itself (centers
-    /// or sizes a lone window) rather than letting the engine fill the work
-    /// area. Picker surfaces a "single-window layout" filter/indicator.
+    /// or sizes a lone window) rather than having the work area filled for a lone
+    /// window. Picker surfaces a "single-window layout" filter/indicator.
     bool supportsSingleWindow = false;
 
     /// True when the algorithm is loaded from a Luau script file rather than

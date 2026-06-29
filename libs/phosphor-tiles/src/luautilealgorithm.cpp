@@ -617,9 +617,9 @@ QVector<QRect> LuauTileAlgorithm::calculateZones(const TilingParams& params) con
         }
         return zones;
     }
-    // The engine fills the work area for a lone window unless the algorithm
-    // opts into laying out the single-window case itself (e.g. a centered-single
-    // layout). Opted-in scripts get tile() called with windowCount == 1.
+    // Fill the work area for a lone window unless the algorithm opts into laying
+    // out the single-window case itself (e.g. a centered-single layout). Opted-in
+    // scripts get tile() called with windowCount == 1.
     if (params.windowCount == 1 && !m_metadata.supportsSingleWindow) {
         return {area};
     }
