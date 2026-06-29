@@ -266,6 +266,11 @@ void Daemon::connectDesktopActivity()
                 }
                 // OSD on the ONE screen that switched (#648).
                 showDesktopSwitchOsdForScreen(screenId, currentActivity());
+                // A context switch lays out its own (different) windows, so
+                // refresh the active-assignment snapshot without applying —
+                // otherwise the next rule edit would diff the new-context
+                // assignment against the old and falsely re-resnap this screen.
+                diffActiveAssignments();
             });
 
     // Prune stale PhosphorTiles::TilingState entries and disabled-desktop numbers when desktops are removed
@@ -395,6 +400,11 @@ void Daemon::connectDesktopActivity()
                     }
 
                     showDesktopSwitchOsd(activityId);
+                    // Refresh the active-assignment snapshot for the new activity
+                    // context (no apply — the switch handles its own windows) so a
+                    // later rule edit doesn't falsely re-resnap. Mirrors the
+                    // per-screen desktop-switch handler above.
+                    diffActiveAssignments();
                 });
     }
 }
