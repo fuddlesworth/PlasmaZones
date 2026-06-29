@@ -460,12 +460,23 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // read would describe the new desktop's occupancy instead of the
         // desktop the user actually dropped on.
         m_snapAssistPendingDesktop = m_layoutManager->currentVirtualDesktopForScreen(releaseScreenId);
+        // Bind the KGlobalAccel Escape grab for the snap-assist phase. The
+        // drag itself relied on the kwin-effect's keyboard grab, which the
+        // effect releases on dragStopped — so the post-drop snap-assist UI
+        // (which may not yet hold Wayland keyboard focus) has no Escape
+        // handler unless we bind one now. This is the only spot that pays a
+        // kglobalshortcutsrc write, and only when snap assist actually
+        // appears, not on every drag (discussion #167). onSnapAssistDismissed
+        // releases it again when the snap-assist UI goes away.
+        registerCancelOverlayShortcut();
     }
 
-    // Reset drag state for next operation.
-    // If snap assist will be shown, keep the Escape shortcut registered so
-    // KGlobalAccel can still dismiss it (the snap assist window may not have
-    // Wayland keyboard focus yet when the user presses Escape).
+    // Reset drag state for next operation. keepEscapeShortcut is true exactly
+    // when snap assist was requested above (and the grab was just bound), so
+    // resetDragState skips the unregister and the snap-assist phase keeps its
+    // Escape handler. When snap assist is not requested nothing was bound, so
+    // the unregister on the false path is a no-op (Registry::unbind ignores
+    // unknown ids).
     resetDragState(/*keepEscapeShortcut=*/snapAssistRequestedOut);
 }
 

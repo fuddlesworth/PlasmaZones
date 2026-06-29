@@ -77,12 +77,16 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZ
                 onLayoutChanged();
             });
 
-    // Escape shortcut to cancel overlay during drag: bound into the Registry
-    // on drag start (see registerCancelOverlayShortcut) and released on end
-    // so the global Escape grab doesn't persist between drags.
+    // Escape-to-cancel during a drag is handled by the kwin-effect's keyboard
+    // grab (grabbedKeyboardEvent -> callCancelSnap), not by a KGlobalAccel
+    // binding — binding one per drag forced kwin to fsync kglobalshortcutsrc
+    // at drag start/end and stuttered the compositor on slow disks (#167). The
+    // kCancelOverlayId grab below is bound only for the grab-less snap-assist
+    // phase (endDrag's requestSnapAssist branch) and the layout picker
+    // (start.cpp), and released via onSnapAssistDismissed / the picker path.
 
     // When snap assist is dismissed (selection, timeout, etc.), unregister the Escape shortcut
-    // that was kept alive during dragStopped() for the snap assist phase
+    // that endDrag bound for the snap assist phase
     connect(overlay, &IOverlayService::snapAssistDismissed, this, &WindowDragAdaptor::onSnapAssistDismissed);
 }
 
@@ -744,8 +748,8 @@ void WindowDragAdaptor::onSnapAssistDismissed()
     // The Escape grab (kCancelOverlayId) is shared with two other consumers
     // that piggy-back on the same id (so KGlobalAccel routes to a single
     // action — see registerCancelOverlayShortcut's docstring): the layout
-    // picker (registered by start.cpp on layoutPickerRequested) and any
-    // active drag (registered by registerCancelOverlayShortcut on dragStarted).
+    // picker (registered by start.cpp on layoutPickerRequested) and the
+    // snap-assist phase (registered by endDrag when it requests snap assist).
     // Releasing here unconditionally tears the grab out from under those
     // consumers — picker-still-up after a snap-assist auto-dismiss would
     // become un-Escape-able, and the same applies if the daemon thinks a
