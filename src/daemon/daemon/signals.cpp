@@ -931,6 +931,11 @@ void Daemon::finalizeStartup()
             });
         }
     }
+
+    // Prime the active-assignment snapshot now that screens and initial layouts
+    // are applied, so the first rule edit diffs against the live assignments
+    // (not an empty baseline, which would resnap every screen once).
+    diffActiveAssignments();
 }
 
 void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, const QString& screenId)
