@@ -129,36 +129,6 @@ PhosphorUi.AboutPageShell {
         }
     ]
 
-    // ── Daemon enable/disable toggle, anchored above the header ──
-    topContent: Component {
-        RowLayout {
-            spacing: Kirigami.Units.smallSpacing
-
-            Label {
-                text: i18n("Enable PlasmaZones")
-                font.weight: Font.DemiBold
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            Label {
-                text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
-                opacity: 0.7
-            }
-
-            SettingsSwitch {
-                checked: settingsController.daemonRunning
-                enabled: !settingsController.daemonController.busy
-                onToggled: function (newValue) {
-                    settingsController.daemonController.setEnabled(newValue);
-                }
-                accessibleName: i18n("Enable PlasmaZones")
-            }
-        }
-    }
-
     component LinkButton: Button {
         id: linkButton
 
