@@ -53,9 +53,6 @@ constexpr QLatin1String Height{"height"};
 constexpr QLatin1String ZoneNumber{"zoneNumber"};
 
 // Per-algorithm (flat under the same top-level object — see header comment).
-// Note: the historical `isSystemEntry` key is emitted alongside `isSystem`
-// for one release cycle (back-compat alias) — drop `isSystemEntry` in a
-// subsequent release. Both keys carry the same resolved boolean.
 constexpr QLatin1String SupportsMasterCount{"supportsMasterCount"};
 constexpr QLatin1String SupportsSplitRatio{"supportsSplitRatio"};
 constexpr QLatin1String ProducesOverlappingZones{"producesOverlappingZones"};
