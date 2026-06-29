@@ -1472,17 +1472,12 @@ void AutotileEngine::refreshConfigFromSettings()
     previewParams.maxWindows = m_config->maxWindows;
     previewParams.masterCount = m_config->masterCount;
     previewParams.splitRatio = m_config->splitRatio;
-    for (auto it = m_config->savedAlgorithmSettings.constBegin(); it != m_config->savedAlgorithmSettings.constEnd();
-         ++it) {
-        QVariantMap entry{
-            {PhosphorTiles::AutotileJsonKeys::MasterCount, it.value().masterCount},
-            {PhosphorTiles::AutotileJsonKeys::SplitRatio, it.value().splitRatio},
-            {PhosphorTiles::AutotileJsonKeys::MaxWindows, it.value().maxWindows},
-        };
-        if (!it.value().customParams.isEmpty()) {
-            entry[PhosphorTiles::AutotileJsonKeys::CustomParams] = it.value().customParams;
-        }
-        previewParams.savedAlgorithmSettings[it.key()] = entry;
+    // Reuse the canonical serializer so the per-algorithm preview entries can't
+    // drift from the on-disk form (every saved field, incl. maxWindows, in one
+    // place).
+    const QVariantMap serialized = AutotileConfig::perAlgoToVariantMap(m_config->savedAlgorithmSettings);
+    for (auto it = serialized.constBegin(); it != serialized.constEnd(); ++it) {
+        previewParams.savedAlgorithmSettings.insert(it.key(), it.value().toMap());
     }
     if (auto* reg = algorithmRegistry()) {
         reg->setPreviewParams(previewParams);

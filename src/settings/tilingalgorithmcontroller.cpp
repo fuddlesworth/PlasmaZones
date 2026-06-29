@@ -281,29 +281,30 @@ QVariantMap TilingAlgorithmController::algorithmSettingsFor(const QString& algor
     // ok=true for both int- and double-typed QVariants (the JSON backend may
     // return either) and ok=false for missing or non-numeric entries, in which
     // case the seeded default is kept rather than collapsing to 0 (mirrors
-    // customParamsForAlgorithm's `ok` guard). Integer fields round back.
+    // customParamsForAlgorithm's `ok` guard). Clamp each saved value in the
+    // double domain BEFORE narrowing to int — a hand-edited out-of-int-range
+    // value would otherwise hit undefined behaviour in the double→int cast. The
+    // seeded defaults are already in range, so clamping only the saved value is
+    // sufficient.
     const QVariantMap entry = m_settings->autotilePerAlgorithmSettings().value(algorithmId).toMap();
     bool ok = false;
     const qreal srSaved = entry.value(PhosphorTiles::AutotileJsonKeys::SplitRatio).toDouble(&ok);
     if (ok)
-        splitRatio = srSaved;
+        splitRatio =
+            std::clamp(srSaved, ConfigDefaults::autotileSplitRatioMin(), ConfigDefaults::autotileSplitRatioMax());
     const qreal mcSaved = entry.value(PhosphorTiles::AutotileJsonKeys::MasterCount).toDouble(&ok);
     if (ok)
-        masterCount = qRound(mcSaved);
+        masterCount = qRound(std::clamp(mcSaved, qreal(ConfigDefaults::autotileMasterCountMin()),
+                                        qreal(ConfigDefaults::autotileMasterCountMax())));
     const qreal mwSaved = entry.value(PhosphorTiles::AutotileJsonKeys::MaxWindows).toDouble(&ok);
     if (ok)
-        maxWindows = qRound(mwSaved);
+        maxWindows = qRound(std::clamp(mwSaved, qreal(ConfigDefaults::autotileMaxWindowsMin()),
+                                       qreal(ConfigDefaults::autotileMaxWindowsMax())));
 
-    // Clamp the read-back values, mirroring customParamsForAlgorithm: a stale
-    // or hand-edited on-disk value outside the current bounds must not reach
-    // the QML slider or the live preview.
     QVariantMap result;
-    result[PhosphorTiles::AutotileJsonKeys::SplitRatio] =
-        std::clamp(splitRatio, ConfigDefaults::autotileSplitRatioMin(), ConfigDefaults::autotileSplitRatioMax());
-    result[PhosphorTiles::AutotileJsonKeys::MasterCount] =
-        std::clamp(masterCount, ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax());
-    result[PhosphorTiles::AutotileJsonKeys::MaxWindows] =
-        std::clamp(maxWindows, ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax());
+    result[PhosphorTiles::AutotileJsonKeys::SplitRatio] = splitRatio;
+    result[PhosphorTiles::AutotileJsonKeys::MasterCount] = masterCount;
+    result[PhosphorTiles::AutotileJsonKeys::MaxWindows] = maxWindows;
     return result;
 }
 
