@@ -61,7 +61,7 @@ Item {
     Rectangle {
         visible: toast.urgency >= 2
         width: Tokens.spacing_xs
-        radius: 2
+        radius: width / 2
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom

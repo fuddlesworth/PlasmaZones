@@ -9,7 +9,7 @@
 // live in one place.
 //
 //   OSDCard {
-//       label: i18n("Volume")
+//       label: qsTr("Volume")
 //       showProgress: true
 //       progress: value / 100
 //       icon: Component { /* glyph */ }
