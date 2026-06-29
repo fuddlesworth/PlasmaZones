@@ -300,6 +300,12 @@ target_link_libraries(test_migration_v4_to_v5
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
 add_test(NAME test_migration_v4_to_v5 COMMAND test_migration_v4_to_v5)
 
+# v5 → v6 provider-default removal (rule precedence becomes pure priority).
+add_executable(test_migration_v5_to_v6 config/test_migration_v5_to_v6.cpp)
+target_link_libraries(test_migration_v5_to_v6
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v5_to_v6 COMMAND test_migration_v5_to_v6)
+
 # RuleStore — daemon-side rules.json persistence + mutation API.
 add_executable(test_rule_store config/test_rule_store.cpp)
 target_link_libraries(test_rule_store

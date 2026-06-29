@@ -15,9 +15,8 @@ import "SearchAnchorHelpers.js" as SearchAnchors
  * Hosts one rule-section's rows, shown highest priority first. Each row can
  * independently expand its WHEN/THEN preview, and rows can be reordered by
  * dragging the grip handle column or by Alt+Up / Alt+Down on a focused row.
- * A drop sets the rule's precedence via `controller.placeRuleByPriority(movedId,
- * beforeId)`: among ordinary band rules that reorders the model; across a pinned
- * rule it assigns an explicit pinned priority so the rule can outrank it. The
+ * A drop reorders the model via `controller.moveRule(movedId, beforeId)`, which
+ * renormalizes priorities so list order maps onto evaluation order. The
  * resulting `dataChanged`/`rowsMoved` is what `RulesPage` listens for to rebuild
  * and re-sort its bucketed `sectionModel`.
  *
@@ -160,10 +159,10 @@ Item {
             required property var modelData
             required property int index
 
-            // Managed System rules and the provider-default catch-all have a
-            // fixed precedence (INT_MIN / 0), so they show no drag affordance —
-            // the controller rejects reordering them anyway.
-            readonly property bool reorderable: modelData.managed !== true && modelData.isProviderDefault !== true
+            // Managed System rules have a fixed precedence (INT_MIN), so they
+            // show no drag affordance — the controller rejects reordering them
+            // anyway.
+            readonly property bool reorderable: modelData.managed !== true
 
             readonly property real baseY: root.cumulativeY(index)
             // Cascade displacement = ± the dragged row's own height
@@ -268,7 +267,7 @@ Item {
                 } else {
                     beforeId = rulesSnapshot[to].ruleId;
                 }
-                root.controller.placeRuleByPriority(movedId, beforeId);
+                root.controller.moveRule(movedId, beforeId);
             }
 
             RowLayout {
@@ -372,7 +371,7 @@ Item {
                                 } else {
                                     beforeId = rulesSnapshot[to].ruleId;
                                 }
-                                root.controller.placeRuleByPriority(movedId, beforeId);
+                                root.controller.moveRule(movedId, beforeId);
                             }
                         }
                         onPositionChanged: {

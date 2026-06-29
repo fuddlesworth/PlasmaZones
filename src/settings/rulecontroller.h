@@ -230,15 +230,12 @@ public:
     /// Toggle the enabled flag of the rule with @p ruleId.
     Q_INVOKABLE bool setRuleEnabled(const QString& ruleId, bool enabled);
 
-    /// Drag-to-set-precedence: place @p movedId at the drop slot, where it lands
-    /// immediately above @p beforeRuleId (empty = section bottom) in the
-    /// priority-sorted section order. If both drop neighbours are ordinary band
-    /// rules it reorders the model (the rule stays a band rule); if a neighbour
-    /// is pinned (a cascade value, the provider-default, or a prior drag-pin) it
-    /// assigns @p movedId an explicit integer between the neighbours and pins it,
-    /// so it can outrank a pinned rule. Managed and provider-default rules are
-    /// rejected. Returns false on a rejected or no-op move.
-    Q_INVOKABLE bool placeRuleByPriority(const QString& movedId, const QString& beforeRuleId);
+    /// Reorder @p ruleId to sit immediately before @p beforeRuleId (an empty
+    /// @p beforeRuleId drops it at the end), then renormalize priorities so
+    /// list order maps onto evaluation order. Returns false on a rejected
+    /// (unknown id) move and true on success — including a no-op drop back to
+    /// the same slot, which leaves the dirty flag untouched.
+    Q_INVOKABLE bool moveRule(const QString& ruleId, const QString& beforeRuleId);
 
     /// The rule with @p ruleId as a JSON map, or an empty map if absent.
     Q_INVOKABLE QVariantMap ruleJson(const QString& ruleId) const;
@@ -417,18 +414,6 @@ private:
     /// by scaling rather than flattening: animation/application rules are
     /// list-ordered, context rules keep their derived bands.
     void renormalizePriorities();
-
-    /// Reorder @p movedUuid to sit just before @p beforeUuid in the model and
-    /// renormalize, so it becomes an ordinary band rule at the new list
-    /// position. The band-rule path of placeRuleByPriority. Returns false on a
-    /// model-level failure; true (no-op) when the drop changed nothing.
-    bool reorderRuleToBand(const QUuid& movedUuid, const QUuid& beforeUuid);
-
-    /// The provider-default catch-all assignment rule (unmanaged, empty-All{}
-    /// match, pinned at priority 0). It is the resolver's gated floor and is
-    /// never reordered by a drag. Shared by placeRuleByPriority (rejection) and
-    /// rulesSnapshot (the `isProviderDefault` field that suppresses its grip).
-    static bool isProviderDefaultRule(const PhosphorRules::Rule& rule);
 
     RuleModel m_model;
     bool m_dirty = false;

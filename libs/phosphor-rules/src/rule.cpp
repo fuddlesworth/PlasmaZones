@@ -19,7 +19,6 @@ constexpr QLatin1StringView kKeyPriority{"priority"};
 constexpr QLatin1StringView kKeyMatch{"match"};
 constexpr QLatin1StringView kKeyActions{"actions"};
 constexpr QLatin1StringView kKeyManaged{"managed"};
-constexpr QLatin1StringView kKeyPinnedPriority{"pinnedPriority"};
 
 } // namespace
 
@@ -122,8 +121,7 @@ QList<ValidationIssue> Rule::validationIssues() const
 bool Rule::operator==(const Rule& other) const
 {
     return id == other.id && name == other.name && enabled == other.enabled && priority == other.priority
-        && match == other.match && actions == other.actions && managed == other.managed
-        && pinnedPriority == other.pinnedPriority;
+        && match == other.match && actions == other.actions && managed == other.managed;
 }
 
 QJsonObject Rule::toJson() const
@@ -147,11 +145,6 @@ QJsonObject Rule::toJson() const
     if (managed) {
         o.insert(kKeyManaged, true);
     }
-    // Same omit-when-false treatment as `managed`: only pinned rules carry the
-    // key, so user rules stay byte-identical and its absence loads as false.
-    if (pinnedPriority) {
-        o.insert(kKeyPinnedPriority, true);
-    }
     return o;
 }
 
@@ -169,7 +162,6 @@ std::optional<Rule> Rule::fromJson(const QJsonObject& obj)
     rule.enabled = obj.value(kKeyEnabled).toBool(true);
     rule.priority = obj.value(kKeyPriority).toInt(0);
     rule.managed = obj.value(kKeyManaged).toBool(false);
-    rule.pinnedPriority = obj.value(kKeyPinnedPriority).toBool(false);
 
     const QJsonValue matchValue = obj.value(kKeyMatch);
     if (!matchValue.isObject()) {

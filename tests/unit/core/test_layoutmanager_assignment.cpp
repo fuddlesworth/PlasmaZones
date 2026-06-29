@@ -73,8 +73,7 @@ private:
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("test-default-assignment");
         rule.enabled = true;
-        rule.priority =
-            PWR::ContextRuleBridge::contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
+        rule.priority = PWR::ContextRuleBridge::kContextBandBase;
         rule.match = PWR::ContextRuleBridge::makeContextMatch(screenId, virtualDesktop, activity);
 
         PWR::RuleAction action;
@@ -94,7 +93,8 @@ private:
         auto* store = mgr->findChild<PWR::RuleStore*>();
         QVERIFY(store != nullptr);
         const PWR::Rule rule = PWR::ContextRuleBridge::makeAssignmentRule(
-            QStringLiteral("test-mode"), screenId, virtualDesktop, activity, modeToken, QString(), QString());
+            QStringLiteral("test-mode"), screenId, virtualDesktop, activity, modeToken, QString(), QString(),
+            PWR::ContextRuleBridge::kContextBandBase);
         QVERIFY(store->addRule(rule));
     }
 
@@ -139,16 +139,17 @@ private Q_SLOTS:
         const auto roundTripped = mgr->combinedAssignments();
         QCOMPARE(roundTripped, combined);
 
-        // Cascade-resolution check: the rebuilt Combined rule must resolve
-        // through the live cascade at its (screen, desktop, activity) tuple.
-        // A regression that mis-builds the rule with a transposed-arg
-        // signature would still produce a hash-equal projection (because
-        // the reader re-reads from the same wrong tuple); this assertion
-        // catches that class of bug.
+        // Resolution check at the (screen, desktop, activity) tuple. Precedence
+        // is plain priority now (no specificity): both the Combined rule
+        // (DP-1, 3, work → LayoutA) and the broader Activity rule (DP-1, work →
+        // LayoutB) match this query, and the Activity rule was authored later so
+        // it seeded a higher priority and wins. The transposed-arg regression
+        // this used to guard is still caught by the round-trip hash equality
+        // above (a mis-built Combined rule reads back a different key).
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 3, QStringLiteral("work"))->name(),
-                 QStringLiteral("LayoutA"));
+                 QStringLiteral("LayoutB"));
 
-        // The pure-Activity rule survives untouched.
+        // The pure-Activity rule resolves at a desktop with no Combined entry.
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 1, QStringLiteral("work"))->name(),
                  QStringLiteral("LayoutB"));
         // The pure-Desktop rule survives untouched.

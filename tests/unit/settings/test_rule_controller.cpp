@@ -55,15 +55,7 @@ private Q_SLOTS:
     void monitorOverviewLockPriorityResolution();
     void engineModePickerExposesAllVocabularyTokens();
     void userAuthorableFilterHidesInternalActions();
-    void placeAmongBandReorders();
-    void renormalizeSkipsPinnedPriority();
-    void explicitPriorityEditPins();
-    void placeAbovePinnedWins();
-    void placeBetweenPinnedTiers();
-    void placeNoGapNudges();
-    void placeKeepsProviderDefaultAtZero();
-    void placeRejectsProviderDefault();
-    void renormalizePreservesPinnedPlacement();
+    void moveRuleReorders();
     void authoringMetadata();
     void inputHints();
     void templatesProduceSeededRules();
@@ -717,7 +709,7 @@ void TestRuleController::userAuthorableFilterHidesInternalActions()
     // RegistryGuard's dtor handles cleanup.
 }
 
-void TestRuleController::placeAmongBandReorders()
+void TestRuleController::moveRuleReorders()
 {
     RuleController controller;
 
@@ -735,207 +727,18 @@ void TestRuleController::placeAmongBandReorders()
     const QString c = makeApp(QStringLiteral("c"));
     QVERIFY(!a.isEmpty() && !b.isEmpty() && !c.isEmpty());
 
-    // All three are ordinary band rules (no pinned neighbour), so placing C
-    // above A is a pure model reorder → order becomes C, A, B.
-    QVERIFY(controller.placeRuleByPriority(c, a));
+    // Moving C above A is a pure list-order reorder, renormalized so list order
+    // maps onto priority order: the list becomes C, A, B.
+    QVERIFY(controller.moveRule(c, a));
     RuleModel* model = controller.model();
     QCOMPARE(model->index(0, 0).data(RuleModel::IdRole).toString(), c);
     QCOMPARE(model->index(1, 0).data(RuleModel::IdRole).toString(), a);
     QCOMPARE(model->index(2, 0).data(RuleModel::IdRole).toString(), b);
 
-    // Earlier list index ⇒ higher priority, and the band reorder does NOT pin —
-    // C stays an ordinary band rule.
+    // Earlier list index maps to higher priority within the band.
     const int prioFirst = model->index(0, 0).data(RuleModel::PriorityRole).toInt();
     const int prioLast = model->index(2, 0).data(RuleModel::PriorityRole).toInt();
     QVERIFY(prioFirst > prioLast);
-    QVERIFY(!controller.ruleJson(c).value(QStringLiteral("pinnedPriority")).toBool());
-}
-
-namespace {
-// Build an application-rule map carrying an explicit priority and optional pin,
-// mirroring the shape a ContextRuleBridge cascade rule has once it reaches the
-// controller's model.
-QVariantMap appRuleMap(RuleController& controller, const QString& appId, int priority, bool pinned)
-{
-    QVariantMap rule = controller.newEmptyRule(QStringLiteral("application"));
-    QVariantMap match = rule.value(QStringLiteral("match")).toMap();
-    match[QStringLiteral("value")] = appId;
-    rule[QStringLiteral("match")] = match;
-    rule[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
-    if (priority >= 0) {
-        rule[QStringLiteral("priority")] = priority;
-    }
-    if (pinned) {
-        rule[QStringLiteral("pinnedPriority")] = true;
-    }
-    return rule;
-}
-
-// The provider-default catch-all: an empty-All{} match, priority 0, pinned.
-QVariantMap providerDefaultMap()
-{
-    QVariantMap rule;
-    rule[QStringLiteral("match")] = QVariantMap{{QStringLiteral("all"), QVariantList{}}};
-    rule[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
-    rule[QStringLiteral("priority")] = 0;
-    rule[QStringLiteral("pinnedPriority")] = true;
-    return rule;
-}
-} // namespace
-
-void TestRuleController::renormalizeSkipsPinnedPriority()
-{
-    RuleController controller;
-
-    // A pinned rule (mimics a ContextRuleBridge cascade value) at priority 610.
-    const QString pinnedId = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("pinned"), 610, true));
-    QVERIFY(!pinnedId.isEmpty());
-
-    // Add several unpinned rules — each add re-runs renormalizePriorities().
-    for (const QString& app : {QStringLiteral("x"), QStringLiteral("y"), QStringLiteral("z")}) {
-        QVERIFY(!controller.addRuleFromJson(appRuleMap(controller, app, -1, false)).isEmpty());
-    }
-
-    // The pinned rule kept its authoritative 610 — not flattened into a band.
-    const QVariantMap reloaded = controller.ruleJson(pinnedId);
-    QCOMPARE(reloaded.value(QStringLiteral("priority")).toInt(), 610);
-    QVERIFY(reloaded.value(QStringLiteral("pinnedPriority")).toBool());
-}
-
-void TestRuleController::explicitPriorityEditPins()
-{
-    RuleController controller;
-
-    const QString id = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("edit"), -1, false));
-    QVERIFY(!id.isEmpty());
-    QVERIFY(!controller.ruleJson(id).value(QStringLiteral("pinnedPriority")).toBool());
-
-    // Edit the priority explicitly → the rule becomes pinned.
-    QVariantMap edit = controller.ruleJson(id);
-    edit[QStringLiteral("priority")] = 250;
-    QVERIFY(controller.updateRuleFromJson(edit));
-    QVERIFY(controller.ruleJson(id).value(QStringLiteral("pinnedPriority")).toBool());
-    QCOMPARE(controller.ruleJson(id).value(QStringLiteral("priority")).toInt(), 250);
-
-    // A later add re-runs renormalize, which must leave the pinned 250 intact.
-    QVERIFY(!controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("other"), -1, false)).isEmpty());
-    QCOMPARE(controller.ruleJson(id).value(QStringLiteral("priority")).toInt(), 250);
-}
-
-void TestRuleController::placeAbovePinnedWins()
-{
-    RuleController controller;
-
-    // Three pinned cascade-like rules (same Application section).
-    const QString a = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("a"), 610, true));
-    const QString b = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("b"), 510, true));
-    const QString c = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("c"), 410, true));
-    QVERIFY(!a.isEmpty() && !b.isEmpty() && !c.isEmpty());
-
-    // Drag C above A (the 610 rule) → C must outrank it: pinned just above 610.
-    QVERIFY(controller.placeRuleByPriority(c, a));
-    QVERIFY(controller.ruleJson(c).value(QStringLiteral("pinnedPriority")).toBool());
-    QVERIFY(controller.ruleJson(c).value(QStringLiteral("priority")).toInt() > 610);
-    // A keeps its 610; C now sorts above everything.
-    QCOMPARE(controller.ruleJson(a).value(QStringLiteral("priority")).toInt(), 610);
-}
-
-void TestRuleController::placeBetweenPinnedTiers()
-{
-    RuleController controller;
-
-    const QString a = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("a"), 610, true));
-    const QString b = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("b"), 410, true));
-    const QString m = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("m"), -1, false));
-    QVERIFY(!a.isEmpty() && !b.isEmpty() && !m.isEmpty());
-
-    // Drop M above B (410), below A (610) → pinned strictly between.
-    QVERIFY(controller.placeRuleByPriority(m, b));
-    const int mp = controller.ruleJson(m).value(QStringLiteral("priority")).toInt();
-    QVERIFY(controller.ruleJson(m).value(QStringLiteral("pinnedPriority")).toBool());
-    QVERIFY(mp > 410 && mp < 610);
-}
-
-void TestRuleController::placeNoGapNudges()
-{
-    RuleController controller;
-
-    // Two pinned rules one apart (no integer between), plus a rule to insert.
-    const QString p399 = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("p399"), 399, true));
-    const QString p398 = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("p398"), 398, true));
-    const QString m = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("m"), -1, false));
-    QVERIFY(!p399.isEmpty() && !p398.isEmpty() && !m.isEmpty());
-
-    // Drop M above p398 → no integer gap, so p398 is nudged down to vacate 398.
-    QVERIFY(controller.placeRuleByPriority(m, p398));
-    const int mp = controller.ruleJson(m).value(QStringLiteral("priority")).toInt();
-    const int hi = controller.ruleJson(p399).value(QStringLiteral("priority")).toInt();
-    const int lo = controller.ruleJson(p398).value(QStringLiteral("priority")).toInt();
-    QCOMPARE(hi, 399);
-    QVERIFY(hi > mp && mp > lo); // 399 > M > (nudged 398)
-    QVERIFY(controller.ruleJson(m).value(QStringLiteral("pinnedPriority")).toBool());
-}
-
-void TestRuleController::placeRejectsProviderDefault()
-{
-    RuleController controller;
-
-    const QString pd = controller.addRuleFromJson(providerDefaultMap());
-    const QString other = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("x"), -1, false));
-    QVERIFY(!pd.isEmpty() && !other.isEmpty());
-
-    // The snapshot flags it as the provider-default (drives grip suppression).
-    const QVariantList snap = controller.rulesSnapshot();
-    bool sawProviderDefault = false;
-    for (const QVariant& v : snap) {
-        const QVariantMap e = v.toMap();
-        if (e.value(QStringLiteral("ruleId")).toString() == pd)
-            sawProviderDefault = e.value(QStringLiteral("isProviderDefault")).toBool();
-    }
-    QVERIFY(sawProviderDefault);
-
-    // The provider-default is the gated floor — it can't be dragged.
-    QVERIFY(!controller.placeRuleByPriority(pd, other));
-    QCOMPARE(controller.ruleJson(pd).value(QStringLiteral("priority")).toInt(), 0);
-}
-
-void TestRuleController::placeKeepsProviderDefaultAtZero()
-{
-    RuleController controller;
-
-    const QString pd = controller.addRuleFromJson(providerDefaultMap());
-    const QString a = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("a"), 610, true));
-    const QString c = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("c"), 410, true));
-    QVERIFY(!pd.isEmpty() && !a.isEmpty() && !c.isEmpty());
-
-    // Reorder unrelated rules — the provider-default stays pinned at 0.
-    QVERIFY(controller.placeRuleByPriority(c, a));
-    QCOMPARE(controller.ruleJson(pd).value(QStringLiteral("priority")).toInt(), 0);
-    QVERIFY(controller.ruleJson(pd).value(QStringLiteral("pinnedPriority")).toBool());
-}
-
-void TestRuleController::renormalizePreservesPinnedPlacement()
-{
-    RuleController controller;
-
-    // Pin a rule at 299 — the top of the Application band (200..299), the slot
-    // the first band rule would otherwise claim.
-    const QString pinned = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("pinned"), 299, true));
-    QVERIFY(!pinned.isEmpty());
-
-    // Adding non-pinned Application rules re-runs renormalize. The band must
-    // pack AROUND the pinned 299 (pin-aware skip), never re-stamping onto it.
-    QVERIFY(!controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("x"), -1, false)).isEmpty());
-    QVERIFY(!controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("y"), -1, false)).isEmpty());
-    QCOMPARE(controller.ruleJson(pinned).value(QStringLiteral("priority")).toInt(), 299);
-    // Exactly one rule at 299 — the band rules skipped it.
-    const QVariantList snap = controller.rulesSnapshot();
-    int at299 = 0;
-    for (const QVariant& v : snap) {
-        if (v.toMap().value(QStringLiteral("priority")).toInt() == 299)
-            ++at299;
-    }
-    QCOMPARE(at299, 1);
 }
 
 void TestRuleController::authoringMetadata()

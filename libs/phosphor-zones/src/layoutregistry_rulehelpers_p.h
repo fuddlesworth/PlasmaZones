@@ -22,6 +22,7 @@
 
 #include <PhosphorRules/WindowQuery.h>
 
+#include <QList>
 #include <QString>
 
 namespace PhosphorRules {
@@ -126,5 +127,12 @@ bool isContextAssignmentRule(const PWR::Rule& rule);
 // Build the AssignmentEntry encoded directly by a rule's action list (no
 // evaluation — used by introspection helpers like desktopAssignments()).
 AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule);
+
+// The lowest priority that strictly outranks every existing context-assignment
+// rule in @p rules — (max isContextAssignmentRule priority) + 1, or the Context
+// band top (kContextBandBase + 99) when none exist. A freshly CREATED runtime
+// assignment seeds from this so it wins over any prior assignment (the
+// priority-wins model); an UPDATE preserves its own stored priority instead.
+int nextAssignmentPriority(const QList<PWR::Rule>& rules);
 
 } // namespace PhosphorZones::RuleHelpers

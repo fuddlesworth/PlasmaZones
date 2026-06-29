@@ -174,4 +174,26 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule)
     return entry;
 }
 
+int nextAssignmentPriority(const QList<PWR::Rule>& rules)
+{
+    bool sawAny = false;
+    int maxPriority = 0;
+    for (const PWR::Rule& rule : rules) {
+        if (!isContextAssignmentRule(rule)) {
+            continue;
+        }
+        if (!sawAny || rule.priority > maxPriority) {
+            maxPriority = rule.priority;
+            sawAny = true;
+        }
+    }
+    // No assignment rule yet — seed at the Context band top so the first
+    // assignment lands inside the Settings Context band; later creates climb
+    // from the running max.
+    if (!sawAny) {
+        return PWR::ContextRuleBridge::kContextBandBase + 99;
+    }
+    return maxPriority + 1;
+}
+
 } // namespace PhosphorZones::RuleHelpers

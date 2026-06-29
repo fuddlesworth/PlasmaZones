@@ -65,7 +65,13 @@ namespace PlasmaZones {
 ///     and the runtime LayoutSettingsStore (in phosphor-zones) merges the
 ///     sidecar back onto each layout on load, so the in-memory model is
 ///     unchanged.
-inline constexpr int ConfigSchemaVersion = 5;
+/// v6: rule precedence becomes pure `priority` (highest wins per slot, ties by
+///     list order). The synthesized provider-default catch-all assignment rule
+///     is retired — the gated default resolver is the sole global-default
+///     source — and the per-rule `pinnedPriority` flag is gone. finalizeV6Conversion
+///     deletes the provider-default rule from rules.json; remaining rules keep
+///     their priorities as-is.
+inline constexpr int ConfigSchemaVersion = 6;
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
@@ -170,9 +176,9 @@ public:
     /// Rebuild trigger: a missing/invalid rules.json triggers a
     /// rebuild PROVIDED config.json has reached
     /// `_version == ConfigSchemaVersion`. When assignments.json is absent
-    /// the rebuild still runs and writes a rule set carrying only the
-    /// provider-default catch-all (plus any disable-list, animation-rule,
-    /// exclusion, and animation-exclusion stash entries from
+    /// the rebuild still runs and writes a rule set carrying no assignment
+    /// rules (just the seeded built-in defaults plus any disable-list,
+    /// animation-rule, exclusion, and animation-exclusion stash entries from
     /// config.json). If the migration chain stalled below v4 (e.g. a
     /// chain step's side-effect write failed), finalizeV4Conversion
     /// refuses to commit a stub rules.json so the next run can
@@ -230,6 +236,32 @@ public:
     ///                 sibling via ConfigDefaults).
     /// @return true on success or a clean no-op; false on an I/O failure.
     static bool finalizeV5Conversion(const QString& jsonPath);
+
+    /// v5 → v6 schema step. The v6 schema makes rule precedence pure `priority`
+    /// (no specificity formula, no `pinnedPriority`). This step only stamps
+    /// `_version = 6`; the cross-file work (deleting the provider-default rule
+    /// from rules.json) lives in @ref finalizeV6Conversion, which runs after the
+    /// chain like the v4 / v5 finalizers.
+    static void migrateV5ToV6(QJsonObject& root);
+
+    /// Post-chain finalizer for the v6 conversion. Mirrors
+    /// @ref finalizeV5Conversion: it runs after the chain from
+    /// @ref ensureJsonConfigImpl, after finalizeV5Conversion (which guarantees
+    /// rules.json exists at the current schema version).
+    ///
+    /// It loads rules.json via `RuleSet::loadFromFile`, removes the synthesized
+    /// provider-default catch-all assignment rule (identified by its
+    /// deterministic provider-default UUID, or by shape — an unmanaged,
+    /// catch-all match carrying an engine-mode assignment action — as a
+    /// fallback), and saves. Remaining rules keep their priorities verbatim.
+    ///
+    /// Idempotent: once the provider-default rule is gone this is a clean no-op
+    /// (the id is stable, so a re-run finds nothing to remove).
+    ///
+    /// @param jsonPath Path to config.json (rules.json is derived as a sibling
+    ///                 via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool finalizeV6Conversion(const QString& jsonPath);
 
     /// Part of the v4 conversion: read every `*.json` layout in @p layoutsDir,
     /// split its embedded per-layout settings into the @p sidecarPath store

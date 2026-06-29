@@ -30,30 +30,11 @@
  * use?". They become context-only `Rule`s whose match expression
  * references only `ScreenId` / `VirtualDesktop` / `Activity`.
  *
- * The deterministic Assignment cascade (exact → activity → desktop → screen →
- * provider default) is reproduced by `priority` ordering. The formula:
- *
- * @code
- *   priority = 300
- *            + (activityPinned ? 200 : 0)
- *            + (desktopPinned  ? 100 : 0)
- *            + (screenPinned   ?  10 : 0)
- * @endcode
- *
- * | Cascade level                   | priority |
- * |---------------------------------|----------|
- * | Exact (screen+desktop+activity) |   610    |
- * | Screen + activity               |   510    |
- * | Screen + desktop                |   410    |
- * | Screen only (display default)   |   310    |
- * | Provider default (catch-all)    |     0    |
- *
- * "Activity beats desktop" is structurally guaranteed because the activity
- * weight (200) exceeds the desktop weight (100). The provider default is an
- * empty-`All{}` catch-all rule at priority 0.
- *
- * Connector-name and virtual-screen fallback are **NOT** priority bands —
- * they are recursive key rewrites handled query-side, not here.
+ * Precedence is plain `priority`: the highest-priority matching rule wins per
+ * action slot, ties broken by list order. There is no specificity formula and
+ * no provider-default rule. The caller supplies each rule's `priority`
+ * explicitly — context rules seed in the @ref kContextBandBase band and the
+ * Settings list-order renormalizer / runtime upsert derive the rest.
  *
  * Header-only: a consumer that includes this bridge takes only an
  * include-time dependency; there is no link edge and no dependency cycle.
@@ -63,16 +44,12 @@ namespace PhosphorRules {
 
 namespace ContextRuleBridge {
 
-/// The base priority of any pinned context rule. A rule that pins at least
-/// one dimension (screen, desktop, or activity) sits at @c kBasePriority +
-/// the per-dimension weights below.
-inline constexpr int kBasePriority = 300;
-inline constexpr int kActivityWeight = 200;
-inline constexpr int kDesktopWeight = 100;
-inline constexpr int kScreenWeight = 10;
-/// Provider-default catch-all rules carry priority 0 — strictly below every
-/// pinned context rule.
-inline constexpr int kProviderDefaultPriority = 0;
+/// Default precedence band base for context rules (zone assignments and
+/// per-mode disables). With specificity removed, `priority` is the only
+/// precedence value: callers seed new context rules in this band and the
+/// Settings list-order renormalizer / runtime upsert derive concrete values
+/// from it. The band is one source of truth shared with the Settings page.
+inline constexpr int kContextBandBase = 300;
 
 /**
  * @brief The cascade axis a context tuple resolves to.
@@ -99,9 +76,9 @@ enum class ContextAxis {
 /**
  * @brief Classify a (screen, desktop, activity) tuple into its cascade axis.
  *
- * The classifier mirrors @ref contextPriority's pinned-dimensions formula —
- * it does NOT distinguish empty-vs-missing in the dimensional sense, only
- * which dimensions are present.
+ * The classifier keys only on which of the three dimensions are present — it
+ * does NOT distinguish empty-vs-missing in the dimensional sense. The axes
+ * remain the batch reader/writer families; they no longer drive any priority.
  */
 inline ContextAxis contextAxisOf(const QString& screenId, int virtualDesktop, const QString& activity)
 {
@@ -167,25 +144,6 @@ inline QString contextIdentityKey(QLatin1StringView family, const QString& scree
 }
 
 } // namespace detail
-
-/**
- * @brief Compute the cascade priority for a context rule.
- *
- * @param screenPinned   true if the rule pins a non-empty screenId.
- * @param desktopPinned  true if the rule pins a virtualDesktop > 0.
- * @param activityPinned true if the rule pins a non-empty activity.
- *
- * A rule that pins nothing (the provider default) returns
- * @c kProviderDefaultPriority (0).
- */
-inline int contextPriority(bool screenPinned, bool desktopPinned, bool activityPinned)
-{
-    if (!screenPinned && !desktopPinned && !activityPinned) {
-        return kProviderDefaultPriority;
-    }
-    return kBasePriority + (activityPinned ? kActivityWeight : 0) + (desktopPinned ? kDesktopWeight : 0)
-        + (screenPinned ? kScreenWeight : 0);
-}
 
 /**
  * @brief The deterministic v5 rule id @ref makeAssignmentRule would assign
@@ -329,14 +287,15 @@ inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const Q
 /**
  * @brief Build a complete migrated zone-Assignment `Rule`.
  *
- * The match is context-only; the priority follows the cascade formula; the
- * actions are the lossless three-action set. @p name is a human-readable
- * label for the settings UI. @p modeToken is the wire string for the
- * assignment's mode (see `makeAssignmentActions` for vocabulary contract).
+ * The match is context-only; the actions are the lossless three-action set.
+ * @p name is a human-readable label for the settings UI. @p modeToken is the
+ * wire string for the assignment's mode (see `makeAssignmentActions` for
+ * vocabulary contract). @p priority is the rule's precedence verbatim — the
+ * caller owns it (highest priority wins per slot, ties by list order).
  */
 inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int virtualDesktop,
                                const QString& activity, const QString& modeToken, const QString& snappingLayout,
-                               const QString& tilingAlgorithm)
+                               const QString& tilingAlgorithm, int priority)
 {
     Rule rule;
     // Deterministic id derived from the source context identity — identical
@@ -344,40 +303,8 @@ inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int
     rule.id = assignmentRuleIdFor(screenId, virtualDesktop, activity);
     rule.name = name;
     rule.enabled = true;
-    rule.priority = contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
-    // The cascade formula is authoritative — pin it so the Settings band
-    // renormalizer never re-derives it (which would flatten the cascade order).
-    rule.pinnedPriority = true;
+    rule.priority = priority;
     rule.match = makeContextMatch(screenId, virtualDesktop, activity);
-    rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm);
-    return rule;
-}
-
-/**
- * @brief Build the provider-default catch-all `Rule`.
- *
- * An empty-`All{}` match at priority 0 — strictly the lowest. It carries the
- * global default mode/layout the cascade falls through to when no pinned
- * context rule matches. @p modeToken is the wire string for the default
- * engine mode (see `makeAssignmentActions` for vocabulary contract).
- */
-inline Rule makeProviderDefaultRule(const QString& name, const QString& modeToken, const QString& snappingLayout,
-                                    const QString& tilingAlgorithm)
-{
-    Rule rule;
-    // The provider default is the single catch-all assignment — its identity
-    // is fixed (no pinned dimensions), so the v5 key carries only the family.
-    rule.id =
-        QUuid::createUuidV5(detail::namespaceUuid(),
-                            detail::contextIdentityKey(QLatin1StringView("provider-default"), QString(), 0, QString()));
-    rule.name = name;
-    rule.enabled = true;
-    rule.priority = kProviderDefaultPriority;
-    // Pin the floor priority (0): the assignment resolver's catch-all tier
-    // excludes priority == kProviderDefaultPriority, so it must never be lifted
-    // into the Context band by the Settings renormalizer.
-    rule.pinnedPriority = true;
-    rule.match = MatchExpression(); // empty All{} catch-all
     rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm);
     return rule;
 }
@@ -389,6 +316,7 @@ inline Rule makeProviderDefaultRule(const QString& name, const QString& modeToke
  * rules carrying a single `DisableEngine` action. @p modeToken records which
  * engine the rule disables (the wire string, e.g. @c "snapping" /
  * @c "autotile" / @c "scrolling") so the evaluator can scope the gate.
+ * @p priority is the rule's precedence verbatim (highest priority wins).
  *
  * Validation: this helper trusts the caller to pass a token recognised by the
  * `DisableEngine` descriptor's validator. The Settings layer routes Mode →
@@ -396,14 +324,9 @@ inline Rule makeProviderDefaultRule(const QString& name, const QString& modeToke
  * here is a programmer error and the resulting rule would be rejected at
  * load by `RuleAction::fromJson`. Passing an empty token writes a malformed
  * rule with action params `{mode: ""}` — also caught at load.
- *
- * The disable rule shares the cascade priority formula with assignment rules
- * — a desktop-scoped disable outranks a monitor-scoped one, mirroring the
- * `contextDisabledReason` monitor > desktop > activity precedence when read
- * the other way (a more specific disable wins).
  */
 inline Rule makeDisableRule(const QString& name, const QString& screenId, int virtualDesktop, const QString& activity,
-                            const QString& modeToken)
+                            const QString& modeToken, int priority)
 {
     Rule rule;
     // Deterministic id — a disable rule's identity is its context tuple plus
@@ -412,9 +335,7 @@ inline Rule makeDisableRule(const QString& name, const QString& screenId, int vi
     rule.id = disableRuleIdFor(screenId, virtualDesktop, activity, modeToken);
     rule.name = name;
     rule.enabled = true;
-    rule.priority = contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
-    // Cascade formula is authoritative — pin it against the band renormalizer.
-    rule.pinnedPriority = true;
+    rule.priority = priority;
     rule.match = makeContextMatch(screenId, virtualDesktop, activity);
 
     RuleAction action;

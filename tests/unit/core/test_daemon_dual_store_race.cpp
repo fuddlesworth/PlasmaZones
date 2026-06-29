@@ -55,7 +55,7 @@ PhosphorRules::Rule makeTestAssignmentRule()
 {
     return PhosphorRules::ContextRuleBridge::makeAssignmentRule(
         QStringLiteral("Test assignment rule"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"),
-        QUuid::createUuid().toString(), QString());
+        QUuid::createUuid().toString(), QString(), PhosphorRules::ContextRuleBridge::kContextBandBase);
 }
 
 /// True iff @p store contains a rule with the assignment-action shape — i.e.,
@@ -189,7 +189,8 @@ private Q_SLOTS:
         // (the path RuleAdaptor takes when KCM edits a rule by id).
         const QString disabledScreen = QStringLiteral("eDP-1");
         const auto rule = PhosphorRules::ContextRuleBridge::makeDisableRule(
-            QStringLiteral("Snapping off · eDP-1"), disabledScreen, 0, QString(), QStringLiteral("snapping"));
+            QStringLiteral("Snapping off · eDP-1"), disabledScreen, 0, QString(), QStringLiteral("snapping"),
+            PhosphorRules::ContextRuleBridge::kContextBandBase);
         QVERIFY(daemonStore->addRule(rule));
 
         // Settings reads through the same store, so the disable is visible

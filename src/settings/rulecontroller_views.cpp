@@ -83,9 +83,6 @@ QVariantList RuleController::rulesSnapshot() const
         entry[QStringLiteral("screenIds")] = m_model.data(idx, RuleModel::ScreenIdsRole);
         entry[QStringLiteral("validationIssueCount")] = m_model.data(idx, RuleModel::ValidationIssueCountRole);
         entry[QStringLiteral("managed")] = m_model.data(idx, RuleModel::ManagedRole);
-        // Provider-default (priority-0 catch-all): fixed at the section floor, so
-        // the row shows no drag grip. Row i aligns with m_model.rules()[i].
-        entry[QStringLiteral("isProviderDefault")] = isProviderDefaultRule(m_model.rules().at(i));
         out.append(entry);
     }
     return out;

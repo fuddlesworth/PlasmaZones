@@ -53,10 +53,9 @@ PhosphorConfig::Schema makeMigrationSchema()
     s.version = ConfigSchemaVersion;
     s.versionKey = ConfigKeys::versionKey();
     s.migrations = {
-        {1, &ConfigMigration::migrateV1ToV2},
-        {2, &ConfigMigration::migrateV2ToV3},
-        {3, &ConfigMigration::migrateV3ToV4},
-        {4, &ConfigMigration::migrateV4ToV5},
+        {1, &ConfigMigration::migrateV1ToV2}, {2, &ConfigMigration::migrateV2ToV3},
+        {3, &ConfigMigration::migrateV3ToV4}, {4, &ConfigMigration::migrateV4ToV5},
+        {5, &ConfigMigration::migrateV5ToV6},
     };
     return s;
 }
@@ -360,14 +359,16 @@ bool ConfigMigration::ensureJsonConfigImpl()
                         // rules.json + quicklayouts.json, stripping the
                         // stash keys, retiring assignments.json) happens
                         // here, after the chain. Idempotent — safe to always run.
-                        return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
+                        return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath)
+                            && finalizeV6Conversion(jsonPath);
                     }
                     // Already at OR above current version — finalizeV4Conversion's
                     // cleanup-only branch runs idempotently: it strips any leftover
                     // assignments.json artifacts or `_v4*Stash` keys that a prior
                     // crash may have left behind, and is a no-op once the file is
                     // already clean.
-                    return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
+                    return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath)
+                        && finalizeV6Conversion(jsonPath);
                 }
                 corrupt = true;
             }
@@ -401,7 +402,8 @@ bool ConfigMigration::ensureJsonConfigImpl()
                     "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
                     "using defaults",
                     qPrintable(corruptBak));
-                return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
+                return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath)
+                    && finalizeV6Conversion(jsonPath);
             }
             qWarning("ConfigMigration: corrupt JSON config moved to %s — re-migrating from INI",
                      qPrintable(corruptBak));
@@ -420,7 +422,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
         // Fresh install — no old config. Still run the v4 finalizer so a
         // stray assignments.json from a partial earlier conversion is folded
         // into rules.json rather than left orphaned.
-        return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
+        return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath) && finalizeV6Conversion(jsonPath);
     }
 
     qInfo("ConfigMigration: migrating %s → %s", qPrintable(iniPath), qPrintable(jsonPath));
@@ -1806,7 +1808,8 @@ PhosphorRules::Rule disableRuleForMonitor(const QString& screenId, PhosphorZones
 {
     const QString name = disableRulePrefixFor(mode) + screenId;
     return PhosphorRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(),
-                                                             PhosphorZones::modeToWireString(mode));
+                                                             PhosphorZones::modeToWireString(mode),
+                                                             PhosphorRules::ContextRuleBridge::kContextBandBase);
 }
 
 /// Build a context rule from a v3 desktop disable-list entry (`screenId/N`).
@@ -1831,7 +1834,8 @@ std::optional<PhosphorRules::Rule> disableRuleForDesktop(const QString& entry,
     }
     const QString name = disableRulePrefixFor(mode) + screenId + disableRuleDesktopSuffix(desktop);
     return PhosphorRules::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(),
-                                                             PhosphorZones::modeToWireString(mode));
+                                                             PhosphorZones::modeToWireString(mode),
+                                                             PhosphorRules::ContextRuleBridge::kContextBandBase);
 }
 
 /// Build a context rule from a v3 activity disable-list entry
@@ -1856,7 +1860,8 @@ std::optional<PhosphorRules::Rule> disableRuleForActivity(const QString& entry,
     const QString activity = entry.mid(slash + 1);
     const QString name = disableRulePrefixFor(mode) + screenId + disableRuleActivitySuffix();
     return PhosphorRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity,
-                                                             PhosphorZones::modeToWireString(mode));
+                                                             PhosphorZones::modeToWireString(mode),
+                                                             PhosphorRules::ContextRuleBridge::kContextBandBase);
 }
 
 /// Parse one Assignment:* group name into (screenId, desktop, activity).
@@ -2786,7 +2791,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // check. If the file EXISTS but the loader returned nullopt (malformed
     // JSON, truncated write, hand-edit error), we'd otherwise fall through
     // to a rebuild that overwrites the corrupt-but-recoverable original
-    // with a stub provider-default rule set — destroying every user-authored
+    // with a freshly-seeded rule set — destroying every user-authored
     // rule. Quarantine to `.corrupt.bak` and abort instead, mirroring the
     // assignments-prevalidate contract below.
     if (!prevalidateRulesFile(rulesPath)) {
@@ -2794,10 +2799,10 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     }
 
     // Pre-flight the legacy assignments.json: a malformed sidecar must abort
-    // BEFORE we write rules.json (otherwise we'd commit a
-    // provider-default-only rule set that silently drops every assignment AND
-    // the quick-layout slots, and then quarantine the corrupt original to
-    // `.migrated` — masking the failure as a successful migration).
+    // BEFORE we write rules.json (otherwise we'd commit a rule set that
+    // silently drops every assignment AND the quick-layout slots, and then
+    // quarantine the corrupt original to `.migrated` — masking the failure as
+    // a successful migration).
     // Defense-in-depth: the ensureJsonConfigImpl pre-chain guard catches the
     // version<schema entry; this catches the fresh-install / post-corruption
     // / already-current re-entry paths. (B5 data-loss fix.)
@@ -2930,46 +2935,19 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             const QString snappingLayout = grp.value(ConfigKeys::Legacy::v3AssignmentLayout()).toString();
             const QString tilingAlgorithm = grp.value(ConfigKeys::Legacy::v3AssignmentAlgorithm()).toString();
 
+            // Priority is the only precedence value (highest wins per slot).
+            // Seed migrated assignments in the Context band, nudged up by the
+            // pinned-dimension count so a more-specific assignment still
+            // outranks a broader one for the contexts they both match — this
+            // explicit value reproduces the upgrader's prior effective
+            // ordering now that the resolver no longer computes specificity.
+            const int priority = PhosphorRules::ContextRuleBridge::kContextBandBase + (activity.isEmpty() ? 0 : 3)
+                + (desktop > 0 ? 2 : 0) + (screenId.isEmpty() ? 0 : 1);
+
             rules.append(PhosphorRules::ContextRuleBridge::makeAssignmentRule(
                 assignmentRuleName(screenId, desktop, activity), screenId, desktop, activity,
-                PhosphorZones::modeToWireString(mode), snappingLayout, tilingAlgorithm));
+                PhosphorZones::modeToWireString(mode), snappingLayout, tilingAlgorithm, priority));
         }
-    }
-
-    // ── Provider-default catch-all rule ────────────────────────────────────
-    // The cascade falls through to a lowest-priority empty-All{} rule when no
-    // pinned context rule matches. Both the snapping default AND the tiling
-    // default are baked into the rule so the catch-all has a complete fallback
-    // regardless of which engine the rule selects — the engine-mode action
-    // chooses the active mode, but both layout/algorithm actions stand ready
-    // so a manual mode toggle later (or another rule overriding the engine)
-    // still resolves a sensible layout. Previously only one mode's default
-    // was embedded, leaving the user's snapping default off the catch-all
-    // when an autotile default was also present.
-    {
-        // Schema-migration freeze policy: read v3 on-disk paths through the
-        // frozen `ConfigKeys::Legacy::v3*` accessors, NEVER the live
-        // ConfigDefaults accessors. A future runtime rename of e.g.
-        // `snappingBehaviorWindowHandlingGroup()` MUST NOT retarget the v3→v4
-        // finalizer to a path that no v3 config ever had on disk. See
-        // configkeys.h `Legacy` struct for the policy rationale.
-        const QJsonObject windowHandling =
-            groupObjectAtPath(configRoot, ConfigKeys::Legacy::v3SnappingBehaviorWindowHandlingGroup());
-        const QString defaultLayoutId = windowHandling.value(ConfigKeys::Legacy::v3DefaultLayoutIdKey()).toString();
-
-        const QJsonObject tilingAlgo = groupObjectAtPath(configRoot, ConfigKeys::Legacy::v3TilingAlgorithmGroup());
-        const QString defaultAlgorithm = tilingAlgo.value(ConfigKeys::Legacy::v3DefaultKey()).toString();
-
-        // Engine-mode preference: pick autotile only when the user has no
-        // snapping default but does have a tiling default — snapping is the
-        // historical default mode and stays selected whenever a snapping
-        // layout is configured.
-        const auto defaultMode = (defaultLayoutId.isEmpty() && !defaultAlgorithm.isEmpty())
-            ? PhosphorZones::AssignmentEntry::Autotile
-            : PhosphorZones::AssignmentEntry::Snapping;
-        rules.append(PhosphorRules::ContextRuleBridge::makeProviderDefaultRule(
-            QStringLiteral("Default"), PhosphorZones::modeToWireString(defaultMode), defaultLayoutId,
-            defaultAlgorithm));
     }
 
     // ── Disable-list rules ─────────────────────────────────────────────────
@@ -3778,6 +3756,59 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
         qWarning("ConfigMigration::finalizeV5Conversion: failed to strip the v5 stash from %s", qPrintable(jsonPath));
         return false;
     }
+    return true;
+}
+
+void ConfigMigration::migrateV5ToV6(QJsonObject& root)
+{
+    // The v6 schema makes rule precedence pure `priority`; the cross-file work
+    // (deleting the provider-default rule from rules.json) lives in
+    // finalizeV6Conversion. This step only stamps the version.
+    // Stamp literal 6 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
+    root[ConfigKeys::versionKey()] = 6;
+}
+
+bool ConfigMigration::finalizeV6Conversion(const QString& jsonPath)
+{
+    // The provider-default catch-all assignment rule is retired in v6: the
+    // gated default resolver is the sole global-default source. Delete it from
+    // rules.json by its deterministic id (stable, so this is idempotent — a
+    // re-run after the rule is gone finds nothing). config.json is untouched;
+    // jsonPath only locates the sibling rules.json.
+    if (!QFile::exists(jsonPath)) {
+        return true;
+    }
+    const QString rulesPath = ConfigDefaults::rulesFilePath();
+    auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
+    if (!setOpt.has_value()) {
+        // finalizeV4Conversion runs first and guarantees a valid rules.json; a
+        // missing/invalid file here means the conversion has not established it
+        // yet. Nothing to strip — a clean no-op (a fresh install never wrote a
+        // provider-default rule in the first place).
+        return true;
+    }
+
+    // The provider-default's identity was fixed: the v5-UUID derivation
+    // ContextRuleBridge keyed off the "provider-default" family with an empty
+    // (screen, desktop, activity) tuple. Reconstruct it directly — the rule
+    // factory that produced it is gone, but the id scheme is preserved verbatim.
+    namespace CRB = PhosphorRules::ContextRuleBridge;
+    const QUuid providerDefaultId = QUuid::createUuidV5(
+        CRB::detail::namespaceUuid(),
+        CRB::detail::contextIdentityKey(QLatin1StringView("provider-default"), QString(), 0, QString()));
+
+    PhosphorRules::RuleSet ruleSet = *setOpt;
+    if (!ruleSet.removeRule(providerDefaultId)) {
+        // No provider-default rule present — already stripped, or a fresh
+        // install that never had one. Clean no-op.
+        return true;
+    }
+    if (!ruleSet.saveToFile(rulesPath)) {
+        qWarning("ConfigMigration::finalizeV6Conversion: failed to write %s after removing the provider-default rule",
+                 qPrintable(rulesPath));
+        return false;
+    }
+    qInfo("ConfigMigration::finalizeV6Conversion: removed the provider-default rule from %s", qPrintable(rulesPath));
     return true;
 }
 
