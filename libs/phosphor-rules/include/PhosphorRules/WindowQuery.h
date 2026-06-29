@@ -63,7 +63,7 @@ struct WindowQuery
     std::optional<QString> zone; ///< the snap zone's UUID the window occupies
     std::optional<bool> isTiled; ///< managed by the autotile engine (distinct from isSnapped)
 
-    // ── Context attributes — always present ──
+    // ── Context attributes — always present (except the optional tiledWindowCount) ──
     QString screenId;
     int virtualDesktop = 0; ///< 0 = all desktops
     QString activity; ///< empty = all activities
