@@ -644,14 +644,19 @@ void RuleModel::setPriorities(const QList<int>& priorities)
     Q_EMIT dataChanged(index(firstChanged, 0), index(lastChanged, 0), {PriorityRole});
 }
 
-void RuleModel::clearPinnedPriority(const QUuid& id)
+void RuleModel::setPinnedPriority(const QUuid& id, bool pinned)
 {
     for (Rule& rule : m_rules) {
         if (rule.id == id) {
-            rule.pinnedPriority = false;
+            rule.pinnedPriority = pinned;
             return;
         }
     }
+}
+
+void RuleModel::clearPinnedPriority(const QUuid& id)
+{
+    setPinnedPriority(id, false);
 }
 
 RuleModel::Section RuleModel::sectionFor(const Rule& rule)

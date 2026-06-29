@@ -11,8 +11,11 @@
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleSet.h>
+
+#include <algorithm>
 
 #include <QDBusConnection>
 #include <QDBusPendingCallWatcher>
@@ -406,6 +409,28 @@ void RuleController::revert()
     fetchAndLoad(/*fromRevert=*/true);
 }
 
+// Band base priority for a rule's section. Shared by renormalizePriorities()
+// (band stamping) and placeRuleByPriority() (drag placement). Managed System
+// rules keep their pinned INT_MIN priority and are skipped before this is read;
+// the System case only keeps the switch exhaustive.
+static int bandBaseFor(RuleModel::Section section)
+{
+    switch (section) {
+    case RuleModel::Section::Advanced:
+        return kAdvancedBandBase;
+    case RuleModel::Section::Monitor:
+    case RuleModel::Section::Activity:
+        return kContextBandBase;
+    case RuleModel::Section::Application:
+        return kApplicationBandBase;
+    case RuleModel::Section::Animation:
+        return kAnimationBandBase;
+    case RuleModel::Section::System:
+        return kAdvancedBandBase;
+    }
+    return kAnimationBandBase;
+}
+
 void RuleController::renormalizePriorities()
 {
     // Walk the model's list order and re-stamp priority so list order maps
@@ -450,25 +475,17 @@ void RuleController::renormalizePriorities()
     // at 0 so a band with >100 rules ties at the floor (list order is
     // preserved by setPriorities's stable application).
     constexpr int kBandWidth = 100;
-    const auto baseFor = [](const Rule& rule) {
-        switch (RuleModel::sectionFor(rule)) {
-        case RuleModel::Section::Advanced:
-            return kAdvancedBandBase;
-        case RuleModel::Section::Monitor:
-        case RuleModel::Section::Activity:
-            return kContextBandBase;
-        case RuleModel::Section::Application:
-            return kApplicationBandBase;
-        case RuleModel::Section::Animation:
-            return kAnimationBandBase;
-        case RuleModel::Section::System:
-            // Managed System rules keep their pinned INT_MIN priority and are
-            // skipped before this runs (see the managed guard in the loop); this
-            // case only keeps the switch exhaustive.
-            return kAdvancedBandBase;
+
+    // Priorities already occupied by pinned/managed rules, grouped by band base.
+    // Non-pinned rules must skip these slots so a drag-pinned value inside a band
+    // (e.g. a Context rule the user pinned at 350) is never collided with when
+    // the band re-packs — which would silently shift the user's placement.
+    QHash<int, QSet<int>> occupiedInBand;
+    for (const Rule& rule : rules) {
+        if (rule.managed || rule.pinnedPriority) {
+            occupiedInBand[bandBaseFor(RuleModel::sectionFor(rule))].insert(rule.priority);
         }
-        return kAnimationBandBase;
-    };
+    }
 
     // Per-band offset counter — base address → next available offset. Each
     // band seeds at `kBandWidth - 1` on first encounter and decrements as
@@ -481,18 +498,24 @@ void RuleController::renormalizePriorities()
         // Authoritative priorities are preserved verbatim, never re-stamped:
         // `managed` baselines (pinned at the bottom of evaluation regardless of
         // list position) and `pinnedPriority` rules (the ContextRuleBridge
-        // cascade values, plus user-edited explicit priorities). Re-stamping
+        // cascade values, plus user-edited / drag-pinned priorities). Re-stamping
         // either would flatten its order into a band value.
         if (rules.at(i).managed || rules.at(i).pinnedPriority) {
             priorities[i] = rules.at(i).priority;
             continue;
         }
-        const int base = baseFor(rules.at(i));
+        const int base = bandBaseFor(RuleModel::sectionFor(rules.at(i)));
         auto it = nextOffset.find(base);
         if (it == nextOffset.end()) {
             it = nextOffset.insert(base, kBandWidth - 1);
         }
-        const int offset = qMax(0, it.value());
+        const QSet<int>& occupied = occupiedInBand.value(base);
+        int offset = qMax(0, it.value());
+        // Skip offsets a pinned rule already holds in this band, so the two
+        // never collide. Floors at 0 (>kBandWidth rules tie at the band base).
+        while (offset > 0 && occupied.contains(base + offset)) {
+            --offset;
+        }
         it.value() = offset - 1;
         priorities[i] = base + offset;
     }
@@ -703,20 +726,27 @@ bool RuleController::setRuleEnabled(const QString& ruleId, bool enabled)
     return true;
 }
 
-bool RuleController::moveRule(const QString& ruleId, const QString& beforeRuleId)
+// The provider-default catch-all assignment rule: an unmanaged, empty-All{}
+// match pinned at priority 0. The assignment resolver excludes priority 0 from
+// its catch-all tier, so this rule must stay at 0 / the section floor and is
+// never reordered by a drag.
+bool RuleController::isProviderDefaultRule(const Rule& rule)
 {
-    // Capture order BEFORE the move so a no-op move (drop a rule on its
-    // own slot, or the slot immediately after — the model accepts both
-    // and returns true) doesn't flip the dirty flag. The model has its
-    // own no-op short-circuit but reports success either way; the user-
-    // visible "drag-drop back to where it started" should never pollute
-    // the dirty state.
+    return !rule.managed && rule.priority == PhosphorRules::ContextRuleBridge::kProviderDefaultPriority
+        && rule.match.isCatchAll();
+}
+
+bool RuleController::reorderRuleToBand(const QUuid& movedUuid, const QUuid& beforeUuid)
+{
+    // Capture order BEFORE the move so a no-op move (drop a rule on its own slot,
+    // or the slot immediately after — the model accepts both and returns true)
+    // doesn't flip the dirty flag.
     QList<QUuid> before;
     before.reserve(m_model.rules().size());
     for (const Rule& r : m_model.rules()) {
         before.append(r.id);
     }
-    if (!m_model.moveRule(QUuid::fromString(ruleId), QUuid::fromString(beforeRuleId))) {
+    if (!m_model.moveRule(movedUuid, beforeUuid)) {
         return false;
     }
     bool actuallyMoved = false;
@@ -734,13 +764,105 @@ bool RuleController::moveRule(const QString& ruleId, const QString& beforeRuleId
     if (!actuallyMoved) {
         return true;
     }
-    // A deliberate drag is a precedence override: clear the moved rule's pin so
-    // the renormalize below re-stamps it into its section band by list order,
-    // rather than preserving its now-stale cascade/explicit priority. The
-    // dragged rule's still-pinned siblings keep their cascade weights, so it
-    // sorts into the band beneath them (documented in the Settings rules help).
-    m_model.clearPinnedPriority(QUuid::fromString(ruleId));
+    // Dropping among ordinary band rules is a pure list-order reorder: clear any
+    // pin so the rule re-enters band stamping at its new list position.
+    m_model.clearPinnedPriority(movedUuid);
     renormalizePriorities();
+    setDirty(true);
+    return true;
+}
+
+bool RuleController::placeRuleByPriority(const QString& movedId, const QString& beforeRuleId)
+{
+    const QUuid movedUuid = QUuid::fromString(movedId);
+    if (movedUuid.isNull()) {
+        return false;
+    }
+    const Rule moved = m_model.ruleById(movedUuid);
+    if (moved.id.isNull() || moved.managed || isProviderDefaultRule(moved)) {
+        // Managed System rules (INT_MIN) and the provider-default (0) are fixed.
+        return false;
+    }
+    const RuleModel::Section section = RuleModel::sectionFor(moved);
+
+    // Section siblings (excluding `moved`) in the page's display order: priority
+    // descending, ties by model order — matching the evaluator's tie-break.
+    QList<Rule> siblings;
+    for (const Rule& r : m_model.rules()) {
+        if (r.id != moved.id && RuleModel::sectionFor(r) == section) {
+            siblings.append(r);
+        }
+    }
+    std::stable_sort(siblings.begin(), siblings.end(), [](const Rule& a, const Rule& b) {
+        return a.priority > b.priority;
+    });
+
+    // The drop lands `moved` immediately above `beforeRuleId` (its lower
+    // neighbour); an empty `beforeRuleId` drops at the section bottom.
+    const QUuid beforeUuid = QUuid::fromString(beforeRuleId);
+    const Rule* below = nullptr;
+    const Rule* above = nullptr;
+    if (!beforeUuid.isNull()) {
+        for (int i = 0; i < siblings.size(); ++i) {
+            if (siblings.at(i).id == beforeUuid) {
+                below = &siblings.at(i);
+                if (i > 0) {
+                    above = &siblings.at(i - 1);
+                }
+                break;
+            }
+        }
+    } else if (!siblings.isEmpty()) {
+        above = &siblings.last(); // bottom drop: land above the lowest sibling
+    }
+
+    const bool aboveBand = !above || (!above->managed && !above->pinnedPriority);
+    const bool belowBand = !below || (!below->managed && !below->pinnedPriority);
+    if (aboveBand && belowBand) {
+        // Ordinary band rules on both sides → reorder the model so `moved` lands
+        // between them as a band rule (durable via list order). The common case.
+        return reorderRuleToBand(movedUuid, beforeUuid);
+    }
+
+    // A pinned neighbour is involved → give `moved` an explicit integer strictly
+    // between the neighbour priorities and pin it (survives renormalize via the
+    // pin-aware offset skip).
+    const int lower = below ? below->priority : PhosphorRules::ContextRuleBridge::kProviderDefaultPriority;
+    QHash<QUuid, int> newPriorities; // ruleId → new priority (moved + any nudged)
+    int target;
+    if (!above) {
+        target = lower + 1; // drop at the very top → just above the current top
+    } else if (above->priority - lower >= 2) {
+        target = lower + 1; // integer gap exists
+    } else {
+        // No integer between the neighbours (e.g. a prior drag-pin sits directly
+        // above the lower neighbour). Take the lower slot and push the lower
+        // neighbour plus its contiguous descending run down by one to vacate it.
+        target = lower;
+        int expect = lower;
+        for (const Rule& s : siblings) {
+            if (s.priority > lower) {
+                continue; // above the insertion point
+            }
+            if (s.priority != expect || isProviderDefaultRule(s)
+                || s.priority - 1 <= PhosphorRules::ContextRuleBridge::kProviderDefaultPriority) {
+                break; // gap reached, or would collide with / pass the floor
+            }
+            newPriorities.insert(s.id, s.priority - 1);
+            m_model.setPinnedPriority(s.id, true);
+            expect = s.priority - 1;
+        }
+    }
+    newPriorities.insert(moved.id, target);
+    m_model.setPinnedPriority(moved.id, true);
+
+    const QList<Rule>& rules = m_model.rules();
+    QList<int> priorities;
+    priorities.reserve(rules.size());
+    for (const Rule& r : rules) {
+        priorities.append(newPriorities.value(r.id, r.priority));
+    }
+    m_model.setPriorities(priorities);
     setDirty(true);
     return true;
 }

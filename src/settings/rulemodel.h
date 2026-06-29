@@ -174,11 +174,16 @@ public:
     /// `rowCount()` entries; a size mismatch is a no-op.
     void setPriorities(const QList<int>& priorities);
 
+    /// Set the `pinnedPriority` flag on the rule with @p id (a no-op if the rule
+    /// is absent). Used when a drag assigns an explicit precedence: the rule's
+    /// priority becomes authoritative and renormalize must not re-derive it. No
+    /// display role changes, so this emits nothing — the following setPriorities()
+    /// emits PriorityRole.
+    void setPinnedPriority(const QUuid& id, bool pinned);
+
     /// Clear the `pinnedPriority` flag on the rule with @p id (a no-op if the
-    /// rule is absent or already unpinned). Used when the user drags a pinned
-    /// rule: the drag is a deliberate precedence override, so the rule re-enters
-    /// band/list-order stamping on the next renormalize. No display role changes,
-    /// so this emits nothing — the following setPriorities() emits PriorityRole.
+    /// rule is absent or already unpinned). The rule re-enters band/list-order
+    /// stamping on the next renormalize.
     void clearPinnedPriority(const QUuid& id);
 
     // ── Section helpers (also used by the model's own data()) ──
