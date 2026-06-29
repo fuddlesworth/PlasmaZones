@@ -97,7 +97,8 @@ public:
 
     /**
      * @brief Set the shortcut registrar used to (un)register the Escape
-     *        cancel-overlay shortcut around active drag sessions.
+     *        cancel-overlay shortcut for the snap-assist phase and layout
+     *        picker (the drag itself uses the kwin-effect's keyboard grab).
      *
      * Must be called after construction, before any drag operations.
      * The registrar is owned by Daemon — this is a non-owning pointer. Routing
@@ -161,8 +162,9 @@ public:
 
     /// Whether a drag is currently active (m_draggedWindowId non-empty).
     /// Daemon uses this to gate the picker-dismissed Escape release on
-    /// drag state — releasing while a drag is in flight would tear down
-    /// the drag's own Escape grab.
+    /// drag state — while a drag is in flight the drag-end path owns
+    /// releasing the shared kCancelOverlayId grab, so a picker dismiss
+    /// must not tear it down early.
     bool isDragActive() const
     {
         return !m_draggedWindowId.isEmpty();
@@ -532,8 +534,8 @@ private:
     bool m_modifierConflictWarned = false; // Logged once per drag, reset on next dragStarted
 
     // Escape cancel-overlay shortcut is registered/unregistered dynamically
-    // via the PhosphorShortcuts Registry around drag sessions — no QAction
-    // member needed (the Registry owns everything).
+    // via the PhosphorShortcuts Registry for the snap-assist phase and layout
+    // picker — no QAction member needed (the Registry owns everything).
 
     // Pre-parsed trigger caches (populated on dragStarted, used on every dragMoved tick)
     QVector<ParsedTrigger> m_cachedActivationTriggers;
@@ -600,7 +602,8 @@ private Q_SLOTS:
 
     /**
      * Called when snap assist is dismissed (selection, timeout, click-away, etc.)
-     * Unregisters the Escape shortcut that was kept alive for snap assist
+     * Unregisters the Escape shortcut that start.cpp's snapAssistShown handler
+     * bound for snap assist
      */
     void onSnapAssistDismissed();
 };
