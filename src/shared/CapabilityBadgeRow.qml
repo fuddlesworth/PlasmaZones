@@ -9,12 +9,14 @@ import org.kde.kirigami as Kirigami
  * Autotile capability badges for layout cards.
  *
  * Shows a compact icon per capability an autotile algorithm advertises
- * (persistent split memory, resize reflow, persistent script state). Manual
- * layouts leave every flag false, so the whole row hides and reserves no space.
+ * (persistent split memory, resize reflow, persistent script state, single-window
+ * layout). Manual layouts leave every flag false, so the whole row hides and
+ * reserves no space.
  *
  * Driven by the serialized LayoutPreview shape (flattened autotile metadata):
- * supportsMemory, reflowsOnResize, supportsScriptState. Shared by the settings
- * layout grid and the overlay layout card so the badge set stays identical.
+ * supportsMemory, reflowsOnResize, supportsScriptState, supportsSingleWindow.
+ * Shared by the settings layout grid and the overlay layout card so the badge
+ * set stays identical.
  */
 Row {
     id: root
@@ -24,7 +26,7 @@ Row {
     spacing: Kirigami.Units.smallSpacing
     // Hidden (and space-free in the enclosing positioner) when the layout
     // advertises no capabilities — i.e. every manual layout.
-    visible: layoutData.supportsMemory === true || layoutData.reflowsOnResize === true || layoutData.supportsScriptState === true
+    visible: layoutData.supportsMemory === true || layoutData.reflowsOnResize === true || layoutData.supportsScriptState === true || layoutData.supportsSingleWindow === true
 
     // Shared icon-badge primitive: a small masked symbolic icon with a hover
     // tooltip. Each instance sets only visible/source/color/text.
@@ -78,5 +80,15 @@ Row {
         color: Kirigami.Theme.neutralTextColor
         Accessible.name: i18n("Persistent script state")
         tooltipText: i18n("Remembers script-managed layout state across window changes")
+    }
+
+    // Single-window indicator for algorithms that lay out a lone window
+    // themselves (centering or sizing it) instead of letting it fill the screen.
+    CapabilityBadge {
+        visible: root.layoutData.supportsSingleWindow === true
+        source: "view-restore-symbolic"
+        color: Kirigami.Theme.activeTextColor
+        Accessible.name: i18n("Single-window layout")
+        tooltipText: i18n("Lays out a single window itself instead of filling the screen")
     }
 }

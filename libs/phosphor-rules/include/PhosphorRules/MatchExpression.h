@@ -113,8 +113,8 @@ public:
     }
 
     /// True if this expression references only context fields (ScreenId /
-    /// VirtualDesktop / Activity / Mode) — i.e. a windowless context rule. An empty
-    /// catch-all is context-only by this definition.
+    /// VirtualDesktop / Activity / Mode / TiledWindowCount) — i.e. a windowless
+    /// context rule. An empty catch-all is context-only by this definition.
     bool isContextOnly() const;
 
     /// True if any leaf predicate anywhere in the tree (including inside

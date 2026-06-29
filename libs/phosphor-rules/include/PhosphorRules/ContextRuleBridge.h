@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QLoggingCategory>
+#include <QSet>
 #include <QString>
 #include <QUuid>
 
@@ -85,7 +86,10 @@ inline constexpr int kProviderDefaultPriority = 0;
  * this enum so the formula lives in one place.
  */
 enum class ContextAxis {
-    CatchAll, ///< empty `screenId` — the provider-default catch-all.
+    CatchAll, ///< empty `screenId` (the provider-default catch-all), OR a
+              ///< context match that pins a non-dimension field beyond
+              ///< screen/desktop/activity (e.g. TiledWindowCount) and so is not
+              ///< an exact-context assignment (see contextAxisFor).
     Monitor, ///< screen only.
     Desktop, ///< screen + desktop.
     Activity, ///< screen + activity.
@@ -525,9 +529,10 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
         }
         // Any leaf that is not a ScreenId / VirtualDesktop / Activity equality
         // leaf is ignored here — a flat mixed rule still yields its context
-        // projection, per the contract above. This includes a Mode equality leaf:
-        // Mode IS a context field, but it is not one of the three decomposed
-        // dimensions, so it is deliberately projected out of contextDimsOf.
+        // projection, per the contract above. This includes the Mode and
+        // TiledWindowCount leaves: both ARE context fields, but neither is one of
+        // the three decomposed dimensions, so they are deliberately projected out
+        // of contextDimsOf.
     }
     // If no context-equality leaf was matched, the input was either a
     // context-axis-empty mixed rule (e.g. `ScreenId NotEquals "DP-1"`) or
@@ -543,16 +548,41 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
     return true;
 }
 
+/// True if @p match pins a context field that is NOT one of the three cascade
+/// dimensions (currently only @c TiledWindowCount). Such a match is more
+/// specific than the (screen, desktop, activity) shape @c makeContextMatch
+/// emits, so it must not be treated as an exact-context assignment: the batch
+/// reader/writers and exact-rule upsert rebuild the context base from the decoded
+/// dims alone, which would silently drop the extra leaf (the same hazard
+/// @c matchIsExactContextActivityStrict guards against for Combined rules). The
+/// field set is a function-local static so the per-rule batch classifiers do not
+/// reconstruct it on every call.
+inline bool pinsNonDimensionContextField(const MatchExpression& match)
+{
+    static const QSet<Field> kNonDimensionContextFields{Field::TiledWindowCount};
+    return match.referencesAnyField(kNonDimensionContextFields);
+}
+
 /**
  * @brief Classify @p match's pinned-dimension shape as a @ref ContextAxis.
  *
  * A non-context-only match (one carrying a window-property leaf) returns
- * @c CatchAll — callers that need to distinguish a window-property rule from
- * a true catch-all must combine this with `match.isContextOnly()`.
+ * @c CatchAll, and so does a context-only match that pins a non-dimension
+ * context field (e.g. TiledWindowCount) — callers that need to distinguish a
+ * window-property rule from a true catch-all must combine this with
+ * `match.isContextOnly()`.
  */
 inline ContextAxis contextAxisFor(const MatchExpression& match)
 {
     if (!match.isContextOnly()) {
+        return ContextAxis::CatchAll;
+    }
+    // A match that ALSO pins a non-dimension context field (TiledWindowCount) is
+    // not the (screen, desktop, activity) shape makeContextMatch emits, so it is
+    // not an exact-context assignment; treat it as CatchAll-axis so the batch
+    // projections skip it. It still resolves normally through the evaluator,
+    // which sees the count via the WindowQuery.
+    if (pinsNonDimensionContextField(match)) {
         return ContextAxis::CatchAll;
     }
     QString screenId;
@@ -624,6 +654,13 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
                                 const QString& activity)
 {
     if (!match.isContextOnly()) {
+        return false;
+    }
+    // A pinned non-dimension context leaf (TiledWindowCount) means the match is
+    // more specific than the bare (screen, desktop, activity) shape, so it is NOT
+    // exact — see contextAxisFor for why dropping it here would lose the leaf on
+    // rebuild.
+    if (pinsNonDimensionContextField(match)) {
         return false;
     }
     QString s;

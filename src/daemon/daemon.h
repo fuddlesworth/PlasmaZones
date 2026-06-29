@@ -910,6 +910,13 @@ private:
     // don't overwrite each other's ordering.
     QHash<TilingStateKey, QStringList> m_lastAutotileOrders;
 
+    // Last observed tiled-window count per screen, tracked so the engine's
+    // placementChanged stream only re-resolves the per-screen tiling algorithm
+    // when the count actually changes (a Field::TiledWindowCount rule keys on
+    // it). Without this gate every retile (drag, resize) would re-walk the
+    // assignment cascade.
+    QHash<QString, int> m_lastTiledCountByScreen;
+
     // Snap-float restore entries collected during windowsReleasedFromTiling.
     // Consumed by the toggle handler to batch geometry restores into the resnap signal.
     QVector<ZoneAssignmentEntry> m_pendingSnapFloatRestores;

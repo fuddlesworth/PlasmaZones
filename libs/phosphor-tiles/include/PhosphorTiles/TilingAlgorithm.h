@@ -245,6 +245,19 @@ public:
     virtual bool centerLayout() const;
 
     /**
+     * @brief Whether this algorithm lays out the single-window case itself
+     *
+     * By default an algorithm does not own the single-window case: a scripted
+     * algorithm's calculateZones() fills the work area for a lone window without
+     * invoking its tile(). An algorithm that opts in (e.g. a centered-single
+     * layout) receives the single-window case in its tile() computation and is
+     * responsible for the resulting geometry.
+     *
+     * @return true if the algorithm owns the single-window layout (default: false)
+     */
+    virtual bool supportsSingleWindow() const noexcept;
+
+    /**
      * @brief Whether this algorithm is a user-provided scripted algorithm
      *
      * Scripted algorithms are loaded from Luau (.luau) files at runtime.

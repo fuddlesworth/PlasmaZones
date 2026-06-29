@@ -38,7 +38,7 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 
 using TileRequestList = QList<TileRequestEntry>;
 
-/// D-Bus struct for algorithm metadata: (sssbbbbdibsbb)
+/// D-Bus struct for algorithm metadata: (sssbbbbdibsbbb)
 struct AlgorithmInfoEntry
 {
     QString id;
@@ -54,6 +54,7 @@ struct AlgorithmInfoEntry
     QString zoneNumberDisplay;
     bool isUserScript = false;
     bool supportsMemory = false;
+    bool supportsSingleWindow = false;
 };
 
 using AlgorithmInfoList = QList<AlgorithmInfoEntry>;

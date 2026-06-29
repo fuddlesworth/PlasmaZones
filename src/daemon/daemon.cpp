@@ -920,6 +920,30 @@ bool Daemon::init()
         }
         return m_settings->defaultAutotileAlgorithm();
     });
+    // Tiled-window-count provider — lets a SetTilingAlgorithm rule match on
+    // Field::TiledWindowCount (e.g. switch algorithm once a second window
+    // opens). Reads the engine's live per-screen state (non-creating); nullopt
+    // when the screen is not actively tiling so a count predicate stays inert
+    // there. The screen's current-context state aligns with the (desktop,
+    // activity) the algorithm is resolved for, so the desktop/activity args are
+    // not needed to disambiguate.
+    m_layoutManager->setTiledWindowCountProvider(
+        [this](const QString& screenId, int, const QString&) -> std::optional<int> {
+            if (!m_autotileEngine) {
+                return std::nullopt;
+            }
+            // const overload: a non-creating lookup that returns nullptr when the
+            // screen has no tiling state. The non-const overload would lazily
+            // CREATE an empty state, both polluting m_screenStates during a pure
+            // resolution query and reporting 0 (not nullopt) for a non-tiling
+            // screen, which would make a TiledWindowCount predicate match there
+            // instead of staying inert.
+            const PhosphorEngine::IPlacementState* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
+            if (!state) {
+                return std::nullopt;
+            }
+            return state->tiledWindowCount();
+        });
     // Snapping-preferred provider — separate from defaultLayoutIdProvider
     // because the user can have snapping enabled WITHOUT a global default
     // snap layout id (per-screen assignments cover everything). Without
@@ -1676,6 +1700,35 @@ bool Daemon::init()
         }
     });
 
+    // Re-resolve the per-screen tiling algorithm when a screen's tiled-window
+    // count changes, so a Field::TiledWindowCount rule (e.g. a centered
+    // single-window layout that gives way once a second window opens) takes
+    // effect as windows open and close. Gated on an ACTUAL count change so the
+    // per-retile placementChanged stream (drags, resizes) does not re-walk the
+    // cascade. A re-resolve that lands on the same count returns the same answer
+    // and updateAutotileScreens() diffs each screen's overrides before
+    // re-applying, so a plain count-keyed switch settles in one step. (A
+    // pathological rule whose chosen algorithm caps MaxWindows below the live
+    // count would float the excess, drop the count, and could oscillate — that
+    // is a self-contradictory config, not a normal one.)
+    connect(
+        autotileEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, [this](const QString& screenId) {
+            if (!m_autotileEngine) {
+                return;
+            }
+            // const overload: non-creating, returns nullptr (→ count 0) when
+            // the screen has no tiling state, so this gate never allocates a
+            // phantom state while observing the count.
+            const PhosphorEngine::IPlacementState* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
+            const int count = state ? state->tiledWindowCount() : 0;
+            const auto it = m_lastTiledCountByScreen.constFind(screenId);
+            if (it != m_lastTiledCountByScreen.constEnd() && it.value() == count) {
+                return; // count unchanged — nothing a count rule could key on moved
+            }
+            m_lastTiledCountByScreen.insert(screenId, count);
+            updateAutotileScreens();
+        });
+
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
@@ -2104,6 +2157,7 @@ void Daemon::stop()
     if (m_layoutManager) {
         m_layoutManager->setDefaultLayoutIdProvider({});
         m_layoutManager->setDefaultAutotileAlgorithmProvider({});
+        m_layoutManager->setTiledWindowCountProvider({});
         m_layoutManager->setSnappingPreferredProvider({});
         m_layoutManager->setDefaultAssignmentSuppressedProvider({});
     }

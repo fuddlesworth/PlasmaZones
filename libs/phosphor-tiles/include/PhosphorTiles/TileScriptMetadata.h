@@ -66,6 +66,7 @@ struct ScriptMetadata
     bool supportsScriptState = false; ///< Persists an opaque ctx.state bag across retiles (non-tree memory)
     bool producesOverlappingZones = false;
     bool centerLayout = false;
+    bool supportsSingleWindow = false; ///< Owns the single-window case (else calculateZones() fills the work area)
     bool supportsMinSizes = true; ///< Default true — most algorithms support min sizes
     QString id; ///< Optional algorithm id (else "script:filename")
     QVector<CustomParamDef> customParams;

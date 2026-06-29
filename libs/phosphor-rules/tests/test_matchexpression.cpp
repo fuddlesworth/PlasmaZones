@@ -145,6 +145,52 @@ private Q_SLOTS:
         QVERIFY(eq.evaluate(firefoxQuery()));
     }
 
+    void testTiledWindowCount_contextNumeric()
+    {
+        // "Switch algorithm once a second window opens" — a TiledWindowCount
+        // predicate matches numerically on the context fact, and is inert when
+        // the count is unknown (absent), like any other optional field.
+        const auto moreThanOne = MatchExpression::makeLeaf(Field::TiledWindowCount, Operator::GreaterThan, 1);
+        const auto exactlyOne = MatchExpression::makeLeaf(Field::TiledWindowCount, Operator::Equals, 1);
+
+        WindowQuery one;
+        one.screenId = QStringLiteral("DP-2");
+        one.tiledWindowCount = 1;
+        QVERIFY(!moreThanOne.evaluate(one));
+        QVERIFY(exactlyOne.evaluate(one));
+
+        WindowQuery two = one;
+        two.tiledWindowCount = 2;
+        QVERIFY(moreThanOne.evaluate(two));
+        QVERIFY(!exactlyOne.evaluate(two));
+
+        // Zero is a genuine value (an empty tiled desktop), distinct from unknown:
+        // an `Equals 0` predicate matches it but a positive count does not. This is
+        // why tiledWindowCount is std::optional rather than a defaulted int.
+        WindowQuery zero;
+        zero.screenId = QStringLiteral("DP-2");
+        zero.tiledWindowCount = 0;
+        const auto exactlyZero = MatchExpression::makeLeaf(Field::TiledWindowCount, Operator::Equals, 0);
+        QVERIFY(exactlyZero.evaluate(zero));
+        QVERIFY(!moreThanOne.evaluate(zero));
+
+        // Unknown count (engine not tiling this context) — every direct predicate
+        // is inert (an absent field never matches).
+        WindowQuery unknown;
+        unknown.screenId = QStringLiteral("DP-2");
+        QVERIFY(!moreThanOne.evaluate(unknown));
+        QVERIFY(!exactlyOne.evaluate(unknown));
+        QVERIFY(!exactlyZero.evaluate(unknown));
+
+        // A None{} negation flips the child: it accepts when the child does NOT
+        // match. So it accepts a one-window query (not > 1) and an unknown count
+        // (inert child), and rejects a two-window query (> 1).
+        const auto notMoreThanOne = MatchExpression::makeNone({moreThanOne});
+        QVERIFY(!notMoreThanOne.evaluate(two));
+        QVERIFY(notMoreThanOne.evaluate(one));
+        QVERIFY(notMoreThanOne.evaluate(unknown));
+    }
+
     void testBoolField()
     {
         const auto isFalse = MatchExpression::makeLeaf(Field::IsFullscreen, Operator::Equals, false);
@@ -326,6 +372,12 @@ private Q_SLOTS:
 
         const auto winLeaf = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
         QVERIFY(!winLeaf.isContextOnly());
+
+        // TiledWindowCount is a context field, so a leaf on it is context-only —
+        // a SetTilingAlgorithm rule keyed on it must pass the context-action
+        // compatibility check rather than be misread as a window match.
+        const auto countLeaf = MatchExpression::makeLeaf(Field::TiledWindowCount, Operator::GreaterThan, 1);
+        QVERIFY(countLeaf.isContextOnly());
 
         const auto ctxComposite = MatchExpression::makeAll({
             MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-2")),

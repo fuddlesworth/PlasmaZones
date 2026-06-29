@@ -63,8 +63,9 @@ QList<ValidationIssue> Rule::validationIssues() const
     QList<ValidationIssue> issues;
 
     // Compute the match's domain once — context-only iff every leaf references
-    // a context field (ScreenId / VirtualDesktop / Activity / Mode). The catch-all is
-    // context-only by this definition and so is compatible with every action.
+    // a context field (ScreenId / VirtualDesktop / Activity / Mode / TiledWindowCount).
+    // The catch-all is context-only by this definition and so is compatible with
+    // every action.
     const bool matchIsContextOnly = match.isContextOnly();
 
     for (int i = 0; i < actions.size(); ++i) {

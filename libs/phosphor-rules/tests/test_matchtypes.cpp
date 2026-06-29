@@ -18,7 +18,7 @@ private Q_SLOTS:
         // Canary: the loop bound is derived from FieldCount, not hard-coded.
         // If this fails, an enumerator was added/removed without updating
         // FieldCount in MatchTypes.h.
-        QCOMPARE(FieldCount, 35);
+        QCOMPARE(FieldCount, 36);
         QTest::addColumn<int>("fieldValue");
         for (int v = 0; v < FieldCount; ++v) {
             QTest::addRow("field-%d", v) << v;
@@ -101,10 +101,10 @@ private Q_SLOTS:
 
     void testFieldIsContext()
     {
-        // Exactly the four context fields are context (screen / desktop /
-        // activity plus the placement Mode) — everything else is a window
-        // property. Action/match compatibility hinges on this split, so
-        // pin it down explicitly rather than re-deriving it from
+        // Exactly the five context fields are context (screen / desktop /
+        // activity, the placement Mode, and the tiled-window count) — everything
+        // else is a window property. Action/match compatibility hinges on this
+        // split, so pin it down explicitly rather than re-deriving it from
         // fieldIsString/fieldIsBool/fieldIsNumeric.
         QVERIFY(fieldIsContext(Field::ScreenId));
         QVERIFY(fieldIsContext(Field::VirtualDesktop));
@@ -113,6 +113,11 @@ private Q_SLOTS:
         // resolution so a per-mode gap/appearance rule participates in the
         // cascade.
         QVERIFY(fieldIsContext(Field::Mode));
+        // TiledWindowCount is a context field (the tiled count for the
+        // screen+desktop being resolved) so a SetTilingAlgorithm rule can key
+        // on it during windowless context resolution.
+        QVERIFY(fieldIsContext(Field::TiledWindowCount));
+        QVERIFY(fieldIsNumeric(Field::TiledWindowCount));
 
         QVERIFY(!fieldIsContext(Field::AppId));
         QVERIFY(!fieldIsContext(Field::WindowClass));

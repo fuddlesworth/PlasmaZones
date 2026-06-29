@@ -13,9 +13,10 @@ namespace PhosphorRules {
 
 /// Match fields. Each names one attribute of a WindowQuery — either a
 /// window property (absent during a windowless context query) or a context
-/// attribute (always present). A predicate over an absent window field
-/// evaluates false, which is what makes window-property rules naturally
-/// inert during context resolution without special-casing.
+/// attribute (present during context resolution, except the optional
+/// tiledWindowCount which is absent when the count is unknown). A predicate over
+/// an absent field evaluates false, which is what makes window-property rules
+/// naturally inert during context resolution without special-casing.
 enum class Field : int {
     // ── Window properties [0, 29] ────────────────────────────────────────
     AppId = 0,
@@ -55,12 +56,14 @@ enum class Field : int {
     IsTiled = 33, ///< managed by the autotile engine (distinct from IsSnapped)
     // ── Context placement-mode field [34] ────────────────────────────────
     Mode = 34, ///< context — current placement mode (snapping / tiling)
+    // ── Context tiling-environment field [35] ────────────────────────────
+    TiledWindowCount = 35, ///< context — tiled windows on this screen + desktop
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::Mode) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::TiledWindowCount) + 1;
 
 // ── Field descriptor table ──────────────────────────────────────────────────
 // Single source of truth for every field's wire string, value-kind, and
@@ -79,7 +82,9 @@ enum class FieldType : int {
 /// Whether a field is a window property or a context attribute.
 enum class FieldSource : int {
     Window, ///< absent during windowless context queries
-    Context, ///< always present (screen / desktop / activity)
+    Context, ///< resolvable during a windowless context query (screen / desktop /
+             ///< activity / mode are always set; tiledWindowCount is optional and
+             ///< absent when the count is unknown)
 };
 
 /// Compile-time descriptor for one Field.
@@ -135,6 +140,13 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     // context resolution — which is what lets a per-mode rule participate in
     // the gap cascade and pass the context-action compatibility check.
     {Field::Mode, QLatin1StringView("mode"), FieldType::String, FieldSource::Context},
+    // [35] — Tiled-window count for the screen + desktop being resolved. Int-
+    // valued (Equals / GreaterThan / LessThan) and Context-sourced so it is
+    // present during windowless context resolution — which is what lets a
+    // "switch algorithm when a second window opens" rule participate in the
+    // tiling-algorithm slot of the assignment cascade. Absent (predicate
+    // false) when the resolving screen is not actively tiling.
+    {Field::TiledWindowCount, QLatin1StringView("tiledWindowCount"), FieldType::Int, FieldSource::Context},
 };
 static_assert(sizeof(kFieldTable) / sizeof(kFieldTable[0]) == static_cast<unsigned>(FieldCount),
               "kFieldTable must have one entry per Field");
@@ -196,8 +208,8 @@ inline bool fieldIsBool(Field field)
 }
 
 /// True if @p field describes the **context** a window appears in
-/// (screen / virtual desktop / activity) rather than a property of the
-/// window itself.
+/// (screen / virtual desktop / activity / placement mode / tiled-window count)
+/// rather than a property of the window itself.
 inline bool fieldIsContext(Field field)
 {
     const int idx = static_cast<int>(field);
@@ -215,8 +227,10 @@ enum class Operator : int {
     EndsWith = 3, ///< suffix, case-insensitive (strings)
     Regex = 4, ///< QRegularExpression, precompiled & cached per predicate
     AppIdMatches = 5, ///< segment-aware reverse-DNS match (AppId only)
-    GreaterThan = 6, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY)
-    LessThan = 7, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY)
+    GreaterThan =
+        6, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY / TiledWindowCount)
+    LessThan =
+        7, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY / TiledWindowCount)
 };
 
 /// The number of distinct `Operator` enumerators. `Operator` is a contiguous

@@ -88,6 +88,11 @@ bool TilingAlgorithm::centerLayout() const
     return false;
 }
 
+bool TilingAlgorithm::supportsSingleWindow() const noexcept
+{
+    return false;
+}
+
 bool TilingAlgorithm::isScripted() const noexcept
 {
     return false;

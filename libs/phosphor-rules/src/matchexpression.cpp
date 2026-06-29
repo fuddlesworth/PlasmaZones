@@ -123,15 +123,10 @@ MatchExpression MatchExpression::makeNone(const QList<MatchExpression>& children
 bool MatchExpression::isContextOnly() const
 {
     if (m_kind == Kind::Leaf) {
-        switch (m_predicate.field) {
-        case Field::ScreenId:
-        case Field::VirtualDesktop:
-        case Field::Activity:
-        case Field::Mode:
-            return true;
-        default:
-            return false;
-        }
+        // Table-derived so a new context field (e.g. TiledWindowCount) is
+        // classified automatically — a hand-maintained switch here silently
+        // omits new enumerators because its `default` arm suppresses -Wswitch.
+        return fieldIsContext(m_predicate.field);
     }
     // A composite is context-only iff every child is context-only AND the
     // composite carries at least one child. An empty `Any{}` is always-false
@@ -325,7 +320,7 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
         return subject.toBool() == value.toBool();
     }
 
-    // ── Numeric fields (Pid / VirtualDesktop / Width / Height / PositionX / PositionY) ──
+    // ── Numeric fields (Pid / VirtualDesktop / Width / Height / PositionX / PositionY / TiledWindowCount) ──
     if (fieldIsNumeric(m_predicate.field)) {
         const int lhs = subject.toInt();
         const int rhs = value.toInt();

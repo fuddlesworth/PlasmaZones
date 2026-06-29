@@ -23,8 +23,10 @@ namespace PhosphorRules {
  * window field evaluates `false`, so window-property rules are naturally
  * inert during context resolution — no special-casing in the evaluator.
  *
- * Context attributes are always present. `virtualDesktop == 0` means "all
- * desktops" (a sticky window); empty `activity` means "all activities".
+ * Context attributes are present even for a windowless context query, with one
+ * exception: `tiledWindowCount` is optional and absent when the count is
+ * unknown. `virtualDesktop == 0` means "all desktops" (a sticky window); empty
+ * `activity` means "all activities".
  */
 struct WindowQuery
 {
@@ -61,11 +63,18 @@ struct WindowQuery
     std::optional<QString> zone; ///< the snap zone's UUID the window occupies
     std::optional<bool> isTiled; ///< managed by the autotile engine (distinct from isSnapped)
 
-    // ── Context attributes — always present ──
+    // ── Context attributes — always present (except the optional tiledWindowCount) ──
     QString screenId;
     int virtualDesktop = 0; ///< 0 = all desktops
     QString activity; ///< empty = all activities
     QString mode; ///< current placement mode wire token ("snapping" / "tiling"); a floating window has no mode (empty)
+
+    /// Tiled-window count for the screen + desktop being resolved. Optional
+    /// rather than defaulted because 0 is a meaningful value (an empty tiled
+    /// desktop): engaged only when the resolver knows the count (the autotile
+    /// engine supplies it for an actively-tiling context), absent otherwise so
+    /// a count predicate is inert wherever the count is unknown.
+    std::optional<int> tiledWindowCount;
 
     /// True if any window attribute is set — i.e. this is a per-window query
     /// rather than a windowless context query.
@@ -121,6 +130,8 @@ struct WindowQuery
             return std::optional<QVariant>(activity);
         case Field::Mode:
             return std::optional<QVariant>(mode);
+        case Field::TiledWindowCount:
+            return tiledWindowCount ? std::optional<QVariant>(*tiledWindowCount) : std::nullopt;
         case Field::IsMaximized:
             return isMaximized ? std::optional<QVariant>(*isMaximized) : std::nullopt;
         case Field::IsFocused:

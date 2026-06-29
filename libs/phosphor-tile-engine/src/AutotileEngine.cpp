@@ -2787,8 +2787,21 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
         return;
     }
 
-    // Need at least two tiled windows for a neighbour to absorb the resize.
-    if (state->tiledWindowCount() < 2) {
+    PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(resolvedScreen);
+    if (!algo) {
+        return;
+    }
+
+    // Need at least two tiled windows for a neighbour to absorb the resize. The
+    // exception is an algorithm that owns the single-window layout and records
+    // the resize itself through the hook (e.g. a centered layout remembering a
+    // per-monitor width): it has no neighbour to reflow but still wants the
+    // event. The exception excludes memory/tree algorithms: their reflow is
+    // Tier A below, which bails for a lone window (leafCount < 2), so admitting
+    // one here would swallow the resize before the hook (Tier B) could run.
+    if (state->tiledWindowCount() < 2
+        && !(state->tiledWindowCount() == 1 && algo->supportsSingleWindow() && algo->supportsResizeHook()
+             && !algo->supportsMemory())) {
         return;
     }
 
@@ -2808,11 +2821,6 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
         screen = screenGeometry(resolvedScreen);
     }
     if (screen.isValid() && !screen.contains(newFrame.center())) {
-        return;
-    }
-
-    PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(resolvedScreen);
-    if (!algo) {
         return;
     }
 

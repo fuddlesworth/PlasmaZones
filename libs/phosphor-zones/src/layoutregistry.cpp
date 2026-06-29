@@ -80,6 +80,12 @@ void LayoutRegistry::setDefaultAutotileAlgorithmProvider(std::function<QString()
     m_defaultAutotileAlgorithmProvider = std::move(provider);
 }
 
+void LayoutRegistry::setTiledWindowCountProvider(
+    std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)> provider)
+{
+    m_tiledWindowCountProvider = std::move(provider);
+}
+
 void LayoutRegistry::setSnappingPreferredProvider(std::function<bool()> provider)
 {
     m_snappingPreferredProvider = std::move(provider);

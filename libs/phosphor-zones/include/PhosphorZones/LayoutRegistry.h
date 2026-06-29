@@ -236,6 +236,33 @@ public:
     void setDefaultAutotileAlgorithmProvider(std::function<QString()> provider);
 
     /**
+     * @brief Inject a callback that returns the tiled-window count for a screen,
+     * or std::nullopt when the screen is not actively tiling (so a count
+     * predicate stays inert there).
+     *
+     * The count is fed into the windowless WindowQuery built during
+     * @ref resolveAssignmentEntry, letting a SetTilingAlgorithm rule match on
+     * @c Field::TiledWindowCount, for example to switch algorithm once a second
+     * window opens. The value also participates in that resolver's cache key, so
+     * a count change yields a distinct entry rather than a stale hit; the caller
+     * (the daemon) re-resolves and re-applies the per-screen algorithm when the
+     * count changes (on the engine's placementChanged).
+     *
+     * The (virtualDesktop, activity) parameters identify the resolution context,
+     * but a provider may return the screen's CURRENT-context count when its
+     * backing engine only tracks the visible desktop. That is sound because the
+     * tiling-algorithm slot is only ever resolved for the screen's current
+     * context; a count predicate on a non-current (desktop, activity) is not a
+     * supported configuration. Returning nullopt for an unknown context is also
+     * valid (the predicate then stays inert).
+     *
+     * Same threading contract as @ref setDefaultAutotileAlgorithmProvider.
+     */
+    void setTiledWindowCountProvider(
+        std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)>
+            provider);
+
+    /**
      * @brief Inject a callback that returns true when Snapping is the
      * user's preferred default mode (regardless of whether a default
      * snapping layout id is configured).
@@ -578,9 +605,9 @@ public:
     /// Used by tests to verify the cache populates and invalidates against
     /// rule-set revision bumps. Not for production callers — the value
     /// drifts as cursor-move resolves come in. Return type is `int` because
-    /// the cache is bounded at 256 entries (`kMaxEntries` in
-    /// layoutregistry_assignments.cpp), well within `int` range — keeps
-    /// test assertions free of the `qsizetype` `int` widening dance.
+    /// the cache is bounded at 256 entries (`kMaxEntries` in the shared
+    /// @ref resolveCachedContext template below), well within `int` range —
+    /// keeps test assertions free of the `qsizetype` `int` widening dance.
     [[nodiscard]] int contextResolveCacheSize() const
     {
         return static_cast<int>(m_contextResolveCache.size());
@@ -653,16 +680,19 @@ private:
     /// fallback is the caller's (layoutForScreen) retry loop.
     ///
     /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
-    /// by (screenId, virtualDesktop, activity). The cache is invalidated
+    /// by (screenId, virtualDesktop, activity) plus a "twc:N" tiled-window-count
+    /// token (empty when the count is unknown), so a count change yields a fresh
+    /// entry rather than a stale hit while count-steady callers keep hitting the
+    /// cache. The cache is invalidated
     /// lazily by comparing the bound rule set's monotonic
     /// @c RuleSet::revision() against the snapshot taken on the last
     /// insert — a mismatch clears the whole map before falling through to the
     /// linear walk. No explicit signal-time clear is required: a real edit
     /// bumps the revision (see @c RuleSet::setRules), so the next
-    /// resolve sees the bump and re-populates. A soft cap (256 entries — see
-    /// the per-cache @c kMaxEntries constant in
-    /// @c layoutregistry_assignments.cpp; each context cache declares its own)
-    /// guards against pathological growth from clients probing unique
+    /// resolve sees the bump and re-populates. A soft cap (256 entries — the
+    /// @c kMaxEntries constant in the shared @ref resolveCachedContext template,
+    /// applied uniformly to every context cache) guards against pathological
+    /// growth from clients probing unique
     /// non-existent tuples; on overflow the cache is cleared entirely (the
     /// next walk re-seeds it cleanly). 256 sits comfortably above any
     /// realistic live (screens × desktops × activities) footprint and far
@@ -783,11 +813,16 @@ private:
         QString screenId;
         int virtualDesktop = 0;
         QString activity;
-        // The placement-mode wire token the gap cascade resolves against. Empty
-        // for the mode-agnostic resolvers (assignment / lock / overlay). It is
-        // part of the cache identity because the SAME (screen, desktop, activity)
-        // now resolves DIFFERENT gaps per mode — caching without it would return
-        // the snapping result for a subsequent tiling query.
+        // A free-form fourth key dimension, used by two resolvers that share the
+        // ContextResolveKey type but never the same cache container. For the gap
+        // cascade it carries the placement-mode wire token, because the SAME
+        // (screen, desktop, activity) resolves DIFFERENT gaps per mode and
+        // caching without it would return the snapping result for a subsequent
+        // tiling query. For the assignment resolver it carries a "twc:N"
+        // tiled-window-count token (empty when the count is unknown), so a count
+        // change yields a fresh entry rather than a stale hit. The lock,
+        // default-assignment, and overlay resolvers leave it empty. Each resolver
+        // owns its own cache hash, so the two token vocabularies never collide.
         QString mode;
         bool operator==(const ContextResolveKey& other) const noexcept
         {
@@ -845,8 +880,11 @@ private:
 
     /// The rule-derived slot resolution cached by @ref resolveAssignmentEntry.
     /// Holds ONLY what the rule set produced for each of the three independent
-    /// slots, so the cache stays a pure function of the rule set (the cache's
-    /// revision-invalidation contract). The global default — an external
+    /// slots. Given a fixed cache key the value is a pure function of the rule
+    /// set (the cache's revision-invalidation contract). The live tiled-window
+    /// count is the one non-rule-set input that affects the result; rather than
+    /// break that contract it participates in the cache KEY (the "twc:N" token),
+    /// so each count resolves its own entry. The global default — an external
     /// provider, not part of the rule set and not revision-tracked — is folded
     /// in AFTER the cache returns, so a default-setting change is reflected
     /// immediately without a rule-set revision bump (a settings edit produces
@@ -915,6 +953,12 @@ private:
     /// Symmetric to @c m_defaultLayoutIdProvider; together they form
     /// the level-1 cascade tier.
     std::function<QString()> m_defaultAutotileAlgorithmProvider;
+    /// Empty = provider unset. Returns the tiled-window count for a context
+    /// (or nullopt when it is not actively tiling), fed into the windowless
+    /// query during @ref resolveAssignmentEntry so a SetTilingAlgorithm rule
+    /// can match @c Field::TiledWindowCount. See @ref setTiledWindowCountProvider.
+    std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)>
+        m_tiledWindowCountProvider;
     /// Empty = provider unset (legacy behaviour). Returns true when
     /// the user has snapping mode enabled in settings, regardless of
     /// whether a global default snap layout id is configured. See
