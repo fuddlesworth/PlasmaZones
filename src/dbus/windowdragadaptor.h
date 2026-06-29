@@ -147,11 +147,12 @@ public:
     /// consumer still needs it. kCancelOverlayId is bound on behalf of the
     /// layout picker (start.cpp, layoutPickerRequested) and the snap-assist
     /// phase (start.cpp, snapAssistShown); the drag itself never binds it (the
-    /// kwin-effect's keyboard grab handles Escape during a drag). Every
-    /// non-Escape release site routes through here so one consumer's teardown
-    /// cannot tear the grab out from under another consumer that is still
-    /// showing. cancelSnap() is the lone exception: it is the explicit
-    /// Escape-pressed teardown and releases unconditionally.
+    /// kwin-effect's keyboard grab handles Escape during a drag). Every normal
+    /// release site routes through here so one consumer's teardown cannot tear
+    /// the grab out from under another consumer that is still showing. Two
+    /// sites deliberately bypass it with an unconditional release: cancelSnap()
+    /// (the explicit Escape-pressed teardown) and clearForCompositorReconnect()
+    /// (force-release when the compositor that held the grab is already gone).
     void releaseCancelOverlayShortcutIfIdle();
 
     /// Register the layout-picker keyboard navigation accelerators

@@ -380,8 +380,10 @@ void WindowDragAdaptor::releaseCancelOverlayShortcutIfIdle()
     // must first confirm no OTHER consumer is still showing — otherwise it
     // tears the grab out from under a visible picker or snap assist, leaving
     // that overlay un-dismissable by Escape. This is the single canonical guard
-    // every non-Escape release site routes through (cancelSnap() is the lone
-    // exception: it is the explicit Escape-pressed teardown).
+    // every normal release site routes through. Two sites deliberately bypass
+    // it with an unconditional release: cancelSnap() (the explicit
+    // Escape-pressed teardown) and clearForCompositorReconnect() (force-release
+    // when the compositor that held the grab is already gone).
     if (m_overlayService && (m_overlayService->isLayoutPickerVisible() || m_overlayService->isSnapAssistVisible())) {
         return;
     }
