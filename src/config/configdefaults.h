@@ -680,7 +680,7 @@ public:
     // Returns the absolute path to rules.json (the unified Rule
     // store — schema v4). Separate from config.json so frequent daemon-driven
     // rule writes do not churn the cold user-settings blob. The daemon is the
-    // sole writer; see docs/window-rule-refactor-design.md §5.
+    // sole writer.
     PLASMAZONES_EXPORT static QString rulesFilePath();
 
     // UUID suffix `...001` is RETIRED — it was the never-shipped single combined
@@ -691,8 +691,7 @@ public:
     // lowest-priority Rule whose actions hold the default window border
     // appearance (visible / width / radius / colour) the Appearance settings
     // page edits. Fixed so the daemon can re-find (and idempotently re-seed) it
-    // across restarts and the settings UI can bind to the same rule. See
-    // docs/window-rule-refactor-design.md.
+    // across restarts and the settings UI can bind to the same rule.
     static QUuid baselineBorderRuleId()
     {
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000002}"));

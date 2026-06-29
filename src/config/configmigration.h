@@ -41,8 +41,7 @@ namespace PlasmaZones {
 ///     The standalone
 ///     "Exclusions" settings page disappears; the three global window-filtering
 ///     knobs (excludeTransientWindows / minimumWindowWidth /
-///     minimumWindowHeight) move to the General page. See
-///     docs/window-rule-refactor-design.md §8.
+///     minimumWindowHeight) move to the General page.
 ///     Each layout's retired per-layout `appRules` triple
 ///     (`{pattern, zoneNumber, targetScreen}`) also folds into rules.json
 ///     as an `AppId AppIdMatches <pattern> → SnapToZone [zoneNumber]` rule,

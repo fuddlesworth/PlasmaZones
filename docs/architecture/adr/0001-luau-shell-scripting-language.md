@@ -11,7 +11,6 @@
 | **Scope** | Shell/compositor scripting surface; first increment = scripted autotiling |
 | **Supersedes** | — |
 | **Spike** | `spike/luau-autotile-embed` (throwaway, `spikes/luau-autotile-embed/`) |
-| **Impl plan** | [luau-migration-impl-plan.md](../luau-migration-impl-plan.md) |
 
 > This is the first ADR in the PlasmaZones series. The `ADR-001…ADR-026`
 > references elsewhere in the tree belong to the bundled claude-flow tooling and
@@ -130,11 +129,10 @@ marshalling/setup); watchdog ≈ wash but safer.
 
 ## Migration & sequencing
 
-The full phased breakdown lives in the
-[implementation plan](../luau-migration-impl-plan.md) (one `feat/luau-scripting`
-branch off `v3.1`, per-phase commits; PRs target `v3.1`). In summary:
+The work shipped as one `feat/luau-scripting` branch off `v3.1`, with per-phase
+commits and PRs targeting `v3.1`. The phases:
 
-1. **Decide & document** — this ADR + the implementation plan.
+1. **Decide & document** — this ADR.
 2. **Build `phosphor-scripting`** — the generic Luau host (engine, sandbox,
    watchdog, compile/load, marshalling core), graduating the spike's `LuauHost`
    into a tested LGPL library.
