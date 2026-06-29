@@ -64,7 +64,7 @@ _INSTANCE_KEYWORDS = frozenset({"default", "const", "examples", "enum"})
 # names can collide with _INSTANCE_KEYWORDS (e.g. a property literally named
 # "default"), so recurse into the map's values directly rather than applying the
 # instance-keyword skip to the arbitrary keys.
-_SUBSCHEMA_MAP_KEYWORDS = frozenset({"properties", "patternProperties", "definitions", "$defs"})
+_SUBSCHEMA_MAP_KEYWORDS = frozenset({"properties", "patternProperties", "definitions", "$defs", "dependencies"})
 
 
 def formats_used(node: object) -> set[str]:

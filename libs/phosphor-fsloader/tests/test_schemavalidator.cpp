@@ -199,8 +199,10 @@ private Q_SLOTS:
         // invalid ECMAScript pattern only fails when a string is checked. It
         // must fail closed (a returned error list), never throw — an escaping
         // throw would terminate, since callers are built under -fno-exceptions.
-        // NOTE: a plain (non-raw) string literal — an unbalanced '[' inside a
-        // raw string confuses moc's lexer and hides this Q_OBJECT class.
+        // NOTE: a plain (non-raw) string literal. An unbalanced '[' inside a raw
+        // string mis-tracks moc's bracket counting in this multi-raw-string TU
+        // and hides the Q_OBJECT class (empty .moc -> undefined vtable). Verified
+        // by reverting: the raw form fails to link.
         const SchemaValidator validator(QByteArrayLiteral("{\"type\":\"string\",\"pattern\":\"[\"}"));
         // Validate a real string value (not via the object-only parse() helper)
         // so `pattern` actually applies and valijson compiles the bad regex.
