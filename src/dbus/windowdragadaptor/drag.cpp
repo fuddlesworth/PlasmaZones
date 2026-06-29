@@ -67,8 +67,8 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // kglobalshortcutsrc + kglobalshortcutsstaterc with an fsync at drag
     // start and end, stalling the compositor on slow-fsync disks
     // (discussion #167). The grab is now bound only for the snap-assist
-    // phase, which has no keyboard grab (see endDrag's requestSnapAssist
-    // branch in drop.cpp), and for the layout picker (start.cpp).
+    // phase, which has no keyboard grab (see start.cpp's snapAssistShown
+    // handler), and for the layout picker (start.cpp).
     m_draggedWindowId = windowId;
     m_originalGeometry = QRect(qRound(x), qRound(y), qRound(width), qRound(height));
     m_currentZoneId.clear();

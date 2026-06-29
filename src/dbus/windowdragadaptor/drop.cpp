@@ -460,24 +460,25 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // read would describe the new desktop's occupancy instead of the
         // desktop the user actually dropped on.
         m_snapAssistPendingDesktop = m_layoutManager->currentVirtualDesktopForScreen(releaseScreenId);
-        // Bind the KGlobalAccel Escape grab for the snap-assist phase. The
-        // drag itself relied on the kwin-effect's keyboard grab, which the
-        // effect releases on dragStopped — so the post-drop snap-assist UI
-        // (which may not yet hold Wayland keyboard focus) has no Escape
-        // handler unless we bind one now. This is the only spot that pays a
-        // kglobalshortcutsrc write, and only when snap assist actually
-        // appears, not on every drag (discussion #167). onSnapAssistDismissed
-        // releases it again when the snap-assist UI goes away.
-        registerCancelOverlayShortcut();
+        // The snap-assist Escape grab is NOT bound here on purpose. Binding on
+        // the dragStopped/endDrag path would fsync kglobalshortcutsrc while the
+        // kwin-effect is still awaiting the endDrag reply — the very drop-path
+        // compositor stall this change set out to remove (#167). The grab is
+        // bound lazily by start.cpp's snapAssistShown handler instead, which
+        // fires on the deferred computeAndEmitSnapAssist tick (after the
+        // compositor is unblocked) and only when snap assist actually shows
+        // with non-empty zones. onSnapAssistDismissed releases it. Deferring to
+        // snapAssistShown also avoids leaking the grab when the empty-zone
+        // check in computeAndEmitSnapAssist finds nothing to show.
     }
 
-    // Reset drag state for next operation. keepEscapeShortcut is true exactly
-    // when snap assist was requested above (and the grab was just bound), so
-    // resetDragState skips the unregister and the snap-assist phase keeps its
-    // Escape handler. When snap assist is not requested nothing was bound, so
-    // the unregister on the false path is a no-op (Registry::unbind ignores
-    // unknown ids).
-    resetDragState(/*keepEscapeShortcut=*/snapAssistRequestedOut);
+    // Reset drag state for next operation. No Escape grab is registered on this
+    // path: the drag used the kwin-effect's keyboard grab, and snap assist
+    // binds its own grab lazily via snapAssistShown (start.cpp). The default
+    // unregister is therefore an unconditional no-op here — Registry::unbind
+    // ignores an id that was never bound — and snapAssistRequestedOut is left
+    // purely as the caller's output flag.
+    resetDragState();
 }
 
 void WindowDragAdaptor::computeAndEmitSnapAssist()

@@ -119,8 +119,14 @@ public:
     /**
      * Register / unregister the cancel-overlay Escape shortcut on demand.
      *
-     * Drag-active code paths register/unregister automatically as part of
-     * the drag lifecycle. The layout picker re-uses the same id
+     * The snap-assist phase (start.cpp's snapAssistShown handler) and the
+     * layout picker register / unregister this on demand. The drag itself
+     * needs no binding: the
+     * kwin-effect grabs the keyboard for the whole drag and routes Escape
+     * to cancelSnap() directly, so a KGlobalAccel grab would never fire
+     * during a drag (and binding one per drag fsynced kglobalshortcutsrc and
+     * stuttered the compositor on slow disks, #167). The layout picker
+     * re-uses the same id
      * (kCancelOverlayId) so KGlobalAccel never sees two distinct actions
      * competing for Escape — once a key is granted, KGlobalAccel routes
      * to a single action, and a second registration with a fresh id is
