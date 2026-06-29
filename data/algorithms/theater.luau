@@ -115,7 +115,8 @@ return pluau.algorithm {
         local centerZone = { x = centerX, y = cy, width = centerW, height = ch }
 
         -- Split the rail windows across the two margins, giving the extra one to
-        -- the right when the count is odd so the column heights stay balanced.
+        -- the right rail when the number of rail windows is odd so the two
+        -- columns stay as balanced as the count allows.
         local rest = count - 1
         local rightCount = math.floor((rest + 1) / 2)
         local leftCount = rest - rightCount

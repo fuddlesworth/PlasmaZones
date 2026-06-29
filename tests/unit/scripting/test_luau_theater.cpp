@@ -158,11 +158,12 @@ private Q_SLOTS:
         const QRect spotlight = z0[1];
         QCOMPARE(spotlight.width(), 1152);
 
+        // A real interactive resize moves at most one edge per axis (left XOR
+        // right); the host never emits both together. Drag the right edge only.
         ResizeEvent ev;
         ev.index = 1; // the focused/spotlight window
         ev.oldRect = spotlight;
-        ev.newRect = QRect(spotlight.x() - 100, spotlight.y(), spotlight.width() + 200, spotlight.height());
-        ev.left = true;
+        ev.newRect = QRect(spotlight.x(), spotlight.y(), spotlight.width() + 200, spotlight.height());
         ev.right = true;
         algo.onWindowResized(state.get(), ev);
 

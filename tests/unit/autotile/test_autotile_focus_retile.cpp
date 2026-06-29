@@ -109,6 +109,34 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         QCOMPARE(tiledSpy.count(), 0);
     }
+
+    void theater_refocusSameWindow_doesNotRetile()
+    {
+        PhosphorScreens::FakeScreenProvider provider;
+        provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+        PhosphorScreens::ScreenManager manager(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        manager.start();
+
+        AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("DP-1")});
+        engine.setAlgorithm(QLatin1String("theater"));
+        engine.windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
+        engine.windowOpened(QStringLiteral("a2"), QStringLiteral("DP-1"));
+
+        PhosphorTiles::TilingState* d1 = engine.tilingStateForScreen(QStringLiteral("DP-1"));
+        QTRY_COMPARE(d1->calculatedZones().size(), 2);
+
+        // Establish focus on a1, then re-focus the SAME window: even a
+        // focus-driven layout must not reflow when focus did not actually move.
+        engine.windowFocused(QStringLiteral("a1"), QStringLiteral("DP-1"));
+        QCoreApplication::processEvents();
+
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+        engine.windowFocused(QStringLiteral("a1"), QStringLiteral("DP-1"));
+        QCoreApplication::processEvents();
+        QCOMPARE(tiledSpy.count(), 0);
+    }
 };
 
 QTEST_MAIN(TestAutotileFocusRetile)

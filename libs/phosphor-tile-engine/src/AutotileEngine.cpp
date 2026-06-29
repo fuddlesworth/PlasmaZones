@@ -2752,12 +2752,19 @@ void AutotileEngine::onWindowFocused(const QString& windowId)
     // Most layouts place a window by its tiled index, so a focus change moves
     // nothing and there is no reason to recompute. Focus-driven layouts (e.g.
     // Theater) opt in via retilesOnFocusChange(): reflow when focus actually
-    // moves to a different tiled window so the layout can follow it. Guard on a
-    // real change and on the target being tiled — focusing a floating window
-    // must not disturb the current layout.
-    if (previousFocus != windowId && state->tiledWindows().contains(windowId)) {
+    // moves to a different tiled window so the layout can follow it. The checks
+    // are ordered cheap-first: the capability bool short-circuits before the
+    // allocating tiledWindows() scan, which would otherwise run on every focus
+    // change for every layout. Reflow only when the focused window is on this
+    // screen's current context (retileAfterOperation keys on m_activeScreen's
+    // current state, so an off-context focus event must not reflow a different
+    // desktop's state) and only when the target is actually tiled (focusing a
+    // floating window must not disturb the layout).
+    if (previousFocus != windowId) {
         PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(m_activeScreen);
-        if (algo && algo->retilesOnFocusChange()) {
+        if (algo && algo->retilesOnFocusChange()
+            && m_windowToStateKey.value(windowId) == currentKeyForScreen(m_activeScreen)
+            && state->tiledWindows().contains(windowId)) {
             retileAfterOperation(m_activeScreen, true);
         }
     }

@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Theater, a widescreen layout**: keeps a single window centered at a width you set per monitor, so one window never has to stretch across a wide display. With more windows the focused one sits in a centered spotlight and the rest line up on rails in the margins on both sides, and focusing a rail window brings it into the spotlight.
+- **Theater, a widescreen layout**: keeps a single window centered at a width you set per monitor, so one window never has to stretch across a wide display. With more windows the focused one sits in a centered spotlight and the rest line up on rails in the margins on both sides, and focusing a rail window brings it into the spotlight ([#704](https://github.com/fuddlesworth/PlasmaZones/pull/704)).
 - **Window appearance and gaps are now rules**: window borders, title bars, corner radius, border colors, and gaps are controlled through the rule system instead of separate per-mode settings pages. A new Windows page under the Appearance category edits the managed defaults, and per-window or per-context overrides are ordinary rules on the Rules page ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Match by placement mode**: a new Mode match condition matches snapped or tiled windows, so snapping and tiling can carry different gaps or appearance. Mode is a context condition, resolved per screen and layout ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Per-monitor gaps**: pick a monitor from the scope chip on the Gaps card to set that screen's gaps independently. The values are stored as a screen-scoped rule ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).

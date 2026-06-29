@@ -465,20 +465,21 @@ private Q_SLOTS:
         const QString path = QStringLiteral("/test/wiretypes/algoinfoecho");
         QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
 
-        const PhosphorProtocol::AlgorithmInfoEntry sent{QStringLiteral("centered-single"),
-                                                        QStringLiteral("Centered"),
-                                                        QStringLiteral("Centered single-window column"),
-                                                        false,
-                                                        true,
-                                                        true,
-                                                        false,
-                                                        0.6,
-                                                        6,
-                                                        true,
-                                                        QStringLiteral("all"),
-                                                        true,
-                                                        false,
-                                                        true};
+        const PhosphorProtocol::AlgorithmInfoEntry sent{
+            QStringLiteral("theater"),
+            QStringLiteral("Theater"),
+            QStringLiteral("Focused window centered with the rest on side rails"),
+            false,
+            true,
+            true,
+            false,
+            0.6,
+            6,
+            true,
+            QStringLiteral("all"),
+            true,
+            false,
+            true};
 
         QDBusMessage call =
             QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
