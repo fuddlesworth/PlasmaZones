@@ -189,10 +189,20 @@ QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManu
         return order;
     }
     if (includeManual) {
+        // Snapping layouts are keyed by bare UUID in both the order and the
+        // preview ids, so they match sortPreviews directly.
         order.append(settings->snappingLayoutOrder());
     }
     if (includeAutotile) {
-        order.append(settings->tilingAlgorithmOrder());
+        // The order stores BARE algorithm ids ("bsp"), but autotile previews are
+        // keyed "autotile:<id>" (LayoutPreview::id). Prefix to the preview
+        // namespace, or sortPreviews' id match misses every autotile entry and
+        // the priority order silently no-ops for tiling.
+        const QStringList algoOrder = settings->tilingAlgorithmOrder();
+        order.reserve(order.size() + algoOrder.size());
+        for (const QString& algoId : algoOrder) {
+            order.append(PhosphorLayout::LayoutId::makeAutotileId(algoId));
+        }
     }
     return order;
 }

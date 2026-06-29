@@ -63,17 +63,22 @@ RowLayout {
     readonly property int groupZoneCount: 1
     readonly property int groupAutoManual: 2
     readonly property int groupSource: 3
-    readonly property int groupSnappingNone: 4
-    // Tiling
+    readonly property int groupVisibility: 4
+    readonly property int groupSnappingNone: 5
+    // Tiling. "Persistent" was dropped — it was a degenerate yes/no split already
+    // covered by the Capability grouping's "Persistent (Memory)" bucket.
     readonly property int groupCapability: 0
     readonly property int groupTilingSource: 1
-    readonly property int groupPersistent: 2
+    readonly property int groupTilingVisibility: 2
     readonly property int groupTilingNone: 3
     // Static ComboBox models (avoids inline array recreation that resets currentIndex)
-    readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("None")]
-    readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Persistent"), i18n("None")]
-    readonly property var snappingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Custom")]
-    readonly property var tilingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Custom")]
+    readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("Visibility"), i18n("None")]
+    readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Visibility"), i18n("None")]
+    // "Priority" sorts by the order set on the Configuration → Priority page
+    // (snappingLayoutOrder / tilingAlgorithmOrder). Falls back to Name order when
+    // no priority has been set yet.
+    readonly property var snappingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Priority")]
+    readonly property var tilingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Priority")]
     // Guard to suppress redundant filterSettingsChanged during batch resets
     property bool _resetting: false
     property int _previousViewMode: 0
@@ -241,18 +246,76 @@ RowLayout {
     ComboBox {
         id: sortByCombo
 
+        // Whether a priority order exists for the current mode. hasCustom*Order()
+        // is a non-reactive Q_INVOKABLE, so cache it and refresh on the staged-
+        // order signals and on the mode switch (model change).
+        property bool hasPriorityOrder: false
+
+        function refreshHasPriorityOrder() {
+            hasPriorityOrder = root.viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder();
+        }
+
         Layout.preferredWidth: Kirigami.Units.gridUnit * 8
         model: root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel
         // Binding is initial-only — user interaction breaks it; loadState()
         // re-syncs imperatively via sortByCombo.currentIndex = ...
         currentIndex: root.sortByIndex
         Accessible.name: i18n("Sort by")
+        Component.onCompleted: refreshHasPriorityOrder()
+        // Fires on the mode switch (the model binding re-evaluates to the other
+        // mode's sort array), so the Priority item's enabled state tracks the
+        // mode's own order.
+        onModelChanged: refreshHasPriorityOrder()
         onActivated: index => {
             if (index < 0 || index >= model.length)
                 return;
 
+            // The last option ("Priority") is unavailable until an order is set
+            // on the Priority page. Swallow the selection and revert the visible
+            // value rather than applying a sort that would silently fall back to
+            // Name order.
+            if (index === count - 1 && !hasPriorityOrder) {
+                currentIndex = root.sortByIndex;
+                return;
+            }
+
             root.sortByIndex = index;
             root.filterSettingsChanged();
+        }
+
+        // The "Priority" item (the last sort option) is unavailable until an
+        // order has been set on the Configuration → Priority page. Keep the
+        // delegate ENABLED — a disabled delegate receives no hover events, so the
+        // explanatory tooltip would never show. Gray it, suppress the hover
+        // highlight, and let onActivated above swallow the selection.
+        delegate: ItemDelegate {
+            id: sortItemDelegate
+
+            required property int index
+            required property var modelData
+
+            readonly property bool isPriority: index === sortByCombo.count - 1
+            readonly property bool unavailable: isPriority && !sortByCombo.hasPriorityOrder
+
+            width: sortByCombo.width
+            text: modelData
+            opacity: unavailable ? 0.5 : 1
+            highlighted: !unavailable && sortByCombo.highlightedIndex === index
+            ToolTip.visible: hovered && unavailable
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+            ToolTip.text: i18n("Set a layout order on the Priority page first")
+        }
+
+        Connections {
+            function onStagedSnappingOrderChanged() {
+                sortByCombo.refreshHasPriorityOrder();
+            }
+
+            function onStagedTilingOrderChanged() {
+                sortByCombo.refreshHasPriorityOrder();
+            }
+
+            target: settingsController
         }
     }
 

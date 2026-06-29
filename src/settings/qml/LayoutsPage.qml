@@ -141,7 +141,12 @@ SettingsFlickable {
         else
             filtered = Logic.applyTilingFilters(filtered, search, filterBar);
         let groups = root.buildGroups(filtered, filterBar.groupByIndex);
-        let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder();
+        // The priority order stores ids in each mode's own namespace: snapping
+        // layouts by bare UUID (matches the cards), tiling algorithms by bare
+        // algorithm id ("bsp"). The tiling cards are keyed "autotile:<id>", so
+        // prefix the tiling order to the card namespace before matching, or the
+        // Priority sort silently no-ops for the tiling view.
+        let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder().map(id => "autotile:" + id);
         Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
         root.groupsModel = Logic.finalizeGroups(groups);
     }
@@ -198,10 +203,10 @@ SettingsFlickable {
                 return Logic.groupByBoolKey(filtered, item => {
                     return Logic.isBuiltIn(item);
                 }, "builtin", i18n("Built-in"), "user", i18n("User Scripts"));
-            else if (groupIdx === filterBar.groupPersistent)
+            else if (groupIdx === filterBar.groupTilingVisibility)
                 return Logic.groupByBoolKey(filtered, item => {
-                    return item.supportsMemory === true;
-                }, "persistent", i18n("Persistent"), "stateless", i18n("Stateless"));
+                    return item.hiddenFromSelector !== true;
+                }, "visible", i18n("Visible"), "hidden", i18n("Hidden"));
             return Logic.ungrouped(filtered);
         }
         // Snapping grouping
@@ -219,6 +224,10 @@ SettingsFlickable {
             return Logic.groupByBoolKey(filtered, item => {
                 return Logic.isBuiltIn(item);
             }, "builtin", i18n("Built-in"), "user", i18n("User Layouts"));
+        else if (groupIdx === filterBar.groupVisibility)
+            return Logic.groupByBoolKey(filtered, item => {
+                return item.hiddenFromSelector !== true;
+            }, "visible", i18n("Visible"), "hidden", i18n("Hidden"));
         return Logic.ungrouped(filtered);
     }
 

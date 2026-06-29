@@ -131,6 +131,7 @@ target_compile_definitions(test_tiling_algo_bsp PRIVATE "P_SOURCE_DIR=\"${PROJEC
 # the ~LayoutSourceBundle "no spurious emit" guarantee.
 p_add_test(test_layout_source_bundle core/test_layout_source_bundle.cpp)
 p_add_test(test_layout_preview_serialize core/test_layout_preview_serialize.cpp)
+p_add_test(test_unified_layout_order core/test_unified_layout_order.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Algorithm Registry Tests
