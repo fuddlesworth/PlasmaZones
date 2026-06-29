@@ -2063,6 +2063,57 @@ PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int 
 /// entries don't leave gaps in the descending-by-list-order priority
 /// sequence (`AnimationAppRuleList::fromJson` filtered first; `toRuleSet`
 /// then used the filtered `entries.size()` as count).
+/// Give every migrated rule the append helpers left at priority 0 (the Exclude
+/// and SnapToZone rules) a sensible band priority, matching what the Settings
+/// renormalizer (RuleTemplates / sectionFor) would stamp. The Settings
+/// controller only renormalizes on edit, not on load, so without this the
+/// migrated rules would all read "Priority 0" and tie on a fresh load. A
+/// composite match (e.g. the Steam exclude) lands in the Advanced band; the
+/// simple window-property rules (AppId/WindowClass exclude, SnapToZone) land in
+/// Application. One descending offset per band keeps them distinct, mirroring
+/// renormalizePriorities. Managed and already-prioritized rules are untouched.
+void assignBandPrioritiesToZeroRules(QList<PhosphorRules::Rule>& rules)
+{
+    using PhosphorRules::MatchExpression;
+    using PhosphorRules::Rule;
+    // Bands mirror RuleTemplates (src/settings/ruletemplates.h) — duplicated as
+    // literals because that header lives in the settings tree (see the
+    // kAdvancedBandBase note at finalizeV5Conversion).
+    constexpr int kApplicationBandBase = 200;
+    constexpr int kAdvancedBandBase = 500;
+    constexpr int kBandWidth = 100;
+
+    const auto isSimpleConjunction = [](const MatchExpression& m) {
+        if (m.isLeaf()) {
+            return true;
+        }
+        if (m.kind() != MatchExpression::Kind::All) {
+            return false;
+        }
+        for (const MatchExpression& child : m.children()) {
+            if (!child.isLeaf()) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    QHash<int, int> nextOffset; // band base → next available offset
+    for (Rule& rule : rules) {
+        if (rule.managed || rule.priority != 0) {
+            continue;
+        }
+        const int base = isSimpleConjunction(rule.match) ? kApplicationBandBase : kAdvancedBandBase;
+        auto it = nextOffset.find(base);
+        if (it == nextOffset.end()) {
+            it = nextOffset.insert(base, kBandWidth - 1);
+        }
+        const int offset = qMax(0, it.value());
+        it.value() = offset - 1;
+        rule.priority = base + offset;
+    }
+}
+
 void appendAnimationRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJsonArray& stash)
 {
     QList<QJsonObject> valid;
@@ -2171,8 +2222,8 @@ void appendExclusionRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJso
                     + Detail::encodeSegment(QString::number(static_cast<int>(Operator::AppIdMatches)))
                     + Detail::encodeSegment(pattern));
             rule.enabled = true;
-            // priority = 0 leaves the rule at the bottom of the
-            // controller-renormalized list within its band. The user can
+            // Left at 0 here; assignBandPrioritiesToZeroRules stamps the real
+            // band priority once the full list is assembled. The user can
             // drag-reorder it in the Rules page if precedence matters.
             rule.priority = 0;
             rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);
@@ -2222,9 +2273,10 @@ void appendSteamDefaultRule(QList<PhosphorRules::Rule>& rules)
                                   Detail::encodeSegment(QStringLiteral("steam-default-exclude")));
     rule.name = QStringLiteral("Steam");
     rule.enabled = true;
-    // priority 0 mirrors the migrated exclusion rules: an Exclude rule's
-    // precedence is irrelevant to the boolean exclusion slice the effect
-    // evaluates, and the controller renormalizes display order on load.
+    // Left at 0 here; assignBandPrioritiesToZeroRules stamps the real band
+    // priority once the full list is assembled (composite match → Advanced
+    // band). An Exclude rule's precedence is irrelevant to the boolean exclusion
+    // slice the effect evaluates, but a band value displays better than 0.
     rule.priority = 0;
     rule.match = MatchExpression::makeAll(
         {MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("steam")),
@@ -3068,6 +3120,11 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
         appendLayoutAppRulesAsSnapToZone(rules, layoutsDir);
     }
+
+    // Stamp a band priority onto the Exclude / SnapToZone rules the helpers
+    // above left at 0, so they display sensibly on a fresh load instead of all
+    // reading "Priority 0".
+    assignBandPrioritiesToZeroRules(rules);
 
     // ── Relocate QuickLayouts to the quicklayouts.json sidecar (FIRST) ─────
     // Quick-layout slots are NOT rules — they belong in the sibling

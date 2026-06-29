@@ -1454,7 +1454,7 @@ private Q_SLOTS:
                  QStringLiteral("firefox"));
         QCOMPARE(shaderRule.value(QStringLiteral("enabled")).toBool(), true);
         QVERIFY2(shaderRule.value(QStringLiteral("priority")).toInt() > 0,
-                 "animation rules must sit strictly above the exclusion band (priority 0)");
+                 "animation app rules get a positive descending-by-list-order priority");
         const QJsonObject shaderAction = animationAction(shaderRule);
         QCOMPARE(shaderAction.value(QStringLiteral("event")).toString(), QStringLiteral("window.open"));
         QCOMPARE(shaderAction.value(QStringLiteral("effectId")).toString(), QStringLiteral("dissolve"));
@@ -1477,7 +1477,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         QJsonArray src;
         // Three valid entries — first should get the highest priority,
-        // last should get priority 1 (above the exclusion band at 0).
+        // last should get priority 1 (descending by list order, lowest is 1).
         src.append(makeShaderRule(QStringLiteral("first"), QStringLiteral("window.open"), QStringLiteral("popup")));
         src.append(makeShaderRule(QStringLiteral("second"), QStringLiteral("window.open"), QStringLiteral("fade")));
         src.append(makeShaderRule(QStringLiteral("third"), QStringLiteral("window.open"), QStringLiteral("blur")));
@@ -1667,8 +1667,7 @@ private Q_SLOTS:
         const QList<QJsonObject> animRulesOut = animationRulesFromRules();
         QCOMPARE(animRulesOut.size(), 1);
         const QJsonObject animRule = animRulesOut.first();
-        // Animation rule sits at priority 1 (count == 1 → priority 1) —
-        // strictly above the exclusion band.
+        // Animation rule sits at priority 1 (count == 1 → priority 1).
         QCOMPARE(animRule.value(QStringLiteral("priority")).toInt(), 1);
 
         // Assignment cascade — every fixture-pinned level (306/304/303/301)
@@ -1936,7 +1935,11 @@ private Q_SLOTS:
         // than at runtime in the cascade evaluator.
         for (const QJsonObject& r : excl) {
             QVERIFY(r.value(QStringLiteral("enabled")).toBool());
-            QCOMPARE(r.value(QStringLiteral("priority")).toInt(), 0);
+            // assignBandPrioritiesToZeroRules seeds the simple AppId-match Exclude
+            // rules in the Application band (200-299) so they display sensibly
+            // instead of all reading "Priority 0".
+            const int priority = r.value(QStringLiteral("priority")).toInt();
+            QVERIFY(priority >= 200 && priority < 300);
         }
     }
 
