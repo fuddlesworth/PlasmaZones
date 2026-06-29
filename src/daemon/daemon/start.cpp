@@ -644,11 +644,18 @@ void Daemon::connectShortcutSignals()
                 }
             });
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
-        // Only release the Escape grab if no drag is currently active —
-        // otherwise the in-progress drag's own cancel-overlay shortcut
-        // would be torn down underneath it. WindowDragAdaptor's drag-end
-        // path will release on its own when appropriate.
-        if (m_windowDragAdaptor && !m_windowDragAdaptor->isDragActive()) {
+        // Release the shared Escape grab (kCancelOverlayId) only when no other
+        // consumer still needs it. It is shared with the snap-assist phase, so
+        // releasing it here while snap assist is visible would tear the grab
+        // out from under it — release is gated on !isSnapAssistVisible() to
+        // mirror WindowDragAdaptor::onSnapAssistDismissed, which gates its own
+        // release on !isLayoutPickerVisible(). The drag itself no longer
+        // registers this grab (it uses the kwin-effect's keyboard grab), but a
+        // drag in flight still owns the drag-end release path, so defer to that
+        // too. snapAssistDismissed / drag-end release on their own when their
+        // turn comes.
+        if (m_windowDragAdaptor && m_overlayService && !m_overlayService->isSnapAssistVisible()
+            && !m_windowDragAdaptor->isDragActive()) {
             m_windowDragAdaptor->releaseCancelOverlayShortcut();
         }
         if (m_windowDragAdaptor) {
