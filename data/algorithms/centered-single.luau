@@ -115,14 +115,20 @@ return pluau.algorithm {
         if resize.index ~= 0 then
             return nil
         end
+        local edges = resize.edges
+        local widthChanged = edges and (edges.left or edges.right)
+        local heightChanged = edges and (edges.top or edges.bottom)
         local result = (state and state.scriptState) or {}
-        if type(resize.newRect.width) == "number" and resize.newRect.width > 0 then
+        -- A horizontal drag sets the remembered centered width. Gate on the moved
+        -- edge so a pure vertical (divider) drag does not re-store an unchanged
+        -- width, which floor-rounding would otherwise shave a pixel from.
+        if widthChanged and type(resize.newRect.width) == "number" and resize.newRect.width > 0 then
             result.singleW = resize.newRect.width
         end
-        -- The top window's bottom edge is the column divider (its top edge is the
-        -- screen edge, so only the divider moves it). The band height is fixed,
+        -- In the multi-window column the top window's bottom edge is the divider,
+        -- so a vertical drag rescales the split ratio. The band height is fixed,
         -- so the new ratio is the old ratio scaled by the height change.
-        if state and type(state.windowCount) == "number" and state.windowCount > 1 then
+        if heightChanged and state and type(state.windowCount) == "number" and state.windowCount > 1 then
             local oldH = resize.oldRect and resize.oldRect.height or 0
             local newH = resize.newRect and resize.newRect.height or 0
             local oldRatio = (type(state.splitRatio) == "number") and state.splitRatio or 0.6

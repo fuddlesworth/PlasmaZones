@@ -236,17 +236,25 @@ public:
     void setDefaultAutotileAlgorithmProvider(std::function<QString()> provider);
 
     /**
-     * @brief Inject a callback that returns the tiled-window count for a
-     * (screen, desktop, activity) context, or std::nullopt when that context
-     * is not actively tiling (so a count predicate stays inert there).
+     * @brief Inject a callback that returns the tiled-window count for a screen,
+     * or std::nullopt when the screen is not actively tiling (so a count
+     * predicate stays inert there).
      *
      * The count is fed into the windowless WindowQuery built during
      * @ref resolveAssignmentEntry, letting a SetTilingAlgorithm rule match on
-     * @c Field::TiledWindowCount — e.g. switch algorithm once a second window
-     * opens. The value also participates in that resolver's cache key, so a
-     * count change yields a distinct entry rather than a stale hit; the caller
+     * @c Field::TiledWindowCount, for example to switch algorithm once a second
+     * window opens. The value also participates in that resolver's cache key, so
+     * a count change yields a distinct entry rather than a stale hit; the caller
      * (the daemon) re-resolves and re-applies the per-screen algorithm when the
      * count changes (on the engine's placementChanged).
+     *
+     * The (virtualDesktop, activity) parameters identify the resolution context,
+     * but a provider may return the screen's CURRENT-context count when its
+     * backing engine only tracks the visible desktop. That is sound because the
+     * tiling-algorithm slot is only ever resolved for the screen's current
+     * context; a count predicate on a non-current (desktop, activity) is not a
+     * supported configuration. Returning nullopt for an unknown context is also
+     * valid (the predicate then stays inert).
      *
      * Same threading contract as @ref setDefaultAutotileAlgorithmProvider.
      */
@@ -812,9 +820,9 @@ private:
         // caching without it would return the snapping result for a subsequent
         // tiling query. For the assignment resolver it carries a "twc:N"
         // tiled-window-count token (empty when the count is unknown), so a count
-        // change yields a fresh entry rather than a stale hit. The lock and
-        // overlay resolvers leave it empty. Each resolver owns its own cache
-        // hash, so the two token vocabularies never collide.
+        // change yields a fresh entry rather than a stale hit. The lock,
+        // default-assignment, and overlay resolvers leave it empty. Each resolver
+        // owns its own cache hash, so the two token vocabularies never collide.
         QString mode;
         bool operator==(const ContextResolveKey& other) const noexcept
         {

@@ -176,6 +176,12 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
         m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop, activity, countCacheKey,
         [&]() -> std::optional<RuleSlotResolution> {
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            // The tiled count is supplied ONLY to the assignment resolver's
+            // query, because algorithm switching is its only intended use. The
+            // gap / lock / overlay / default-assignment resolvers build their own
+            // makeContextQuery() without it, so a Field::TiledWindowCount predicate
+            // on a rule carrying one of those actions stays inert (the field is
+            // absent there) by design.
             query.tiledWindowCount = tiledCount;
 
             // Specificity-tiered slot match: a pinned rule wins over a user

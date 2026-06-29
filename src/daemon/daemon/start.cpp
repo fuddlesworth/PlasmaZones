@@ -821,6 +821,18 @@ void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenI
             ++it;
         }
     }
+
+    // The per-screen tiled-count cache (the placementChanged re-resolve gate) is
+    // keyed by the same screen ids, so prune it on the same boundary to keep it
+    // from accumulating dead entries across virtual-screen reconfigures.
+    for (auto it = m_lastTiledCountByScreen.begin(); it != m_lastTiledCountByScreen.end();) {
+        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) == physicalScreenId
+            && !keepIds.contains(it.key())) {
+            it = m_lastTiledCountByScreen.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void Daemon::pruneAutotileOrdersForWindow(const QString& instanceId)

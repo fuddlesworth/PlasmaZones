@@ -353,6 +353,12 @@ private Q_SLOTS:
         const auto winLeaf = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
         QVERIFY(!winLeaf.isContextOnly());
 
+        // TiledWindowCount is a context field, so a leaf on it is context-only —
+        // a SetTilingAlgorithm rule keyed on it must pass the context-action
+        // compatibility check rather than be misread as a window match.
+        const auto countLeaf = MatchExpression::makeLeaf(Field::TiledWindowCount, Operator::GreaterThan, 1);
+        QVERIFY(countLeaf.isContextOnly());
+
         const auto ctxComposite = MatchExpression::makeAll({
             MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-2")),
             MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 2),
