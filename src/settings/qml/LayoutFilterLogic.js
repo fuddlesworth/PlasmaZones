@@ -179,8 +179,9 @@ function ungrouped(items) {
 
 // ── Sorting ─────────────────────────────────────────────────────────────────
 
-// sortIdx 0 = Name (both modes), 1 = Zone Count, 2 = Custom order.
-// Custom order uses the provided customOrder array of IDs.
+// sortIdx 0 = Name (both modes), 1 = Zone Count, 2 = Priority order.
+// Priority order uses the provided customOrder array of IDs (the order set on
+// the Configuration → Priority page).
 function sortItems(groups, sortIdx, ascending, customOrder) {
     // Build index map for custom order (O(1) lookup)
     var orderMap = {};

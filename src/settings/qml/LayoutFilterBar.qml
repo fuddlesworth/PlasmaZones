@@ -270,13 +270,24 @@ RowLayout {
             if (index < 0 || index >= model.length)
                 return;
 
+            // The last option ("Priority") is unavailable until an order is set
+            // on the Priority page. Swallow the selection and revert the visible
+            // value rather than applying a sort that would silently fall back to
+            // Name order.
+            if (index === count - 1 && !hasPriorityOrder) {
+                currentIndex = root.sortByIndex;
+                return;
+            }
+
             root.sortByIndex = index;
             root.filterSettingsChanged();
         }
 
-        // Disable the "Priority" item (the last sort option) until an order has
-        // been set on the Configuration → Priority page — otherwise it silently
-        // falls back to Name order. A hover tooltip points the user there.
+        // The "Priority" item (the last sort option) is unavailable until an
+        // order has been set on the Configuration → Priority page. Keep the
+        // delegate ENABLED — a disabled delegate receives no hover events, so the
+        // explanatory tooltip would never show. Gray it, suppress the hover
+        // highlight, and let onActivated above swallow the selection.
         delegate: ItemDelegate {
             id: sortItemDelegate
 
@@ -284,12 +295,13 @@ RowLayout {
             required property var modelData
 
             readonly property bool isPriority: index === sortByCombo.count - 1
+            readonly property bool unavailable: isPriority && !sortByCombo.hasPriorityOrder
 
             width: sortByCombo.width
             text: modelData
-            enabled: !isPriority || sortByCombo.hasPriorityOrder
-            highlighted: sortByCombo.highlightedIndex === index
-            ToolTip.visible: hovered && isPriority && !sortByCombo.hasPriorityOrder
+            opacity: unavailable ? 0.5 : 1
+            highlighted: !unavailable && sortByCombo.highlightedIndex === index
+            ToolTip.visible: hovered && unavailable
             ToolTip.delay: Kirigami.Units.toolTipDelay
             ToolTip.text: i18n("Set a layout order on the Priority page first")
         }
