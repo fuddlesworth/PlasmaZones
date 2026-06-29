@@ -935,15 +935,24 @@ Lives in `phosphor-shell-widgets` alongside the 3.1 atoms (same `Phosphor.Widget
 
 **Effort:** L (~3 weeks, the geometry math is the bulk)
 
-### 3.3: OSD framework + first OSDs
+### 3.3: OSD framework + first OSDs *(scaffolded)*
 
-| Deliverable                                                  | Notes                                                                                       |
-|--------------------------------------------------------------|---------------------------------------------------------------------------------------------|
-| `qml/Phosphor/OSD/OSDHost.qml`                               | Single layer-shell surface per screen. Owns timers / debounce / dedupe.                     |
-| Built-in OSDs (`VolumeOSD`, `BrightnessOSD`, `MicOSD`, `CapsLockOSD`) | Registered via `IOSDFactory`.                                                       |
-| `examples/phosphor-osd-demo/`                                | Standalone window that displays the OSD layer overlay; `phosphorctl call osd.show volume 62` triggers it. |
+Lives in a new `phosphor-shell-osd` library (module `Phosphor.OSD`), depending on theme + widgets. `OSDHost` is screen-agnostic and routed by name (compose one per monitor via `PerScreen`); the layer-shell surface is the shell's job in Phase 4, so the framework renders into whatever item it's parented to.
+
+| Deliverable                                                  | Status | Notes                                                                                       |
+|--------------------------------------------------------------|--------|---------------------------------------------------------------------------------------------|
+| `libs/phosphor-shell-osd/qml/Phosphor/OSD/OSDHost.qml`       | scaffolded | One-at-a-time OSD surface manager: hold timer, debounce/dedupe (repeat = update + restart, not recreate), state-driven opacity+scale fade (Motion tokens), and `screenName`/`targetScreen` routing. Delegates come from a `provider` (createOSD(kind, parent)). |
+| `OSDCard` + `VolumeOSD` / `BrightnessOSD` / `MicOSD` / `CapsLockOSD` | scaffolded | Shared elevated card chrome (glyph + label + optional progress) and the four built-ins (QtQuick.Shapes glyphs). Registered via `IOSDFactory` (the demo wraps each in a `QmlComponentOSDFactory` held in a `Registry<IOSDFactory>`). |
+| `libs/phosphor-shell-osd/tests/`                             | scaffolded | QtQuickTest (9 cases): creation, dedupe, kind-swap, per-screen routing, empty-target broadcast, the shown signal, and the full auto-hide lifecycle. |
+| `examples/phosphor-osd-demo/`                                | scaffolded | OSDHost overlay driven by in-window buttons and by `phosphorctl call osd.show --arg kind=volume --arg value=62` (an `osd` IpcTarget). The four OSDs come from OSDController's `Registry<IOSDFactory>`. |
 
 **Acceptance:** repeated triggers restart the timer; multi-screen routing works; theme-tinted; uses Motion tokens for fade.
+- [x] Repeat restarts the timer (dedupe path reuses the delegate; unit-tested).
+- [x] Multi-screen routing (by `screenName`/`targetScreen`; unit-tested) — one OSDHost per monitor via PerScreen in production.
+- [x] Theme-tinted + Motion-token fade (card uses theme tokens; show/hide transitions use Motion emphasized/standard).
+- [x] `phosphorctl call osd.show` triggers every OSD end-to-end (verified live against the running demo).
+
+**Note:** `OSDHost` defers delegate teardown via `Qt.callLater`. `show()` is dispatched synchronously from C++ by the IPC router (meta-object call); destroying a QML object inline inside such a call corrupts the invoked function's return-value marshalling (the caller saw `false`). Deferring the destroy fixes that and is the right place to tear down anyway. The drop shadow (ElevationShadow / MultiEffect) needs a GPU; it does not render under the headless software/offscreen path used for CI screenshots, but does on a real session.
 
 **Effort:** M (~2 weeks)
 

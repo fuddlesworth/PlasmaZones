@@ -363,6 +363,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(cli/phosphorctl)       # phosphorctl call / list / schema / subscribe
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types
     add_subdirectory(libs/phosphor-shell-widgets)  # Phosphor.Widgets M3 atom library (Phase 3.1); depends on phosphor-theme
+    add_subdirectory(libs/phosphor-shell-osd)      # Phosphor.OSD on-screen-display framework (Phase 3.3); depends on theme + widgets
 endif()
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
@@ -668,6 +669,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
 #                            enabled/disabled states (widgets + theme).
 #   phosphor-bar-canvas-demo — connected-corner bar; a popout grows out of
 #                            the bar as one Shape, toggled via PopoutService.
+#   phosphor-osd-demo — OSDHost overlay; the four built-in OSDs via
+#                            Registry<IOSDFactory>, driven by phosphorctl.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-theme-demo)
     add_subdirectory(examples/phosphor-theme-cli)
@@ -676,6 +679,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-ipc-demo)
     add_subdirectory(examples/phosphor-widgets-kitchen-sink)
     add_subdirectory(examples/phosphor-bar-canvas-demo)
+    add_subdirectory(examples/phosphor-osd-demo)
 endif()
 
 # phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell
