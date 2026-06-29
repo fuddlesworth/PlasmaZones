@@ -2744,7 +2744,8 @@ void AutotileEngine::onWindowFocused(const QString& windowId)
 
     // Track which screen has the active focus (used by tiledWindowsForFocusedScreen
     // to avoid non-deterministic QHash iteration when multiple screens have focused windows)
-    m_activeScreen = m_windowToStateKey.value(windowId).screenId;
+    const TilingStateKey windowKey = m_windowToStateKey.value(windowId);
+    m_activeScreen = windowKey.screenId;
 
     const QString previousFocus = state->focusedWindow();
     state->setFocusedWindow(windowId);
@@ -2762,8 +2763,7 @@ void AutotileEngine::onWindowFocused(const QString& windowId)
     // floating window must not disturb the layout).
     if (previousFocus != windowId) {
         PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(m_activeScreen);
-        if (algo && algo->retilesOnFocusChange()
-            && m_windowToStateKey.value(windowId) == currentKeyForScreen(m_activeScreen)
+        if (algo && algo->retilesOnFocusChange() && windowKey == currentKeyForScreen(m_activeScreen)
             && state->tiledWindows().contains(windowId)) {
             retileAfterOperation(m_activeScreen, true);
         }

@@ -137,6 +137,40 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         QCOMPARE(tiledSpy.count(), 0);
     }
+
+    void theater_floatingWindowFocus_doesNotRetile()
+    {
+        PhosphorScreens::FakeScreenProvider provider;
+        provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+        PhosphorScreens::ScreenManager manager(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        manager.start();
+
+        AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("DP-1")});
+        engine.setAlgorithm(QLatin1String("theater"));
+        engine.windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
+        engine.windowOpened(QStringLiteral("a2"), QStringLiteral("DP-1"));
+        engine.windowOpened(QStringLiteral("a3"), QStringLiteral("DP-1"));
+
+        PhosphorTiles::TilingState* d1 = engine.tilingStateForScreen(QStringLiteral("DP-1"));
+        QTRY_COMPARE(d1->calculatedZones().size(), 3);
+
+        engine.windowFocused(QStringLiteral("a1"), QStringLiteral("DP-1"));
+        QCoreApplication::processEvents();
+
+        // Float a3: it leaves the tiled set (this reflow is expected, before the spy).
+        engine.floatWindow(QStringLiteral("a3"));
+        QCoreApplication::processEvents();
+        QTRY_COMPARE(d1->tiledWindows().size(), 2);
+
+        // Focusing the now-floating window must not reflow the layout — the guard
+        // only reflows when the focused window is tiled.
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+        engine.windowFocused(QStringLiteral("a3"), QStringLiteral("DP-1"));
+        QCoreApplication::processEvents();
+        QCOMPARE(tiledSpy.count(), 0);
+    }
 };
 
 QTEST_MAIN(TestAutotileFocusRetile)

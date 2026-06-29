@@ -67,7 +67,6 @@ return pluau.algorithm {
         supportsMinSizes = false,
         defaultMaxWindows = 6,
         minimumWindows = 1,
-        masterZoneIndex = 0,
         zoneNumberDisplay = "all",
         customParams = {
             { name = "widthRatio", type = "number", default = 0.6, min = 0.2, max = 1.0,

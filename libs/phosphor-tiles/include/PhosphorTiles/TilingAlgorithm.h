@@ -249,9 +249,9 @@ public:
      *
      * By default an algorithm does not own the single-window case: a scripted
      * algorithm's calculateZones() fills the work area for a lone window without
-     * invoking its tile(). An algorithm that opts in (e.g. a centered
-     * single-window layout) receives the single-window case in its tile() computation and is
-     * responsible for the resulting geometry.
+     * invoking its tile(). An algorithm that opts in (e.g. a layout that centers
+     * a lone window) receives the single-window case in its tile() and owns the
+     * resulting geometry.
      *
      * @return true if the algorithm owns the single-window layout (default: false)
      */
