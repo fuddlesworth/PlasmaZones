@@ -105,15 +105,16 @@ Item {
         // delegate is fully installed: a consumer that calls show() from a
         // hidden() handler then re-enters against consistent state instead
         // of orphaning the delegate this call just created.
+        // Announce the new OSD BEFORE the outgoing one's hidden(). hidden()
+        // is delivered synchronously and a consumer may even re-enter show()
+        // from it; emitting shown(kind) first means this delegate's shown()
+        // is announced before any such re-entry, so it can never be stale,
+        // and a re-entrant swap still produces its own symmetric
+        // shown()/hidden() pair. Every installed delegate thus gets exactly
+        // one shown() and (when replaced) one hidden().
+        root.shown(kind);
         if (previousKind !== "")
             root.hidden(previousKind);
-        // A hidden() handler may synchronously re-enter show() with another
-        // kind, which becomes the current OSD and emits its own shown().
-        // Only announce this show if it is still the current one, so the
-        // unwinding outer call doesn't tack a stale shown() onto a delegate
-        // that was already swapped out.
-        if (priv.currentKind === kind)
-            root.shown(kind);
         return true;
     }
 

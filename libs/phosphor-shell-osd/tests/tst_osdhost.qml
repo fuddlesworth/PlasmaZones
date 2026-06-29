@@ -239,6 +239,31 @@ TestCase {
         compare(spy.signalArguments[0][0], "volume", "hidden carries the previous kind");
     }
 
+    function test_reentrant_show_from_hidden_is_symmetric() {
+        // A consumer may call show() synchronously from a hidden() handler.
+        // Every installed delegate must still get exactly one shown() and,
+        // once replaced, exactly one hidden() — no orphan/stale signal.
+        const h = createTemporaryObject(hostComp, testCase);
+        const shownSpy = createTemporaryObject(spyComp, testCase, {
+            "target": h,
+            "signalName": "shown"
+        });
+        const hiddenSpy = createTemporaryObject(spyComp, testCase, {
+            "target": h,
+            "signalName": "hidden"
+        });
+        // When "volume" leaves, re-enter with a third kind mid-swap.
+        h.hidden.connect(function (k) {
+            if (k === "volume")
+                h.show("mic", undefined, true, "");
+        });
+        h.show("volume", 50, undefined, ""); // shown(volume)
+        h.show("brightness", 30, undefined, ""); // shown(brightness), hidden(volume) -> show(mic): shown(mic), hidden(brightness)
+        compare(h.currentKind, "mic", "the re-entrant kind ends up current");
+        compare(shownSpy.count, 3, "volume, brightness, mic each announced shown once");
+        compare(hiddenSpy.count, 2, "volume and brightness each announced hidden once");
+    }
+
     Component {
         id: spyComp
 
