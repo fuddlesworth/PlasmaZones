@@ -244,18 +244,64 @@ RowLayout {
     ComboBox {
         id: sortByCombo
 
+        // Whether a priority order exists for the current mode. hasCustom*Order()
+        // is a non-reactive Q_INVOKABLE, so cache it and refresh on the staged-
+        // order signals and on the mode switch (model change).
+        property bool hasPriorityOrder: false
+
+        function refreshHasPriorityOrder() {
+            hasPriorityOrder = root.viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder();
+        }
+
         Layout.preferredWidth: Kirigami.Units.gridUnit * 8
         model: root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel
         // Binding is initial-only — user interaction breaks it; loadState()
         // re-syncs imperatively via sortByCombo.currentIndex = ...
         currentIndex: root.sortByIndex
         Accessible.name: i18n("Sort by")
+        Component.onCompleted: refreshHasPriorityOrder()
+        // Fires on the mode switch (the model binding re-evaluates to the other
+        // mode's sort array), so the Priority item's enabled state tracks the
+        // mode's own order.
+        onModelChanged: refreshHasPriorityOrder()
         onActivated: index => {
             if (index < 0 || index >= model.length)
                 return;
 
             root.sortByIndex = index;
             root.filterSettingsChanged();
+        }
+
+        // Disable the "Priority" item (the last sort option) until an order has
+        // been set on the Configuration → Priority page — otherwise it silently
+        // falls back to Name order. A hover tooltip points the user there.
+        delegate: ItemDelegate {
+            id: sortItemDelegate
+
+            required property int index
+            required property var modelData
+
+            readonly property bool isPriority: index === sortByCombo.count - 1
+
+            width: sortByCombo.width
+            text: modelData
+            enabled: !isPriority || sortByCombo.hasPriorityOrder
+            highlighted: sortByCombo.highlightedIndex === index
+            ToolTip.visible: hovered && isPriority && !sortByCombo.hasPriorityOrder
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+            ToolTip.text: i18n("Set a layout order on the Priority page first")
+        }
+
+        Connections {
+            function onStagedSnappingOrderChanged() {
+                sortByCombo.refreshHasPriorityOrder();
+            }
+
+            function onStagedTilingOrderChanged() {
+                sortByCombo.refreshHasPriorityOrder();
+            }
+
+            target: settingsController
         }
     }
 
