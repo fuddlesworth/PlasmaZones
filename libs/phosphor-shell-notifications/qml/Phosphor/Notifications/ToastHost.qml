@@ -60,6 +60,12 @@ Item {
                 t.timeout = decision.timeout;
         }
 
+        // Advance the auto-id counter past any caller-supplied id so a
+        // later auto-generated id can't collide with an explicit one (which
+        // dismiss() would then resolve to the wrong toast).
+        if (t.id !== undefined && t.id >= priv.nextId)
+            priv.nextId = t.id + 1;
+
         const row = {
             "toastId": t.id !== undefined ? t.id : priv.nextId++,
             "appName": t.appName !== undefined ? t.appName : "",

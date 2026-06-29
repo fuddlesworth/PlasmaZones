@@ -34,8 +34,10 @@ MultiEffect {
     // Clamp once so the per-tier lookup never indexes out of bounds when a
     // caller passes a level outside 0..5.
     readonly property int _level: Math.max(0, Math.min(5, level))
-    // The selected design-system elevation tier ({ y, blur, opacity }).
-    // Reads the Tokens.* properties so a Tokens retune re-evaluates here.
+    // The selected design-system elevation tier. The tier object also
+    // carries a `tint` field (read by PhosphorCard, not here); this effect
+    // uses only y / blur / opacity. Reads the Tokens.* properties so a
+    // Tokens retune re-evaluates here.
     readonly property var _tier: [Tokens.elevation_0, Tokens.elevation_1, Tokens.elevation_2, Tokens.elevation_3, Tokens.elevation_4, Tokens.elevation_5][_level]
 
     // MultiEffect crops the shadow to the source rect unless padding is

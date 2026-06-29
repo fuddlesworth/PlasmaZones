@@ -93,17 +93,20 @@ Item {
             console.warn("OSDHost: provider returned no delegate for", kind);
             return false;
         }
-        // The outgoing OSD (if any) "left", so announce its hidden() to
-        // keep the shown/hidden pairing symmetric for consumers.
         const previousKind = priv.currentKind;
         priv.destroyDelegate();
-        if (previousKind !== "")
-            root.hidden(previousKind);
         priv.delegate = item;
         priv.currentKind = kind;
         priv.apply(item, value, active);
         root.state = "shown";
         holdTimer.restart();
+        // The outgoing OSD (if any) "left", so announce its hidden() to keep
+        // the shown/hidden pairing symmetric. Emit it only after the new
+        // delegate is fully installed: a consumer that calls show() from a
+        // hidden() handler then re-enters against consistent state instead
+        // of orphaning the delegate this call just created.
+        if (previousKind !== "")
+            root.hidden(previousKind);
         root.shown(kind);
         return true;
     }

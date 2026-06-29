@@ -21,8 +21,9 @@ function _n(v) {
     return Math.round(v * 100) / 100;
 }
 
-// Depth below which a socket is treated as closed (flat edge). Just under
-// a pixel so the first frames of an open animation don't pop a notch in.
+// Depth at or below which a socket is treated as closed (flat edge): the
+// path math skips `depth <= MIN_DEPTH`. Just under a pixel so the first
+// frames of an open animation don't pop a notch in.
 // Exported so consumers (BarCanvas.maxSocketDepth) gate on the same
 // threshold the path math uses.
 var MIN_DEPTH = 0.5;

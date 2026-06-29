@@ -47,7 +47,10 @@ ApplicationWindow {
                 "body": notification.body,
                 "imageSource": isPath ? icon : "",
                 "urgency": notification.urgency,
-                "timeout": notification.expireTimeout > 0 ? notification.expireTimeout : toastHost.defaultTimeout
+                // freedesktop: -1 = "server decides" (use the default), 0 =
+                // never expire (sticky), >0 = that many ms. Only -1 maps to
+                // the default; 0 must pass through so notify-send -t 0 stays.
+                "timeout": notification.expireTimeout >= 0 ? notification.expireTimeout : toastHost.defaultTimeout
             });
         }
 

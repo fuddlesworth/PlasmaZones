@@ -76,7 +76,8 @@ FocusScope {
         anchors.left: input.left
         anchors.verticalCenter: input.verticalCenter
         text: root.placeholderText
-        color: Theme.on_surface_variant
+        // Dim with the field when disabled, matching the border and input.
+        color: root.enabled ? Theme.on_surface_variant : root._disabledTint
         font.pixelSize: Tokens.font_size_body_l
         // Hidden once the user focuses the field or types anything, so it
         // never overlaps real input.
