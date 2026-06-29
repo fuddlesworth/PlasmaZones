@@ -547,13 +547,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    QString activeId;
-    if (m_layoutManager) {
-        PhosphorZones::Layout* activeLayout = resolveScreenLayout(resolvedId);
-        if (activeLayout) {
-            activeId = activeLayout->id().toString();
-        }
-    }
+    const QString activeId = activeLayoutIdForScreen(resolvedId);
 
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);

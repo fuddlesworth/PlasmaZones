@@ -603,6 +603,24 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screen
     return screenLayout;
 }
 
+QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
+{
+    // Autotile contexts have no backing Layout object — their active id is the
+    // resolved "autotile:<algorithm>" assignment id, which matches the autotile
+    // cards in the picker / selector. Manual contexts keep the existing
+    // Layout-based resolution (its fallback chain to default/global is what makes
+    // snapping highlight correctly).
+    if (m_layoutManager && !screenId.isEmpty()) {
+        const QString assignmentId = m_layoutManager->assignmentIdForScreen(
+            screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+            return assignmentId;
+        }
+    }
+    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
+    return screenLayout ? screenLayout->id().toString() : QString();
+}
+
 void OverlayService::hideDisabledAndRefresh()
 {
     // Hide overlay + zone-selector slots on screens where the current

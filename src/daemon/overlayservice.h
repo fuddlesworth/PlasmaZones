@@ -580,6 +580,15 @@ private:
     PhosphorZones::Layout* resolveScreenLayout(QScreen* screen) const;
     PhosphorZones::Layout* resolveScreenLayout(const QString& screenId) const;
 
+    /// The id the layout picker / zone selector highlights as active on @p
+    /// screenId. In autotile mode this is the resolved "autotile:<algorithm>"
+    /// assignment id (matching the autotile cards); in snapping mode it is the
+    /// resolved Layout's UUID (matching the manual cards). Snapping resolves
+    /// through resolveScreenLayout() so its fallback chain is preserved, while
+    /// autotile uses the assignment id directly because no Layout object backs
+    /// an algorithm.
+    QString activeLayoutIdForScreen(const QString& screenId) const;
+
     /// True when the snapping overlay must NOT show on @p screenId for the current
     /// desktop/activity: either the context is on a disable list, OR its default
     /// layout assignment is suppressed (the global "don't assign by default"
