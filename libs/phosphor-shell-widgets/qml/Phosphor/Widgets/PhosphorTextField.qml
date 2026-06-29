@@ -74,11 +74,15 @@ FocusScope {
 
     Text {
         anchors.left: input.left
+        anchors.right: input.right
         anchors.verticalCenter: input.verticalCenter
         text: root.placeholderText
         // Dim with the field when disabled, matching the border and input.
         color: root.enabled ? Theme.on_surface_variant : root._disabledTint
         font.pixelSize: Tokens.font_size_body_l
+        // Clip like the input (which sets clip: true) so a long placeholder
+        // doesn't spill past the rounded outline.
+        elide: Text.ElideRight
         // Hidden once the user focuses the field or types anything, so it
         // never overlaps real input.
         visible: input.text.length === 0 && !root._focused

@@ -119,6 +119,10 @@ ApplicationWindow {
         height: Math.max(0, bar.ccDepth)
         clip: true
         opacity: barController.controlCenterOpen ? 1 : 0
+        // Gate input off immediately on close: opacity-0 items stay
+        // hit-testable, and the height collapse outlasts the opacity fade,
+        // so without this the invisible controls remain clickable mid-close.
+        enabled: barController.controlCenterOpen
 
         Behavior on opacity {
             NumberAnimation {
