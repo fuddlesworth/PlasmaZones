@@ -87,7 +87,8 @@ QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QV
                        MinMasterCount, MaxMasterCount);
         const QVariant mwVar = entry.value(PhosphorTiles::AutotileJsonKeys::MaxWindows);
         const int maxWindows =
-            std::clamp(mwVar.isValid() ? mwVar.toInt() : DefaultMaxWindows, MinMaxWindows, MaxMaxWindows);
+            std::clamp(mwVar.isValid() ? mwVar.toInt() : PhosphorTiles::AutotileDefaults::DefaultMaxWindows,
+                       MinMaxWindows, MaxMaxWindows);
         AlgorithmSettings settings;
         settings.splitRatio = ratio;
         settings.masterCount = masterCount;

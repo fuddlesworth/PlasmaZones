@@ -277,16 +277,22 @@ QVariantMap TilingAlgorithmController::algorithmSettingsFor(const QString& algor
         maxWindows = algo->defaultMaxWindows();
     }
 
+    // Override with saved values. Read each via toDouble(&ok): it yields
+    // ok=true for both int- and double-typed QVariants (the JSON backend may
+    // return either) and ok=false for missing or non-numeric entries, in which
+    // case the seeded default is kept rather than collapsing to 0 (mirrors
+    // customParamsForAlgorithm's `ok` guard). Integer fields round back.
     const QVariantMap entry = m_settings->autotilePerAlgorithmSettings().value(algorithmId).toMap();
-    const QVariant srVar = entry.value(PhosphorTiles::AutotileJsonKeys::SplitRatio);
-    if (srVar.isValid())
-        splitRatio = srVar.toDouble();
-    const QVariant mcVar = entry.value(PhosphorTiles::AutotileJsonKeys::MasterCount);
-    if (mcVar.isValid())
-        masterCount = mcVar.toInt();
-    const QVariant mwVar = entry.value(PhosphorTiles::AutotileJsonKeys::MaxWindows);
-    if (mwVar.isValid())
-        maxWindows = mwVar.toInt();
+    bool ok = false;
+    const qreal srSaved = entry.value(PhosphorTiles::AutotileJsonKeys::SplitRatio).toDouble(&ok);
+    if (ok)
+        splitRatio = srSaved;
+    const qreal mcSaved = entry.value(PhosphorTiles::AutotileJsonKeys::MasterCount).toDouble(&ok);
+    if (ok)
+        masterCount = qRound(mcSaved);
+    const qreal mwSaved = entry.value(PhosphorTiles::AutotileJsonKeys::MaxWindows).toDouble(&ok);
+    if (ok)
+        maxWindows = qRound(mwSaved);
 
     // Clamp the read-back values, mirroring customParamsForAlgorithm: a stale
     // or hand-edited on-disk value outside the current bounds must not reach

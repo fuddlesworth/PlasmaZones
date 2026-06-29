@@ -1477,6 +1477,7 @@ void AutotileEngine::refreshConfigFromSettings()
         QVariantMap entry{
             {PhosphorTiles::AutotileJsonKeys::MasterCount, it.value().masterCount},
             {PhosphorTiles::AutotileJsonKeys::SplitRatio, it.value().splitRatio},
+            {PhosphorTiles::AutotileJsonKeys::MaxWindows, it.value().maxWindows},
         };
         if (!it.value().customParams.isEmpty()) {
             entry[PhosphorTiles::AutotileJsonKeys::CustomParams] = it.value().customParams;
