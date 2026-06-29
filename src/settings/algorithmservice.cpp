@@ -219,7 +219,6 @@ QVariantList AlgorithmService::availableAlgorithms() const
             algoMap[QLatin1String("producesOverlappingZones")] = algo->producesOverlappingZones();
             algoMap[QLatin1String("zoneNumberDisplay")] = algo->zoneNumberDisplay();
             algoMap[QLatin1String("centerLayout")] = algo->centerLayout();
-            algoMap[QLatin1String("supportsSingleWindow")] = algo->supportsSingleWindow();
 
             // Expose whether this algorithm declares custom parameters.
             // The full definitions are retrieved via customParamsForAlgorithm().

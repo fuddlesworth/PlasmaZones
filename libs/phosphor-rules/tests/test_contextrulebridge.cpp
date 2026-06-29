@@ -262,6 +262,24 @@ private Q_SLOTS:
         QVERIFY(act.isEmpty());
     }
 
+    void testTiledWindowCountLeafExcludedFromExactContext()
+    {
+        // A flat All{ScreenId, TiledWindowCount} is context-only (so it resolves
+        // through the evaluator), but it pins MORE than the (screen, desktop,
+        // activity) shape makeContextMatch emits. It must NOT be classified as an
+        // exact-context assignment: the batch reader/writers and exact-rule
+        // upsert would otherwise rebuild the screen base from the decoded screen
+        // alone and silently drop the count leaf.
+        const MatchExpression m = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+            MatchExpression::makeLeaf(Field::TiledWindowCount, Operator::GreaterThan, 1),
+        });
+        QVERIFY(m.isContextOnly());
+        QCOMPARE(CRB::contextAxisFor(m), CRB::ContextAxis::CatchAll);
+        QVERIFY(!CRB::matchIsExactContextBase(m));
+        QVERIFY(!CRB::matchIsExactContext(m, QStringLiteral("DP-1"), 0, QString()));
+    }
+
     void testContextDimsOf_nonFlatCompositeYieldsDefaults()
     {
         // An Any{} composite is outside the bridge contract — contextDimsOf

@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QLoggingCategory>
+#include <QSet>
 #include <QString>
 #include <QUuid>
 
@@ -556,6 +557,17 @@ inline ContextAxis contextAxisFor(const MatchExpression& match)
     if (!match.isContextOnly()) {
         return ContextAxis::CatchAll;
     }
+    // A match that ALSO pins a non-dimension context field (TiledWindowCount)
+    // is not the (screen, desktop, activity) shape makeContextMatch emits, so it
+    // is not an exact-context assignment. Classifying it as one would let the
+    // batch reader/writers and exact-rule upsert rebuild the context base from
+    // its decoded dims alone, silently dropping the count leaf (the same hazard
+    // matchIsExactContextActivityStrict guards against for Combined rules). Treat
+    // it as CatchAll-axis so those projections skip it; it still resolves
+    // normally through the evaluator, which sees the count via the WindowQuery.
+    if (match.referencesAnyField({Field::TiledWindowCount})) {
+        return ContextAxis::CatchAll;
+    }
     QString screenId;
     int virtualDesktop = 0;
     QString activity;
@@ -625,6 +637,12 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
                                 const QString& activity)
 {
     if (!match.isContextOnly()) {
+        return false;
+    }
+    // A pinned TiledWindowCount leaf means the match is more specific than the
+    // bare (screen, desktop, activity) shape, so it is NOT exact — see
+    // contextAxisFor for why dropping it here would lose the leaf on rebuild.
+    if (match.referencesAnyField({Field::TiledWindowCount})) {
         return false;
     }
     QString s;
