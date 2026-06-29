@@ -6,8 +6,8 @@
 # A pure-QML module: ToastHost (the top-right toast stack manager, owning
 # the queue, per-toast lifecycle, and add/remove/reflow transitions) plus
 # the Toast card (image + rich text + hover-to-pause auto-dismiss).
-# Themed through phosphor-theme and built on the phosphor-shell-widgets
-# atoms (ElevationShadow, StateLayer).
+# Themed through phosphor-theme (tokens, Motion, StateLayer) and the
+# phosphor-shell-widgets ElevationShadow atom.
 #
 # Phase 3.4 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
 

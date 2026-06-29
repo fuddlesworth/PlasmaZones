@@ -83,9 +83,9 @@ it was visible or still queued.
 
 - Qt6 ≥ 6.6 Core / Gui / Qml / Quick; `QtQuick.Shapes` (`Qt6::QuickShapes`)
   for the close glyph.
-- `phosphor-theme` (`Phosphor.Theme`) for tokens and Motion;
-  `phosphor-shell-widgets` (`Phosphor.Widgets`) for `ElevationShadow` /
-  `StateLayer`. In-tree builds link their QML plugins automatically. This
+- `phosphor-theme` (`Phosphor.Theme`) for tokens, Motion, and `StateLayer`;
+  `phosphor-shell-widgets` (`Phosphor.Widgets`) for `ElevationShadow`.
+  In-tree builds link their QML plugins automatically. This
   module is static and in-tree-only today.
 
 ## Status

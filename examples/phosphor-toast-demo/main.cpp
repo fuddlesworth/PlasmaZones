@@ -44,9 +44,11 @@ int main(int argc, char* argv[])
 
     // Serve decoded notification images (the freedesktop image-data hint) to
     // QML under image://notification/<id>. The engine takes ownership of the
-    // provider. The cache/drop connections use a context object (the engine,
-    // or the provider for the per-notification changed() re-cache) that
-    // outlives every notification, so they detach cleanly on teardown.
+    // provider. Each cache/drop connection names a context object (the engine
+    // for add/close, the provider for the per-notification changed() re-cache);
+    // destroying that context object on engine teardown severs the connection,
+    // so no callback fires into the destroyed provider even though notifier
+    // (and its Notification objects) outlives the engine.
     auto* imageProvider = new PhosphorToastDemo::NotificationImageProvider;
     engine.addImageProvider(QStringLiteral("notification"), imageProvider);
     QObject::connect(&notifier, &PhosphorServiceNotifications::NotificationServer::notificationAdded, &engine,
