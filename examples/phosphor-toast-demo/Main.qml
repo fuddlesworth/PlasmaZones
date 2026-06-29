@@ -47,10 +47,11 @@ ApplicationWindow {
                 "body": notification.body,
                 "imageSource": isPath ? icon : "",
                 "urgency": notification.urgency,
-                // freedesktop: -1 = "server decides" (use the default), 0 =
-                // never expire (sticky), >0 = that many ms. Only -1 maps to
-                // the default; 0 must pass through so notify-send -t 0 stays.
-                "timeout": notification.expireTimeout >= 0 ? notification.expireTimeout : toastHost.defaultTimeout
+                // freedesktop: 0 = never expire (sticky), >0 = that many ms,
+                // -1 = "server decides". 0 and explicit values pass through;
+                // for -1 the server keeps Critical sticky and otherwise falls
+                // back to the default, so mirror that here.
+                "timeout": notification.expireTimeout >= 0 ? notification.expireTimeout : (notification.urgency === 2 ? 0 : toastHost.defaultTimeout)
             });
         }
 

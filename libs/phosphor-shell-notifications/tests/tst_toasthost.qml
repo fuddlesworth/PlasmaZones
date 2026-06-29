@@ -187,6 +187,21 @@ TestCase {
         compare(spy.count, 2, "clear() emits toastDismissed for every removed toast (visible + queued)");
     }
 
+    function test_explicit_id_advances_counter() {
+        // A caller-supplied id must push the auto-id counter past it, so a
+        // later auto-generated id can't collide with the explicit one.
+        const h = createTemporaryObject(hostComp, testCase);
+        const explicit = h.show({
+            "id": 5,
+            "summary": "a"
+        });
+        compare(explicit, 5, "the explicit id is used verbatim");
+        const auto = h.show({
+            "summary": "b"
+        });
+        compare(auto, 6, "the next auto id is bumped past the explicit one");
+    }
+
     Component {
         id: spyComp
 
