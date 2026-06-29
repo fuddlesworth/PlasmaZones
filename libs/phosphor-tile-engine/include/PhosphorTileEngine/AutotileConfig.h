@@ -13,19 +13,21 @@
 namespace PhosphorTileEngine {
 
 /**
- * @brief Per-algorithm saved settings (split ratio + master count)
+ * @brief Per-algorithm saved settings (split ratio, master count, max windows)
  *
- * Replaces AlgorithmSettings for clarity. Saved when switching away
- * from an algorithm, restored when switching back.
+ * Saved when switching away from an algorithm, restored when switching back,
+ * so each algorithm keeps its own tuning.
  */
 struct AlgorithmSettings
 {
     qreal splitRatio = PhosphorTiles::AutotileDefaults::DefaultSplitRatio;
     int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
+    int maxWindows = PhosphorTiles::AutotileDefaults::DefaultMaxWindows;
     QVariantMap customParams; ///< Algorithm-declared custom parameter values
     bool operator==(const AlgorithmSettings& other) const
     {
-        if (masterCount != other.masterCount || !qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)) {
+        if (masterCount != other.masterCount || maxWindows != other.maxWindows
+            || !qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)) {
             return false;
         }
         if (customParams.size() != other.customParams.size()) {
@@ -111,7 +113,7 @@ struct PHOSPHORTILEENGINE_EXPORT AutotileConfig
      */
     int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
 
-    /// Per-algorithm saved settings (split ratio + master count).
+    /// Per-algorithm saved settings (split ratio, master count, max windows).
     /// Saved when switching away from an algorithm, restored when switching back.
     /// Key: algorithm ID (e.g. "master-stack", "centered-master", "script:deck")
     QHash<QString, AlgorithmSettings> savedAlgorithmSettings;

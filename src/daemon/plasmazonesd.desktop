@@ -9,3 +9,9 @@
 Type=Application
 Name=PlasmaZones
 Icon=plasmazones
+# The daemon is a background service, not a launchable app. NoDisplay keeps it
+# out of application launchers and files it under "System Services" (not
+# "Applications") in System Settings > Shortcuts. KGlobalAccel still reads the
+# Name/Icon above for the shortcuts list.
+NoDisplay=true
+X-KDE-StartupNotify=false

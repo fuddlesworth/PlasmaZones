@@ -67,19 +67,26 @@ private Q_SLOTS:
         QCOMPARE(engine.config()->maxWindows, bspAlgo->defaultMaxWindows());
     }
 
-    void testAlgorithmSwitch_maxWindowsPreservedWhenCustomized()
+    void testAlgorithmSwitch_maxWindowsPerAlgorithm()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setAlgorithm(QLatin1String("master-stack"));
 
         auto* msAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("master-stack"));
-        QVERIFY(msAlgo);
+        auto* bspAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("bsp"));
+        QVERIFY(msAlgo && bspAlgo);
 
+        // Customize master-stack's max windows.
         const int customMax = msAlgo->defaultMaxWindows() + 3;
         engine.config()->maxWindows = customMax;
 
+        // Switching to BSP loads BSP's own value (its default — no saved entry
+        // yet), not master-stack's customization.
         engine.setAlgorithm(QLatin1String("bsp"));
+        QCOMPARE(engine.config()->maxWindows, bspAlgo->defaultMaxWindows());
 
+        // Switching back restores master-stack's customized value.
+        engine.setAlgorithm(QLatin1String("master-stack"));
         QCOMPARE(engine.config()->maxWindows, customMax);
     }
 
