@@ -179,13 +179,9 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     writeQmlProperty(window, QStringLiteral("globalAutoAssign"), m_settings && m_settings->autoAssignAllLayouts());
 
     // Set active layout ID for this screen
-    // Per-screen assignment takes priority so each monitor highlights its own layout
-    QString activeLayoutId;
-    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
-    if (screenLayout) {
-        activeLayoutId = screenLayout->id().toString();
-    }
-    writeQmlProperty(window, QStringLiteral("activeLayoutId"), activeLayoutId);
+    // Per-screen assignment takes priority so each monitor highlights its own
+    // layout (or its autotile algorithm, via the "autotile:<algorithm>" id).
+    writeQmlProperty(window, QStringLiteral("activeLayoutId"), activeLayoutIdForScreen(screenId));
 
     // Push lock state so QML disables non-active layout interaction.
     // isAnyModeLocked checks a LockContext rule first, then both manual modes -
