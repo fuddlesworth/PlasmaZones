@@ -400,6 +400,12 @@ private Q_SLOTS:
 public:
     void invalidateCache();
 
+    // Mark screens as changed for the next applyAssignmentChanges(), without
+    // going through setAssignmentEntry. Internal (NOT bus-exposed): the daemon
+    // calls this to drive the same resnap/retile path when a RULE edit (not a
+    // legacy assignment edit) changes the active assignment for some screens.
+    void markScreensChanged(const QSet<QString>& screenIds);
+
     /**
      * @brief Notify consumers that the layout list data has changed
      *

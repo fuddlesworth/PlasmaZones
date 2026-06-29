@@ -445,7 +445,7 @@ public:
     Q_PROPERTY(QVariantList availableAlgorithms READ availableAlgorithms NOTIFY availableAlgorithmsChanged)
     Q_INVOKABLE QVariantList availableAlgorithms() const;
     Q_INVOKABLE QVariantList generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,
-                                                      int masterCount) const;
+                                                      int masterCount, const QVariantMap& customParams) const;
     Q_INVOKABLE QVariantList generateAlgorithmDefaultPreview(const QString& algorithmId) const;
     Q_INVOKABLE void openAlgorithmsFolder();
     Q_INVOKABLE bool importAlgorithm(const QString& filePath);
