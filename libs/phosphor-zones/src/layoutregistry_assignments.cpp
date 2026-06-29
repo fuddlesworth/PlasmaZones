@@ -164,8 +164,8 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // Live tiled-window count for this context (nullopt when not actively
     // tiling). It is NOT part of the rule set, so it cannot ride the cache's
     // revision-invalidation contract like the global default does. Instead it
-    // is folded into the cache KEY (via the otherwise-unused `mode` slot of
-    // this cache, which is always empty here) so a count change yields a fresh
+    // is folded into the cache KEY (via the `mode` slot of this cache, which is
+    // otherwise always empty for the assignment resolver) so a count change yields a fresh
     // entry rather than a stale hit, while count-independent callers (overlay /
     // OSD per cursor-move, where the count is steady) keep hitting the cache.
     const std::optional<int> tiledCount =

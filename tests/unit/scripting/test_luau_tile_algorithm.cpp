@@ -462,7 +462,7 @@ void TestLuauTileAlgorithm::singleWindowGateControlsTileForLoneWindow()
     using namespace PlasmaZones::TestHelpers;
     // The same script body, toggled only by the supportsSingleWindow flag. Its
     // tile() always returns a distinctive small centered rect. Without the flag,
-    // the engine fills the work area for a lone window and tile() is never
+    // calculateZones fills the work area for a lone window and tile() is never
     // honoured; with it, tile() owns the single-window geometry.
     const QString body = QStringLiteral(R"LUA(
         return {
@@ -485,7 +485,7 @@ void TestLuauTileAlgorithm::singleWindowGateControlsTileForLoneWindow()
     p.outerGaps = EdgeGaps::uniform(0); // work area == full screen
 
     // Opted out (flag absent): the lone window fills the work area; tile()'s rect
-    // is discarded by the engine's single-window short-circuit.
+    // is discarded by calculateZones' single-window short-circuit.
     const QString optedOutPath = writeTempScript(m_tmp, QStringLiteral("sw-off.luau"),
                                                  body.arg(QStringLiteral("sw-off"), QStringLiteral("false")));
     LuauTileAlgorithm optedOut(optedOutPath, m_watchdog);

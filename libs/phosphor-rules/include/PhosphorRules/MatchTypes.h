@@ -13,9 +13,10 @@ namespace PhosphorRules {
 
 /// Match fields. Each names one attribute of a WindowQuery — either a
 /// window property (absent during a windowless context query) or a context
-/// attribute (always present). A predicate over an absent window field
-/// evaluates false, which is what makes window-property rules naturally
-/// inert during context resolution without special-casing.
+/// attribute (present during context resolution, except the optional
+/// tiledWindowCount which is absent when the count is unknown). A predicate over
+/// an absent field evaluates false, which is what makes window-property rules
+/// naturally inert during context resolution without special-casing.
 enum class Field : int {
     // ── Window properties [0, 29] ────────────────────────────────────────
     AppId = 0,
@@ -207,8 +208,8 @@ inline bool fieldIsBool(Field field)
 }
 
 /// True if @p field describes the **context** a window appears in
-/// (screen / virtual desktop / activity) rather than a property of the
-/// window itself.
+/// (screen / virtual desktop / activity / placement mode / tiled-window count)
+/// rather than a property of the window itself.
 inline bool fieldIsContext(Field field)
 {
     const int idx = static_cast<int>(field);
@@ -226,8 +227,10 @@ enum class Operator : int {
     EndsWith = 3, ///< suffix, case-insensitive (strings)
     Regex = 4, ///< QRegularExpression, precompiled & cached per predicate
     AppIdMatches = 5, ///< segment-aware reverse-DNS match (AppId only)
-    GreaterThan = 6, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY)
-    LessThan = 7, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY)
+    GreaterThan =
+        6, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY / TiledWindowCount)
+    LessThan =
+        7, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY / TiledWindowCount)
 };
 
 /// The number of distinct `Operator` enumerators. `Operator` is a contiguous

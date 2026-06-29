@@ -174,17 +174,21 @@ private Q_SLOTS:
         QVERIFY(exactlyZero.evaluate(zero));
         QVERIFY(!moreThanOne.evaluate(zero));
 
-        // Unknown count (engine not tiling this context) — every predicate is
-        // inert, including the negation of one: an absent field can neither match
-        // nor be the thing a None{} negates a match for.
+        // Unknown count (engine not tiling this context) — every direct predicate
+        // is inert (an absent field never matches).
         WindowQuery unknown;
         unknown.screenId = QStringLiteral("DP-2");
         QVERIFY(!moreThanOne.evaluate(unknown));
         QVERIFY(!exactlyOne.evaluate(unknown));
         QVERIFY(!exactlyZero.evaluate(unknown));
+
+        // A None{} negation flips the child: it accepts when the child does NOT
+        // match. So it accepts a one-window query (not > 1) and an unknown count
+        // (inert child), and rejects a two-window query (> 1).
         const auto notMoreThanOne = MatchExpression::makeNone({moreThanOne});
-        QVERIFY(notMoreThanOne.evaluate(two) == false); // two windows: > 1, so None rejects
-        QVERIFY(notMoreThanOne.evaluate(one)); // one window: not > 1, so None accepts
+        QVERIFY(!notMoreThanOne.evaluate(two));
+        QVERIFY(notMoreThanOne.evaluate(one));
+        QVERIFY(notMoreThanOne.evaluate(unknown));
     }
 
     void testBoolField()
