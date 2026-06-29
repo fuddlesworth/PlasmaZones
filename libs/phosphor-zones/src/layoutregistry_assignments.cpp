@@ -161,10 +161,22 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // stale mode/layout on the layout-only path until the next rule edit. The
     // fold-in is a handful of O(1) provider / per-context-slot reads, so the
     // expensive priority walk stays memoized.
+    // Live tiled-window count for this context (nullopt when not actively
+    // tiling). It is NOT part of the rule set, so it cannot ride the cache's
+    // revision-invalidation contract like the global default does. Instead it
+    // is folded into the cache KEY (via the otherwise-unused `mode` slot of
+    // this cache, which is always empty here) so a count change yields a fresh
+    // entry rather than a stale hit, while count-independent callers (overlay /
+    // OSD per cursor-move, where the count is steady) keep hitting the cache.
+    const std::optional<int> tiledCount =
+        m_tiledWindowCountProvider ? m_tiledWindowCountProvider(screenId, virtualDesktop, activity) : std::nullopt;
+    const QString countCacheKey = tiledCount ? (QLatin1String("twc:") + QString::number(*tiledCount)) : QString();
+
     const std::optional<RuleSlotResolution> rules = resolveCachedContext(
-        m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop, activity, QString(),
+        m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop, activity, countCacheKey,
         [&]() -> std::optional<RuleSlotResolution> {
-            const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            query.tiledWindowCount = tiledCount;
 
             // Specificity-tiered slot match: a pinned rule wins over a user
             // catch-all, and the synthesized provider-default (priority 0) is

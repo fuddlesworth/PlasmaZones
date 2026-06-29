@@ -236,6 +236,25 @@ public:
     void setDefaultAutotileAlgorithmProvider(std::function<QString()> provider);
 
     /**
+     * @brief Inject a callback that returns the tiled-window count for a
+     * (screen, desktop, activity) context, or std::nullopt when that context
+     * is not actively tiling (so a count predicate stays inert there).
+     *
+     * The count is fed into the windowless WindowQuery built during
+     * @ref resolveAssignmentEntry, letting a SetTilingAlgorithm rule match on
+     * @c Field::TiledWindowCount — e.g. switch algorithm once a second window
+     * opens. The value also participates in that resolver's cache key, so a
+     * count change yields a distinct entry rather than a stale hit; the caller
+     * (the daemon) re-resolves and re-applies the per-screen algorithm when the
+     * count changes (on the engine's placementChanged).
+     *
+     * Same threading contract as @ref setDefaultAutotileAlgorithmProvider.
+     */
+    void setTiledWindowCountProvider(
+        std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)>
+            provider);
+
+    /**
      * @brief Inject a callback that returns true when Snapping is the
      * user's preferred default mode (regardless of whether a default
      * snapping layout id is configured).
@@ -915,6 +934,12 @@ private:
     /// Symmetric to @c m_defaultLayoutIdProvider; together they form
     /// the level-1 cascade tier.
     std::function<QString()> m_defaultAutotileAlgorithmProvider;
+    /// Empty = provider unset. Returns the tiled-window count for a context
+    /// (or nullopt when it is not actively tiling), fed into the windowless
+    /// query during @ref resolveAssignmentEntry so a SetTilingAlgorithm rule
+    /// can match @c Field::TiledWindowCount. See @ref setTiledWindowCountProvider.
+    std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)>
+        m_tiledWindowCountProvider;
     /// Empty = provider unset (legacy behaviour). Returns true when
     /// the user has snapping mode enabled in settings, regardless of
     /// whether a global default snap layout id is configured. See

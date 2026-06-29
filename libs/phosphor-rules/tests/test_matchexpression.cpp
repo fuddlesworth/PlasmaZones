@@ -145,6 +145,32 @@ private Q_SLOTS:
         QVERIFY(eq.evaluate(firefoxQuery()));
     }
 
+    void testTiledWindowCount_contextNumeric()
+    {
+        // "Switch algorithm once a second window opens" — a TiledWindowCount
+        // predicate matches numerically on the context fact, and is inert when
+        // the count is unknown (absent), like any other optional field.
+        const auto moreThanOne = MatchExpression::makeLeaf(Field::TiledWindowCount, Operator::GreaterThan, 1);
+        const auto exactlyOne = MatchExpression::makeLeaf(Field::TiledWindowCount, Operator::Equals, 1);
+
+        WindowQuery one;
+        one.screenId = QStringLiteral("DP-2");
+        one.tiledWindowCount = 1;
+        QVERIFY(!moreThanOne.evaluate(one));
+        QVERIFY(exactlyOne.evaluate(one));
+
+        WindowQuery two = one;
+        two.tiledWindowCount = 2;
+        QVERIFY(moreThanOne.evaluate(two));
+        QVERIFY(!exactlyOne.evaluate(two));
+
+        // Unknown count (engine not tiling this context) — predicate is inert.
+        WindowQuery unknown;
+        unknown.screenId = QStringLiteral("DP-2");
+        QVERIFY(!moreThanOne.evaluate(unknown));
+        QVERIFY(!exactlyOne.evaluate(unknown));
+    }
+
     void testBoolField()
     {
         const auto isFalse = MatchExpression::makeLeaf(Field::IsFullscreen, Operator::Equals, false);

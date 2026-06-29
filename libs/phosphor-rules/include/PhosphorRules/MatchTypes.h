@@ -55,12 +55,14 @@ enum class Field : int {
     IsTiled = 33, ///< managed by the autotile engine (distinct from IsSnapped)
     // ── Context placement-mode field [34] ────────────────────────────────
     Mode = 34, ///< context — current placement mode (snapping / tiling)
+    // ── Context tiling-environment field [35] ────────────────────────────
+    TiledWindowCount = 35, ///< context — tiled windows on this screen + desktop
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::Mode) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::TiledWindowCount) + 1;
 
 // ── Field descriptor table ──────────────────────────────────────────────────
 // Single source of truth for every field's wire string, value-kind, and
@@ -135,6 +137,13 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     // context resolution — which is what lets a per-mode rule participate in
     // the gap cascade and pass the context-action compatibility check.
     {Field::Mode, QLatin1StringView("mode"), FieldType::String, FieldSource::Context},
+    // [35] — Tiled-window count for the screen + desktop being resolved. Int-
+    // valued (Equals / GreaterThan / LessThan) and Context-sourced so it is
+    // present during windowless context resolution — which is what lets a
+    // "switch algorithm when a second window opens" rule participate in the
+    // tiling-algorithm slot of the assignment cascade. Absent (predicate
+    // false) when the resolving screen is not actively tiling.
+    {Field::TiledWindowCount, QLatin1StringView("tiledWindowCount"), FieldType::Int, FieldSource::Context},
 };
 static_assert(sizeof(kFieldTable) / sizeof(kFieldTable[0]) == static_cast<unsigned>(FieldCount),
               "kFieldTable must have one entry per Field");

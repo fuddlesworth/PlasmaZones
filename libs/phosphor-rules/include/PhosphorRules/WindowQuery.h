@@ -67,6 +67,13 @@ struct WindowQuery
     QString activity; ///< empty = all activities
     QString mode; ///< current placement mode wire token ("snapping" / "tiling"); a floating window has no mode (empty)
 
+    /// Tiled-window count for the screen + desktop being resolved. Optional
+    /// rather than defaulted because 0 is a meaningful value (an empty tiled
+    /// desktop): engaged only when the resolver knows the count (the autotile
+    /// engine supplies it for an actively-tiling context), absent otherwise so
+    /// a count predicate is inert wherever the count is unknown.
+    std::optional<int> tiledWindowCount;
+
     /// True if any window attribute is set — i.e. this is a per-window query
     /// rather than a windowless context query.
     bool hasWindow() const
@@ -121,6 +128,8 @@ struct WindowQuery
             return std::optional<QVariant>(activity);
         case Field::Mode:
             return std::optional<QVariant>(mode);
+        case Field::TiledWindowCount:
+            return tiledWindowCount ? std::optional<QVariant>(*tiledWindowCount) : std::nullopt;
         case Field::IsMaximized:
             return isMaximized ? std::optional<QVariant>(*isMaximized) : std::nullopt;
         case Field::IsFocused:

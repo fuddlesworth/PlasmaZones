@@ -776,6 +776,8 @@ QString RuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Zone");
     case Field::Mode:
         return PhosphorI18n::tr("Mode");
+    case Field::TiledWindowCount:
+        return PhosphorI18n::tr("Tiled window count");
     }
     return QString();
 }

@@ -96,6 +96,7 @@ PickerCategory fieldCategory(Field f)
     case Field::VirtualDesktop:
     case Field::Activity:
     case Field::Mode:
+    case Field::TiledWindowCount:
         return {PhosphorI18n::tr("Context"), 0};
     }
     return {PhosphorI18n::tr("Other"), 99};
@@ -179,6 +180,11 @@ QString fieldDescription(Field f)
         return PhosphorI18n::tr("The KDE Activity the window is on.");
     case Field::Mode:
         return PhosphorI18n::tr("The engine mode the window is placed by (snapping or tiling).");
+    case Field::TiledWindowCount:
+        return PhosphorI18n::tr(
+            "How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as "
+            "windows open and close, for example a centered single-window layout that gives way once a second window "
+            "opens.");
     }
     return QString();
 }
