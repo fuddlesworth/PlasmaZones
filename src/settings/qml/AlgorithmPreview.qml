@@ -32,8 +32,9 @@ Item {
     // Color customization (passed through to ZonePreview)
     property color windowColor: Kirigami.Theme.highlightColor
     property color windowBorder: Kirigami.Theme.textColor
-    // Throttled zone calculation (~60fps cap) to avoid redundant recalcs
-    // when multiple properties change in the same frame
+    // Computed zones, rendered by ZonePreview. Recomputed by recalcTimer, which
+    // throttles to ~60fps so several input changes in one frame coalesce into a
+    // single C++ call.
     property var zones: []
     property string zoneNumberDisplay: "all"
     // Read the availableAlgorithms PROPERTY (not a call): it is exposed as both a

@@ -8,9 +8,8 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.control as PhosphorUi
 
 // PhosphorUi.AboutPageShell hosts the standard chrome (icon + name +
-// version + description + license + homepage); PlasmaZones-specific
-// content (daemon toggle on top, link / license / credits cards in
-// extras) is injected through the shell's slots.
+// version + description + license + homepage). PlasmaZones-specific content
+// (the Links and Credits cards) is injected through the shell's extras slot.
 PhosphorUi.AboutPageShell {
     id: root
 

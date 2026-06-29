@@ -288,10 +288,16 @@ QVariantMap TilingAlgorithmController::algorithmSettingsFor(const QString& algor
     if (mwVar.isValid())
         maxWindows = mwVar.toInt();
 
+    // Clamp the read-back values, mirroring customParamsForAlgorithm: a stale
+    // or hand-edited on-disk value outside the current bounds must not reach
+    // the QML slider or the live preview.
     QVariantMap result;
-    result[PhosphorTiles::AutotileJsonKeys::SplitRatio] = splitRatio;
-    result[PhosphorTiles::AutotileJsonKeys::MasterCount] = masterCount;
-    result[PhosphorTiles::AutotileJsonKeys::MaxWindows] = maxWindows;
+    result[PhosphorTiles::AutotileJsonKeys::SplitRatio] =
+        std::clamp(splitRatio, ConfigDefaults::autotileSplitRatioMin(), ConfigDefaults::autotileSplitRatioMax());
+    result[PhosphorTiles::AutotileJsonKeys::MasterCount] =
+        std::clamp(masterCount, ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax());
+    result[PhosphorTiles::AutotileJsonKeys::MaxWindows] =
+        std::clamp(maxWindows, ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax());
     return result;
 }
 
@@ -315,7 +321,6 @@ void TilingAlgorithmController::setAlgorithmSplitRatio(const QString& algorithmI
     const qreal clamped =
         std::clamp(value, ConfigDefaults::autotileSplitRatioMin(), ConfigDefaults::autotileSplitRatioMax());
     if (writeAlgorithmField(algorithmId, PhosphorTiles::AutotileJsonKeys::SplitRatio, clamped)) {
-        Q_EMIT algorithmSettingsChanged(algorithmId);
         Q_EMIT changed();
     }
 }
@@ -325,7 +330,6 @@ void TilingAlgorithmController::setAlgorithmMasterCount(const QString& algorithm
     const int clamped =
         std::clamp(value, ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax());
     if (writeAlgorithmField(algorithmId, PhosphorTiles::AutotileJsonKeys::MasterCount, clamped)) {
-        Q_EMIT algorithmSettingsChanged(algorithmId);
         Q_EMIT changed();
     }
 }
@@ -335,7 +339,6 @@ void TilingAlgorithmController::setAlgorithmMaxWindows(const QString& algorithmI
     const int clamped =
         std::clamp(value, ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax());
     if (writeAlgorithmField(algorithmId, PhosphorTiles::AutotileJsonKeys::MaxWindows, clamped)) {
-        Q_EMIT algorithmSettingsChanged(algorithmId);
         Q_EMIT changed();
     }
 }

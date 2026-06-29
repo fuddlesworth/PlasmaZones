@@ -393,6 +393,10 @@ SettingsFlickable {
                 // =============================================================
                 // Custom Algorithm Parameters
                 // =============================================================
+                // Unlike the built-in sliders above, custom params are stored
+                // per-algorithm only — there is no per-screen override for them,
+                // so the controls write the global per-algorithm value via
+                // setCustomParam() regardless of the active monitor scope.
                 Repeater {
                     model: root.customParamDefs
 

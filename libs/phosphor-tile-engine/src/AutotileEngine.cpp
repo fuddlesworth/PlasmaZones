@@ -987,13 +987,11 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         }
     };
 
-    if (oldAlgo && newAlgo) {
-        restorePerAlgoSettings(newAlgo, savedIt);
-        propagateGlobalSplitRatio();
-        propagateGlobalMasterCount();
-    } else if (newAlgo) {
-        // oldAlgo is nullptr (first-ever call or corrupted m_algorithmId).
-        // Initialize config from the new algorithm's defaults or saved settings.
+    if (newAlgo) {
+        // Restore the new algorithm's saved tuning, or its defaults when it has
+        // no saved entry. Identical whether switching from another algorithm or
+        // initializing on the first-ever call (oldAlgo null): the save block
+        // above already persisted the outgoing algorithm's values when present.
         restorePerAlgoSettings(newAlgo, savedIt);
         propagateGlobalSplitRatio();
         propagateGlobalMasterCount();
@@ -1387,7 +1385,14 @@ void AutotileEngine::refreshConfigFromSettings()
     SYNC_FIELD(smartGaps, autotileSmartGaps);
     SYNC_FIELD(focusFollowsMouse, autotileFocusFollowsMouse);
     SYNC_FIELD(respectMinimumSize, autotileRespectMinimumSize);
-    SYNC_FIELD(maxWindows, autotileMaxWindows);
+
+    // maxWindows is engine-managed: the global is written back on algorithm
+    // switch (under the write-back guard) and the per-algorithm restore below
+    // is its authoritative source. Skip the global re-read while our own
+    // write-back is in flight, matching the splitRatio/masterCount guards.
+    if (!m_writeBackGuardTimer.isActive()) {
+        SYNC_FIELD(maxWindows, autotileMaxWindows);
+    }
 
     if (!m_writeBackGuardTimer.isActive()) {
         const qreal newRatio = s->autotileSplitRatio();
