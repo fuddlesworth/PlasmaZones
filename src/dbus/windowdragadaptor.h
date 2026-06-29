@@ -142,10 +142,17 @@ public:
     {
         registerCancelOverlayShortcut();
     }
-    void releaseCancelOverlayShortcut()
-    {
-        unregisterCancelOverlayShortcut();
-    }
+
+    /// Release the shared cancel-overlay Escape grab, but ONLY when no other
+    /// consumer still needs it. kCancelOverlayId is bound on behalf of the
+    /// layout picker (start.cpp, layoutPickerRequested) and the snap-assist
+    /// phase (start.cpp, snapAssistShown); the drag itself never binds it (the
+    /// kwin-effect's keyboard grab handles Escape during a drag). Every
+    /// non-Escape release site routes through here so one consumer's teardown
+    /// cannot tear the grab out from under another consumer that is still
+    /// showing. cancelSnap() is the lone exception: it is the explicit
+    /// Escape-pressed teardown and releases unconditionally.
+    void releaseCancelOverlayShortcutIfIdle();
 
     /// Register the layout-picker keyboard navigation accelerators
     /// (Left/Right/Up/Down/Return/Enter) as global shortcuts. Required
@@ -159,16 +166,6 @@ public:
     void ensureLayoutPickerNavShortcutsRegistered(std::function<void(int dx, int dy)> moveCb,
                                                   std::function<void()> confirmCb);
     void releaseLayoutPickerNavShortcuts();
-
-    /// Whether a drag is currently active (m_draggedWindowId non-empty).
-    /// Daemon uses this to gate the picker-dismissed Escape release on
-    /// drag state — while a drag is in flight the drag-end path owns
-    /// releasing the shared kCancelOverlayId grab, so a picker dismiss
-    /// must not tear it down early.
-    bool isDragActive() const
-    {
-        return !m_draggedWindowId.isEmpty();
-    }
 
 public Q_SLOTS:
     /**

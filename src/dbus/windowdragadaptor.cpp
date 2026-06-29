@@ -294,7 +294,11 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
     // If this window was being dragged, clean up drag state
     if (windowId == m_draggedWindowId) {
         cancelDragInsertIfActive();
-        unregisterCancelOverlayShortcut();
+        // Drag-teardown: only drop the shared Escape grab if no picker / snap
+        // assist still needs it. A layout picker can be open over an in-flight
+        // drag, and it holds kCancelOverlayId — an unconditional release here
+        // would leave that still-visible picker un-Escape-able.
+        releaseCancelOverlayShortcutIfIdle();
         hideOverlayAndClearZoneState();
 
         // Hide zone selector if shown
@@ -364,6 +368,24 @@ void WindowDragAdaptor::unregisterCancelOverlayShortcut()
     // through unbind() inside the Registry, and the cancel path always uses
     // the explicit unregister call below.
     m_shortcutRegistrar->unregisterAdhocShortcut(kCancelOverlayId);
+}
+
+void WindowDragAdaptor::releaseCancelOverlayShortcutIfIdle()
+{
+    // kCancelOverlayId is the SHARED Escape grab. It is bound on behalf of the
+    // layout picker (start.cpp, layoutPickerRequested) and the snap-assist
+    // phase (start.cpp, snapAssistShown), each of which releases it on its own
+    // dismiss. The drag itself never binds it (the kwin-effect's keyboard grab
+    // handles Escape during a drag). So any teardown path that drops the grab
+    // must first confirm no OTHER consumer is still showing — otherwise it
+    // tears the grab out from under a visible picker or snap assist, leaving
+    // that overlay un-dismissable by Escape. This is the single canonical guard
+    // every non-Escape release site routes through (cancelSnap() is the lone
+    // exception: it is the explicit Escape-pressed teardown).
+    if (m_overlayService && (m_overlayService->isLayoutPickerVisible() || m_overlayService->isSnapAssistVisible())) {
+        return;
+    }
+    unregisterCancelOverlayShortcut();
 }
 
 namespace {
@@ -624,6 +646,12 @@ void WindowDragAdaptor::clearForCompositorReconnect()
 {
     hideOverlayAndClearZoneState();
     resetDragState(/*keepEscapeShortcut=*/false);
+    // Reconnect tears EVERYTHING down: the compositor that held the grabs is
+    // gone. Force-release the shared cancel-overlay grab unconditionally (not
+    // via releaseCancelOverlayShortcutIfIdle) because a stale isLayoutPicker/
+    // SnapAssistVisible flag from the dead session must not keep the grab
+    // bound. Mirrors the unconditional releaseLayoutPickerNavShortcuts() below.
+    unregisterCancelOverlayShortcut();
     // Drop any pending async snapAssistReady payload. Without this, a
     // compositor reconnect between endDrag and the QTimer::singleShot(0)
     // that emits snapAssistReady would deliver the prior session's
@@ -669,7 +697,11 @@ void WindowDragAdaptor::clearForCompositorReconnect()
 void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
 {
     if (!keepEscapeShortcut) {
-        unregisterCancelOverlayShortcut();
+        // Drag-end: drop the shared Escape grab only if no picker / snap assist
+        // still needs it. The drag never bound the grab itself, so an
+        // unconditional release here would tear it out from under a layout
+        // picker left open across the drop.
+        releaseCancelOverlayShortcutIfIdle();
     }
     m_draggedWindowId.clear();
     m_originalGeometry = QRect();
@@ -745,25 +777,13 @@ void WindowDragAdaptor::onLayoutChanged()
 
 void WindowDragAdaptor::onSnapAssistDismissed()
 {
-    // The Escape grab (kCancelOverlayId) is shared with two other consumers
-    // that piggy-back on the same id (so KGlobalAccel routes to a single
-    // action — see registerCancelOverlayShortcut's docstring): the layout
-    // picker (registered by start.cpp on layoutPickerRequested) and the
-    // snap-assist phase (registered by start.cpp's snapAssistShown handler).
-    // Releasing here unconditionally tears the grab out from under those
-    // consumers — picker-still-up after a snap-assist auto-dismiss would
-    // become un-Escape-able, and the same applies if the daemon thinks a
-    // drag is in flight (defence-in-depth, snap-assist normally appears
-    // post-drop). cancelSnap() already orchestrates precedence between
-    // overlays at Escape time, so the only safe thing this slot can do is
-    // release WHEN no other consumer still needs the grab.
-    if (m_overlayService && m_overlayService->isLayoutPickerVisible()) {
-        return;
-    }
-    if (isDragActive()) {
-        return;
-    }
-    unregisterCancelOverlayShortcut();
+    // Snap assist is already hidden by the time this fires, so the shared
+    // Escape grab (kCancelOverlayId) can be dropped — unless the layout picker
+    // is still up and holding the same grab (e.g. a snap-assist auto-dismiss
+    // while a picker is open). releaseCancelOverlayShortcutIfIdle() is the
+    // canonical cross-consumer guard; cancelSnap() handles Escape-time
+    // precedence between overlays.
+    releaseCancelOverlayShortcutIfIdle();
 }
 
 } // namespace PlasmaZones
