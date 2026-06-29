@@ -912,14 +912,26 @@ Lives in a dedicated `libs/phosphor-shell-widgets/` library shipping the `Phosph
 
 ### 3.2: `ConnectedCorner` / `ConnectedShape` / `BarCanvas`
 
-The connected-corner geometry primitive, central to the visual identity.
+The connected-corner geometry primitive, central to the visual identity. *(scaffolded)*
 
-| Deliverable                                                                          | Notes                                                                                   |
-|--------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
-| `qml/Phosphor/Widgets/{ConnectedShape,ConnectedCorner,BarCanvas}.qml`               | QML `Shape` + JS geometry (`ConnectorGeometry.js`). Sockets are a binding; geometry recomputes on socket change with `Behavior on …` Motion easing. |
-| `examples/phosphor-bar-canvas-demo/`                                                 | A standalone bar with one button that opens a popout. The popout grows out of the bar with the inverted-corner join, exactly the animation from `mockups/control-center.svg`. |
+Lives in `phosphor-shell-widgets` alongside the 3.1 atoms (same `Phosphor.Widgets` module), so the bar surface and the widgets it hosts share one import.
+
+| Deliverable                                                                          | Status | Notes                                                                                   |
+|--------------------------------------------------------------------------------------|--------|-----------------------------------------------------------------------------------------|
+| `qml/Phosphor/Widgets/ConnectorGeometry.js`                                          | scaffolded | `.pragma library` path math: builds the SVG `d` string for the bar outline weaving sockets into its bottom edge (convex pocket-floor corners, concave/inverted top corners, sweep flags matching the mockups). Degrades to a flat edge at `depth <= 0.5`. |
+| `qml/Phosphor/Widgets/ConnectedShape.qml`                                            | scaffolded | Generic `Shape` + `ShapePath` + `PathSvg` painter for a path string; `CurveRenderer` antialiasing; theme fill retints live. The renderer behind `BarCanvas`. |
+| `qml/Phosphor/Widgets/ConnectedCorner.qml`                                           | scaffolded | Standalone concave / convex quarter-fillet primitive for hand-composing joins. |
+| `qml/Phosphor/Widgets/BarCanvas.qml`                                                 | scaffolded | Bar surface: `sockets` ([{x,width,depth}]) drives the path; default children land in the bar strip; `pathData` exposed for tests. The host animates a socket's `depth` to morph the shape. |
+| `examples/phosphor-bar-canvas-demo/`                                                 | scaffolded | Floating bar with a "Control Center" button. Toggling it grows a centred popout out of the bar with the inverted-corner join (the `control-center.svg` animation). Routes through a real `PopoutController` via a minimal `SocketPopoutTransport`; pocket content reuses the 3.1 atoms. |
+| `libs/phosphor-shell-widgets/tests/tst_connector.qml`                                | scaffolded | Geometry contract via `BarCanvas.pathData`: 4 arcs socketless, 8 with an open socket, exactly one sweep-0 (left inverted) corner, zero-depth collapses to flat, `implicitHeight` reserves pocket depth. |
 
 **Acceptance:** opening/closing the popout morphs the shared Shape; one popout per bar; uses `PopoutService` from Phase 1.2.
+- [x] Socket morph: `pathData` grows/collapses with `depth` (unit-tested); demo animates `depth` via `Behavior` + Motion `emphasized`.
+- [x] One popout per bar: enforced by the `PopoutController` (Cooperative, single scope).
+- [x] Uses `PopoutService`: the demo's button toggles through `PopoutController`; the socket binds the controller's open-state.
+- [x] Visual match to the mockup confirmed via an offscreen render (bar floats on the wallpaper, popout grows out of it, concave/inverted joins correct). A human eyeball pass on a live GPU session is still nice-to-have.
+
+**Note:** the demo backdrop is a darkened brand gradient (wallpaper-like) on purpose. An early flat-navy backdrop was near-identical to `surface_container`, which made the (correct) painted pocket read as an inverted notch. A real shell sits on a photo wallpaper, so this is a demo-presentation fix, not a geometry change.
 
 **Effort:** L (~3 weeks, the geometry math is the bulk)
 

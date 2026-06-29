@@ -35,6 +35,10 @@ signal to whatever controller drives it.
 | `PhosphorPill`       | Compact fully-rounded chip / toggle; outlined when unselected, filled when selected.  |
 | `PhosphorRipple`     | Shared interaction layer: hover / press state-layer tint + expanding press ripple.    |
 | `ElevationShadow`    | M3 elevation shadow (levels 0..5), used as a `layer.effect` on any rounded surface.   |
+| `BarCanvas`          | Connected-corner bar surface; its bottom edge weaves into `sockets` so popouts grow out of it as one Shape. |
+| `ConnectedShape`     | Generic `Shape` painter for an SVG path string; the renderer behind `BarCanvas`.       |
+| `ConnectedCorner`    | Standalone concave / convex quarter-fillet primitive for hand-composing joins.        |
+| `ConnectorGeometry.js` | Pure path math: builds the connected-corner SVG `d` string from socket descriptors. |
 
 ## Typical use
 
@@ -77,8 +81,9 @@ content drop to the M3 disabled opacities (`StateLayer.disabled_container`
   its `tapped` as their own `clicked`. Known limitation: `Item.clip` is
   rectangular, so the expanding ripple circle is not masked to a rounded
   corner radius. The resting state-layer tint honours `radius`; only the
-  transient ripple sweep is unclipped. A rounded clip primitive arrives
-  with the connected-corner work (Phase 3.2) and this will adopt it.
+  transient ripple sweep is unclipped. A rounded clip (e.g. a `MultiEffect`
+  mask sourced from a `ConnectedShape`) is the eventual fix; it is not yet
+  wired in, as the spill is subtle and per-control masking has a real cost.
 - **Elevation is two halves.** `ElevationShadow` is the shadow half: a
   `MultiEffect` tuned for the six M3 elevation tiers, used as a
   `layer.effect` so the engine wires the layered item into its `source`
@@ -95,19 +100,32 @@ content drop to the M3 disabled opacities (`StateLayer.disabled_container`
 - **Host owns state.** `PhosphorPill` does not flip its own `selected`,
   and `PhosphorSlider`/`PhosphorTextField` expose the value/text for the
   host to bind. The atoms emit intent; the host owns the source of truth.
+- **Connected-corner geometry is a path string, not declarative arcs.**
+  `ConnectorGeometry.js` builds the outline as an SVG `d` string and
+  `ConnectedShape` renders it via `PathSvg`, because a `Shape` cannot
+  generate N pocket arcs declaratively for a variable socket count. This
+  matches the design mockups (also SVG paths) command-for-command. The
+  morph is driven by the host animating a socket's `depth`; the path
+  recomputes reactively and `Shape.CurveRenderer` antialiases the concave
+  joins. The pocket degrades to a flat edge at `depth <= 0.5`, so an
+  open-from-zero animation grows the pocket smoothly. The popout body is
+  drawn over the pocket by the host (e.g. the bar-canvas demo), so the
+  painted socket and the content read as one surface.
 
 ## Dependencies
 
 - Qt6 ≥ 6.6 Core / Gui / Qml / Quick. `ElevationShadow` uses
-  `QtQuick.Effects` (`MultiEffect`), which ships with Qt6::Quick.
+  `QtQuick.Effects` (`MultiEffect`), which ships with Qt6::Quick;
+  `ConnectedShape` / `BarCanvas` use `QtQuick.Shapes` (`Qt6::QuickShapes`).
 - `phosphor-theme` (`Phosphor.Theme` QML module) for the `Theme`,
   `Motion`, and `StateLayer` singletons. In-tree builds link the theme
   QML plugin automatically; the module is static and in-tree-only today.
 
 ## Status
 
-Phase 3.1: in progress. Atoms and the kitchen-sink acceptance demo
-(`examples/phosphor-widgets-kitchen-sink/`) are in the tree; the Phase 3
-gate (all four 3.x examples runnable, `phosphor-ui-primitives-0.1` tag)
-also requires 3.2 (`ConnectedCorner` / `BarCanvas`), 3.3 (OSD framework),
-and 3.4 (toast framework).
+Phase 3.1 (atoms) and Phase 3.2 (connected-corner geometry) are in the
+tree, each with an acceptance demo
+(`examples/phosphor-widgets-kitchen-sink/`,
+`examples/phosphor-bar-canvas-demo/`). The Phase 3 gate (all four 3.x
+examples runnable, `phosphor-ui-primitives-0.1` tag) still requires 3.3
+(OSD framework) and 3.4 (toast framework).

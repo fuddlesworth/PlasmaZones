@@ -666,6 +666,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
 #   phosphor-ipc-demo    — three IpcTargets driven via phosphorctl.
 #   phosphor-widgets-kitchen-sink — every Phosphor.Widgets atom in its
 #                            enabled/disabled states (widgets + theme).
+#   phosphor-bar-canvas-demo — connected-corner bar; a popout grows out of
+#                            the bar as one Shape, toggled via PopoutService.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-theme-demo)
     add_subdirectory(examples/phosphor-theme-cli)
@@ -673,6 +675,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-registry-demo)
     add_subdirectory(examples/phosphor-ipc-demo)
     add_subdirectory(examples/phosphor-widgets-kitchen-sink)
+    add_subdirectory(examples/phosphor-bar-canvas-demo)
 endif()
 
 # phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell

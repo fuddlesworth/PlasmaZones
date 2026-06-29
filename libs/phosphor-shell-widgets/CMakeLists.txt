@@ -26,7 +26,7 @@ endif()
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
 
 # The atoms import Phosphor.Theme for Theme / Motion / StateLayer. The
 # QML import scanner (qmllint, qmlcachegen) needs the registered theme
@@ -61,6 +61,11 @@ set(_phosphor_widgets_qml_files
     qml/Phosphor/Widgets/PhosphorCard.qml
     qml/Phosphor/Widgets/PhosphorSlider.qml
     qml/Phosphor/Widgets/PhosphorTextField.qml
+    # Phase 3.2 connected-corner primitives.
+    qml/Phosphor/Widgets/ConnectorGeometry.js
+    qml/Phosphor/Widgets/ConnectedShape.qml
+    qml/Phosphor/Widgets/ConnectedCorner.qml
+    qml/Phosphor/Widgets/BarCanvas.qml
 )
 
 # qt_add_qml_module nests QML_FILES under their source-relative path
@@ -95,6 +100,7 @@ qt_add_qml_module(PhosphorShellWidgetsQml
     IMPORTS
         Phosphor.Theme
         QtQuick.Effects
+        QtQuick.Shapes
     SOURCES
         src/phosphorshellwidgets_qml_plugin.cpp
     QML_FILES ${_phosphor_widgets_qml_files}
@@ -111,6 +117,10 @@ target_link_libraries(PhosphorShellWidgetsQml
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
+        # ConnectedShape uses QtQuick.Shapes (Shape/ShapePath/PathSvg);
+        # linking the module pulls its plugin so the import resolves in a
+        # static build.
+        Qt6::QuickShapes
 )
 
 # Link the PhosphorTheme QML plugin and module when available so
