@@ -102,18 +102,16 @@ Item {
         priv.apply(item, value, active);
         root.state = "shown";
         holdTimer.restart();
-        // The outgoing OSD (if any) "left", so announce its hidden() to keep
-        // the shown/hidden pairing symmetric. Emit it only after the new
-        // delegate is fully installed: a consumer that calls show() from a
-        // hidden() handler then re-enters against consistent state instead
-        // of orphaning the delegate this call just created.
-        // Announce the new OSD BEFORE the outgoing one's hidden(). hidden()
-        // is delivered synchronously and a consumer may even re-enter show()
-        // from it; emitting shown(kind) first means this delegate's shown()
-        // is announced before any such re-entry, so it can never be stale,
-        // and a re-entrant swap still produces its own symmetric
-        // shown()/hidden() pair. Every installed delegate thus gets exactly
-        // one shown() and (when replaced) one hidden().
+        // Ordering matters for re-entrancy. Announce the new OSD's shown(kind)
+        // before the outgoing one's hidden(previousKind), and only after the
+        // new delegate is fully installed. Both signals are delivered
+        // synchronously and a consumer may re-enter show() from the hidden()
+        // handler, so emitting shown() first means this delegate's shown() can
+        // never be stale, the re-entrant call sees consistent state instead of
+        // orphaning the delegate just created, and a re-entrant swap still
+        // produces its own symmetric shown()/hidden() pair. Every installed
+        // delegate thus gets exactly one shown() and (when replaced) one
+        // hidden().
         root.shown(kind);
         if (previousKind !== "")
             root.hidden(previousKind);

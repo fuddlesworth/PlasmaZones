@@ -135,7 +135,7 @@ ApplicationWindow {
                 font.pixelSize: Tokens.font_size_body_s
                 textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
-                text: ipcSocketPath.length > 0 ? qsTr("export PHOSPHOR_SOCKET=%1\nphosphorctl call osd.show --arg kind=volume --arg value=62\nphosphorctl call osd.show --arg kind=mic --arg value=1\nphosphorctl schema osd | jq").arg(ipcSocketPath) : qsTr("# IPC router not running; use the buttons above.")
+                text: ipcSocketPath.length > 0 ? qsTr("export PHOSPHOR_SOCKET=%1\nphosphorctl call osd.show --arg kind=volume --arg value=62\nphosphorctl call osd.show --arg kind=mic --arg value=1\nphosphorctl schema osd | jq").arg(ipcSocketPath) : qsTr("# IPC router not running. Use the buttons above.")
             }
         }
     }

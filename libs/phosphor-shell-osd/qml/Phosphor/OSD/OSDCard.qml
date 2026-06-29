@@ -67,6 +67,10 @@ Item {
         }
 
         Text {
+            // The card root already announces the label (and percentage) as
+            // its AlertMessage name, so keep this Text out of the a11y tree to
+            // avoid a screen reader reading the label twice.
+            Accessible.ignored: true
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
             text: card.label

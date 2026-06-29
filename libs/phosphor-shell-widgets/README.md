@@ -60,8 +60,8 @@ PhosphorCard {
 }
 ```
 
-Set `enabled: false` on any atom for its disabled state; container and
-content drop to the M3 disabled opacities (`StateLayer.disabled_container`
+Set `enabled: false` on any atom for its disabled state. The container and
+content then drop to the M3 disabled opacities (`StateLayer.disabled_container`
 / `StateLayer.disabled_content`).
 
 ## Design notes
@@ -130,7 +130,7 @@ content drop to the M3 disabled opacities (`StateLayer.disabled_container`
 ## Dependencies
 
 - Qt6 ≥ 6.6 Core / Gui / Qml / Quick. `ElevationShadow` uses
-  `QtQuick.Effects` (`MultiEffect`), which ships with Qt6::Quick;
+  `QtQuick.Effects` (`MultiEffect`), which ships with Qt6::Quick.
   `ConnectedShape` / `BarCanvas` use `QtQuick.Shapes` (`Qt6::QuickShapes`).
 - `phosphor-theme` (`Phosphor.Theme` QML module) for the `Theme`,
   `Motion`, and `StateLayer` singletons. In-tree builds link the theme

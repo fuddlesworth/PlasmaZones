@@ -6,7 +6,7 @@
 // track, and a draggable handle. Drag the handle or tap anywhere on the
 // track to set the value. User-driven changes are clamped to [from, to]
 // and `moved` fires whenever the user changes it. The host owns range
-// validity for programmatic `value` assignments (see the README note).
+// validity for programmatic `value` assignments.
 //
 //   PhosphorSlider {
 //       from: 0; to: 100; value: volume
@@ -83,8 +83,10 @@ Item {
     // Include the value in the name: QML's Accessible attached type exposes
     // role/name but not the numeric value/minimumValue/maximumValue
     // interface (those are C++-only), so the position is folded into the
-    // announced name instead.
-    Accessible.name: qsTr("Slider, %1").arg(Math.round(root.value))
+    // announced name instead. Announce the clamped position (via _ratio) so
+    // the spoken value always matches where the handle actually sits, even if
+    // the host assigned an out-of-range `value`.
+    Accessible.name: qsTr("Slider, %1").arg(Math.round(root.from + root._ratio * (root.to - root.from)))
 
     // Normalised 0..1 position of the current value. Guards a non-positive
     // range (from == to, or an inverted from > to) so it collapses to 0
