@@ -1,0 +1,22 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "urn:plasmazones:schema:curve",
+    "title": "PlasmaZones Animation Curve",
+    "description": "A named easing curve with a factory typeId and its numeric parameters. The 'name' field is enforced separately by the loader's filename-envelope check (it must equal the file's base name), so it is optional here and the schema validates both the on-disk file and the envelope-stripped root.",
+    "type": "object",
+    "required": ["typeId"],
+    "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string" },
+        "typeId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Curve factory id resolved by CurveRegistry (e.g. cubic-bezier). Unknown ids are rejected at load by the registry, not here."
+        },
+        "parameters": {
+            "type": "object",
+            "description": "Factory-specific numeric parameters (e.g. x1/y1/x2/y2 for cubic-bezier).",
+            "additionalProperties": { "type": "number" }
+        }
+    }
+}

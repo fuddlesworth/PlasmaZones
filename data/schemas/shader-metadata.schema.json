@@ -1,0 +1,45 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "urn:plasmazones:schema:shader-metadata",
+    "title": "PlasmaZones Wallpaper Shader Metadata",
+    "description": "metadata.json for a bundled or user wallpaper-shader pack. Core identity and the parameter contract are enforced. Optional multipass, buffer, and wallpaper rendering keys, plus descriptive metadata (category, description, author, version), are allowed through.",
+    "type": "object",
+    "required": ["id", "name", "fragmentShader", "parameters"],
+    "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "author": { "type": "string" },
+        "version": { "type": "string" },
+        "fragmentShader": { "type": "string", "minLength": 1 },
+        "vertexShader": { "type": "string" },
+        "parameters": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/parameter" }
+        }
+    },
+    "definitions": {
+        "parameter": {
+            "type": "object",
+            "required": ["id", "name", "group", "type", "default"],
+            "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "name": { "type": "string", "minLength": 1 },
+                "group": { "type": "string" },
+                "type": {
+                    "type": "string",
+                    "enum": ["float", "int", "bool", "color", "image"],
+                    "description": "Marshalling type of the uniform (image binds a texture slot). An unknown type cannot be bound, so it is rejected."
+                },
+                "default": {
+                    "type": ["number", "string", "boolean"],
+                    "description": "Default value. Use a string for color (#rrggbb), a number for float or int, and a boolean for bool."
+                },
+                "min": { "type": "number" },
+                "max": { "type": "number" },
+                "slot": { "type": "integer" }
+            }
+        }
+    }
+}

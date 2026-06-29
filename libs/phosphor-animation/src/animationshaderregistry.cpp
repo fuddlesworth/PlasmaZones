@@ -4,6 +4,7 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
+#include <PhosphorFsLoader/SchemaValidator.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QColor>
@@ -162,6 +163,16 @@ std::optional<QString> validateTexturePathWithinEffectDir(const QString& rawPath
 /// change that defaults the field can pin the contract.
 std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const QJsonObject& root, bool isUserDir)
 {
+    // Validate metadata.json (identity + parameter contract) before building it,
+    // so a malformed pack is skipped. Compiled once on first parse, fail-closed.
+    static const PhosphorFsLoader::SchemaValidator validator = PhosphorFsLoader::SchemaValidator::fromResource(
+        QStringLiteral(":/phosphoranimation/schemas/animation-metadata.schema.json"), lcRegistry());
+    if (const auto errors = validator.validate(root)) {
+        qCWarning(lcRegistry) << "Skipping animation pack failing schema validation:" << effectDir;
+        PhosphorFsLoader::logSchemaErrors(lcRegistry(), *errors);
+        return std::nullopt;
+    }
+
     AnimationShaderEffect e = AnimationShaderEffect::fromJson(root);
     e.sourceDir = effectDir;
     e.isUserEffect = isUserDir;

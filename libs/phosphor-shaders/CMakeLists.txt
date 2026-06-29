@@ -117,6 +117,16 @@ add_library(PhosphorShaders SHARED
 
 add_library(PhosphorShaders::PhosphorShaders ALIAS PhosphorShaders)
 
+# Embed the shader-metadata JSON Schema so ShaderRegistry can validate each
+# pack's metadata.json on load without an installed data path. The committed
+# data/schemas/shader-metadata.schema.json is the single source of truth shared
+# with CI; read at :/phosphorshaders/schemas/shader-metadata.schema.json.
+qt6_add_resources(PhosphorShaders "phosphorshaders_schemas"
+    PREFIX "/phosphorshaders/schemas"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}/../../data/schemas"
+    FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../data/schemas/shader-metadata.schema.json"
+)
+
 generate_export_header(PhosphorShaders
     EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/PhosphorShaders/phosphorshaders_export.h
     EXPORT_MACRO_NAME PHOSPHORSHADERS_EXPORT

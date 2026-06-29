@@ -45,6 +45,7 @@
 #include "snappingshaderspagecontroller.h"
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorFsLoader/SchemaValidator.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -777,7 +778,21 @@ SettingsController::SettingsController(QObject* parent)
         QFile whatsNewFile(QStringLiteral(":/whatsnew.json"));
         if (whatsNewFile.open(QIODevice::ReadOnly)) {
             const auto doc = QJsonDocument::fromJson(whatsNewFile.readAll());
-            const auto releases = doc.object().value(QLatin1String("releases")).toArray();
+
+            // Validate against the embedded schema before consuming. The same
+            // schema CI validates the file against. fromResource fails closed if
+            // the resource is missing (a build error), so malformed or
+            // unvalidatable data is skipped rather than surfaced (the page
+            // simply shows nothing).
+            const auto validator = PhosphorFsLoader::SchemaValidator::fromResource(
+                QStringLiteral(":/schemas/whatsnew.schema.json"), PlasmaZones::lcCore());
+            QJsonArray releases;
+            if (const auto errors = validator.validate(doc.object())) {
+                qCWarning(PlasmaZones::lcCore) << "whatsnew.json failed schema validation; skipping What's New entries";
+                PhosphorFsLoader::logSchemaErrors(PlasmaZones::lcCore(), *errors);
+            } else {
+                releases = doc.object().value(QLatin1String("releases")).toArray();
+            }
             for (const auto& entry : releases) {
                 const auto obj = entry.toObject();
                 QVariantMap release;
