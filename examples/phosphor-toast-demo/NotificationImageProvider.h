@@ -60,7 +60,9 @@ public:
         if (size != nullptr) {
             *size = image.size();
         }
-        if (requestedSize.isValid() && requestedSize != image.size()) {
+        // isEmpty() (not isValid()) so a 0x0 request falls through to the
+        // full image rather than scaling to a null result.
+        if (!requestedSize.isEmpty() && requestedSize != image.size()) {
             return image.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
         }
         return image;

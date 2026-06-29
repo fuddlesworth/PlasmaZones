@@ -44,9 +44,11 @@ Item {
     // The kind currently shown, or "" when hidden. Read-only for consumers.
     readonly property alias currentKind: priv.currentKind
 
-    // Emitted when an OSD becomes visible / fully hidden. Useful for
-    // tests and for a host that wants to coordinate (e.g. pause an idle
-    // timer while an OSD is up).
+    // Emitted as an OSD is shown, and after one is hidden. On a kind-swap
+    // the outgoing kind's hidden() fires immediately (no fade-out), while an
+    // auto-hide fires hidden() at the end of the fade. Useful for tests and
+    // for a host that wants to coordinate (e.g. pause an idle timer while an
+    // OSD is up).
     signal shown(string kind)
     signal hidden(string kind)
 

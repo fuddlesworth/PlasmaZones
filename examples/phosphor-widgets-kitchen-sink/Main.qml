@@ -252,7 +252,7 @@ ApplicationWindow {
                 spacing: Tokens.spacing_m
 
                 Label {
-                    text: qsTr("Cards (elevation 0 → 5: shadow deepens, surface tint rises)")
+                    text: qsTr("Cards (elevation 0 → 5 deepens the shadow and raises the surface tint)")
                     color: Theme.on_surface_variant
                     font.pixelSize: Tokens.font_size_body_m
                     font.weight: Tokens.font_weight_demibold

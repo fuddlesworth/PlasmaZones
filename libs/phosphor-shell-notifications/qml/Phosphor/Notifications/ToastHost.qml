@@ -93,8 +93,11 @@ Item {
         for (let i = 0; i < activeModel.count; ++i) {
             if (activeModel.get(i).toastId === id) {
                 activeModel.remove(i);
-                host.toastDismissed(id);
+                // Promote the next queued toast before emitting, so a
+                // re-entrant toastDismissed handler observes the slot already
+                // refilled (matches clear()'s mutate-fully-then-emit order).
                 priv.promote();
+                host.toastDismissed(id);
                 return;
             }
         }
@@ -157,7 +160,7 @@ Item {
         anchors.topMargin: host.margins
         anchors.rightMargin: host.margins
         width: 360
-        height: Math.min(contentHeight, parent.height - host.margins * 2)
+        height: Math.max(0, Math.min(contentHeight, parent.height - host.margins * 2))
         spacing: host.spacing
         interactive: false
         clip: false

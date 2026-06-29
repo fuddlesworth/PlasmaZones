@@ -43,6 +43,11 @@ Item {
     implicitWidth: 360
     implicitHeight: Math.max(72, row.implicitHeight + 2 * Tokens.spacing_m)
 
+    // Announce the toast to assistive tech. Use the plain-text app name and
+    // summary only; body is StyledText markup and would read its tags aloud.
+    Accessible.role: Accessible.Notification
+    Accessible.name: [toast.appName, toast.summary].filter(s => s !== "").join(", ")
+
     HoverHandler {
         id: hover
     }
@@ -137,9 +142,17 @@ Item {
 
         // Close affordance.
         Item {
+            id: closeButton
+
             Layout.preferredWidth: 22
             Layout.preferredHeight: 22
             Layout.alignment: Qt.AlignTop
+
+            // A real button to assistive tech: named, and activatable via the
+            // AT press action (the pointer path goes through the TapHandler).
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Dismiss notification")
+            Accessible.onPressAction: toast.dismissed()
 
             Rectangle {
                 anchors.fill: parent
@@ -186,7 +199,9 @@ Item {
     // timeout (a simple, lossless-enough "hover keeps it open"). A zero
     // timeout is sticky (the user must close it).
     Timer {
-        interval: toast.timeout
+        // Floor a stray negative timeout to a valid interval; running still
+        // gates on timeout > 0, so 0 and negative both mean sticky.
+        interval: Math.max(0, toast.timeout)
         running: toast.timeout > 0 && !toast.hovered
         repeat: false
         onTriggered: toast.dismissed()

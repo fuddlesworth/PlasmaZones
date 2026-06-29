@@ -21,7 +21,7 @@ Provide a seam where a rules service can suppress or retime toasts.
 
 The framework owns presentation, queueing, and timing only. Notification
 *ingest* (the `org.freedesktop.Notifications` server) is a separate
-concern: the host feeds toasts in by calling `show()`. The toast demo
+concern. The host feeds toasts in by calling `show()`. The toast demo
 wires `phosphor-service-notifications` to that call.
 
 ## Key types
@@ -74,8 +74,8 @@ it was visible or still queued.
   when set.
 - **Per-app-rules seam.** Assign `ToastHost.rules`, an object exposing
   `evaluate(toast) -> { suppress: bool, timeout: int } | null`. ToastHost
-  consults it before showing each toast: `suppress` drops it, `timeout`
-  overrides the auto-dismiss. The rules editor and its persistence are
+  consults it before showing each toast. `suppress` drops it, and
+  `timeout` overrides the auto-dismiss. The rules editor and its persistence are
   Phase 4.3 (Notification center) and wire into this seam without
   touching ToastHost.
 
@@ -85,7 +85,7 @@ it was visible or still queued.
   for the close glyph.
 - `phosphor-theme` (`Phosphor.Theme`) for tokens and Motion;
   `phosphor-shell-widgets` (`Phosphor.Widgets`) for `ElevationShadow` /
-  `StateLayer`. In-tree builds link their QML plugins automatically; this
+  `StateLayer`. In-tree builds link their QML plugins automatically. This
   module is static and in-tree-only today.
 
 ## Status

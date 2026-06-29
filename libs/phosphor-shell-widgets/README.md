@@ -3,8 +3,8 @@
 
 # PhosphorShellWidgets
 
-The `Phosphor.Widgets` atom library: the Material 3 building blocks every
-Phosphor shell surface composes. Pure QML, themed entirely through
+The `Phosphor.Widgets` atom library provides the Material 3 building blocks
+every Phosphor shell surface composes. Pure QML, themed entirely through
 [`phosphor-theme`](../phosphor-theme/README.md)'s `Theme` / `Motion` /
 `StateLayer` singletons, so a palette or motion retune propagates to every
 widget with no per-widget edit.
@@ -21,7 +21,7 @@ bar, launcher, control center, OSDs) assemble these rather than
 re-rolling button and slider styling per surface.
 
 The library owns presentation only. It holds no business logic and no
-service bindings; a host wires an atom's `clicked` / `moved` / `toggled`
+service bindings. A host wires an atom's `clicked` / `moved` / `toggled`
 signal to whatever controller drives it.
 
 ## Key types
@@ -120,7 +120,7 @@ content drop to the M3 disabled opacities (`StateLayer.disabled_container`
   `ConnectedShape` renders it via `PathSvg`, because a `Shape` cannot
   generate N pocket arcs declaratively for a variable socket count. This
   matches the design mockups (also SVG paths) command-for-command. The
-  morph is driven by the host animating a socket's `depth`; the path
+  morph is driven by the host animating a socket's `depth`. The path
   recomputes reactively and `Shape.CurveRenderer` antialiases the concave
   joins. The pocket degrades to a flat edge at `depth <= 0.5`, so an
   open-from-zero animation grows the pocket smoothly. The popout body is
@@ -134,7 +134,7 @@ content drop to the M3 disabled opacities (`StateLayer.disabled_container`
   `ConnectedShape` / `BarCanvas` use `QtQuick.Shapes` (`Qt6::QuickShapes`).
 - `phosphor-theme` (`Phosphor.Theme` QML module) for the `Theme`,
   `Motion`, and `StateLayer` singletons. In-tree builds link the theme
-  QML plugin automatically; the module is static and in-tree-only today.
+  QML plugin automatically. The module is static and in-tree-only today.
 
 ## Status
 

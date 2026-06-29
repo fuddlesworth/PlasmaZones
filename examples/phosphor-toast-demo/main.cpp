@@ -50,9 +50,20 @@ int main(int argc, char* argv[])
     engine.addImageProvider(QStringLiteral("notification"), imageProvider);
     QObject::connect(&notifier, &PhosphorServiceNotifications::NotificationServer::notificationAdded, &engine,
                      [imageProvider](PhosphorServiceNotifications::Notification* notification) {
-                         if (notification != nullptr && notification->hasImage()) {
-                             imageProvider->cacheImage(notification->id(), notification->image());
+                         if (notification == nullptr) {
+                             return;
                          }
+                         const auto cache = [imageProvider, notification] {
+                             if (notification->hasImage()) {
+                                 imageProvider->cacheImage(notification->id(), notification->image());
+                             }
+                         };
+                         cache();
+                         // A replaces-id update reports through changed(), not
+                         // notificationAdded, so re-cache on it to keep a
+                         // swapped image current.
+                         QObject::connect(notification, &PhosphorServiceNotifications::Notification::changed,
+                                          imageProvider, cache);
                      });
     QObject::connect(&notifier, &PhosphorServiceNotifications::NotificationServer::NotificationClosed, &engine,
                      [imageProvider](uint id, uint) {

@@ -73,6 +73,10 @@ TestCase {
             "signalName": "clicked"
         });
         verify(spy.valid, "clicked signal exists");
+        b.forceActiveFocus();
+        verify(b.activeFocus, "button takes keyboard focus");
+        keyClick(Qt.Key_Space);
+        compare(spy.count, 1, "clicked actually fires on activation");
     }
 
     function test_pill_defaults() {
@@ -176,6 +180,7 @@ TestCase {
             "signalName": "toggled"
         });
         p.forceActiveFocus();
+        verify(p.activeFocus, "pill takes keyboard focus");
         keyClick(Qt.Key_Space);
         compare(clickSpy.count, 1, "Space emits clicked");
         compare(toggleSpy.count, 1, "Space emits toggled");

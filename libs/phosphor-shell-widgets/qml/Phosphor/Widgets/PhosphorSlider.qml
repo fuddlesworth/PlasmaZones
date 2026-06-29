@@ -4,8 +4,9 @@
 //
 // A token-driven horizontal slider: inactive track, active (filled)
 // track, and a draggable handle. Drag the handle or tap anywhere on the
-// track to set the value. The value is clamped to [from, to]; `moved`
-// fires whenever the user changes it.
+// track to set the value. User-driven changes are clamped to [from, to]
+// and `moved` fires whenever the user changes it. The host owns range
+// validity for programmatic `value` assignments (see the README note).
 //
 //   PhosphorSlider {
 //       from: 0; to: 100; value: volume

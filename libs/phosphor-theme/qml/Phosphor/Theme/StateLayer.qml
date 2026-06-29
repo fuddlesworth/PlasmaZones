@@ -4,7 +4,7 @@
 // M3 "state layer" model. Every interactive surface paints the
 // foreground color over itself at a state-specific opacity to
 // communicate hover, focus, press, and drag. Centralising these here
-// keeps every Pz* widget consistent. Future high-contrast and
+// keeps every Phosphor* widget consistent. Future high-contrast and
 // reduced-motion accessibility profiles can override the singleton in
 // one place.
 

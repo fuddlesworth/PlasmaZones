@@ -906,7 +906,7 @@ Lives in a dedicated `libs/phosphor-shell-widgets/` library shipping the `Phosph
 - [ ] Accent cycle retints every atom live
 - [x] All colours/timing/state opacities route through `Theme` / `Motion` / `StateLayer` (no literals)
 
-**Known limitation:** `PhosphorRipple`'s expanding circle is not rounded-clipped (`Item.clip` is rectangular); the resting state-layer tint honours `radius`. Adopts the shared rounded-clip primitive when 3.2 lands.
+**Known limitation:** `PhosphorRipple`'s expanding circle is not rounded-clipped (`Item.clip` is rectangular). The resting state-layer tint honours `radius`. Adopts the shared rounded-clip primitive when 3.2 lands.
 
 **Effort:** M (~2 weeks)
 

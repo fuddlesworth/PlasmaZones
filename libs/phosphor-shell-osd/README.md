@@ -54,19 +54,19 @@ osd.show("volume", 62, undefined, "DP-1")
 `provider` is any object exposing `createOSD(kind, parent) -> Item`. In
 the shell it is backed by a `Registry<IOSDFactory>` (the OSD demo wires
 this and registers the four built-ins as `IOSDFactory` instances). A
-delegate is expected to carry `value` (0..100) and/or `active` (bool);
+delegate is expected to carry `value` (0..100) and/or `active` (bool).
 `OSDHost` sets whichever it exposes.
 
 The host owns the delegate's lifetime and destroys it on swap/hide, so a
 provider MUST return a **destroyable** item. A C++ factory (the
 `IOSDFactory` path) must set `QQmlEngine::setObjectOwnership(item,
-QQmlEngine::JavaScriptOwnership)` before returning it; a QObject-parented
+QQmlEngine::JavaScriptOwnership)` before returning it. A QObject-parented
 item defaults to `CppOwnership`, which makes the host's `destroy()` throw
 ("indestructible object") and leaves a ghost stacked behind the next OSD.
 
 Multi-screen: instantiate one `OSDHost` per monitor (via
 `Phosphor.Shell`'s `PerScreen`), give each its `screenName`, and pass the
-same trigger to all; `show()`'s `targetScreen` argument routes it
+same trigger to all. `show()`'s `targetScreen` argument routes it
 (`""`/omitted = every screen).
 
 ## Design notes
@@ -76,7 +76,7 @@ same trigger to all; `show()`'s `targetScreen` argument routes it
   a held key streams smoothly through one surface. A different kind swaps
   the delegate.
 - **Lifecycle via states.** `OSDHost` drives a `shown`/`hidden` state
-  pair; the transitions animate opacity + scale with `phosphor-theme`
+  pair. The transitions animate opacity + scale with `phosphor-theme`
   Motion tokens, and the hide transition's tail destroys the delegate and
   emits `hidden(kind)`. The hold timer is what flips `shown -> hidden`. A
   kind swap also emits `hidden(previousKind)` synchronously from `show()`
@@ -93,7 +93,7 @@ same trigger to all; `show()`'s `targetScreen` argument routes it
   for the OSD glyphs.
 - `phosphor-theme` (`Phosphor.Theme`) for tokens and Motion;
   `phosphor-shell-widgets` (`Phosphor.Widgets`) for `ElevationShadow`.
-  In-tree builds link their QML plugins automatically; this module is
+  In-tree builds link their QML plugins automatically. This module is
   static and in-tree-only today.
 
 ## Status

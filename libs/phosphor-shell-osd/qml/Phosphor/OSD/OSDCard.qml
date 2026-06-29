@@ -34,6 +34,13 @@ Item {
     implicitWidth: 240
     implicitHeight: column.implicitHeight + 2 * Tokens.spacing_l
 
+    // An OSD is a transient status announcement, so expose it to assistive
+    // tech as an alert. Fold the progress percentage into the name for the
+    // OSDs that show it (volume/brightness); the stateful ones (mic/caps)
+    // carry their state in the label already.
+    Accessible.role: Accessible.AlertMessage
+    Accessible.name: card.showProgress ? qsTr("%1, %2 percent").arg(card.label).arg(Math.round(Math.max(0, Math.min(1, card.progress)) * 100)) : card.label
+
     Rectangle {
         anchors.fill: parent
         radius: Tokens.radius_l

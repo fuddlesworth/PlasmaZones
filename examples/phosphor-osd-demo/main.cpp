@@ -5,7 +5,8 @@
 //
 // QGuiApplication + QQmlApplicationEngine + an IpcRouter so the OSD
 // overlay can be driven from a terminal (`phosphorctl call osd.show
-// volume 62`). The OSDController owns a Registry<IOSDFactory> with the
+// --arg kind=volume --arg value=62`). The OSDController owns a
+// Registry<IOSDFactory> with the
 // four built-in OSDs and is exposed to QML as the OSDHost provider.
 
 #include "OSDController.h"
