@@ -54,17 +54,24 @@ private Q_SLOTS:
 
     // ─── Slider bounds ────────────────────────────────────────────────────
 
-    void springBounds_matchPhosphorAnimationSpringDoc()
+    void springBounds_areUsableSubsetOfEngineClamp()
     {
         AnimationsPageController c;
-        // Bounds are documented in PhosphorAnimation/Spring.h:
-        //   omega ∈ [0.1, 200], zeta ∈ [0.0, 10.0]
-        // The controller exposes them as CONSTANT properties so QML
-        // sliders can bind once.
-        QCOMPARE(c.springOmegaMin(), 0.1);
-        QCOMPARE(c.springOmegaMax(), 200.0);
-        QCOMPARE(c.springZetaMin(), 0.0);
-        QCOMPARE(c.springZetaMax(), 10.0);
+        // The engine clamps to omega ∈ [0.1, 200], zeta ∈ [0, 10]
+        // (PhosphorAnimation/Spring.h). The slider exposes a deliberately
+        // narrower, usable band within that clamp: above omega ~40 the spring
+        // settles visually instantly, and zeta > ~4 is a barely-moving crawl;
+        // zeta is floored at 0.1 so the edited spring always settles.
+        QCOMPARE(c.springOmegaMin(), 1.0);
+        QCOMPARE(c.springOmegaMax(), 40.0);
+        QCOMPARE(c.springZetaMin(), 0.1);
+        QCOMPARE(c.springZetaMax(), 4.0);
+
+        // The slider band stays inside the engine's accepted clamp range.
+        QVERIFY(c.springOmegaMin() >= 0.1);
+        QVERIFY(c.springOmegaMax() <= 200.0);
+        QVERIFY(c.springZetaMin() >= 0.0);
+        QVERIFY(c.springZetaMax() <= 10.0);
     }
 
     // ─── Path discovery ───────────────────────────────────────────────────

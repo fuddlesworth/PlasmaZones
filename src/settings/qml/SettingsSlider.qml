@@ -47,15 +47,18 @@ RowLayout {
         from: root.from
         to: root.to
         stepSize: root.stepSize
-        onMoved: {
-            root.value = value;
-            root.moved(value);
-        }
+        // Emit `moved` only — do NOT write `root.value` here. Callers bind
+        // `value:` to their source and update it from `onMoved`; the new value
+        // flows back through that binding and the Binding above re-syncs the
+        // handle on release. Writing `root.value` imperatively would sever the
+        // caller's `value:` binding, so a later EXTERNAL update to the source
+        // (e.g. picking a spring preset that sets ω/ζ) would no longer move the
+        // handle.
+        onMoved: root.moved(value)
     }
 
     Label {
         text: root.formatValue ? root.formatValue(slider.value) : Math.round(slider.value) + root.valueSuffix
         Layout.preferredWidth: root.labelWidth
     }
-
 }

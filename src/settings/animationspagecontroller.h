@@ -84,21 +84,30 @@ public:
     void apply() override;
     void discard() override;
 
+    // Slider bounds for the spring editor. These are a deliberately narrower,
+    // usable subset of the engine's accepted clamp range (PhosphorAnimation::
+    // Spring clamps omega to [0.1, 200] and zeta to [0, 10]). The slider only
+    // needs to cover values a user can perceive: above omega ~40 the spring
+    // settles in well under ~75 ms (visually instant), and zeta > ~4 is a
+    // barely-moving overdamped crawl. zeta is floored at 0.1 (not 0) so the
+    // edited spring always settles rather than oscillating forever. A
+    // hand-edited config outside this band still parses — the engine clamp,
+    // not the slider, is the validity boundary.
     qreal springOmegaMin() const
     {
-        return 0.1;
+        return 1.0;
     }
     qreal springOmegaMax() const
     {
-        return 200.0;
+        return 40.0;
     }
     qreal springZetaMin() const
     {
-        return 0.0;
+        return 0.1;
     }
     qreal springZetaMax() const
     {
-        return 10.0;
+        return 4.0;
     }
 
     /// Built-in event paths, grouped by section. Each entry:
