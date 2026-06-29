@@ -137,6 +137,10 @@ void Daemon::connectScreenSignals()
                             GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
                     }
                 }
+                // Record the new screen's resolved assignment so a later
+                // (unrelated) rule edit doesn't diff it as a change and
+                // spuriously resnap it — the screen-add path lays it out here.
+                diffActiveAssignments();
             });
 
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenRemoved, this,
@@ -179,6 +183,10 @@ void Daemon::connectScreenSignals()
                         layout->setAllowedScreens(allowed);
                     }
                 }
+                // Drop the removed screen from the assignment snapshot so it
+                // doesn't linger as a stale entry (kept consistent with the
+                // add / context-switch / apply refresh points).
+                diffActiveAssignments();
             });
 
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenGeometryChanged, this, [this] {
