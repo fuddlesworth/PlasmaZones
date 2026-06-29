@@ -7,6 +7,8 @@
 
 #include "layoutregistry_rulehelpers_p.h"
 
+#include "zoneslogging.h"
+
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/RuleAction.h>
@@ -154,6 +156,14 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule)
             const QString modeToken = action.params.value(PWR::ActionParam::Mode).toString();
             if (const auto mode = modeFromWireString(modeToken)) {
                 entry.mode = *mode;
+            } else if (!modeToken.isEmpty()) {
+                // A non-empty token the closed mode vocabulary doesn't recognize
+                // (a typo in a hand-edited rules.json, or a token from a newer
+                // schema). We keep the Snapping default rather than reject the
+                // rule, but log it so the silent degrade is diagnosable.
+                qCWarning(PhosphorZones::lcZonesLib)
+                    << "Assignment rule" << rule.id.toString() << "carries an unrecognized SetEngineMode token"
+                    << modeToken << "— keeping the Snapping default";
             }
         } else if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)) {
             entry.snappingLayout = action.params.value(PWR::ActionParam::LayoutId).toString();

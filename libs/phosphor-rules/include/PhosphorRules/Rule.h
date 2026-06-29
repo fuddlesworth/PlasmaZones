@@ -93,6 +93,14 @@ struct PHOSPHORRULES_EXPORT Rule
     /// rule like any other; the UI and store layers enforce the lifecycle.
     bool managed = false;
 
+    /// True when @ref priority is authoritative and must not be re-derived by
+    /// the Settings band renormalizer (`RuleController::renormalizePriorities`).
+    /// Set on generated/migrated context rules (the `ContextRuleBridge` cascade
+    /// values) and on user rules whose priority was edited explicitly, so the
+    /// next add/drag/section-change does not flatten their order. Cleared when
+    /// the user drags the rule, which is a deliberate precedence override.
+    bool pinnedPriority = false;
+
     /// True if the rule has a non-null id, a valid match expression, and
     /// every action validates against the registry.
     bool isValid() const;

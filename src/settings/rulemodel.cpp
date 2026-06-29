@@ -644,6 +644,16 @@ void RuleModel::setPriorities(const QList<int>& priorities)
     Q_EMIT dataChanged(index(firstChanged, 0), index(lastChanged, 0), {PriorityRole});
 }
 
+void RuleModel::clearPinnedPriority(const QUuid& id)
+{
+    for (Rule& rule : m_rules) {
+        if (rule.id == id) {
+            rule.pinnedPriority = false;
+            return;
+        }
+    }
+}
+
 RuleModel::Section RuleModel::sectionFor(const Rule& rule)
 {
     // App-managed baseline rules (the seeded Default borders / title bars / gaps)

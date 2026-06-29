@@ -56,6 +56,9 @@ private Q_SLOTS:
     void engineModePickerExposesAllVocabularyTokens();
     void userAuthorableFilterHidesInternalActions();
     void moveRuleReorders();
+    void renormalizeSkipsPinnedPriority();
+    void explicitPriorityEditPins();
+    void dragUnpinsRule();
     void authoringMetadata();
     void inputHints();
     void templatesProduceSeededRules();
@@ -738,6 +741,86 @@ void TestRuleController::moveRuleReorders()
     const int prioFirst = model->index(0, 0).data(RuleModel::PriorityRole).toInt();
     const int prioLast = model->index(2, 0).data(RuleModel::PriorityRole).toInt();
     QVERIFY(prioFirst > prioLast);
+}
+
+namespace {
+// Build an application-rule map carrying an explicit priority and optional pin,
+// mirroring the shape a ContextRuleBridge cascade rule has once it reaches the
+// controller's model.
+QVariantMap appRuleMap(RuleController& controller, const QString& appId, int priority, bool pinned)
+{
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("application"));
+    QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+    match[QStringLiteral("value")] = appId;
+    rule[QStringLiteral("match")] = match;
+    rule[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
+    if (priority >= 0) {
+        rule[QStringLiteral("priority")] = priority;
+    }
+    if (pinned) {
+        rule[QStringLiteral("pinnedPriority")] = true;
+    }
+    return rule;
+}
+} // namespace
+
+void TestRuleController::renormalizeSkipsPinnedPriority()
+{
+    RuleController controller;
+
+    // A pinned rule (mimics a ContextRuleBridge cascade value) at priority 610.
+    const QString pinnedId = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("pinned"), 610, true));
+    QVERIFY(!pinnedId.isEmpty());
+
+    // Add several unpinned rules — each add re-runs renormalizePriorities().
+    for (const QString& app : {QStringLiteral("x"), QStringLiteral("y"), QStringLiteral("z")}) {
+        QVERIFY(!controller.addRuleFromJson(appRuleMap(controller, app, -1, false)).isEmpty());
+    }
+
+    // The pinned rule kept its authoritative 610 — not flattened into a band.
+    const QVariantMap reloaded = controller.ruleJson(pinnedId);
+    QCOMPARE(reloaded.value(QStringLiteral("priority")).toInt(), 610);
+    QVERIFY(reloaded.value(QStringLiteral("pinnedPriority")).toBool());
+}
+
+void TestRuleController::explicitPriorityEditPins()
+{
+    RuleController controller;
+
+    const QString id = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("edit"), -1, false));
+    QVERIFY(!id.isEmpty());
+    QVERIFY(!controller.ruleJson(id).value(QStringLiteral("pinnedPriority")).toBool());
+
+    // Edit the priority explicitly → the rule becomes pinned.
+    QVariantMap edit = controller.ruleJson(id);
+    edit[QStringLiteral("priority")] = 250;
+    QVERIFY(controller.updateRuleFromJson(edit));
+    QVERIFY(controller.ruleJson(id).value(QStringLiteral("pinnedPriority")).toBool());
+    QCOMPARE(controller.ruleJson(id).value(QStringLiteral("priority")).toInt(), 250);
+
+    // A later add re-runs renormalize, which must leave the pinned 250 intact.
+    QVERIFY(!controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("other"), -1, false)).isEmpty());
+    QCOMPARE(controller.ruleJson(id).value(QStringLiteral("priority")).toInt(), 250);
+}
+
+void TestRuleController::dragUnpinsRule()
+{
+    RuleController controller;
+
+    const QString a = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("a"), 610, true));
+    const QString b = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("b"), 510, true));
+    const QString c = controller.addRuleFromJson(appRuleMap(controller, QStringLiteral("c"), 410, true));
+    QVERIFY(!a.isEmpty() && !b.isEmpty() && !c.isEmpty());
+
+    // Drag C before A — a real reorder ([a,b,c] → [c,a,b]).
+    QVERIFY(controller.moveRule(c, a));
+
+    // The dragged rule unpinned; its still-pinned siblings kept their weights.
+    QVERIFY(!controller.ruleJson(c).value(QStringLiteral("pinnedPriority")).toBool());
+    QVERIFY(controller.ruleJson(a).value(QStringLiteral("pinnedPriority")).toBool());
+    QVERIFY(controller.ruleJson(b).value(QStringLiteral("pinnedPriority")).toBool());
+    QCOMPARE(controller.ruleJson(a).value(QStringLiteral("priority")).toInt(), 610);
+    QVERIFY(controller.ruleJson(c).value(QStringLiteral("priority")).toInt() != 410);
 }
 
 void TestRuleController::authoringMetadata()

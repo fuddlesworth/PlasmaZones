@@ -71,6 +71,48 @@ private Q_SLOTS:
         QVERIFY(idStr.endsWith(QLatin1Char('}')));
     }
 
+    void testJson_pinnedPriorityRoundTrip()
+    {
+        Rule r = makeRule(QStringLiteral("pinned context rule"), 610, MatchExpression{}, {floatAction()});
+        r.pinnedPriority = true;
+        const auto reloaded = Rule::fromJson(r.toJson());
+        QVERIFY(reloaded.has_value());
+        QVERIFY(reloaded->pinnedPriority);
+        QCOMPARE(*reloaded, r);
+    }
+
+    void testJson_pinnedPriorityAbsentDefaultsFalse()
+    {
+        QJsonObject o;
+        o.insert(QStringLiteral("id"), QUuid::createUuid().toString());
+        o.insert(QStringLiteral("name"), QStringLiteral("x"));
+        o.insert(QStringLiteral("match"), QJsonObject{{QStringLiteral("all"), QJsonArray{}}});
+        QJsonArray actions;
+        actions.append(floatAction().toJson());
+        o.insert(QStringLiteral("actions"), actions);
+        // No `pinnedPriority` key.
+        const auto reloaded = Rule::fromJson(o);
+        QVERIFY(reloaded.has_value());
+        QVERIFY(!reloaded->pinnedPriority);
+    }
+
+    void testJson_pinnedPriorityOmittedWhenFalse()
+    {
+        const Rule r = makeRule(QStringLiteral("user rule"), 200, MatchExpression{}, {floatAction()});
+        QVERIFY(!r.pinnedPriority);
+        // Mirrors `managed`: the key is emitted only when true, so user rules
+        // stay byte-identical and absence loads back as false.
+        QVERIFY(!r.toJson().contains(QStringLiteral("pinnedPriority")));
+    }
+
+    void testEquality_pinnedPriorityDistinguishes()
+    {
+        const Rule base = makeRule(QStringLiteral("r"), 300, MatchExpression{}, {floatAction()});
+        Rule pinned = base;
+        pinned.pinnedPriority = true;
+        QVERIFY(base != pinned);
+    }
+
     void testJson_enabledDefaultsTrueWhenAbsent()
     {
         QJsonObject o;

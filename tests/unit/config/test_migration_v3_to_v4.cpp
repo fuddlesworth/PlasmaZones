@@ -595,6 +595,38 @@ private Q_SLOTS:
         QVERIFY(hasAssignmentAtPriority(rules, 310));
     }
 
+    void testAssignmentRules_arePinned()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonArray rules = rulesFromRules();
+
+        // Every migrated assignment rule's cascade priority is authoritative —
+        // pinned so the Settings band renormalizer can never flatten the
+        // cascade order on a later edit.
+        for (const int priority : {610, 510, 410, 310}) {
+            const QJsonObject rule = findAssignmentRuleByPriority(rules, priority);
+            QVERIFY2(!rule.isEmpty(), qPrintable(QStringLiteral("assignment rule at %1 missing").arg(priority)));
+            QVERIFY2(rule.value(QStringLiteral("pinnedPriority")).toBool(),
+                     qPrintable(QStringLiteral("assignment rule at %1 must be pinned").arg(priority)));
+        }
+
+        // The provider-default catch-all (priority 0) is also pinned: the
+        // resolver's catch-all tier excludes priority 0, so renormalize must
+        // never lift it into the Context band.
+        bool foundProviderDefault = false;
+        for (const QJsonObject& r : allRulesByPriority(rules, 0)) {
+            if (isAssignmentRule(r)) {
+                foundProviderDefault = true;
+                QVERIFY2(r.value(QStringLiteral("pinnedPriority")).toBool(), "provider-default rule must be pinned");
+            }
+        }
+        QVERIFY2(foundProviderDefault, "provider-default assignment rule (priority 0) missing");
+    }
+
     // ─── Lossless three-action assignment rules ──────────────────────────
 
     void testAssignmentRule_carriesAllThreeActions()

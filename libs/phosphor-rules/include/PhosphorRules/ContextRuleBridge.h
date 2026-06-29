@@ -345,6 +345,9 @@ inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int
     rule.name = name;
     rule.enabled = true;
     rule.priority = contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
+    // The cascade formula is authoritative — pin it so the Settings band
+    // renormalizer never re-derives it (which would flatten the cascade order).
+    rule.pinnedPriority = true;
     rule.match = makeContextMatch(screenId, virtualDesktop, activity);
     rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm);
     return rule;
@@ -370,6 +373,10 @@ inline Rule makeProviderDefaultRule(const QString& name, const QString& modeToke
     rule.name = name;
     rule.enabled = true;
     rule.priority = kProviderDefaultPriority;
+    // Pin the floor priority (0): the assignment resolver's catch-all tier
+    // excludes priority == kProviderDefaultPriority, so it must never be lifted
+    // into the Context band by the Settings renormalizer.
+    rule.pinnedPriority = true;
     rule.match = MatchExpression(); // empty All{} catch-all
     rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm);
     return rule;
@@ -406,6 +413,8 @@ inline Rule makeDisableRule(const QString& name, const QString& screenId, int vi
     rule.name = name;
     rule.enabled = true;
     rule.priority = contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
+    // Cascade formula is authoritative — pin it against the band renormalizer.
+    rule.pinnedPriority = true;
     rule.match = makeContextMatch(screenId, virtualDesktop, activity);
 
     RuleAction action;

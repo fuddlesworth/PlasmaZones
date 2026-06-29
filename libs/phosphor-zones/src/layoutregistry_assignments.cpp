@@ -110,31 +110,38 @@ auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> declt
 std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
                                                                       const QString& activity) const
 {
-    // Resolution is per-slot AND specificity-tiered. There are three
-    // independent slots — engine mode, snapping layout, tiling algorithm — each
-    // resolved separately, so a layout-only rule (a SetSnappingLayout or
-    // SetTilingAlgorithm with NO SetEngineMode) sets the layout for its engine
-    // in this context WITHOUT forcing the engine mode. The engine mode is the
-    // global default's (or another rule's); the layout slot is just filled.
+    // Resolution is per-slot and two-tier. There are three independent slots —
+    // engine mode, snapping layout, tiling algorithm — each resolved separately,
+    // so a layout-only rule (a SetSnappingLayout or SetTilingAlgorithm with NO
+    // SetEngineMode) sets the layout for its engine in this context WITHOUT
+    // forcing the engine mode. The engine mode is the global default's (or
+    // another rule's); the layout slot is just filled.
     //
-    // Within each slot the match is specificity-tiered, not a flat priority
-    // walk: the most specific *kind* of rule wins, and only within a kind does
-    // descending priority (then list order) break the tie. This keeps the
-    // answer correct even though pinned-rule priorities (ContextRuleBridge's
-    // cascade weights) and user-authored catch-all priorities (the Settings UI
-    // bands) live in one numeric space that can overlap — a screen-only pin at
-    // 310 must still beat a catch-all authored at 399.
+    // Within each slot there are exactly TWO structural tiers, and the winner
+    // inside a tier is decided by RAW PRIORITY (highest wins, list order breaks
+    // ties) — NOT by a specificity computation. There is no exact > activity >
+    // desktop > screen ladder in this resolver. That cascade ordering is an
+    // emergent property of the ContextRuleBridge priority VALUES (610 > 510 >
+    // 410 > 310 > 0), not of any structural ranking here. Those generated values
+    // are pinned (Rule::pinnedPriority) so the Settings band renormalizer cannot
+    // flatten them, which is what keeps the cascade order intact across edits.
     //
-    //   Tier 1 — a PINNED (non-catch-all) rule carrying the slot's action.
+    //   Tier 1 — a PINNED (non-catch-all) rule carrying the slot's action,
+    //            chosen by highest raw priority. A user rule authored at a
+    //            higher priority than a bridge cascade value WILL win here —
+    //            that is the intended "priority wins" contract.
     //   Tier 2 — a USER-authored catch-all rule carrying it: the explicit
     //            floor. The synthesized provider-default carries
     //            kProviderDefaultPriority and is excluded so the settings-gated
     //            resolveDefaultAssignmentEntry stays the single source of truth
     //            for the true global default.
     //
-    // Each tier is the shared RuleEvaluator::highestPriorityMatch — the one
-    // place the descending-priority, tie-break-by-list-order walk lives, so this
-    // resolver can never drift from the evaluator's own ordering.
+    // The pinned tier strictly outranks the catch-all tier, so a screen-only pin
+    // (310) still beats a user catch-all authored at 399 — via the tier
+    // boundary, not specificity. Each tier delegates to the shared
+    // RuleEvaluator::highestPriorityMatch — the one place the descending-
+    // priority, tie-break-by-list-order walk lives, so this resolver can never
+    // drift from the evaluator's own ordering.
     //
     // If no slot matched at all it's a genuine miss (nullopt) and the caller
     // routes to the global default. If at least one slot matched, the entry's

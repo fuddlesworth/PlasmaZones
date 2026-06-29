@@ -169,6 +169,9 @@ private Q_SLOTS:
         // Exact pin → priority 610.
         QCOMPARE(rule.priority, 610);
         QCOMPARE(rule.actions.size(), 3);
+        // The cascade priority is authoritative — pinned against the Settings
+        // band renormalizer so it can't be flattened on the next edit.
+        QVERIFY(rule.pinnedPriority);
     }
 
     void testMakeAssignmentRule_modeOnlyEntry()
@@ -191,6 +194,10 @@ private Q_SLOTS:
         QVERIFY(rule.match.isCatchAll());
         QCOMPARE(rule.priority, CRB::kProviderDefaultPriority);
         QCOMPARE(modeToken(rule.actions), QStringLiteral("snapping"));
+        // The floor priority (0) must stay pinned: the assignment resolver's
+        // catch-all tier excludes kProviderDefaultPriority, so renormalize must
+        // never lift it into the Context band.
+        QVERIFY(rule.pinnedPriority);
     }
 
     // ─── makeDisableRule ──────────────────────────────────────────────────
@@ -203,6 +210,7 @@ private Q_SLOTS:
         QCOMPARE(rule.actions.size(), 1);
         QCOMPARE(rule.actions.first().type, QString(ActionType::DisableEngine));
         QCOMPARE(rule.priority, 310); // screen only
+        QVERIFY(rule.pinnedPriority);
     }
 
     // ─── Round-trip: makeContextMatch → contextDimsOf ─────────────────────

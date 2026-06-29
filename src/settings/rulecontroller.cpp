@@ -422,6 +422,12 @@ void RuleController::renormalizePriorities()
     // the band-derived value. A non-priority in-place edit likewise leaves
     // priority untouched, so list order and PriorityRole stay consistent.
     //
+    // Rules with an authoritative priority are skipped: `managed` baselines
+    // (pinned at INT_MIN) and `pinnedPriority` rules (the ContextRuleBridge
+    // cascade values on generated/migrated context rules, plus any priority the
+    // user edited explicitly). Re-stamping those would flatten the cascade order
+    // into the band — the bug this guard prevents.
+    //
     // Only the priority changes — push the new values through setPriorities()
     // so the model emits a single dataChanged(PriorityRole) instead of a full
     // reset (which would tear down and rebuild every QML delegate).
@@ -429,8 +435,9 @@ void RuleController::renormalizePriorities()
     const int n = rules.size();
     QList<int> priorities;
     priorities.resize(n);
-    // Bands are spaced 100 apart (Animation=100, Application=200,
-    // Context=300, Advanced=500). The per-rule offset is BAND-LOCAL — each
+    // Band bases are 100/200/300/500 (Animation=100, Application=200,
+    // Context=300, Advanced=500); 400-499 is an intentionally reserved gap
+    // above Context. The per-rule offset is BAND-LOCAL — each
     // band re-starts the offset countdown from the band-width cap (99) and
     // decrements as later entries within the same band are encountered. This
     // gives a contiguous "earlier list index ⇒ higher priority within the
@@ -471,11 +478,12 @@ void RuleController::renormalizePriorities()
     // `operator[]` on QHash would otherwise produce.
     QHash<int, int> nextOffset;
     for (int i = 0; i < n; ++i) {
-        // Managed rules (the baseline appearance rule) carry a pinned priority
-        // that fixes them at the bottom of evaluation regardless of list
-        // position — never re-stamp them with a band value, or they'd jump
-        // above user rules.
-        if (rules.at(i).managed) {
+        // Authoritative priorities are preserved verbatim, never re-stamped:
+        // `managed` baselines (pinned at the bottom of evaluation regardless of
+        // list position) and `pinnedPriority` rules (the ContextRuleBridge
+        // cascade values, plus user-edited explicit priorities). Re-stamping
+        // either would flatten its order into a band value.
+        if (rules.at(i).managed || rules.at(i).pinnedPriority) {
             priorities[i] = rules.at(i).priority;
             continue;
         }
@@ -553,6 +561,12 @@ bool RuleController::updateRuleFromJson(const QVariantMap& ruleJson)
         rule.managed = true;
         rule.priority = existing.priority;
         rule.match = existing.match;
+    } else {
+        // Preserve an existing authoritative priority across edits (the QML
+        // editor does not round-trip the flag), and pin the rule when the user
+        // changes its priority explicitly via the Advanced editor. Either way
+        // the next add/drag/section-change renormalize must leave it verbatim.
+        rule.pinnedPriority = existing.pinnedPriority || rule.priority != existing.priority;
     }
     const RuleModel::UpdateResult result = m_model.updateRule(rule);
     switch (result) {
@@ -720,6 +734,12 @@ bool RuleController::moveRule(const QString& ruleId, const QString& beforeRuleId
     if (!actuallyMoved) {
         return true;
     }
+    // A deliberate drag is a precedence override: clear the moved rule's pin so
+    // the renormalize below re-stamps it into its section band by list order,
+    // rather than preserving its now-stale cascade/explicit priority. The
+    // dragged rule's still-pinned siblings keep their cascade weights, so it
+    // sorts into the band beneath them (documented in the Settings rules help).
+    m_model.clearPinnedPriority(QUuid::fromString(ruleId));
     renormalizePriorities();
     setDirty(true);
     return true;

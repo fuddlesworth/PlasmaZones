@@ -1118,7 +1118,7 @@ bool Daemon::init()
         if (autotileToggled && !autotileNow && m_windowTrackingAdaptor && m_snapAdaptor && m_snapEngine) {
             // Pre-arm OSD suppression for the resnap signal(s) about to fire (the
             // feedback returns asynchronously, so arm before emitting).
-            m_suppressResnapOsd = 1; // resnapCurrentAssignments()
+            armResnapOsdSuppression(1); // resnapCurrentAssignments()
             m_snapAdaptor->resnapCurrentAssignments();
             // Batched float-restore: one resnap signal per autotile-disabled
             // toggle instead of per-window D-Bus chatter. Downcast mirrors
@@ -1142,7 +1142,7 @@ bool Daemon::init()
                 entries.append(m_pendingSnapFloatRestores);
                 m_pendingSnapFloatRestores.clear();
                 if (!entries.isEmpty()) {
-                    ++m_suppressResnapOsd; // the batched emit drives a second resnap feedback
+                    armResnapOsdSuppression(1); // the batched emit drives a second resnap feedback
                     concreteSnap->emitBatchedResnap(entries);
                 }
             }
@@ -1162,13 +1162,22 @@ bool Daemon::init()
     // shortcuts). Autotile windows are already retiled by the settingsChanged
     // handler above; this covers manually-snapped windows. Debounced so a batch
     // of per-side gap edits in one save collapses into a single resnap pass.
+    // Watchdog that floors the resnap-OSD suppression counter if some primed
+    // feedback never arrives (a resnap that produced zero moves emits none).
+    // Re-armed by armResnapOsdSuppression on every arm.
+    m_suppressResnapOsdWatchdog.setSingleShot(true);
+    m_suppressResnapOsdWatchdog.setInterval(2000);
+    connect(&m_suppressResnapOsdWatchdog, &QTimer::timeout, this, [this]() {
+        m_suppressResnapOsd = 0;
+    });
+
     m_gapResnapTimer.setSingleShot(true);
     m_gapResnapTimer.setInterval(100);
     connect(&m_gapResnapTimer, &QTimer::timeout, this, [this]() {
         if (!m_snapAdaptor) {
             return;
         }
-        m_suppressResnapOsd = 1; // settings-driven reflow, not user navigation
+        armResnapOsdSuppression(1); // settings-driven reflow, not user navigation
         m_snapAdaptor->resnapCurrentAssignments();
     });
     const auto scheduleGapResnap = [this]() {
@@ -1510,6 +1519,16 @@ bool Daemon::init()
     // open zone selectors / the layout picker in sync would miss it. Re-push
     // the lock state to any open overlay on every rule change. QPointer guards
     // the shutdown window (overlay reset before ~Daemon disconnects).
+    //
+    // Deliberately UNCONDITIONAL — no slice-equality guard like the exclude path
+    // above. That guard exists because its work is expensive (walking long
+    // pending-restore queues + bumping an evaluator revision); these two
+    // refreshes are cheap and self-bounding: refreshContextLockState only acts
+    // on live selector/picker slots, and refreshOverlayPropertiesIfShown
+    // early-returns unless the overlay is currently shown. rulesChanged also
+    // only fires on a real store change (setAllRules no-ops when equal), so a
+    // whole-set guard would never trip; a lock/overlay-only slice extractor
+    // would be the only guard that could, and it isn't worth the machinery here.
     connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this,
             [overlay = QPointer(m_overlayService.get())](bool /*persisted*/) {
                 if (overlay) {
@@ -1788,7 +1807,7 @@ bool Daemon::init()
             // Resnap only the snapping-mode screens whose assignments actually changed.
             // changedScreenIds scopes the resnap to avoid spurious geometry-set on
             // screens whose layout didn't change (prevents flicker on unrelated VS).
-            m_suppressResnapOsd = osdEntries.size();
+            armResnapOsdSuppression(osdEntries.size());
             m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
             m_snapAdaptor->resnapToNewLayout();
             // Restore snap-float positions for windows this KCM apply released
