@@ -203,10 +203,10 @@ SettingsFlickable {
                 return Logic.groupByBoolKey(filtered, item => {
                     return Logic.isBuiltIn(item);
                 }, "builtin", i18n("Built-in"), "user", i18n("User Scripts"));
-            else if (groupIdx === filterBar.groupPersistent)
+            else if (groupIdx === filterBar.groupTilingVisibility)
                 return Logic.groupByBoolKey(filtered, item => {
-                    return item.supportsMemory === true;
-                }, "persistent", i18n("Persistent"), "stateless", i18n("Stateless"));
+                    return item.hiddenFromSelector !== true;
+                }, "visible", i18n("Visible"), "hidden", i18n("Hidden"));
             return Logic.ungrouped(filtered);
         }
         // Snapping grouping
@@ -224,6 +224,10 @@ SettingsFlickable {
             return Logic.groupByBoolKey(filtered, item => {
                 return Logic.isBuiltIn(item);
             }, "builtin", i18n("Built-in"), "user", i18n("User Layouts"));
+        else if (groupIdx === filterBar.groupVisibility)
+            return Logic.groupByBoolKey(filtered, item => {
+                return item.hiddenFromSelector !== true;
+            }, "visible", i18n("Visible"), "hidden", i18n("Hidden"));
         return Logic.ungrouped(filtered);
     }
 

@@ -63,15 +63,17 @@ RowLayout {
     readonly property int groupZoneCount: 1
     readonly property int groupAutoManual: 2
     readonly property int groupSource: 3
-    readonly property int groupSnappingNone: 4
-    // Tiling
+    readonly property int groupVisibility: 4
+    readonly property int groupSnappingNone: 5
+    // Tiling. "Persistent" was dropped — it was a degenerate yes/no split already
+    // covered by the Capability grouping's "Persistent (Memory)" bucket.
     readonly property int groupCapability: 0
     readonly property int groupTilingSource: 1
-    readonly property int groupPersistent: 2
+    readonly property int groupTilingVisibility: 2
     readonly property int groupTilingNone: 3
     // Static ComboBox models (avoids inline array recreation that resets currentIndex)
-    readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("None")]
-    readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Persistent"), i18n("None")]
+    readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("Visibility"), i18n("None")]
+    readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Visibility"), i18n("None")]
     // "Priority" sorts by the order set on the Configuration → Priority page
     // (snappingLayoutOrder / tilingAlgorithmOrder). Falls back to Name order when
     // no priority has been set yet.
