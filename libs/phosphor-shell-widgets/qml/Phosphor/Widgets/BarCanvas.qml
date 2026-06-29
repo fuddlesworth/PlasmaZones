@@ -56,12 +56,17 @@ Item {
     readonly property alias pathData: shape.path
 
     // Deepest open socket, so the item reserves height for the pocket and
-    // the host can size content against it.
+    // the host can size content against it. A socket at or below MIN_DEPTH
+    // renders flat (no pocket), so it reserves no height either, matching
+    // the geometry's gate.
     readonly property real maxSocketDepth: {
         let m = 0;
         const list = root.sockets;
-        for (let i = 0; i < (list ? list.length : 0); ++i)
-            m = Math.max(m, list[i].depth || 0);
+        for (let i = 0; i < (list ? list.length : 0); ++i) {
+            const d = list[i].depth || 0;
+            if (d > ConnectorGeometry.MIN_DEPTH)
+                m = Math.max(m, d);
+        }
         return m;
     }
 

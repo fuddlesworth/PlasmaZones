@@ -41,17 +41,19 @@ Item {
     // M3 surface tint overlay: an elevated surface is tinted with the
     // surface-tint colour at an elevation-dependent opacity, layered over
     // the base container colour. This is the colour half of elevation;
-    // ElevationShadow is the shadow half. The opacities are the M3
-    // elevation-overlay ramp for tiers 0..5. Theme.surface_tint defaults
-    // to the primary accent (M3 default) but honours an explicit
-    // surface_tint palette token when present.
+    // ElevationShadow is the shadow half. The per-tier tint opacity is the
+    // `tint` field of the Tokens.elevation_* tiers (the same tier objects
+    // ElevationShadow reads for its shadow), so the whole elevation ramp
+    // lives in Tokens.qml. Theme.surface_tint defaults to the primary
+    // accent (M3 default) but honours an explicit surface_tint palette
+    // token when present.
     //
     // The binding reads Theme.surface_container and Theme.surface_tint as
     // property reads (not via a Theme function), so it stays tracked and
     // the card retints live on a palette change. Calling a Theme method
     // here would silently break that, see phosphor-theme's Theme.qml.
     readonly property color _tintedSurface: {
-        const a = [0.0, 0.05, 0.08, 0.11, 0.12, 0.14][_level];
+        const a = [Tokens.elevation_0, Tokens.elevation_1, Tokens.elevation_2, Tokens.elevation_3, Tokens.elevation_4, Tokens.elevation_5][_level].tint;
         return a > 0 ? Qt.tint(Theme.surface_container, Qt.rgba(Theme.surface_tint.r, Theme.surface_tint.g, Theme.surface_tint.b, a)) : Theme.surface_container;
     }
 

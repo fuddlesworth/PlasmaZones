@@ -38,8 +38,14 @@ TestCase {
         // Last delegate handed out, so a test can capture it and assert
         // it gets destroyed on swap.
         property var lastItem: null
+        // When set, createOSD returns null for this kind, simulating an
+        // unregistered/mistyped kind (the registry-backed provider returns
+        // null for those).
+        property string failFor: ""
 
         function createOSD(kind, parent) {
+            if (kind === fakeProvider.failFor)
+                return null;
             fakeProvider.created++;
             // Create JS-owned (no creation parent) then reparent, so the
             // delegate is destroyable by the host — the same ownership the
@@ -75,6 +81,7 @@ TestCase {
 
     function init() {
         fakeProvider.created = 0;
+        fakeProvider.failFor = "";
     }
 
     function test_show_creates_delegate() {
@@ -82,6 +89,40 @@ TestCase {
         h.show("volume", 50, undefined, "");
         compare(h.currentKind, "volume", "currentKind reflects the shown OSD");
         compare(fakeProvider.created, 1, "one delegate created");
+    }
+
+    function test_failed_swap_preserves_current_osd() {
+        const h = createTemporaryObject(hostComp, testCase);
+        const spy = createTemporaryObject(spyComp, testCase, {
+            "target": h,
+            "signalName": "hidden"
+        });
+        h.show("volume", 50, undefined, "");
+        compare(h.currentKind, "volume", "volume is up");
+        // A swap whose provider yields no delegate must leave the current
+        // OSD intact, return false, and NOT emit hidden for it.
+        fakeProvider.failFor = "missing";
+        const ok = h.show("missing", undefined, undefined, "");
+        compare(ok, false, "a null-delegate show returns false");
+        compare(h.currentKind, "volume", "the current OSD survives a failed swap");
+        compare(fakeProvider.created, 1, "no new delegate was created");
+        compare(spy.count, 0, "hidden is not emitted for a show that failed");
+    }
+
+    function test_no_provider_returns_false() {
+        const h = createTemporaryObject(hostComp, testCase, {
+            "provider": null
+        });
+        compare(h.show("volume", 50, undefined, ""), false, "no provider -> false");
+        compare(h.currentKind, "", "nothing shown without a provider");
+    }
+
+    function test_value_and_active_applied_to_delegate() {
+        const h = createTemporaryObject(hostComp, testCase);
+        h.show("volume", 42, undefined, "");
+        compare(fakeProvider.lastItem.value, 42, "value lands on the delegate");
+        h.show("mic", undefined, true, "");
+        compare(fakeProvider.lastItem.active, true, "active lands on the delegate");
     }
 
     function test_repeat_same_kind_dedupes() {

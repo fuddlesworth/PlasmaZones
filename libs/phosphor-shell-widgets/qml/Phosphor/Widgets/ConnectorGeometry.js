@@ -21,6 +21,12 @@ function _n(v) {
     return Math.round(v * 100) / 100;
 }
 
+// Depth below which a socket is treated as closed (flat edge). Just under
+// a pixel so the first frames of an open animation don't pop a notch in.
+// Exported so consumers (BarCanvas.maxSocketDepth) gate on the same
+// threshold the path math uses.
+var MIN_DEPTH = 0.5;
+
 // Build the connected-corner bar path.
 //
 //   w, h            bar strip size (h is the closed bar height)
@@ -39,10 +45,6 @@ function _n(v) {
 // owns that invariant.
 function buildBarPath(w, h, cornerRadius, connectorRadius, sockets) {
     var R = Math.max(0, Math.min(cornerRadius, w / 2, h / 2));
-
-    // Depth below which a socket is treated as closed (flat edge). Just
-    // under a pixel so the first animation frames don't pop a notch in.
-    var MIN_DEPTH = 0.5;
 
     // Collect valid pockets and sort right-to-left: the bottom edge is
     // walked leftward (clockwise outline), so we weave sockets in

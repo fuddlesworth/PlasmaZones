@@ -46,7 +46,10 @@ Item {
     //   { id?, appName, summary, body, imageSource, urgency, timeout }
     // Returns the toast id, or -1 if a rule suppressed it.
     function show(toast) {
-        const t = toast || {};
+        // Shallow-copy so a rules timeout override (t.timeout = ...) can't
+        // mutate the caller's object; Object.assign ignores a null/undefined
+        // source, so this also covers a missing argument.
+        const t = Object.assign({}, toast);
 
         // Per-app-rules seam: consult before showing.
         if (host.rules && typeof host.rules.evaluate === "function") {

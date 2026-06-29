@@ -83,17 +83,22 @@ Item {
         }
 
         // Different kind (or nothing showing): swap in a fresh delegate.
+        // Build and validate the replacement BEFORE tearing the current OSD
+        // down. If the provider has no delegate for `kind` (an unregistered
+        // or mistyped kind), the OSD the user is looking at must stay put;
+        // destroying it first would blank the surface and wrongly emit
+        // hidden() for a show() that ultimately failed.
+        const item = root.provider.createOSD(kind, frame);
+        if (!item) {
+            console.warn("OSDHost: provider returned no delegate for", kind);
+            return false;
+        }
         // The outgoing OSD (if any) "left", so announce its hidden() to
         // keep the shown/hidden pairing symmetric for consumers.
         const previousKind = priv.currentKind;
         priv.destroyDelegate();
         if (previousKind !== "")
             root.hidden(previousKind);
-        const item = root.provider.createOSD(kind, frame);
-        if (!item) {
-            console.warn("OSDHost: provider returned no delegate for", kind);
-            return false;
-        }
         priv.delegate = item;
         priv.currentKind = kind;
         priv.apply(item, value, active);

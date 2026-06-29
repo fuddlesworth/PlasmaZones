@@ -50,7 +50,10 @@ Item {
     // Map a pointer x (in root coordinates) to a clamped value and emit
     // moved() if it actually changed.
     function _setFromX(px) {
-        if (_trackWidth <= 0)
+        // Mirror _ratio's guard: with no usable track or a non-positive
+        // range (to <= from) the handle is pinned at 0 and can't reflect a
+        // value, so don't emit one the user can't see.
+        if (_trackWidth <= 0 || to <= from)
             return;
         const r = Math.max(0, Math.min(1, (px - handle.width / 2) / _trackWidth));
         const v = from + r * (to - from);

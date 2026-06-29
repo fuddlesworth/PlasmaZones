@@ -35,40 +35,48 @@ QtObject {
     readonly property int radius_xl: 24
     readonly property int radius_xxl: 32
     readonly property int radius_full: 9999
-    // ─── Elevation (Y offset / blur / opacity per tier) ──────────────────
-    // Rendered by ElevationShadow.qml into MultiEffect drop-shadow
-    // parameters (it is the single consumer of these tiers). M3 levels 0
-    // through 5. Most shell surfaces sit at level 1 for the bar, level 2
-    // for popouts, level 3 for modals.
+    // ─── Elevation (per tier) ────────────────────────────────────────────
+    // Both halves of the M3 elevation system live here so a retune touches
+    // one place: y/blur/opacity drive the drop shadow (rendered by
+    // ElevationShadow.qml into MultiEffect parameters) and tint is the
+    // surface-tint overlay opacity (applied by PhosphorCard over the base
+    // container colour). M3 levels 0 through 5. Most shell surfaces sit at
+    // level 1 for the bar, level 2 for popouts, level 3 for modals.
     readonly property var elevation_0: ({
             "y": 0,
             "blur": 0,
-            "opacity": 0
+            "opacity": 0,
+            "tint": 0.0
         })
     readonly property var elevation_1: ({
             "y": 1,
             "blur": 3,
-            "opacity": 0.15
+            "opacity": 0.15,
+            "tint": 0.05
         })
     readonly property var elevation_2: ({
             "y": 2,
             "blur": 6,
-            "opacity": 0.18
+            "opacity": 0.18,
+            "tint": 0.08
         })
     readonly property var elevation_3: ({
             "y": 6,
             "blur": 12,
-            "opacity": 0.22
+            "opacity": 0.22,
+            "tint": 0.11
         })
     readonly property var elevation_4: ({
             "y": 8,
             "blur": 24,
-            "opacity": 0.25
+            "opacity": 0.25,
+            "tint": 0.12
         })
     readonly property var elevation_5: ({
             "y": 12,
             "blur": 32,
-            "opacity": 0.3
+            "opacity": 0.3,
+            "tint": 0.14
         })
     // ─── Typography ──────────────────────────────────────────────────────
     // Font-family is the system default. The shell respects the user's

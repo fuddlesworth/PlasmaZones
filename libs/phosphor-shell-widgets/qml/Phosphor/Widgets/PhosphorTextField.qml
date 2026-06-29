@@ -33,7 +33,10 @@ FocusScope {
     implicitHeight: 48
 
     Accessible.role: Accessible.EditableText
-    Accessible.name: root.placeholderText
+    // Announce the entered text once there is any, falling back to the
+    // placeholder while empty. Password fields keep the placeholder so the
+    // secret is never read out by assistive tech.
+    Accessible.name: (input.text !== "" && input.echoMode === TextInput.Normal) ? input.text : root.placeholderText
 
     readonly property bool _focused: input.activeFocus
     readonly property color _disabledTint: Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_content)

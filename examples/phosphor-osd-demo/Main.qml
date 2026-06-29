@@ -121,7 +121,7 @@ ApplicationWindow {
         // phosphorctl cheat sheet.
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 96
+            Layout.preferredHeight: Tokens.spacing_xxxl * 2
             radius: Tokens.radius_m
             color: Theme.surface_container
             border.width: 1
