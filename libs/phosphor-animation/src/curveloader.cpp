@@ -130,11 +130,9 @@ public:
             return std::nullopt;
         }
 
+        // typeId is guaranteed present and non-empty by the schema gate above
+        // (required, minLength 1), which fails closed, so no empty-check here.
         const QString typeId = obj.value(QLatin1String("typeId")).toString();
-        if (typeId.isEmpty()) {
-            qCWarning(lcCurveLoader) << "Skipping" << filePath << ": missing required 'typeId' field";
-            return std::nullopt;
-        }
         const QJsonObject params = obj.value(QLatin1String("parameters")).toObject();
 
         // Delegate parameter-shape validation to the CurveRegistry's

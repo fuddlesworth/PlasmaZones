@@ -10,6 +10,7 @@
 
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QLoggingCategory>
 #include <QTemporaryFile>
 #include <QTest>
@@ -201,7 +202,9 @@ private Q_SLOTS:
         // NOTE: a plain (non-raw) string literal — an unbalanced '[' inside a
         // raw string confuses moc's lexer and hides this Q_OBJECT class.
         const SchemaValidator validator(QByteArrayLiteral("{\"type\":\"string\",\"pattern\":\"[\"}"));
-        const auto errors = validator.validate(parse("\"abc\""));
+        // Validate a real string value (not via the object-only parse() helper)
+        // so `pattern` actually applies and valijson compiles the bad regex.
+        const auto errors = validator.validate(QJsonValue(QStringLiteral("abc")));
         QVERIFY(errors.has_value());
         QVERIFY(!errors->isEmpty());
     }

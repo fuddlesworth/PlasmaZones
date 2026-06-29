@@ -56,20 +56,36 @@ def load_json(path: Path) -> object:
 
 
 # Keywords whose values are literal data instances, not subschemas, so a
-# "format" key nested inside them is a data field rather than the JSON Schema
-# format keyword and must not be collected.
-_NON_SCHEMA_KEYWORDS = frozenset({"default", "const", "examples", "enum"})
+# "format" key nested inside them is a data field, not the JSON Schema format
+# keyword, and must not be collected.
+_INSTANCE_KEYWORDS = frozenset({"default", "const", "examples", "enum"})
+
+# Keywords whose value is a map of subschemas keyed by arbitrary names. Those
+# names can collide with _INSTANCE_KEYWORDS (e.g. a property literally named
+# "default"), so recurse into the map's values directly rather than applying the
+# instance-keyword skip to the arbitrary keys.
+_SUBSCHEMA_MAP_KEYWORDS = frozenset({"properties", "patternProperties", "definitions", "$defs"})
 
 
 def formats_used(node: object) -> set[str]:
-    """Collect every JSON Schema `format` keyword string used in a schema."""
+    """Collect every JSON Schema `format` keyword string used in a schema.
+
+    Distinguishes the `format` keyword from a data field named "format": values
+    of instance keywords (default/const/examples/enum) are skipped, while
+    subschema-map values (e.g. a property named "default") are still traversed.
+    """
     found: set[str] = set()
     if isinstance(node, dict):
         fmt = node.get("format")
         if isinstance(fmt, str):
             found.add(fmt)
         for key, value in node.items():
-            if key not in _NON_SCHEMA_KEYWORDS:
+            if key in _INSTANCE_KEYWORDS:
+                continue
+            if key in _SUBSCHEMA_MAP_KEYWORDS and isinstance(value, dict):
+                for subschema in value.values():
+                    found |= formats_used(subschema)
+            else:
                 found |= formats_used(value)
     elif isinstance(node, list):
         for item in node:
