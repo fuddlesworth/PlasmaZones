@@ -141,7 +141,12 @@ SettingsFlickable {
         else
             filtered = Logic.applyTilingFilters(filtered, search, filterBar);
         let groups = root.buildGroups(filtered, filterBar.groupByIndex);
-        let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder();
+        // The priority order stores ids in each mode's own namespace: snapping
+        // layouts by bare UUID (matches the cards), tiling algorithms by bare
+        // algorithm id ("bsp"). The tiling cards are keyed "autotile:<id>", so
+        // prefix the tiling order to the card namespace before matching, or the
+        // Priority sort silently no-ops for the tiling view.
+        let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder().map(id => "autotile:" + id);
         Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
         root.groupsModel = Logic.finalizeGroups(groups);
     }
