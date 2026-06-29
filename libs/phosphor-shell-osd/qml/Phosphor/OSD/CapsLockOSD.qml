@@ -21,6 +21,9 @@ OSDCard {
     label: osd.active ? qsTr("Caps Lock on") : qsTr("Caps Lock off")
     showProgress: false
 
+    // Glyph tint: caps-on lights the glyph with the primary accent.
+    readonly property color glyphColor: osd.active ? Theme.primary : Theme.on_surface
+
     icon: Component {
         Item {
             implicitWidth: 30
@@ -32,7 +35,7 @@ OSDCard {
                 preferredRendererType: Shape.CurveRenderer
 
                 ShapePath {
-                    fillColor: osd.active ? Theme.primary : Theme.on_surface
+                    fillColor: osd.glyphColor
                     strokeColor: "transparent"
 
                     PathSvg {
@@ -47,7 +50,7 @@ OSDCard {
                 width: 14
                 height: 3
                 radius: 1.5
-                color: osd.active ? Theme.primary : Theme.on_surface
+                color: osd.glyphColor
             }
         }
     }

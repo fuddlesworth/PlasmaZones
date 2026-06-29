@@ -55,8 +55,9 @@ toasts.show({
 ```
 
 `show()` returns the toast id, or `-1` if a rule suppressed it. Dismiss
-with `dismiss(id)`; `clear()` removes everything (e.g. before a session
-lock). `toastDismissed(id)` fires whenever a toast leaves.
+with `dismiss(id)`, and `clear()` removes everything (e.g. before a
+session lock). `toastDismissed(id)` fires whenever a toast leaves, whether
+it was visible or still queued.
 
 ## Design notes
 

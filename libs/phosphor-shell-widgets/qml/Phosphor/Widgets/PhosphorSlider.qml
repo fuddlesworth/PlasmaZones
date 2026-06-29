@@ -33,10 +33,15 @@ Item {
     implicitHeight: 40
 
     Accessible.role: Accessible.Slider
-    Accessible.name: qsTr("Slider")
+    // Include the value in the name: QML's Accessible attached type exposes
+    // role/name but not the numeric value/minimumValue/maximumValue
+    // interface (those are C++-only), so the position is folded into the
+    // announced name instead.
+    Accessible.name: qsTr("Slider, %1").arg(Math.round(root.value))
 
-    // Normalised 0..1 position of the current value. Guards a zero-width
-    // range so a misconfigured from == to collapses to 0 instead of NaN.
+    // Normalised 0..1 position of the current value. Guards a non-positive
+    // range (from == to, or an inverted from > to) so it collapses to 0
+    // instead of producing NaN or a negative ratio.
     readonly property real _ratio: to > from ? Math.max(0, Math.min(1, (value - from) / (to - from))) : 0
     // Travel available to the handle centre: the full width minus the
     // handle so it never overhangs either end.
@@ -63,7 +68,7 @@ Item {
         x: handle.width / 2
         width: root._trackWidth
         height: 4
-        radius: 2
+        radius: height / 2
         color: root.enabled ? Theme.surface_variant : Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_container)
     }
 
@@ -73,7 +78,7 @@ Item {
         x: handle.width / 2
         width: root._trackWidth * root._ratio
         height: 4
-        radius: 2
+        radius: height / 2
         color: root.enabled ? Theme.primary : root._disabledTint
     }
 

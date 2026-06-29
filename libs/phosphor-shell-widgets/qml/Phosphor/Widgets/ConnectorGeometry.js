@@ -21,14 +21,6 @@ function _n(v) {
     return Math.round(v * 100) / 100;
 }
 
-// Build the path for a rounded rectangle of size w x h with corner
-// radius r. Used as the baseline bar shape (no sockets) and as a
-// convenience for any plain rounded surface that wants to share the
-// connected-corner renderer.
-function buildRoundedRectPath(w, h, r) {
-    return buildBarPath(w, h, r, r, []);
-}
-
 // Build the connected-corner bar path.
 //
 //   w, h            bar strip size (h is the closed bar height)

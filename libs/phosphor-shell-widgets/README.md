@@ -30,7 +30,7 @@ signal to whatever controller drives it.
 |----------------------|---------------------------------------------------------------------------------------|
 | `PhosphorButton`     | M3 button in four variants (`Filled`, `Tonal`, `Outlined`, `Text`).                   |
 | `PhosphorSlider`     | Continuous horizontal slider; drag the handle or tap the track. Emits `moved`.        |
-| `PhosphorTextField`  | Outlined single-line input; focus thickens and tints the outline; placeholder.        |
+| `PhosphorTextField`  | Outlined single-line input with a placeholder; focus thickens and tints the outline.   |
 | `PhosphorCard`       | Elevated rounded surface container; children land in a padded content area.           |
 | `PhosphorPill`       | Compact fully-rounded chip / toggle; outlined when unselected, filled when selected.  |
 | `PhosphorRipple`     | Shared interaction layer: hover / press state-layer tint + expanding press ripple.    |
@@ -80,10 +80,10 @@ content drop to the M3 disabled opacities (`StateLayer.disabled_container`
   embed it for the hover / press tint and the touch ripple, and re-emit
   its `tapped` as their own `clicked`. Known limitation: `Item.clip` is
   rectangular, so the expanding ripple circle is not masked to a rounded
-  corner radius. The resting state-layer tint honours `radius`; only the
+  corner radius. The resting state-layer tint honours `radius`, so only the
   transient ripple sweep is unclipped. A rounded clip (e.g. a `MultiEffect`
-  mask sourced from a `ConnectedShape`) is the eventual fix; it is not yet
-  wired in, as the spill is subtle and per-control masking has a real cost.
+  mask sourced from a `ConnectedShape`) is the eventual fix. It is not yet
+  wired in because the spill is subtle and per-control masking has a real cost.
 - **Elevation is two halves.** `ElevationShadow` is the shadow half: a
   `MultiEffect` tuned for the six M3 elevation tiers, used as a
   `layer.effect` so the engine wires the layered item into its `source`
@@ -99,7 +99,11 @@ content drop to the M3 disabled opacities (`StateLayer.disabled_container`
   `elevation > 0`.
 - **Host owns state.** `PhosphorPill` does not flip its own `selected`,
   and `PhosphorSlider`/`PhosphorTextField` expose the value/text for the
-  host to bind. The atoms emit intent; the host owns the source of truth.
+  host to bind. The atoms emit intent and the host owns the source of
+  truth. Note `PhosphorSlider` follows the `QtQuick.Controls.Slider`
+  convention: set `value` as the initial position and respond to `moved`
+  (dragging writes `value` imperatively, so a one-way `value:` binding does
+  not survive interaction). Re-drive `value` from the `moved` handler.
 - **Connected-corner geometry is a path string, not declarative arcs.**
   `ConnectorGeometry.js` builds the outline as an SVG `d` string and
   `ConnectedShape` renders it via `PathSvg`, because a `Shape` cannot

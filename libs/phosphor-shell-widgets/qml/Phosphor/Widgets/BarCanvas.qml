@@ -43,7 +43,9 @@ Item {
     // Socket descriptors: [{ x, width, depth }] in bar-local coordinates.
     // Driven by the host / PopoutService. A socket with depth <= ~0.5 is
     // treated as closed (flat edge), so animating depth from 0 grows the
-    // pocket smoothly.
+    // pocket smoothly. Update by REASSIGNING a fresh array (the path /
+    // maxSocketDepth bindings react to the property, not to in-place
+    // mutation of an element, e.g. `sockets[0].depth = x` will not redraw).
     property var sockets: []
 
     // Default children land in the bar strip, not over the whole item, so

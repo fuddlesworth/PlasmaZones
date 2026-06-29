@@ -19,7 +19,7 @@ import QtQuick.Layouts
 ApplicationWindow {
     id: root
 
-    readonly property real margin: 16
+    readonly property real margin: Tokens.spacing_l
 
     width: 960
     height: 640
@@ -63,8 +63,8 @@ ApplicationWindow {
         width: parent.width - root.margin * 2
         height: barHeight + Math.max(0, ccDepth)
         barHeight: 48
-        cornerRadius: 16
-        connectorRadius: 18
+        cornerRadius: Tokens.radius_l
+        connectorRadius: Tokens.radius_l
         color: Theme.surface_container
         // Below ~0.5 the socket reads as closed (flat edge), so the
         // animation grows the pocket out of nothing and removes it cleanly.
@@ -86,15 +86,15 @@ ApplicationWindow {
         // Bar strip widgets (default children land in the strip band).
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 20
-            anchors.rightMargin: 12
-            spacing: 12
+            anchors.leftMargin: Tokens.spacing_l
+            anchors.rightMargin: Tokens.spacing_m
+            spacing: Tokens.spacing_m
 
             Label {
                 text: Qt.formatTime(new Date(), "HH:mm")
                 color: Theme.on_surface
-                font.pixelSize: 15
-                font.weight: Font.Medium
+                font.pixelSize: Tokens.font_size_title_s
+                font.weight: Tokens.font_weight_medium
             }
 
             Item {
@@ -129,19 +129,19 @@ ApplicationWindow {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 24
-            spacing: 16
+            anchors.margins: Tokens.spacing_xl
+            spacing: Tokens.spacing_l
 
             Label {
                 text: qsTr("Control Center")
                 color: Theme.on_surface
-                font.pixelSize: 16
-                font.weight: Font.DemiBold
+                font.pixelSize: Tokens.font_size_title_m
+                font.weight: Tokens.font_weight_demibold
             }
 
             Flow {
                 Layout.fillWidth: true
-                spacing: 10
+                spacing: Tokens.spacing_s
 
                 PhosphorPill {
                     property bool checked: true
@@ -171,7 +171,7 @@ ApplicationWindow {
             Label {
                 text: qsTr("Brightness")
                 color: Theme.on_surface_variant
-                font.pixelSize: 12
+                font.pixelSize: Tokens.font_size_body_s
             }
 
             PhosphorSlider {

@@ -7,8 +7,9 @@
 // for the "large rounding, generous spacing" aesthetic agreed in the
 // mockup conventions.
 
-import QtQuick
 pragma Singleton
+
+import QtQuick
 
 QtObject {
     // ─── Spacing scale ───────────────────────────────────────────────────
@@ -34,41 +35,41 @@ QtObject {
     readonly property int radius_xl: 24
     readonly property int radius_xxl: 32
     readonly property int radius_full: 9999
-    // ─── Elevation (Y offset / blur radius pairs) ────────────────────────
-    // Translates to ElevationShadow.qml drop-shadow parameters when that
-    // primitive lands in Phase 3.1. M3 levels 0 through 5. Most shell
-    // surfaces sit at level 1 for the bar, level 2 for popouts, level 3
-    // for modals.
+    // ─── Elevation (Y offset / blur / opacity per tier) ──────────────────
+    // Rendered by ElevationShadow.qml into MultiEffect drop-shadow
+    // parameters (it is the single consumer of these tiers). M3 levels 0
+    // through 5. Most shell surfaces sit at level 1 for the bar, level 2
+    // for popouts, level 3 for modals.
     readonly property var elevation_0: ({
-        "y": 0,
-        "blur": 0,
-        "opacity": 0
-    })
+            "y": 0,
+            "blur": 0,
+            "opacity": 0
+        })
     readonly property var elevation_1: ({
-        "y": 1,
-        "blur": 3,
-        "opacity": 0.15
-    })
+            "y": 1,
+            "blur": 3,
+            "opacity": 0.15
+        })
     readonly property var elevation_2: ({
-        "y": 2,
-        "blur": 6,
-        "opacity": 0.18
-    })
+            "y": 2,
+            "blur": 6,
+            "opacity": 0.18
+        })
     readonly property var elevation_3: ({
-        "y": 6,
-        "blur": 12,
-        "opacity": 0.22
-    })
+            "y": 6,
+            "blur": 12,
+            "opacity": 0.22
+        })
     readonly property var elevation_4: ({
-        "y": 8,
-        "blur": 24,
-        "opacity": 0.25
-    })
+            "y": 8,
+            "blur": 24,
+            "opacity": 0.25
+        })
     readonly property var elevation_5: ({
-        "y": 12,
-        "blur": 32,
-        "opacity": 0.3
-    })
+            "y": 12,
+            "blur": 32,
+            "opacity": 0.3
+        })
     // ─── Typography ──────────────────────────────────────────────────────
     // Font-family is the system default. The shell respects the user's
     // system font choice rather than a hardcoded face. Size and weight
@@ -89,5 +90,6 @@ QtObject {
     readonly property int font_size_label_s: 11
     readonly property int font_weight_regular: Font.Normal
     readonly property int font_weight_medium: Font.Medium
+    readonly property int font_weight_demibold: Font.DemiBold
     readonly property int font_weight_bold: Font.Bold
 }

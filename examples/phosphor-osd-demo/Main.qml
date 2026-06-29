@@ -32,39 +32,41 @@ ApplicationWindow {
     color: Theme.background
 
     // IPC: `phosphorctl call osd.show --arg kind=volume --arg value=62`.
-    // A value of 0 reads as the "off/muted" state for the stateful OSDs.
+    // For the stateful OSDs (mic/caps) a value of 0 reads as off/unmuted
+    // and non-zero as on/muted; value-based OSDs (volume/brightness) ignore
+    // active. Returns OSDHost.show's result so a bad kind reports failure.
     IpcTarget {
         target: "osd"
 
         function show(kind: string, value: int): bool {
-            osdHost.show(kind, value, value !== 0, "");
-            return true;
+            const stateful = kind === "mic" || kind === "caps";
+            return osdHost.show(kind, value, stateful ? value !== 0 : undefined, "");
         }
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 28
-        spacing: 18
+        anchors.margins: Tokens.spacing_xl
+        spacing: Tokens.spacing_l
 
         Label {
             text: qsTr("On-Screen Displays")
             color: Theme.on_surface
-            font.pixelSize: 20
-            font.weight: Font.DemiBold
+            font.pixelSize: Tokens.font_size_display_s
+            font.weight: Tokens.font_weight_demibold
         }
 
         Label {
             Layout.fillWidth: true
             text: qsTr("Trigger an OSD with a button or from a terminal. Repeated triggers of the same OSD refresh it and restart the timer.")
             color: Theme.on_surface_variant
-            font.pixelSize: 13
+            font.pixelSize: Tokens.font_size_body_m
             wrapMode: Text.WordWrap
         }
 
         Flow {
             Layout.fillWidth: true
-            spacing: 12
+            spacing: Tokens.spacing_m
 
             PhosphorButton {
                 text: qsTr("Volume −")
@@ -120,17 +122,17 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 96
-            radius: 12
+            radius: Tokens.radius_m
             color: Theme.surface_container
             border.width: 1
             border.color: Theme.outline_variant
 
             Text {
                 anchors.fill: parent
-                anchors.margins: 14
+                anchors.margins: Tokens.spacing_m
                 color: Theme.on_surface
                 font.family: "monospace"
-                font.pixelSize: 12
+                font.pixelSize: Tokens.font_size_body_s
                 textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
                 text: ipcSocketPath.length > 0 ? qsTr("export PHOSPHOR_SOCKET=%1\nphosphorctl call osd.show --arg kind=volume --arg value=62\nphosphorctl call osd.show --arg kind=mic --arg value=1\nphosphorctl schema osd | jq").arg(ipcSocketPath) : qsTr("# IPC router not running; use the buttons above.")

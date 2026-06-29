@@ -51,12 +51,16 @@ QQuickItem* QmlComponentOSDFactory::createOSD(QQmlEngine* engine, QObject* paren
         return nullptr;
     }
     QObject* obj = component.create(engine->rootContext());
+    if (!obj) {
+        // create() can fail at runtime even when isError() was false at
+        // load; surface the actual error rather than the wrong-type message.
+        qWarning() << "QmlComponentOSDFactory: component creation failed for" << m_id << "—" << component.errorString();
+        return nullptr;
+    }
     auto* item = qobject_cast<QQuickItem*>(obj);
     if (!item) {
         qWarning() << "QmlComponentOSDFactory: component is not a QQuickItem for" << m_id;
-        if (obj) {
-            obj->deleteLater();
-        }
+        obj->deleteLater();
         return nullptr;
     }
     if (auto* parentItem = qobject_cast<QQuickItem*>(parent)) {

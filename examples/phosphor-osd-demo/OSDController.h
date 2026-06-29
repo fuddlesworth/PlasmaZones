@@ -34,9 +34,6 @@ public:
     // engine is resolved from `parent` so QML need not pass it.
     [[nodiscard]] Q_INVOKABLE QQuickItem* createOSD(const QString& kind, QQuickItem* parent);
 
-    // Registered OSD kinds in registration order, for the demo's button row.
-    [[nodiscard]] Q_INVOKABLE QStringList kinds() const;
-
 private:
     PhosphorRegistry::Registry<PhosphorRegistry::IOSDFactory> m_registry;
 };

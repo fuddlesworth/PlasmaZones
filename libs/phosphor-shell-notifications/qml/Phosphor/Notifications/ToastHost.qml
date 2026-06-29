@@ -32,8 +32,8 @@ Item {
     property int maxVisible: 4
     // Default auto-dismiss when a toast doesn't specify one.
     property int defaultTimeout: 5000
-    property real spacing: 10
-    property real margins: 16
+    property real spacing: Tokens.spacing_s
+    property real margins: Tokens.spacing_l
     // Per-app-rules hook (see header). Null = no rules.
     property var rules: null
 
@@ -69,8 +69,8 @@ Item {
 
         if (activeModel.count < host.maxVisible)
             activeModel.insert(0, row);
-            // newest on top
         else
+            // newest on top
             // Reassign (not push) so the queuedCount binding re-evaluates;
             // an in-place Array.push doesn't notify QML.
             priv.queue = priv.queue.concat([row]);
@@ -92,15 +92,28 @@ Item {
             if (priv.queue[j].toastId === id) {
                 // Reassign so queuedCount updates (see show()).
                 priv.queue = priv.queue.slice(0, j).concat(priv.queue.slice(j + 1));
+                // A queued toast that is dismissed also "left"; emit so the
+                // contract (toastDismissed fires whenever a toast leaves)
+                // holds for queued toasts, not just visible ones.
+                host.toastDismissed(id);
                 return;
             }
         }
     }
 
-    // Clear everything (e.g. a session lock about to show).
+    // Clear everything (e.g. a session lock about to show). Emits
+    // toastDismissed for every toast removed (visible and queued) so the
+    // signal contract holds for bulk teardown too.
     function clear() {
+        const ids = [];
+        for (let i = 0; i < activeModel.count; ++i)
+            ids.push(activeModel.get(i).toastId);
+        for (let j = 0; j < priv.queue.length; ++j)
+            ids.push(priv.queue[j].toastId);
         priv.queue = [];
         activeModel.clear();
+        for (let k = 0; k < ids.length; ++k)
+            host.toastDismissed(ids[k]);
     }
 
     QtObject {

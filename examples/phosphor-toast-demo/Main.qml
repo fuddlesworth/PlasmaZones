@@ -47,7 +47,7 @@ ApplicationWindow {
                 "body": notification.body,
                 "imageSource": isPath ? icon : "",
                 "urgency": notification.urgency,
-                "timeout": notification.expireTimeout > 0 ? notification.expireTimeout : 5000
+                "timeout": notification.expireTimeout > 0 ? notification.expireTimeout : toastHost.defaultTimeout
             });
         }
 
@@ -56,27 +56,27 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 28
-        spacing: 18
+        anchors.margins: Tokens.spacing_xl
+        spacing: Tokens.spacing_l
 
         Label {
             text: qsTr("Notification Toasts")
             color: Theme.on_surface
-            font.pixelSize: 20
-            font.weight: Font.DemiBold
+            font.pixelSize: Tokens.font_size_display_s
+            font.weight: Tokens.font_weight_demibold
         }
 
         Label {
             Layout.fillWidth: true
-            text: notifier.nameAcquired ? qsTr("Active notification server. Try: notify-send 'Build finished' 'All tests passed' — or use the buttons.") : qsTr("Another notification daemon owns the bus, so notify-send won't reach this demo. The buttons below still drive the toast stack.")
+            text: notifier.nameAcquired ? qsTr("Active notification server. Try notify-send 'Build finished' 'All tests passed', or use the buttons.") : qsTr("Another notification daemon owns the bus, so notify-send won't reach this demo. The buttons below still drive the toast stack.")
             color: Theme.on_surface_variant
-            font.pixelSize: 13
+            font.pixelSize: Tokens.font_size_body_m
             wrapMode: Text.WordWrap
         }
 
         Flow {
             Layout.fillWidth: true
-            spacing: 12
+            spacing: Tokens.spacing_m
 
             PhosphorButton {
                 text: qsTr("Info")

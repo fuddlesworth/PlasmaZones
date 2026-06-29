@@ -15,11 +15,13 @@
 //
 // Levels map to M3's elevation ramp: 0 = flat (no shadow), 1 = resting
 // cards, 2 = raised buttons, 3 = menus / popouts, 4 = nav drawers,
-// 5 = modal dialogs. A single retune here propagates to every elevated
-// surface in the shell.
+// 5 = modal dialogs. The per-tier offset/blur/opacity values live in the
+// design system (Tokens.elevation_0..5); this is their single renderer, so
+// a retune in Tokens.qml propagates to every elevated surface in the shell.
 
 import QtQuick
 import QtQuick.Effects
+import Phosphor.Theme
 
 MultiEffect {
     id: root
@@ -29,25 +31,27 @@ MultiEffect {
     // level-0 ElevationShadow is a transparent pass-through).
     property int level: 1
 
-    // Clamp once so the per-tier lookup arrays below never index out of
-    // bounds when a caller passes a level outside 0..5.
+    // Clamp once so the per-tier lookup never indexes out of bounds when a
+    // caller passes a level outside 0..5.
     readonly property int _level: Math.max(0, Math.min(5, level))
+    // The selected design-system elevation tier ({ y, blur, opacity }).
+    // Reads the Tokens.* properties so a Tokens retune re-evaluates here.
+    readonly property var _tier: [Tokens.elevation_0, Tokens.elevation_1, Tokens.elevation_2, Tokens.elevation_3, Tokens.elevation_4, Tokens.elevation_5][_level]
 
     // MultiEffect crops the shadow to the source rect unless padding is
     // auto-grown. Without this the blur is clipped at the surface edge.
     autoPaddingEnabled: true
-    // Headroom for the blur kernel at the highest tier; the default
-    // ceiling clips level-5 shadows.
+    // Kernel ceiling; shadowBlur below is expressed as a fraction of it.
     blurMax: 64
 
     shadowEnabled: _level > 0
-    // Opaque black; the visible softness comes from shadowOpacity so the
+    // Opaque black; the visible strength comes from shadowOpacity so the
     // colour and the strength stay independently tunable.
     shadowColor: Qt.rgba(0, 0, 0, 1)
     shadowHorizontalOffset: 0
-    // Per-tier blur (0..1 of blurMax), vertical drop, and opacity. M3
-    // shadows deepen and drop further as elevation rises.
-    shadowBlur: [0.0, 0.20, 0.30, 0.42, 0.58, 0.80][_level]
-    shadowVerticalOffset: [0, 1, 2, 4, 6, 8][_level]
-    shadowOpacity: [0.0, 0.28, 0.32, 0.36, 0.40, 0.44][_level]
+    // Tokens.elevation blur is in px; MultiEffect.shadowBlur is a 0..1
+    // fraction of blurMax.
+    shadowBlur: _tier.blur / blurMax
+    shadowVerticalOffset: _tier.y
+    shadowOpacity: _tier.opacity
 }

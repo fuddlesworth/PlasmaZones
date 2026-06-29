@@ -41,7 +41,7 @@ Item {
     readonly property bool hovered: hover.hovered
 
     implicitWidth: 360
-    implicitHeight: Math.max(72, row.implicitHeight + 28)
+    implicitHeight: Math.max(72, row.implicitHeight + 2 * Tokens.spacing_m)
 
     HoverHandler {
         id: hover
@@ -49,7 +49,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 16
+        radius: Tokens.radius_l
         color: Theme.surface_container_high
         layer.enabled: true
         layer.effect: ElevationShadow {
@@ -60,12 +60,12 @@ Item {
     // Critical-urgency accent stripe.
     Rectangle {
         visible: toast.urgency >= 2
-        width: 4
+        width: Tokens.spacing_xs
         radius: 2
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.margins: 10
+        anchors.margins: Tokens.spacing_s
         color: Theme.error
     }
 
@@ -73,9 +73,9 @@ Item {
         id: row
 
         anchors.fill: parent
-        anchors.margins: 14
-        anchors.leftMargin: toast.urgency >= 2 ? 22 : 14
-        spacing: 12
+        anchors.margins: Tokens.spacing_m
+        anchors.leftMargin: toast.urgency >= 2 ? Tokens.spacing_xl : Tokens.spacing_m
+        spacing: Tokens.spacing_m
 
         // Image / avatar, shown only when a source is set.
         Rectangle {
@@ -83,7 +83,7 @@ Item {
             Layout.preferredWidth: 40
             Layout.preferredHeight: 40
             Layout.alignment: Qt.AlignTop
-            radius: 8
+            radius: Tokens.radius_s
             clip: true
             color: Theme.surface_variant
 
@@ -98,14 +98,14 @@ Item {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
-            spacing: 2
+            spacing: Tokens.spacing_xxs
 
             Text {
                 visible: toast.appName !== ""
                 text: toast.appName
                 color: Theme.on_surface_variant
-                font.pixelSize: 11
-                font.weight: Font.Medium
+                font.pixelSize: Tokens.font_size_label_s
+                font.weight: Tokens.font_weight_medium
                 elide: Text.ElideRight
                 Layout.fillWidth: true
             }
@@ -114,8 +114,8 @@ Item {
                 visible: toast.summary !== ""
                 text: toast.summary
                 color: Theme.on_surface
-                font.pixelSize: 14
-                font.weight: Font.DemiBold
+                font.pixelSize: Tokens.font_size_body_l
+                font.weight: Tokens.font_weight_demibold
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
                 elide: Text.ElideRight
@@ -126,7 +126,7 @@ Item {
                 visible: toast.body !== ""
                 text: toast.body
                 color: Theme.on_surface_variant
-                font.pixelSize: 13
+                font.pixelSize: Tokens.font_size_body_m
                 textFormat: Text.StyledText
                 wrapMode: Text.WordWrap
                 maximumLineCount: 4

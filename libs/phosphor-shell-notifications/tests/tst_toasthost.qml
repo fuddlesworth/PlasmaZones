@@ -124,6 +124,45 @@ TestCase {
         compare(h.activeCount, 1);
     }
 
+    function test_dismiss_queued_emits_signal() {
+        const h = createTemporaryObject(hostComp, testCase, {
+            "maxVisible": 1
+        });
+        const spy = spyComp.createObject(testCase, {
+            "target": h,
+            "signalName": "toastDismissed"
+        });
+        h.show({
+            "summary": "a"
+        });
+        const queuedId = h.show({
+            "summary": "b"
+        }); // queued, not visible
+        compare(h.queuedCount, 1);
+        h.dismiss(queuedId);
+        compare(h.queuedCount, 0, "the queued toast is removed");
+        compare(spy.count, 1, "toastDismissed fires for a queued toast too");
+        compare(spy.signalArguments[0][0], queuedId, "carries the dismissed queued id");
+    }
+
+    function test_clear_emits_for_each() {
+        const h = createTemporaryObject(hostComp, testCase, {
+            "maxVisible": 1
+        });
+        const spy = spyComp.createObject(testCase, {
+            "target": h,
+            "signalName": "toastDismissed"
+        });
+        h.show({
+            "summary": "a"
+        });
+        h.show({
+            "summary": "b"
+        }); // queued
+        h.clear();
+        compare(spy.count, 2, "clear() emits toastDismissed for every removed toast (visible + queued)");
+    }
+
     Component {
         id: spyComp
 

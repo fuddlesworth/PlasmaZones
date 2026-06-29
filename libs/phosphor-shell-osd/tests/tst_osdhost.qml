@@ -154,6 +154,50 @@ TestCase {
         tryCompare(h, "currentKind", "", 3000, "auto-hides and clears after the hold");
     }
 
+    function test_empty_kind_is_rejected() {
+        const h = createTemporaryObject(hostComp, testCase);
+        const r = h.show("", 50, undefined, "");
+        compare(r, false, "an empty kind returns false");
+        compare(h.currentKind, "", "nothing is shown");
+        compare(fakeProvider.created, 0, "no delegate created for an empty kind");
+    }
+
+    function test_show_returns_bool() {
+        const h = createTemporaryObject(hostComp, testCase);
+        compare(h.show("volume", 50, undefined, ""), true, "a shown OSD returns true");
+        compare(h.show("volume", 60, undefined, "DP-9"), false, "a trigger routed elsewhere returns false");
+    }
+
+    function test_hide_dismisses_early() {
+        const h = createTemporaryObject(hostComp, testCase);
+        h.show("volume", 50, undefined, "");
+        h.hide();
+        tryCompare(h, "currentKind", "", 3000, "hide() tears the OSD down");
+    }
+
+    function test_hidden_signal_on_auto_hide() {
+        const h = createTemporaryObject(hostComp, testCase);
+        const spy = spyComp.createObject(testCase, {
+            "target": h,
+            "signalName": "hidden"
+        });
+        h.show("volume", 50, undefined, "");
+        tryCompare(spy, "count", 1, 3000, "hidden fires once on auto-hide");
+        compare(spy.signalArguments[0][0], "volume", "hidden carries the kind that left");
+    }
+
+    function test_swap_emits_hidden_for_previous() {
+        const h = createTemporaryObject(hostComp, testCase);
+        const spy = spyComp.createObject(testCase, {
+            "target": h,
+            "signalName": "hidden"
+        });
+        h.show("volume", 50, undefined, "");
+        h.show("brightness", 30, undefined, ""); // swap
+        compare(spy.count, 1, "swapping emits hidden for the outgoing OSD");
+        compare(spy.signalArguments[0][0], "volume", "hidden carries the previous kind");
+    }
+
     Component {
         id: spyComp
 

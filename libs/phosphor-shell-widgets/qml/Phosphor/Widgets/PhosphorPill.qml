@@ -30,7 +30,7 @@ Item {
     signal toggled
 
     implicitHeight: 32
-    implicitWidth: label.implicitWidth + 28
+    implicitWidth: label.implicitWidth + Tokens.spacing_xl
 
     Accessible.role: Accessible.CheckBox
     Accessible.name: root.text
@@ -86,7 +86,7 @@ Item {
         anchors.centerIn: parent
         text: root.text
         color: root._content
-        font.pixelSize: 13
+        font.pixelSize: Tokens.font_size_label_l
 
         Behavior on color {
             ColorAnimation {

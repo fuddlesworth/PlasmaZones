@@ -48,15 +48,15 @@ ApplicationWindow {
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
-            spacing: 12
+            anchors.leftMargin: Tokens.spacing_l
+            anchors.rightMargin: Tokens.spacing_l
+            spacing: Tokens.spacing_m
 
             Label {
                 text: qsTr("Phosphor.Widgets")
                 color: Theme.on_surface
-                font.pixelSize: 18
-                font.weight: Font.DemiBold
+                font.pixelSize: Tokens.font_size_title_l
+                font.weight: Tokens.font_weight_demibold
                 Layout.fillWidth: true
             }
 
@@ -78,31 +78,35 @@ ApplicationWindow {
     }
 
     ScrollView {
+        id: scroller
+
         anchors.fill: parent
         contentWidth: availableWidth
 
         ColumnLayout {
-            width: root.width
-            spacing: 28
+            // availableWidth (not root.width) so content never slips under
+            // the vertical scrollbar when one appears.
+            width: scroller.availableWidth
+            spacing: Tokens.spacing_xl
 
             // ── Buttons ──────────────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
-                Layout.topMargin: 24
-                spacing: 12
+                Layout.leftMargin: Tokens.spacing_xl
+                Layout.rightMargin: Tokens.spacing_xl
+                Layout.topMargin: Tokens.spacing_xl
+                spacing: Tokens.spacing_m
 
                 Label {
                     text: qsTr("Buttons")
                     color: Theme.on_surface_variant
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
+                    font.pixelSize: Tokens.font_size_body_m
+                    font.weight: Tokens.font_weight_demibold
                 }
 
                 Flow {
                     Layout.fillWidth: true
-                    spacing: 12
+                    spacing: Tokens.spacing_m
 
                     PhosphorButton {
                         text: qsTr("Filled")
@@ -135,20 +139,20 @@ ApplicationWindow {
             // ── Pills ────────────────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
-                spacing: 12
+                Layout.leftMargin: Tokens.spacing_xl
+                Layout.rightMargin: Tokens.spacing_xl
+                spacing: Tokens.spacing_m
 
                 Label {
                     text: qsTr("Pills")
                     color: Theme.on_surface_variant
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
+                    font.pixelSize: Tokens.font_size_body_m
+                    font.weight: Tokens.font_weight_demibold
                 }
 
                 Flow {
                     Layout.fillWidth: true
-                    spacing: 12
+                    spacing: Tokens.spacing_m
 
                     PhosphorPill {
                         // Local toggle state for the demo; a real host
@@ -179,15 +183,15 @@ ApplicationWindow {
             // ── Slider ───────────────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
-                spacing: 12
+                Layout.leftMargin: Tokens.spacing_xl
+                Layout.rightMargin: Tokens.spacing_xl
+                spacing: Tokens.spacing_m
 
                 Label {
                     text: qsTr("Slider")
                     color: Theme.on_surface_variant
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
+                    font.pixelSize: Tokens.font_size_body_m
+                    font.weight: Tokens.font_weight_demibold
                 }
 
                 PhosphorSlider {
@@ -209,20 +213,20 @@ ApplicationWindow {
             // ── Text fields ──────────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
-                spacing: 12
+                Layout.leftMargin: Tokens.spacing_xl
+                Layout.rightMargin: Tokens.spacing_xl
+                spacing: Tokens.spacing_m
 
                 Label {
                     text: qsTr("Text fields")
                     color: Theme.on_surface_variant
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
+                    font.pixelSize: Tokens.font_size_body_m
+                    font.weight: Tokens.font_weight_demibold
                 }
 
                 Flow {
                     Layout.fillWidth: true
-                    spacing: 12
+                    spacing: Tokens.spacing_m
 
                     PhosphorTextField {
                         placeholderText: qsTr("Search")
@@ -242,21 +246,21 @@ ApplicationWindow {
             // ── Cards ────────────────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
-                Layout.bottomMargin: 24
-                spacing: 12
+                Layout.leftMargin: Tokens.spacing_xl
+                Layout.rightMargin: Tokens.spacing_xl
+                Layout.bottomMargin: Tokens.spacing_xl
+                spacing: Tokens.spacing_m
 
                 Label {
                     text: qsTr("Cards (elevation 0 → 5: shadow deepens, surface tint rises)")
                     color: Theme.on_surface_variant
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
+                    font.pixelSize: Tokens.font_size_body_m
+                    font.weight: Tokens.font_weight_demibold
                 }
 
                 Flow {
                     Layout.fillWidth: true
-                    spacing: 20
+                    spacing: Tokens.spacing_l
 
                     Repeater {
                         model: 6
@@ -267,19 +271,19 @@ ApplicationWindow {
                             elevation: index
 
                             ColumnLayout {
-                                spacing: 8
+                                spacing: Tokens.spacing_s
 
                                 Label {
                                     text: qsTr("Card")
                                     color: Theme.on_surface
-                                    font.pixelSize: 15
-                                    font.weight: Font.Medium
+                                    font.pixelSize: Tokens.font_size_title_s
+                                    font.weight: Tokens.font_weight_medium
                                 }
 
                                 Label {
                                     text: qsTr("Elevation %1").arg(index)
                                     color: Theme.on_surface_variant
-                                    font.pixelSize: 12
+                                    font.pixelSize: Tokens.font_size_body_s
                                 }
                             }
                         }

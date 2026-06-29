@@ -32,11 +32,11 @@ Item {
     property real progress: 0
 
     implicitWidth: 240
-    implicitHeight: column.implicitHeight + 40
+    implicitHeight: column.implicitHeight + 2 * Tokens.spacing_l
 
     Rectangle {
         anchors.fill: parent
-        radius: 20
+        radius: Tokens.radius_l
         color: Theme.surface_container_high
         layer.enabled: true
         layer.effect: ElevationShadow {
@@ -50,9 +50,9 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: 24
-        anchors.rightMargin: 24
-        spacing: 14
+        anchors.leftMargin: Tokens.spacing_xl
+        anchors.rightMargin: Tokens.spacing_xl
+        spacing: Tokens.spacing_m
 
         Loader {
             Layout.alignment: Qt.AlignHCenter
@@ -64,8 +64,8 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             text: card.label
             color: Theme.on_surface
-            font.pixelSize: 15
-            font.weight: Font.Medium
+            font.pixelSize: Tokens.font_size_title_s
+            font.weight: Tokens.font_weight_medium
             elide: Text.ElideRight
         }
 
@@ -75,7 +75,7 @@ Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 6
             visible: card.showProgress
-            radius: 3
+            radius: height / 2
             color: Theme.surface_variant
 
             Rectangle {

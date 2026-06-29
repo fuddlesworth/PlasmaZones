@@ -36,7 +36,7 @@ Item {
     // Emitted on a completed tap when enabled.
     signal clicked
 
-    implicitWidth: Math.max(64, label.implicitWidth + 48)
+    implicitWidth: Math.max(64, label.implicitWidth + Tokens.spacing_xxxl)
     implicitHeight: 40
 
     Accessible.role: Accessible.Button
@@ -85,8 +85,10 @@ Item {
         anchors.fill: parent
         radius: height / 2
         color: root._container
-        border.width: root.variant === PhosphorButton.Outlined && root.enabled ? 1 : 0
-        border.color: Theme.outline
+        // Outlined keeps its outline when disabled, at the M3 disabled
+        // opacity, rather than vanishing to a borderless invisible box.
+        border.width: root.variant === PhosphorButton.Outlined ? 1 : 0
+        border.color: root.enabled ? Theme.outline : Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_container)
 
         Behavior on color {
             ColorAnimation {
@@ -110,8 +112,8 @@ Item {
         anchors.centerIn: parent
         text: root.text
         color: root._content
-        font.pixelSize: 14
-        font.weight: Font.Medium
+        font.pixelSize: Tokens.font_size_body_l
+        font.weight: Tokens.font_weight_medium
         horizontalAlignment: Text.AlignHCenter
 
         Behavior on color {

@@ -51,28 +51,45 @@ Item {
     // (bool) are applied to the delegate if it exposes them; pass
     // undefined to leave a property untouched. targetScreen routes the
     // trigger: "" / undefined hits every host, otherwise only the host
-    // whose screenName matches.
+    // whose screenName matches. Returns true when an OSD was shown or
+    // refreshed on this host, false when the trigger was routed elsewhere,
+    // rejected (empty kind, no provider), or the provider had no delegate.
     function show(kind, value, active, targetScreen) {
         if (targetScreen !== undefined && targetScreen !== "" && targetScreen !== root.screenName)
-            return;
-        if (!root.provider) {
-            console.warn("OSDHost: no provider set; cannot show", kind);
-            return;
+            return false;
+        // An empty kind would alias priv.currentKind's "nothing shown"
+        // sentinel, producing an OSD that hide()/onHidden refuse to dismiss
+        // and never announce. Reject it at the boundary.
+        if (!kind) {
+            console.warn("OSDHost: empty kind ignored");
+            return false;
+        }
+        if (!root.provider || typeof root.provider.createOSD !== "function") {
+            console.warn("OSDHost: no valid provider set; cannot show", kind);
+            return false;
         }
 
         if (kind === priv.currentKind && priv.delegate) {
-            // Dedupe: same OSD already up. Update and restart the hold.
+            // Dedupe: same OSD already up. Update, re-assert "shown" (a
+            // repeat during the fade-out window must interrupt the fade and
+            // animate back in, not let it finish), and restart the hold.
             priv.apply(priv.delegate, value, active);
+            root.state = "shown";
             holdTimer.restart();
-            return;
+            return true;
         }
 
         // Different kind (or nothing showing): swap in a fresh delegate.
+        // The outgoing OSD (if any) "left", so announce its hidden() to
+        // keep the shown/hidden pairing symmetric for consumers.
+        const previousKind = priv.currentKind;
         priv.destroyDelegate();
+        if (previousKind !== "")
+            root.hidden(previousKind);
         const item = root.provider.createOSD(kind, frame);
         if (!item) {
             console.warn("OSDHost: provider returned no delegate for", kind);
-            return;
+            return false;
         }
         priv.delegate = item;
         priv.currentKind = kind;
@@ -80,6 +97,7 @@ Item {
         root.state = "shown";
         holdTimer.restart();
         root.shown(kind);
+        return true;
     }
 
     // Hide the current OSD early (e.g. the user dismissed it).

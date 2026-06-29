@@ -40,7 +40,7 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        radius: 8
+        radius: Tokens.radius_s
         color: "transparent"
         border.width: root._focused ? 2 : 1
         border.color: !root.enabled ? Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, StateLayer.disabled_container) : (root._focused ? Theme.primary : Theme.outline)
@@ -57,15 +57,15 @@ FocusScope {
         id: input
 
         anchors.fill: parent
-        anchors.leftMargin: 14
-        anchors.rightMargin: 14
+        anchors.leftMargin: Tokens.spacing_l
+        anchors.rightMargin: Tokens.spacing_l
         verticalAlignment: TextInput.AlignVCenter
         clip: true
         enabled: root.enabled
         color: root.enabled ? Theme.on_surface : root._disabledTint
         selectionColor: Theme.primary
         selectedTextColor: Theme.on_primary
-        font.pixelSize: 14
+        font.pixelSize: Tokens.font_size_body_l
         onAccepted: root.accepted()
     }
 
@@ -74,7 +74,7 @@ FocusScope {
         anchors.verticalCenter: input.verticalCenter
         text: root.placeholderText
         color: Theme.on_surface_variant
-        font.pixelSize: 14
+        font.pixelSize: Tokens.font_size_body_l
         // Hidden once the user focuses the field or types anything, so it
         // never overlaps real input.
         visible: input.text.length === 0 && !root._focused

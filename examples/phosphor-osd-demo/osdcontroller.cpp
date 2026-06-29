@@ -52,9 +52,4 @@ QQuickItem* OSDController::createOSD(const QString& kind, QQuickItem* parent)
     return factory->createOSD(engine, parent);
 }
 
-QStringList OSDController::kinds() const
-{
-    return m_registry.ids();
-}
-
 } // namespace PhosphorOsdDemo

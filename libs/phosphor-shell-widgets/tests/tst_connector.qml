@@ -23,6 +23,12 @@ TestCase {
         BarCanvas {}
     }
 
+    Component {
+        id: cornerComp
+
+        ConnectedCorner {}
+    }
+
     // Count non-overlapping occurrences of sub in s.
     function _count(s, sub) {
         return s.split(sub).length - 1;
@@ -100,5 +106,24 @@ TestCase {
         ];
         compare(b.maxSocketDepth, 250, "maxSocketDepth tracks the deepest socket");
         compare(b.implicitHeight, 48 + 250, "implicitHeight reserves the pocket depth");
+    }
+
+    function test_connected_corner_convex_path() {
+        const c = createTemporaryObject(cornerComp, testCase, {
+            "radius": 16,
+            "concave": false
+        });
+        verify(c, "ConnectedCorner instantiates");
+        // A quarter-disc pie centred on the origin (sweep 1, convex).
+        compare(c._path, "M 0 0 L 16 0 A 16 16 0 0 1 0 16 Z");
+    }
+
+    function test_connected_corner_concave_path() {
+        const c = createTemporaryObject(cornerComp, testCase, {
+            "radius": 16,
+            "concave": true
+        });
+        // The r x r box minus a quarter-disc bite from the origin corner.
+        compare(c._path, "M 16 0 L 16 16 L 0 16 A 16 16 0 0 1 16 0 Z");
     }
 }

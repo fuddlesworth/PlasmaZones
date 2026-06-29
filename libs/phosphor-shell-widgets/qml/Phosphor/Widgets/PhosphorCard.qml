@@ -29,8 +29,8 @@ Item {
     // shadow (forwarded to ElevationShadow) and the surface tint overlay
     // (the colour shift below).
     property int elevation: 1
-    property real radius: 16
-    property real padding: 16
+    property real radius: Tokens.radius_l
+    property real padding: Tokens.spacing_l
 
     implicitWidth: contentArea.implicitWidth + padding * 2
     implicitHeight: contentArea.implicitHeight + padding * 2

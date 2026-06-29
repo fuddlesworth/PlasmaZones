@@ -21,6 +21,9 @@ OSDCard {
     label: osd.active ? qsTr("Microphone muted") : qsTr("Microphone on")
     showProgress: false
 
+    // Glyph tint: muted dims the mic body (the red slash carries the state).
+    readonly property color glyphColor: osd.active ? Theme.on_surface_variant : Theme.on_surface
+
     icon: Component {
         Item {
             implicitWidth: 30
@@ -33,7 +36,7 @@ OSDCard {
                 width: 11
                 height: 16
                 radius: width / 2
-                color: osd.active ? Theme.on_surface_variant : Theme.on_surface
+                color: osd.glyphColor
             }
             // Stand stem.
             Rectangle {
@@ -41,7 +44,7 @@ OSDCard {
                 y: 21
                 width: 2
                 height: 4
-                color: osd.active ? Theme.on_surface_variant : Theme.on_surface
+                color: osd.glyphColor
             }
             // Base.
             Rectangle {
@@ -50,7 +53,7 @@ OSDCard {
                 width: 13
                 height: 2
                 radius: 1
-                color: osd.active ? Theme.on_surface_variant : Theme.on_surface
+                color: osd.glyphColor
             }
             // Mute slash.
             Shape {

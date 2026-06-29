@@ -40,7 +40,9 @@ Item {
     implicitHeight: radius
 
     readonly property string _path: {
-        const r = root.radius;
+        // Round to 2 decimals so a fractional radius doesn't produce
+        // float-noise path strings (matches ConnectorGeometry).
+        const r = Math.round(root.radius * 100) / 100;
         if (root.concave)
             // The r x r box minus a quarter disc bitten from the origin
             // corner: the inverted (concave) fillet.
