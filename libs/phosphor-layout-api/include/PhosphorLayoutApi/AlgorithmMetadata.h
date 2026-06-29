@@ -118,6 +118,11 @@ struct AlgorithmMetadata
     /// window. Picker surfaces a "single-window layout" filter/indicator.
     bool supportsSingleWindow = false;
 
+    /// True when the algorithm rearranges as focus moves between tiled windows
+    /// (e.g. a spotlight layout that brings the focused window to the center).
+    /// Picker surfaces a "follows focus" filter/indicator.
+    bool reflowsOnFocus = false;
+
     /// True when the algorithm is loaded from a Luau script file rather than
     /// a built-in implementation. Affects how the picker renders the
     /// system-vs-user badge (see @c isUserScript).

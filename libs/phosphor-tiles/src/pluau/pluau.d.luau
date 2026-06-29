@@ -76,6 +76,7 @@ export type Metadata = {
     producesOverlappingZones: boolean?,
     centerLayout: boolean?,
     supportsSingleWindow: boolean?, -- algorithm lays out the lone window itself (else the host fills the work area for a lone window)
+    retileOnFocus: boolean?, -- reflow when focus moves between tiled windows (focus-driven layouts, e.g. a spotlight that follows focus)
     defaultSplitRatio: number?,
     defaultMaxWindows: number?,
     minimumWindows: number?,

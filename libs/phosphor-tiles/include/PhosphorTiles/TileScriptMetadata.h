@@ -34,15 +34,15 @@ struct CustomParamDef
     QVariantMap toVariantMap() const
     {
         QVariantMap m;
-        m[QLatin1String("name")] = name;
-        m[QLatin1String("type")] = type;
-        m[QLatin1String("defaultValue")] = defaultValue;
-        m[QLatin1String("description")] = description;
+        m[QStringLiteral("name")] = name;
+        m[QStringLiteral("type")] = type;
+        m[QStringLiteral("defaultValue")] = defaultValue;
+        m[QStringLiteral("description")] = description;
         if (type == QLatin1String("number")) {
-            m[QLatin1String("minValue")] = minValue;
-            m[QLatin1String("maxValue")] = maxValue;
+            m[QStringLiteral("minValue")] = minValue;
+            m[QStringLiteral("maxValue")] = maxValue;
         } else if (type == QLatin1String("enum")) {
-            m[QLatin1String("enumOptions")] = QVariant(enumOptions);
+            m[QStringLiteral("enumOptions")] = QVariant(enumOptions);
         }
         return m;
     }
@@ -68,6 +68,7 @@ struct ScriptMetadata
     bool centerLayout = false;
     bool supportsSingleWindow = false; ///< Owns the single-window case (else calculateZones() fills the work area)
     bool supportsMinSizes = true; ///< Default true — most algorithms support min sizes
+    bool retileOnFocus = false; ///< Re-run the layout when focus moves between tiled windows (focus-driven layouts)
     QString id; ///< Optional algorithm id (else "script:filename")
     QVector<CustomParamDef> customParams;
 };

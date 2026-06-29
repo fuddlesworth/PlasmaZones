@@ -46,6 +46,7 @@ RowLayout {
     property bool showReflowsOnResize: true
     property bool showScriptState: true
     property bool showSingleWindow: true
+    property bool showReflowsOnFocus: true
     // Whether any non-default filter is active (drives badge visibility)
     readonly property bool hasActiveFilters: {
         if (filterText.length > 0)
@@ -54,7 +55,7 @@ RowLayout {
         if (root.viewMode === 0)
             return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || !showHidden || !showAutoLayouts || !showManualLayouts || !showBuiltInLayouts || !showUserLayouts;
         else
-            return !showBuiltInAlgorithms || !showUserAlgorithms || !showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams || !showReflowsOnResize || !showScriptState || !showSingleWindow;
+            return !showBuiltInAlgorithms || !showUserAlgorithms || !showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams || !showReflowsOnResize || !showScriptState || !showSingleWindow || !showReflowsOnFocus;
     }
     // ── Group-by index constants (must match model order below) ───────────
     // Snapping
@@ -83,7 +84,7 @@ RowLayout {
     // hasActiveFilters, the menu item, and the JS filter logic (see the same
     // note above _defaultValues below — keep both lists in sync).
     readonly property var _snappingStateMap: [["groupByIndex", "snappingGroupByIndex"], ["sortByIndex", "snappingSortByIndex"], ["sortAscending", "snappingSortAscending"], ["showHidden", "snappingShowHidden"], ["showAspectAny", "snappingShowAspectAny"], ["showAspectStandard", "snappingShowAspectStandard"], ["showAspectUltrawide", "snappingShowAspectUltrawide"], ["showAspectSuperUltrawide", "snappingShowAspectSuperUltrawide"], ["showAspectPortrait", "snappingShowAspectPortrait"], ["showAutoLayouts", "snappingShowAutoLayouts"], ["showManualLayouts", "snappingShowManualLayouts"], ["showBuiltInLayouts", "snappingShowBuiltInLayouts"], ["showUserLayouts", "snappingShowUserLayouts"]]
-    readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"], ["showScriptState", "tilingShowScriptState"], ["showSingleWindow", "tilingShowSingleWindow"]]
+    readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"], ["showScriptState", "tilingShowScriptState"], ["showSingleWindow", "tilingShowSingleWindow"], ["showReflowsOnFocus", "tilingShowReflowsOnFocus"]]
     // Default values for all resettable filter properties (not group/sort).
     // Adding a filter requires updating: property declaration, _defaultValues,
     // the relevant state map, persistedState, hasActiveFilters, menu item, and JS logic.
@@ -107,7 +108,8 @@ RowLayout {
         "showCustomParams": true,
         "showReflowsOnResize": true,
         "showScriptState": true,
-        "showSingleWindow": true
+        "showSingleWindow": true,
+        "showReflowsOnFocus": true
     }
 
     signal filterSettingsChanged
@@ -423,6 +425,12 @@ RowLayout {
             checked: root.showSingleWindow
         }
 
+        FilterMenuItem {
+            text: i18n("Follows Focus")
+            filterProperty: "showReflowsOnFocus"
+            checked: root.showReflowsOnFocus
+        }
+
         MenuSeparator {}
 
         FilterMenuItem {
@@ -469,6 +477,7 @@ RowLayout {
         property bool tilingShowReflowsOnResize: true
         property bool tilingShowScriptState: true
         property bool tilingShowSingleWindow: true
+        property bool tilingShowReflowsOnFocus: true
 
         category: "LayoutsPageFilterBar"
     }

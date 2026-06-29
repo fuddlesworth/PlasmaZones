@@ -104,6 +104,7 @@ public:
     QString zoneNumberDisplay() const noexcept override;
     bool centerLayout() const override;
     bool supportsSingleWindow() const noexcept override;
+    bool retilesOnFocusChange() const noexcept override;
     bool isScripted() const noexcept override;
     bool isUserScript() const noexcept override;
     void prepareTilingState(TilingState* state) const override;

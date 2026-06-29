@@ -87,6 +87,8 @@ function applyTilingFilters(items, search, f) {
             return false;
         if (!f.showSingleWindow && item.supportsSingleWindow === true)
             return false;
+        if (!f.showReflowsOnFocus && item.reflowsOnFocus === true)
+            return false;
         return true;
     });
 }

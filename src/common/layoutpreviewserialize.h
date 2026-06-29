@@ -24,7 +24,8 @@
 // object (not a nested `algorithm` sub-object):
 //   supportsMasterCount, supportsSplitRatio, producesOverlappingZones,
 //   supportsCustomParams, supportsMemory, reflowsOnResize, supportsScriptState,
-//   isScripted, isUserScript, zoneNumberDisplay?
+//   supportsSingleWindow, reflowsOnFocus, isScripted, isUserScript,
+//   zoneNumberDisplay?
 //
 // Rationale: QML delegates bind to flat scalar properties naturally;
 // nesting adds one `.algorithm.` step everywhere without buying

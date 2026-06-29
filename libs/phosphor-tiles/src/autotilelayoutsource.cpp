@@ -41,6 +41,8 @@ PhosphorLayout::AlgorithmMetadata buildMetadata(PhosphorTiles::TilingAlgorithm* 
     meta.reflowsOnResize = algorithm->supportsMemory() || algorithm->supportsResizeHook();
     meta.supportsScriptState = algorithm->supportsScriptState();
     meta.supportsSingleWindow = algorithm->supportsSingleWindow();
+    // Rearranges as focus moves between tiled windows (e.g. a spotlight layout).
+    meta.reflowsOnFocus = algorithm->retilesOnFocusChange();
     meta.isScripted = algorithm->isScripted();
     meta.isUserScript = algorithm->isUserScript();
     meta.zoneNumberDisplay = PhosphorLayout::zoneNumberDisplayFromString(algorithm->zoneNumberDisplay());

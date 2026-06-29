@@ -91,6 +91,7 @@ QJsonObject ConfigDefaults::defaultLayoutVisibilitySettings()
         QStringLiteral("spread"),
         QStringLiteral("stair"),
         QStringLiteral("tatami"),
+        QStringLiteral("theater"),
         QStringLiteral("wide"),
         QStringLiteral("zen"),
     };
