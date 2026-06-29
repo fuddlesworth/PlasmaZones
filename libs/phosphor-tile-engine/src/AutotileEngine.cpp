@@ -2796,10 +2796,12 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
     // exception is an algorithm that owns the single-window layout and records
     // the resize itself through the hook (e.g. a centered layout remembering a
     // per-monitor width): it has no neighbour to reflow but still wants the
-    // event. Tree/memory reflow (Tier A below) always needs a neighbour, so the
-    // exception is gated on the resize hook, which the tree path does not use.
+    // event. The exception excludes memory/tree algorithms: their reflow is
+    // Tier A below, which bails for a lone window (leafCount < 2), so admitting
+    // one here would swallow the resize before the hook (Tier B) could run.
     if (state->tiledWindowCount() < 2
-        && !(state->tiledWindowCount() == 1 && algo->supportsSingleWindow() && algo->supportsResizeHook())) {
+        && !(state->tiledWindowCount() == 1 && algo->supportsSingleWindow() && algo->supportsResizeHook()
+             && !algo->supportsMemory())) {
         return;
     }
 

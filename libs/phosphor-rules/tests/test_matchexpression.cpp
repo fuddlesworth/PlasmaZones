@@ -164,11 +164,27 @@ private Q_SLOTS:
         QVERIFY(moreThanOne.evaluate(two));
         QVERIFY(!exactlyOne.evaluate(two));
 
-        // Unknown count (engine not tiling this context) — predicate is inert.
+        // Zero is a genuine value (an empty tiled desktop), distinct from unknown:
+        // an `Equals 0` predicate matches it but a positive count does not. This is
+        // why tiledWindowCount is std::optional rather than a defaulted int.
+        WindowQuery zero;
+        zero.screenId = QStringLiteral("DP-2");
+        zero.tiledWindowCount = 0;
+        const auto exactlyZero = MatchExpression::makeLeaf(Field::TiledWindowCount, Operator::Equals, 0);
+        QVERIFY(exactlyZero.evaluate(zero));
+        QVERIFY(!moreThanOne.evaluate(zero));
+
+        // Unknown count (engine not tiling this context) — every predicate is
+        // inert, including the negation of one: an absent field can neither match
+        // nor be the thing a None{} negates a match for.
         WindowQuery unknown;
         unknown.screenId = QStringLiteral("DP-2");
         QVERIFY(!moreThanOne.evaluate(unknown));
         QVERIFY(!exactlyOne.evaluate(unknown));
+        QVERIFY(!exactlyZero.evaluate(unknown));
+        const auto notMoreThanOne = MatchExpression::makeNone({moreThanOne});
+        QVERIFY(notMoreThanOne.evaluate(two) == false); // two windows: > 1, so None rejects
+        QVERIFY(notMoreThanOne.evaluate(one)); // one window: not > 1, so None accepts
     }
 
     void testBoolField()

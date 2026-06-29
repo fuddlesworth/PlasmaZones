@@ -23,8 +23,10 @@ namespace PhosphorRules {
  * window field evaluates `false`, so window-property rules are naturally
  * inert during context resolution — no special-casing in the evaluator.
  *
- * Context attributes are always present. `virtualDesktop == 0` means "all
- * desktops" (a sticky window); empty `activity` means "all activities".
+ * Context attributes are present even for a windowless context query, with one
+ * exception: `tiledWindowCount` is optional and absent when the count is
+ * unknown. `virtualDesktop == 0` means "all desktops" (a sticky window); empty
+ * `activity` means "all activities".
  */
 struct WindowQuery
 {

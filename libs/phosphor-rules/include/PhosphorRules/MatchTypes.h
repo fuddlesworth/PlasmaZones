@@ -81,7 +81,9 @@ enum class FieldType : int {
 /// Whether a field is a window property or a context attribute.
 enum class FieldSource : int {
     Window, ///< absent during windowless context queries
-    Context, ///< always present (screen / desktop / activity)
+    Context, ///< resolvable during a windowless context query (screen / desktop /
+             ///< activity / mode are always set; tiledWindowCount is optional and
+             ///< absent when the count is unknown)
 };
 
 /// Compile-time descriptor for one Field.

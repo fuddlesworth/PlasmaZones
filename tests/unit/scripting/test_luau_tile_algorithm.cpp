@@ -58,6 +58,7 @@ private Q_SLOTS:
     void onWindowRemovedHookRuns();
     void nonFiniteOverrideRejected();
     void scriptedMetadataFlagsExposed();
+    void singleWindowGateControlsTileForLoneWindow();
     void zoneNumberDisplayInvalidFallsBack();
     void metadataInfiniteSplitRatioClamped();
     void erroringOverrideFallsBack();
@@ -454,6 +455,55 @@ void TestLuauTileAlgorithm::scriptedMetadataFlagsExposed()
     QVERIFY(algo.centerLayout());
     QVERIFY(!algo.supportsMinSizes());
     QCOMPARE(algo.zoneNumberDisplay(), QStringLiteral("all"));
+}
+
+void TestLuauTileAlgorithm::singleWindowGateControlsTileForLoneWindow()
+{
+    using namespace PlasmaZones::TestHelpers;
+    // The same script body, toggled only by the supportsSingleWindow flag. Its
+    // tile() always returns a distinctive small centered rect. Without the flag,
+    // the engine fills the work area for a lone window and tile() is never
+    // honoured; with it, tile() owns the single-window geometry.
+    const QString body = QStringLiteral(R"LUA(
+        return {
+            metadata = { id = "%1", name = "Single", supportsSingleWindow = %2 },
+            tile = function(ctx)
+                if ctx.windowCount == 1 then
+                    return { { x = 100, y = 100, width = 200, height = 200 } }
+                end
+                return pluau.fillArea(ctx.area, ctx.windowCount)
+            end,
+        }
+    )LUA");
+
+    TilingState state(QStringLiteral("screen-1"));
+    TilingParams p;
+    p.windowCount = 1;
+    p.screenGeometry = QRect(0, 0, 1000, 1000);
+    p.state = &state;
+    p.innerGap = 0;
+    p.outerGaps = EdgeGaps::uniform(0); // work area == full screen
+
+    // Opted out (flag absent): the lone window fills the work area; tile()'s rect
+    // is discarded by the engine's single-window short-circuit.
+    const QString optedOutPath = writeTempScript(m_tmp, QStringLiteral("sw-off.luau"),
+                                                 body.arg(QStringLiteral("sw-off"), QStringLiteral("false")));
+    LuauTileAlgorithm optedOut(optedOutPath, m_watchdog);
+    QVERIFY(optedOut.isValid());
+    QVERIFY(!optedOut.supportsSingleWindow());
+    const QVector<QRect> filled = optedOut.calculateZones(p);
+    QCOMPARE(filled.size(), 1);
+    QCOMPARE(filled[0], QRect(0, 0, 1000, 1000));
+
+    // Opted in: tile() runs for the lone window and its centered rect is honoured.
+    const QString optedInPath =
+        writeTempScript(m_tmp, QStringLiteral("sw-on.luau"), body.arg(QStringLiteral("sw-on"), QStringLiteral("true")));
+    LuauTileAlgorithm optedIn(optedInPath, m_watchdog);
+    QVERIFY(optedIn.isValid());
+    QVERIFY(optedIn.supportsSingleWindow());
+    const QVector<QRect> centered = optedIn.calculateZones(p);
+    QCOMPARE(centered.size(), 1);
+    QCOMPARE(centered[0], QRect(100, 100, 200, 200));
 }
 
 void TestLuauTileAlgorithm::zoneNumberDisplayInvalidFallsBack()
