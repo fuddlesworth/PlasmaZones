@@ -268,13 +268,17 @@ QVariantMap TilingAlgorithmController::algorithmSettingsFor(const QString& algor
 {
     // Seed with the algorithm's declared defaults so an algorithm with no
     // saved entry still shows its own sensible values (e.g. BSP's default
-    // max windows, not a global constant).
+    // max windows, not a global constant). Clamp the algorithm-derived
+    // defaults: a scripted (Luau) algorithm's metadata is user-authored and may
+    // declare an out-of-range value.
     qreal splitRatio = PhosphorTiles::AutotileDefaults::DefaultSplitRatio;
     int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
     int maxWindows = PhosphorTiles::AutotileDefaults::DefaultMaxWindows;
     if (PhosphorTiles::TilingAlgorithm* algo = m_registry->algorithm(algorithmId)) {
-        splitRatio = algo->defaultSplitRatio();
-        maxWindows = algo->defaultMaxWindows();
+        splitRatio = std::clamp(algo->defaultSplitRatio(), ConfigDefaults::autotileSplitRatioMin(),
+                                ConfigDefaults::autotileSplitRatioMax());
+        maxWindows = std::clamp(algo->defaultMaxWindows(), ConfigDefaults::autotileMaxWindowsMin(),
+                                ConfigDefaults::autotileMaxWindowsMax());
     }
 
     // Override with saved values. Read each via toDouble(&ok): it yields
