@@ -956,18 +956,28 @@ Lives in a new `phosphor-shell-osd` library (module `Phosphor.OSD`), depending o
 
 **Effort:** M (~2 weeks)
 
-### 3.4: Toast framework
+### 3.4: Toast framework *(scaffolded)*
 
-| Deliverable                                                  | Notes                                                                                            |
-|--------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
-| `qml/Phosphor/Notifications/ToastHost.qml` + `Toast.qml`     | Layer-shell surface per screen, stacks toasts top-right. Slide-in from edge, auto-dismiss, hover-to-pause. |
-| `examples/phosphor-toast-demo/`                              | Send a notification via `notify-send` and a toast appears. Uses `phosphor-service-notifications` from Phase 2.5. |
+Lives in a new `phosphor-shell-notifications` library (module `Phosphor.Notifications`), depending on theme + widgets. `ToastHost` renders into whatever it's parented to; the layer-shell surface per screen is the shell's job in Phase 4 (compose via `PerScreen`).
+
+| Deliverable                                                  | Status | Notes                                                                                            |
+|--------------------------------------------------------------|--------|--------------------------------------------------------------------------------------------------|
+| `libs/phosphor-shell-notifications/qml/Phosphor/Notifications/ToastHost.qml` | scaffolded | Top-right stack: shows up to `maxVisible`, queues the rest, dismiss + promote. Slide-in / slide-out / reflow via ListView add/remove/displaced transitions (Motion). Per-app-rules seam (`rules.evaluate(toast) -> {suppress, timeout}`). |
+| `Toast.qml`                                                  | scaffolded | A toast card: optional image, app name, summary, rich-text (`StyledText`) body, close, critical-urgency accent stripe, hover-to-pause auto-dismiss. |
+| `libs/phosphor-shell-notifications/tests/`                   | scaffolded | QtQuickTest (9 cases): show, queue beyond max, dismiss + promote, the dismissed signal, unknown-id safety, clear, and the rules seam (suppress + pass-through). |
+| `examples/phosphor-toast-demo/`                              | scaffolded | ToastHost overlay fed by a real `NotificationServer` (so `notify-send` raises a toast when this process owns the bus name) plus in-window buttons; a Do-Not-Disturb pill exercises the rules seam. |
 
 **Acceptance:** toasts queue, dismiss correctly; rich text + image support; the per-app-rules consumption seam exists and applies any rules supplied by the rules service. The rules editor and its persistence layer belong to Phase 4.3 (Notification center) and wire into this seam without changes to ToastHost.
+- [x] Queue + dismiss + promote (unit-tested).
+- [x] Rich text + image (verified in an offscreen render: bold body markup, image avatar, critical accent stripe).
+- [x] Per-app-rules seam applies (suppress unit-tested; DND pill in the demo).
+- [ ] `notify-send` → toast on a live session owning the bus name (offscreen can't own it; wired and ready for a real-session check).
+
+**Note:** toast/card backgrounds use `ElevationShadow` (MultiEffect), which needs a GPU and does not render under the headless offscreen path; content (text/image/stripe) renders regardless.
 
 **Effort:** M (~2 weeks)
 
-**Phase 3 gate:** All four examples runnable. The connected-corner bar demo is the headline, visually identical to the mockup. Tag `phosphor-ui-primitives-0.1`.
+**Phase 3 gate:** All four examples runnable (`phosphor-widgets-kitchen-sink`, `phosphor-bar-canvas-demo`, `phosphor-osd-demo`, `phosphor-toast-demo`). The connected-corner bar demo is the headline, visually identical to the mockup. Tag `phosphor-ui-primitives-0.1`.
 
 ---
 

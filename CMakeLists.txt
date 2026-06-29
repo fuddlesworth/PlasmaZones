@@ -364,6 +364,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types
     add_subdirectory(libs/phosphor-shell-widgets)  # Phosphor.Widgets M3 atom library (Phase 3.1); depends on phosphor-theme
     add_subdirectory(libs/phosphor-shell-osd)      # Phosphor.OSD on-screen-display framework (Phase 3.3); depends on theme + widgets
+    add_subdirectory(libs/phosphor-shell-notifications) # Phosphor.Notifications toast framework (Phase 3.4); depends on theme + widgets
 endif()
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
@@ -671,6 +672,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
 #                            the bar as one Shape, toggled via PopoutService.
 #   phosphor-osd-demo — OSDHost overlay; the four built-in OSDs via
 #                            Registry<IOSDFactory>, driven by phosphorctl.
+#   phosphor-toast-demo — ToastHost overlay fed by a real NotificationServer
+#                            (notify-send) + buttons; DND exercises the rules seam.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-theme-demo)
     add_subdirectory(examples/phosphor-theme-cli)
@@ -680,6 +683,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-widgets-kitchen-sink)
     add_subdirectory(examples/phosphor-bar-canvas-demo)
     add_subdirectory(examples/phosphor-osd-demo)
+    add_subdirectory(examples/phosphor-toast-demo)
 endif()
 
 # phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell
