@@ -96,7 +96,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // opt-in, the baseline defaults them off.
     std::optional<ResolvedWindowAppearance> ovr;
     if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
-        ovr = resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor);
+        ovr = resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor, m_borderInactiveColor);
     }
 
     if (!ovr || !ovr->showBorder || !*ovr->showBorder) {
@@ -130,7 +130,16 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     const QRectF frame = w->frameGeometry();
     const KWin::RectF innerRect(bw, bw, frame.width() - 2.0 * bw, frame.height() - 2.0 * bw);
     const int br = ovr->borderRadius.value_or(0);
-    const KWin::BorderOutline outline(bw, bc, KWin::BorderRadius(br));
+    // BorderOutline / OutlinedBorderItem paint the outline colour OPAQUE — the
+    // scene ignores the QColor alpha channel (verified: a #80…/#40… border drew
+    // fully solid). The scene DOES honour a per-item opacity, so split the colour:
+    // hand the outline an opaque RGB and drive the translucency through the item's
+    // setOpacity(). This makes a focused #80…/unfocused #40… border render at its
+    // intended 50% / 25% strength instead of a solid swatch.
+    const qreal borderOpacity = bc.alphaF();
+    QColor opaqueBc = bc;
+    opaqueBc.setAlpha(255);
+    const KWin::BorderOutline outline(bw, opaqueBc, KWin::BorderRadius(br));
 
     KWin::WindowItem* windowItem = w->windowItem();
     if (!windowItem) {
@@ -139,6 +148,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
 
     WindowBorder wb;
     wb.item = new KWin::OutlinedBorderItem(innerRect, outline, windowItem);
+    wb.item->setOpacity(borderOpacity);
 
     // Clip the window contents so they don't poke past the rounded outline
     // at the corners (dark pixels leaking past the border).
@@ -267,7 +277,7 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     // The manager owns the capability gate and the geometry re-assert across
     // veto-driven decoration flips.
     const std::optional<ResolvedWindowAppearance> ovr =
-        resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor);
+        resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor, m_borderInactiveColor);
     m_decorationManager->setRuleOverride(windowId, ovr ? ovr->hideTitleBar : std::nullopt);
 }
 

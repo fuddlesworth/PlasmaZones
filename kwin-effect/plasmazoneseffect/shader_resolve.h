@@ -164,7 +164,8 @@ struct ResolvedWindowAppearance
     // `activeColor` is the focused colour (from SetBorderColorActive),
     // `inactiveColor` the unfocused one (from SetBorderColorInactive, already
     // defaulted to active when that action was omitted). The accent sentinel has
-    // been resolved to the live accent by the time it lands here.
+    // been resolved to the matching system colour by the time it lands here —
+    // the accent/highlight in activeColor, the inactive colour in inactiveColor.
     // updateWindowBorder picks by the window's focus state. A focus-scoped
     // single-colour rule (matching IsFocused) still works — it just fills
     // activeColor in its matching state.
@@ -177,10 +178,12 @@ struct ResolvedWindowAppearance
     }
 };
 
-/// @p accentColor is the live system accent the `BorderColorToken::Accent`
-/// sentinel resolves to; pass an invalid QColor when none is known (the
-/// sentinel then contributes no colour).
+/// @p accentColor / @p inactiveColor are the live system colours the
+/// `BorderColorToken::Accent` sentinel resolves to per focus state: @p accentColor
+/// (the system accent / highlight) fills the focused/active slot, @p inactiveColor
+/// the unfocused/inactive slot. Pass an invalid QColor for either when none is
+/// known (the sentinel then contributes no colour for that state).
 std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRules::ResolvedActions& resolved,
-                                                                const QColor& accentColor);
+                                                                const QColor& accentColor, const QColor& inactiveColor);
 
 } // namespace PlasmaZones

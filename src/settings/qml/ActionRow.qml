@@ -607,16 +607,23 @@ ColumnLayout {
             readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : "#FF3DAEE9"
             // A border-colour action's single `value` param may carry the "accent"
             // sentinel ("follow the system accent") instead of a hex string. It is
-            // not a QColor, so render the live accent colour for the swatch and a
+            // not a QColor, so render the live system colour for the swatch and a
             // word for the label rather than letting QColor("accent") fall to black.
             readonly property bool _isAccent: _hex === "accent"
+            // The accent sentinel follows the system colour scheme per focus state,
+            // the same split updateWindowBorder applies: the focused (active) slot
+            // adopts the highlight colour, the unfocused (inactive) slot the inactive
+            // colour. Preview the matching system colour WITH its alpha so the swatch
+            // shows what the border will actually draw instead of one opaque accent
+            // for both. Falls back to the theme highlight when settings are absent.
+            readonly property color _accentColor: !row.appSettings ? Kirigami.Theme.highlightColor : (row.action.type === "setBorderColorInactive" ? row.appSettings.inactiveColor : row.appSettings.highlightColor)
 
             spacing: Kirigami.Units.smallSpacing
 
             ColorButton {
                 id: swatch
 
-                color: parent._isAccent ? Kirigami.Theme.highlightColor : parent._hex
+                color: parent._isAccent ? parent._accentColor : parent._hex
                 Accessible.name: _param.label
                 onClicked: colorDialog.open()
             }
