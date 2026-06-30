@@ -11,10 +11,16 @@ Item {
 
     property bool checked: false
     property string accessibleName: ""
+    // Optional caption rendered to the right of the toggle. Empty by default, so
+    // every existing call site (which already carries its own row label to the
+    // left) keeps the bare toggle and its prior implicit size. The rule-builder
+    // bool editors set it to a per-instance On/Off state read so a lone toggle
+    // standing in a value column still says what is or isn't happening.
+    property string label: ""
 
     signal toggled(bool newValue)
 
-    implicitWidth: Kirigami.Units.gridUnit * 2
+    implicitWidth: track.width + (stateLabel.visible ? Kirigami.Units.smallSpacing + stateLabel.implicitWidth : 0)
     implicitHeight: Kirigami.Units.gridUnit
     Accessible.role: Accessible.CheckBox
     Accessible.name: root.accessibleName
@@ -22,7 +28,12 @@ Item {
 
     // Track
     Rectangle {
-        anchors.fill: parent
+        id: track
+
+        width: Kirigami.Units.gridUnit * 2
+        height: Kirigami.Units.gridUnit
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
         radius: height / 2
         color: root.checked ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
 
@@ -45,9 +56,7 @@ Item {
                     // root.checked has already flipped to the destination state.
                     profile: root.checked ? "widget.toggleOn" : "widget.toggleOff"
                 }
-
             }
-
         }
 
         // Color uses widget.tint (no overshoot) — overshooting a colour
@@ -57,9 +66,24 @@ Item {
             PhosphorMotionAnimation {
                 profile: "widget.tint"
             }
-
         }
+    }
 
+    // Optional state caption. Mirrors the toggle's emphasis: full text colour
+    // when on, muted when off, so the word reads as part of the live state.
+    Label {
+        id: stateLabel
+
+        visible: root.label.length > 0
+        text: root.label
+        anchors.left: track.right
+        anchors.leftMargin: Kirigami.Units.smallSpacing
+        anchors.verticalCenter: track.verticalCenter
+        color: root.checked ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
+        // The toggle already exposes its state through Accessible.checked; the
+        // caption is a visual echo, so keep it out of the a11y tree to avoid a
+        // duplicate "On/Off" reading.
+        Accessible.ignored: true
     }
 
     MouseArea {
@@ -67,5 +91,4 @@ Item {
         cursorShape: Qt.PointingHandCursor
         onClicked: root.toggled(!root.checked)
     }
-
 }

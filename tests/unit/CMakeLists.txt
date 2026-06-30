@@ -778,6 +778,9 @@ add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_ov
 add_executable(test_rule_model
     settings/test_rule_model.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rulemodel.cpp
+    # rulemodel's action summary now shares its boolean polarity phrasing with
+    # the editor via RuleAuthoring::boolActionStateLabel.
+    ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
 )
 target_link_libraries(test_rule_model
     PRIVATE

@@ -278,7 +278,12 @@ RowLayout {
 
     Loader {
         Layout.fillWidth: true
-        Layout.alignment: Qt.AlignTop
+        // Most value editors top-align so a string editor's wrapped operator hint
+        // can grow downward without dragging the combos with it. The bool toggle
+        // is a short fixed-height control with no hint line, so it vertically
+        // centers against the taller field / operator combos instead of clinging
+        // to their top edge (which read as "not centered").
+        Layout.alignment: leaf._valueKind === "bool" ? Qt.AlignVCenter : Qt.AlignTop
         sourceComponent: {
             if (leaf._valueKind === "bool")
                 return boolValueEditor;
@@ -392,11 +397,32 @@ RowLayout {
     Component {
         id: boolValueEditor
 
-        CheckBox {
-            checked: leaf.node.value === true
-            text: checked ? i18n("True") : i18n("False")
-            Accessible.name: i18n("Match value")
-            onToggled: leaf._emit(leaf.node.field, leaf.node.op, checked)
+        // SettingsSwitch is a fixed-size custom Item whose track fills its
+        // bounds, but the hosting Loader is Layout.fillWidth (for the text /
+        // combo editors), which would stretch the toggle into a full-width pill.
+        // Host it in a fill wrapper and keep the toggle at its implicit size,
+        // left- and vertically-centered — the same control and wrapper the
+        // action editor's bool param uses (ActionRow's _boolParamEditor), so
+        // a WHEN bool value and a THEN bool value share one widget.
+        Item {
+            implicitHeight: boolToggle.implicitHeight
+
+            SettingsSwitch {
+                id: boolToggle
+
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                checked: leaf.node.value === true
+                accessibleName: i18n("Match value")
+                // Echo the toggle's state as On / Off so the predicate value is
+                // legible at a glance (the field and operator to the left say
+                // what is being matched, this says to what). Same On / Off
+                // vocabulary as the read-only match summary.
+                label: checked ? i18n("On") : i18n("Off")
+                onToggled: function (newValue) {
+                    leaf._emit(leaf.node.field, leaf.node.op, newValue);
+                }
+            }
         }
     }
 

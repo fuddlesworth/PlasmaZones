@@ -253,8 +253,11 @@ QString paramLabel(const QString& type, const QString& key)
         return PhosphorI18n::tr("Zones");
     }
     // Unsnapped-position restore override (window-domain, single bool value).
+    // off is not inert: it force-suppresses restore for matched windows,
+    // overriding the per-engine restore-on-login setting, so the off meaning
+    // is spelled out the same way the other bool actions do.
     if (type == ActionType::RestorePosition && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Restore position on login");
+        return PhosphorI18n::tr("Restore position on login (off = don't restore)");
     }
     // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
     // SetHideTitleBar is tri-state at the effect: rule absent = mode decides,
@@ -264,7 +267,7 @@ QString paramLabel(const QString& type, const QString& key)
         return PhosphorI18n::tr("Hide title bars (off = force visible)");
     }
     if (type == ActionType::SetBorderVisible && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Show border");
+        return PhosphorI18n::tr("Show border (off = hide)");
     }
     if (type == ActionType::SetBorderWidth && key == ActionParam::Value) {
         return PhosphorI18n::tr("Border width (px)");
@@ -286,7 +289,7 @@ QString paramLabel(const QString& type, const QString& key)
         return PhosphorI18n::tr("Outer gap (px)");
     }
     if (type == ActionType::SetUsePerSideOuterGap && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Per-side outer gaps");
+        return PhosphorI18n::tr("Use per-side outer gaps (off = one uniform gap)");
     }
     if (type == ActionType::LockContext && key == ActionParam::Value) {
         // The action is the rule-driven counterpart to the ToggleLayoutLock
@@ -415,6 +418,18 @@ QVariantList paramsForActionTypeImpl(const QString& type)
         if (const QString hint = paramHint(type, schema.key); !hint.isEmpty()) {
             p[QStringLiteral("hint")] = hint;
         }
+        // Bool params carry a polarity-aware on/off caption (e.g. "Show border" /
+        // "Hide border") so the editor toggle reads out its current effect rather
+        // than a bare On/Off. Shared with the rule-list summary through
+        // boolActionStateLabel, so the editor and the summary never diverge.
+        if (schema.kind == QLatin1String("bool")) {
+            if (const QString onLabel = boolActionStateLabel(type, true); !onLabel.isEmpty()) {
+                p[QStringLiteral("onLabel")] = onLabel;
+            }
+            if (const QString offLabel = boolActionStateLabel(type, false); !offLabel.isEmpty()) {
+                p[QStringLiteral("offLabel")] = offLabel;
+            }
+        }
         if (schema.min.has_value()) {
             p[QStringLiteral("min")] = *schema.min;
         }
@@ -497,11 +512,12 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Exclude from animations");
     }
     if (type == ActionType::SetHideTitleBar) {
-        // Tri-state at the effect (true = hide, false = force visible) — the
-        // picker label hints both directions so a user looking to FORCE a
-        // title bar finds the action; the parameter toggle's "(off = force
-        // visible)" wording carries the detail.
-        return PhosphorI18n::tr("Hide or show title bars");
+        // Affirmative verb phrase like the other boolean action labels (e.g.
+        // SetBorderVisible's "Show border"); the on-state is "hide". The
+        // parameter toggle's "(off = force visible)" wording carries the
+        // tri-state detail (off forces the title bar visible even where the
+        // mode would otherwise hide it).
+        return PhosphorI18n::tr("Hide title bars");
     }
     if (type == ActionType::SetBorderVisible) {
         return PhosphorI18n::tr("Show border");
@@ -575,6 +591,30 @@ QString operatorLabelImpl(Operator op)
 }
 
 } // namespace
+
+QString boolActionStateLabel(const QString& type, bool on)
+{
+    namespace ActionType = PhosphorRules::ActionType;
+    if (type == ActionType::RestorePosition) {
+        return on ? PhosphorI18n::tr("Restore position on login") : PhosphorI18n::tr("Don't restore position on login");
+    }
+    if (type == ActionType::SetHideTitleBar) {
+        return on ? PhosphorI18n::tr("Hide title bars") : PhosphorI18n::tr("Show title bars");
+    }
+    if (type == ActionType::LockContext) {
+        return on ? PhosphorI18n::tr("Lock layout") : PhosphorI18n::tr("Don't lock layout");
+    }
+    if (type == ActionType::DefaultLayoutAssignment) {
+        return on ? PhosphorI18n::tr("Assign default layout") : PhosphorI18n::tr("Don't assign default layout");
+    }
+    if (type == ActionType::SetBorderVisible) {
+        return on ? PhosphorI18n::tr("Show border") : PhosphorI18n::tr("Hide border");
+    }
+    if (type == ActionType::SetUsePerSideOuterGap) {
+        return on ? PhosphorI18n::tr("Per-side outer gaps") : PhosphorI18n::tr("Uniform outer gap");
+    }
+    return QString();
+}
 
 QVariantList matchFields()
 {

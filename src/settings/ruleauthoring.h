@@ -41,6 +41,13 @@ QString matchValueHint(const QString& op);
 /// here and surfaces this list verbatim.
 QVariantList actionTypes();
 
+/// Polarity-aware phrase for a boolean action's current value — e.g.
+/// `SetBorderVisible` → "Show border" when @p on, "Hide border" when off. The
+/// single source of truth shared by the rule-list summary (`RuleModel`) and the
+/// editor toggle caption (`ActionRow`), so the two never drift. Returns an empty
+/// string for a non-boolean or unknown action type.
+QString boolActionStateLabel(const QString& typeWire, bool on);
+
 /// A complete, default-seeded action payload for @p typeWire — a JSON map of
 /// the form `{ type: <typeWire>, ...defaults }` ready to drop into a rule's
 /// `actions` list. See `RuleController::defaultPayloadFor` for the

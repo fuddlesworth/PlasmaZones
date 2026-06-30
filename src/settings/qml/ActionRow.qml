@@ -594,6 +594,14 @@ ColumnLayout {
                 anchors.verticalCenter: parent.verticalCenter
                 checked: row.action[_param.key] === true
                 accessibleName: _param.label
+                // Caption the toggle with the action's polarity-aware phrase
+                // ("Show border" / "Hide border", "Lock layout" / "Don't lock
+                // layout") so its current effect is legible, not just whether it
+                // is on. The wording comes from the param descriptor's
+                // onLabel/offLabel (RuleAuthoring::boolActionStateLabel, shared
+                // with the rule-list summary); a bool param without a curated
+                // phrase falls back to plain On / Off.
+                label: checked ? (_param.onLabel !== undefined ? _param.onLabel : i18n("On")) : (_param.offLabel !== undefined ? _param.offLabel : i18n("Off"))
                 onToggled: function (newValue) {
                     row.actionEdited(row._withParam(_param.key, newValue));
                 }
