@@ -399,9 +399,9 @@ private Q_SLOTS:
     {
         // makeAssignmentRule's id IS assignmentRuleIdFor's id — every tuple
         // axis covered (Monitor, Combined) so a regression in the id helper
-        // can't slip in on a single-dimension lookup. The provider default is
-        // a separate family ("provider-default"), so it intentionally is NOT
-        // included here — the provider-default rule was retired in the priority-wins model.
+        // can't slip in on a single-dimension lookup. The retired
+        // provider-default rule no longer exists, so only the Monitor/Combined
+        // axes are covered here.
         const Rule monitorOnly = CRB::makeAssignmentRule(QStringLiteral("Monitor"), QStringLiteral("DP-1"), 0,
                                                          QString(), QStringLiteral("snapping"),
                                                          QStringLiteral("layout-a"), QString(), CRB::kContextBandBase);

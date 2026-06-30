@@ -162,8 +162,7 @@ SettingsFlickable {
             // Within a section, show highest priority first — the winning rule
             // on top, matching the priority-wins precedence. Qt's V4 sort is
             // stable, so equal priorities keep model order (the evaluator's
-            // own tie-break). The provider-default (0) and managed rules sort
-            // to the bottom.
+            // own tie-break). Lower-priority rules sort to the bottom.
             var bucket = buckets[sec.value];
             bucket.sort(function (l, r) {
                 return r.priority - l.priority;

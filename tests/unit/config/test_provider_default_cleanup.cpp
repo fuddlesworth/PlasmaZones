@@ -2,20 +2,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * @file test_migration_v5_to_v6.cpp
- * @brief Unit tests for the v5 → v6 schema migration (provider-default removal).
+ * @file test_provider_default_cleanup.cpp
+ * @brief Unit tests for pruning the retired provider-default rule from rules.json.
  *
- * The v6 schema makes rule precedence pure `priority` — the synthesized
- * provider-default catch-all assignment rule is retired (the gated default
- * resolver is the sole global-default source). A v5 config.json fixture plus a
- * pre-existing v5-era rules.json (so finalizeV4Conversion takes its
- * cleanup-only branch, mirroring a real upgrade) is run through
+ * Rule precedence is pure `priority` — the synthesized provider-default
+ * catch-all assignment rule is retired (the gated default resolver is the sole
+ * global-default source). The cleanup needs no schema bump: it runs from
+ * finalizeV4Conversion's idempotent cleanup branch
+ * (pruneRetiredProviderDefaultRule). A current-version config.json fixture plus
+ * a pre-existing rules.json (so finalizeV4Conversion takes its cleanup-only
+ * branch, mirroring a real upgrade) is run through
  * ConfigMigration::ensureJsonConfig; the test asserts:
  *   - the provider-default catch-all rule is deleted from rules.json,
  *   - every other rule survives untouched (id, priority, actions),
  *   - a rules.json with no provider-default rule is left intact,
- *   - the conversion is idempotent (running twice is a clean no-op),
- *   - config.json is stamped at the current schema version.
+ *   - the cleanup is idempotent (running twice is a clean no-op),
+ *   - config.json stays stamped at the current schema version.
  */
 
 #include <QDir>
@@ -39,7 +41,7 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 namespace PWR = PhosphorRules;
 namespace CRB = PhosphorRules::ContextRuleBridge;
 
-class TestMigrationV5ToV6 : public QObject
+class TestProviderDefaultCleanup : public QObject
 {
     Q_OBJECT
 
@@ -63,7 +65,7 @@ private:
 
     /// The deterministic id the retired `makeProviderDefaultRule` stamped — the
     /// "provider-default" family with an empty (screen, desktop, activity) tuple.
-    /// finalizeV6Conversion removes exactly this id.
+    /// pruneRetiredProviderDefaultRule removes exactly this id.
     QUuid providerDefaultId() const
     {
         return QUuid::createUuidV5(
@@ -98,11 +100,12 @@ private:
         return set.value_or(PWR::RuleSet{});
     }
 
-    /// A v5 config root — enough to drive the chain into the v5 → v6 step.
-    QJsonObject baseV5Config() const
+    /// A current-version config root — drives the chain into
+    /// finalizeV4Conversion's cleanup-only branch (rules.json already exists).
+    QJsonObject baseCurrentConfig() const
     {
         QJsonObject root;
-        root.insert(QStringLiteral("_version"), 5);
+        root.insert(QStringLiteral("_version"), PlasmaZones::ConfigSchemaVersion);
         return root;
     }
 
@@ -121,7 +124,7 @@ private Q_SLOTS:
             QStringLiteral("{dp1-layout}"), QString(), CRB::kContextBandBase + 1);
         seedRules({makeProviderDefaultLike(), screenRule});
 
-        writeJson(ConfigDefaults::configFilePath(), baseV5Config());
+        writeJson(ConfigDefaults::configFilePath(), baseCurrentConfig());
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -151,7 +154,7 @@ private Q_SLOTS:
                                                              QStringLiteral("bsp"), CRB::kContextBandBase + 2);
         seedRules({screenRule});
 
-        writeJson(ConfigDefaults::configFilePath(), baseV5Config());
+        writeJson(ConfigDefaults::configFilePath(), baseCurrentConfig());
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -172,7 +175,7 @@ private Q_SLOTS:
             QStringLiteral("DP-3"), QStringLiteral("DP-3"), 0, QString(), QStringLiteral("snapping"),
             QStringLiteral("{dp3-layout}"), QString(), CRB::kContextBandBase + 3);
         seedRules({makeProviderDefaultLike(), screenRule});
-        writeJson(ConfigDefaults::configFilePath(), baseV5Config());
+        writeJson(ConfigDefaults::configFilePath(), baseCurrentConfig());
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -183,7 +186,7 @@ private Q_SLOTS:
         QVERIFY(!firstRun.isEmpty());
 
         // Reset the process-level migration guard so the second call re-runs the
-        // full logic against the now-v6 config — which must be a clean no-op.
+        // full logic against the cleaned config — which must be a clean no-op.
         ConfigMigration::resetMigrationGuardForTesting();
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -200,5 +203,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_GUILESS_MAIN(TestMigrationV5ToV6)
-#include "test_migration_v5_to_v6.moc"
+QTEST_GUILESS_MAIN(TestProviderDefaultCleanup)
+#include "test_provider_default_cleanup.moc"

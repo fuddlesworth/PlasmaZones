@@ -856,6 +856,12 @@ private Q_SLOTS:
         QVERIFY2(!steam.isEmpty(), "premade Steam rule must be seeded on a fresh/migrated v4 config");
         QVERIFY(steam.value(QStringLiteral("enabled")).toBool());
 
+        // Composite match (the None{} guard below makes it non-simple), so
+        // assignBandPrioritiesToZeroRules seeds it in the Advanced band [500,600)
+        // rather than the Application band the simple AppId excludes get.
+        const int steamPriority = steam.value(QStringLiteral("priority")).toInt();
+        QVERIFY(steamPriority >= 500 && steamPriority < 600);
+
         // A single terminal Exclude action — the window is left unmanaged by
         // snap/tile.
         QCOMPARE(actionTypes(steam), (QStringList{QStringLiteral("exclude")}));

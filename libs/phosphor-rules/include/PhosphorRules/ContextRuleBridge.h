@@ -48,7 +48,8 @@ namespace ContextRuleBridge {
 /// per-mode disables). With specificity removed, `priority` is the only
 /// precedence value: callers seed new context rules in this band and the
 /// Settings list-order renormalizer / runtime upsert derive concrete values
-/// from it. The band is one source of truth shared with the Settings page.
+/// from it. Kept numerically in sync with `RuleTemplates::kContextBandBase`
+/// (src/settings/ruletemplates.h), which the settings tree defines separately.
 inline constexpr int kContextBandBase = 300;
 
 /**
@@ -63,7 +64,7 @@ inline constexpr int kContextBandBase = 300;
  * this enum so the formula lives in one place.
  */
 enum class ContextAxis {
-    CatchAll, ///< empty `screenId` (the provider-default catch-all), OR a
+    CatchAll, ///< empty `screenId` (the catch-all), OR a
               ///< context match that pins a non-dimension field beyond
               ///< screen/desktop/activity (e.g. TiledWindowCount) and so is not
               ///< an exact-context assignment (see contextAxisFor).
@@ -203,7 +204,7 @@ inline QUuid disableRuleIdFor(const QString& screenId, int virtualDesktop, const
  *
  * Pins only the non-default dimensions: a non-empty @p screenId, a
  * @p virtualDesktop > 0, a non-empty @p activity. A tuple that pins nothing
- * yields the empty-`All{}` catch-all (the provider default's match).
+ * yields the empty-`All{}` catch-all match.
  */
 inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesktop, const QString& activity)
 {

@@ -42,9 +42,9 @@ int cascadePriority(bool screenPinned, bool desktopPinned, bool activityPinned)
 
 /// Builds a context-only rule pinning the given dimensions, with one
 /// engine-mode action carrying @p tag as its mode so the test can read back
-/// which rule won. The match expression and priority both come from the
-/// production `ContextRuleBridge` — the cascade fidelity this file asserts is
-/// the bridge's behaviour, not a re-implementation.
+/// which rule won. The match expression comes from the production
+/// `ContextRuleBridge`; the priority is assigned locally by `cascadePriority`,
+/// since the resolver no longer derives it.
 Rule contextRule(const QString& name, const QString& screenId, int desktop, const QString& activity, const QString& tag)
 {
     const bool screenPinned = !screenId.isEmpty();
@@ -73,26 +73,10 @@ class TestRuleEvaluatorCascade : public QObject
 
 private Q_SLOTS:
 
-    // ── Priority formula sanity ──
-
-    void testPriorityBands()
-    {
-        // The explicit priorities this oracle assigns preserve the legacy
-        // cascade ordering under the priority-wins resolver.
-        QCOMPARE(cascadePriority(true, true, true), 306); // exact
-        QCOMPARE(cascadePriority(true, false, true), 304); // screen + activity
-        QCOMPARE(cascadePriority(true, true, false), 303); // screen + desktop
-        QCOMPARE(cascadePriority(true, false, false), 301); // screen only
-        QCOMPARE(cascadePriority(false, false, false), 1); // catch-all default
-    }
-
-    void testActivityBeatsDesktop_structurally()
-    {
-        // The whole "activity beats desktop" guarantee is the weight ordering.
-        QVERIFY(cascadePriority(true, false, true) > cascadePriority(true, true, false));
-    }
-
     // ── Full cascade ──
+    // The priority ordering itself is proven through the resolver below
+    // (highest-priority rule wins per slot); there is no separate "formula"
+    // contract to pin now that the resolver derives nothing.
 
     void testExactBeatsEverything()
     {
@@ -145,7 +129,7 @@ private Q_SLOTS:
         QCOMPARE(resolvedMode(eval, q), QStringLiteral("screen+desktop"));
     }
 
-    void testScreenOnlyBeatsProviderDefault()
+    void testScreenOnlyBeatsCatchAllDefault()
     {
         RuleSet set;
         set.addRule(contextRule(QStringLiteral("default"), QString(), 0, QString(), QStringLiteral("default")));
@@ -158,7 +142,7 @@ private Q_SLOTS:
         QCOMPARE(resolvedMode(eval, q), QStringLiteral("screen"));
     }
 
-    void testFallThroughToProviderDefault()
+    void testFallThroughToCatchAllDefault()
     {
         RuleSet set;
         set.addRule(contextRule(QStringLiteral("default"), QString(), 0, QString(), QStringLiteral("default")));
@@ -166,7 +150,7 @@ private Q_SLOTS:
         RuleEvaluator eval(set);
 
         // A query on a screen with no specific rule falls through to the
-        // empty-All{} provider default.
+        // empty-All{} catch-all default.
         WindowQuery q;
         q.screenId = QStringLiteral("HDMI-9");
         QCOMPARE(resolvedMode(eval, q), QStringLiteral("default"));
@@ -247,7 +231,7 @@ private Q_SLOTS:
         scrOnly.activity = QStringLiteral("{unknown}");
         QCOMPARE(resolvedMode(eval, scrOnly), QStringLiteral("screen"));
 
-        // Unknown screen -> provider default.
+        // Unknown screen -> catch-all default.
         WindowQuery def;
         def.screenId = QStringLiteral("VGA-3");
         QCOMPARE(resolvedMode(eval, def), QStringLiteral("default"));

@@ -760,17 +760,11 @@ public:
         // can't drop it while the conversion is still pending.
         P_CONFIG_KEY(v5AppearanceStashKey, "_v5AppearanceStash")
 
-        // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and
-        // finalizeV4Conversion. These mirror the live `displayGroup`,
-        // `defaultLayoutIdKey`, `snappingBehaviorWindowHandlingGroup`,
-        // `tilingAlgorithmGroup`, and `defaultKey` accessors but are frozen
-        // at their v3 literal so a future runtime rename cannot silently
-        // retarget the migration to a path no v3 config ever had on disk.
+        // v3 frozen group accessor — used ONLY by migrateV3ToV4. Mirrors the
+        // live `displayGroup` accessor but is frozen at its v3 literal so a
+        // future runtime rename cannot silently retarget the migration to a
+        // path no v3 config ever had on disk.
         P_CONFIG_GROUP(v3DisplayGroup, "Display")
-        P_CONFIG_KEY(v3DefaultLayoutIdKey, "DefaultLayoutId")
-        P_CONFIG_GROUP(v3SnappingBehaviorWindowHandlingGroup, "Snapping.Behavior.WindowHandling")
-        P_CONFIG_GROUP(v3TilingAlgorithmGroup, "Tiling.Algorithm")
-        P_CONFIG_KEY(v3DefaultKey, "Default")
 
         // v3 Exclusions group + comma-joined pattern keys — frozen at their
         // v3 literal for the same reason the disable-list group/keys above

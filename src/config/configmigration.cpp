@@ -53,9 +53,10 @@ PhosphorConfig::Schema makeMigrationSchema()
     s.version = ConfigSchemaVersion;
     s.versionKey = ConfigKeys::versionKey();
     s.migrations = {
-        {1, &ConfigMigration::migrateV1ToV2}, {2, &ConfigMigration::migrateV2ToV3},
-        {3, &ConfigMigration::migrateV3ToV4}, {4, &ConfigMigration::migrateV4ToV5},
-        {5, &ConfigMigration::migrateV5ToV6},
+        {1, &ConfigMigration::migrateV1ToV2},
+        {2, &ConfigMigration::migrateV2ToV3},
+        {3, &ConfigMigration::migrateV3ToV4},
+        {4, &ConfigMigration::migrateV4ToV5},
     };
     return s;
 }
@@ -101,7 +102,7 @@ QString legacyAssignmentsFilePath()
 ///
 /// Rationale (B5 data-loss fix): silently treating a corrupt assignments.json
 /// as "no assignments" would let the conversion write a rules.json
-/// holding only the provider-default + disable rules, then quarantine the
+/// holding only the seeded built-in rules, then quarantine the
 /// corrupt original to `.migrated` — the user's pinned assignments AND quick-
 /// layout slots would be lost without warning. The `.migrated` suffix also
 /// falsely implies the file was successfully migrated, masking the failure.
@@ -169,7 +170,7 @@ bool prevalidateLegacyAssignmentsFile(const QString& assignmentsPath)
 /// `RuleSet::loadFromFile(...).has_value()`. If the file exists but
 /// is corrupt (truncation, hand-edit error, power-loss), that probe returns
 /// nullopt — the gate falls through to the rebuild path, which mints a
-/// provider-default-only rule set and writes it on top of the corrupt-but-
+/// freshly-seeded rule set and writes it on top of the corrupt-but-
 /// recoverable original. Every user-authored rule is destroyed without
 /// warning and without a backup.
 ///
@@ -359,16 +360,14 @@ bool ConfigMigration::ensureJsonConfigImpl()
                         // rules.json + quicklayouts.json, stripping the
                         // stash keys, retiring assignments.json) happens
                         // here, after the chain. Idempotent — safe to always run.
-                        return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath)
-                            && finalizeV6Conversion(jsonPath);
+                        return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
                     }
                     // Already at OR above current version — finalizeV4Conversion's
                     // cleanup-only branch runs idempotently: it strips any leftover
                     // assignments.json artifacts or `_v4*Stash` keys that a prior
-                    // crash may have left behind, and is a no-op once the file is
-                    // already clean.
-                    return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath)
-                        && finalizeV6Conversion(jsonPath);
+                    // crash may have left behind (and prunes the retired
+                    // provider-default rule from rules.json), a no-op once clean.
+                    return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
                 }
                 corrupt = true;
             }
@@ -402,8 +401,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
                     "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
                     "using defaults",
                     qPrintable(corruptBak));
-                return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath)
-                    && finalizeV6Conversion(jsonPath);
+                return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
             }
             qWarning("ConfigMigration: corrupt JSON config moved to %s — re-migrating from INI",
                      qPrintable(corruptBak));
@@ -422,7 +420,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
         // Fresh install — no old config. Still run the v4 finalizer so a
         // stray assignments.json from a partial earlier conversion is folded
         // into rules.json rather than left orphaned.
-        return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath) && finalizeV6Conversion(jsonPath);
+        return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
     }
 
     qInfo("ConfigMigration: migrating %s → %s", qPrintable(iniPath), qPrintable(jsonPath));
@@ -444,7 +442,8 @@ bool ConfigMigration::ensureJsonConfigImpl()
     // The in-memory chain above ran through migrateV4ToV5, which stashes the v5
     // appearance/gap payload — run BOTH finalizers (matching the version-path
     // return sites) so the v5 override rules are built on this launch, not the
-    // next.
+    // next. finalizeV4Conversion's cleanup also prunes the retired
+    // provider-default rule.
     return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
 }
 
@@ -1981,7 +1980,7 @@ bool isValidAnimationAppRuleSource(const QJsonObject& source)
 /// @param i      zero-based index into the FILTERED (valid-only) source
 ///               list — used to derive `priority = count - i`.
 /// @param count  total VALID source entries (priority floors at 1, reserving
-///               0 for the provider-default catch-all band).
+///               0 for the unassigned-marker band that assignBandPrioritiesToZeroRules stamps).
 PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int count)
 {
     namespace ActionParam = PhosphorRules::ActionParam;
@@ -2072,6 +2071,10 @@ PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int 
 /// simple window-property rules (AppId/WindowClass exclude, SnapToZone) land in
 /// Application. One descending offset per band keeps them distinct, mirroring
 /// renormalizePriorities. Managed and already-prioritized rules are untouched.
+/// Past 100 zero-priority rules in one band the offset floors at the band base
+/// (the `qMax(0, ...)` below), so the 100th-onward rules tie there — the same
+/// saturation renormalizePriorities has, and harmless because priority does not
+/// affect the boolean exclusion / snap slices these rules feed.
 void assignBandPrioritiesToZeroRules(QList<PhosphorRules::Rule>& rules)
 {
     using PhosphorRules::MatchExpression;
@@ -2519,8 +2522,9 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorRules::Rule>& rules, const Q
                                     Detail::encodeSegment(pattern) + Detail::encodeSegment(QString::number(zoneNumber))
                                         + Detail::encodeSegment(targetScreen));
             rule.enabled = true;
-            // priority 0 mirrors the other migrated rules; the controller
-            // renormalizes display order on load and the user can reorder.
+            // Left at 0 here; assignBandPrioritiesToZeroRules stamps the real
+            // band priority once the full list is assembled. The user can
+            // drag-reorder it in the Rules page if precedence matters.
             rule.priority = 0;
             rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);
             RuleAction action;
@@ -2830,6 +2834,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         // on filesystems where remove may not (and the renamed file is inert —
         // nothing reads it), so a delete-failure can never loop forever.
         retireLegacyAssignmentsFile(assignmentsPath);
+
+        // Prune the retired provider-default catch-all rule from rules.json.
+        // Idempotent: once gone (or on a config that never had one) it is a
+        // no-op. Folded here rather than into a schema bump because the gated
+        // default resolver already ignores the rule at runtime.
+        ok = pruneRetiredProviderDefaultRule(jsonPath) && ok;
 
         return ok;
     }
@@ -3816,36 +3826,27 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
     return true;
 }
 
-void ConfigMigration::migrateV5ToV6(QJsonObject& root)
+bool ConfigMigration::pruneRetiredProviderDefaultRule(const QString& jsonPath)
 {
-    // The v6 schema makes rule precedence pure `priority`; the cross-file work
-    // (deleting the provider-default rule from rules.json) lives in
-    // finalizeV6Conversion. This step only stamps the version.
-    // Stamp literal 6 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
-    root[ConfigKeys::versionKey()] = 6;
-}
-
-bool ConfigMigration::finalizeV6Conversion(const QString& jsonPath)
-{
-    // The provider-default catch-all assignment rule is retired in v6: the
-    // gated default resolver is the sole global-default source. Delete it from
-    // rules.json by its deterministic id (stable, so this is idempotent — a
-    // re-run after the rule is gone finds nothing). config.json is untouched;
-    // jsonPath only locates the sibling rules.json.
+    // The provider-default catch-all assignment rule is retired: the gated
+    // default resolver is the sole global-default source, and it already ignores
+    // the priority-0 catch-all at runtime. Delete the stale rule from rules.json
+    // by its deterministic id (stable, so this is idempotent — a re-run after
+    // the rule is gone finds nothing). No schema bump: this runs from
+    // finalizeV4Conversion's cleanup path. config.json is untouched; jsonPath
+    // only gates on the conversion having happened.
     if (!QFile::exists(jsonPath)) {
         return true;
     }
     const QString rulesPath = ConfigDefaults::rulesFilePath();
     auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
     if (!setOpt.has_value()) {
-        // finalizeV4Conversion runs first and guarantees a valid rules.json; a
-        // missing/invalid file here means the conversion has not established it
-        // yet. Nothing to strip — a clean no-op (a fresh install never wrote a
-        // provider-default rule in the first place).
+        // No rules.json yet (conversion not established) — nothing to strip. A
+        // fresh install never wrote a provider-default rule in the first place.
         return true;
     }
 
-    // The provider-default's identity was fixed: the v5-UUID derivation
+    // The provider-default's identity was fixed: the UUID derivation
     // ContextRuleBridge keyed off the "provider-default" family with an empty
     // (screen, desktop, activity) tuple. Reconstruct it directly — the rule
     // factory that produced it is gone, but the id scheme is preserved verbatim.
@@ -3861,11 +3862,14 @@ bool ConfigMigration::finalizeV6Conversion(const QString& jsonPath)
         return true;
     }
     if (!ruleSet.saveToFile(rulesPath)) {
-        qWarning("ConfigMigration::finalizeV6Conversion: failed to write %s after removing the provider-default rule",
-                 qPrintable(rulesPath));
+        qWarning(
+            "ConfigMigration::pruneRetiredProviderDefaultRule: failed to write %s after removing the "
+            "provider-default rule",
+            qPrintable(rulesPath));
         return false;
     }
-    qInfo("ConfigMigration::finalizeV6Conversion: removed the provider-default rule from %s", qPrintable(rulesPath));
+    qInfo("ConfigMigration::pruneRetiredProviderDefaultRule: removed the provider-default rule from %s",
+          qPrintable(rulesPath));
     return true;
 }
 

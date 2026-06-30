@@ -178,6 +178,10 @@ int nextAssignmentPriority(const QList<PWR::Rule>& rules)
 {
     bool sawAny = false;
     int maxPriority = 0;
+    // Scan only assignment rules (those carrying a SetEngineMode action). A
+    // user-authored layout-only context rule is not counted, so creating an
+    // assignment while such a rule outranks it is the one case the seed can
+    // land below an existing rule; the user resolves it by dragging.
     for (const PWR::Rule& rule : rules) {
         if (!isContextAssignmentRule(rule)) {
             continue;
@@ -189,7 +193,13 @@ int nextAssignmentPriority(const QList<PWR::Rule>& rules)
     }
     // No assignment rule yet — seed at the Context band top so the first
     // assignment lands inside the Settings Context band; later creates climb
-    // from the running max.
+    // from the running max. The unbounded `max + 1` climb is deliberate: it is
+    // how "the newest assignment wins" is realised under priority-wins (a
+    // clamp would tie the new rule with the current top and lose the tie by
+    // list order). After enough concurrent assignments the climb can cross out
+    // of the Context band; a Settings reorder renormalises it back, and the
+    // band number only affects cross-section display order, never which
+    // assignment a context resolves to.
     if (!sawAny) {
         return PWR::ContextRuleBridge::kContextBandBase + 99;
     }

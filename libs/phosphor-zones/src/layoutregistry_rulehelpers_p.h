@@ -70,7 +70,7 @@ ContextDims decodeDims(const PWR::MatchExpression& match);
 // would emit for that tuple. A match pinning more/fewer dimensions, pinning
 // different values, or carrying ANY window-property leaf is NOT an exact
 // match. This is what hasExplicitAssignment relies on to distinguish a stored
-// entry from a wider cascade entry or the synthesized provider default.
+// entry from a wider cascade entry or the gated default.
 //
 // contextDimsOf ignores window-property leaves, so a flat rule mixing a
 // window predicate with the context leaves (e.g. All{ ScreenId==DP-1,
@@ -81,10 +81,9 @@ ContextDims decodeDims(const PWR::MatchExpression& match);
 bool matchIsExactContext(const PWR::MatchExpression& match, const QString& screenId, int virtualDesktop,
                          const QString& activity);
 
-// True if @p rule carries a SetEngineMode action. Both context assignment
-// rules and the provider-default catch-all carry one; callers that must
-// exclude the catch-all do so explicitly (see resolveAssignmentEntry), and
-// the matchIsExactContext* shape filters reject a catch-all anyway.
+// True if @p rule carries a SetEngineMode action. Context assignment rules
+// carry one; the matchIsExactContext* shape filters reject a catch-all, so a
+// user-authored catch-all engine rule is handled by priority alone.
 bool hasEngineModeAction(const PWR::Rule& rule);
 
 // True if @p rule carries a SetSnappingLayout / SetTilingAlgorithm action. The
