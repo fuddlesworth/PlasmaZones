@@ -14,10 +14,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Match by placement mode**: a new Mode match condition matches snapped or tiled windows, so snapping and tiling can carry different gaps or appearance. Mode is a context condition, resolved per screen and layout ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Per-monitor gaps**: pick a monitor from the scope chip on the Gaps card to set that screen's gaps independently. The values are stored as a screen-scoped rule ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Separate focused and unfocused border colors**: the border color is now two actions, "Set focused border color" and "Set unfocused border color", each with its own swatch ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
-- **System section on the Rules page**: the app-managed default rules (Default borders, Default title bars, Default gaps) are grouped in their own System section and cannot be deleted ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
+- **App-managed default rules**: the default rules (Default borders, Default title bars, Default gaps) cannot be deleted and stay pinned to the lowest priority ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 
 ### Changed
 
+- **The Rules page is one flat priority list**: rules show in a single, drag-reorderable list ordered by precedence, with the highest-priority rule on top, instead of per-section groups. Drag any rule up or down to set which one wins. The filter button narrows the list by source (system or user-created), category, and status, and search and the monitor strip narrow it further ([#720](https://github.com/fuddlesworth/PlasmaZones/pull/720)).
 - **"Window Rules" is now "Rules"**: the page and the config file (`windowrules.json` becomes `rules.json`) are renamed, because rules now cover gaps, layout, and animation as well as windows. Existing rules carry over automatically ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Window Appearance and Animations are grouped under an Appearance category** in the settings sidebar ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Gaps use one shared model**: snapping zone padding and tiling inner gap are now the same setting. Use Mode or per-monitor rules where they should differ ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
