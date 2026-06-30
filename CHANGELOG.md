@@ -25,6 +25,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **The action and condition pickers are reorganized**: both are alphabetized, and the action picker groups the context conditions above the window conditions with a divider ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Old per-mode appearance and gap settings are migrated to rules**: on upgrade, snapping and tiling appearance and gap values you had customized become Snapping and Tiling rules, and per-monitor gaps become screen rules. A default configuration produces no extra rules ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 
+### Fixed
+
+- **Dragging a window stuttered at the start and end of the drag on disks with slow write flushing**: the daemon bound a temporary global Escape shortcut on every drag and released it on drop, and each bind made KWin rewrite its shortcut config to disk with an fsync. On a drive with slow flush latency that briefly stalled the compositor at pickup and at drop, while a continuous drag stayed smooth. The per-drag binding is gone, because the KWin effect already grabs Escape for the whole drag, so dragging is smooth regardless of disk. Thanks @arinl for the report and the bpftrace diagnosis ([#714](https://github.com/fuddlesworth/PlasmaZones/pull/714), [discussion #167](https://github.com/fuddlesworth/PlasmaZones/discussions/167)).
+
 ## [3.1.2] - 2026-06-25
 
 ### Fixed
