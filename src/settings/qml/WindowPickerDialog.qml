@@ -212,6 +212,13 @@ Kirigami.Dialog {
             Layout.fillHeight: true
             Layout.preferredHeight: Kirigami.Units.gridUnit * 14
             clip: true
+            // Don't auto-highlight the first row on open. Rows commit on
+            // click, so there's no keyboard cursor to seed — a pre-selected
+            // top item just reads as a mistaken default. Re-clear after every
+            // model change, since reassigning the model snaps currentIndex
+            // back to 0.
+            currentIndex: -1
+            onCountChanged: currentIndex = -1
             model: {
                 // `_baseRows` is the mode-stable pre-pruned list (titles mode
                 // drops captionless rows; other modes keep everything). It
@@ -243,6 +250,8 @@ Kirigami.Dialog {
             }
 
             delegate: ItemDelegate {
+                id: windowDelegate
+
                 // Strict QML requires the delegate's context property to be
                 // declared before it's read in bindings.
                 required property var modelData
@@ -279,6 +288,9 @@ Kirigami.Dialog {
                         Layout.preferredWidth: Kirigami.Units.iconSizes.small
                         Layout.preferredHeight: Kirigami.Units.iconSizes.small
                         Layout.alignment: Qt.AlignVCenter
+                        // Recolors symbolic icons to track the (highlighted)
+                        // text; full-color icons ignore `color`.
+                        color: windowDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                     }
 
                     ColumnLayout {
@@ -289,13 +301,15 @@ Kirigami.Dialog {
                             text: primaryText
                             Layout.fillWidth: true
                             elide: Text.ElideRight
+                            color: windowDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                         }
 
                         Label {
                             text: secondaryText
                             Layout.fillWidth: true
                             font: Kirigami.Theme.smallFont
-                            opacity: 0.7
+                            color: windowDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
+                            opacity: windowDelegate.highlighted ? 0.85 : 0.7
                             elide: Text.ElideRight
                             visible: secondaryText.length > 0
                         }
