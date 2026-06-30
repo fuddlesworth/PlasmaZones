@@ -814,32 +814,6 @@ SettingsFlickable {
                 });
             }
         }
-
-        // =================================================================
-        // Per-window overrides — link to the Rules page.
-        // =================================================================
-        SettingsCard {
-            Layout.fillWidth: true
-            headerText: i18n("Per-window appearance")
-            searchAnchor: "perWindow"
-            collapsible: false
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                SettingsRow {
-                    title: i18n("Override per app or monitor")
-                    description: i18n("These settings apply to every window. Add a rule to override the border or title bar for a specific app or monitor.")
-                    searchAnchor: "perRules"
-
-                    Button {
-                        text: i18n("Open Rules")
-                        icon.name: "view-list-details"
-                        onClicked: settingsController.activePage = "rules"
-                    }
-                }
-            }
-        }
     }
 
     // =====================================================================
