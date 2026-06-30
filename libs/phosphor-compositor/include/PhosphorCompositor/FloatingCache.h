@@ -47,7 +47,10 @@ public:
         return m_byAppId.contains(::PhosphorIdentity::WindowId::extractAppId(windowId));
     }
 
-    void setFloating(const QString& windowId, bool floating)
+    /// Set @p windowId's floating state. Returns true iff a tracked entry was
+    /// actually added or removed, so a caller can drive a side effect (e.g.
+    /// re-resolving IsFloating rules) only on a real transition.
+    bool setFloating(const QString& windowId, bool floating)
     {
         const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
         const bool isComposite = (appId != windowId); // bare appId has no separator
@@ -57,22 +60,30 @@ public:
             // it would alias every other empty-instance window onto one wildcard
             // slot. Reject rather than corrupt the cache.
             if (instanceId.isEmpty()) {
-                return;
+                return false;
             }
             if (floating) {
+                if (m_byInstance.contains(instanceId)) {
+                    return false;
+                }
                 m_byInstance.insert(instanceId);
-            } else {
-                m_byInstance.remove(instanceId);
-                // Mirror WindowTrackingService::setFloating: an explicit instance
-                // unfloat also drops the coarse app-wide fallback. Siblings keep
-                // their own instance entries, so this only clears the appId marker.
-                m_byAppId.remove(appId);
+                return true;
             }
-        } else if (floating) {
-            m_byAppId.insert(windowId);
-        } else {
-            m_byAppId.remove(windowId);
+            const bool removedInstance = m_byInstance.remove(instanceId);
+            // Mirror WindowTrackingService::setFloating: an explicit instance
+            // unfloat also drops the coarse app-wide fallback. Siblings keep
+            // their own instance entries, so this only clears the appId marker.
+            const bool removedAppId = m_byAppId.remove(appId);
+            return removedInstance || removedAppId;
         }
+        if (floating) {
+            if (m_byAppId.contains(windowId)) {
+                return false;
+            }
+            m_byAppId.insert(windowId);
+            return true;
+        }
+        return m_byAppId.remove(windowId);
     }
 
     void clear()
@@ -92,16 +103,18 @@ public:
     }
 
     /// Convenience alias for setFloating(windowId, true). Kept symmetric
-    /// with remove() so both entry points share the same guard logic.
-    void insert(const QString& windowId)
+    /// with remove() so both entry points share the same guard logic. Returns
+    /// true iff a tracked entry was actually added.
+    bool insert(const QString& windowId)
     {
-        setFloating(windowId, true);
+        return setFloating(windowId, true);
     }
 
-    /// Convenience alias for setFloating(windowId, false).
-    void remove(const QString& windowId)
+    /// Convenience alias for setFloating(windowId, false). Returns true iff a
+    /// tracked entry was actually removed.
+    bool remove(const QString& windowId)
     {
-        setFloating(windowId, false);
+        return setFloating(windowId, false);
     }
 
 private:

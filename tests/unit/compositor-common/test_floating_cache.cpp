@@ -133,6 +133,34 @@ private Q_SLOTS:
     }
 
     // =================================================================
+    // FloatingCache: setFloating reports whether the state actually changed
+    // (drives the NavigationHandler rule-invalidation — a no-op re-assert must
+    // not re-resolve).
+    // =================================================================
+
+    void testFloatingCacheChangedReturn()
+    {
+        PhosphorCompositor::FloatingCache cache;
+        // First float of an instance is a change; re-floating it is not.
+        QVERIFY(cache.setFloating(QStringLiteral("app|1"), true));
+        QVERIFY(!cache.setFloating(QStringLiteral("app|1"), true));
+        // Unfloat is a change; unfloating again is not.
+        QVERIFY(cache.setFloating(QStringLiteral("app|1"), false));
+        QVERIFY(!cache.setFloating(QStringLiteral("app|1"), false));
+        // insert / remove aliases report the same.
+        QVERIFY(cache.insert(QStringLiteral("firefox"))); // bare appId, new
+        QVERIFY(!cache.insert(QStringLiteral("firefox"))); // already present
+        QVERIFY(cache.remove(QStringLiteral("firefox")));
+        QVERIFY(!cache.remove(QStringLiteral("firefox")));
+        // Unfloating an instance that also clears a bare appId marker is a change.
+        cache.insert(QStringLiteral("slack")); // app-wide
+        cache.insert(QStringLiteral("slack|7")); // instance
+        QVERIFY(cache.setFloating(QStringLiteral("slack|7"), false)); // removed both
+        // Malformed id never changes anything.
+        QVERIFY(!cache.setFloating(QStringLiteral("bad|"), true));
+    }
+
+    // =================================================================
     // ZoneCache: basic set / get / unsnap
     // =================================================================
 
@@ -210,6 +238,31 @@ private Q_SLOTS:
         QCOMPARE(cache.size(), 0);
         QVERIFY(!cache.isSnapped(QStringLiteral("app|")));
         QVERIFY(!cache.isSnapped(QStringLiteral("other|")));
+    }
+
+    // =================================================================
+    // ZoneCache: setZone / remove report whether the entry actually changed
+    // (drives the NavigationHandler rule-invalidation — a no-op re-assert must
+    // not re-resolve).
+    // =================================================================
+
+    void testZoneCacheChangedReturn()
+    {
+        PhosphorCompositor::ZoneCache cache;
+        // New zone is a change; re-asserting the same zone is not.
+        QVERIFY(cache.setZone(QStringLiteral("app|1"), QStringLiteral("{z1}")));
+        QVERIFY(!cache.setZone(QStringLiteral("app|1"), QStringLiteral("{z1}")));
+        // Moving to a different zone is a change.
+        QVERIFY(cache.setZone(QStringLiteral("app|1"), QStringLiteral("{z2}")));
+        // Clearing an existing entry is a change; clearing again is not.
+        QVERIFY(cache.setZone(QStringLiteral("app|1"), QString()));
+        QVERIFY(!cache.setZone(QStringLiteral("app|1"), QString()));
+        // remove() reports the same.
+        cache.setZone(QStringLiteral("app|2"), QStringLiteral("{z}"));
+        QVERIFY(cache.remove(QStringLiteral("app|2")));
+        QVERIFY(!cache.remove(QStringLiteral("app|2")));
+        // Malformed id never changes anything.
+        QVERIFY(!cache.setZone(QStringLiteral("bad|"), QStringLiteral("{z}")));
     }
 
     // =================================================================

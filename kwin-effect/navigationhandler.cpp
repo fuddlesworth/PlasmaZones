@@ -77,11 +77,11 @@ void NavigationHandler::syncFloatingStateForWindow(const QString& windowId)
         QDBusPendingReply<bool> reply = *w;
         if (reply.isValid()) {
             bool floating = reply.value();
+            // Per-window sync goes through setWindowFloating so a real change
+            // re-resolves this window's IsFloating-scoped rules.
+            setWindowFloating(windowId, floating);
             if (floating) {
-                m_floatingCache.insert(windowId);
                 qCDebug(lcEffect) << "Synced floating state for window" << windowId << "- is floating";
-            } else {
-                m_floatingCache.remove(windowId);
             }
         }
         w->deleteLater();
@@ -114,11 +114,14 @@ void NavigationHandler::syncZonesFromDaemon()
         }
 
         // Seed every snapped window's zone. A window with an empty zoneId (floating
-        // / unmanaged) carries no entry. setWindowZone keys by instanceId (see header).
+        // / unmanaged) carries no entry. Write the cache DIRECTLY (not setWindowZone)
+        // so this bulk re-seed doesn't enqueue a per-window rule invalidation for
+        // each window — the single invalidateAllRuleCaches below covers the whole
+        // batch. setZone keys by instanceId (see ZoneCache).
         const PhosphorProtocol::WindowStateList states = reply.value();
         for (const PhosphorProtocol::WindowStateEntry& state : states) {
             if (!state.zoneId.isEmpty()) {
-                setWindowZone(state.windowId, state.zoneId);
+                m_zoneCache.setZone(state.windowId, state.zoneId);
             }
         }
         qCDebug(lcEffect) << "Synced" << zoneEntryCount() << "snapped-window zones from daemon";
@@ -128,6 +131,38 @@ void NavigationHandler::syncZonesFromDaemon()
         // next frame (mirrors the daemon-loss invalidation).
         m_effect->invalidateAllRuleCaches();
     });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Placement-state writes — each re-resolves the window's rules on a real change.
+//
+// These are the single chokepoints for the IsFloating / IsSnapped / Zone / Mode
+// rule-match inputs. Welding the invalidation to the write (rather than asking
+// every caller to remember a follow-up invalidateRuleCacheForStateChange) is what
+// keeps a placement change from silently leaving a scoped border / title-bar /
+// opacity rule resolved against stale state. The cache setters return whether the
+// value actually changed, so a redundant re-assert costs nothing.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void NavigationHandler::setWindowFloating(const QString& windowId, bool floating)
+{
+    if (m_floatingCache.setFloating(windowId, floating)) {
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
+}
+
+void NavigationHandler::setWindowZone(const QString& windowId, const QString& zoneId)
+{
+    if (m_zoneCache.setZone(windowId, zoneId)) {
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
+}
+
+void NavigationHandler::clearWindowZone(const QString& windowId)
+{
+    if (m_zoneCache.remove(windowId)) {
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
 }
 
 } // namespace PlasmaZones
