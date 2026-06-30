@@ -32,12 +32,11 @@ namespace {
 using PhosphorRules::Rule;
 using PhosphorRules::RuleSet;
 
-// Priority bands live next to the seeded templates (ruletemplates.h) so
-// the renormalize logic here shares the exact bands the templates /
-// empty-rule seeds land in — a single source of truth keeps section ordering
-// (Advanced > Monitor/Activity > Application > Animation; Monitor and Activity
-// share the Context band) consistent between newly-authored rules and
-// post-reorder priority stamps.
+// Default priority bases by section, shared with the seeded templates
+// (ruletemplates.h). Priority renormalization is flat global list-order and does
+// NOT use these; they feed only `bandBaseForSection`, which seeds where a newly
+// added rule inserts (a new Advanced rule starts above Application, etc.) before
+// the user reorders freely.
 using RuleTemplates::kAdvancedBandBase;
 using RuleTemplates::kAnimationBandBase;
 using RuleTemplates::kApplicationBandBase;
@@ -422,8 +421,8 @@ int RuleController::bandBaseForSection(RuleModel::Section section)
         return kAnimationBandBase;
     case RuleModel::Section::System:
         // Managed System rules keep their pinned INT_MIN priority — they are
-        // never stamped a band by renormalizePriorities (the managed guard skips
-        // them). Report INT_MIN so section ordering places System last.
+        // never renumbered by renormalizePriorities (the managed guard skips
+        // them). Report INT_MIN so a System rule seeds below every user rule.
         return std::numeric_limits<int>::min();
     }
     return kAnimationBandBase;
@@ -669,10 +668,10 @@ QString RuleController::duplicateRule(const QString& ruleId)
         qCWarning(lcConfig) << "RuleController::duplicateRule: model rejected clone" << clone.id.toString();
         return QString();
     }
-    // The clone inherited the source's priority verbatim; without
-    // re-stamping the two would collide on the band-base value and the
-    // daemon's section-ordering would treat them as indistinguishable.
-    // Mirrors the renormalize call addRuleFromJson does after appending.
+    // The clone inherited the source's priority verbatim. Re-stamp the global
+    // list-order priorities so the clone, inserted directly after the source,
+    // gets a distinct rank and evaluates immediately after it instead of tying on
+    // the inherited integer. Mirrors the renormalize call addRuleFromJson does.
     renormalizePriorities();
     setDirty(true);
     return clone.id.toString();

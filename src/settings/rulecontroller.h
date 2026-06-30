@@ -218,11 +218,11 @@ public:
     /// Remove the rule with @p ruleId (a UUID string). Returns false if absent.
     Q_INVOKABLE bool removeRule(const QString& ruleId);
 
-    /// Clone the rule with @p ruleId. The clone gets a fresh UUID, the same
-    /// priority as the source (so its evaluation order is unchanged), and an
-    /// auto-suffixed name ("X (copy)") when the source's name is non-empty so
-    /// the two are distinguishable in the list. The clone is inserted just
-    /// after the source so it appears next to it in the section.
+    /// Clone the rule with @p ruleId. The clone gets a fresh UUID and an
+    /// auto-suffixed name ("X (copy)") when the source's name is non-empty so the
+    /// two are distinguishable in the list. It is inserted directly after the
+    /// source and the global list-order priorities are re-stamped, so it
+    /// evaluates immediately after the source.
     ///
     /// Returns the new rule's UUID string on success, or an empty string if
     /// the source id is unknown or the clone could not be added (id collision
@@ -244,7 +244,8 @@ public:
 
     // ── List / section metadata for the page ──────────────────────────────
 
-    /// The ordered section descriptors for the grouped list and chip filter.
+    /// The ordered section descriptors for the section filter menu and the
+    /// per-row section badge labels.
     /// Each entry: `{ value: int (Section enum), label }`. The order is the
     /// canonical display order; QML must not hardcode the enum values.
     Q_INVOKABLE QVariantList sections() const;

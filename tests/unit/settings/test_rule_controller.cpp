@@ -253,8 +253,8 @@ void TestRuleController::monitorOverviewLockPriorityResolution()
     // report the HIGHEST-PRIORITY rule's value (first-wins), not last-wins and
     // not mere presence — mirroring resolveContextLocked's single-winner Locked
     // slot (cf. testContextLock_priorityResolution at the registry level).
-    // Each added rule seeds at the top of its (Context) band tier, so within a
-    // band the earlier-added rule keeps the higher global priority — the FIRST
+    // Each added rule seeds at the bottom of its (Context) band tier, so within
+    // a band the earlier-added rule keeps the higher global priority — the FIRST
     // rule added for a screen is its winner. Run both value directions so a
     // "true-always-wins" / "false-always-wins" bug fails one of the two.
     RuleController controller;

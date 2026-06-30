@@ -221,8 +221,8 @@ SettingsFlickable {
     contentHeight: mainCol.implicitHeight
     clip: true
 
-    // Re-derive the section model on every structural or per-rule change so a
-    // rule that changes section is re-bucketed.
+    // Re-derive filteredRules on every structural or per-rule change so a rule
+    // that changes section gets its updated badge / filter classification.
     Connections {
         function onCountChanged() {
             page.modelRevision++;
