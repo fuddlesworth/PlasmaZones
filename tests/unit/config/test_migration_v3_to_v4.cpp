@@ -1938,7 +1938,7 @@ private Q_SLOTS:
 
         // Schema invariants spelled out so a regression in the builder
         // (e.g. wrong field, wrong op, multi-action rule) fails here rather
-        // than at runtime in the cascade evaluator.
+        // than at runtime in the rule evaluator.
         for (const QJsonObject& r : excl) {
             QVERIFY(r.value(QStringLiteral("enabled")).toBool());
             // assignBandPrioritiesToZeroRules seeds the simple AppId-match Exclude

@@ -333,7 +333,7 @@ private Q_SLOTS:
     // Ports testLevel1Default_* — a context with no pinned rule resolves to
     // the low-priority catch-all floor rule.
 
-    void testProviderDefaultFallback()
+    void testCatchAllFloorFallback()
     {
         QList<PWR::Rule> rules;
         // One pinned rule for DP-1 only.
@@ -361,7 +361,7 @@ private Q_SLOTS:
     // The catch-all matches every query, but its low priority (1) means a
     // pinned rule (priority >= 301) always resolves first.
 
-    void testProviderDefaultNeverShadowsPinned()
+    void testCatchAllFloorNeverShadowsPinned()
     {
         QList<PWR::Rule> rules;
         rules.append(CRB::makeAssignmentRule(QStringLiteral("Default"), QString(), 0, QString(),
@@ -485,13 +485,13 @@ private Q_SLOTS:
     // passes the registry filter structurally (it carries an engine-mode
     // action and is not the catch-all), but its AppId leaf evaluates false
     // against the registry's windowless query and so the All{} must fail.
-    // The registry has to fall through to the provider default — the mixed
+    // The registry has to fall through to the gated default — the mixed
     // rule's autotile mode must NOT surface.
 
     void testMixedRuleDoesNotLeakIntoContextOnlyResolution()
     {
         RegistryFixture f = makeRegistryFixture();
-        // Snap default so the synthesised provider default is unambiguously
+        // Snap default so the synthesised gated default is unambiguously
         // distinguishable from the mixed rule's autotile output.
         f.registry->setDefaultLayoutIdProvider([]() {
             return QStringLiteral("{provider-snap-default}");
@@ -508,7 +508,7 @@ private Q_SLOTS:
         const PhosphorZones::AssignmentEntry entry =
             f.registry->assignmentEntryForScreen(QStringLiteral("DP-2"), 1, QString());
 
-        // The synthesised entry is Snapping (provider default), not the
+        // The synthesised entry is Snapping (gated default), not the
         // Autotile/dwindle that would arrive if the mixed rule leaked.
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, QStringLiteral("{provider-snap-default}"));

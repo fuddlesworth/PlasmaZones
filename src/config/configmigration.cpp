@@ -2062,8 +2062,8 @@ PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int 
 /// entries don't leave gaps in the descending-by-list-order priority
 /// sequence (`AnimationAppRuleList::fromJson` filtered first; `toRuleSet`
 /// then used the filtered `entries.size()` as count).
-/// Give every migrated rule the append helpers left at priority 0 (the Exclude
-/// and SnapToZone rules) a sensible band priority, matching what the Settings
+/// Give every migrated rule the append helpers left at priority 0 (the Exclude,
+/// animation-exclusion, and SnapToZone rules) a sensible band priority, matching what the Settings
 /// renormalizer (RuleTemplates / sectionFor) would stamp. The Settings
 /// controller only renormalizes on edit, not on load, so without this the
 /// migrated rules would all read "Priority 0" and tie on a fresh load. A
@@ -3131,8 +3131,8 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         appendLayoutAppRulesAsSnapToZone(rules, layoutsDir);
     }
 
-    // Stamp a band priority onto the Exclude / SnapToZone rules the helpers
-    // above left at 0, so they display sensibly on a fresh load instead of all
+    // Stamp a band priority onto the Exclude / animation-exclusion / SnapToZone
+    // rules the helpers above left at 0, so they display sensibly on a fresh load instead of all
     // reading "Priority 0".
     assignBandPrioritiesToZeroRules(rules);
 

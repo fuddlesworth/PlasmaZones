@@ -4,16 +4,15 @@
 // Layout assignment management (per-screen, per-desktop, per-activity).
 // Part of LayoutRegistry — split from layoutregistry.cpp for SRP.
 //
-// Phase 3b: the per-context assignment cascade is reimplemented on the
-// unified Rule engine. There is one resolution model: a windowless
-// WindowQuery evaluated through RuleEvaluator against the RuleStore's
-// rule set. The deterministic Assignment cascade (exact → activity → desktop
-// → screen → provider default) is reproduced by the ContextRuleBridge
-// priority formula — higher priority pins more context dimensions, so the
-// evaluator's descending-priority, first-action-per-slot walk returns the
-// same result the old walkCascade() did. Connector-name / virtual-screen
-// fallback is NOT a priority band — it is a query-side recursive key rewrite,
-// kept here in layoutForScreen() / the shared resolve helper.
+// Phase 3b: per-context assignment is resolved on the unified Rule engine.
+// There is one resolution model: a windowless WindowQuery evaluated through
+// RuleEvaluator against the RuleStore's rule set, and the winner of each action
+// slot is the highest-priority matching rule (ties broken by list order). There
+// is no specificity formula and no provider-default tail — priority is the only
+// precedence value, and a genuine miss (no rule fills any slot) routes to the
+// settings-gated default. Connector-name / virtual-screen fallback is NOT a
+// priority band — it is a query-side recursive key rewrite, kept here in
+// layoutForScreen() / the shared resolve helper.
 
 #include <PhosphorZones/LayoutRegistry.h>
 

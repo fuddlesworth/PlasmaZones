@@ -795,9 +795,9 @@ private:
     AssignmentEntry resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,
                                                             const QString& activity) const;
 
-    /// True iff an enabled, PINNED (non-catch-all) engine-mode assignment rule
-    /// matches the (screen, desktop, activity) context — i.e. the user authored
-    /// an explicit per-context assignment, even one that sets only the mode with
+    /// True iff an enabled engine-mode assignment rule matches the (screen,
+    /// desktop, activity) context — i.e. the user authored an explicit
+    /// per-context assignment, even one that sets only the mode with
     /// no layout. Such a rule overrides the global suppress setting (the
     /// context is managed, never suppressed). Mirrors the connector /
     /// virtual-screen fallback chain of @ref assignmentIdForScreen so a rule
