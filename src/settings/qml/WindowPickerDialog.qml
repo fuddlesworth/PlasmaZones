@@ -271,13 +271,22 @@ Kirigami.Dialog {
                 readonly property string secondaryText: !valueAvailable ? (dialog.mode === "desktopFiles" ? i18n("(no desktop file)") : dialog.mode === "titles" ? i18n("(no title)") : "") : dialog.mode === "titles" ? (modelData.windowClass || "") : (modelData.caption || "")
 
                 width: ListView.view.width
-                highlighted: ListView.isCurrentItem
+                // Rows commit on click, so hovering is how a row gets
+                // "selected" — highlight on hover too, not just the keyboard
+                // current item, so the active row always reads as the target.
+                highlighted: ListView.isCurrentItem || hovered
                 enabled: valueAvailable
                 opacity: valueAvailable ? 1 : 0.5
                 Accessible.name: primaryText + (secondaryText.length > 0 ? ", " + secondaryText : "")
                 onClicked: {
                     dialog.picked(rawValue);
                     dialog.close();
+                }
+
+                // Use the accent fill from the combo/list convention rather
+                // than the default ItemDelegate selection wash.
+                background: Rectangle {
+                    color: windowDelegate.highlighted ? Kirigami.Theme.highlightColor : "transparent"
                 }
 
                 contentItem: RowLayout {
