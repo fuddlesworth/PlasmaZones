@@ -220,6 +220,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             qCDebug(lcEffect) << "Window move started -" << w->windowClass()
                               << "current modifiers:" << static_cast<int>(m_currentModifiers);
 
+            // Capture the floating state at drag start, before any float
+            // transition (the autotile-bypass fast path below floats tiled
+            // windows). The drag-stop ApplyFloat path uses this to decide
+            // whether to restore the pre-autotile size: a window that was
+            // already floating is just being moved and must keep its current
+            // user-chosen size, not snap back to the stale pre-autotile rect.
+            m_dragStartedFloating = isWindowFloating(windowId);
+
             // Note: `cursor.drag` is intentionally NOT wired here. The
             // OffscreenEffect pipeline operates on window content; firing
             // a shader at drag start through it is indistinguishable from
