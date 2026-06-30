@@ -160,6 +160,11 @@ PhosphorRules::Rule makeBaselineBorderRule()
     };
 
     Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineBorderRuleId(), PhosphorI18n::tr("Default borders"));
+    // Fresh-install default: draw the baseline border only on tiled / snapped
+    // windows, the behaviour before appearance moved onto rules. The Appearance
+    // page's "Apply to" selector rewrites this match; the seeder never re-pins it,
+    // so an existing install keeps whatever scope it already carries.
+    rule.match = ConfigDefaults::tiledAndSnappedScopeMatch();
     rule.actions = {
         action(ActionType::SetBorderVisible, ActionParam::Value, DD::ShowBorder),
     };
@@ -181,6 +186,11 @@ PhosphorRules::Rule makeBaselineTitleBarRule()
     };
 
     Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineTitleBarRuleId(), PhosphorI18n::tr("Default title bars"));
+    // Fresh-install default: hide the title bar only on tiled / snapped windows,
+    // the behaviour before appearance moved onto rules. The Appearance page's
+    // "Apply to" selector rewrites this match; the seeder never re-pins it, so an
+    // existing install keeps whatever scope it already carries.
+    rule.match = ConfigDefaults::tiledAndSnappedScopeMatch();
     rule.actions = {
         action(ActionType::SetHideTitleBar, ActionParam::Value, DD::HideTitleBars),
     };

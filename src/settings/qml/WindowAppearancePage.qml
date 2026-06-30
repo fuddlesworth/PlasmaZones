@@ -71,6 +71,61 @@ SettingsFlickable {
         return root.actionValue(root.actBorderVisible, "value", false) === true;
     }
 
+    // True when the baseline hides title bars (the scope row is only meaningful
+    // while it does).
+    readonly property bool hideTitleBarsOn: {
+        root.reloadTick;
+        return root.actionValue(root.actHideTitleBar, "value", false) === true;
+    }
+
+    // "Apply to" scope options for the border / title-bar baselines, in display
+    // order. `scope` is the token the controller's matchJsonForScope/scopeOfMatch
+    // speak; `label` is the user-facing text.
+    readonly property var scopeOptions: [
+        {
+            "scope": "tiled",
+            "label": i18n("Tiled and snapped windows")
+        },
+        {
+            "scope": "normal",
+            "label": i18n("All normal windows")
+        },
+        {
+            "scope": "all",
+            "label": i18n("All windows")
+        }
+    ]
+
+    // The current scope token of the baseline rule @p ruleId, derived from its
+    // stored match expression.
+    function scopeOf(ruleId) {
+        const rule = ruleController.ruleJson(ruleId);
+        return root.bounds.scopeOfMatch((rule && rule.match) || ({}));
+    }
+
+    // Index of @p scope in scopeOptions, or -1 when it is not a listed preset
+    // (e.g. a "custom" match authored on the Rules page).
+    function scopeIndex(scope) {
+        for (var i = 0; i < root.scopeOptions.length; ++i) {
+            if (root.scopeOptions[i].scope === scope) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    // Rewrite the match of baseline rule @p ruleId to @p scope, preserving every
+    // other field of the rule (actions, managed flag, priority).
+    function writeScope(ruleId, scope) {
+        const rule = ruleController.ruleJson(ruleId);
+        if (!rule || !rule.id) {
+            return;
+        }
+        rule.match = root.bounds.matchJsonForScope(scope);
+        ruleController.updateRuleFromJson(rule);
+        root.reloadTick++;
+    }
+
     contentHeight: content.implicitHeight
     clip: true
 
@@ -402,6 +457,36 @@ SettingsFlickable {
 
                 SettingsRow {
                     visible: root.borderVisible
+                    title: i18n("Apply to")
+                    searchAnchor: "borderScope"
+                    description: i18n("Which windows get a border")
+
+                    WideComboBox {
+                        id: borderScopeCombo
+
+                        readonly property string currentScope: {
+                            root.reloadTick;
+                            return root.scopeOf(root.borderId);
+                        }
+
+                        Accessible.name: i18n("Apply borders to")
+                        textRole: "label"
+                        model: root.scopeOptions
+                        currentIndex: root.scopeIndex(borderScopeCombo.currentScope)
+                        // A "custom" match (authored on the Rules page) is not a
+                        // listed preset, so currentIndex is -1; show it as Custom
+                        // rather than a blank box.
+                        displayText: borderScopeCombo.currentScope === "custom" ? i18n("Custom (set on the Rules page)") : borderScopeCombo.currentText
+                        onActivated: index => root.writeScope(root.borderId, root.scopeOptions[index].scope)
+                    }
+                }
+
+                SettingsSeparator {
+                    visible: root.borderVisible
+                }
+
+                SettingsRow {
+                    visible: root.borderVisible
                     title: i18n("Border width")
                     searchAnchor: "borderWidth"
                     description: i18n("Thickness of the colored border around windows")
@@ -592,6 +677,33 @@ SettingsFlickable {
                                 "value": newValue
                             });
                         }
+                    }
+                }
+
+                SettingsSeparator {
+                    visible: root.hideTitleBarsOn
+                }
+
+                SettingsRow {
+                    visible: root.hideTitleBarsOn
+                    title: i18n("Apply to")
+                    searchAnchor: "hideTitleBarsScope"
+                    description: i18n("Which windows lose their title bar")
+
+                    WideComboBox {
+                        id: titleBarScopeCombo
+
+                        readonly property string currentScope: {
+                            root.reloadTick;
+                            return root.scopeOf(root.titleBarId);
+                        }
+
+                        Accessible.name: i18n("Hide title bars on")
+                        textRole: "label"
+                        model: root.scopeOptions
+                        currentIndex: root.scopeIndex(titleBarScopeCombo.currentScope)
+                        displayText: titleBarScopeCombo.currentScope === "custom" ? i18n("Custom (set on the Rules page)") : titleBarScopeCombo.currentText
+                        onActivated: index => root.writeScope(root.titleBarId, root.scopeOptions[index].scope)
                     }
                 }
             }

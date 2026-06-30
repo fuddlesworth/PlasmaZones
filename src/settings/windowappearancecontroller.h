@@ -7,6 +7,7 @@
 
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorControl/PageController.h>
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
 #include <QUuid>
@@ -130,6 +131,27 @@ public:
     /// QML uses this to author a per-monitor gap rule's `ScreenId Equals` match
     /// in the same canonical form the rule id is keyed by.
     Q_INVOKABLE QString canonicalScreenId(const QString& screenId) const;
+
+    // ── "Apply to" scope selector for the border / title-bar baselines ────────
+    //
+    // The baseline border and title-bar rules carry a window-property match that
+    // scopes which windows their appearance applies to. The Appearance page
+    // exposes this as an "Apply to" picker; these two helpers translate between
+    // the picker's scope token and the rule's `match` JSON so the QML never has
+    // to author the wire shape (and so the WindowType-as-int encoding stays in
+    // C++). Scope tokens: "tiled" (snapped or autotile-managed), "normal" (all
+    // ordinary application windows), "all" (every window — the catch-all).
+
+    /// The `match` JSON for @p scope, ready to drop onto a rule. An unrecognized
+    /// token returns the catch-all (the "all" scope), so a bad value never
+    /// narrows the baseline unexpectedly.
+    Q_INVOKABLE QJsonObject matchJsonForScope(const QString& scope) const;
+
+    /// Classify a rule's @p match JSON back to its scope token: "tiled",
+    /// "normal", "all" (catch-all or unparseable), or "custom" (a recognized but
+    /// non-preset expression, e.g. one hand-authored on the Rules page).
+    Q_INVOKABLE QString scopeOfMatch(const QJsonObject& match) const;
+
     int innerGapMin() const
     {
         return ConfigDefaults::innerGapMin();

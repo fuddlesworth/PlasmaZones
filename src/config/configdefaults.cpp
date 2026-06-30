@@ -5,6 +5,9 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorProtocol/WindowTypeEnum.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
 
 #include <QDir>
 #include <QFile>
@@ -27,6 +30,34 @@ static QString configDir()
 QString ConfigDefaults::configFilePath()
 {
     return configDir() + QStringLiteral("/plasmazones/config.json");
+}
+
+PhosphorRules::MatchExpression ConfigDefaults::tiledAndSnappedScopeMatch()
+{
+    using namespace PhosphorRules;
+    // Either snapped into a zone OR managed by the autotile engine. IsSnapped and
+    // IsTiled are distinct window-property fields, so an OR over both covers a
+    // window placed by either subsystem.
+    return MatchExpression::makeAny({
+        MatchExpression::makeLeaf(Field::IsSnapped, Operator::Equals, QVariant(true)),
+        MatchExpression::makeLeaf(Field::IsTiled, Operator::Equals, QVariant(true)),
+    });
+}
+
+PhosphorRules::MatchExpression ConfigDefaults::normalWindowsScopeMatch()
+{
+    using namespace PhosphorRules;
+    // WindowType is matched by its underlying int (the rule engine compares
+    // WindowType leaves numerically), so the leaf carries the enum value, not the
+    // wire token. IsTransient folds the whole dialog / utility / popup / menu /
+    // tooltip / splash family plus transient-child surfaces into one flag, so
+    // pairing it with WindowType == Normal excludes both the non-Normal types and
+    // the Electron-style children that report Normal but have a transient parent.
+    return MatchExpression::makeAll({
+        MatchExpression::makeLeaf(Field::WindowType, Operator::Equals,
+                                  QVariant(static_cast<int>(PhosphorProtocol::WindowType::Normal))),
+        MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, QVariant(false)),
+    });
 }
 
 QString ConfigDefaults::sessionFilePath()

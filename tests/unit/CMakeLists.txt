@@ -702,6 +702,14 @@ target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::C
     PhosphorControl::PhosphorControl)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
+add_executable(test_window_appearance_controller
+    settings/test_window_appearance_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/windowappearancecontroller.cpp
+)
+target_link_libraries(test_window_appearance_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
+add_test(NAME test_window_appearance_controller COMMAND test_window_appearance_controller)
+
 # Animations-controller sources shared by the three test executables below
 # (page controller / motion sets / shader overrides). One list so a new
 # controller source file can't silently miss one of the three.
