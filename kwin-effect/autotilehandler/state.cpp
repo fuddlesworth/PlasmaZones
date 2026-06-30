@@ -312,6 +312,16 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
     // A floating window is no longer tile-managed on any screen — clear tiled
     // tracking (title-bar restores flow through the rule path).
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+    // Re-resolve the appearance rules now that IsTiled / IsFloating have flipped,
+    // co-located with the state write so the flush reads the fresh tiled state
+    // (the snap path does the same in slotWindowStateChanged). Without this a
+    // baseline border / title-bar rule scoped to tiled windows keeps drawing /
+    // hiding on the now-floating window: the autotile float signal is on a
+    // separate D-Bus interface from the WindowTracking one that would otherwise
+    // enqueue the flush, and the synchronous drag-to-float path's signal "may
+    // never arrive". invalidateRuleCacheForStateChange coalesces, so the
+    // redundant call from the WindowTracking backstop is harmless.
+    m_effect->invalidateRuleCacheForStateChange(windowId);
     // Drop centering/target tracking too — a floated window isn't being
     // tiled anymore so a stale entry here would trigger centering on the
     // next frameGeometryChanged, snapping the floated window back into an
