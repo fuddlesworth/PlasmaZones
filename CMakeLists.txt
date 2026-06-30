@@ -362,6 +362,9 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-ipc)     # JSON-over-Unix-socket IpcRouter + IpcTarget QML type
     add_subdirectory(cli/phosphorctl)       # phosphorctl call / list / schema / subscribe
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types
+    add_subdirectory(libs/phosphor-shell-widgets)  # Phosphor.Widgets M3 atom library (Phase 3.1); depends on phosphor-theme
+    add_subdirectory(libs/phosphor-shell-osd)      # Phosphor.OSD on-screen-display framework (Phase 3.3); depends on theme + widgets
+    add_subdirectory(libs/phosphor-shell-notifications) # Phosphor.Notifications toast framework (Phase 3.4); depends on theme + widgets
 endif()
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
@@ -663,12 +666,24 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
 #   phosphor-registry-demo — in-process IBarWidgetFactory registration
 #                            (registry + theme).
 #   phosphor-ipc-demo    — three IpcTargets driven via phosphorctl.
+#   phosphor-widgets-kitchen-sink — every Phosphor.Widgets atom in its
+#                            enabled/disabled states (widgets + theme).
+#   phosphor-bar-canvas-demo — connected-corner bar; a popout grows out of
+#                            the bar as one Shape, toggled via PopoutService.
+#   phosphor-osd-demo — OSDHost overlay; the four built-in OSDs via
+#                            Registry<IOSDFactory>, driven by phosphorctl.
+#   phosphor-toast-demo — ToastHost overlay fed by a real NotificationServer
+#                            (notify-send) + buttons; DND exercises the rules seam.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-theme-demo)
     add_subdirectory(examples/phosphor-theme-cli)
     add_subdirectory(examples/phosphor-popout-demo)
     add_subdirectory(examples/phosphor-registry-demo)
     add_subdirectory(examples/phosphor-ipc-demo)
+    add_subdirectory(examples/phosphor-widgets-kitchen-sink)
+    add_subdirectory(examples/phosphor-bar-canvas-demo)
+    add_subdirectory(examples/phosphor-osd-demo)
+    add_subdirectory(examples/phosphor-toast-demo)
 endif()
 
 # phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell
