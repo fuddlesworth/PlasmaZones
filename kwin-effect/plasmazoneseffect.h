@@ -1010,6 +1010,15 @@ private:
     // the geometry restore for a drag-floated window.
     QSet<QString> m_dragFloatedWindowIds;
 
+    // Whether the window being dragged was ALREADY floating when the drag
+    // began. Captured once in the DragTracker::dragStarted handler before any
+    // float transition runs. The drag-stop ApplyFloat path consults it: a
+    // window that was already floating is just being moved, so its current
+    // (user-chosen) size must be preserved — re-applying the stale
+    // pre-autotile size would clobber any resize the user made while floating.
+    // Only the tiled→float transition wants the pre-autotile size restore.
+    bool m_dragStartedFloating = false;
+
     // Per-rule-cache invalidations accumulated within one event-loop turn,
     // flushed once by flushPendingRuleInvalidations(). Coalesces the double
     // invalidation a float toggle triggers (windowFloatingChanged + windowStateChanged).

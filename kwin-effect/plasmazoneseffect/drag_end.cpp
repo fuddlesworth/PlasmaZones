@@ -149,7 +149,17 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     if (dropScreenId.isEmpty()) {
                         break;
                     }
-                    m_autotileHandler->handleDragToFloat(safeWindow, windowId);
+                    // Only run the float transition (which restores the
+                    // pre-autotile size) when the window was TILED at drag
+                    // start. A window that was already floating is merely being
+                    // moved — handleDragToFloat would re-apply the stale
+                    // pre-autotile rect and clobber any resize the user made
+                    // while it was floating. The float-screen reassignment
+                    // (setWindowFloatingForScreen) below still runs so a
+                    // cross-screen move updates the daemon's float tracking.
+                    if (!m_dragStartedFloating) {
+                        m_autotileHandler->handleDragToFloat(safeWindow, windowId);
+                    }
                     // Window is now floating — drop it from snapping's set.
                     m_snapHandler->clearWindowSnapped(windowId);
                     // Now floating — flips the Mode / IsSnapped / IsFloating rule
