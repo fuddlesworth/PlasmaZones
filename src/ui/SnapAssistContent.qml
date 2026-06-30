@@ -16,7 +16,7 @@ import org.phosphor.animation
  * (`KeyboardInteractivity::None`); Escape is routed via the daemon's
  * KGlobalAccel `cancel_overlay_during_drag` shortcut, which calls
  * `WindowDragAdaptor::cancelSnap()` — that already dismisses snap-assist
- * when visible (windowdragadaptor.cpp:265), so no per-content kbd grab
+ * when visible, so no per-content kbd grab
  * is needed.
  *
  * Carries `property bool shaderAnchor: true` so the SurfaceAnimator's

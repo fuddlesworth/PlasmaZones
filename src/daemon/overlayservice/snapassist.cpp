@@ -249,8 +249,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // ensureCancelOverlayShortcutRegistered() - the shell's wl_surface is
     // kbd-None so the per-content QML Shortcut path used by the legacy
     // SnapAssistOverlay can't fire here. KGlobalAccel grab of Escape +
-    // cancelSnap()'s existing isSnapAssistVisible() branch (see
-    // windowdragadaptor.cpp:265) routes Escape to hideSnapAssist().
+    // cancelSnap()'s existing isSnapAssistVisible() branch routes Escape to
+    // hideSnapAssist().
     Q_EMIT snapAssistShown(screenId, emptyZones, candidates);
 }
 
@@ -424,7 +424,7 @@ void OverlayService::hideSnapAssist()
     // settle): in both cases "dismissed" arrives first.
     //
     // snapAssistDismissed → WindowDragAdaptor::onSnapAssistDismissed →
-    // unregisterCancelOverlayShortcut() (windowdragadaptor.cpp:82).
+    // unregisterCancelOverlayShortcut().
     Q_EMIT snapAssistDismissed();
 
     auto stateIt = m_screenStates.find(screenId);
