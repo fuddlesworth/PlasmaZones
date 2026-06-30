@@ -4,10 +4,11 @@
 .pragma library
 
 /**
- * Neutral grouping / sorting primitives shared by every listing page (Layouts,
- * Tiling algorithms, Rules). Functions take plain data and caller-supplied,
- * i18n-resolved labels — they never touch any QML context, so the same code
- * backs both the layout grid and the rule list.
+ * Neutral grouping / sorting primitives for the settings listing pages.
+ * Functions take plain data and caller-supplied, i18n-resolved labels and never
+ * touch any QML context, so they're page-agnostic. The Layouts page (snapping
+ * layouts + tiling algorithms) is the current consumer; the primitives are kept
+ * here as a small reusable library for any future grouped/sorted listing.
  *
  * Group shape: an object keyed by group id, each value `{ items, order, label }`.
  * `order` drives inter-group ordering; `label` is the (already localized) header.
@@ -36,9 +37,12 @@ function groupByBoolKey(items, testFn, trueKey, trueLabel, falseKey, falseLabel)
     return groups;
 }
 
-// General N-bucket grouping. `keyFn(item)` returns `{ key, order, label }`
-// describing the bucket the item belongs to. Items mapping to the same `key`
-// share a bucket; the first occurrence's `order`/`label` win.
+// General N-bucket grouping — the multi-bucket generalization of
+// groupByBoolKey, provided by the library for reuse (no page consumes it today;
+// the Layouts page only needs the two-bucket split). `keyFn(item)` returns
+// `{ key, order, label }` describing the bucket the item belongs to. Items
+// mapping to the same `key` share a bucket; the first occurrence's
+// `order`/`label` win.
 function groupByKeyed(items, keyFn) {
     var groups = {};
     for (var i = 0; i < items.length; i++) {
@@ -82,9 +86,10 @@ function applySort(groups, comparator, ascending) {
 
 // Flatten the group map into an ordered, non-empty `[{ label, items }]` array.
 // When only one non-empty group remains its header is dropped — UNLESS
-// `keepSingleLabel` is true (the Rules page always wants its section header,
-// even when a single section is populated). The grid pages leave it false so a
-// lone group renders header-less.
+// `keepSingleLabel` is true. The Layouts page passes true for its "None"
+// grouping (so the lone "All layouts" card keeps its header) and false
+// otherwise (so a real grouping that happens to collapse to one group renders
+// header-less).
 function finalizeGroups(groups, keepSingleLabel) {
     var sorted = Object.values(groups).sort(function(a, b) {
         return a.order - b.order;

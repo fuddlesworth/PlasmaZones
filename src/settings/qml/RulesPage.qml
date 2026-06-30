@@ -234,12 +234,11 @@ SettingsFlickable {
 
         // moveRule fires through beginMoveRows / endMoveRows, which emits
         // rowsMoved (and never countChanged / dataChanged on a summary role).
-        // Without this handler the section buckets stay frozen on the
+        // Without this handler the flat priority list stays frozen on the
         // pre-move ordering: the dragged row's `y` re-binds to its OLD
         // cumulative position and the user sees a snap-back even though the
-        // C++ model has accepted the move. The Animation section's drag
-        // container is the only place this surfaces today, but the bump is
-        // model-wide so future reorderable sections inherit the fix.
+        // C++ model has accepted the move. The single drag container hosts
+        // every rule, so this covers all reorders.
         function onRowsMoved() {
             page.modelRevision++;
         }

@@ -21,8 +21,9 @@ namespace PlasmaZones {
  * @brief A single flat list model over the unified Rule set.
  *
  * This is the *only* model behind the Rules page. There are no
- * per-section proxy models — `RulesPage.qml` derives section buckets,
- * search filtering, and chip filtering in QML over this one model.
+ * per-section proxy models — `RulesPage.qml` derives its flat,
+ * priority-ordered view, search filtering, and the section / source / status
+ * filters in QML over this one model.
  *
  * The model is staging: it holds an in-memory `QList<Rule>` that the
  * `RuleController` populates from the daemon's `org.plasmazones.Rules`
@@ -31,8 +32,8 @@ namespace PlasmaZones {
  *
  * ## SectionRole — derived in C++
  *
- * Every rule is bucketed into exactly one section, computed from its match
- * expression + actions:
+ * Every rule is classified into exactly one section, computed from its match
+ * expression + actions (the section drives the per-row badge and the filter):
  *   - `monitor`     — context-only rule (ScreenId / VirtualDesktop / Activity)
  *                     whose actions are layout / engine / disable. The
  *                     "Monitor & Layout" group.
@@ -149,14 +150,15 @@ public:
         NotFound, ///< no rule with that id, or @p rule is invalid
         Unchanged, ///< the rule was already identical — nothing applied
         Applied, ///< the rule was replaced and a change signal emitted
-        AppliedSectionChanged, ///< replaced AND the edit moved it to a different section/band
+        AppliedSectionChanged, ///< replaced AND the edit moved it to a different section
     };
 
     /// Replace the rule with the same id. Returns `NotFound` for an unknown id
     /// or an invalid rule, `Unchanged` for an identical rule (no signal),
     /// `Applied` when the rule was replaced in place, and
     /// `AppliedSectionChanged` when the replacement also moved the rule into a
-    /// different section (its priority band must be re-stamped by the caller).
+    /// different section (its global list-order priority must be re-stamped by
+    /// the caller).
     UpdateResult updateRule(const PhosphorRules::Rule& rule);
 
     /// Remove the rule with @p id. Returns false if no such rule.
@@ -266,7 +268,8 @@ Q_SIGNALS:
     void countChanged();
     /// Emitted when an `updateRule()` moved a rule into a different section
     /// (its `sectionFor()` changed). A plain `dataChanged` does not prompt the
-    /// QML section view to re-bucket the rule, so the page listens for this.
+    /// QML view to re-derive the rule's section (its badge / filter
+    /// classification), so the page listens for this.
     void ruleSectionChanged();
 
 private:

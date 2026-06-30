@@ -221,7 +221,8 @@ Item {
 
             // Register a per-rule deep-link anchor ("rule:<id>") with the host
             // page's reveal registry so a window-rule search result scrolls to
-            // and pulses this exact row (expanding its section card if collapsed).
+            // and pulses this exact row (expanding the rule list's card if
+            // collapsed).
             Component.onCompleted: {
                 root.setDelegateHeight(modelData.ruleId, actualHeight);
                 Qt.callLater(function () {

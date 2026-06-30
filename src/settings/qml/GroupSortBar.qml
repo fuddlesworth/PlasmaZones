@@ -9,14 +9,15 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Reusable "Group by / Sort by / direction" toolbar row.
  *
- * The shared group/sort affordance behind every listing page (Layouts, Tiling
- * algorithms, Rules). Driven entirely by injected data:
+ * A reusable group/sort affordance for the settings listing pages; the Layouts
+ * page (snapping layouts + tiling algorithms) is the current consumer. Driven
+ * entirely by injected data:
  *
  *   - `groupModel` / `sortModel`: arrays of already-localized option labels.
  *   - `groupByIndex` / `sortByIndex` / `sortAscending`: the live selection,
  *     read AND written here. The host owns persistence — this component holds
- *     no Settings of its own — so each page can persist however it likes
- *     (per-view-mode for Layouts, a single category for Rules).
+ *     no Settings of its own — so each page persists however it likes (the
+ *     Layouts page persists per view mode).
  *   - `sortItemAvailable`: optional per-sort-option enablement. A `false` entry
  *     greys that option, suppresses its hover highlight, shows
  *     `disabledSortTooltip`, and makes selecting it a no-op (the Layouts page

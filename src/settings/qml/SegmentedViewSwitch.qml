@@ -17,8 +17,8 @@ import org.phosphor.animation
  * button group, so pages read consistently with the monitor pickers elsewhere
  * in the app. Radio semantics: exactly one mode is active and clicking the
  * active tile is a no-op. The labels are injected via `modes`, so the same
- * switch backs the Layouts page (Snapping / Tiling) and the Rules page
- * (Edit / View).
+ * switch is reusable across pages — the Layouts page uses it for its
+ * Snapping / Tiling mode switch.
  */
 Item {
     id: root

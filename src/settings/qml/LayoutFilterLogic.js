@@ -7,9 +7,8 @@
 /**
  * Layout/algorithm-specific filtering, grouping, and sorting helpers for the
  * layout grid. The neutral, page-agnostic primitives (groupByBoolKey,
- * groupByKeyed, ungrouped, applySort, finalizeGroups) live in GroupSortLogic.js
- * and are shared with the Rules page; this file holds only what is specific to
- * layouts and tiling algorithms.
+ * groupByKeyed, ungrouped, applySort, finalizeGroups) live in GroupSortLogic.js;
+ * this file holds only what is specific to layouts and tiling algorithms.
  *
  * Functions receive data and filter config without accessing any QML context.
  * i18n-dependent labels are passed in by the caller.
