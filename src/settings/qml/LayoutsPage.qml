@@ -33,8 +33,8 @@ SettingsFlickable {
     property int viewMode: 0
     // Selected layout id (tracked across group cards).
     property string selectedLayoutId: ""
-    // Grouped, filtered, sorted layouts — `[{ label, layouts: [...] }]` from
-    // LayoutFilterLogic.finalizeGroups. Rebuilt by rebuildModel().
+    // Grouped, filtered, sorted layouts — `[{ label, items: [...] }]` from
+    // GroupSortLogic.finalizeGroups (Core). Rebuilt by rebuildModel().
     property var groupsModel: []
 
     // Capability group definitions for tiling view — hoisted to avoid

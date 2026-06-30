@@ -182,9 +182,10 @@ SettingsFlickable {
             out.push(entry);
         }
         // Highest priority first. Qt's V4 sort is stable, so equal priorities keep
-        // snapshot (model) order — which the global renormalize keeps in sync with
-        // priority order, so display order == model row order (the invariant the
-        // drag commit relies on).
+        // snapshot (model) order — the only ties are the managed System rules,
+        // which all share INT_MIN and sort to the bottom. The global renormalize
+        // keeps model row order in sync with priority order, so display order ==
+        // model row order (the invariant the drag commit relies on).
         out.sort(function (a, b) {
             return (b.priority || 0) - (a.priority || 0);
         });
@@ -541,7 +542,6 @@ SettingsFlickable {
                     Layout.fillWidth: true
                     rules: page.filteredRules
                     reorderingEnabled: true
-                    ascending: false
                     showSectionBadge: true
                     controller: page.controller
                     matchFieldOptions: page.matchFieldOptions

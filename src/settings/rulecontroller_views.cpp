@@ -52,11 +52,6 @@ QVariantList RuleController::sections() const
         QVariantMap entry;
         entry[QStringLiteral("value")] = static_cast<int>(s);
         entry[QStringLiteral("label")] = RuleModel::sectionLabel(s);
-        // Priority-band base (higher ⇒ higher precedence) so the page can order
-        // section cards by evaluation precedence. The `value`/`kOrder` index
-        // still breaks ties between sections that share a band (Monitor and
-        // Activity both sit in the Context band).
-        entry[QStringLiteral("band")] = RuleController::bandBaseForSection(s);
         out.append(entry);
     }
     return out;

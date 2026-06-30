@@ -208,9 +208,11 @@ public:
     Q_INVOKABLE QString addRuleFromJson(const QVariantMap& ruleJson);
 
     /// Replace the rule with the matching id from its JSON map. Returns false
-    /// on a malformed map or an unknown id. An in-place edit never reorders the
-    /// list, so priorities are NOT renormalized — an explicit `priority` edit
-    /// in the Advanced editor is honoured verbatim.
+    /// on a malformed map or an unknown id. An in-place edit leaves the rule's
+    /// row position unchanged, so a same-section edit does NOT renormalize and an
+    /// explicit `priority` edit in the Advanced editor is honoured verbatim. An
+    /// edit that reclassifies the rule's section re-syncs the global list-order
+    /// priorities (see the AppliedSectionChanged path).
     Q_INVOKABLE bool updateRuleFromJson(const QVariantMap& ruleJson);
 
     /// Remove the rule with @p ruleId (a UUID string). Returns false if absent.
@@ -248,10 +250,11 @@ public:
     Q_INVOKABLE QVariantList sections() const;
 
     /// A snapshot of every rule as a map keyed by the model's role names
-    /// (`ruleId`, `name`, `enabled`, `priority`, `section`, `matchSummary`,
-    /// `actionSummary`, `conditionCount`, `actionCount`, `isComposite`,
-    /// `screenIds`, `validationIssueCount`, `managed`). Lets the page bucket / filter
-    /// rules without ever referencing raw `Qt.UserRole + N` integers.
+    /// (`ruleId`, `name`, `enabled`, `priority`, `section`, `sectionLabel`,
+    /// `matchSummary`, `actionSummary`, `conditionCount`, `actionCount`,
+    /// `isComposite`, `screenIds`, `validationIssueCount`, `managed`). Lets the
+    /// page filter / sort rules without ever referencing raw `Qt.UserRole + N`
+    /// integers.
     Q_INVOKABLE QVariantList rulesSnapshot() const;
 
     // ── Monitor overview strip ────────────────────────────────────────────
@@ -409,25 +412,26 @@ private:
     /// covers transport errors via the applyResult signal.
     bool pushToDaemonAsync(const QList<PhosphorRules::Rule>& rules);
 
-    /// Renormalize every rule's priority so descending list order ⇒
-    /// descending priority. Keeps the migrated-context bands roughly intact
-    /// by scaling rather than flattening: animation/application rules are
-    /// list-ordered, context rules keep their derived bands.
+    /// Re-stamp every rule's priority as one global descending list-order
+    /// sequence (earlier row ⇒ higher priority, spaced by a fixed step). There
+    /// are no priority bands: a rule's precedence is purely its position in the
+    /// one flat list. Managed rules keep their pinned INT_MIN priority and are
+    /// skipped, so they never consume a rank and always sort below user rules.
     void renormalizePriorities();
 
-    /// Priority-band base for a section — used now only to (a) order section
-    /// cards by precedence in `sections()` and (b) seed a sensible DEFAULT
-    /// position for a newly added rule (see `bandSeededInsertIndex`). Priority
-    /// itself is a single global list-order sequence (`renormalizePriorities`),
-    /// no longer banded — a rule's precedence is its position in the one flat
-    /// list. Managed System rules are pinned at INT_MIN, so System reports the
-    /// lowest base.
+    /// Priority-band base for a section — used now ONLY to seed a sensible
+    /// DEFAULT position for a newly added rule (see `bandSeededInsertIndex`), so
+    /// a new Advanced rule starts high and a new Animation rule starts low.
+    /// Priority itself is a single global list-order sequence
+    /// (`renormalizePriorities`), no longer banded. Managed System rules are
+    /// pinned at INT_MIN, so System reports the lowest base.
     static int bandBaseForSection(RuleModel::Section section);
 
     /// Row index at which a freshly added rule should be inserted so its default
     /// precedence reflects its section's band — above the first existing rule of
-    /// a lower band (or the first managed rule), i.e. the top of its band tier.
-    /// The user can then freely drag it anywhere; this only seeds the default.
+    /// a lower band (or the first managed rule). Existing same-band rules are
+    /// stepped over, so the new rule lands at the bottom of its own tier. The
+    /// user can then freely drag it anywhere; this only seeds the default.
     int bandSeededInsertIndex(const PhosphorRules::Rule& rule) const;
 
     RuleModel m_model;

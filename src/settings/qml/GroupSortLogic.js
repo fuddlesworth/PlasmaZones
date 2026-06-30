@@ -78,7 +78,7 @@ function applySort(groups, comparator, ascending) {
     return groups;
 }
 
-// ── Finalization ──────────────────────────────────────────────────────────--
+// ── Finalization ─────────────────────────────────────────────────────────────
 
 // Flatten the group map into an ordered, non-empty `[{ label, items }]` array.
 // When only one non-empty group remains its header is dropped — UNLESS

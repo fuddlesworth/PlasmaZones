@@ -481,9 +481,11 @@ int RuleController::bandSeededInsertIndex(const Rule& rule) const
     // Seed the new rule's DEFAULT position by band so defaults stay sensible (a
     // new Advanced rule starts high, a new Animation rule starts low) even
     // though priority is now one free-form global sequence. Insert above the
-    // first existing rule of a strictly lower band, or above the managed block —
-    // i.e. at the top of the new rule's band tier. The user can drag it anywhere
-    // afterwards.
+    // first existing rule of a strictly lower band, or above the managed block.
+    // Existing same-band rules are stepped over, so the new rule lands at the
+    // bottom of its own tier (just above the next lower band), keeping
+    // earlier-added rules ahead of it within the tier. The user can drag it
+    // anywhere afterwards.
     const int band = bandBaseForSection(RuleModel::sectionFor(rule));
     const QList<Rule>& rules = m_model.rules();
     for (int i = 0; i < rules.size(); ++i) {
@@ -574,12 +576,14 @@ bool RuleController::updateRuleFromJson(const QVariantMap& ruleJson)
         setDirty(true);
         return true;
     case RuleModel::UpdateResult::AppliedSectionChanged:
-        // The edit moved the rule into a different section, so its stored
-        // priority is now in the wrong band (e.g. adding an animation action
-        // reclassifies a Monitor rule to Animation). Re-stamp band priorities so
-        // evaluation order matches the rule's new section. This runs only on a
-        // section change, so a same-section Advanced edit still keeps its
-        // explicitly chosen priority verbatim.
+        // The edit reclassified the rule's section (e.g. adding an animation
+        // action moves a Monitor rule to Animation). Section no longer feeds
+        // priority (only list position does) and the in-place edit leaves the
+        // row where it was, so this re-stamp is normally a no-op. It is kept to
+        // re-sync PriorityRole with model row order in case an earlier explicit
+        // priority edit (the Applied path, which does not renormalize) had
+        // diverged the two. A same-section edit keeps any explicit priority
+        // verbatim.
         renormalizePriorities();
         setDirty(true);
         return true;

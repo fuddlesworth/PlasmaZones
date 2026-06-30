@@ -18,7 +18,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **The Rules page is one flat priority list**: rules show in a single, drag-reorderable list ordered by precedence, with the highest-priority rule on top, instead of per-section groups. Drag any rule up or down to set which one wins. The filter button narrows the list by source (system or user-created), category, and status, and search and the monitor strip narrow it further ([#720](https://github.com/fuddlesworth/PlasmaZones/pull/720)).
+- **The Rules page is one flat priority list**: rules show in a single, drag-reorderable list ordered by precedence, with the highest-priority rule on top, instead of per-section groups. Drag any rule up or down to set which one wins. The filter button narrows the list by source (system or user-created), category, and status. Search and the monitor strip narrow it further ([#720](https://github.com/fuddlesworth/PlasmaZones/pull/720)).
 - **"Window Rules" is now "Rules"**: the page and the config file (`windowrules.json` becomes `rules.json`) are renamed, because rules now cover gaps, layout, and animation as well as windows. Existing rules carry over automatically ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Window Appearance and Animations are grouped under an Appearance category** in the settings sidebar ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Gaps use one shared model**: snapping zone padding and tiling inner gap are now the same setting. Use Mode or per-monitor rules where they should differ ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
