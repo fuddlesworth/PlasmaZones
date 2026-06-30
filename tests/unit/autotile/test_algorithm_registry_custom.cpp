@@ -111,9 +111,16 @@ private Q_SLOTS:
         // Clean up any test algorithms that might still be registered
         auto* registry = m_scriptSetup.registry();
         const QStringList testIds = {
-            QStringLiteral("test-replace"),  QStringLiteral("test-signal"),     QStringLiteral("test-double-1"),
-            QStringLiteral("test-double-2"), QStringLiteral("test-unregister"), QStringLiteral("test-order-remove"),
-            QStringLiteral("test-null"),     QStringLiteral("test-clearid"),    QStringLiteral("test-replace-clearid"),
+            QStringLiteral("test-replace"),
+            QStringLiteral("test-signal"),
+            QStringLiteral("test-double-1"),
+            QStringLiteral("test-double-2"),
+            QStringLiteral("test-unregister"),
+            QStringLiteral("test-order-remove"),
+            QStringLiteral("test-null"),
+            QStringLiteral("test-clearid"),
+            QStringLiteral("test-replace-clearid"),
+            QStringLiteral("test-customparam"),
         };
         for (const auto& id : testIds) {
             if (registry->hasAlgorithm(id)) {

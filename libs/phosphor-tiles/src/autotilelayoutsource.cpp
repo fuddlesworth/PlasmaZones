@@ -117,6 +117,11 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     if (registry) {
         const auto& params = registry->previewParams();
         const bool isActive = !params.algorithmId.isEmpty() && registry->algorithm(params.algorithmId) == algorithm;
+        // The per-algorithm saved entry feeds both the inactive-algorithm
+        // master/split fallback and the custom-param resolution below, so look
+        // it up once here.
+        const auto savedIt = params.savedAlgorithmSettings.constFind(algorithmId);
+        const bool hasSaved = savedIt != params.savedAlgorithmSettings.constEnd();
         if (isActive) {
             if (params.masterCount > 0) {
                 masterCount = params.masterCount;
@@ -127,18 +132,15 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
             if (effectiveCount <= 0 && params.maxWindows > 0) {
                 effectiveCount = params.maxWindows;
             }
-        } else {
-            auto it = params.savedAlgorithmSettings.constFind(algorithmId);
-            if (it != params.savedAlgorithmSettings.constEnd()) {
-                const QVariantMap& saved = it.value();
-                const int savedMaster = saved.value(PhosphorTiles::AutotileJsonKeys::MasterCount, -1).toInt();
-                const qreal savedRatio = saved.value(PhosphorTiles::AutotileJsonKeys::SplitRatio, -1.0).toDouble();
-                if (savedMaster > 0) {
-                    masterCount = savedMaster;
-                }
-                if (savedRatio > 0.0) {
-                    splitRatio = savedRatio;
-                }
+        } else if (hasSaved) {
+            const QVariantMap& saved = savedIt.value();
+            const int savedMaster = saved.value(PhosphorTiles::AutotileJsonKeys::MasterCount, -1).toInt();
+            const qreal savedRatio = saved.value(PhosphorTiles::AutotileJsonKeys::SplitRatio, -1.0).toDouble();
+            if (savedMaster > 0) {
+                masterCount = savedMaster;
+            }
+            if (savedRatio > 0.0) {
+                splitRatio = savedRatio;
             }
         }
         // Custom params live in the per-algorithm saved entry regardless of
@@ -146,8 +148,7 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
         // active/saved split above. Filter to the algorithm's currently
         // declared params (mirrors AutotileEngine::recalculateLayout) so a stale
         // value from an edited script can't reach calculateZones.
-        const auto savedIt = params.savedAlgorithmSettings.constFind(algorithmId);
-        if (savedIt != params.savedAlgorithmSettings.constEnd() && algorithm->supportsCustomParams()) {
+        if (hasSaved && algorithm->supportsCustomParams()) {
             const QVariantMap declared = savedIt.value().value(PhosphorTiles::AutotileJsonKeys::CustomParams).toMap();
             for (auto pit = declared.constBegin(); pit != declared.constEnd(); ++pit) {
                 if (algorithm->hasCustomParam(pit.key())) {
