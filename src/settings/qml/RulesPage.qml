@@ -97,6 +97,13 @@ SettingsFlickable {
         readonly property string defaultLayoutId: appSettings.defaultLayoutId
         readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
         readonly property bool autoAssignAllLayouts: appSettings.autoAssignAllLayouts === true
+        // System highlight / inactive colours (alpha included), proxied from the
+        // real Settings object so ActionRow's border-colour swatch can preview the
+        // "accent" sentinel as the colour the border actually draws — highlight for
+        // the focused (active) slot, inactive for the unfocused one. Without these
+        // the composite would return undefined and the swatch would paint black.
+        readonly property color highlightColor: appSettings.highlightColor
+        readonly property color inactiveColor: appSettings.inactiveColor
     }
     // ── Filter state ──
 

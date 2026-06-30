@@ -223,7 +223,7 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorRules::ResolvedActions& 
 }
 
 std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRules::ResolvedActions& resolved,
-                                                                const QColor& accentColor)
+                                                                const QColor& accentColor, const QColor& inactiveColor)
 {
     // Each reader re-validates the param type even though the load-time
     // descriptor validators already did — defence in depth against a
@@ -263,9 +263,12 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
     };
     // The focused and unfocused colours live on two separate single-colour slots
     // (SetBorderColorActive / SetBorderColorInactive), each carrying its colour in
-    // the `value` param. The accent sentinel resolves to the live accent; anything
-    // else parses as a hex colour.
-    const auto borderColorSlot = [&resolved, &accentColor](QLatin1StringView slot) -> std::optional<QColor> {
+    // the `value` param. The accent sentinel resolves to the matching system
+    // colour passed in @p systemColor (the accent/highlight for the active slot,
+    // the inactive colour for the inactive slot); anything else parses as a hex
+    // colour.
+    const auto borderColorSlot = [&resolved](QLatin1StringView slot,
+                                             const QColor& systemColor) -> std::optional<QColor> {
         const auto action = resolved.slot(QString(slot));
         if (!action) {
             return std::nullopt;
@@ -276,7 +279,7 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
         }
         const QString s = v.toString();
         if (s == PhosphorRules::BorderColorToken::Accent) {
-            return accentColor.isValid() ? std::optional<QColor>(accentColor) : std::nullopt;
+            return systemColor.isValid() ? std::optional<QColor>(systemColor) : std::nullopt;
         }
         const QColor color(s);
         if (!color.isValid()) {
@@ -290,8 +293,8 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
     out.showBorder = boolSlot(PhosphorRules::ActionSlot::BorderVisible);
     out.borderWidth = intSlot(PhosphorRules::ActionSlot::BorderWidth, kMaxBorderWidth);
     out.borderRadius = intSlot(PhosphorRules::ActionSlot::BorderRadius, kMaxBorderRadius);
-    out.activeColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorActive);
-    out.inactiveColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorInactive);
+    out.activeColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorActive, accentColor);
+    out.inactiveColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorInactive, inactiveColor);
     // An omitted `inactive` mirrors the active colour, matching the retired
     // global behaviour where a window with no distinct inactive colour kept its
     // active border when unfocused.

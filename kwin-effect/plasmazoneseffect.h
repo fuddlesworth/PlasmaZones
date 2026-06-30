@@ -647,11 +647,15 @@ private:
 
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 
-    // Live system accent colour that a `BorderColorToken::Accent` sentinel in a
-    // border-colour rule resolves to. Pushed from the daemon, which tracks the
-    // Plasma colour scheme; invalid until the first push (sentinel then yields
-    // no colour). See resolveWindowAppearance.
+    // Live system colours that a `BorderColorToken::Accent` sentinel in a
+    // border-colour rule resolves to. The sentinel tracks the system colour
+    // scheme per focus state: the focused (active) slot adopts the accent /
+    // highlight colour, the unfocused (inactive) slot adopts the inactive
+    // colour. Both are pushed from the daemon, which tracks the Plasma colour
+    // scheme; invalid until the first push (sentinel then yields no colour).
+    // See resolveWindowAppearance.
     QColor m_borderAccentColor;
+    QColor m_borderInactiveColor;
 
     // The window most recently passed to slotWindowActivated — i.e. the
     // "previously active" window on the next focus change. Used to repaint the

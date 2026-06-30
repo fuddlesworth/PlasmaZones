@@ -520,14 +520,16 @@ SettingsFlickable {
                     ColorSwatchRow {
                         color: {
                             root.reloadTick;
-                            // Map the accent sentinel to the live accent colour,
-                            // mirroring the inactive swatch — a stored "accent"
-                            // value would otherwise coerce to black.
+                            // Map the accent sentinel to the live system highlight
+                            // colour (alpha included) — the colour the focused border
+                            // actually draws. A stored "accent" value would otherwise
+                            // coerce to black.
                             const raw = root.actionValue(root.actBorderColorActive, "value", root.defaultBorderHex);
-                            return raw === root.accentToken ? Kirigami.Theme.highlightColor : raw;
+                            return raw === root.accentToken ? (appSettings ? appSettings.highlightColor : Kirigami.Theme.highlightColor) : raw;
                         }
                         onClicked: {
-                            activeBorderColorDialog.selectedColor = root.actionValue(root.actBorderColorActive, "value", root.defaultBorderHex);
+                            const raw = root.actionValue(root.actBorderColorActive, "value", root.defaultBorderHex);
+                            activeBorderColorDialog.selectedColor = raw === root.accentToken ? (appSettings ? appSettings.highlightColor : root.defaultBorderHex) : raw;
                             activeBorderColorDialog.open();
                         }
                     }
@@ -546,12 +548,15 @@ SettingsFlickable {
                     ColorSwatchRow {
                         color: {
                             root.reloadTick;
+                            // The unfocused border follows the system INACTIVE colour
+                            // (alpha included), not the accent, matching what the
+                            // border actually draws.
                             const raw = root.actionValue(root.actBorderColorInactive, "value", root.defaultBorderHex);
-                            return raw === root.accentToken ? Kirigami.Theme.highlightColor : raw;
+                            return raw === root.accentToken ? (appSettings ? appSettings.inactiveColor : Kirigami.Theme.highlightColor) : raw;
                         }
                         onClicked: {
                             const raw = root.actionValue(root.actBorderColorInactive, "value", root.defaultBorderHex);
-                            inactiveBorderColorDialog.selectedColor = raw === root.accentToken ? root.defaultBorderHex : raw;
+                            inactiveBorderColorDialog.selectedColor = raw === root.accentToken ? (appSettings ? appSettings.inactiveColor : root.defaultBorderHex) : raw;
                             inactiveBorderColorDialog.open();
                         }
                     }
