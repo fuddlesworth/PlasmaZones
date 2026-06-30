@@ -406,7 +406,7 @@ public:
     /// assignment is still an explicit assignment: this reports stored
     /// intent, not the effective cascade result. It therefore intentionally
     /// diverges from @ref assignmentEntryForScreen / the resolvers, which
-    /// skip disabled rules and would synthesize the provider default for a
+    /// skip disabled rules and fall through to the gated default for a
     /// context whose only rule is disabled.
     Q_INVOKABLE bool hasExplicitAssignment(const QString& screenId, int virtualDesktop = 0,
                                            const QString& activity = QString()) const;
@@ -673,11 +673,12 @@ private:
 
     /// Resolve the AssignmentEntry for a context by evaluating a windowless
     /// WindowQuery through the RuleEvaluator and reading the engine-mode /
-    /// layout / tiling action slots of the resolved action set. Returns
-    /// nullopt when no pinned context rule fills the engine-mode slot
-    /// (the catch-all/provider-default rule is excluded so cascade-miss is
-    /// distinguishable). @p screenId is taken verbatim — connector / VS
-    /// fallback is the caller's (layoutForScreen) retry loop.
+    /// layout / tiling action slots of the resolved action set. The winner of
+    /// each slot is the highest-priority matching rule (priority wins, ties by
+    /// list order). Returns nullopt when no rule of any shape fills any of the
+    /// three slots, so a genuine miss stays distinguishable and routes to the
+    /// gated default. @p screenId is taken verbatim — connector / VS fallback is
+    /// the caller's (layoutForScreen) retry loop.
     ///
     /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
     /// by (screenId, virtualDesktop, activity) plus a "twc:N" tiled-window-count
@@ -794,9 +795,9 @@ private:
     AssignmentEntry resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,
                                                             const QString& activity) const;
 
-    /// True iff an enabled, PINNED (non-catch-all) engine-mode assignment rule
-    /// matches the (screen, desktop, activity) context — i.e. the user authored
-    /// an explicit per-context assignment, even one that sets only the mode with
+    /// True iff an enabled engine-mode assignment rule matches the (screen,
+    /// desktop, activity) context — i.e. the user authored an explicit
+    /// per-context assignment, even one that sets only the mode with
     /// no layout. Such a rule overrides the global suppress setting (the
     /// context is managed, never suppressed). Mirrors the connector /
     /// virtual-screen fallback chain of @ref assignmentIdForScreen so a rule

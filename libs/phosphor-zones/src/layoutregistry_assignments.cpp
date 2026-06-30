@@ -4,16 +4,15 @@
 // Layout assignment management (per-screen, per-desktop, per-activity).
 // Part of LayoutRegistry — split from layoutregistry.cpp for SRP.
 //
-// Phase 3b: the per-context assignment cascade is reimplemented on the
-// unified Rule engine. There is one resolution model: a windowless
-// WindowQuery evaluated through RuleEvaluator against the RuleStore's
-// rule set. The deterministic Assignment cascade (exact → activity → desktop
-// → screen → provider default) is reproduced by the ContextRuleBridge
-// priority formula — higher priority pins more context dimensions, so the
-// evaluator's descending-priority, first-action-per-slot walk returns the
-// same result the old walkCascade() did. Connector-name / virtual-screen
-// fallback is NOT a priority band — it is a query-side recursive key rewrite,
-// kept here in layoutForScreen() / the shared resolve helper.
+// Phase 3b: per-context assignment is resolved on the unified Rule engine.
+// There is one resolution model: a windowless WindowQuery evaluated through
+// RuleEvaluator against the RuleStore's rule set, and the winner of each action
+// slot is the highest-priority matching rule (ties broken by list order). There
+// is no specificity formula and no provider-default tail — priority is the only
+// precedence value, and a genuine miss (no rule fills any slot) routes to the
+// settings-gated default. Connector-name / virtual-screen fallback is NOT a
+// priority band — it is a query-side recursive key rewrite, kept here in
+// layoutForScreen() / the shared resolve helper.
 
 #include <PhosphorZones/LayoutRegistry.h>
 
@@ -110,31 +109,21 @@ auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> declt
 std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
                                                                       const QString& activity) const
 {
-    // Resolution is per-slot AND specificity-tiered. There are three
-    // independent slots — engine mode, snapping layout, tiling algorithm — each
-    // resolved separately, so a layout-only rule (a SetSnappingLayout or
-    // SetTilingAlgorithm with NO SetEngineMode) sets the layout for its engine
-    // in this context WITHOUT forcing the engine mode. The engine mode is the
-    // global default's (or another rule's); the layout slot is just filled.
+    // Resolution is per-slot. There are three independent slots — engine mode,
+    // snapping layout, tiling algorithm — each resolved separately, so a
+    // layout-only rule (a SetSnappingLayout or SetTilingAlgorithm with NO
+    // SetEngineMode) sets the layout for its engine in this context WITHOUT
+    // forcing the engine mode. The engine mode is the global default's (or
+    // another rule's); the layout slot is just filled.
     //
-    // Within each slot the match is specificity-tiered, not a flat priority
-    // walk: the most specific *kind* of rule wins, and only within a kind does
-    // descending priority (then list order) break the tie. This keeps the
-    // answer correct even though pinned-rule priorities (ContextRuleBridge's
-    // cascade weights) and user-authored catch-all priorities (the Settings UI
-    // bands) live in one numeric space that can overlap — a screen-only pin at
-    // 310 must still beat a catch-all authored at 399.
-    //
-    //   Tier 1 — a PINNED (non-catch-all) rule carrying the slot's action.
-    //   Tier 2 — a USER-authored catch-all rule carrying it: the explicit
-    //            floor. The synthesized provider-default carries
-    //            kProviderDefaultPriority and is excluded so the settings-gated
-    //            resolveDefaultAssignmentEntry stays the single source of truth
-    //            for the true global default.
-    //
-    // Each tier is the shared RuleEvaluator::highestPriorityMatch — the one
-    // place the descending-priority, tie-break-by-list-order walk lives, so this
-    // resolver can never drift from the evaluator's own ordering.
+    // The winner per slot is simply the HIGHEST-PRIORITY matching rule carrying
+    // that slot's action, ties broken by list order. There is no specificity
+    // computation and no catch-all exclusion — `priority` is the only
+    // precedence value, and a user rule authored at a higher priority than a
+    // context assignment WILL win. This delegates to the shared
+    // RuleEvaluator::highestPriorityMatch — the one place the descending-
+    // priority, tie-break-by-list-order walk lives, so this resolver can never
+    // drift from the evaluator's own ordering.
     //
     // If no slot matched at all it's a genuine miss (nullopt) and the caller
     // routes to the global default. If at least one slot matched, the entry's
@@ -184,25 +173,16 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             // absent there) by design.
             query.tiledWindowCount = tiledCount;
 
-            // Specificity-tiered slot match: a pinned rule wins over a user
-            // catch-all, and the synthesized provider-default (priority 0) is
-            // excluded so the gated default resolver remains authoritative.
-            const auto tieredMatch = [&](bool (*carriesSlot)(const PWR::Rule&)) -> const PWR::Rule* {
-                if (const PWR::Rule* pinned =
-                        m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::Rule& rule) {
-                            return carriesSlot(rule) && !rule.match.isCatchAll();
-                        })) {
-                    return pinned;
-                }
+            // Highest-priority matching rule per slot wins (ties by list order).
+            const auto slotMatch = [&](bool (*carriesSlot)(const PWR::Rule&)) -> const PWR::Rule* {
                 return m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::Rule& rule) {
-                    return carriesSlot(rule) && rule.match.isCatchAll()
-                        && rule.priority > PWR::ContextRuleBridge::kProviderDefaultPriority;
+                    return carriesSlot(rule);
                 });
             };
 
-            const PWR::Rule* modeRule = tieredMatch(hasEngineModeAction);
-            const PWR::Rule* snapRule = tieredMatch(hasSnappingLayoutAction);
-            const PWR::Rule* algoRule = tieredMatch(hasTilingAlgorithmAction);
+            const PWR::Rule* modeRule = slotMatch(hasEngineModeAction);
+            const PWR::Rule* snapRule = slotMatch(hasSnappingLayoutAction);
+            const PWR::Rule* algoRule = slotMatch(hasTilingAlgorithmAction);
 
             if (modeRule == nullptr && snapRule == nullptr && algoRule == nullptr) {
                 return std::nullopt; // genuine miss — the caller routes to the default
@@ -210,9 +190,9 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
 
             // The engine-mode rule decides the mode (and carries its own layout
             // tokens, preserving mode-toggle losslessness); the per-slot layout
-            // winners fill their own field. tieredMatch already ranks pinned over
-            // catch-all, so a more-specific layout rule beats a catch-all layout
-            // rule regardless of the raw priority numbers.
+            // winners fill their own field. Each slot independently took the
+            // highest-priority matching rule, so the layout slots track their
+            // own winner regardless of the engine-mode rule.
             RuleSlotResolution resolved;
             if (modeRule != nullptr) {
                 resolved.modeEntry = entryFromRuleMatchActions(*modeRule);
@@ -559,14 +539,21 @@ void LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
     // mode that wasn't Autotile, which would corrupt a Scrolling assignment
     // on save and round-trip back as Snapping on load.
     const QString modeToken = modeToWireString(entry.mode);
+
+    const PWR::Rule* existing = findExactContextRule(screenId, virtualDesktop, activity);
+    // Priority is the only precedence value (highest wins per slot). On UPDATE
+    // preserve the rule's stored priority; on CREATE seed a winning top value so
+    // a freshly authored assignment outranks any prior one.
+    const int priority =
+        existing != nullptr ? existing->priority : nextAssignmentPriority(m_ruleStore->ruleSet().rules());
     // Pass an empty rule name — the settings UI renders an auto-friendly
     // title from the rule's match (with lookup-resolved screen/activity
     // labels). Stamping a raw `screenId · Desktop N · Activity` here would
     // bake connector strings and activity UUIDs into the stored rule.
-    PWR::Rule rule = PWR::ContextRuleBridge::makeAssignmentRule(QString(), screenId, virtualDesktop, activity,
-                                                                modeToken, entry.snappingLayout, entry.tilingAlgorithm);
+    PWR::Rule rule =
+        PWR::ContextRuleBridge::makeAssignmentRule(QString(), screenId, virtualDesktop, activity, modeToken,
+                                                   entry.snappingLayout, entry.tilingAlgorithm, priority);
 
-    const PWR::Rule* existing = findExactContextRule(screenId, virtualDesktop, activity);
     if (existing == nullptr) {
         m_ruleStore->addRule(rule);
     } else {

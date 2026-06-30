@@ -65,6 +65,14 @@ namespace PlasmaZones {
 ///     and the runtime LayoutSettingsStore (in phosphor-zones) merges the
 ///     sidecar back onto each layout on load, so the in-memory model is
 ///     unchanged.
+///
+/// Rule precedence later became pure `priority` (highest wins per slot, ties by
+/// list order): the synthesized provider-default catch-all assignment rule was
+/// retired (the gated default resolver is the sole global-default source) and
+/// the per-rule `pinnedPriority` flag was dropped. That change needed no schema
+/// bump — the gated resolver already ignored the priority-0 catch-all at
+/// runtime, so the stale rule is pruned from rules.json by finalizeV4Conversion's
+/// idempotent cleanup (see pruneRetiredProviderDefaultRule), not a version step.
 inline constexpr int ConfigSchemaVersion = 5;
 
 class PLASMAZONES_EXPORT ConfigMigration
@@ -170,9 +178,9 @@ public:
     /// Rebuild trigger: a missing/invalid rules.json triggers a
     /// rebuild PROVIDED config.json has reached
     /// `_version == ConfigSchemaVersion`. When assignments.json is absent
-    /// the rebuild still runs and writes a rule set carrying only the
-    /// provider-default catch-all (plus any disable-list, animation-rule,
-    /// exclusion, and animation-exclusion stash entries from
+    /// the rebuild still runs and writes a rule set carrying no assignment
+    /// rules (just the seeded built-in defaults plus any disable-list,
+    /// animation-rule, exclusion, and animation-exclusion stash entries from
     /// config.json). If the migration chain stalled below v4 (e.g. a
     /// chain step's side-effect write failed), finalizeV4Conversion
     /// refuses to commit a stub rules.json so the next run can
@@ -183,10 +191,11 @@ public:
     ///
     /// Degraded path under config corruption: if config.json is corrupt (or
     /// absent) with no INI fallback, the rebuild proceeds with an empty
-    /// `configRoot`, so the provider-default rule is derived with empty
-    /// `DefaultLayoutId` / tiling-algorithm and degrades to the bare snapping
-    /// placeholder. This is accepted degradation — no regression versus the
-    /// pre-PR behaviour — and is intentionally not treated as a failure.
+    /// `configRoot`, so the migrated rules fall back to compile defaults. The
+    /// global default engine/layout is resolved at runtime from settings, not
+    /// from a rule, so no catch-all placeholder is written. This is accepted
+    /// degradation — no regression versus the pre-PR behaviour — and is
+    /// intentionally not treated as a failure.
     ///
     /// @param jsonPath Path to config.json (assignments.json / rules.json
     ///                 are derived as siblings via ConfigDefaults).
@@ -230,6 +239,24 @@ public:
     ///                 sibling via ConfigDefaults).
     /// @return true on success or a clean no-op; false on an I/O failure.
     static bool finalizeV5Conversion(const QString& jsonPath);
+
+    /// Prune the retired provider-default catch-all assignment rule from
+    /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup
+    /// path, so it executes for every already-converted user without consuming a
+    /// schema version. The rule was synthesized by the v3→v4 conversion before
+    /// the priority-wins model retired it; the gated default resolver already
+    /// ignores the priority-0 catch-all at runtime, so deleting the stale rule
+    /// is a display-only cleanup that needs no `_version` bump.
+    ///
+    /// It loads rules.json via `RuleSet::loadFromFile` and removes the rule by
+    /// its deterministic provider-default UUID. Remaining rules keep their
+    /// priorities verbatim. Idempotent: once the rule is gone this is a clean
+    /// no-op (the id is stable, so a re-run finds nothing to remove).
+    ///
+    /// @param jsonPath Path to config.json (rules.json is derived as a sibling
+    ///                 via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool pruneRetiredProviderDefaultRule(const QString& jsonPath);
 
     /// Part of the v4 conversion: read every `*.json` layout in @p layoutsDir,
     /// split its embedded per-layout settings into the @p sidecarPath store

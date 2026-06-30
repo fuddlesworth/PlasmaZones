@@ -102,7 +102,7 @@ QString legacyAssignmentsFilePath()
 ///
 /// Rationale (B5 data-loss fix): silently treating a corrupt assignments.json
 /// as "no assignments" would let the conversion write a rules.json
-/// holding only the provider-default + disable rules, then quarantine the
+/// holding only the seeded built-in rules, then quarantine the
 /// corrupt original to `.migrated` — the user's pinned assignments AND quick-
 /// layout slots would be lost without warning. The `.migrated` suffix also
 /// falsely implies the file was successfully migrated, masking the failure.
@@ -170,7 +170,7 @@ bool prevalidateLegacyAssignmentsFile(const QString& assignmentsPath)
 /// `RuleSet::loadFromFile(...).has_value()`. If the file exists but
 /// is corrupt (truncation, hand-edit error, power-loss), that probe returns
 /// nullopt — the gate falls through to the rebuild path, which mints a
-/// provider-default-only rule set and writes it on top of the corrupt-but-
+/// freshly-seeded rule set and writes it on top of the corrupt-but-
 /// recoverable original. Every user-authored rule is destroyed without
 /// warning and without a backup.
 ///
@@ -365,8 +365,8 @@ bool ConfigMigration::ensureJsonConfigImpl()
                     // Already at OR above current version — finalizeV4Conversion's
                     // cleanup-only branch runs idempotently: it strips any leftover
                     // assignments.json artifacts or `_v4*Stash` keys that a prior
-                    // crash may have left behind, and is a no-op once the file is
-                    // already clean.
+                    // crash may have left behind (and prunes the retired
+                    // provider-default rule from rules.json), a no-op once clean.
                     return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
                 }
                 corrupt = true;
@@ -442,7 +442,8 @@ bool ConfigMigration::ensureJsonConfigImpl()
     // The in-memory chain above ran through migrateV4ToV5, which stashes the v5
     // appearance/gap payload — run BOTH finalizers (matching the version-path
     // return sites) so the v5 override rules are built on this launch, not the
-    // next.
+    // next. finalizeV4Conversion's cleanup also prunes the retired
+    // provider-default rule.
     return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
 }
 
@@ -1806,7 +1807,8 @@ PhosphorRules::Rule disableRuleForMonitor(const QString& screenId, PhosphorZones
 {
     const QString name = disableRulePrefixFor(mode) + screenId;
     return PhosphorRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(),
-                                                             PhosphorZones::modeToWireString(mode));
+                                                             PhosphorZones::modeToWireString(mode),
+                                                             PhosphorRules::ContextRuleBridge::kContextBandBase);
 }
 
 /// Build a context rule from a v3 desktop disable-list entry (`screenId/N`).
@@ -1831,7 +1833,8 @@ std::optional<PhosphorRules::Rule> disableRuleForDesktop(const QString& entry,
     }
     const QString name = disableRulePrefixFor(mode) + screenId + disableRuleDesktopSuffix(desktop);
     return PhosphorRules::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(),
-                                                             PhosphorZones::modeToWireString(mode));
+                                                             PhosphorZones::modeToWireString(mode),
+                                                             PhosphorRules::ContextRuleBridge::kContextBandBase);
 }
 
 /// Build a context rule from a v3 activity disable-list entry
@@ -1856,7 +1859,8 @@ std::optional<PhosphorRules::Rule> disableRuleForActivity(const QString& entry,
     const QString activity = entry.mid(slash + 1);
     const QString name = disableRulePrefixFor(mode) + screenId + disableRuleActivitySuffix();
     return PhosphorRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity,
-                                                             PhosphorZones::modeToWireString(mode));
+                                                             PhosphorZones::modeToWireString(mode),
+                                                             PhosphorRules::ContextRuleBridge::kContextBandBase);
 }
 
 /// Parse one Assignment:* group name into (screenId, desktop, activity).
@@ -1976,7 +1980,7 @@ bool isValidAnimationAppRuleSource(const QJsonObject& source)
 /// @param i      zero-based index into the FILTERED (valid-only) source
 ///               list — used to derive `priority = count - i`.
 /// @param count  total VALID source entries (priority floors at 1, reserving
-///               0 for the provider-default catch-all band).
+///               0 for the unassigned-marker band that assignBandPrioritiesToZeroRules stamps).
 PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int count)
 {
     namespace ActionParam = PhosphorRules::ActionParam;
@@ -2058,6 +2062,61 @@ PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int 
 /// entries don't leave gaps in the descending-by-list-order priority
 /// sequence (`AnimationAppRuleList::fromJson` filtered first; `toRuleSet`
 /// then used the filtered `entries.size()` as count).
+/// Give every migrated rule the append helpers left at priority 0 (the Exclude,
+/// animation-exclusion, and SnapToZone rules) a sensible band priority, matching what the Settings
+/// renormalizer (RuleTemplates / sectionFor) would stamp. The Settings
+/// controller only renormalizes on edit, not on load, so without this the
+/// migrated rules would all read "Priority 0" and tie on a fresh load. A
+/// composite match (e.g. the Steam exclude) lands in the Advanced band; the
+/// simple window-property rules (AppId/WindowClass exclude, SnapToZone) land in
+/// Application. One descending offset per band keeps them distinct, mirroring
+/// renormalizePriorities. Managed and already-prioritized rules are untouched.
+/// Past 100 zero-priority rules in one band the offset floors at the band base
+/// (the `qMax(0, ...)` below), so the 100th-onward rules tie there — the same
+/// saturation renormalizePriorities has, and harmless because priority does not
+/// affect the boolean exclusion / snap slices these rules feed.
+void assignBandPrioritiesToZeroRules(QList<PhosphorRules::Rule>& rules)
+{
+    using PhosphorRules::MatchExpression;
+    using PhosphorRules::Rule;
+    // Bands mirror RuleTemplates (src/settings/ruletemplates.h) — duplicated as
+    // literals because that header lives in the settings tree (see the
+    // kAdvancedBandBase note at finalizeV5Conversion).
+    constexpr int kApplicationBandBase = 200;
+    constexpr int kAdvancedBandBase = 500;
+    constexpr int kBandWidth = 100;
+
+    const auto isSimpleConjunction = [](const MatchExpression& m) {
+        if (m.isLeaf()) {
+            return true;
+        }
+        if (m.kind() != MatchExpression::Kind::All) {
+            return false;
+        }
+        for (const MatchExpression& child : m.children()) {
+            if (!child.isLeaf()) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    QHash<int, int> nextOffset; // band base → next available offset
+    for (Rule& rule : rules) {
+        if (rule.managed || rule.priority != 0) {
+            continue;
+        }
+        const int base = isSimpleConjunction(rule.match) ? kApplicationBandBase : kAdvancedBandBase;
+        auto it = nextOffset.find(base);
+        if (it == nextOffset.end()) {
+            it = nextOffset.insert(base, kBandWidth - 1);
+        }
+        const int offset = qMax(0, it.value());
+        it.value() = offset - 1;
+        rule.priority = base + offset;
+    }
+}
+
 void appendAnimationRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJsonArray& stash)
 {
     QList<QJsonObject> valid;
@@ -2166,8 +2225,8 @@ void appendExclusionRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJso
                     + Detail::encodeSegment(QString::number(static_cast<int>(Operator::AppIdMatches)))
                     + Detail::encodeSegment(pattern));
             rule.enabled = true;
-            // priority = 0 leaves the rule at the bottom of the
-            // controller-renormalized list within its band. The user can
+            // Left at 0 here; assignBandPrioritiesToZeroRules stamps the real
+            // band priority once the full list is assembled. The user can
             // drag-reorder it in the Rules page if precedence matters.
             rule.priority = 0;
             rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);
@@ -2217,9 +2276,10 @@ void appendSteamDefaultRule(QList<PhosphorRules::Rule>& rules)
                                   Detail::encodeSegment(QStringLiteral("steam-default-exclude")));
     rule.name = QStringLiteral("Steam");
     rule.enabled = true;
-    // priority 0 mirrors the migrated exclusion rules: an Exclude rule's
-    // precedence is irrelevant to the boolean exclusion slice the effect
-    // evaluates, and the controller renormalizes display order on load.
+    // Left at 0 here; assignBandPrioritiesToZeroRules stamps the real band
+    // priority once the full list is assembled (composite match → Advanced
+    // band). An Exclude rule's precedence is irrelevant to the boolean exclusion
+    // slice the effect evaluates, but a band value displays better than 0.
     rule.priority = 0;
     rule.match = MatchExpression::makeAll(
         {MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("steam")),
@@ -2462,8 +2522,9 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorRules::Rule>& rules, const Q
                                     Detail::encodeSegment(pattern) + Detail::encodeSegment(QString::number(zoneNumber))
                                         + Detail::encodeSegment(targetScreen));
             rule.enabled = true;
-            // priority 0 mirrors the other migrated rules; the controller
-            // renormalizes display order on load and the user can reorder.
+            // Left at 0 here; assignBandPrioritiesToZeroRules stamps the real
+            // band priority once the full list is assembled. The user can
+            // drag-reorder it in the Rules page if precedence matters.
             rule.priority = 0;
             rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);
             RuleAction action;
@@ -2774,6 +2835,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         // nothing reads it), so a delete-failure can never loop forever.
         retireLegacyAssignmentsFile(assignmentsPath);
 
+        // Prune the retired provider-default catch-all rule from rules.json.
+        // Idempotent: once gone (or on a config that never had one) it is a
+        // no-op. Folded here rather than into a schema bump because the gated
+        // default resolver already ignores the rule at runtime.
+        ok = pruneRetiredProviderDefaultRule(jsonPath) && ok;
+
         return ok;
     }
 
@@ -2786,7 +2853,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // check. If the file EXISTS but the loader returned nullopt (malformed
     // JSON, truncated write, hand-edit error), we'd otherwise fall through
     // to a rebuild that overwrites the corrupt-but-recoverable original
-    // with a stub provider-default rule set — destroying every user-authored
+    // with a freshly-seeded rule set — destroying every user-authored
     // rule. Quarantine to `.corrupt.bak` and abort instead, mirroring the
     // assignments-prevalidate contract below.
     if (!prevalidateRulesFile(rulesPath)) {
@@ -2794,10 +2861,10 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     }
 
     // Pre-flight the legacy assignments.json: a malformed sidecar must abort
-    // BEFORE we write rules.json (otherwise we'd commit a
-    // provider-default-only rule set that silently drops every assignment AND
-    // the quick-layout slots, and then quarantine the corrupt original to
-    // `.migrated` — masking the failure as a successful migration).
+    // BEFORE we write rules.json (otherwise we'd commit a rule set that
+    // silently drops every assignment AND the quick-layout slots, and then
+    // quarantine the corrupt original to `.migrated` — masking the failure as
+    // a successful migration).
     // Defense-in-depth: the ensureJsonConfigImpl pre-chain guard catches the
     // version<schema entry; this catches the fresh-install / post-corruption
     // / already-current re-entry paths. (B5 data-loss fix.)
@@ -2930,46 +2997,19 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             const QString snappingLayout = grp.value(ConfigKeys::Legacy::v3AssignmentLayout()).toString();
             const QString tilingAlgorithm = grp.value(ConfigKeys::Legacy::v3AssignmentAlgorithm()).toString();
 
+            // Priority is the only precedence value (highest wins per slot).
+            // Seed migrated assignments in the Context band, nudged up by the
+            // pinned-dimension count so a more-specific assignment still
+            // outranks a broader one for the contexts they both match — this
+            // explicit value reproduces the upgrader's prior effective
+            // ordering now that the resolver no longer computes specificity.
+            const int priority = PhosphorRules::ContextRuleBridge::kContextBandBase + (activity.isEmpty() ? 0 : 3)
+                + (desktop > 0 ? 2 : 0) + (screenId.isEmpty() ? 0 : 1);
+
             rules.append(PhosphorRules::ContextRuleBridge::makeAssignmentRule(
                 assignmentRuleName(screenId, desktop, activity), screenId, desktop, activity,
-                PhosphorZones::modeToWireString(mode), snappingLayout, tilingAlgorithm));
+                PhosphorZones::modeToWireString(mode), snappingLayout, tilingAlgorithm, priority));
         }
-    }
-
-    // ── Provider-default catch-all rule ────────────────────────────────────
-    // The cascade falls through to a lowest-priority empty-All{} rule when no
-    // pinned context rule matches. Both the snapping default AND the tiling
-    // default are baked into the rule so the catch-all has a complete fallback
-    // regardless of which engine the rule selects — the engine-mode action
-    // chooses the active mode, but both layout/algorithm actions stand ready
-    // so a manual mode toggle later (or another rule overriding the engine)
-    // still resolves a sensible layout. Previously only one mode's default
-    // was embedded, leaving the user's snapping default off the catch-all
-    // when an autotile default was also present.
-    {
-        // Schema-migration freeze policy: read v3 on-disk paths through the
-        // frozen `ConfigKeys::Legacy::v3*` accessors, NEVER the live
-        // ConfigDefaults accessors. A future runtime rename of e.g.
-        // `snappingBehaviorWindowHandlingGroup()` MUST NOT retarget the v3→v4
-        // finalizer to a path that no v3 config ever had on disk. See
-        // configkeys.h `Legacy` struct for the policy rationale.
-        const QJsonObject windowHandling =
-            groupObjectAtPath(configRoot, ConfigKeys::Legacy::v3SnappingBehaviorWindowHandlingGroup());
-        const QString defaultLayoutId = windowHandling.value(ConfigKeys::Legacy::v3DefaultLayoutIdKey()).toString();
-
-        const QJsonObject tilingAlgo = groupObjectAtPath(configRoot, ConfigKeys::Legacy::v3TilingAlgorithmGroup());
-        const QString defaultAlgorithm = tilingAlgo.value(ConfigKeys::Legacy::v3DefaultKey()).toString();
-
-        // Engine-mode preference: pick autotile only when the user has no
-        // snapping default but does have a tiling default — snapping is the
-        // historical default mode and stays selected whenever a snapping
-        // layout is configured.
-        const auto defaultMode = (defaultLayoutId.isEmpty() && !defaultAlgorithm.isEmpty())
-            ? PhosphorZones::AssignmentEntry::Autotile
-            : PhosphorZones::AssignmentEntry::Snapping;
-        rules.append(PhosphorRules::ContextRuleBridge::makeProviderDefaultRule(
-            QStringLiteral("Default"), PhosphorZones::modeToWireString(defaultMode), defaultLayoutId,
-            defaultAlgorithm));
     }
 
     // ── Disable-list rules ─────────────────────────────────────────────────
@@ -3090,6 +3130,11 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
         appendLayoutAppRulesAsSnapToZone(rules, layoutsDir);
     }
+
+    // Stamp a band priority onto the Exclude / animation-exclusion / SnapToZone
+    // rules the helpers above left at 0, so they display sensibly on a fresh load instead of all
+    // reading "Priority 0".
+    assignBandPrioritiesToZeroRules(rules);
 
     // ── Relocate QuickLayouts to the quicklayouts.json sidecar (FIRST) ─────
     // Quick-layout slots are NOT rules — they belong in the sibling
@@ -3778,6 +3823,53 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
         qWarning("ConfigMigration::finalizeV5Conversion: failed to strip the v5 stash from %s", qPrintable(jsonPath));
         return false;
     }
+    return true;
+}
+
+bool ConfigMigration::pruneRetiredProviderDefaultRule(const QString& jsonPath)
+{
+    // The provider-default catch-all assignment rule is retired: the gated
+    // default resolver is the sole global-default source, and it already ignores
+    // the priority-0 catch-all at runtime. Delete the stale rule from rules.json
+    // by its deterministic id (stable, so this is idempotent — a re-run after
+    // the rule is gone finds nothing). No schema bump: this runs from
+    // finalizeV4Conversion's cleanup path. config.json is untouched; jsonPath
+    // only gates on the conversion having happened.
+    if (!QFile::exists(jsonPath)) {
+        return true;
+    }
+    const QString rulesPath = ConfigDefaults::rulesFilePath();
+    auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
+    if (!setOpt.has_value()) {
+        // No rules.json yet (conversion not established) — nothing to strip. A
+        // fresh install never wrote a provider-default rule in the first place.
+        return true;
+    }
+
+    // The provider-default's identity was fixed: the UUID derivation
+    // ContextRuleBridge keyed off the "provider-default" family with an empty
+    // (screen, desktop, activity) tuple. Reconstruct it directly — the rule
+    // factory that produced it is gone, but the id scheme is preserved verbatim.
+    namespace CRB = PhosphorRules::ContextRuleBridge;
+    const QUuid providerDefaultId = QUuid::createUuidV5(
+        CRB::detail::namespaceUuid(),
+        CRB::detail::contextIdentityKey(QLatin1StringView("provider-default"), QString(), 0, QString()));
+
+    PhosphorRules::RuleSet ruleSet = *setOpt;
+    if (!ruleSet.removeRule(providerDefaultId)) {
+        // No provider-default rule present — already stripped, or a fresh
+        // install that never had one. Clean no-op.
+        return true;
+    }
+    if (!ruleSet.saveToFile(rulesPath)) {
+        qWarning(
+            "ConfigMigration::pruneRetiredProviderDefaultRule: failed to write %s after removing the "
+            "provider-default rule",
+            qPrintable(rulesPath));
+        return false;
+    }
+    qInfo("ConfigMigration::pruneRetiredProviderDefaultRule: removed the provider-default rule from %s",
+          qPrintable(rulesPath));
     return true;
 }
 

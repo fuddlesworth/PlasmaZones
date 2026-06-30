@@ -9,11 +9,12 @@
  * A v3 config.json + assignments.json fixture is run through
  * ConfigMigration::ensureJsonConfig; the test asserts:
  *   - rules.json is produced at `_version == 4`,
- *   - each migrated zone Assignment becomes a context rule at the exact
- *     cascade priority dictated by the formula,
+ *   - each migrated zone Assignment becomes a context rule seeded in the
+ *     Context priority band (~301..306) by its pinned dimensions,
  *   - assignment rules carry SetEngineMode + (when non-empty)
  *     SetSnappingLayout / SetTilingAlgorithm,
- *   - a provider-default catch-all rule exists at priority 0,
+ *   - the global default comes from a gated resolver, so no provider-default
+ *     catch-all rule is emitted,
  *   - per-mode disable-list entries become DisableEngine context rules,
  *   - the v3 window-class/application exclusion lists fold into
  *     `AppId AppIdMatches` Exclude rules,
@@ -104,7 +105,8 @@ private:
         display.insert(QStringLiteral("AutotileDisabledActivities"), QStringLiteral("DP-1/act-uuid-7"));
         root.insert(QStringLiteral("Display"), display);
 
-        // Global default snapping layout — drives the provider-default rule.
+        // Global default snapping layout — feeds the gated default resolver
+        // (no provider-default rule is emitted).
         QJsonObject windowHandling;
         windowHandling.insert(QStringLiteral("DefaultLayoutId"),
                               QStringLiteral("{aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee}"));
@@ -177,10 +179,10 @@ private:
     }
 
     // An assignment rule sets an engine mode and does NOT disable an engine.
-    // Disable rules share the assignment cascade priorities (e.g. a
-    // screen+activity disable and a screen+activity assignment both land at
-    // 510), so any priority-keyed lookup that must target the assignment rule
-    // has to filter on this predicate rather than taking the first match.
+    // Disable rules are all seeded at the Context band base (300) while
+    // assignment rules sit just above it (301..306), so they never share a
+    // priority; this predicate still lets a priority-keyed lookup target the
+    // assignment rule unambiguously.
     bool isAssignmentRule(const QJsonObject& rule)
     {
         const QStringList types = actionTypes(rule);
@@ -197,10 +199,10 @@ private:
         return false;
     }
 
-    // Returns the assignment rule at @p priority, skipping any same-priority
-    // disable rule. A bare first-match-by-priority lookup would return
-    // whichever rule the migration happened to emit first — an order
-    // dependency the assertion should not rely on.
+    // Returns the assignment rule at @p priority, skipping any disable rule.
+    // A bare first-match-by-priority lookup would return whichever rule the
+    // migration happened to emit first — an order dependency the assertion
+    // should not rely on.
     QJsonObject findAssignmentRuleByPriority(const QJsonArray& rules, int priority)
     {
         for (const QJsonObject& r : allRulesByPriority(rules, priority)) {
@@ -576,23 +578,24 @@ private Q_SLOTS:
 
         const QJsonArray rules = rulesFromRules();
 
-        // Each fixture Assignment migrated to a rule at the cascade priority
-        // its pinned dimensions dictate. The four pinned levels must all be
-        // present in the migrated rule set.
+        // Each fixture Assignment migrated to a rule seeded in the Context
+        // priority band by its pinned dimensions
+        // (300 + activity?3 + desktop?2 + screen?1). The four pinned levels
+        // must all be present in the migrated rule set.
         //
-        // Priorities 410/510 can also carry same-priority disable rules, so we
-        // assert against the assignment cascade explicitly via the shared
-        // assignment-filtered helper (a rule that sets an engine mode and does
-        // NOT disable an engine).
+        // Disable rules all sit at the band base (300), so they never share a
+        // priority with these assignment rules; the assignment-filtered helper
+        // (a rule that sets an engine mode and does NOT disable an engine) keeps
+        // the lookup unambiguous regardless.
 
-        // Exact (screen+desktop+activity) → 610.
-        QVERIFY(hasAssignmentAtPriority(rules, 610));
-        // Screen + activity → 510 (activity weight beats desktop).
-        QVERIFY(hasAssignmentAtPriority(rules, 510));
-        // Screen + desktop → 410.
-        QVERIFY(hasAssignmentAtPriority(rules, 410));
-        // Screen only → 310.
-        QVERIFY(hasAssignmentAtPriority(rules, 310));
+        // Exact (screen+desktop+activity) → 306.
+        QVERIFY(hasAssignmentAtPriority(rules, 306));
+        // Screen + activity → 304 (activity nudge beats desktop).
+        QVERIFY(hasAssignmentAtPriority(rules, 304));
+        // Screen + desktop → 303.
+        QVERIFY(hasAssignmentAtPriority(rules, 303));
+        // Screen only → 301.
+        QVERIFY(hasAssignmentAtPriority(rules, 301));
     }
 
     // ─── Lossless three-action assignment rules ──────────────────────────
@@ -606,65 +609,29 @@ private Q_SLOTS:
 
         const QJsonArray rules = rulesFromRules();
 
-        // The exact rule (610) had Mode=Autotile + snappingLayout + tilingAlgo
-        // — all three actions present. (610 is unique to the exact assignment;
-        // no disable rule collides there, but use the assignment-filtered
-        // lookup uniformly so the three sites stay consistent.)
-        const QJsonObject exact = findAssignmentRuleByPriority(rules, 610);
+        // The exact rule (306) had Mode=Autotile + snappingLayout + tilingAlgo
+        // — all three actions present. Disable rules all sit at the band base
+        // (300), so none collides with an assignment rule; the
+        // assignment-filtered lookup is used uniformly so the three sites stay
+        // consistent.
+        const QJsonObject exact = findAssignmentRuleByPriority(rules, 306);
         QVERIFY(!exact.isEmpty());
         QCOMPARE(actionTypes(exact),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout"),
                               QStringLiteral("setTilingAlgorithm")}));
 
-        // The screen+activity rule (510) had snapping mode + a layout, no
-        // tiling algorithm → SetEngineMode + SetSnappingLayout only. A
-        // screen+activity disable rule (AutotileDisabledActivities) also lands
-        // at 510, so filter to the assignment rule explicitly.
-        const QJsonObject scrAct = findAssignmentRuleByPriority(rules, 510);
+        // The screen+activity rule (304) had snapping mode + a layout, no
+        // tiling algorithm → SetEngineMode + SetSnappingLayout only.
+        const QJsonObject scrAct = findAssignmentRuleByPriority(rules, 304);
         QVERIFY(!scrAct.isEmpty());
         QCOMPARE(actionTypes(scrAct),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout")}));
 
-        // The screen-only rule (310) was mode-only autotile (both layout
-        // fields empty) → just SetEngineMode. Screen-only monitor disable
-        // rules also land at 310, so filter to the assignment rule explicitly.
-        const QJsonObject scrOnly = findAssignmentRuleByPriority(rules, 310);
+        // The screen-only rule (301) was mode-only autotile (both layout
+        // fields empty) → just SetEngineMode.
+        const QJsonObject scrOnly = findAssignmentRuleByPriority(rules, 301);
         QVERIFY(!scrOnly.isEmpty());
         QCOMPARE(actionTypes(scrOnly), (QStringList{QStringLiteral("setEngineMode")}));
-    }
-
-    // ─── Provider-default catch-all ───────────────────────────────────────
-
-    void testProviderDefaultRule_atPriorityZero()
-    {
-        IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(assignmentsPath(), makeAssignments());
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const QJsonArray rules = rulesFromRules();
-        // Priority 0 is the shared exclusion/catch-all band: the migrated AppId
-        // Exclude rules AND the premade Steam exclusion rule also live at 0, so
-        // the catch-all is no longer the sole priority-0 rule. Identify it by
-        // its defining empty-All{} match instead of by priority alone.
-        QList<QJsonObject> catchAlls;
-        for (const QJsonObject& r : allRulesByPriority(rules, 0)) {
-            const QJsonObject m = r.value(QStringLiteral("match")).toObject();
-            if (m.contains(QStringLiteral("all")) && m.value(QStringLiteral("all")).toArray().isEmpty()) {
-                catchAlls.append(r);
-            }
-        }
-        QCOMPARE(catchAlls.size(), 1);
-
-        const QJsonObject def = catchAlls.first();
-        // The catch-all match is an empty All{} — serialized as { "all": [] }.
-        const QJsonObject match = def.value(QStringLiteral("match")).toObject();
-        QVERIFY(match.contains(QStringLiteral("all")));
-        QVERIFY(match.value(QStringLiteral("all")).toArray().isEmpty());
-
-        // The v3 config carried a DefaultLayoutId → provider default is a
-        // snapping rule carrying that layout.
-        QCOMPARE(actionTypes(def), (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout")}));
     }
 
     // ─── Disable-list rules ───────────────────────────────────────────────
@@ -736,14 +703,14 @@ private Q_SLOTS:
         QCOMPARE(std::count_if(disabled.cbegin(), disabled.cend(), isAutotileActivity), 1);
     }
 
-    // ─── Multi-dimension disable-rule priority ────────────────────────────
-    // The disable rules share the cascade priority formula with assignment
-    // rules: a screen+desktop disable outranks a screen-only disable, and a
-    // screen+activity disable outranks both. This exercises the formula above
-    // the single-dimension (screen-only, 310) band — a monitor-only fixture
-    // entry alone never reaches the multi-pin priorities.
+    // ─── Disable-rule priority: seeded in the Context band ────────────────
+    // Disable rules no longer follow a multi-dimension cascade: every migrated
+    // DisableEngine rule is seeded at the Context band base
+    // (kContextBandBase = 300) regardless of how many dimensions it pins. This
+    // asserts the screen+desktop, screen+activity, and screen-only disables all
+    // land at the same band value, and that makeDisableRule agrees.
 
-    void testDisableRulePriority_multiDimension()
+    void testDisableRulePriority_seededInContextBand()
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
@@ -752,47 +719,45 @@ private Q_SLOTS:
 
         const QList<QJsonObject> disabled = disableRules(rulesFromRules());
 
-        // The "DP-1/4" SnappingDisabledDesktops entry pins screen + desktop →
-        // priority 410 (kBasePriority + screen + desktop weights).
+        // The "DP-1/4" SnappingDisabledDesktops entry pins screen + desktop —
+        // seeded at the Context band base (300), no per-dimension nudge.
         const auto snapDesktop = std::find_if(disabled.cbegin(), disabled.cend(), [&](const QJsonObject& r) {
             return disableActionMode(r) == QLatin1String("snapping")
                 && matchLeafValue(r, QStringLiteral("virtualDesktop")) == QLatin1String("4");
         });
         QVERIFY(snapDesktop != disabled.cend());
         QCOMPARE(snapDesktop->value(QStringLiteral("priority")).toInt(),
-                 CRB::contextPriority(/*screenPinned=*/true, /*desktopPinned=*/true, /*activityPinned=*/false));
-        QCOMPARE(snapDesktop->value(QStringLiteral("priority")).toInt(), 410);
+                 PhosphorRules::ContextRuleBridge::kContextBandBase);
 
         // The "DP-1/act-uuid-7" AutotileDisabledActivities entry pins screen +
-        // activity → priority 510 (activity weight beats desktop).
+        // activity — also seeded at the band base (300).
         const auto autotileActivity = std::find_if(disabled.cbegin(), disabled.cend(), [&](const QJsonObject& r) {
             return disableActionMode(r) == QLatin1String("autotile")
                 && matchLeafValue(r, QStringLiteral("activity")) == QLatin1String("act-uuid-7");
         });
         QVERIFY(autotileActivity != disabled.cend());
         QCOMPARE(autotileActivity->value(QStringLiteral("priority")).toInt(),
-                 CRB::contextPriority(/*screenPinned=*/true, /*desktopPinned=*/false, /*activityPinned=*/true));
-        QCOMPARE(autotileActivity->value(QStringLiteral("priority")).toInt(), 510);
+                 PhosphorRules::ContextRuleBridge::kContextBandBase);
 
-        // A screen-only monitor disable sits at the single-dimension band (310).
+        // A screen-only monitor disable sits at the band base (300) too.
         const auto snapMonitor = std::find_if(disabled.cbegin(), disabled.cend(), [&](const QJsonObject& r) {
             return disableActionMode(r) == QLatin1String("snapping")
                 && matchLeafValue(r, QStringLiteral("screenId")) == QLatin1String("DP-3");
         });
         QVERIFY(snapMonitor != disabled.cend());
         QCOMPARE(snapMonitor->value(QStringLiteral("priority")).toInt(),
-                 CRB::contextPriority(/*screenPinned=*/true, /*desktopPinned=*/false, /*activityPinned=*/false));
+                 PhosphorRules::ContextRuleBridge::kContextBandBase);
 
-        // makeDisableRule's priority must agree with the migration output for
-        // a multi-dimension entry — a screen+desktop disable rule pins 410.
-        const PhosphorRules::Rule directDesktop = CRB::makeDisableRule(
-            QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(), QStringLiteral("snapping"));
-        QCOMPARE(directDesktop.priority, 410);
-        // A screen+activity disable rule pins 510 — activity outranks desktop.
-        const PhosphorRules::Rule directActivity = CRB::makeDisableRule(
-            QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"), QStringLiteral("autotile"));
-        QCOMPARE(directActivity.priority, 510);
-        QVERIFY(directActivity.priority > directDesktop.priority);
+        // makeDisableRule must agree with the migration output: every disable
+        // rule is seeded at the band base regardless of the pinned dimensions.
+        const PhosphorRules::Rule directDesktop =
+            CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(),
+                                 QStringLiteral("snapping"), PhosphorRules::ContextRuleBridge::kContextBandBase);
+        QCOMPARE(directDesktop.priority, PhosphorRules::ContextRuleBridge::kContextBandBase);
+        const PhosphorRules::Rule directActivity =
+            CRB::makeDisableRule(QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"),
+                                 QStringLiteral("autotile"), PhosphorRules::ContextRuleBridge::kContextBandBase);
+        QCOMPARE(directActivity.priority, PhosphorRules::ContextRuleBridge::kContextBandBase);
     }
 
     // ─── Idempotency ──────────────────────────────────────────────────────
@@ -835,7 +800,7 @@ private Q_SLOTS:
 
     // ─── No-assignments fixture ───────────────────────────────────────────
 
-    void testNoAssignments_stillWritesProviderDefault()
+    void testNoAssignments_writesNoProviderDefault()
     {
         IsolatedConfigGuard guard;
         // A v3 config with no assignments.json at all.
@@ -847,30 +812,22 @@ private Q_SLOTS:
 
         QVERIFY(QFile::exists(ConfigDefaults::rulesFilePath()));
         const QJsonArray rules = rulesFromRules();
-        // Two rules: the provider-default catch-all + the premade Steam
-        // exclusion rule (seeded unconditionally on every fresh/migrated v4
-        // config). Identify the catch-all by its empty-All{} match.
-        QCOMPARE(rules.size(), 2);
-        QJsonObject def;
+        // Exactly one rule: the premade Steam exclusion rule (seeded
+        // unconditionally on every fresh/migrated v4 config). No provider-default
+        // catch-all rule is emitted — the global default now comes from the gated
+        // resolver, not a rule.
+        QCOMPARE(rules.size(), 1);
+
+        // No empty-All{} catch-all assignment rule (one carrying a setEngineMode
+        // action) may be present.
         for (const QJsonValue& v : rules) {
             const QJsonObject r = v.toObject();
             const QJsonObject m = r.value(QStringLiteral("match")).toObject();
-            if (m.contains(QStringLiteral("all")) && m.value(QStringLiteral("all")).toArray().isEmpty()) {
-                def = r;
-            }
+            const bool emptyAll =
+                m.contains(QStringLiteral("all")) && m.value(QStringLiteral("all")).toArray().isEmpty();
+            QVERIFY2(!(emptyAll && actionTypes(r).contains(QLatin1String("setEngineMode"))),
+                     "no empty-All{} provider-default rule may be emitted");
         }
-        QVERIFY2(!def.isEmpty(), "provider-default catch-all must be present");
-        QCOMPARE(def.value(QStringLiteral("priority")).toInt(), 0);
-
-        // With no DefaultLayoutId and no Tiling default algorithm, the
-        // provider default is the bare snapping placeholder: a single
-        // SetEngineMode action (mode = "snapping"), no layout action — there
-        // is no layout to carry, so SetSnappingLayout / SetTilingAlgorithm are
-        // both absent.
-        QCOMPARE(actionTypes(def), (QStringList{QStringLiteral("setEngineMode")}));
-        const QJsonArray actions = def.value(QStringLiteral("actions")).toArray();
-        QCOMPARE(actions.size(), 1);
-        QCOMPARE(actions.first().toObject().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
     }
 
     // ─── Premade Steam rule ───────────────────────────────────────────────
@@ -898,6 +855,12 @@ private Q_SLOTS:
         }
         QVERIFY2(!steam.isEmpty(), "premade Steam rule must be seeded on a fresh/migrated v4 config");
         QVERIFY(steam.value(QStringLiteral("enabled")).toBool());
+
+        // Composite match (the None{} guard below makes it non-simple), so
+        // assignBandPrioritiesToZeroRules seeds it in the Advanced band [500,600)
+        // rather than the Application band the simple AppId excludes get.
+        const int steamPriority = steam.value(QStringLiteral("priority")).toInt();
+        QVERIFY(steamPriority >= 500 && steamPriority < 600);
 
         // A single terminal Exclude action — the window is left unmanaged by
         // snap/tile.
@@ -1077,7 +1040,8 @@ private Q_SLOTS:
         QVERIFY2(setWithUserRule.has_value(), "rules.json must parse as a v4 rule set");
         const PhosphorRules::Rule userRule =
             CRB::makeDisableRule(QStringLiteral("User-authored · DP-9"), QStringLiteral("DP-9"),
-                                 /*virtualDesktop=*/0, QString(), QStringLiteral("snapping"));
+                                 /*virtualDesktop=*/0, QString(), QStringLiteral("snapping"),
+                                 PhosphorRules::ContextRuleBridge::kContextBandBase);
         const QUuid userRuleId = userRule.id;
         QVERIFY(setWithUserRule->addRule(userRule));
         QVERIFY(setWithUserRule->saveToFile(ConfigDefaults::rulesFilePath()));
@@ -1116,7 +1080,7 @@ private Q_SLOTS:
     // rules.json prevalidate. When rules.json exists but doesn't
     // parse, the "already converted" probe (loadFromFile().has_value()) drops
     // into the rebuild path, which would otherwise overwrite the corrupt-but-
-    // recoverable original with a stub provider-default rule set — destroying
+    // recoverable original with a stub seed-only rule set — destroying
     // every user-authored rule. The new prevalidateRulesFile fires
     // FIRST: quarantines to .corrupt.bak, refuses to commit, returns false.
     void testMalformedRulesJsonAborts()
@@ -1166,8 +1130,8 @@ private Q_SLOTS:
     // ─── Data-loss regression (B5): malformed assignments.json aborts ─────
     //
     // A corrupt assignments.json (truncation, power-loss, hand-edit error)
-    // must NOT silently produce a rules.json holding only the provider-
-    // default + disable rules — that would lose every pinned assignment AND
+    // must NOT silently produce a rules.json holding only the disable + seed
+    // rules — that would lose every pinned assignment AND
     // the quick-layout slots. The migration aborts loudly: the corrupt file
     // is quarantined to `.corrupt.bak` (NOT `.migrated`, which would imply a
     // successful migration), rules.json is NOT written, and config.json
@@ -1365,7 +1329,7 @@ private Q_SLOTS:
 private:
     /// Build a v3 config carrying ONLY animation app rules (no Display.* keys,
     /// no Snapping defaults). Keeps animation-specific tests narrow — they
-    /// don't have to filter the provider-default + disable-rule noise out.
+    /// don't have to filter the disable-rule + seed-rule noise out.
     ///
     /// The v4 group / key names are pinned as inline `QStringLiteral`
     /// literals — the test's role is to be an INDEPENDENT WITNESS of the
@@ -1496,7 +1460,7 @@ private Q_SLOTS:
                  QStringLiteral("firefox"));
         QCOMPARE(shaderRule.value(QStringLiteral("enabled")).toBool(), true);
         QVERIFY2(shaderRule.value(QStringLiteral("priority")).toInt() > 0,
-                 "animation rules must sit strictly above the provider-default catch-all band (priority 0)");
+                 "animation app rules get a positive descending-by-list-order priority");
         const QJsonObject shaderAction = animationAction(shaderRule);
         QCOMPARE(shaderAction.value(QStringLiteral("event")).toString(), QStringLiteral("window.open"));
         QCOMPARE(shaderAction.value(QStringLiteral("effectId")).toString(), QStringLiteral("dissolve"));
@@ -1519,8 +1483,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         QJsonArray src;
         // Three valid entries — first should get the highest priority,
-        // last should get priority 1 (above the provider-default catch-all
-        // band at 0).
+        // last should get priority 1 (descending by list order, lowest is 1).
         src.append(makeShaderRule(QStringLiteral("first"), QStringLiteral("window.open"), QStringLiteral("popup")));
         src.append(makeShaderRule(QStringLiteral("second"), QStringLiteral("window.open"), QStringLiteral("fade")));
         src.append(makeShaderRule(QStringLiteral("third"), QStringLiteral("window.open"), QStringLiteral("blur")));
@@ -1710,37 +1673,25 @@ private Q_SLOTS:
         const QList<QJsonObject> animRulesOut = animationRulesFromRules();
         QCOMPARE(animRulesOut.size(), 1);
         const QJsonObject animRule = animRulesOut.first();
-        // Animation rule sits at priority 1 (count == 1 → priority 1) —
-        // strictly above the catch-all band.
+        // Animation rule sits at priority 1 (count == 1 → priority 1).
         QCOMPARE(animRule.value(QStringLiteral("priority")).toInt(), 1);
 
-        // Assignment cascade — every fixture-pinned level (610/510/410/310)
+        // Assignment cascade — every fixture-pinned level (306/304/303/301)
         // must still produce an assignment rule (setEngineMode + NOT
         // disableEngine), matching testCascadePriorities_exactValues. A
         // regression where an animation rule collided with an assignment
         // rule's id would drop the assignment from the rebuilt set; counting
-        // every cascade level guards that.
+        // every pinned level guards that.
         const QJsonArray allRules = rulesFromRules();
-        QVERIFY(hasAssignmentAtPriority(allRules, 610));
-        QVERIFY(hasAssignmentAtPriority(allRules, 510));
-        QVERIFY(hasAssignmentAtPriority(allRules, 410));
-        QVERIFY(hasAssignmentAtPriority(allRules, 310));
+        QVERIFY(hasAssignmentAtPriority(allRules, 306));
+        QVERIFY(hasAssignmentAtPriority(allRules, 304));
+        QVERIFY(hasAssignmentAtPriority(allRules, 303));
+        QVERIFY(hasAssignmentAtPriority(allRules, 301));
 
         // Disable family — count must match testDisableListRules exactly
         // (fixture: 1 + 2 + 1 + 1 = 5). Drift here means an animation rule
         // clobbered a disable rule.
         QCOMPARE(disableRules(allRules).size(), 5);
-
-        // Provider-default catch-all at 0.
-        const auto hasPriority = [&](int p) {
-            for (const QJsonValue& v : allRules) {
-                if (v.toObject().value(QStringLiteral("priority")).toInt() == p) {
-                    return true;
-                }
-            }
-            return false;
-        };
-        QVERIFY(hasPriority(0));
 
         // Animation rule id is distinct from every other rule's id — disjoint
         // slot namespaces are nothing without disjoint identities (a clash on
@@ -1947,8 +1898,8 @@ private:
     /// Surface every rule that's an Application-subject Exclude rule (the
     /// only shape the exclusion fold produces). A v3 fixture with no
     /// assignments / disable lists / animation rules yields a rule set
-    /// containing exactly the migrated exclusions + the provider-default
-    /// catch-all; the catch-all has no `appId` leaf, so this filter
+    /// containing exactly the migrated exclusions + the premade Steam rule;
+    /// the Steam rule matches on `windowClass`, not `appId`, so this filter
     /// targets the exclusion-fold output cleanly.
     QList<QJsonObject> exclusionRules(const QJsonArray& rules)
     {
@@ -1987,10 +1938,14 @@ private Q_SLOTS:
 
         // Schema invariants spelled out so a regression in the builder
         // (e.g. wrong field, wrong op, multi-action rule) fails here rather
-        // than at runtime in the cascade evaluator.
+        // than at runtime in the rule evaluator.
         for (const QJsonObject& r : excl) {
             QVERIFY(r.value(QStringLiteral("enabled")).toBool());
-            QCOMPARE(r.value(QStringLiteral("priority")).toInt(), 0);
+            // assignBandPrioritiesToZeroRules seeds the simple AppId-match Exclude
+            // rules in the Application band (200-299) so they display sensibly
+            // instead of all reading "Priority 0".
+            const int priority = r.value(QStringLiteral("priority")).toInt();
+            QVERIFY(priority >= 200 && priority < 300);
         }
     }
 
@@ -2105,8 +2060,8 @@ private Q_SLOTS:
     {
         // A clean v3 config with no Exclusions group must not produce any
         // exclusion stash entry and not contribute any exclusion rule to
-        // the output. The provider-default catch-all rule still appears —
-        // the assertion targets the exclusion-shaped subset exactly.
+        // the output. The premade Steam rule still appears — the assertion
+        // targets the exclusion-shaped subset exactly.
         IsolatedConfigGuard guard;
         // makeV3ConfigWithExclusions with both nulls produces a v3 config
         // with NO Exclusions group at all.

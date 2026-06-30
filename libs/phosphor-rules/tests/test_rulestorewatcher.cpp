@@ -40,7 +40,7 @@ private:
     {
         return ContextRuleBridge::makeAssignmentRule(screenId, screenId, 0, QString(), QStringLiteral("snapping"),
                                                      QStringLiteral("{11111111-2222-3333-4444-555555555555}"),
-                                                     QString());
+                                                     QString(), ContextRuleBridge::kContextBandBase);
     }
 
 private Q_SLOTS:

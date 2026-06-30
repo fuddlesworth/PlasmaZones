@@ -80,6 +80,14 @@ QStringList applicationExcludePatternsFrom(const RuleSet& source)
             continue;
         }
         const MatchExpression& match = rule.match;
+        // KNOWN LIMITATION (EXCL-3): only a single `AppId AppIdMatches` leaf is
+        // harvested into the pattern list. WindowClass / Equals / composite
+        // Exclude rules contribute no pattern, so their stale queued
+        // pending-restores aren't pruned through THIS path. Not a leak — the
+        // snap engine re-checks each queued placement against the live RuleSet
+        // at restore time and discards excluded ones, so growth self-heals
+        // (just delayed). A full fix evaluates the Exclude RuleSet against each
+        // queued WindowQuery instead of harvesting strings — deferred.
         if (match.kind() != MatchExpression::Kind::Leaf) {
             continue;
         }

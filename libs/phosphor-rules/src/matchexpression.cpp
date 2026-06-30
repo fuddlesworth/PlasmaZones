@@ -321,6 +321,13 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
     }
 
     // ── Numeric fields (Pid / VirtualDesktop / Width / Height / PositionX / PositionY / TiledWindowCount) ──
+    // KNOWN LIMITATION (VD-1): VirtualDesktop is compared as a plain int with no
+    // awareness of the `0 = all desktops / sticky` sentinel (WindowQuery.h). A
+    // sticky window (virtualDesktop == 0) matches only a literal
+    // `VirtualDesktop Equals 0`, never a real desktop number, so it can't be
+    // targeted by an ordinary per-desktop rule. Targeting the sticky/all-desktops
+    // state should use a dedicated predicate (e.g. IsSticky), not an overload of
+    // this numeric compare — deferred, tracked as a follow-up.
     if (fieldIsNumeric(m_predicate.field)) {
         const int lhs = subject.toInt();
         const int rhs = value.toInt();

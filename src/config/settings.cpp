@@ -1688,7 +1688,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         } else if (axis == DisableAxis::Activity) {
             name += disableRuleActivitySuffix();
         }
-        kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, modeToken));
+        kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, modeToken, CRB::kContextBandBase));
     }
 
     if (!m_ruleStore->setAllRules(kept)) {

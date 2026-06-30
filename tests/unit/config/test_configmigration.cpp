@@ -257,15 +257,16 @@ private Q_SLOTS:
             QFileInfo(ConfigDefaults::rulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
         QVERIFY2(!QFile::exists(assignmentsPath), "assignments.json must be retired by the v4 conversion");
 
-        // The assignment lives in rules.json as a context rule. The
-        // exact (screen+desktop+activity) cascade level → priority 610, with
-        // SetEngineMode (snapping) + SetSnappingLayout + SetTilingAlgorithm.
+        // The assignment lives in rules.json as a context rule. Priority is
+        // seeded in the Context band by pinned-dimension count: the exact
+        // (screen+desktop+activity) shape → 306, with SetEngineMode (snapping) +
+        // SetSnappingLayout + SetTilingAlgorithm.
         const QJsonObject wr = readJsonConfig(ConfigDefaults::rulesFilePath());
         QCOMPARE(wr.value(QStringLiteral("_version")).toInt(), 4);
         bool foundExact = false;
         for (const QJsonValue& v : wr.value(QStringLiteral("rules")).toArray()) {
             const QJsonObject r = v.toObject();
-            if (r.value(QStringLiteral("priority")).toInt() != 610) {
+            if (r.value(QStringLiteral("priority")).toInt() != 306) {
                 continue;
             }
             QStringList types;
@@ -278,7 +279,7 @@ private Q_SLOTS:
                                   QStringLiteral("setTilingAlgorithm")}));
             foundExact = true;
         }
-        QVERIFY2(foundExact, "exact-cascade assignment rule (priority 610) missing from rules.json");
+        QVERIFY2(foundExact, "exact-context assignment rule (priority 306) missing from rules.json");
     }
 
     void testMigrateAssignmentGroups_readableAsRule()
@@ -292,12 +293,12 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         // The v3→v4 conversion turned the assignment into a screen+desktop
-        // context rule (priority 410, autotile mode + the dwindle algorithm).
+        // context rule (priority 303, autotile mode + the dwindle algorithm).
         const QJsonObject wr = readJsonConfig(ConfigDefaults::rulesFilePath());
         bool foundDesktopRule = false;
         for (const QJsonValue& v : wr.value(QStringLiteral("rules")).toArray()) {
             const QJsonObject r = v.toObject();
-            if (r.value(QStringLiteral("priority")).toInt() != 410) {
+            if (r.value(QStringLiteral("priority")).toInt() != 303) {
                 continue;
             }
             QString mode;
@@ -316,7 +317,7 @@ private Q_SLOTS:
             QCOMPARE(algorithm, QStringLiteral("dwindle"));
             foundDesktopRule = true;
         }
-        QVERIFY2(foundDesktopRule, "screen+desktop assignment rule (priority 410) missing from rules.json");
+        QVERIFY2(foundDesktopRule, "screen+desktop assignment rule (priority 303) missing from rules.json");
     }
 
     void testMigrateNumericValues()

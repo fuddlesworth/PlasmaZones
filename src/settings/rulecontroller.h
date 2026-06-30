@@ -230,10 +230,11 @@ public:
     /// Toggle the enabled flag of the rule with @p ruleId.
     Q_INVOKABLE bool setRuleEnabled(const QString& ruleId, bool enabled);
 
-    /// Reorder: move @p ruleId to sit just before @p beforeRuleId (empty =
-    /// move to the end). Drives the Animations drag-to-reorder. After a move
-    /// the affected rules' priorities are renormalized so list order and
-    /// evaluation order agree.
+    /// Reorder @p ruleId to sit immediately before @p beforeRuleId (an empty
+    /// @p beforeRuleId drops it at the end), then renormalize priorities so
+    /// list order maps onto evaluation order. Returns false on a rejected
+    /// (unknown id) move and true on success — including a no-op drop back to
+    /// the same slot, which leaves the dirty flag untouched.
     Q_INVOKABLE bool moveRule(const QString& ruleId, const QString& beforeRuleId);
 
     /// The rule with @p ruleId as a JSON map, or an empty map if absent.

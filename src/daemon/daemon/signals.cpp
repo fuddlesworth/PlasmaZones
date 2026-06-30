@@ -501,7 +501,9 @@ void Daemon::initializeAutotile()
 
                 // Emit ONE batched signal (suppresses one OSD regardless of screen count)
                 concreteSnap->emitBatchedResnap(allResnapEntries);
-                m_suppressResnapOsd = allResnapEntries.isEmpty() ? 0 : 1;
+                // Empty ⇒ no feedback to suppress; a no-op arm must NOT zero a
+                // concurrent stream's outstanding count (the old `= 0` did).
+                armResnapOsdSuppression(allResnapEntries.isEmpty() ? 0 : 1);
             }
         });
 

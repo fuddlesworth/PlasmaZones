@@ -44,9 +44,10 @@ private:
     // A valid context rule that round-trips cleanly.
     PWR::Rule makeRule(const QString& screenId, int priorityHint = -1)
     {
-        PWR::Rule rule = PWR::ContextRuleBridge::makeAssignmentRule(
-            screenId, screenId, 0, QString(), QStringLiteral("snapping"),
-            QStringLiteral("{11111111-2222-3333-4444-555555555555}"), QString());
+        PWR::Rule rule =
+            PWR::ContextRuleBridge::makeAssignmentRule(screenId, screenId, 0, QString(), QStringLiteral("snapping"),
+                                                       QStringLiteral("{11111111-2222-3333-4444-555555555555}"),
+                                                       QString(), PWR::ContextRuleBridge::kContextBandBase);
         if (priorityHint >= 0) {
             rule.priority = priorityHint;
         }

@@ -878,8 +878,20 @@ private:
      */
     void pruneAutotileOrdersForWindow(const QString& instanceId);
 
+    /// Arm OSD suppression for @p count upcoming resnap feedback signals. ADDS
+    /// to the running count (never clobbers) so overlapping async resnap streams
+    /// accumulate instead of overwriting each other, and (re)starts the watchdog
+    /// so a primed feedback that never arrives can't leave the counter stuck. A
+    /// non-positive @p count is a no-op. See @ref m_suppressResnapOsd.
+    void armResnapOsdSuppression(int count);
+
     bool m_running = false;
     int m_suppressResnapOsd = 0;
+    /// Bounds @ref m_suppressResnapOsd leakage: a resnap that produces zero
+    /// moves emits no feedback, so without this the count would stay armed and
+    /// suppress the next unrelated OSD. Reset to 0 on timeout; re-armed by
+    /// @ref armResnapOsdSuppression.
+    QTimer m_suppressResnapOsdWatchdog;
 
     /// Shutdown flag — set by `aboutToQuit`, `stop()`. Gates `shouldSuppressOsd()`.
     bool m_shuttingDown = false;

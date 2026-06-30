@@ -117,14 +117,22 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     {
         AssignmentEntry entry;
         bool enabled = true;
+        int priority = 0;
     };
     QHash<KeyT, OldEntrySnapshot> oldEntries;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const BatchContext ctx = decode(it.key());
         if (const PWR::Rule* existing = findExactContextRule(ctx.screenId, ctx.virtualDesktop, ctx.activity)) {
-            oldEntries.insert(it.key(), {entryFromRuleMatchActions(*existing), existing->enabled});
+            oldEntries.insert(it.key(), {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority});
         }
     }
+
+    // Priority seed for newly CREATED assignments — a winning top value so a
+    // fresh assignment outranks any prior one (the priority-wins model).
+    // Computed from the live rule set before the family drop; each new rule
+    // claims the next value so back-to-back creates don't collide. An UPDATE
+    // preserves its snapshot priority instead.
+    int seedPriority = nextAssignmentPriority(m_ruleStore->ruleSet().rules());
 
     // Step 2 — drop every rule belonging to this family; keep the rest.
     QList<PWR::Rule> kept;
@@ -153,11 +161,15 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         if (shouldSkipLayoutAssignment(layoutId, logContext)) {
             continue;
         }
+        const bool hadOld = oldEntries.contains(it.key());
         const OldEntrySnapshot oldSnapshot = oldEntries.value(it.key());
         const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldSnapshot.entry);
-        PWR::Rule rebuilt = PWR::ContextRuleBridge::makeAssignmentRule(QString(), ctx.screenId, ctx.virtualDesktop,
-                                                                       ctx.activity, modeToWireString(entry.mode),
-                                                                       entry.snappingLayout, entry.tilingAlgorithm);
+        // UPDATE preserves the stored priority; CREATE claims the next winning
+        // seed value.
+        const int priority = hadOld ? oldSnapshot.priority : seedPriority++;
+        PWR::Rule rebuilt = PWR::ContextRuleBridge::makeAssignmentRule(
+            QString(), ctx.screenId, ctx.virtualDesktop, ctx.activity, modeToWireString(entry.mode),
+            entry.snappingLayout, entry.tilingAlgorithm, priority);
         // Preserve the prior `enabled` flag — `makeAssignmentRule` always
         // stamps `enabled = true`. Mirrors the upsertAssignmentRule
         // precedent. If there's no prior snapshot (new assignment), the
@@ -241,6 +253,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     {
         AssignmentEntry entry;
         bool enabled = true;
+        int priority = 0;
     };
     QHash<CombinedAssignmentKey, OldEntrySnapshot> oldEntries;
     // Validity gate up front: a malformed key (zero desktop or empty
@@ -259,9 +272,13 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
             continue;
         }
         if (const PWR::Rule* existing = findExactContextRule(key.screenId, key.virtualDesktop, key.activity)) {
-            oldEntries.insert(key, {entryFromRuleMatchActions(*existing), existing->enabled});
+            oldEntries.insert(key, {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority});
         }
     }
+
+    // Priority seed for newly CREATED combined assignments (see
+    // applyBatchAssignments for the rationale).
+    int seedPriority = nextAssignmentPriority(m_ruleStore->ruleSet().rules());
 
     QList<PWR::Rule> kept;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
@@ -289,11 +306,13 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         if (shouldSkipLayoutAssignment(layoutId, logContext)) {
             continue;
         }
+        const bool hadOld = oldEntries.contains(key);
         const OldEntrySnapshot oldSnapshot = oldEntries.value(key);
         const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldSnapshot.entry);
-        PWR::Rule rebuilt = PWR::ContextRuleBridge::makeAssignmentRule(QString(), key.screenId, key.virtualDesktop,
-                                                                       key.activity, modeToWireString(entry.mode),
-                                                                       entry.snappingLayout, entry.tilingAlgorithm);
+        const int priority = hadOld ? oldSnapshot.priority : seedPriority++;
+        PWR::Rule rebuilt = PWR::ContextRuleBridge::makeAssignmentRule(
+            QString(), key.screenId, key.virtualDesktop, key.activity, modeToWireString(entry.mode),
+            entry.snappingLayout, entry.tilingAlgorithm, priority);
         rebuilt.enabled = oldSnapshot.enabled;
         kept.append(rebuilt);
         emittedKeys.insert(key);

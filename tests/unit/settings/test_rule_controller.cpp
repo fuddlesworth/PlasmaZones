@@ -727,14 +727,15 @@ void TestRuleController::moveRuleReorders()
     const QString c = makeApp(QStringLiteral("c"));
     QVERIFY(!a.isEmpty() && !b.isEmpty() && !c.isEmpty());
 
-    // Move C before A — order becomes C, A, B.
+    // Moving C above A is a pure list-order reorder, renormalized so list order
+    // maps onto priority order: the list becomes C, A, B.
     QVERIFY(controller.moveRule(c, a));
     RuleModel* model = controller.model();
     QCOMPARE(model->index(0, 0).data(RuleModel::IdRole).toString(), c);
     QCOMPARE(model->index(1, 0).data(RuleModel::IdRole).toString(), a);
     QCOMPARE(model->index(2, 0).data(RuleModel::IdRole).toString(), b);
 
-    // moveRule renormalizes priorities — earlier list index ⇒ higher priority.
+    // Earlier list index maps to higher priority within the band.
     const int prioFirst = model->index(0, 0).data(RuleModel::PriorityRole).toInt();
     const int prioLast = model->index(2, 0).data(RuleModel::PriorityRole).toInt();
     QVERIFY(prioFirst > prioLast);

@@ -12,14 +12,13 @@ import "SearchAnchorHelpers.js" as SearchAnchors
 /**
  * @brief Drag-reorderable, variable-height list of RuleRow delegates.
  *
- * Hosts one rule-section's rows. Each row can independently expand its
- * WHEN/THEN preview, and rows can be reordered by dragging the grip
- * handle column or by Alt+Up / Alt+Down on a focused row. Priorities
- * within a section are entirely list-order driven via the controller's
- * `renormalizePriorities` — moving a row in the UI translates to a
- * `controller.moveRule(movedId, beforeId)` call on release, and the
- * model's `rowsMoved` signal is what `RulesPage` listens for to
- * rebuild its bucketed `sectionModel`.
+ * Hosts one rule-section's rows, shown highest priority first. Each row can
+ * independently expand its WHEN/THEN preview, and rows can be reordered by
+ * dragging the grip handle column or by Alt+Up / Alt+Down on a focused row.
+ * A drop reorders the model via `controller.moveRule(movedId, beforeId)`, which
+ * renormalizes priorities so list order maps onto evaluation order. The
+ * resulting `dataChanged`/`rowsMoved` is what `RulesPage` listens for to rebuild
+ * and re-sort its bucketed `sectionModel`.
  *
  * Variable-height invariant: each delegate publishes its actual rendered
  * height (header row + expansion contribution) back to the container via
@@ -160,6 +159,11 @@ Item {
             required property var modelData
             required property int index
 
+            // Managed System rules have a fixed precedence (INT_MIN), so they
+            // show no drag affordance — the controller rejects reordering them
+            // anyway.
+            readonly property bool reorderable: modelData.managed !== true
+
             readonly property real baseY: root.cumulativeY(index)
             // Cascade displacement = ± the dragged row's own height
             // (not a fixed stride) so displaced rows slide exactly
@@ -236,6 +240,8 @@ Item {
             Keys.onPressed: event => {
                 if (!(event.modifiers & Qt.AltModifier))
                     return;
+                if (!delegateRoot.reorderable)
+                    return;
                 var rulesSnapshot = root.rules;
                 var from = delegateRoot.index;
                 var to = from;
@@ -298,12 +304,14 @@ Item {
                         width: Kirigami.Units.iconSizes.smallMedium
                         height: Kirigami.Units.iconSizes.smallMedium
                         source: "handle-sort"
+                        visible: delegateRoot.reorderable
                         opacity: dragArea.containsMouse || dragArea.drag.active ? 0.7 : 0.3
                     }
 
                     MouseArea {
                         id: dragArea
 
+                        enabled: delegateRoot.reorderable
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor

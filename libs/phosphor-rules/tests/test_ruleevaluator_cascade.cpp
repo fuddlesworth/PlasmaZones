@@ -1,23 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Cascade-fidelity oracle. Phase 1 writes this NOW so Phase 3's migration has
-// a behavioural reference: it proves that context-only rules, ordered by the
-// production `ContextRuleBridge` priority formula, reproduce the existing
-// zone-Assignment cascade
-// (exact -> activity -> desktop -> screen -> provider-default) exactly.
+// Priority-wins oracle for context-only rules: the highest-priority matching
+// rule per slot wins (ties by stable list order). There is no specificity
+// formula in the resolver, so this oracle assigns each context rule an explicit
+// priority that preserves the legacy cascade ordering
+// (exact > screen+activity > screen+desktop > screen-only > catch-all default)
+// and proves the RuleEvaluator resolves each query to the highest-priority
+// match. The match expression still comes from `ContextRuleBridge`; the
+// priorities are now the caller's, chosen here by pinned-dimension count.
 //
-// The priority formula and the context match expression are NOT re-derived
-// here — both are delegated to `ContextRuleBridge` so this oracle exercises
-// the real production code path. `testPriorityBands` pins the literal bands
-// the bridge must keep producing.
-//
-// Priority bands:
-//   exact (screen+desktop+activity)  610
-//   screen + activity                510   (activity weight 200 > desktop 100)
-//   screen + desktop                 410
-//   screen only                      310
-//   provider default                   0   (empty-All{} catch-all)
+// Explicit priorities (Context band base = 300):
+//   exact (screen+desktop+activity)  306
+//   screen + activity                304
+//   screen + desktop                 303
+//   screen only                      301
+//   catch-all default                  1   (empty-All{} match, the floor)
 
 #include "RuleTestHelpers.h"
 
@@ -30,19 +28,23 @@ using namespace PhosphorRules::TestHelpers;
 
 namespace {
 
-/// The cascade -> priority formula under test. Delegated to the production
-/// `ContextRuleBridge` so this oracle exercises the *real* formula rather than
-/// a hand-rolled copy that could silently drift from it.
+/// Explicit priority for a context rule, chosen to preserve the legacy cascade
+/// ordering under the priority-wins resolver. The resolver no longer derives
+/// this; the caller owns it. A rule pinning nothing is the catch-all floor.
 int cascadePriority(bool screenPinned, bool desktopPinned, bool activityPinned)
 {
-    return ContextRuleBridge::contextPriority(screenPinned, desktopPinned, activityPinned);
+    if (!screenPinned && !desktopPinned && !activityPinned) {
+        return 1; // catch-all default — the floor
+    }
+    return ContextRuleBridge::kContextBandBase + (activityPinned ? 3 : 0) + (desktopPinned ? 2 : 0)
+        + (screenPinned ? 1 : 0);
 }
 
 /// Builds a context-only rule pinning the given dimensions, with one
 /// engine-mode action carrying @p tag as its mode so the test can read back
-/// which rule won. The match expression and priority both come from the
-/// production `ContextRuleBridge` — the cascade fidelity this file asserts is
-/// the bridge's behaviour, not a re-implementation.
+/// which rule won. The match expression comes from the production
+/// `ContextRuleBridge`; the priority is assigned locally by `cascadePriority`,
+/// since the resolver no longer derives it.
 Rule contextRule(const QString& name, const QString& screenId, int desktop, const QString& activity, const QString& tag)
 {
     const bool screenPinned = !screenId.isEmpty();
@@ -50,7 +52,7 @@ Rule contextRule(const QString& name, const QString& screenId, int desktop, cons
     const bool activityPinned = !activity.isEmpty();
 
     const MatchExpression match = ContextRuleBridge::makeContextMatch(screenId, desktop, activity);
-    const int priority = ContextRuleBridge::contextPriority(screenPinned, desktopPinned, activityPinned);
+    const int priority = cascadePriority(screenPinned, desktopPinned, activityPinned);
     return makeRule(name, priority, match, {engineMode(tag)});
 }
 
@@ -71,27 +73,10 @@ class TestRuleEvaluatorCascade : public QObject
 
 private Q_SLOTS:
 
-    // ── Priority formula sanity ──
-
-    void testPriorityBands()
-    {
-        // Assert the production bridge formula reproduces the literal cascade
-        // bands. These constants are the cascade-fidelity contract — if the
-        // bridge ever changes its weights, this oracle must fail loudly.
-        QCOMPARE(ContextRuleBridge::contextPriority(true, true, true), 610); // exact
-        QCOMPARE(ContextRuleBridge::contextPriority(true, false, true), 510); // screen + activity
-        QCOMPARE(ContextRuleBridge::contextPriority(true, true, false), 410); // screen + desktop
-        QCOMPARE(ContextRuleBridge::contextPriority(true, false, false), 310); // screen only
-        QCOMPARE(ContextRuleBridge::contextPriority(false, false, false), 0); // provider default
-    }
-
-    void testActivityBeatsDesktop_structurally()
-    {
-        // The whole "activity beats desktop" guarantee is the weight ordering.
-        QVERIFY(cascadePriority(true, false, true) > cascadePriority(true, true, false));
-    }
-
     // ── Full cascade ──
+    // The priority ordering itself is proven through the resolver below
+    // (highest-priority rule wins per slot); there is no separate "formula"
+    // contract to pin now that the resolver derives nothing.
 
     void testExactBeatsEverything()
     {
@@ -144,7 +129,7 @@ private Q_SLOTS:
         QCOMPARE(resolvedMode(eval, q), QStringLiteral("screen+desktop"));
     }
 
-    void testScreenOnlyBeatsProviderDefault()
+    void testScreenOnlyBeatsCatchAllDefault()
     {
         RuleSet set;
         set.addRule(contextRule(QStringLiteral("default"), QString(), 0, QString(), QStringLiteral("default")));
@@ -157,7 +142,7 @@ private Q_SLOTS:
         QCOMPARE(resolvedMode(eval, q), QStringLiteral("screen"));
     }
 
-    void testFallThroughToProviderDefault()
+    void testFallThroughToCatchAllDefault()
     {
         RuleSet set;
         set.addRule(contextRule(QStringLiteral("default"), QString(), 0, QString(), QStringLiteral("default")));
@@ -165,7 +150,7 @@ private Q_SLOTS:
         RuleEvaluator eval(set);
 
         // A query on a screen with no specific rule falls through to the
-        // empty-All{} provider default.
+        // empty-All{} catch-all default.
         WindowQuery q;
         q.screenId = QStringLiteral("HDMI-9");
         QCOMPARE(resolvedMode(eval, q), QStringLiteral("default"));
@@ -246,7 +231,7 @@ private Q_SLOTS:
         scrOnly.activity = QStringLiteral("{unknown}");
         QCOMPARE(resolvedMode(eval, scrOnly), QStringLiteral("screen"));
 
-        // Unknown screen -> provider default.
+        // Unknown screen -> catch-all default.
         WindowQuery def;
         def.screenId = QStringLiteral("VGA-3");
         QCOMPARE(resolvedMode(eval, def), QStringLiteral("default"));
