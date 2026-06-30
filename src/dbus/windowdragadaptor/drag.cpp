@@ -59,7 +59,16 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         m_overlayService->hideSnapAssist();
     }
 
-    registerCancelOverlayShortcut();
+    // No KGlobalAccel Escape grab is bound here. During a snap drag the
+    // kwin-effect grabs the keyboard (lifecycle.cpp) and routes Escape
+    // through grabbedKeyboardEvent -> callCancelSnap -> cancelSnap(), so a
+    // KGlobalAccel binding would never fire during the drag anyway. Binding
+    // it per-drag used to force kwin (which hosts kglobalaccel) to rewrite
+    // kglobalshortcutsrc + kglobalshortcutsstaterc with an fsync at drag
+    // start and end, stalling the compositor on slow-fsync disks
+    // (discussion #167). The grab is now bound only for the snap-assist
+    // phase, which has no keyboard grab (see start.cpp's snapAssistShown
+    // handler), and for the layout picker (start.cpp).
     m_draggedWindowId = windowId;
     m_originalGeometry = QRect(qRound(x), qRound(y), qRound(width), qRound(height));
     m_currentZoneId.clear();
@@ -572,10 +581,12 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         if (!triggerHeld) {
             m_triggerReleasedAfterCancel = true;
         } else if (m_triggerReleasedAfterCancel) {
-            // Trigger released and re-pressed: clear cancel, resume zone snapping
+            // Trigger released and re-pressed: clear cancel, resume zone snapping.
+            // No Escape grab to re-arm: the kwin-effect's keyboard grab stays
+            // held for the whole drag (it ungrabs only on dragStopped), so
+            // Escape still reaches cancelSnap() after a cancel+re-press cycle.
             m_snapCancelled = false;
             m_triggerReleasedAfterCancel = false;
-            registerCancelOverlayShortcut();
             // Fall through to normal processing
         } else {
             return; // Trigger still held from before Escape — stay cancelled

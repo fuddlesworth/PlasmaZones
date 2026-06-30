@@ -610,7 +610,17 @@ void Daemon::connectShortcutSignals()
         m_unifiedLayoutController->setCurrentScreenName(screenId);
         updateLayoutFilterForScreen(screenId);
         m_overlayService->showLayoutPicker(screenId);
-        if (m_windowDragAdaptor) {
+        // Bind the picker's KGlobalAccel grabs only if the picker actually
+        // became visible. showLayoutPicker() bails without setting
+        // m_layoutPickerVisible when the screen, shell, or layout list is
+        // missing, and the only releaser of the nav grabs is
+        // layoutPickerDismissed, which never fires for an invisible picker —
+        // so binding on a failed show would leak the Escape + arrow/Return/Enter
+        // grabs system-wide (swallowed even over fullscreen games) until the
+        // next successful open+dismiss or a compositor reconnect. Re-press of an
+        // already-visible picker is fine: isLayoutPickerVisible() is true and
+        // registration is idempotent.
+        if (m_windowDragAdaptor && m_overlayService->isLayoutPickerVisible()) {
             m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
             // Picker navigation accels — registered while picker is
             // shown, dropped on dismiss. The unified PassiveOverlayShell
@@ -644,14 +654,13 @@ void Daemon::connectShortcutSignals()
                 }
             });
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
-        // Only release the Escape grab if no drag is currently active —
-        // otherwise the in-progress drag's own cancel-overlay shortcut
-        // would be torn down underneath it. WindowDragAdaptor's drag-end
-        // path will release on its own when appropriate.
-        if (m_windowDragAdaptor && !m_windowDragAdaptor->isDragActive()) {
-            m_windowDragAdaptor->releaseCancelOverlayShortcut();
-        }
+        // Release the shared Escape grab only when no other consumer (snap
+        // assist) still needs it — releaseCancelOverlayShortcutIfIdle() is the
+        // canonical cross-consumer guard (the picker is already hidden by the
+        // time this fires). The 6 picker-nav grabs are picker-only, so always
+        // drop them.
         if (m_windowDragAdaptor) {
+            m_windowDragAdaptor->releaseCancelOverlayShortcutIfIdle();
             m_windowDragAdaptor->releaseLayoutPickerNavShortcuts();
         }
     });

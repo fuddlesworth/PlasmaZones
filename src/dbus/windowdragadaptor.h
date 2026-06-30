@@ -97,7 +97,8 @@ public:
 
     /**
      * @brief Set the shortcut registrar used to (un)register the Escape
-     *        cancel-overlay shortcut around active drag sessions.
+     *        cancel-overlay shortcut for the snap-assist phase and layout
+     *        picker (the drag itself uses the kwin-effect's keyboard grab).
      *
      * Must be called after construction, before any drag operations.
      * The registrar is owned by Daemon — this is a non-owning pointer. Routing
@@ -119,8 +120,14 @@ public:
     /**
      * Register / unregister the cancel-overlay Escape shortcut on demand.
      *
-     * Drag-active code paths register/unregister automatically as part of
-     * the drag lifecycle. The layout picker re-uses the same id
+     * The snap-assist phase (start.cpp's snapAssistShown handler) and the
+     * layout picker register / unregister this on demand. The drag itself
+     * needs no binding: the
+     * kwin-effect grabs the keyboard for the whole drag and routes Escape
+     * to cancelSnap() directly, so a KGlobalAccel grab would never fire
+     * during a drag (and binding one per drag fsynced kglobalshortcutsrc and
+     * stuttered the compositor on slow disks, #167). The layout picker
+     * re-uses the same id
      * (kCancelOverlayId) so KGlobalAccel never sees two distinct actions
      * competing for Escape — once a key is granted, KGlobalAccel routes
      * to a single action, and a second registration with a fresh id is
@@ -135,10 +142,18 @@ public:
     {
         registerCancelOverlayShortcut();
     }
-    void releaseCancelOverlayShortcut()
-    {
-        unregisterCancelOverlayShortcut();
-    }
+
+    /// Release the shared cancel-overlay Escape grab, but ONLY when no other
+    /// consumer still needs it. kCancelOverlayId is bound on behalf of the
+    /// layout picker (start.cpp, layoutPickerRequested) and the snap-assist
+    /// phase (start.cpp, snapAssistShown); the drag itself never binds it (the
+    /// kwin-effect's keyboard grab handles Escape during a drag). Every normal
+    /// release site routes through here so one consumer's teardown cannot tear
+    /// the grab out from under another consumer that is still showing. Two
+    /// sites deliberately bypass it with an unconditional release: cancelSnap()
+    /// (the explicit Escape-pressed teardown) and clearForCompositorReconnect()
+    /// (force-release when the compositor that held the grab is already gone).
+    void releaseCancelOverlayShortcutIfIdle();
 
     /// Register the layout-picker keyboard navigation accelerators
     /// (Left/Right/Up/Down/Return/Enter) as global shortcuts. Required
@@ -152,15 +167,6 @@ public:
     void ensureLayoutPickerNavShortcutsRegistered(std::function<void(int dx, int dy)> moveCb,
                                                   std::function<void()> confirmCb);
     void releaseLayoutPickerNavShortcuts();
-
-    /// Whether a drag is currently active (m_draggedWindowId non-empty).
-    /// Daemon uses this to gate the picker-dismissed Escape release on
-    /// drag state — releasing while a drag is in flight would tear down
-    /// the drag's own Escape grab.
-    bool isDragActive() const
-    {
-        return !m_draggedWindowId.isEmpty();
-    }
 
 public Q_SLOTS:
     /**
@@ -526,8 +532,8 @@ private:
     bool m_modifierConflictWarned = false; // Logged once per drag, reset on next dragStarted
 
     // Escape cancel-overlay shortcut is registered/unregistered dynamically
-    // via the PhosphorShortcuts Registry around drag sessions — no QAction
-    // member needed (the Registry owns everything).
+    // via the PhosphorShortcuts Registry for the snap-assist phase and layout
+    // picker — no QAction member needed (the Registry owns everything).
 
     // Pre-parsed trigger caches (populated on dragStarted, used on every dragMoved tick)
     QVector<ParsedTrigger> m_cachedActivationTriggers;
@@ -594,7 +600,8 @@ private Q_SLOTS:
 
     /**
      * Called when snap assist is dismissed (selection, timeout, click-away, etc.)
-     * Unregisters the Escape shortcut that was kept alive for snap assist
+     * Unregisters the Escape shortcut that start.cpp's snapAssistShown handler
+     * bound for snap assist
      */
     void onSnapAssistDismissed();
 };
