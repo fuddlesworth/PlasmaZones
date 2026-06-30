@@ -214,9 +214,11 @@ ColumnLayout {
             return rawStr === "accent" ? i18n("Accent") : rawStr.toUpperCase();
         }
         if (kind === "bool") {
-            // Render the JSON bool as On / Off — without this branch a bool
-            // param fell through to the raw lowercase "true" / "false". Matches
-            // the editor toggle and the WHEN-side value pill.
+            // Render the JSON bool as On / Off for the value pill — without this
+            // branch it fell through to the raw lowercase "true" / "false". The
+            // collapsed rule list and the action editor's toggle caption use the
+            // action's polarity phrase ("Hide border") instead; this terser On /
+            // Off is the tabular pill form, matching the WHEN-side value pills.
             return (raw === true || raw === "true") ? i18n("On") : i18n("Off");
         }
         return rawStr;

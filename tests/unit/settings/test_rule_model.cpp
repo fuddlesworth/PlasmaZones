@@ -112,6 +112,7 @@ private Q_SLOTS:
     void disableEngineNamesTheModeBeingDisabled();
     void setOpacityRendersValidValuesAndGuardsRejectPaths();
     void restorePositionRendersValueAwareLabel();
+    void boolMatchConditionRendersOnOff();
     void shaderAndCurveLabelsResolveThroughLookups();
     void routeActionsRenderFriendlyLabels();
 };
@@ -492,6 +493,38 @@ void TestRuleModel::restorePositionRendersValueAwareLabel()
     // affirmative "Restore …", false as the negated "Don't restore …".
     QVERIFY2(labelAt(0).contains(QStringLiteral("Restore position")), qPrintable(labelAt(0)));
     QVERIFY2(labelAt(1).contains(QStringLiteral("Don't")), qPrintable(labelAt(1)));
+}
+
+void TestRuleModel::boolMatchConditionRendersOnOff()
+{
+    // A boolean match condition (e.g. Maximized) renders its value as On / Off in
+    // the rule's match summary, not the raw JSON "true" / "false" the generic
+    // toString() fallback would emit. Mirrors the editor toggle and the expanded
+    // match tree so the three boolean surfaces read the same.
+    const auto buildRule = [](bool value) {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 150;
+        rule.match = MatchExpression::makeLeaf(Field::IsMaximized, Operator::Equals, value);
+        RuleAction action;
+        action.type = QString(ActionType::Float);
+        rule.actions = {action};
+        return rule;
+    };
+
+    RuleModel model;
+    model.setRules({buildRule(true), buildRule(false)});
+
+    const auto summaryAt = [&](int row) {
+        return model.data(model.index(row, 0), RuleModel::MatchSummaryRole).toString();
+    };
+    // Never the raw JSON bool token.
+    QVERIFY2(!summaryAt(0).contains(QStringLiteral("true")), qPrintable(summaryAt(0)));
+    QVERIFY2(!summaryAt(1).contains(QStringLiteral("false")), qPrintable(summaryAt(1)));
+    // The field label is carried, with the value rendered as On / Off.
+    QVERIFY2(summaryAt(0).contains(QStringLiteral("On")), qPrintable(summaryAt(0)));
+    QVERIFY2(summaryAt(1).contains(QStringLiteral("Off")), qPrintable(summaryAt(1)));
+    QVERIFY(summaryAt(0) != summaryAt(1));
 }
 
 void TestRuleModel::shaderAndCurveLabelsResolveThroughLookups()
