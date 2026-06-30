@@ -415,6 +415,21 @@ private:
     /// list-ordered, context rules keep their derived bands.
     void renormalizePriorities();
 
+    /// Priority-band base for a section — used now only to (a) order section
+    /// cards by precedence in `sections()` and (b) seed a sensible DEFAULT
+    /// position for a newly added rule (see `bandSeededInsertIndex`). Priority
+    /// itself is a single global list-order sequence (`renormalizePriorities`),
+    /// no longer banded — a rule's precedence is its position in the one flat
+    /// list. Managed System rules are pinned at INT_MIN, so System reports the
+    /// lowest base.
+    static int bandBaseForSection(RuleModel::Section section);
+
+    /// Row index at which a freshly added rule should be inserted so its default
+    /// precedence reflects its section's band — above the first existing rule of
+    /// a lower band (or the first managed rule), i.e. the top of its band tier.
+    /// The user can then freely drag it anywhere; this only seeds the default.
+    int bandSeededInsertIndex(const PhosphorRules::Rule& rule) const;
+
     RuleModel m_model;
     bool m_dirty = false;
     bool m_daemonReachable = false;

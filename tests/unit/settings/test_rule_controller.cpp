@@ -56,6 +56,7 @@ private Q_SLOTS:
     void engineModePickerExposesAllVocabularyTokens();
     void userAuthorableFilterHidesInternalActions();
     void moveRuleReorders();
+    void flatPriorityIgnoresBandsOnReorder();
     void authoringMetadata();
     void inputHints();
     void templatesProduceSeededRules();
@@ -252,9 +253,9 @@ void TestRuleController::monitorOverviewLockPriorityResolution()
     // report the HIGHEST-PRIORITY rule's value (first-wins), not last-wins and
     // not mere presence — mirroring resolveContextLocked's single-winner Locked
     // slot (cf. testContextLock_priorityResolution at the registry level).
-    // addRuleFromJson appends and renormalizePriorities makes the earlier-added
-    // rule the higher-priority one within the Context band, so the FIRST rule
-    // added for a screen is its winner. Run both value directions so a
+    // Each added rule seeds at the top of its (Context) band tier, so within a
+    // band the earlier-added rule keeps the higher global priority — the FIRST
+    // rule added for a screen is its winner. Run both value directions so a
     // "true-always-wins" / "false-always-wins" bug fails one of the two.
     RuleController controller;
 
@@ -735,10 +736,65 @@ void TestRuleController::moveRuleReorders()
     QCOMPARE(model->index(1, 0).data(RuleModel::IdRole).toString(), a);
     QCOMPARE(model->index(2, 0).data(RuleModel::IdRole).toString(), b);
 
-    // Earlier list index maps to higher priority within the band.
+    // Earlier list index maps to higher (global) priority.
     const int prioFirst = model->index(0, 0).data(RuleModel::PriorityRole).toInt();
     const int prioLast = model->index(2, 0).data(RuleModel::PriorityRole).toInt();
     QVERIFY(prioFirst > prioLast);
+}
+
+void TestRuleController::flatPriorityIgnoresBandsOnReorder()
+{
+    // Priority is one flat global sequence — section "bands" only seed a new
+    // rule's default position, they do NOT cap precedence. A cross-band drag
+    // must let a lower-band rule outrank a higher-band one.
+    RuleController controller;
+
+    // Application rule (float action → Applications band) and a Monitor rule
+    // (context match + lockContext → Context band, which seeds higher).
+    QVariantMap appRule = controller.newEmptyRule(QStringLiteral("application"));
+    {
+        QVariantMap match = appRule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("firefox");
+        appRule[QStringLiteral("match")] = match;
+        appRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
+    }
+    const QString appId = controller.addRuleFromJson(appRule);
+    QVERIFY(!appId.isEmpty());
+
+    QVariantMap monRule = controller.newEmptyRule(QStringLiteral("monitor"));
+    {
+        QVariantMap match = monRule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("DP-1");
+        monRule[QStringLiteral("match")] = match;
+        monRule[QStringLiteral("actions")] = QVariantList{
+            QVariantMap{{QStringLiteral("type"), QStringLiteral("lockContext")}, {QStringLiteral("value"), true}}};
+    }
+    const QString monId = controller.addRuleFromJson(monRule);
+    QVERIFY(!monId.isEmpty());
+
+    RuleModel* model = controller.model();
+    const auto rowOf = [&](const QString& id) {
+        for (int i = 0; i < model->rowCount(); ++i)
+            if (model->index(i, 0).data(RuleModel::IdRole).toString() == id)
+                return i;
+        return -1;
+    };
+    const auto prioOf = [&](const QString& id) {
+        return model->index(rowOf(id), 0).data(RuleModel::PriorityRole).toInt();
+    };
+
+    // Band-seeded insert: the Monitor rule (higher band) seeds ABOVE the
+    // Application rule even though it was added second.
+    QVERIFY(rowOf(monId) < rowOf(appId));
+    QVERIFY(prioOf(monId) > prioOf(appId));
+
+    // Cross-band drag: drop the Application rule above the Monitor rule. Position
+    // now decides — the Application rule outranks the Monitor rule despite its
+    // lower band. (The old banded scheme would have snapped it back below.)
+    QVERIFY(controller.moveRule(appId, monId));
+    QVERIFY(rowOf(appId) < rowOf(monId));
+    QVERIFY(prioOf(appId) > prioOf(monId));
 }
 
 void TestRuleController::authoringMetadata()

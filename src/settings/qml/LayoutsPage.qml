@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import "GroupSortLogic.js" as Core
 import "LayoutFilterLogic.js" as Logic
 import QtQuick
 import QtQuick.Controls
@@ -148,7 +149,13 @@ SettingsFlickable {
         // Priority sort silently no-ops for the tiling view.
         let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder().map(id => "autotile:" + id);
         Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
-        root.groupsModel = Logic.finalizeGroups(groups);
+        // "None" is the one grouping that should still show its (single) card
+        // header — the user wants the title + count even with no grouping. Every
+        // other grouping keeps the legacy "drop the header when it collapses to a
+        // single group" behaviour (a lone "Built-in" card needs no redundant
+        // header).
+        let isNoneGroup = root.viewMode === 0 ? filterBar.groupByIndex === filterBar.groupSnappingNone : filterBar.groupByIndex === filterBar.groupTilingNone;
+        root.groupsModel = Core.finalizeGroups(groups, isNoneGroup);
     }
 
     function selectDefaultLayout(mode) {
@@ -174,7 +181,7 @@ SettingsFlickable {
         // autotile mode doesn't accidentally select a bare snap layout.
         const sections = root.groupsModel || [];
         for (let i = 0; i < sections.length; ++i) {
-            const items = sections[i].layouts || [];
+            const items = sections[i].items || [];
             for (let j = 0; j < items.length; ++j) {
                 const item = items[j];
                 const itemIsAutotile = item.isAutotile === true;
@@ -200,14 +207,14 @@ SettingsFlickable {
             if (groupIdx === filterBar.groupCapability)
                 return Logic.groupByCapability(filtered, root.tilingCapabilityGroups, i18n("Other"));
             else if (groupIdx === filterBar.groupTilingSource)
-                return Logic.groupByBoolKey(filtered, item => {
+                return Core.groupByBoolKey(filtered, item => {
                     return Logic.isBuiltIn(item);
                 }, "builtin", i18n("Built-in"), "user", i18n("User Scripts"));
             else if (groupIdx === filterBar.groupTilingVisibility)
-                return Logic.groupByBoolKey(filtered, item => {
+                return Core.groupByBoolKey(filtered, item => {
                     return item.hiddenFromSelector !== true;
                 }, "visible", i18n("Visible"), "hidden", i18n("Hidden"));
-            return Logic.ungrouped(filtered);
+            return Core.ungrouped(filtered, i18n("All algorithms"));
         }
         // Snapping grouping
         if (groupIdx === filterBar.groupAspectRatio)
@@ -217,18 +224,18 @@ SettingsFlickable {
                 return i18np("%n zone", "%n zones", count);
             }, i18n("Unknown"));
         else if (groupIdx === filterBar.groupAutoManual)
-            return Logic.groupByBoolKey(filtered, item => {
+            return Core.groupByBoolKey(filtered, item => {
                 return item.autoAssign === true;
             }, "auto", i18n("Auto"), "manual", i18n("Manual"));
         else if (groupIdx === filterBar.groupSource)
-            return Logic.groupByBoolKey(filtered, item => {
+            return Core.groupByBoolKey(filtered, item => {
                 return Logic.isBuiltIn(item);
             }, "builtin", i18n("Built-in"), "user", i18n("User Layouts"));
         else if (groupIdx === filterBar.groupVisibility)
-            return Logic.groupByBoolKey(filtered, item => {
+            return Core.groupByBoolKey(filtered, item => {
                 return item.hiddenFromSelector !== true;
             }, "visible", i18n("Visible"), "hidden", i18n("Hidden"));
-        return Logic.ungrouped(filtered);
+        return Core.ungrouped(filtered, i18n("All layouts"));
     }
 
     contentHeight: content.implicitHeight
@@ -277,10 +284,11 @@ SettingsFlickable {
         spacing: Kirigami.Units.largeSpacing
 
         // ─── View switch (Snapping / Tiling) — only when autotiling is on ──
-        // Centered monitor-switcher-style tiles (see LayoutViewSwitch).
-        LayoutViewSwitch {
+        // Centered monitor-switcher-style tiles (shared SegmentedViewSwitch).
+        SegmentedViewSwitch {
             Layout.fillWidth: true
             visible: root.settingsBridge.autotileEnabled
+            modes: [i18n("Snapping"), i18n("Tiling")]
             currentIndex: root.viewMode
             onIndexChanged: index => {
                 root.viewMode = index;
@@ -400,7 +408,7 @@ SettingsFlickable {
 
                 Layout.fillWidth: true
                 headerText: modelData.label
-                headerTrailingText: root.viewMode === 1 ? i18np("%n algorithm", "%n algorithms", modelData.layouts.length) : i18np("%n layout", "%n layouts", modelData.layouts.length)
+                headerTrailingText: root.viewMode === 1 ? i18np("%n algorithm", "%n algorithms", modelData.items.length) : i18np("%n layout", "%n layouts", modelData.items.length)
                 // Only labelled groups get a collapse affordance — a header-less
                 // ungrouped card has nothing to click to toggle.
                 collapsible: modelData.label.length > 0
@@ -423,7 +431,7 @@ SettingsFlickable {
                         readonly property real _cardWidth: (width - spacing * (_columns - 1)) / _columns
 
                         Repeater {
-                            model: groupCard.modelData.layouts
+                            model: groupCard.modelData.items
 
                             LayoutGridDelegate {
                                 appSettings: root.settingsBridge

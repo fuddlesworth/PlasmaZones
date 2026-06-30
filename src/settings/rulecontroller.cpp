@@ -23,6 +23,8 @@
 #include <QJsonObject>
 #include <QUuid>
 
+#include <limits>
+
 namespace PlasmaZones {
 
 namespace {
@@ -406,89 +408,92 @@ void RuleController::revert()
     fetchAndLoad(/*fromRevert=*/true);
 }
 
+int RuleController::bandBaseForSection(RuleModel::Section section)
+{
+    switch (section) {
+    case RuleModel::Section::Advanced:
+        return kAdvancedBandBase;
+    case RuleModel::Section::Monitor:
+    case RuleModel::Section::Activity:
+        return kContextBandBase;
+    case RuleModel::Section::Application:
+        return kApplicationBandBase;
+    case RuleModel::Section::Animation:
+        return kAnimationBandBase;
+    case RuleModel::Section::System:
+        // Managed System rules keep their pinned INT_MIN priority — they are
+        // never stamped a band by renormalizePriorities (the managed guard skips
+        // them). Report INT_MIN so section ordering places System last.
+        return std::numeric_limits<int>::min();
+    }
+    return kAnimationBandBase;
+}
+
 void RuleController::renormalizePriorities()
 {
-    // Walk the model's list order and re-stamp priority so list order maps
-    // monotonically onto evaluation order. Higher list index ⇒ lower
-    // priority within the rule's band; the bands keep the section ordering
-    // (Advanced > Monitor/Activity > Application > Animation; Monitor and
-    // Activity share the Context band) stable.
+    // Priority is a single GLOBAL list-order sequence: earlier list row ⇒ higher
+    // priority, full stop. There are no priority bands — a rule's precedence is
+    // purely its position in the one flat list, and the user can freely
+    // interleave rules from what used to be separate "sections" (sections are
+    // now only a display label + a default-seeding hint, see
+    // bandSeededInsertIndex). The evaluator only ever reads this integer
+    // (descending, list-order tie-break), so a flat global sequence evaluates
+    // identically to the old banded scheme — it just lets cross-section drags
+    // actually change who wins.
     //
-    // This is invoked ONLY when list order changes — on a drag-reorder
-    // (moveRule) and when a new rule is appended (addRuleFromJson). An in-place
-    // edit (updateRuleFromJson) never reorders the list, so it does not call
-    // this: the Advanced editor exposes `priority` directly, and an explicit
-    // priority edit there is honoured verbatim rather than being overwritten by
-    // the band-derived value. A non-priority in-place edit likewise leaves
-    // priority untouched, so list order and PriorityRole stay consistent.
-    //
-    // Only the priority changes — push the new values through setPriorities()
-    // so the model emits a single dataChanged(PriorityRole) instead of a full
-    // reset (which would tear down and rebuild every QML delegate).
+    // Invoked ONLY when list order changes — on a drag-reorder (moveRule) and
+    // when a rule is added (addRuleFromJson). An in-place edit
+    // (updateRuleFromJson) never reorders the list, so it does not call this:
+    // the Advanced editor exposes `priority` directly and an explicit edit there
+    // is honoured verbatim until the next reorder. Only the priority changes —
+    // push through setPriorities() so the model emits a single
+    // dataChanged(PriorityRole) instead of a full reset.
     const QList<Rule>& rules = m_model.rules();
     const int n = rules.size();
     QList<int> priorities;
     priorities.resize(n);
-    // Bands are spaced 100 apart (Animation=100, Application=200,
-    // Context=300, Advanced=500). The per-rule offset is BAND-LOCAL — each
-    // band re-starts the offset countdown from the band-width cap (99) and
-    // decrements as later entries within the same band are encountered. This
-    // gives a contiguous "earlier list index ⇒ higher priority within the
-    // band" property: the global `i` would only do that if every band were
-    // dense, but with sparse bands (one Animation rule near the bottom of
-    // the list) the global index dropped the bottom rule below other rules
-    // in its own band. Bands run independent counters.
-    //
-    // Each band's offset starts at `kBandWidth - 1` and decrements; capped
-    // at 0 so a band with >100 rules ties at the floor (list order is
-    // preserved by setPriorities's stable application).
-    constexpr int kBandWidth = 100;
-    const auto baseFor = [](const Rule& rule) {
-        switch (RuleModel::sectionFor(rule)) {
-        case RuleModel::Section::Advanced:
-            return kAdvancedBandBase;
-        case RuleModel::Section::Monitor:
-        case RuleModel::Section::Activity:
-            return kContextBandBase;
-        case RuleModel::Section::Application:
-            return kApplicationBandBase;
-        case RuleModel::Section::Animation:
-            return kAnimationBandBase;
-        case RuleModel::Section::System:
-            // Managed System rules keep their pinned INT_MIN priority and are
-            // skipped before this runs (see the managed guard in the loop); this
-            // case only keeps the switch exhaustive.
-            return kAdvancedBandBase;
-        }
-        return kAnimationBandBase;
-    };
-
-    // Per-band offset counter — base address → next available offset. Each
-    // band seeds at `kBandWidth - 1` on first encounter and decrements as
-    // later entries within the same band are stamped. Absence in the hash
-    // (`find() == end()`) signals not-yet-seeded; the explicit
-    // find/insert flow disambiguates from the value-initialised 0 that
-    // `operator[]` on QHash would otherwise produce.
-    QHash<int, int> nextOffset;
+    // Spaced by kStep so a manual Advanced-editor priority edit has room to land
+    // between two neighbours before the next reorder renumbers. Start from the
+    // top (highest priority = first row) and step down.
+    constexpr int kStep = 16;
+    int userCount = 0;
+    for (int i = 0; i < n; ++i) {
+        if (!rules.at(i).managed)
+            ++userCount;
+    }
+    int rank = userCount;
     for (int i = 0; i < n; ++i) {
         // Managed rules (the baseline appearance rule) carry a pinned priority
-        // that fixes them at the bottom of evaluation regardless of list
-        // position — never re-stamp them with a band value, or they'd jump
-        // above user rules.
+        // (INT_MIN) that fixes them below every user rule regardless of list
+        // position — never re-stamp them, or they'd jump above user rules.
         if (rules.at(i).managed) {
             priorities[i] = rules.at(i).priority;
             continue;
         }
-        const int base = baseFor(rules.at(i));
-        auto it = nextOffset.find(base);
-        if (it == nextOffset.end()) {
-            it = nextOffset.insert(base, kBandWidth - 1);
-        }
-        const int offset = qMax(0, it.value());
-        it.value() = offset - 1;
-        priorities[i] = base + offset;
+        priorities[i] = rank * kStep;
+        --rank;
     }
     m_model.setPriorities(priorities);
+}
+
+int RuleController::bandSeededInsertIndex(const Rule& rule) const
+{
+    // Seed the new rule's DEFAULT position by band so defaults stay sensible (a
+    // new Advanced rule starts high, a new Animation rule starts low) even
+    // though priority is now one free-form global sequence. Insert above the
+    // first existing rule of a strictly lower band, or above the managed block —
+    // i.e. at the top of the new rule's band tier. The user can drag it anywhere
+    // afterwards.
+    const int band = bandBaseForSection(RuleModel::sectionFor(rule));
+    const QList<Rule>& rules = m_model.rules();
+    for (int i = 0; i < rules.size(); ++i) {
+        const Rule& r = rules.at(i);
+        if (r.managed)
+            return i;
+        if (bandBaseForSection(RuleModel::sectionFor(r)) < band)
+            return i;
+    }
+    return rules.size();
 }
 
 QVariantMap RuleController::newEmptyRule(const QString& subject) const
@@ -522,14 +527,16 @@ QString RuleController::addRuleFromJson(const QVariantMap& ruleJson)
         qCWarning(lcConfig) << "RuleController::addRuleFromJson: rejecting malformed rule payload";
         return QString();
     }
-    if (!m_model.addRule(*parsed)) {
+    // Insert at the band-seeded position so a new rule's DEFAULT precedence
+    // reflects its section (Advanced high, Animation low) rather than always
+    // landing at the bottom of the flat list. The user can drag it afterwards.
+    if (!m_model.addRuleAt(*parsed, bandSeededInsertIndex(*parsed))) {
         qCWarning(lcConfig) << "RuleController::addRuleFromJson: model rejected rule" << parsed->id.toString()
                             << "(id collision or invalid)";
         return QString();
     }
-    // Re-stamp priorities so two rules added back-to-back in the same band do
-    // not collide on the band-base priority — list order maps onto evaluation
-    // order exactly as it does after a drag-reorder.
+    // Re-stamp priorities so list order maps onto evaluation order exactly as it
+    // does after a drag-reorder.
     renormalizePriorities();
     setDirty(true);
     return parsed->id.toString();

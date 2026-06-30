@@ -292,9 +292,12 @@ qt_add_qml_module(plasmazones-settings
         qml/MonitorScopeChip.qml
         qml/LayoutGridDelegate.qml
         qml/LayoutManageCard.qml
-        qml/LayoutViewSwitch.qml
+        qml/SegmentedViewSwitch.qml
         qml/LayoutFilterBar.qml
         qml/LayoutFilterLogic.js
+        # Shared group/sort infrastructure (Layouts + Rules pages)
+        qml/GroupSortBar.qml
+        qml/GroupSortLogic.js
         qml/ZoneSelectorSection.qml
         qml/EasingPreview.qml
         qml/EasingSettings.qml

@@ -13,11 +13,23 @@ import org.plasmazones.settings
  *
  * One surface for every window-matching rule — monitors, applications,
  * activities, animations. Backed by a single `RuleModel` exposed by
- * `SettingsController.rulesPage`; section grouping, search and section
- * filtering are all derived here in QML over that one model — there are no
- * per-section proxy models.
+ * `SettingsController.rulesPage`.
  *
- * The monitor overview strip is read-only; clicking a tile filters the list.
+ * The page is ONE flat, drag-reorderable priority list — highest precedence on
+ * top. A drop re-stamps the single GLOBAL priority sequence
+ * (`RuleController::renormalizePriorities`), so the user freely interleaves
+ * rules from any section and position alone decides who wins. There are no
+ * priority bands in evaluation (the daemon only reads the priority integer); the
+ * old section "bands" survive only as a default-seeding hint for newly added
+ * rules. Managed System rules pin to the bottom (INT_MIN) and are non-draggable.
+ *
+ * There is deliberately NO grouping/sorting on this page — precedence is only
+ * meaningful in priority order, so a re-grouped/re-sorted view would fight the
+ * drag. Browsing is served by narrowing instead: the search field, the section
+ * filter button, and the read-only monitor overview strip (clicking a tile
+ * filters the list). Category stays legible via a per-row section badge. (The
+ * reusable GroupSortBar / GroupSortLogic / SegmentedViewSwitch components live on
+ * for the Layouts page and any future use.)
  */
 SettingsFlickable {
     id: page
@@ -108,40 +120,51 @@ SettingsFlickable {
     // ── Filter state ──
 
     property string searchText: ""
-    // Section filter (multi-select): the set of RuleModel.Section enum
-    // values (as ints) the user has unchecked. Empty = show every section.
-    // The filter button owns this state; the page reads it one-way.
-    readonly property var excludedSections: rulesFilterButton.excluded
+    // Multi-select filter state: the set of filter KEYS the user has unchecked
+    // (empty = show everything). Keys are mixed across three groups — section
+    // values (ints), source ("src:system"/"src:user"), and status
+    // ("status:active"/"status:disabled"). The filter button owns this; the page
+    // reads it one-way.
+    readonly property var excludedFilters: rulesFilterButton.excluded
     property string monitorFilter: ""
     // Ordered section descriptors — `[{ value: int, label }]` straight from
-    // the controller. The C++ Section enum order is never duplicated in QML.
+    // the controller. Drives the section filter menu; the C++ Section enum
+    // order is never duplicated in QML.
     readonly property var sectionDescriptors: page.controller.sections()
-    // Cached `matchFields()` table — threaded down to every RuleRow's
-    // expansion view so the per-row Q_INVOKABLE doesn't fire on every expand.
-    // The authoring catalogue is static, so this is a one-shot read.
+
+    // Cached `matchFields()` / `actionTypes()` tables — threaded down to every
+    // RuleRow's expansion view so the per-row Q_INVOKABLE doesn't fire on every
+    // expand. The authoring catalogue is static, so this is a one-shot read.
     property var matchFieldOptions: page.controller.matchFields()
-    // Cached `actionTypes()` — same caching rationale as matchFieldOptions;
-    // threaded down to RuleRow's expansion so each row doesn't re-invoke
-    // the Q_INVOKABLE.
     property var actionTypeOptions: page.controller.actionTypes()
-    // Bumped whenever the underlying model changes so sectionModel re-evaluates
+    // Bumped whenever the underlying model changes so filteredRules re-evaluates
     // without QML hardcoding the model's role layout.
     property int modelRevision: 0
-    /// Build a `[ { section, label, rules: [...] } ]` array over the flat
-    /// model, applying search / section / monitor filters. Reactive: depends on
-    /// searchText / excludedSections / monitorFilter and `modelRevision`.
-    readonly property var sectionModel: {
-        // Touch the revision so the binding re-evaluates on any model change.
+
+    /// The flat, filtered, priority-ordered rule list — highest precedence first.
+    /// This is the page's single view: precedence only has meaning in priority
+    /// order, so there is no grouping/sorting UI — the list is always the
+    /// drag-reorderable priority sequence. Search + the filter button (section /
+    /// source / status) + the monitor strip narrow it without changing order.
+    /// Managed System rules pin to the bottom for free (their priority is
+    /// INT_MIN). Reactive on searchText / excludedFilters / monitorFilter and
+    /// `modelRevision`.
+    readonly property var filteredRules: {
         var rev = page.modelRevision;
         var snapshot = page.controller.rulesSnapshot();
-        var buckets = {};
-        for (var s = 0; s < page.sectionDescriptors.length; ++s)
-            buckets[page.sectionDescriptors[s].value] = [];
         var search = page.searchText.toLowerCase();
+        var excluded = page.excludedFilters;
+        var out = [];
         for (var i = 0; i < snapshot.length; ++i) {
             var entry = snapshot[i];
-            // Section filter — hide entries whose section the user unchecked.
-            if (page.excludedSections.indexOf(entry.section) >= 0)
+            // Section filter — hide entries whose category the user unchecked.
+            if (excluded.indexOf(entry.section) >= 0)
+                continue;
+            // Source filter — built-in (managed) vs user-created.
+            if (excluded.indexOf(entry.managed === true ? "src:system" : "src:user") >= 0)
+                continue;
+            // Status filter — active (enabled) vs disabled.
+            if (excluded.indexOf(entry.enabled === true ? "status:active" : "status:disabled") >= 0)
                 continue;
 
             // Search filter — match name / match summary / action summary.
@@ -150,36 +173,21 @@ SettingsFlickable {
                 if (hay.indexOf(search) < 0)
                     continue;
             }
-            // Monitor filter — keep only rules whose ScreenId predicate(s)
-            // name the selected monitor (an exact id match, not a substring
-            // scan of the localized summary).
+            // Monitor filter — keep only rules whose ScreenId predicate(s) name
+            // the selected monitor (an exact id match, not a substring scan).
             if (page.monitorFilter.length > 0) {
                 if (!entry.screenIds || entry.screenIds.indexOf(page.monitorFilter) < 0)
                     continue;
             }
-            if (buckets[entry.section] !== undefined)
-                buckets[entry.section].push(entry);
+            out.push(entry);
         }
-        var out = [];
-        for (var so = 0; so < page.sectionDescriptors.length; ++so) {
-            var sec = page.sectionDescriptors[so];
-            if (buckets[sec.value].length === 0)
-                continue;
-
-            // Within a section, show highest priority first — the winning rule
-            // on top, matching the priority-wins precedence. Qt's V4 sort is
-            // stable, so equal priorities keep model order (the evaluator's
-            // own tie-break). Lower-priority rules sort to the bottom.
-            var bucket = buckets[sec.value];
-            bucket.sort(function (l, r) {
-                return r.priority - l.priority;
-            });
-            out.push({
-                "section": sec.value,
-                "label": sec.label,
-                "rules": bucket
-            });
-        }
+        // Highest priority first. Qt's V4 sort is stable, so equal priorities keep
+        // snapshot (model) order — which the global renormalize keeps in sync with
+        // priority order, so display order == model row order (the invariant the
+        // drag commit relies on).
+        out.sort(function (a, b) {
+            return (b.priority || 0) - (a.priority || 0);
+        });
         return out;
     }
     // Bump `tilesRevision` whenever the upstream lists change. The tile
@@ -188,11 +196,11 @@ SettingsFlickable {
     // unchanged), leaving the tile caption stale. Listening to the change
     // signals directly invalidates on any structural OR content change.
     property int tilesRevision: 0
-    // Roles the sectionModel reads (bucketing, filtering, summary cards, and
-    // the per-row badges including Priority). The sectionModel is built from
-    // `rulesSnapshot()` — a frozen QVariantList — so a row only reflects a role
-    // change once the snapshot is rebuilt. The onDataChanged handler below
-    // bumps modelRevision (→ rebuild) when EITHER:
+    // Roles the filteredRules list reads (filtering, the row summaries, and the
+    // priority sort). filteredRules is built from `rulesSnapshot()` — a frozen
+    // QVariantList — so a row only reflects a role change once the snapshot is
+    // rebuilt. The onDataChanged handler below bumps modelRevision (→ rebuild)
+    // when EITHER:
     //   (a) the dataChanged roles vector is empty — Qt's "any role" convention,
     //       which every updateRule() mutation uses, so enabled / name / match /
     //       action / in-place-priority edits already rebuild this way; OR
@@ -201,10 +209,10 @@ SettingsFlickable {
     //       refreshLabels() → {NameRole, MatchSummaryRole, ActionSummaryRole}.
     // PriorityRole MUST be listed: a drag-reorder runs renormalizePriorities()
     // → setPriorities(), whose targeted dataChanged({PriorityRole}) the
-    // empty-roles fallback never sees — omitting it left the reordered rows'
-    // Priority badges showing their stale pre-move numbers. The remaining
-    // entries (Section / ScreenIds / ConditionCount / ActionCount / IsComposite
-    // / ValidationIssueCount) are also read by the sectionModel but currently
+    // empty-roles fallback never sees — omitting it would leave the reordered
+    // rows in their stale pre-move order. The remaining entries (Section /
+    // ScreenIds / ConditionCount / ActionCount / IsComposite /
+    // ValidationIssueCount) are also read when building the rows but currently
     // change only through the roles-less updateRule path; they're kept so a
     // future targeted emitter carrying them rebuilds without a second edit here.
     readonly property var _summaryRoles: [RuleModel.SectionRole, RuleModel.MatchSummaryRole, RuleModel.ActionSummaryRole, RuleModel.ScreenIdsRole, RuleModel.ConditionCountRole, RuleModel.ActionCountRole, RuleModel.IsCompositeRole, RuleModel.ValidationIssueCountRole, RuleModel.PriorityRole]
@@ -443,19 +451,45 @@ SettingsFlickable {
                 onTextChanged: page.searchText = text
             }
 
-            // Multi-select section filter, modeled on the Layouts page filter
-            // button. Section labels/order come from the controller (C++), not
-            // hardcoded here. `excluded` is the page's section filter state.
+            // Multi-select filter, modeled on the Layouts page filter button —
+            // same group ORDER as the Layouts menu: source first (built-in before
+            // user), then the categories, then the status/type pair. Three groups:
+            // source (system vs user-created), category sections, status (active
+            // vs disabled). Section labels/order come from the controller (C++).
+            // System is dropped from the section group because a System rule is
+            // exactly a managed rule (sectionFor maps managed → System), so the
+            // Source group's "System" already covers it — listing it twice would
+            // be redundant.
             FilterMenuButton {
                 id: rulesFilterButton
 
                 menuTitle: i18nc("@title:menu", "Filter Rules")
-                groups: [page.sectionDescriptors.map(function (s) {
+                groups: [[
+                        {
+                            "key": "src:system",
+                            "label": i18nc("@option:check filter rules by source", "System")
+                        },
+                        {
+                            "key": "src:user",
+                            "label": i18nc("@option:check filter rules by source", "User-created")
+                        }
+                    ], page.sectionDescriptors.filter(function (s) {
+                        return s.value !== RuleModel.System;
+                    }).map(function (s) {
                         return {
                             "key": s.value,
                             "label": s.label
                         };
-                    })]
+                    }), [
+                        {
+                            "key": "status:active",
+                            "label": i18nc("@option:check filter rules by status", "Active")
+                        },
+                        {
+                            "key": "status:disabled",
+                            "label": i18nc("@option:check filter rules by status", "Disabled")
+                        }
+                    ]]
             }
 
             Button {
@@ -477,73 +511,53 @@ SettingsFlickable {
 
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.gridUnit * 2
-            visible: page.sectionModel.length === 0 && !_daemonDown
+            visible: page.filteredRules.length === 0 && !_daemonDown
             icon.name: "view-list-details"
             text: _trulyEmpty ? i18n("No rules yet") : i18n("No rules match the current filter")
             explanation: _trulyEmpty ? i18n("Add a rule to assign layouts to monitors, float application windows, or override animations.") : i18n("Try a different filter or search term.")
         }
 
-        // ── Grouped rule list ──
-        // Each section renders as a standard `SettingsCard` with `headerText`
-        // — same visual treatment as the rest of the app (Animations Presets,
-        // Virtual Screens, General). The card carries the section label as
-        // its header and the rule rows as its body.
-        Repeater {
-            model: page.sectionModel
+        // ── The flat priority list ──
+        // One drag-reorderable list, highest precedence on top — there is no
+        // grouping, so a single card hosts every (filtered) rule. The header
+        // carries the count and the reorder hint; the section badge on each row
+        // keeps category legible without grouping.
+        SettingsCard {
+            Layout.fillWidth: true
+            visible: page.filteredRules.length > 0
+            headerText: i18n("All rules")
+            headerTrailingText: {
+                var base = i18np("%n rule", "%n rules", page.filteredRules.length);
+                return i18nc("Suffix in the rule list header showing the count and a reorder hint", "%1 · drag to set precedence", base);
+            }
 
-            delegate: SettingsCard {
-                required property var modelData
+            contentItem: ColumnLayout {
+                spacing: 0
 
-                Layout.fillWidth: true
-                headerText: modelData.label
-                // Collapsible sections — clicking the header chevron toggles
-                // visibility of the section's rule list. State lives on the
-                // delegate so each section collapses independently; resets on
-                // page reload (acceptable — recovering the list is one click
-                // away and the page's rule count makes empty sections honest).
-                collapsible: true
-                // Right-aligned rule count in the section header — matches
-                // the mockup's "MONITOR & LAYOUT  4 rules" pattern and gives
-                // the user a quick scan of how many rules are bucketed where.
-                // The "drag to set precedence" hint applies to every section:
-                // priority within a section is uniformly list-order driven
-                // (`renormalizePriorities` stamps band-base + per-band offset
-                // for ALL sections), so the drag affordance and its hint are
-                // section-agnostic.
-                headerTrailingText: {
-                    var count = modelData.rules ? modelData.rules.length : 0;
-                    var base = i18np("%n rule", "%n rules", count);
-                    return i18nc("Suffix in a section header showing the count and a reorder hint", "%1 · drag to set precedence", base);
-                }
-
-                contentItem: ColumnLayout {
-                    spacing: 0
-
-                    // One drag-reorderable, variable-height list for every
-                    // section. Priorities within each cascade band are
-                    // computed from list order by the C++ controller's
-                    // `renormalizePriorities` (called on every moveRule),
-                    // so the same drag UX applies uniformly across Monitor,
-                    // Application, Activity, Animation, and Advanced.
-                    RuleSectionList {
-                        Layout.fillWidth: true
-                        rules: modelData.rules
-                        controller: page.controller
-                        matchFieldOptions: page.matchFieldOptions
-                        actionTypeOptions: page.actionTypeOptions
-                        appSettings: page._editorAppSettings
-                        onToggleRequested: function (ruleId, enabled) {
-                            page.controller.setRuleEnabled(ruleId, enabled);
-                        }
-                        onEditRequested: function (ruleId) {
-                            ruleEditorSheet.openFor(page.controller.ruleJson(ruleId));
-                        }
-                        onDuplicateRequested: function (ruleId) {
-                            page.controller.duplicateRule(ruleId);
-                        }
-                        onDeleteRequested: function (ruleId) {
-                            page.controller.removeRule(ruleId);
-                        }
+                // A drop re-stamps the global priority sequence via the
+                // controller's `renormalizePriorities`; managed System rules pin
+                // to the bottom and are non-draggable (handled per-row).
+                RuleSectionList {
+                    Layout.fillWidth: true
+                    rules: page.filteredRules
+                    reorderingEnabled: true
+                    ascending: false
+                    showSectionBadge: true
+                    controller: page.controller
+                    matchFieldOptions: page.matchFieldOptions
+                    actionTypeOptions: page.actionTypeOptions
+                    appSettings: page._editorAppSettings
+                    onToggleRequested: function (ruleId, enabled) {
+                        page.controller.setRuleEnabled(ruleId, enabled);
+                    }
+                    onEditRequested: function (ruleId) {
+                        ruleEditorSheet.openFor(page.controller.ruleJson(ruleId));
+                    }
+                    onDuplicateRequested: function (ruleId) {
+                        page.controller.duplicateRule(ruleId);
+                    }
+                    onDeleteRequested: function (ruleId) {
+                        page.controller.removeRule(ruleId);
                     }
                 }
             }

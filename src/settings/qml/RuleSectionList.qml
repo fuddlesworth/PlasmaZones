@@ -50,6 +50,34 @@ Item {
     /// activities + window picker) threaded into MatchLeafEditor and
     /// ActionListView. May be null while the page is still wiring up.
     property var appSettings: null
+    /// Whether drag / keyboard reordering is offered. Reordering maps list order
+    /// onto the priority bands `renormalizePriorities` stamps, so the host only
+    /// enables it in its Reorder mode (Section grouping + Priority sort); a plain
+    /// browse/filter view is static.
+    property bool reorderingEnabled: true
+    /// Whether the list is shown lowest-priority-first. The drag/keyboard commit
+    /// maps a drop position onto a `beforeId` for `moveRule`; that mapping is
+    /// mirrored when the list is ascending so dragging works in both directions.
+    property bool ascending: false
+    /// Whether each row shows its section as a small badge. The flat list shows
+    /// it (so category stays legible without grouping); the page suppresses it
+    /// when the cards already group by section.
+    property bool showSectionBadge: false
+
+    /// Resolve the `beforeId` to hand `moveRule` for moving `list[from]` to slot
+    /// `to`. `moveRule` inserts immediately BEFORE `beforeId` (empty = end, i.e.
+    /// lowest priority). The model is kept in priority-descending row order, so an
+    /// ascending display is its reverse and the neighbour math inverts.
+    function beforeIdFor(list, from, to) {
+        if (root.ascending) {
+            if (from < to)
+                return list[to].ruleId;
+            return to - 1 >= 0 ? list[to - 1].ruleId : "";
+        }
+        if (from < to)
+            return to + 1 < list.length ? list[to + 1].ruleId : "";
+        return list[to].ruleId;
+    }
 
     /// Emitted when the row's enable switch is toggled. Page-level
     /// handler routes to `controller.setRuleEnabled`.
@@ -159,10 +187,11 @@ Item {
             required property var modelData
             required property int index
 
-            // Managed System rules have a fixed precedence (INT_MIN), so they
-            // show no drag affordance — the controller rejects reordering them
-            // anyway.
-            readonly property bool reorderable: modelData.managed !== true
+            // A row is reorderable only when the list as a whole offers
+            // reordering (canonical view) AND this is not a managed System rule
+            // — managed rules have a fixed precedence (INT_MIN) and the
+            // controller rejects reordering them anyway.
+            readonly property bool reorderable: root.reorderingEnabled && modelData.managed !== true
 
             readonly property real baseY: root.cumulativeY(index)
             // Cascade displacement = ± the dragged row's own height
@@ -259,15 +288,8 @@ Item {
                     return;
                 }
                 var movedId = rulesSnapshot[from].ruleId;
-                // Mirror the drag-release beforeId math.
-                var beforeId = "";
-                if (from < to) {
-                    if (to + 1 < rulesSnapshot.length)
-                        beforeId = rulesSnapshot[to + 1].ruleId;
-                } else {
-                    beforeId = rulesSnapshot[to].ruleId;
-                }
-                root.controller.moveRule(movedId, beforeId);
+                // Same neighbour resolution as the drag release (direction-aware).
+                root.controller.moveRule(movedId, root.beforeIdFor(rulesSnapshot, from, to));
             }
 
             RowLayout {
@@ -306,6 +328,18 @@ Item {
                         source: "handle-sort"
                         visible: delegateRoot.reorderable
                         opacity: dragArea.containsMouse || dragArea.drag.active ? 0.7 : 0.3
+                    }
+
+                    // Pinned indicator for non-reorderable rows (managed System
+                    // rules at INT_MIN) — replaces the drag grip so it reads as
+                    // "fixed at the bottom" rather than just missing a handle.
+                    Kirigami.Icon {
+                        anchors.centerIn: parent
+                        width: Kirigami.Units.iconSizes.small
+                        height: Kirigami.Units.iconSizes.small
+                        source: "lock"
+                        visible: !delegateRoot.reorderable && delegateRoot.modelData.managed === true
+                        opacity: 0.3
                     }
 
                     MouseArea {
@@ -357,21 +391,11 @@ Item {
                                 return delegateRoot.baseY + delegateRoot.visualOffset;
                             });
                             if (movedId !== "" && from >= 0 && to >= 0 && from !== to && to < rulesSnapshot.length) {
-                                // controller.moveRule positions
-                                // movedId immediately BEFORE
-                                // beforeId. To move down (from <
-                                // to), beforeId is the rule at
-                                // (to + 1) so the moved rule lands
-                                // after the target; if dropping at
-                                // the end, pass empty.
-                                var beforeId = "";
-                                if (from < to) {
-                                    if (to + 1 < rulesSnapshot.length)
-                                        beforeId = rulesSnapshot[to + 1].ruleId;
-                                } else {
-                                    beforeId = rulesSnapshot[to].ruleId;
-                                }
-                                root.controller.moveRule(movedId, beforeId);
+                                // controller.moveRule positions movedId
+                                // immediately BEFORE beforeId; beforeIdFor
+                                // resolves the right neighbour for the current
+                                // list direction (see its doc).
+                                root.controller.moveRule(movedId, root.beforeIdFor(rulesSnapshot, from, to));
                             }
                         }
                         onPositionChanged: {
@@ -413,6 +437,7 @@ Item {
                     validationIssueCount: delegateRoot.modelData.validationIssueCount
                     priority: delegateRoot.modelData.priority
                     managed: delegateRoot.modelData.managed === true
+                    sectionLabel: root.showSectionBadge ? (delegateRoot.modelData.sectionLabel || "") : ""
                     controller: root.controller
                     matchFieldOptions: root.matchFieldOptions
                     actionTypeOptions: root.actionTypeOptions

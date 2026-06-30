@@ -52,6 +52,11 @@ QVariantList RuleController::sections() const
         QVariantMap entry;
         entry[QStringLiteral("value")] = static_cast<int>(s);
         entry[QStringLiteral("label")] = RuleModel::sectionLabel(s);
+        // Priority-band base (higher ⇒ higher precedence) so the page can order
+        // section cards by evaluation precedence. The `value`/`kOrder` index
+        // still breaks ties between sections that share a band (Monitor and
+        // Activity both sit in the Context band).
+        entry[QStringLiteral("band")] = RuleController::bandBaseForSection(s);
         out.append(entry);
     }
     return out;
@@ -71,8 +76,11 @@ QVariantList RuleController::rulesSnapshot() const
         entry[QStringLiteral("name")] = m_model.data(idx, RuleModel::NameRole);
         entry[QStringLiteral("enabled")] = m_model.data(idx, RuleModel::EnabledRole);
         entry[QStringLiteral("priority")] = m_model.data(idx, RuleModel::PriorityRole);
-        entry[QStringLiteral("section")] =
-            static_cast<int>(m_model.data(idx, RuleModel::SectionRole).value<RuleModel::Section>());
+        const auto section = m_model.data(idx, RuleModel::SectionRole).value<RuleModel::Section>();
+        entry[QStringLiteral("section")] = static_cast<int>(section);
+        // Localized section name, for the per-row badge the flat list shows so
+        // category stays legible without grouping.
+        entry[QStringLiteral("sectionLabel")] = RuleModel::sectionLabel(section);
         entry[QStringLiteral("matchSummary")] = m_model.data(idx, RuleModel::MatchSummaryRole);
         entry[QStringLiteral("actionSummary")] = m_model.data(idx, RuleModel::ActionSummaryRole);
         entry[QStringLiteral("conditionCount")] = m_model.data(idx, RuleModel::ConditionCountRole);

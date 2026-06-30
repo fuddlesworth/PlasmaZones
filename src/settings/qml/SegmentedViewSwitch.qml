@@ -9,26 +9,27 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 /**
- * @brief Snapping / Tiling mode switch styled as the RulesPage monitor
- *        switcher.
+ * @brief Centered radio-tile mode switch.
  *
  * A centered row of soft-highlight, label-only tiles mirroring
  * MonitorOverviewTile's visual treatment — selected tint + border, hover wash,
  * focus ring, and the shared widget.hover motion — instead of a segmented
- * button group, so the Layouts page reads consistently with the monitor pickers
- * elsewhere in the app. Radio semantics: exactly one mode is active and clicking
- * the active tile is a no-op.
+ * button group, so pages read consistently with the monitor pickers elsewhere
+ * in the app. Radio semantics: exactly one mode is active and clicking the
+ * active tile is a no-op. The labels are injected via `modes`, so the same
+ * switch backs the Layouts page (Snapping / Tiling) and the Rules page
+ * (Edit / View).
  */
 Item {
     id: root
 
-    // Selected mode index (0 = Snapping, 1 = Tiling). Bound by the host page.
+    /// Localized tile labels, one per mode.
+    property var modes: []
+    /// Selected mode index. Bound by the host page.
     property int currentIndex: 0
 
-    // Emitted when the user picks a different mode.
+    /// Emitted when the user picks a different mode.
     signal indexChanged(int index)
-
-    readonly property var _modes: [i18n("Snapping"), i18n("Tiling")]
 
     implicitHeight: tileRow.implicitHeight
 
@@ -39,7 +40,7 @@ Item {
         spacing: Kirigami.Units.largeSpacing
 
         Repeater {
-            model: root._modes
+            model: root.modes
 
             Rectangle {
                 id: tile

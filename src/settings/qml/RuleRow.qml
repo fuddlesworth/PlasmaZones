@@ -43,14 +43,21 @@ ItemDelegate {
     /// knows the rule never fires (the picker now prevents the combination
     /// for new rules, but a hand-edited JSON store keeps the offending rule).
     required property int validationIssueCount
-    /// The rule's raw priority integer — surfaced as a `Priority N` badge in
-    /// the badge cluster on every row, so each rule's effective ordering
-    /// priority is visible regardless of section.
+    /// The rule's raw priority integer — surfaced as a `Priority N` badge on
+    /// every row. In the flat list a rule's position already conveys precedence,
+    /// but the number stays important when the filter hides categories: the
+    /// visible rows are then a subset, so the badge is what tells the user the
+    /// true precedence of (and gaps between) the rules still on screen. Matches
+    /// the value the Advanced editor exposes and edits.
     required property int priority
     /// True for app-managed System rules (the seeded baseline defaults). They
     /// are non-deletable and pinned, so the delete affordance is shown but
     /// disabled (kept visible to preserve column alignment).
     property bool managed: false
+    /// Localized section name shown as a small category badge. The flat list
+    /// passes it so category stays legible without grouping; empty hides the
+    /// badge (e.g. when the cards already group by section).
+    property string sectionLabel: ""
     /// RuleController — needed to resolve a rule's match JSON
     /// on-demand for the expansion view (`controller.ruleJson(ruleId).match`).
     /// `null` disables expansion entirely; expansion-capable callers must
@@ -195,6 +202,29 @@ ItemDelegate {
                 }
             }
 
+            // Section badge — the rule's category (Monitor / Application / …),
+            // shown first in the cluster so the flat priority list stays legible
+            // by category without grouping. Highlight-tinted (theme-derived, not
+            // hardcoded) to read as a category marker distinct from the neutral
+            // metadata badges that follow.
+            Rectangle {
+                visible: row.sectionLabel.length > 0
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: sectionBadgeLabel.implicitWidth + Kirigami.Units.largeSpacing
+                implicitHeight: sectionBadgeLabel.implicitHeight + Kirigami.Units.smallSpacing
+                radius: Kirigami.Units.smallSpacing
+                color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
+
+                Label {
+                    id: sectionBadgeLabel
+
+                    anchors.centerIn: parent
+                    text: row.sectionLabel
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    opacity: 0.85
+                }
+            }
+
             // "Composite" badge — paired with the conditions count for composite
             // rules. Surfaces the kind of rule the user is looking at without
             // making them open the editor. Sentence case (project convention; the
@@ -259,11 +289,10 @@ ItemDelegate {
                 }
             }
 
-            // Priority badge — sits with the other metadata badges (Composite,
-            // Conditions, Actions). Shown on every row so each rule's effective
-            // ordering priority is visible across all sections, not just
-            // Advanced (other sections derive their priority from cascade bands,
-            // but surfacing the resolved number is still informative).
+            // Priority badge — kept on every row so precedence stays legible even
+            // when the filter hides categories (the visible rows are then a subset,
+            // so position alone can't convey the true ordering). Managed System
+            // rules are pinned to INT_MIN, so show that intent, not the raw number.
             Rectangle {
                 Layout.alignment: Qt.AlignVCenter
                 implicitWidth: priorityLabel.implicitWidth + Kirigami.Units.largeSpacing
@@ -275,8 +304,6 @@ ItemDelegate {
                     id: priorityLabel
 
                     anchors.centerIn: parent
-                    // Managed System rules are pinned to INT_MIN so they always
-                    // sort below user rules — show that intent, not the raw number.
                     text: row.managed ? i18nc("Priority badge for a managed baseline rule that always sorts last", "Lowest priority") : i18nc("Badge showing the rule's raw priority integer", "Priority %1", row.priority)
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     opacity: 0.7
