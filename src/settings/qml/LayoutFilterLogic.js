@@ -2,9 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 .pragma library
+.import "GroupSortLogic.js" as Core
 
 /**
- * Shared filtering, grouping, and sorting helpers for the layout/algorithm grid.
+ * Layout/algorithm-specific filtering, grouping, and sorting helpers for the
+ * layout grid. The neutral, page-agnostic primitives (groupByBoolKey,
+ * groupByKeyed, ungrouped, applySort, finalizeGroups) live in GroupSortLogic.js;
+ * this file holds only what is specific to layouts and tiling algorithms.
  *
  * Functions receive data and filter config without accessing any QML context.
  * i18n-dependent labels are passed in by the caller.
@@ -94,23 +98,8 @@ function applyTilingFilters(items, search, f) {
 }
 
 // ── Grouping ────────────────────────────────────────────────────────────────
-
-function groupByBoolKey(items, testFn, trueKey, trueLabel, falseKey, falseLabel) {
-    var groups = {};
-    for (var i = 0; i < items.length; i++) {
-        var item = items[i];
-        var match = testFn(item);
-        var key = match ? trueKey : falseKey;
-        if (!groups[key])
-            groups[key] = {
-                items: [],
-                order: match ? 0 : 1,
-                label: match ? trueLabel : falseLabel
-            };
-        groups[key].items.push(item);
-    }
-    return groups;
-}
+// groupByBoolKey / ungrouped live in GroupSortLogic.js (Core). The remaining
+// groupers here are layout-specific (aspect ratio, zone count, capability).
 
 function groupByAspectRatio(items) {
     var groups = {};
@@ -173,57 +162,40 @@ function groupByCapability(items, capGroups, otherLabel) {
     return groups;
 }
 
-function ungrouped(items) {
-    return { "all": { items: items, order: 0, label: "" } };
-}
-
 // ── Sorting ─────────────────────────────────────────────────────────────────
 
 // sortIdx 0 = Name (both modes), 1 = Zone Count, 2 = Priority order.
 // Priority order uses the provided customOrder array of IDs (the order set on
-// the Configuration → Priority page).
+// the Configuration → Priority page). Delegates the per-group, asc/desc, stable
+// sort machinery to Core.applySort; only the comparator is layout-specific.
 function sortItems(groups, sortIdx, ascending, customOrder) {
     // Build index map for custom order (O(1) lookup)
     var orderMap = {};
-    if (sortIdx === 2 && customOrder && customOrder.length > 0) {
+    var hasCustomOrder = sortIdx === 2 && customOrder && customOrder.length > 0;
+    if (hasCustomOrder) {
         for (var i = 0; i < customOrder.length; i++)
             orderMap[customOrder[i]] = i;
     }
 
-    for (var key in groups) {
-        groups[key].items.sort(function(a, b) {
-            var cmp;
-            if (sortIdx === 2 && customOrder && customOrder.length > 0) {
-                var aIdx = (a.id in orderMap) ? orderMap[a.id] : Number.MAX_SAFE_INTEGER;
-                var bIdx = (b.id in orderMap) ? orderMap[b.id] : Number.MAX_SAFE_INTEGER;
-                if (aIdx !== bIdx)
-                    cmp = aIdx - bIdx;
-                else
-                    cmp = (a.displayName || "").localeCompare(b.displayName || "");
-            } else if (sortIdx === 1) {
-                cmp = Math.max(0, a.zoneCount || 0) - Math.max(0, b.zoneCount || 0);
-                if (cmp === 0)
-                    cmp = (a.displayName || "").localeCompare(b.displayName || "");
-            } else {
-                cmp = (a.displayName || "").localeCompare(b.displayName || "");
-            }
-            return ascending ? cmp : -cmp;
-        });
+    function byName(a, b) {
+        return (a.displayName || "").localeCompare(b.displayName || "");
     }
-    return groups;
-}
 
-function finalizeGroups(groups) {
-    var sorted = Object.values(groups).sort(function(a, b) {
-        return a.order - b.order;
-    });
-    var nonEmpty = sorted.filter(function(g) {
-        return g.items.length > 0;
-    });
-    return nonEmpty.map(function(g) {
-        return {
-            label: nonEmpty.length > 1 ? g.label : "",
-            layouts: g.items
+    var comparator;
+    if (hasCustomOrder) {
+        comparator = function(a, b) {
+            var aIdx = (a.id in orderMap) ? orderMap[a.id] : Number.MAX_SAFE_INTEGER;
+            var bIdx = (b.id in orderMap) ? orderMap[b.id] : Number.MAX_SAFE_INTEGER;
+            return (aIdx !== bIdx) ? aIdx - bIdx : byName(a, b);
         };
-    });
+    } else if (sortIdx === 1) {
+        comparator = function(a, b) {
+            var cmp = Math.max(0, a.zoneCount || 0) - Math.max(0, b.zoneCount || 0);
+            return cmp !== 0 ? cmp : byName(a, b);
+        };
+    } else {
+        comparator = byName;
+    }
+
+    return Core.applySort(groups, comparator, ascending);
 }

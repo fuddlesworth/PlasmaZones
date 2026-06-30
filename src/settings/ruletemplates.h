@@ -9,11 +9,12 @@
 
 namespace PlasmaZones::RuleTemplates {
 
-/// Priority bands. Context rules keep the migration's cascade bands;
-/// application/animation rules are list-ordered within their band so the
-/// drag-to-reorder is meaningful. Shared with `RuleController`'s
-/// `renormalizePriorities` so list-order ↔ priority renormalization uses
-/// the same bands the seeded templates / empty rules land in.
+/// Default priority bases by section. They seed the starting priority of the
+/// seeded templates / empty rules, and `RuleController::bandBaseForSection`
+/// reuses them to seed where a newly added rule inserts (so a new Advanced rule
+/// starts high). Priority renormalization itself is flat global list-order, not
+/// banded (see `RuleController::renormalizePriorities`); these only set sensible
+/// defaults, the user reorders freely afterwards.
 constexpr int kContextBandBase = 300;
 constexpr int kApplicationBandBase = 200;
 constexpr int kAnimationBandBase = 100;

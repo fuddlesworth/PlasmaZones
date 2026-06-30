@@ -12,31 +12,29 @@ import "SearchAnchorHelpers.js" as SearchAnchors
 /**
  * @brief Drag-reorderable, variable-height list of RuleRow delegates.
  *
- * Hosts one rule-section's rows, shown highest priority first. Each row can
- * independently expand its WHEN/THEN preview, and rows can be reordered by
- * dragging the grip handle column or by Alt+Up / Alt+Down on a focused row.
- * A drop reorders the model via `controller.moveRule(movedId, beforeId)`, which
- * renormalizes priorities so list order maps onto evaluation order. The
- * resulting `dataChanged`/`rowsMoved` is what `RulesPage` listens for to rebuild
- * and re-sort its bucketed `sectionModel`.
+ * Hosts the rule rows, shown highest priority first. Each row can independently
+ * expand its WHEN/THEN preview, and rows can be reordered by dragging the grip
+ * handle column or by Alt+Up / Alt+Down on a focused row. A drop reorders the
+ * model via `controller.moveRule(movedId, beforeId)`, which renormalizes
+ * priorities so list order maps onto evaluation order. The resulting
+ * `dataChanged`/`rowsMoved` is what `RulesPage` listens for to rebuild its
+ * `filteredRules`.
  *
  * Variable-height invariant: each delegate publishes its actual rendered
  * height (header row + expansion contribution) back to the container via
- * `setDelegateHeight(ruleId, h)`. The container's `cumulativeY`,
- * `totalHeight`, and `slotIndexAt` walk that map so the drag cascade
- * matches the layout even when rows differ in size — fixed-stride math
- * (the prior shape) wouldn't survive an expanded source row leaving a
- * gap larger than the displaced rows' shift, breaking the slot-in
- * preview.
+ * `setDelegateHeight(ruleId, h)`. The container caches a prefix sum of those
+ * heights (`_offsets`) so the drag cascade matches the layout even when rows
+ * differ in size — fixed-stride math (the prior shape) wouldn't survive an
+ * expanded source row leaving a gap larger than the displaced rows' shift,
+ * breaking the slot-in preview.
  */
 Item {
     id: root
 
-    /// The section's rule entries — `[{ ruleId, name, enabled, ... }, ...]`
-    /// as produced by `RulesPage.sectionModel`. The container snapshots
-    /// the array here so the Repeater delegate's `modelData` (which the
-    /// delegate scope rebinds to the row, not the section) doesn't collide
-    /// with the array reference.
+    /// The rule entries — `[{ ruleId, name, enabled, ... }, ...]` as produced by
+    /// `RulesPage.filteredRules`. The container snapshots the array here so the
+    /// Repeater delegate's `modelData` (which the delegate scope rebinds to the
+    /// row) doesn't collide with the array reference.
     required property var rules
     /// The RuleController — supplies match-field and operator tables
     /// to the row's expansion view and owns `moveRule` for drag commits.
@@ -50,6 +48,25 @@ Item {
     /// activities + window picker) threaded into MatchLeafEditor and
     /// ActionListView. May be null while the page is still wiring up.
     property var appSettings: null
+    /// Whether drag / keyboard reordering is offered. The host disables it only
+    /// for a non-reorderable hosting context; the Rules page leaves it on (the
+    /// flat priority list is always reorderable). Managed System rows are still
+    /// pinned per-row regardless.
+    property bool reorderingEnabled: true
+    /// Whether each row shows its section as a small badge, so category stays
+    /// legible in the flat (ungrouped) list.
+    property bool showSectionBadge: false
+
+    /// Resolve the `beforeId` to hand `moveRule` for moving `list[from]` to slot
+    /// `to`. `moveRule` inserts immediately BEFORE `beforeId` (empty = end, i.e.
+    /// lowest priority). The list is shown highest-priority-first and the model is
+    /// kept in that same row order, so moving down (from < to) lands before the
+    /// slot after the target, and moving up lands before the target.
+    function beforeIdFor(list, from, to) {
+        if (from < to)
+            return to + 1 < list.length ? list[to + 1].ruleId : "";
+        return list[to].ruleId;
+    }
 
     /// Emitted when the row's enable switch is toggled. Page-level
     /// handler routes to `controller.setRuleEnabled`.
@@ -78,8 +95,8 @@ Item {
     // Per-ruleId published height. Keyed by ruleId (not index) so
     // reorders don't invalidate the map. The whole object is
     // reassigned on each publish so QML bindings that read it
-    // (heightOf / totalHeight / cumulativeY) re-evaluate — partial
-    // mutation `delegateHeights[k] = v` wouldn't notify dependents.
+    // (heightOf / `_offsets`) re-evaluate — partial mutation
+    // `delegateHeights[k] = v` wouldn't notify dependents.
     property var delegateHeights: ({})
 
     function setDelegateHeight(ruleId, h) {
@@ -113,36 +130,37 @@ Item {
         return (h !== undefined && h > 0) ? h : headerRowHeight;
     }
 
-    function cumulativeY(idx) {
-        var y = 0;
-        for (var i = 0; i < idx; ++i)
-            y += heightOf(i);
-        return y;
+    // Prefix-sum of row heights, recomputed once whenever `rules` or
+    // `delegateHeights` changes: `_offsets[i]` is the cumulative Y of row i and
+    // `_offsets[rules.length]` is the total height. Reading the cache keeps
+    // baseY / totalHeight / slotIndexAt at O(1) / O(n) instead of each delegate
+    // re-walking the heights from 0 — which made one relayout O(n²) and a full
+    // load O(n³). That was bounded when each section was its own short list, but
+    // the unified flat list now puts every rule through this one container.
+    readonly property var _offsets: {
+        var arr = [0];
+        for (var i = 0; i < rules.length; ++i)
+            arr.push(arr[i] + heightOf(i));
+        return arr;
     }
 
-    // Find the slot whose original (pre-cascade) range contains @p
-    // centerY — used by the drag MouseArea to resolve dropTargetIndex
-    // against variable heights. Walking the cumulative sum once per
-    // pointer event is cheap for typical rule counts; the prior
-    // fixed-stride formula `floor(centerY / rowHeight)` only worked
-    // when every row was the same height.
+    function cumulativeY(idx) {
+        return root._offsets[Math.max(0, Math.min(idx, rules.length))] || 0;
+    }
+
+    // Find the slot whose original (pre-cascade) range contains @p centerY —
+    // used by the drag MouseArea to resolve dropTargetIndex against variable
+    // heights. Reads the cached prefix sums; the prior fixed-stride formula
+    // `floor(centerY / rowHeight)` only worked when every row was the same height.
     function slotIndexAt(centerY) {
-        var y = 0;
         for (var i = 0; i < rules.length; ++i) {
-            var h = heightOf(i);
-            if (centerY < y + h)
+            if (centerY < root._offsets[i + 1])
                 return i;
-            y += h;
         }
         return Math.max(0, rules.length - 1);
     }
 
-    readonly property real totalHeight: {
-        var y = 0;
-        for (var i = 0; i < rules.length; ++i)
-            y += heightOf(i);
-        return y;
-    }
+    readonly property real totalHeight: root._offsets[rules.length] || 0
 
     readonly property real draggedHeight: dragFromIndex >= 0 ? heightOf(dragFromIndex) : headerRowHeight
 
@@ -159,10 +177,11 @@ Item {
             required property var modelData
             required property int index
 
-            // Managed System rules have a fixed precedence (INT_MIN), so they
-            // show no drag affordance — the controller rejects reordering them
-            // anyway.
-            readonly property bool reorderable: modelData.managed !== true
+            // A row is reorderable only when the list as a whole offers
+            // reordering AND this is not a managed System rule — managed rules
+            // have a fixed precedence (INT_MIN) and the controller rejects
+            // reordering them anyway.
+            readonly property bool reorderable: root.reorderingEnabled && modelData.managed !== true
 
             readonly property real baseY: root.cumulativeY(index)
             // Cascade displacement = ± the dragged row's own height
@@ -202,7 +221,8 @@ Item {
 
             // Register a per-rule deep-link anchor ("rule:<id>") with the host
             // page's reveal registry so a window-rule search result scrolls to
-            // and pulses this exact row (expanding its section card if collapsed).
+            // and pulses this exact row (expanding the rule list's card if
+            // collapsed).
             Component.onCompleted: {
                 root.setDelegateHeight(modelData.ruleId, actualHeight);
                 Qt.callLater(function () {
@@ -259,15 +279,8 @@ Item {
                     return;
                 }
                 var movedId = rulesSnapshot[from].ruleId;
-                // Mirror the drag-release beforeId math.
-                var beforeId = "";
-                if (from < to) {
-                    if (to + 1 < rulesSnapshot.length)
-                        beforeId = rulesSnapshot[to + 1].ruleId;
-                } else {
-                    beforeId = rulesSnapshot[to].ruleId;
-                }
-                root.controller.moveRule(movedId, beforeId);
+                // Same neighbour resolution as the drag release (direction-aware).
+                root.controller.moveRule(movedId, root.beforeIdFor(rulesSnapshot, from, to));
             }
 
             RowLayout {
@@ -306,6 +319,18 @@ Item {
                         source: "handle-sort"
                         visible: delegateRoot.reorderable
                         opacity: dragArea.containsMouse || dragArea.drag.active ? 0.7 : 0.3
+                    }
+
+                    // Pinned indicator for non-reorderable rows (managed System
+                    // rules at INT_MIN) — replaces the drag grip so it reads as
+                    // "fixed at the bottom" rather than just missing a handle.
+                    Kirigami.Icon {
+                        anchors.centerIn: parent
+                        width: Kirigami.Units.iconSizes.small
+                        height: Kirigami.Units.iconSizes.small
+                        source: "lock"
+                        visible: !delegateRoot.reorderable && delegateRoot.modelData.managed === true
+                        opacity: 0.3
                     }
 
                     MouseArea {
@@ -357,21 +382,11 @@ Item {
                                 return delegateRoot.baseY + delegateRoot.visualOffset;
                             });
                             if (movedId !== "" && from >= 0 && to >= 0 && from !== to && to < rulesSnapshot.length) {
-                                // controller.moveRule positions
-                                // movedId immediately BEFORE
-                                // beforeId. To move down (from <
-                                // to), beforeId is the rule at
-                                // (to + 1) so the moved rule lands
-                                // after the target; if dropping at
-                                // the end, pass empty.
-                                var beforeId = "";
-                                if (from < to) {
-                                    if (to + 1 < rulesSnapshot.length)
-                                        beforeId = rulesSnapshot[to + 1].ruleId;
-                                } else {
-                                    beforeId = rulesSnapshot[to].ruleId;
-                                }
-                                root.controller.moveRule(movedId, beforeId);
+                                // controller.moveRule positions movedId
+                                // immediately BEFORE beforeId; beforeIdFor
+                                // resolves the right neighbour for the current
+                                // list direction (see its doc).
+                                root.controller.moveRule(movedId, root.beforeIdFor(rulesSnapshot, from, to));
                             }
                         }
                         onPositionChanged: {
@@ -413,6 +428,7 @@ Item {
                     validationIssueCount: delegateRoot.modelData.validationIssueCount
                     priority: delegateRoot.modelData.priority
                     managed: delegateRoot.modelData.managed === true
+                    sectionLabel: root.showSectionBadge ? (delegateRoot.modelData.sectionLabel || "") : ""
                     controller: root.controller
                     matchFieldOptions: root.matchFieldOptions
                     actionTypeOptions: root.actionTypeOptions

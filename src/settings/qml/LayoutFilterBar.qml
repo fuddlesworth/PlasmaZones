@@ -82,6 +82,15 @@ RowLayout {
     // Guard to suppress redundant filterSettingsChanged during batch resets
     property bool _resetting: false
     property int _previousViewMode: 0
+    // Cached "a priority order exists for the current mode" — hasCustom*Order()
+    // is a non-reactive Q_INVOKABLE, so refresh it on completion, mode switch,
+    // and the staged-order signals. Drives the Priority sort option's availability
+    // in the GroupSortBar (its last sort entry).
+    property bool _hasPriorityOrder: false
+
+    function _refreshHasPriorityOrder() {
+        _hasPriorityOrder = viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder();
+    }
     // Property-name maps for data-driven save/load.
     // Each entry: [rootPropertyName, persistedStatePropertyName].
     // NOTE: adding a filter requires updating ALL of: property declaration,
@@ -185,8 +194,10 @@ RowLayout {
                 val = Math.max(0, Math.min(val, maxSort));
             root[prop] = val;
         }
-        groupByCombo.currentIndex = groupByIndex;
-        sortByCombo.currentIndex = sortByIndex;
+        groupSort.groupByIndex = groupByIndex;
+        groupSort.sortByIndex = sortByIndex;
+        groupSort.sortAscending = sortAscending;
+        groupSort.syncFromState();
         _resetting = false;
         filterSettingsChanged();
     }
@@ -205,131 +216,50 @@ RowLayout {
         saveState(_previousViewMode);
         _previousViewMode = viewMode;
         loadState(viewMode);
+        // The new mode has its own priority order — refresh the Priority sort
+        // option's availability for the mode we just switched to.
+        _refreshHasPriorityOrder();
     }
     Component.onCompleted: {
         _previousViewMode = viewMode;
         loadState(viewMode);
+        _refreshHasPriorityOrder();
     }
 
-    // ── Group By ────────────────────────────────────────────────────────────
-    Label {
-        text: i18n("Group:")
-        font: Kirigami.Theme.smallFont
-        color: Kirigami.Theme.disabledTextColor
+    // Priority order can be staged on the Configuration → Priority page while
+    // this bar is alive — refresh the cached availability so the Priority sort
+    // option ungreys without a mode switch.
+    Connections {
+        function onStagedSnappingOrderChanged() {
+            root._refreshHasPriorityOrder();
+        }
+
+        function onStagedTilingOrderChanged() {
+            root._refreshHasPriorityOrder();
+        }
+
+        target: settingsController
     }
 
-    ComboBox {
-        id: groupByCombo
+    // ── Group / Sort / direction ─────────────────────────────────────────────
+    // The shared GroupSortBar owns the combos + direction toggle; this bar keeps
+    // ownership of the persisted state (per view mode) and pushes it in via
+    // syncFromState() on load / mode switch, pulling user edits back out in
+    // onChanged. "Priority" (the last sort option) is unavailable until an order
+    // is set on the Configuration → Priority page; _hasPriorityOrder tracks that.
+    GroupSortBar {
+        id: groupSort
 
-        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-        model: root.viewMode === 0 ? root.snappingGroupModel : root.tilingGroupModel
-        // Binding is initial-only — user interaction breaks it; loadState()
-        // re-syncs imperatively via groupByCombo.currentIndex = ...
-        currentIndex: root.groupByIndex
-        Accessible.name: i18n("Group by")
-        onActivated: index => {
-            if (index < 0 || index >= model.length)
-                return;
-
-            root.groupByIndex = index;
+        groupModel: root.viewMode === 0 ? root.snappingGroupModel : root.tilingGroupModel
+        sortModel: root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel
+        sortItemAvailable: [true, true, root._hasPriorityOrder]
+        disabledSortTooltip: i18n("Set a layout order on the Priority page first")
+        onChanged: {
+            root.groupByIndex = groupByIndex;
+            root.sortByIndex = sortByIndex;
+            root.sortAscending = sortAscending;
             root.filterSettingsChanged();
         }
-    }
-
-    // ── Sort By ─────────────────────────────────────────────────────────────
-    Label {
-        text: i18n("Sort:")
-        font: Kirigami.Theme.smallFont
-        color: Kirigami.Theme.disabledTextColor
-    }
-
-    ComboBox {
-        id: sortByCombo
-
-        // Whether a priority order exists for the current mode. hasCustom*Order()
-        // is a non-reactive Q_INVOKABLE, so cache it and refresh on the staged-
-        // order signals and on the mode switch (model change).
-        property bool hasPriorityOrder: false
-
-        function refreshHasPriorityOrder() {
-            hasPriorityOrder = root.viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder();
-        }
-
-        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-        model: root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel
-        // Binding is initial-only — user interaction breaks it; loadState()
-        // re-syncs imperatively via sortByCombo.currentIndex = ...
-        currentIndex: root.sortByIndex
-        Accessible.name: i18n("Sort by")
-        Component.onCompleted: refreshHasPriorityOrder()
-        // Fires on the mode switch (the model binding re-evaluates to the other
-        // mode's sort array), so the Priority item's enabled state tracks the
-        // mode's own order.
-        onModelChanged: refreshHasPriorityOrder()
-        onActivated: index => {
-            if (index < 0 || index >= model.length)
-                return;
-
-            // The last option ("Priority") is unavailable until an order is set
-            // on the Priority page. Swallow the selection and revert the visible
-            // value rather than applying a sort that would silently fall back to
-            // Name order.
-            if (index === count - 1 && !hasPriorityOrder) {
-                currentIndex = root.sortByIndex;
-                return;
-            }
-
-            root.sortByIndex = index;
-            root.filterSettingsChanged();
-        }
-
-        // The "Priority" item (the last sort option) is unavailable until an
-        // order has been set on the Configuration → Priority page. Keep the
-        // delegate ENABLED — a disabled delegate receives no hover events, so the
-        // explanatory tooltip would never show. Gray it, suppress the hover
-        // highlight, and let onActivated above swallow the selection.
-        delegate: ItemDelegate {
-            id: sortItemDelegate
-
-            required property int index
-            required property var modelData
-
-            readonly property bool isPriority: index === sortByCombo.count - 1
-            readonly property bool unavailable: isPriority && !sortByCombo.hasPriorityOrder
-
-            width: sortByCombo.width
-            text: modelData
-            opacity: unavailable ? 0.5 : 1
-            highlighted: !unavailable && sortByCombo.highlightedIndex === index
-            ToolTip.visible: hovered && unavailable
-            ToolTip.delay: Kirigami.Units.toolTipDelay
-            ToolTip.text: i18n("Set a layout order on the Priority page first")
-        }
-
-        Connections {
-            function onStagedSnappingOrderChanged() {
-                sortByCombo.refreshHasPriorityOrder();
-            }
-
-            function onStagedTilingOrderChanged() {
-                sortByCombo.refreshHasPriorityOrder();
-            }
-
-            target: settingsController
-        }
-    }
-
-    ToolButton {
-        icon.name: root.sortAscending ? "view-sort-ascending" : "view-sort-descending"
-        icon.width: Kirigami.Units.iconSizes.smallMedium
-        icon.height: Kirigami.Units.iconSizes.smallMedium
-        onClicked: {
-            root.sortAscending = !root.sortAscending;
-            root.filterSettingsChanged();
-        }
-        Accessible.name: root.sortAscending ? i18n("Sort ascending") : i18n("Sort descending")
-        ToolTip.visible: hovered
-        ToolTip.text: root.sortAscending ? i18n("Ascending") : i18n("Descending")
     }
 
     Timer {

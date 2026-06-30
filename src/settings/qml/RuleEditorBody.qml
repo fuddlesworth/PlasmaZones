@@ -193,10 +193,9 @@ ColumnLayout {
             }
         }
 
-        // Priority + band-name hint. Bare integers like "610" are
-        // meaningless without the band scheme; the inline label maps the
-        // current value back to its semantic band. Bands defined in
-        // rulecontroller.cpp.
+        // Priority. The value is a position in one flat, global precedence list
+        // (higher wins). Reordering rules on the Rules page renumbers them by list
+        // order, so an explicit value set here holds only until the next reorder.
         RowLayout {
             id: priorityRow
 
@@ -208,19 +207,12 @@ ColumnLayout {
             SpinBox {
                 Accessible.name: i18n("Rule priority. Higher rules are evaluated first.")
                 ToolTip.delay: Kirigami.Units.toolTipDelay
-                ToolTip.text: i18n("Priority bands. 100: Animation, 200: Application, 300: Context, 500: Advanced. Higher numbers win within a band.")
+                ToolTip.text: i18n("Higher priority is evaluated first. Reordering rules on the Rules page renumbers them by list order.")
                 ToolTip.visible: hovered
                 from: 0
                 to: 100000
                 value: priorityRow._priority
                 onValueModified: root._patch("priority", value)
-            }
-
-            Label {
-                Layout.alignment: Qt.AlignVCenter
-                font.italic: true
-                opacity: 0.65
-                text: priorityRow._priority >= 500 ? i18n("Advanced") : priorityRow._priority >= 300 ? i18n("Context") : priorityRow._priority >= 200 ? i18n("Application") : priorityRow._priority >= 100 ? i18n("Animation") : i18n("Custom")
             }
         }
     }
