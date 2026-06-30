@@ -213,6 +213,12 @@ ColumnLayout {
             // actual swatch is rendered alongside this pill).
             return rawStr === "accent" ? i18n("Accent") : rawStr.toUpperCase();
         }
+        if (kind === "bool") {
+            // Render the JSON bool as On / Off — without this branch a bool
+            // param fell through to the raw lowercase "true" / "false". Matches
+            // the editor toggle and the WHEN-side value pill.
+            return (raw === true || raw === "true") ? i18n("On") : i18n("Off");
+        }
         return rawStr;
     }
 

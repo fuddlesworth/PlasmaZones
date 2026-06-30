@@ -96,7 +96,7 @@ ColumnLayout {
 
     /// Localize a leaf's value for display, mirroring `MatchLeafEditor`'s
     /// per-kind editors so the read-only preview agrees with the editor:
-    ///   - bool → "True" / "False" (i18n'd)
+    ///   - bool → "On" / "Off" (i18n'd)
     ///   - screen → `appSettings.screens.displayLabel` for the matching name
     ///   - activity → `appSettings.activities.name` for the matching id
     ///   - everything else (string, number) → `String(value)`
@@ -109,7 +109,7 @@ ColumnLayout {
 
         var kind = root._valueKind(fieldWire);
         if (kind === "bool")
-            return value === true || value === "true" ? i18n("True") : i18n("False");
+            return value === true || value === "true" ? i18n("On") : i18n("Off");
 
         if (kind === "screen" && root.appSettings) {
             var screens = root.appSettings.screens;

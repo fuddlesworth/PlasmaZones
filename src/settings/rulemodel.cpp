@@ -3,6 +3,8 @@
 
 #include "rulemodel.h"
 
+#include "ruleauthoring.h"
+
 #include "../phosphor_i18n.h"
 
 #include <PhosphorRules/ContextRuleBridge.h>
@@ -158,6 +160,16 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
             label = PhosphorI18n::tr("Tiling");
         }
         return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field), label);
+    }
+
+    // Boolean fields (Maximized, Keep above, Skip taskbar, …) render their
+    // value as On / Off instead of the raw JSON "true" / "false" the generic
+    // toString() fallback would emit, matching the editor toggle and the
+    // expanded match tree (MatchExpressionView).
+    if (PhosphorRules::fieldIsBool(predicate.field)) {
+        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
+                                              predicate.value.toBool() ? PhosphorI18n::tr("On")
+                                                                       : PhosphorI18n::tr("Off"));
     }
 
     return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
@@ -327,22 +339,13 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     //    border / title-bar overrides, per-context gap overrides) ──
     {
         const QJsonValue raw = action.params.value(PhosphorRules::ActionParam::Value);
-        if (action.type == ActionType::RestorePosition) {
-            return raw.toBool() ? PhosphorI18n::tr("Restore position on login")
-                                : PhosphorI18n::tr("Don't restore position on login");
-        }
-        if (action.type == ActionType::SetHideTitleBar) {
-            return raw.toBool() ? PhosphorI18n::tr("Hide title bars") : PhosphorI18n::tr("Show title bars");
-        }
-        if (action.type == ActionType::LockContext) {
-            return raw.toBool() ? PhosphorI18n::tr("Lock layout") : PhosphorI18n::tr("Don't lock layout");
-        }
-        if (action.type == ActionType::DefaultLayoutAssignment) {
-            return raw.toBool() ? PhosphorI18n::tr("Assign default layout")
-                                : PhosphorI18n::tr("Don't assign default layout");
-        }
-        if (action.type == ActionType::SetBorderVisible) {
-            return raw.toBool() ? PhosphorI18n::tr("Show border") : PhosphorI18n::tr("Hide border");
+        // Boolean actions render their polarity-aware phrase ("Show border" /
+        // "Hide border", …). The wording lives in RuleAuthoring so the editor
+        // toggle caption and this summary always read the same; a non-boolean
+        // action type returns empty and falls through to the cases below.
+        if (const QString boolLabel = RuleAuthoring::boolActionStateLabel(action.type, raw.toBool());
+            !boolLabel.isEmpty()) {
+            return boolLabel;
         }
         if (action.type == ActionType::SetBorderWidth) {
             return PhosphorI18n::tr("Border width: %1 px").arg(raw.toInt());
@@ -367,9 +370,6 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         }
         if (action.type == ActionType::SetOuterGap) {
             return PhosphorI18n::tr("Outer gap: %1 px").arg(raw.toInt());
-        }
-        if (action.type == ActionType::SetUsePerSideOuterGap) {
-            return raw.toBool() ? PhosphorI18n::tr("Per-side outer gaps") : PhosphorI18n::tr("Uniform outer gap");
         }
         if (action.type == ActionType::SetOuterGapTop) {
             return PhosphorI18n::tr("Top gap: %1 px").arg(raw.toInt());
