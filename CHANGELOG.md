@@ -15,6 +15,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Per-monitor gaps**: pick a monitor from the scope chip on the Gaps card to set that screen's gaps independently. The values are stored as a screen-scoped rule ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Separate focused and unfocused border colors**: the border color is now two actions, "Set focused border color" and "Set unfocused border color", each with its own swatch ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **App-managed default rules**: the default rules (Default borders, Default title bars, Default gaps) cannot be deleted and stay pinned to the lowest priority ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
+- **Choose which windows the appearance defaults apply to**: the Borders and Title bars cards on the Appearance Windows page have an "Apply to" option with three scopes, tiled and snapped windows, all normal windows, and all windows. New installs default to tiled and snapped windows, so the default border and hidden title bar stay off the desktop, panels, popups, and on-screen displays. Existing setups keep their current scope and can switch at any time ([#721](https://github.com/fuddlesworth/PlasmaZones/pull/721)).
 
 ### Changed
 
