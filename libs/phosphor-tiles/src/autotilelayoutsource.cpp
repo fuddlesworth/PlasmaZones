@@ -108,6 +108,12 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
     qreal splitRatio = algorithm->defaultSplitRatio();
     int effectiveCount = windowCount;
+    // Per-algorithm custom-param values for the preview. Sourced below from the
+    // saved per-algorithm entry (which the engine serialises for EVERY
+    // algorithm, active or not), then handed to calculateZones — without this
+    // the thumbnail/list previews ignored custom parameters entirely while the
+    // live tiler honoured them.
+    QVariantMap customParams;
     if (registry) {
         const auto& params = registry->previewParams();
         const bool isActive = !params.algorithmId.isEmpty() && registry->algorithm(params.algorithmId) == algorithm;
@@ -135,6 +141,20 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
                 }
             }
         }
+        // Custom params live in the per-algorithm saved entry regardless of
+        // whether this is the active algorithm, so resolve them outside the
+        // active/saved split above. Filter to the algorithm's currently
+        // declared params (mirrors AutotileEngine::recalculateLayout) so a stale
+        // value from an edited script can't reach calculateZones.
+        const auto savedIt = params.savedAlgorithmSettings.constFind(algorithmId);
+        if (savedIt != params.savedAlgorithmSettings.constEnd() && algorithm->supportsCustomParams()) {
+            const QVariantMap declared = savedIt.value().value(PhosphorTiles::AutotileJsonKeys::CustomParams).toMap();
+            for (auto pit = declared.constBegin(); pit != declared.constEnd(); ++pit) {
+                if (algorithm->hasCustomParam(pit.key())) {
+                    customParams.insert(pit.key(), pit.value());
+                }
+            }
+        }
     }
     if (effectiveCount <= 0) {
         effectiveCount = algorithm->defaultMaxWindows();
@@ -144,6 +164,7 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     previewState.setMasterCount(masterCount);
     previewState.setSplitRatio(splitRatio);
     PhosphorTiles::TilingParams params = PhosphorTiles::TilingParams::forPreview(effectiveCount, canvas, &previewState);
+    params.customParams = customParams;
 
     const QVector<QRect> rects = algorithm->calculateZones(params);
 

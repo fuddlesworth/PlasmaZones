@@ -17,22 +17,26 @@ SettingsFlickable {
     // Q_PROPERTY and a same-named Q_INVOKABLE, so the `()` form errors with
     // "is not a function"). Refreshed via the Connections below on its NOTIFY.
     property var _cachedAlgos: settingsController.availableAlgorithms || []
-    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.defaultAutotileAlgorithm)
-    // Derive algorithm ID from the combo's current selection (tracks UI immediately,
-    // not delayed by D-Bus round-trip to daemon)
-    readonly property string selectedAlgorithm: {
-        if (!algorithmCombo)
-            return root.effectiveAlgorithm;
+    // The ISettings object (the `appSettings` context property), captured at page
+    // scope. LayoutComboBox declares its own `appSettings: settingsController`,
+    // which SHADOWS the context property inside the combo's onActivated — writing
+    // `appSettings.defaultAutotileAlgorithm` there hit a nonexistent property on
+    // the controller and silently dropped every algorithm change. Read/write the
+    // algorithm through this reference so it always targets ISettings.
+    readonly property var appSettingsObj: appSettings
+    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettingsObj.defaultAutotileAlgorithm)
+    // Working algorithm for the whole page (preview, custom-param controls,
+    // capability lookups). Driven imperatively rather than bound to
+    // algorithmCombo.currentValue: that value transiently resets to the first
+    // list entry (BSP) whenever the combo rebuilds its model — e.g. the layout
+    // reload that follows a Save — which used to drag the entire page onto BSP.
+    // It is set the instant the user picks an algorithm (the combo's
+    // onActivated, below) so switching is immediate, and re-synced to the
+    // persisted setting on load / external edits / per-screen scope changes via
+    // onEffectiveAlgorithmChanged.
+    property string selectedAlgorithm: root.effectiveAlgorithm
 
-        let val = algorithmCombo.currentValue;
-        if (!val || val === "")
-            return root.effectiveAlgorithm;
-
-        if (val.startsWith("autotile:"))
-            return val.substring(9);
-
-        return val;
-    }
+    onEffectiveAlgorithmChanged: root.selectedAlgorithm = root.effectiveAlgorithm
     // Data-driven algorithm capabilities (lookup from cached availableAlgorithms by ID)
     readonly property var algoCapabilities: {
         const algos = root._cachedAlgos;
@@ -262,17 +266,18 @@ SettingsFlickable {
                             // Extract algorithm ID from autotile: prefixed value
                             let selectedId = algorithmCombo.currentValue;
                             if (selectedId === "")
-                                selectedId = appSettings.defaultAutotileAlgorithm;
+                                selectedId = root.appSettingsObj.defaultAutotileAlgorithm;
                             else if (selectedId.startsWith("autotile:"))
                                 selectedId = selectedId.substring(9);
-                            // Just change the algorithm. Max windows / split ratio /
-                            // master count are per-algorithm now: selectedAlgorithm
-                            // updates from the combo, re-seeding liveAlgoSettings from
-                            // the new algorithm's saved tuning, and the daemon performs
-                            // the same save/restore on its side. Resetting global
-                            // values here would clobber a sibling algorithm's slot.
+                            // Drive the page off the user's pick immediately, then
+                            // persist. Both go through root.appSettingsObj — NOT the
+                            // bare `appSettings`, which the combo shadows with the
+                            // controller in this scope (see appSettingsObj above).
+                            // Resetting global max-windows / split-ratio / master-count
+                            // here would clobber a sibling algorithm's per-algorithm slot.
+                            root.selectedAlgorithm = selectedId;
                             root.writeSetting("Algorithm", selectedId, function (v) {
-                                appSettings.defaultAutotileAlgorithm = v;
+                                root.appSettingsObj.defaultAutotileAlgorithm = v;
                             });
                         }
                     }

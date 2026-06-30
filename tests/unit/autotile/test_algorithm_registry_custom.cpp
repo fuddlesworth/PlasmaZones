@@ -5,9 +5,12 @@
 #include <QSignalSpy>
 
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
+
+#include <QVariantMap>
 
 #include "../helpers/ScriptedAlgoTestSetup.h"
 #include "../helpers/TilingTestHelpers.h"
@@ -51,6 +54,39 @@ public:
 
 private:
     QString m_name;
+};
+
+/**
+ * @brief Test algorithm whose single zone's width tracks a "widthRatio" custom
+ *        param, so a preview that ignores custom params is observably wrong.
+ */
+class CustomParamTestAlgorithm : public PhosphorTiles::TilingAlgorithm
+{
+    Q_OBJECT
+public:
+    QString name() const noexcept override
+    {
+        return QStringLiteral("Custom Param Test");
+    }
+    QString description() const override
+    {
+        return QStringLiteral("Width tracks the widthRatio custom param");
+    }
+    bool supportsCustomParams() const noexcept override
+    {
+        return true;
+    }
+    bool hasCustomParam(const QString& paramName) const override
+    {
+        return paramName == QLatin1String("widthRatio");
+    }
+    QVector<QRect> calculateZones(const PhosphorTiles::TilingParams& params) const override
+    {
+        const QRect& screen = params.screenGeometry;
+        const double widthRatio = params.customParams.value(QStringLiteral("widthRatio"), 0.5).toDouble();
+        const int w = static_cast<int>(screen.width() * widthRatio);
+        return {QRect(screen.x(), screen.y(), w, screen.height())};
+    }
 };
 
 /**
@@ -345,6 +381,49 @@ private Q_SLOTS:
                 QVERIFY(zone.height() > 0);
             }
         }
+    }
+
+    // =========================================================================
+    // Preview honours per-algorithm custom params
+    // =========================================================================
+
+    // previewFromAlgorithm() must feed the algorithm's saved custom params into
+    // calculateZones(), so a thumbnail / list preview reflects the user's
+    // configured parameters exactly as the live tiler does. Regression guard for
+    // the bug where the preview path read masterCount/splitRatio from the
+    // preview params but dropped customParams entirely.
+    void testPreview_appliesSavedCustomParams()
+    {
+        auto* registry = m_scriptSetup.registry();
+        const QString id = QStringLiteral("test-customparam");
+        registry->registerAlgorithm(id, new CustomParamTestAlgorithm());
+        auto* algo = registry->algorithm(id);
+        QVERIFY(algo != nullptr);
+        QVERIFY(algo->supportsCustomParams());
+
+        const auto relativeWidthForRatio = [&](double widthRatio) -> qreal {
+            PhosphorTiles::AlgorithmPreviewParams pp;
+            pp.algorithmId = id; // active-algorithm branch
+            QVariantMap custom;
+            custom.insert(QStringLiteral("widthRatio"), widthRatio);
+            QVariantMap entry;
+            entry.insert(QStringLiteral("customParams"), custom);
+            pp.savedAlgorithmSettings.insert(id, entry);
+            registry->setPreviewParams(pp);
+
+            const PhosphorLayout::LayoutPreview preview =
+                PhosphorTiles::previewFromAlgorithm(id, algo, 1, registry, QSize());
+            return preview.zones.isEmpty() ? -1.0 : preview.zones.first().width();
+        };
+
+        const qreal narrow = relativeWidthForRatio(0.25);
+        const qreal wide = relativeWidthForRatio(0.75);
+
+        QVERIFY2(qAbs(narrow - 0.25) < 0.05, "preview zone width should track widthRatio=0.25");
+        QVERIFY2(qAbs(wide - 0.75) < 0.05, "preview zone width should track widthRatio=0.75");
+
+        registry->setPreviewParams(PhosphorTiles::AlgorithmPreviewParams{});
+        registry->unregisterAlgorithm(id);
     }
 };
 
