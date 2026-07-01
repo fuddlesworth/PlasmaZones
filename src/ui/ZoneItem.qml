@@ -32,8 +32,8 @@ Item {
     property int borderWidth: Kirigami.Units.smallSpacing // 4px - increased for better visibility
     property int borderRadius: Kirigami.Units.gridUnit // 8px - use theme spacing
 
-    signal clicked()
-    signal hovered()
+    signal clicked
+    signal hovered
 
     // Zone background
     Rectangle {
@@ -41,7 +41,15 @@ Item {
 
         anchors.fill: parent
         radius: zoneItem.borderRadius
-        color: zoneItem.isHighlighted ? zoneItem.highlightColor : zoneItem.inactiveColor
+        // Discard the fill colour's own alpha so `opacity` is the SOLE alpha
+        // control — otherwise the two multiply (colour.a × opacity) and the
+        // zone renders far more transparent than the configured opacity. This
+        // matches the shader overlay path (overlay_data.cpp sets FillA =
+        // activeOpacity, ignoring the colour's alpha) and SnapAssistContent.
+        color: {
+            var base = zoneItem.isHighlighted ? zoneItem.highlightColor : zoneItem.inactiveColor;
+            return Qt.rgba(base.r, base.g, base.b, 1.0);
+        }
         opacity: zoneItem.isHighlighted ? zoneItem.activeOpacity : zoneItem.inactiveOpacity
         // Multi-zone: increase border width by 2px, brighter border color
         border.width: zoneItem.isMultiZone ? (zoneItem.borderWidth + 2) : zoneItem.borderWidth
@@ -64,16 +72,13 @@ Item {
             PhosphorMotionAnimation {
                 profile: "widget.zoneHighlight"
             }
-
         }
 
         Behavior on opacity {
             PhosphorMotionAnimation {
                 profile: "widget.zoneHighlight"
             }
-
         }
-
     }
 
     // Zone number/name label
@@ -107,9 +112,7 @@ Item {
                 PhosphorMotionAnimation {
                     profile: "widget.zoneHighlight"
                 }
-
             }
-
         }
 
         Label {
@@ -130,11 +133,8 @@ Item {
                 PhosphorMotionAnimation {
                     profile: "widget.zoneHighlight"
                 }
-
             }
-
         }
-
     }
 
     // Mouse interaction
@@ -144,5 +144,4 @@ Item {
         onClicked: zoneItem.clicked()
         onEntered: zoneItem.hovered()
     }
-
 }

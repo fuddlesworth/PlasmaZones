@@ -114,8 +114,7 @@ Item {
             // Zones may come from LayoutPreview (flat x/y/w/h) or the legacy
             // zonesToVariantList shape (nested relativeGeometry); prefer flat,
             // fall back to nested.
-            property var relGeo: modelData.relativeGeometry || ({
-            })
+            property var relGeo: modelData.relativeGeometry || ({})
             property real relX: Math.max(0, Math.min((modelData.x !== undefined ? modelData.x : (relGeo.x || 0)), 1))
             property real relY: Math.max(0, Math.min((modelData.y !== undefined ? modelData.y : (relGeo.y || 0)), 1))
             property real relWidth: Math.max(0, Math.min((modelData.width !== undefined ? modelData.width : (relGeo.width || 0.25)), 1 - relX))
@@ -139,7 +138,6 @@ Item {
                         for (var i = 0; i < root.highlightedZoneIds.length; i++) {
                             if (String(root.highlightedZoneIds[i]) === String(zoneId))
                                 return true;
-
                         }
                     }
                 }
@@ -164,13 +162,15 @@ Item {
             scale: isZoneHovered && root.hoverScale > 1 ? root.hoverScale : 1
             z: isZoneHovered ? 10 : 1
             transformOrigin: Item.Center
-            // Zone fill color - use highlight color when selected/hovered, inactive color otherwise
+            // Zone fill color - use highlight color when selected/hovered, inactive color otherwise.
+            // Discard the colour's own alpha so `opacity` is the SOLE alpha control;
+            // otherwise the two multiply (colour.a × opacity) and the zone previews
+            // far more transparent than the configured opacity — mismatching the live
+            // shader overlay (overlay_data.cpp sets FillA = activeOpacity).
             color: {
                 var isHighlighted = root.isActive || root.isHovered || isZoneSelected || isZoneHovered;
-                if (isHighlighted)
-                    return root.highlightColor;
-
-                return root.inactiveColor;
+                var base = isHighlighted ? root.highlightColor : root.inactiveColor;
+                return Qt.rgba(base.r, base.g, base.b, 1.0);
             }
             opacity: (root.isActive || root.isHovered || isZoneSelected || isZoneHovered) ? root.activeOpacity : root.inactiveOpacity
             // Border - brighter on hover
@@ -228,9 +228,7 @@ Item {
                         profile: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? "widget.fadeIn" : "widget.fadeOut"
                         durationOverride: root.animationDuration
                     }
-
                 }
-
             }
 
             // Mouse interaction for zone selection (only when interactive)
@@ -252,7 +250,6 @@ Item {
                     profile: "widget.zoneHighlight"
                     durationOverride: root.animationDuration
                 }
-
             }
 
             Behavior on opacity {
@@ -260,7 +257,6 @@ Item {
                     profile: "widget.zoneHighlight"
                     durationOverride: root.animationDuration
                 }
-
             }
 
             Behavior on scale {
@@ -270,7 +266,6 @@ Item {
                     profile: "widget.zoneHighlight.pop"
                     durationOverride: root.animationDuration
                 }
-
             }
 
             // Border feedback uses the half-duration widget.zoneHighlight.border
@@ -281,7 +276,6 @@ Item {
                     profile: "widget.zoneHighlight.border"
                     durationOverride: Math.round(root.animationDuration / 2)
                 }
-
             }
 
             Behavior on border.width {
@@ -289,11 +283,8 @@ Item {
                     profile: "widget.zoneHighlight.border"
                     durationOverride: Math.round(root.animationDuration / 2)
                 }
-
             }
-
         }
-
     }
 
     // Master indicator dots overlaid on master zone(s) for autotile algorithms
@@ -303,8 +294,7 @@ Item {
         Rectangle {
             required property var modelData
             required property int index
-            readonly property var relGeo: modelData.relativeGeometry || ({
-            })
+            readonly property var relGeo: modelData.relativeGeometry || ({})
             readonly property real relX: modelData.x !== undefined ? modelData.x : (relGeo.x || 0)
             readonly property real relY: modelData.y !== undefined ? modelData.y : (relGeo.y || 0)
             readonly property real leftOffset: relX < 0.01 ? root.edgeGap : root.zonePadding / 2
@@ -319,7 +309,5 @@ Item {
             radius: Kirigami.Units.smallSpacing
             color: Kirigami.Theme.positiveTextColor
         }
-
     }
-
 }
