@@ -31,6 +31,13 @@ RowLayout {
     // The current field's descriptor (by wire string), or undefined if the
     // stored field is unknown / legacy.
     readonly property var _fieldEntry: leaf._entryForWire(leaf.fieldOptions, leaf.node.field)
+    // True once a field is chosen. A freshly-added condition seeds an empty
+    // field so the picker shows its placeholder and the user must select one;
+    // the operator / value editors stay hidden until then (mirroring how an
+    // action row shows no param editors until its type is picked). Keyed on
+    // the field STRING being non-empty — not on `_fieldEntry` — so a legacy /
+    // unknown field (non-empty but unrecognised) still shows its editors.
+    readonly property bool _hasField: leaf.node.field !== undefined && String(leaf.node.field).length > 0
     // Operator options depend on the current field's enum value.
     readonly property var _operatorOptions: leaf._fieldEntry !== undefined ? controller.operatorsForField(leaf._fieldEntry.value) : []
     readonly property string _valueKind: leaf._fieldEntry !== undefined ? leaf._fieldEntry.valueKind : "string"
@@ -257,6 +264,9 @@ RowLayout {
     WideComboBox {
         id: opCombo
 
+        // Hidden until a field is chosen — a field-less placeholder has no
+        // operator vocabulary to offer yet.
+        visible: leaf._hasField
         Layout.alignment: Qt.AlignTop
         // Fixed to the widest operator label across ALL fields' operator sets
         // (plus chrome for the dropdown indicator + padding) instead of the
@@ -278,6 +288,10 @@ RowLayout {
 
     Loader {
         Layout.fillWidth: true
+        // Hidden until a field is chosen — there is no value to type against a
+        // field-less placeholder (mirrors the operator combo above).
+        visible: leaf._hasField
+        active: leaf._hasField
         // Most value editors top-align so a string editor's wrapped operator hint
         // can grow downward without dragging the combos with it. The bool toggle
         // is a short fixed-height control with no hint line, so it vertically

@@ -98,7 +98,23 @@ ColumnLayout {
     /// True iff the working rule is structurally complete (≥1 action,
     /// every leaf filled) AND semantically clean (no action/match domain
     /// mismatches). The consumer's Save button binds its `enabled` to this.
-    readonly property bool canSave: root.workingRule.actions !== undefined && root.workingRule.actions.length > 0 && root._matchHasFilledLeaves(root.workingRule.match) && root.validationIssues.length === 0
+    readonly property bool canSave: root.workingRule.actions !== undefined && root.workingRule.actions.length > 0 && root._actionsAllHaveType(root.workingRule.actions) && root._matchHasFilledLeaves(root.workingRule.match) && root.validationIssues.length === 0
+
+    /// True iff every action carries a non-empty type. A freshly-added action
+    /// is a type-less placeholder ("Choose…" in the picker) until the user
+    /// picks one — block saving that incomplete action. The rule library's
+    /// validator deliberately treats an empty-type slot as a benign
+    /// placeholder (see validationIssuesForJson), so the completeness gate has
+    /// to live here rather than surfacing as a validation issue.
+    function _actionsAllHaveType(actions) {
+        if (actions === undefined || actions === null)
+            return false;
+        for (var i = 0; i < actions.length; ++i) {
+            if (!actions[i] || actions[i].type === undefined || String(actions[i].type).length === 0)
+                return false;
+        }
+        return true;
+    }
 
     function _patch(key, value) {
         // Shallow clone via Object.assign — we replace `key`'s value
@@ -134,6 +150,14 @@ ColumnLayout {
             return true;
 
         if (node.field !== undefined) {
+            // A freshly-added condition seeds an empty field / operator; block
+            // save until the user picks a field (which auto-seeds a valid
+            // operator) and fills the value.
+            if (String(node.field).length === 0)
+                return false;
+            if (node.op === undefined || String(node.op).length === 0)
+                return false;
+
             var v = node.value;
             if (v === undefined || v === null)
                 return false;
