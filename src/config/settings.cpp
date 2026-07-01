@@ -780,11 +780,47 @@ void Settings::setUseSystemColors(bool use)
     Q_EMIT useSystemColorsChanged();
     Q_EMIT settingsChanged();
 }
-P_STORE_GET(QColor, highlightColor, snappingZonesColorsGroup, highlightKey, QColor)
+// Zone-overlay appearance getters read the managed baseline overlay rule (the v5
+// source of truth, seeded by makeBaselineOverlayRule / updated by the migration),
+// falling back to ConfigDefaults when the rule/action is absent — mirroring the
+// gap getters (innerGap() etc). Colours are stored as `#AARRGGBB` hex on the
+// action; an invalid/absent value falls back. The setters still write config
+// (unused by the rule-backed Overlay Appearance page, kept for API completeness).
+QColor Settings::highlightColor() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
+                                        PhosphorRules::ActionType::SetOverlayHighlightColor)) {
+        const QColor c(v->toString());
+        if (c.isValid()) {
+            return c;
+        }
+    }
+    return ConfigDefaults::highlightColor();
+}
 P_STORE_SET_COLOR(setHighlightColor, snappingZonesColorsGroup, highlightKey, highlightColorChanged)
-P_STORE_GET(QColor, inactiveColor, snappingZonesColorsGroup, inactiveKey, QColor)
+QColor Settings::inactiveColor() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
+                                        PhosphorRules::ActionType::SetOverlayInactiveColor)) {
+        const QColor c(v->toString());
+        if (c.isValid()) {
+            return c;
+        }
+    }
+    return ConfigDefaults::inactiveColor();
+}
 P_STORE_SET_COLOR(setInactiveColor, snappingZonesColorsGroup, inactiveKey, inactiveColorChanged)
-P_STORE_GET(QColor, borderColor, snappingZonesColorsGroup, borderKey, QColor)
+QColor Settings::borderColor() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
+                                        PhosphorRules::ActionType::SetOverlayBorderColor)) {
+        const QColor c(v->toString());
+        if (c.isValid()) {
+            return c;
+        }
+    }
+    return ConfigDefaults::borderColor();
+}
 P_STORE_SET_COLOR(setBorderColor, snappingZonesColorsGroup, borderKey, borderColorChanged)
 
 // Labels group
@@ -803,16 +839,44 @@ P_STORE_SET_BOOL(setLabelFontUnderline, snappingZonesLabelsGroup, fontUnderlineK
 P_STORE_GET(bool, labelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, bool)
 P_STORE_SET_BOOL(setLabelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, labelFontStrikeoutChanged)
 
-// Opacity group
-P_STORE_GET(qreal, activeOpacity, snappingZonesOpacityGroup, activeKey, double)
+// Opacity group — rule-backed getters (baseline overlay rule), config setters.
+qreal Settings::activeOpacity() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
+                                        PhosphorRules::ActionType::SetOverlayActiveOpacity)) {
+        return v->toDouble(ConfigDefaults::activeOpacity());
+    }
+    return ConfigDefaults::activeOpacity();
+}
 P_STORE_SET_DOUBLE(setActiveOpacity, snappingZonesOpacityGroup, activeKey, activeOpacityChanged)
-P_STORE_GET(qreal, inactiveOpacity, snappingZonesOpacityGroup, inactiveKey, double)
+qreal Settings::inactiveOpacity() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
+                                        PhosphorRules::ActionType::SetOverlayInactiveOpacity)) {
+        return v->toDouble(ConfigDefaults::inactiveOpacity());
+    }
+    return ConfigDefaults::inactiveOpacity();
+}
 P_STORE_SET_DOUBLE(setInactiveOpacity, snappingZonesOpacityGroup, inactiveKey, inactiveOpacityChanged)
 
-// Border group
-P_STORE_GET(int, borderWidth, snappingZonesBorderGroup, widthKey, int)
+// Border group — rule-backed getters (baseline overlay rule), config setters.
+int Settings::borderWidth() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
+                                        PhosphorRules::ActionType::SetOverlayBorderWidth)) {
+        return v->toInt(ConfigDefaults::borderWidth());
+    }
+    return ConfigDefaults::borderWidth();
+}
 P_STORE_SET_INT(setBorderWidth, snappingZonesBorderGroup, widthKey, borderWidthChanged)
-P_STORE_GET(int, borderRadius, snappingZonesBorderGroup, radiusKey, int)
+int Settings::borderRadius() const
+{
+    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
+                                        PhosphorRules::ActionType::SetOverlayBorderRadius)) {
+        return v->toInt(ConfigDefaults::borderRadius());
+    }
+    return ConfigDefaults::borderRadius();
+}
 P_STORE_SET_INT(setBorderRadius, snappingZonesBorderGroup, radiusKey, borderRadiusChanged)
 
 // Effects group (blur lives here for historical reasons)

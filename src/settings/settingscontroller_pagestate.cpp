@@ -192,6 +192,12 @@ bool SettingsController::isPageDirty(const QString& page) const
             if (m_settings.isKeyModified(gk.first, gk.second))
                 return true;
         }
+        // The Overlay Appearance page is MIXED: its colours / opacity / border fold
+        // onto the managed overlay baseline rule (the rest of the group — effects,
+        // labels, colour-source toggle — stays config), so it is also dirty when
+        // that baseline differs from the snapshot.
+        if (page == QLatin1String("snapping-overlay-appearance") && m_rulesPage != nullptr)
+            return m_rulesPage->overlayBaselineDirty();
         return false;
     }
 
@@ -310,6 +316,10 @@ void SettingsController::reconcileRuleBackedDirty()
     };
     sync(QStringLiteral("window-appearance"), m_rulesPage->baselinesDirty());
     sync(QStringLiteral("rules"), m_rulesPage->userRulesDirty());
+    // The Overlay Appearance page is mixed (config + overlay baseline); attribute
+    // via isPageDirty so a baseline edit badges it without clobbering a config-key
+    // dirty state.
+    sync(QStringLiteral("snapping-overlay-appearance"), isPageDirty(QStringLiteral("snapping-overlay-appearance")));
     if (changed) {
         Q_EMIT dirtyPagesChanged();
     }
@@ -436,6 +446,11 @@ void SettingsController::resetPage(const QString& page)
         });
         m_settings.resetKeys(*it);
     }
+    // The Overlay Appearance page also owns the managed overlay baseline rule
+    // (colours / opacity / border); reset it to factory alongside the config keys.
+    if (page == QLatin1String("snapping-overlay-appearance") && m_rulesPage != nullptr) {
+        m_rulesPage->resetOverlayBaseline();
+    }
     // Resetting to defaults usually diverges from the saved baseline, so the
     // page normally becomes dirty (stage → Save/Discard). If the defaults
     // already matched the baseline it stays clean — reconcile handles both.
@@ -464,6 +479,11 @@ void SettingsController::discardPage(const QString& page)
                 m_loading = wasLoading;
             });
             m_settings.discardKeys(*it);
+        }
+        // The Overlay Appearance page also owns the managed overlay baseline rule;
+        // restore it from the snapshot alongside the config keys.
+        if (page == QLatin1String("snapping-overlay-appearance") && m_rulesPage != nullptr) {
+            m_rulesPage->discardOverlayBaseline();
         }
         // Every owned key is back at the committed baseline, so the page is clean.
         reconcilePageDirty(page);

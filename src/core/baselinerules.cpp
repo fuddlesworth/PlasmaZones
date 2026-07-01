@@ -122,4 +122,38 @@ PhosphorRules::Rule makeBaselineGapRule()
     return rule;
 }
 
+// Build the managed baseline ZONE-OVERLAY appearance rule: the catch-all,
+// lowest-priority rule that is the single source of truth for the global
+// drag-overlay appearance (Settings reads these actions back as its
+// highlightColor()/activeOpacity()/… getters). All seven appearance actions are
+// seeded at their ConfigDefaults values; colours are `#AARRGGBB` hex. The
+// `showZoneNumbers` toggle is deliberately NOT here — it lives in the effects
+// group and stays plain config.
+PhosphorRules::Rule makeBaselineOverlayRule()
+{
+    using namespace PhosphorRules;
+
+    const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
+        RuleAction a;
+        a.type = QString(type);
+        a.params.insert(QString(key), value);
+        return a;
+    };
+
+    Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineOverlayRuleId(), PhosphorI18n::tr("Default zone overlay"));
+    rule.actions = {
+        action(ActionType::SetOverlayHighlightColor, ActionParam::Value,
+               ConfigDefaults::highlightColor().name(QColor::HexArgb)),
+        action(ActionType::SetOverlayInactiveColor, ActionParam::Value,
+               ConfigDefaults::inactiveColor().name(QColor::HexArgb)),
+        action(ActionType::SetOverlayBorderColor, ActionParam::Value,
+               ConfigDefaults::borderColor().name(QColor::HexArgb)),
+        action(ActionType::SetOverlayActiveOpacity, ActionParam::Value, ConfigDefaults::activeOpacity()),
+        action(ActionType::SetOverlayInactiveOpacity, ActionParam::Value, ConfigDefaults::inactiveOpacity()),
+        action(ActionType::SetOverlayBorderWidth, ActionParam::Value, ConfigDefaults::borderWidth()),
+        action(ActionType::SetOverlayBorderRadius, ActionParam::Value, ConfigDefaults::borderRadius()),
+    };
+    return rule;
+}
+
 } // namespace PlasmaZones

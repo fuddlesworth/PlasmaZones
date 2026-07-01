@@ -538,10 +538,14 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
         {QStringLiteral("snapping-overlay-appearance"),
          {
+             // The overlay APPEARANCE (highlight / inactive / border colours,
+             // active / inactive opacity, border width / radius) folds onto the
+             // managed overlay baseline rule and is NOT listed here — its reset /
+             // dirty / discard route through resetOverlayBaseline / overlayBaseline-
+             // Dirty / discardOverlayBaseline (see settingscontroller_pagestate.cpp).
+             // The UseSystem colour-source toggle, labels, effects, and shader keys
+             // stay config-backed.
              {CD::snappingZonesColorsGroup(), CD::useSystemKey()},
-             {CD::snappingZonesColorsGroup(), CD::highlightKey()},
-             {CD::snappingZonesColorsGroup(), CD::inactiveKey()},
-             {CD::snappingZonesColorsGroup(), CD::borderKey()},
              {CD::snappingZonesLabelsGroup(), CD::fontColorKey()},
              {CD::snappingZonesLabelsGroup(), CD::fontFamilyKey()},
              {CD::snappingZonesLabelsGroup(), CD::fontSizeScaleKey()},
@@ -549,10 +553,6 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingZonesLabelsGroup(), CD::fontItalicKey()},
              {CD::snappingZonesLabelsGroup(), CD::fontUnderlineKey()},
              {CD::snappingZonesLabelsGroup(), CD::fontStrikeoutKey()},
-             {CD::snappingZonesOpacityGroup(), CD::activeKey()},
-             {CD::snappingZonesOpacityGroup(), CD::inactiveKey()},
-             {CD::snappingZonesBorderGroup(), CD::widthKey()},
-             {CD::snappingZonesBorderGroup(), CD::radiusKey()},
              {CD::snappingEffectsGroup(), CD::blurKey()},
              {CD::snappingEffectsGroup(), CD::showNumbersKey()},
              {CD::snappingEffectsGroup(), CD::flashOnSwitchKey()},

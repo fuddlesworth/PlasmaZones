@@ -38,4 +38,11 @@ PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineTitleBarRule();
 /// the Appearance page on demand, so a reset naturally drops them.
 PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineGapRule();
 
+/// Baseline ZONE-OVERLAY appearance rule (id baselineOverlayRuleId()) — the
+/// catch-all source of truth for the global drag-overlay appearance (fill /
+/// inactive / border colours, active + inactive opacity, border width + radius).
+/// Settings reads these actions back as its highlightColor()/activeOpacity()/…
+/// getters. Seeds all seven appearance actions at their ConfigDefaults values.
+PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineOverlayRule();
+
 } // namespace PlasmaZones

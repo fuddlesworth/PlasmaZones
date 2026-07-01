@@ -3425,6 +3425,29 @@ constexpr QLatin1String kStashZoneSelector{"zoneSelector"};
 constexpr QLatin1String kStashAnimMinSize{"animMinSize"};
 constexpr QLatin1String kFieldAnimMinWidth{"minWidth"};
 constexpr QLatin1String kFieldAnimMinHeight{"minHeight"};
+
+// Zone-overlay appearance (Snapping.Zones.{Colors,Opacity,Border}) → the managed
+// baseline overlay rule. Colours are gated on UseSystem (accent-on contributes
+// no colour action, as with the mode-appearance stash); the daemon seeds any
+// action the migration doesn't carry. The effects/label keys stay in config.
+constexpr QLatin1String kV4OvColorsPath{"Snapping.Zones.Colors"};
+constexpr QLatin1String kV4OvOpacityPath{"Snapping.Zones.Opacity"};
+constexpr QLatin1String kV4OvBorderPath{"Snapping.Zones.Border"};
+constexpr QLatin1String kV4OvHighlightKey{"Highlight"};
+constexpr QLatin1String kV4OvInactiveKey{"Inactive"}; // used by both Colors and Opacity groups
+constexpr QLatin1String kV4OvBorderColorKey{"Border"};
+constexpr QLatin1String kV4OvUseSystemKey{"UseSystem"};
+constexpr QLatin1String kV4OvActiveKey{"Active"};
+constexpr QLatin1String kV4OvWidthKey{"Width"};
+constexpr QLatin1String kV4OvRadiusKey{"Radius"};
+constexpr QLatin1String kStashOverlay{"overlay"};
+constexpr QLatin1String kFieldOvHighlight{"ovHighlight"};
+constexpr QLatin1String kFieldOvInactiveColor{"ovInactiveColor"};
+constexpr QLatin1String kFieldOvBorderColor{"ovBorderColor"};
+constexpr QLatin1String kFieldOvActiveOpacity{"ovActiveOpacity"};
+constexpr QLatin1String kFieldOvInactiveOpacity{"ovInactiveOpacity"};
+constexpr QLatin1String kFieldOvBorderWidth{"ovBorderWidth"};
+constexpr QLatin1String kFieldOvBorderRadius{"ovBorderRadius"};
 constexpr QLatin1String kFieldShowBorder{"showBorder"};
 constexpr QLatin1String kFieldBorderWidth{"borderWidth"};
 constexpr QLatin1String kFieldBorderRadius{"borderRadius"};
@@ -3465,6 +3488,26 @@ void stashDoubleIfDiffers(const QJsonObject& grp, QLatin1String key, double def,
     }
 }
 
+// "Stash if present" variants for the overlay appearance: the daemon seeds any
+// missing baseline action at its default, so the migration only needs to carry
+// whatever the user actually has (no differ-from-default gating needed, which
+// also avoids pinning the colour/opacity default literals here).
+void stashDoublePresent(const QJsonObject& grp, QLatin1String key, QJsonObject& out, QLatin1String field)
+{
+    const QJsonValue v = grp.value(key);
+    if (v.isDouble()) {
+        out.insert(field, v.toDouble());
+    }
+}
+
+void stashIntPresent(const QJsonObject& grp, QLatin1String key, QJsonObject& out, QLatin1String field)
+{
+    const QJsonValue v = grp.value(key);
+    if (v.isDouble()) {
+        out.insert(field, v.toInt());
+    }
+}
+
 void stashBoolIfDiffers(const QJsonObject& grp, QLatin1String key, bool def, QJsonObject& out, QLatin1String field)
 {
     const QJsonValue v = grp.value(key);
@@ -3485,6 +3528,29 @@ void stashColor(const QJsonObject& colors, QLatin1String key, QJsonObject& out, 
     if (c.isValid()) {
         out.insert(field, c.name(QColor::HexArgb));
     }
+}
+
+// Build the overlay-appearance stash: carry whatever colours / opacity / border
+// the user has onto the baseline overlay rule. Colours are carried regardless of
+// the UseSystem toggle — the getter reads the rule and the (still-config) UseSystem
+// toggle independently decides whether the fill colours or the system accent apply,
+// so carrying them avoids discarding a custom colour that a later UseSystem-off flip
+// would want.
+QJsonObject buildOverlayStash(const QJsonObject& root)
+{
+    const QJsonObject colors = groupObjectAtPath(root, QString(kV4OvColorsPath));
+    const QJsonObject opacity = groupObjectAtPath(root, QString(kV4OvOpacityPath));
+    const QJsonObject border = groupObjectAtPath(root, QString(kV4OvBorderPath));
+
+    QJsonObject out;
+    stashColor(colors, kV4OvHighlightKey, out, kFieldOvHighlight);
+    stashColor(colors, kV4OvInactiveKey, out, kFieldOvInactiveColor);
+    stashColor(colors, kV4OvBorderColorKey, out, kFieldOvBorderColor);
+    stashDoublePresent(opacity, kV4OvActiveKey, out, kFieldOvActiveOpacity);
+    stashDoublePresent(opacity, kV4OvInactiveKey, out, kFieldOvInactiveOpacity);
+    stashIntPresent(border, kV4OvWidthKey, out, kFieldOvBorderWidth);
+    stashIntPresent(border, kV4OvRadiusKey, out, kFieldOvBorderRadius);
+    return out;
 }
 
 // Build the differing-from-default appearance + gap stash for one global mode
@@ -3848,6 +3914,23 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
                         {kV4AnimMinWidth, kV4AnimMinHeight});
     }
 
+    // ── Zone-overlay appearance → managed baseline overlay rule ─────────────
+    // Colours/opacity/border fold onto the baseline overlay rule. The effects
+    // (blur, frame rate), zone-number, and label keys stay in config, as does
+    // the UseSystem colour-source toggle.
+    {
+        const QJsonObject overlayStash = buildOverlayStash(root);
+        if (!overlayStash.isEmpty()) {
+            stash.insert(kStashOverlay, overlayStash);
+        }
+        stripKeysAtPath(root, {QStringLiteral("Snapping"), QStringLiteral("Zones"), QStringLiteral("Colors")},
+                        {kV4OvHighlightKey, kV4OvInactiveKey, kV4OvBorderColorKey});
+        stripKeysAtPath(root, {QStringLiteral("Snapping"), QStringLiteral("Zones"), QStringLiteral("Opacity")},
+                        {kV4OvActiveKey, kV4OvInactiveKey});
+        stripKeysAtPath(root, {QStringLiteral("Snapping"), QStringLiteral("Zones"), QStringLiteral("Border")},
+                        {kV4OvWidthKey, kV4OvRadiusKey});
+    }
+
     // ── Remove the consumed v4 global appearance / gap keys ────────────────
     // Appearance is fully dead in v5 — drop the three leaf sub-groups and let
     // removeGroupAtSegments prune the now-empty Appearance parent. Gaps keep
@@ -4062,6 +4145,50 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
                        QStringLiteral("Skip animations for narrow windows"));
         addMinSizeRule(animMinSize.value(kFieldAnimMinHeight), Field::Height,
                        ConfigDefaults::animationMinHeightRuleId(), QStringLiteral("Skip animations for short windows"));
+    }
+
+    // Zone-overlay appearance: the managed baseline overlay rule, carrying the
+    // user's differing appearance actions. Seeded managed / INT_MIN / catch-all to
+    // match makeBaselineOverlayRule so the daemon's ensureManagedRule recognises it
+    // and fills any action the migration didn't carry.
+    {
+        namespace AT = PhosphorRules::ActionType;
+        const QJsonObject overlay = stash.value(kStashOverlay).toObject();
+        QList<PhosphorRules::RuleAction> actions;
+        const auto addColor = [&](QLatin1String field, QLatin1StringView type) {
+            if (overlay.value(field).isString()) {
+                actions.append(makeValueAction(type, overlay.value(field).toString()));
+            }
+        };
+        const auto addOpacity = [&](QLatin1String field, QLatin1StringView type) {
+            if (overlay.value(field).isDouble()) {
+                actions.append(makeValueAction(type, qBound(0.0, overlay.value(field).toDouble(), 1.0)));
+            }
+        };
+        const auto addBorderInt = [&](QLatin1String field, QLatin1StringView type, int max) {
+            if (overlay.value(field).isDouble()) {
+                actions.append(makeValueAction(type, qBound(0, overlay.value(field).toInt(), max)));
+            }
+        };
+        addColor(kFieldOvHighlight, AT::SetOverlayHighlightColor);
+        addColor(kFieldOvInactiveColor, AT::SetOverlayInactiveColor);
+        addColor(kFieldOvBorderColor, AT::SetOverlayBorderColor);
+        addOpacity(kFieldOvActiveOpacity, AT::SetOverlayActiveOpacity);
+        addOpacity(kFieldOvInactiveOpacity, AT::SetOverlayInactiveOpacity);
+        addBorderInt(kFieldOvBorderWidth, AT::SetOverlayBorderWidth, 10);
+        addBorderInt(kFieldOvBorderRadius, AT::SetOverlayBorderRadius, 50);
+        if (!actions.isEmpty()) {
+            Rule rule;
+            rule.id = ConfigDefaults::baselineOverlayRuleId();
+            // Not translated — Rule::name is the persisted identity surface.
+            rule.name = QStringLiteral("Default zone overlay");
+            rule.enabled = true;
+            rule.managed = true;
+            rule.priority = std::numeric_limits<int>::min();
+            rule.match = MatchExpression{}; // empty catch-all
+            rule.actions = actions;
+            newRules.append(rule);
+        }
     }
 
     // ── Merge into the existing rule store ─────────────────────────────────

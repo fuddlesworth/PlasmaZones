@@ -178,6 +178,11 @@ QString SettingsController::animationMinHeightRuleId() const
     return ConfigDefaults::animationMinHeightRuleId().toString();
 }
 
+QString SettingsController::overlayBaselineRuleId() const
+{
+    return ConfigDefaults::baselineOverlayRuleId().toString();
+}
+
 // ── Per-screen zone selector overrides ───────────────────────────────────
 
 QVariantMap SettingsController::getPerScreenZoneSelectorSettings(const QString& screenName) const

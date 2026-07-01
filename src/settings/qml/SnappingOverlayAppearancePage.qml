@@ -18,6 +18,75 @@ SettingsFlickable {
     readonly property var zonesBridge: settingsController.snappingZonesPage
     readonly property var effectsBridge: settingsController.snappingEffectsPage
     readonly property int opacitySliderMax: 100
+    // The overlay appearance (colours / opacity / border) is rule-backed: it lives
+    // on the managed overlay baseline rule. The Settings getters (appSettings.
+    // highlightColor etc) read that rule; the controls WRITE it via the
+    // RuleController. Bumped to re-read the (non-reactive) getter bindings after a
+    // write / reset / discard.
+    readonly property var ruleController: settingsController.rulesPage
+    property int overlayReloadTick: 0
+
+    // Convert a QML colour to the `#AARRGGBB` hex the colour actions store.
+    function colorToHex(c) {
+        function pad(v) {
+            return Math.round(v * 255).toString(16).padStart(2, '0');
+        }
+        return ("#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b)).toUpperCase();
+    }
+
+    // Read an overlay appearance action's value from the baseline rule (the same
+    // view the writes target, so read-after-write is consistent), falling back to
+    // the passed-in value. Reading overlayReloadTick makes the bindings reactive.
+    function overlayValue(typeWire, fallback) {
+        root.overlayReloadTick;
+        const rule = root.ruleController.ruleJson(settingsController.overlayBaselineRuleId());
+        if (rule && rule.id) {
+            const actions = rule.actions || [];
+            for (var i = 0; i < actions.length; ++i) {
+                if (actions[i].type === typeWire && actions[i].value !== undefined)
+                    return actions[i].value;
+            }
+        }
+        return fallback;
+    }
+
+    // Write an overlay appearance action's value onto the managed overlay baseline
+    // rule (find-or-update the action), then push through the RuleController.
+    function writeOverlayAction(typeWire, value) {
+        const id = settingsController.overlayBaselineRuleId();
+        var rule = root.ruleController.ruleJson(id);
+        if (!rule || !rule.id)
+            return;
+        const actions = (rule.actions || []).slice();
+        var found = false;
+        for (var i = 0; i < actions.length; ++i) {
+            if (actions[i].type === typeWire) {
+                var updated = Object.assign({}, actions[i]);
+                updated.value = value;
+                actions[i] = updated;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            actions.push({
+                "type": typeWire,
+                "value": value
+            });
+        rule.actions = actions;
+        root.ruleController.updateRuleFromJson(rule);
+        root.overlayReloadTick++;
+    }
+
+    Connections {
+        target: root.ruleController
+        function onRulesLoaded() {
+            root.overlayReloadTick++;
+        }
+        function onBaselinesChanged() {
+            root.overlayReloadTick++;
+        }
+    }
 
     contentHeight: content.implicitHeight
     clip: true
@@ -71,7 +140,7 @@ SettingsFlickable {
                         description: i18n("Color for the active/hovered zone")
 
                         ColorSwatchRow {
-                            color: appSettings.highlightColor
+                            color: root.overlayValue("setOverlayHighlightColor", appSettings.highlightColor)
                             onClicked: {
                                 highlightColorDialog.selectedColor = appSettings.highlightColor;
                                 highlightColorDialog.open();
@@ -90,7 +159,7 @@ SettingsFlickable {
                         description: i18n("Color for zones that are not hovered")
 
                         ColorSwatchRow {
-                            color: appSettings.inactiveColor
+                            color: root.overlayValue("setOverlayInactiveColor", appSettings.inactiveColor)
                             onClicked: {
                                 inactiveColorDialog.selectedColor = appSettings.inactiveColor;
                                 inactiveColorDialog.open();
@@ -109,7 +178,7 @@ SettingsFlickable {
                         description: i18n("Color for zone borders")
 
                         ColorSwatchRow {
-                            color: appSettings.borderColor
+                            color: root.overlayValue("setOverlayBorderColor", appSettings.borderColor)
                             onClicked: {
                                 borderColorDialog.selectedColor = appSettings.borderColor;
                                 borderColorDialog.open();
@@ -191,9 +260,9 @@ SettingsFlickable {
                         SettingsSlider {
                             from: 0
                             to: root.opacitySliderMax
-                            value: appSettings.activeOpacity * root.opacitySliderMax
+                            value: root.overlayValue("setOverlayActiveOpacity", appSettings.activeOpacity) * root.opacitySliderMax
                             onMoved: value => {
-                                return appSettings.activeOpacity = value / root.opacitySliderMax;
+                                return root.writeOverlayAction("setOverlayActiveOpacity", value / root.opacitySliderMax);
                             }
                         }
                     }
@@ -208,9 +277,9 @@ SettingsFlickable {
                         SettingsSlider {
                             from: 0
                             to: root.opacitySliderMax
-                            value: appSettings.inactiveOpacity * root.opacitySliderMax
+                            value: root.overlayValue("setOverlayInactiveOpacity", appSettings.inactiveOpacity) * root.opacitySliderMax
                             onMoved: value => {
-                                return appSettings.inactiveOpacity = value / root.opacitySliderMax;
+                                return root.writeOverlayAction("setOverlayInactiveOpacity", value / root.opacitySliderMax);
                             }
                         }
                     }
@@ -244,9 +313,9 @@ SettingsFlickable {
                         SettingsSpinBox {
                             from: root.zonesBridge.borderWidthMin
                             to: root.zonesBridge.borderWidthMax
-                            value: appSettings.borderWidth
+                            value: root.overlayValue("setOverlayBorderWidth", appSettings.borderWidth)
                             onValueModified: value => {
-                                return appSettings.borderWidth = value;
+                                return root.writeOverlayAction("setOverlayBorderWidth", value);
                             }
                         }
                     }
@@ -261,9 +330,9 @@ SettingsFlickable {
                         SettingsSpinBox {
                             from: root.zonesBridge.borderRadiusMin
                             to: root.zonesBridge.borderRadiusMax
-                            value: appSettings.borderRadius
+                            value: root.overlayValue("setOverlayBorderRadius", appSettings.borderRadius)
                             onValueModified: value => {
-                                return appSettings.borderRadius = value;
+                                return root.writeOverlayAction("setOverlayBorderRadius", value);
                             }
                         }
                     }
@@ -537,7 +606,7 @@ SettingsFlickable {
 
         options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Highlight Color")
-        onAccepted: appSettings.highlightColor = selectedColor
+        onAccepted: root.writeOverlayAction("setOverlayHighlightColor", root.colorToHex(selectedColor))
     }
 
     ColorDialog {
@@ -545,7 +614,7 @@ SettingsFlickable {
 
         options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Inactive Zone Color")
-        onAccepted: appSettings.inactiveColor = selectedColor
+        onAccepted: root.writeOverlayAction("setOverlayInactiveColor", root.colorToHex(selectedColor))
     }
 
     ColorDialog {
@@ -553,7 +622,7 @@ SettingsFlickable {
 
         options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Border Color")
-        onAccepted: appSettings.borderColor = selectedColor
+        onAccepted: root.writeOverlayAction("setOverlayBorderColor", root.colorToHex(selectedColor))
     }
 
     ColorDialog {

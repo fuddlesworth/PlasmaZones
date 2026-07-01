@@ -149,15 +149,21 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
-        // The v3→v4 step renames the zone-overlay groups Snapping.Appearance.*
-        // → Snapping.Zones.*, so the fully-migrated config lands them here.
-        QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
-        QJsonObject colors = zones.value(QStringLiteral("Colors")).toObject();
-
-        // Colors should be converted to hex
-        QString highlight = colors.value(QStringLiteral("Highlight")).toString();
+        // The zone-overlay colours fold onto the managed baseline overlay rule in
+        // v5 (converted to hex along the way), no longer stored in config.
+        const QJsonObject rulesRoot = readJsonConfig(ConfigDefaults::rulesFilePath());
+        const QString overlayId = ConfigDefaults::baselineOverlayRuleId().toString();
+        QJsonObject overlayRule;
+        for (const QJsonValue& v : rulesRoot.value(QStringLiteral("rules")).toArray()) {
+            if (v.toObject().value(QStringLiteral("id")).toString() == overlayId)
+                overlayRule = v.toObject();
+        }
+        QVERIFY2(!overlayRule.isEmpty(), "colours must fold onto the baseline overlay rule");
+        QString highlight;
+        for (const QJsonValue& av : overlayRule.value(QStringLiteral("actions")).toArray()) {
+            if (av.toObject().value(QStringLiteral("type")).toString() == QLatin1String("setOverlayHighlightColor"))
+                highlight = av.toObject().value(QStringLiteral("value")).toString();
+        }
         QVERIFY2(highlight.startsWith(QLatin1Char('#')),
                  qPrintable(QStringLiteral("Expected hex color, got: ") + highlight));
 
@@ -343,10 +349,19 @@ private Q_SLOTS:
         // no top-level "Gaps" group is produced.
         QVERIFY(!root.contains(QStringLiteral("Gaps")));
 
-        // Zone-overlay groups land under Snapping.Zones.* after the v3→v4 rename.
-        QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
-        QJsonObject opacity = zones.value(QStringLiteral("Opacity")).toObject();
-        QCOMPARE(opacity.value(QStringLiteral("Active")).toDouble(), 0.3);
+        // Zone-overlay opacity folds onto the managed baseline overlay rule in v5.
+        const QJsonObject rulesRoot = readJsonConfig(ConfigDefaults::rulesFilePath());
+        const QString overlayId = ConfigDefaults::baselineOverlayRuleId().toString();
+        double activeOpacity = -1.0;
+        for (const QJsonValue& v : rulesRoot.value(QStringLiteral("rules")).toArray()) {
+            if (v.toObject().value(QStringLiteral("id")).toString() != overlayId)
+                continue;
+            for (const QJsonValue& av : v.toObject().value(QStringLiteral("actions")).toArray()) {
+                if (av.toObject().value(QStringLiteral("type")).toString() == QLatin1String("setOverlayActiveOpacity"))
+                    activeOpacity = av.toObject().value(QStringLiteral("value")).toDouble();
+            }
+        }
+        QCOMPARE(activeOpacity, 0.3);
     }
 
     void testMigrateRootLevelKeys()
@@ -998,18 +1013,8 @@ private Q_SLOTS:
             auto g = backend->group(QStringLiteral("Snapping"));
             QCOMPARE(g->readBool(QStringLiteral("Enabled")), true);
         }
-        {
-            // Zone-overlay groups land under Snapping.Zones.* after the v3→v4 rename.
-            auto g = backend->group(QStringLiteral("Snapping.Zones.Colors"));
-            QColor c = g->readColor(QStringLiteral("Highlight"));
-            QCOMPARE(c.red(), 82);
-            QCOMPARE(c.green(), 148);
-            QCOMPARE(c.blue(), 226);
-        }
-        {
-            auto g = backend->group(QStringLiteral("Snapping.Zones.Opacity"));
-            QCOMPARE(g->readDouble(QStringLiteral("Active")), 0.3);
-        }
+        // The zone-overlay highlight colour and active opacity fold onto the managed
+        // baseline overlay rule in v5, so they are no longer readable from config.
     }
 
     /// v1→v2 animation migration: the five legacy per-field keys

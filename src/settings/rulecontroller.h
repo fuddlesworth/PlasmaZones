@@ -188,9 +188,14 @@ public:
     // (`m_savedRules`) so `SettingsController` can badge each page independently:
     // the managed baseline rules are "appearance", everything else is "rules".
 
-    /// True iff any managed baseline rule differs from the last synced snapshot
-    /// (drives the Windows appearance page's dirty state).
+    /// True iff any of the three APPEARANCE baseline rules (border / title bar /
+    /// gap) differs from the last synced snapshot (drives the Windows appearance
+    /// page's dirty state).
     bool baselinesDirty() const;
+
+    /// True iff the managed OVERLAY baseline rule differs from the last synced
+    /// snapshot (drives the Overlay appearance page's dirty state).
+    bool overlayBaselineDirty() const;
 
     /// True iff the non-managed (user) rules differ from the last synced
     /// snapshot, including order (drives the Rules page's dirty state).
@@ -210,10 +215,19 @@ public:
     /// flushes it. Leaves user rules untouched.
     void resetBaselines();
 
+    /// Per-page "Reset to defaults" for the Overlay appearance page: rewrite the
+    /// managed overlay baseline rule to its factory definition. Staged; leaves the
+    /// appearance baselines and user rules untouched.
+    void resetOverlayBaseline();
+
     /// Per-page "Discard changes" for the Windows appearance page: restore the
-    /// three managed baseline rules from the last synced snapshot, leaving every
-    /// user rule untouched.
+    /// three appearance baseline rules from the last synced snapshot, leaving user
+    /// rules and the overlay baseline untouched.
     void discardBaselineEdits();
+
+    /// Per-page "Discard changes" for the Overlay appearance page: restore the
+    /// overlay baseline rule from the last synced snapshot.
+    void discardOverlayBaseline();
 
     /// Fire-and-forget D-Bus call asking the daemon to reset the three managed
     /// baseline rules to factory (org.plasmazones.Rules.resetManagedDefaults),

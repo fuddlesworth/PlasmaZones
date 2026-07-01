@@ -2323,13 +2323,12 @@ private Q_SLOTS:
 
         const QJsonObject snapping = cfg.value(QStringLiteral("Snapping")).toObject();
 
-        // The four zone sub-groups now live under Snapping.Zones.* with their
-        // exact keys/values preserved.
+        // The zone sub-groups live under Snapping.Zones.* after the v3→v4 rename.
+        // The still-config keys (colour source, labels) keep their exact values; the
+        // colours / opacity / border width+radius fold onto the managed baseline
+        // overlay rule in the v5 step, so they are no longer under Snapping.Zones.*.
         const QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
         QCOMPARE(zones.value(QStringLiteral("Colors")).toObject().value(QStringLiteral("UseSystem")).toBool(), false);
-        QVERIFY(qFuzzyCompare(
-            zones.value(QStringLiteral("Opacity")).toObject().value(QStringLiteral("Active")).toDouble(), 0.5));
-        QCOMPARE(zones.value(QStringLiteral("Border")).toObject().value(QStringLiteral("Width")).toInt(), 3);
         QCOMPARE(zones.value(QStringLiteral("Labels")).toObject().value(QStringLiteral("FontFamily")).toString(),
                  QStringLiteral("X"));
 

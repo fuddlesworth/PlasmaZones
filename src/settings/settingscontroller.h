@@ -563,6 +563,10 @@ public:
     Q_INVOKABLE QString animationMinWidthRuleId() const;
     Q_INVOKABLE QString animationMinHeightRuleId() const;
 
+    // Id of the managed baseline zone-overlay appearance rule — the Overlay
+    // Appearance page's colours / opacity / border controls read/write its actions.
+    Q_INVOKABLE QString overlayBaselineRuleId() const;
+
     Q_INVOKABLE QVariantMap loadWindowGeometry() const;
     Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height);
 

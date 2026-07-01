@@ -762,6 +762,16 @@ public:
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000008}"));
     }
 
+    // Stable id of the managed baseline ZONE-OVERLAY appearance rule: the
+    // lowest-priority Rule whose actions hold the global default drag-overlay
+    // appearance (fill / inactive / border colours, active + inactive opacity,
+    // border width + radius). Settings reads these back as its highlightColor()
+    // / activeOpacity() / … getters (mirroring the gap baseline).
+    static QUuid baselineOverlayRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000009}"));
+    }
+
     // Window-property match expressions that scope which windows the managed
     // baseline BORDER and TITLE BAR rules apply to. These are the canonical wire
     // shapes shared by the daemon's seeder (the fresh-install default) and the

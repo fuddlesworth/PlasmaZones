@@ -13,6 +13,7 @@
 
 #include "rulecontroller.h"
 
+#include "../config/configdefaults.h"
 #include "../core/baselinerules.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -20,22 +21,40 @@
 #include <PhosphorRules/Rule.h>
 
 #include <QList>
+#include <QSet>
 #include <QString>
+#include <QUuid>
 
 namespace PlasmaZones {
 
 namespace {
-// Partition helpers: managed rules are the appearance baselines; the rest are
-// user rules. Order is preserved so the user-rules comparison catches reorders.
-QList<PhosphorRules::Rule> managedSubset(const QList<PhosphorRules::Rule>& rules)
+// The managed baselines split by owning page: the three appearance baselines
+// (Window Appearance page) and the overlay baseline (Overlay Appearance page).
+// Kept separate so each page's dirty / reset / discard covers ONLY its own
+// baseline(s); a shared "all managed" bit would cross-attribute overlay edits to
+// the Window Appearance page.
+const QSet<QUuid>& appearanceBaselineIds()
+{
+    static const QSet<QUuid> ids{ConfigDefaults::baselineBorderRuleId(), ConfigDefaults::baselineTitleBarRuleId(),
+                                 ConfigDefaults::baselineGapRuleId()};
+    return ids;
+}
+const QSet<QUuid>& overlayBaselineIds()
+{
+    static const QSet<QUuid> ids{ConfigDefaults::baselineOverlayRuleId()};
+    return ids;
+}
+// Rules whose id is in @p ids, order preserved.
+QList<PhosphorRules::Rule> subsetByIds(const QList<PhosphorRules::Rule>& rules, const QSet<QUuid>& ids)
 {
     QList<PhosphorRules::Rule> out;
     for (const PhosphorRules::Rule& r : rules) {
-        if (r.managed)
+        if (ids.contains(r.id))
             out.append(r);
     }
     return out;
 }
+// User rules: every non-managed rule (order preserved so a reorder is caught).
 QList<PhosphorRules::Rule> userSubset(const QList<PhosphorRules::Rule>& rules)
 {
     QList<PhosphorRules::Rule> out;
@@ -54,7 +73,12 @@ void RuleController::captureSavedSnapshot()
 
 bool RuleController::baselinesDirty() const
 {
-    return managedSubset(m_model.rules()) != managedSubset(m_savedRules);
+    return subsetByIds(m_model.rules(), appearanceBaselineIds()) != subsetByIds(m_savedRules, appearanceBaselineIds());
+}
+
+bool RuleController::overlayBaselineDirty() const
+{
+    return subsetByIds(m_model.rules(), overlayBaselineIds()) != subsetByIds(m_savedRules, overlayBaselineIds());
 }
 
 bool RuleController::userRulesDirty() const
@@ -64,7 +88,7 @@ bool RuleController::userRulesDirty() const
 
 void RuleController::recomputeDirtyFromSnapshot()
 {
-    setDirty(baselinesDirty() || userRulesDirty());
+    setDirty(baselinesDirty() || overlayBaselineDirty() || userRulesDirty());
 }
 
 void RuleController::upsertRule(const PhosphorRules::Rule& rule)
@@ -87,6 +111,14 @@ void RuleController::resetBaselines()
     Q_EMIT baselinesChanged();
 }
 
+void RuleController::resetOverlayBaseline()
+{
+    // Rewrite the managed overlay baseline to its factory definition (staged).
+    upsertRule(makeBaselineOverlayRule());
+    recomputeDirtyFromSnapshot();
+    Q_EMIT baselinesChanged();
+}
+
 void RuleController::resetManagedDefaults()
 {
     // Fire-and-forget: no out-args, and the model refresh comes from the daemon's
@@ -99,11 +131,22 @@ void RuleController::resetManagedDefaults()
 
 void RuleController::discardBaselineEdits()
 {
-    // Restore each managed baseline from the last synced snapshot, leaving every
-    // user rule untouched.
-    const QList<PhosphorRules::Rule> savedBaselines = managedSubset(m_savedRules);
+    // Restore the three APPEARANCE baselines from the last synced snapshot,
+    // leaving user rules and the overlay baseline untouched.
+    const QList<PhosphorRules::Rule> savedBaselines = subsetByIds(m_savedRules, appearanceBaselineIds());
     for (const PhosphorRules::Rule& saved : savedBaselines)
         upsertRule(saved);
+    recomputeDirtyFromSnapshot();
+    Q_EMIT baselinesChanged();
+}
+
+void RuleController::discardOverlayBaseline()
+{
+    // Restore the overlay baseline from the last synced snapshot, leaving the
+    // appearance baselines and user rules untouched.
+    const QList<PhosphorRules::Rule> saved = subsetByIds(m_savedRules, overlayBaselineIds());
+    for (const PhosphorRules::Rule& r : saved)
+        upsertRule(r);
     recomputeDirtyFromSnapshot();
     Q_EMIT baselinesChanged();
 }
