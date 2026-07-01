@@ -199,8 +199,11 @@ public:
     // tiled status flips (IsTiled is a match field). Welding the invalidation to
     // the write mirrors NavigationHandler's snap/float setters, so a caller can't
     // change tiling membership and forget to re-resolve a tiled-scoped border /
-    // title-bar / opacity rule. A pure screen-to-screen move (still tiled) does
-    // not flip the status, so it does not invalidate.
+    // title-bar / opacity rule. markWindowTiled only invalidates on a genuine
+    // not-tiled→tiled transition (re-adding an already-tiled window is a no-op),
+    // so a cross-screen transfer that first runs removeFromOtherScreens does
+    // invalidate (the window is briefly not-tiled), while a same-screen re-assert
+    // does not.
     void markWindowTiled(const QString& screenId, const QString& windowId);
     void clearWindowTiledAllScreens(const QString& windowId);
     void clearWindowTiledOnScreen(const QString& screenId, const QString& windowId);

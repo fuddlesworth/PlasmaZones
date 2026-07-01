@@ -26,37 +26,21 @@ NavigationHandler::NavigationHandler(PlasmaZonesEffect* effect, QObject* parent)
 // Floating window tracking — sync methods use D-Bus helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void NavigationHandler::syncFloatingWindowsFromDaemon()
+void NavigationHandler::seedFloatingWindows(const QStringList& floatingIds)
 {
-    if (!m_effect->isDaemonReady("sync floating windows")) {
-        return;
+    // Bulk re-seed from a daemon snapshot: clear stale entries (so a reconnect
+    // drops windows the daemon no longer reports as floating) and write the cache
+    // DIRECTLY, without the per-window rule invalidation setWindowFloating would
+    // run. The caller pairs this with a single invalidateAllRuleCaches, mirroring
+    // the direct m_zoneCache writes in syncZonesFromDaemon.
+    m_floatingCache.clear();
+    for (const QString& id : floatingIds) {
+        m_floatingCache.insert(id);
     }
-
-    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
-        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
-    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
-
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-
-        QDBusPendingReply<QStringList> reply = *w;
-        if (!reply.isValid()) {
-            qCDebug(lcEffect) << "Failed to get floating windows from daemon";
-            return;
-        }
-
-        QStringList floatingIds = reply.value();
-        m_floatingCache.clear();
-
-        for (const QString& id : floatingIds) {
-            m_floatingCache.insert(id);
-        }
-
-        // Report the count of synced entries, not m_floatingCache.size() — the
-        // latter sums the instance and app-wide keyspaces and would misreport when
-        // both carry entries for the same app.
-        qCDebug(lcEffect) << "Synced" << floatingIds.size() << "floating windows from daemon";
-    });
+    // Report the count of synced entries, not m_floatingCache.size() — the latter
+    // sums the instance and app-wide keyspaces and would misreport when both
+    // carry entries for the same app.
+    qCDebug(lcEffect) << "Synced" << floatingIds.size() << "floating windows from daemon";
 }
 
 void NavigationHandler::syncFloatingStateForWindow(const QString& windowId)

@@ -8,6 +8,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 class QDBusPendingCallWatcher;
 
@@ -52,7 +53,10 @@ public:
     {
         m_floatingCache.clear();
     }
-    void syncFloatingWindowsFromDaemon();
+    /// Bulk re-seed the floating set from a daemon snapshot (clear + direct
+    /// insert, no per-window rule invalidation). Callers pair this with a single
+    /// invalidateAllRuleCaches.
+    void seedFloatingWindows(const QStringList& floatingIds);
     void syncFloatingStateForWindow(const QString& windowId);
     void syncZonesFromDaemon();
 

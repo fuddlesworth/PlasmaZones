@@ -49,7 +49,7 @@ public:
 
     /// Set @p windowId's floating state. Returns true iff a tracked entry was
     /// actually added or removed, so a caller can drive a side effect (e.g.
-    /// re-resolving IsFloating rules) only on a real transition.
+    /// re-resolving IsFloating rules) only when the tracked set changed.
     bool setFloating(const QString& windowId, bool floating)
     {
         const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
@@ -76,6 +76,12 @@ public:
             const bool removedAppId = m_byAppId.remove(appId);
             return removedInstance || removedAppId;
         }
+        // Bare appId keyspace. Reject an empty id (no separator, nothing before
+        // it) the same way the composite branch rejects an empty instanceId —
+        // an empty key would alias every empty-id window onto one wildcard slot.
+        if (windowId.isEmpty()) {
+            return false;
+        }
         if (floating) {
             if (m_byAppId.contains(windowId)) {
                 return false;
@@ -95,8 +101,7 @@ public:
     /// Total entries across BOTH keyspaces (instance floats + app-wide floats).
     /// Not a window count: an app floated both app-wide and per-instance counts
     /// in each. Diagnostics that want "how many windows did the daemon report
-    /// floating" should log the source list size, not this (see
-    /// NavigationHandler::syncFloatingWindowsFromDaemon).
+    /// floating" should log the source list size, not this.
     int size() const
     {
         return m_byInstance.size() + m_byAppId.size();

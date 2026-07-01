@@ -838,8 +838,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                                               QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
     });
 
-    // NOTE: syncFloatingWindowsFromDaemon() and loadCachedSettings() are NOT
-    // called here. m_daemonServiceRegistered is false at this point (set only by
+    // NOTE: daemon state sync (floating windows, cached settings) is NOT done
+    // here. m_daemonServiceRegistered is false at this point (set only by
     // slotDaemonReady), so any ensureInterface() call would bail out immediately.
     // All daemon state sync is deferred to slotDaemonReady().
 

@@ -48,7 +48,7 @@ public:
     /// Record @p windowId's zone. An empty @p zoneId removes the entry (the
     /// window left its zone — unsnapped / floated / screen-changed). Returns true
     /// iff the stored zone actually changed, so a caller can drive a side effect
-    /// (e.g. re-resolving IsSnapped / Zone rules) only on a real transition.
+    /// (e.g. re-resolving IsSnapped / Zone rules) only when the stored zone changed.
     bool setZone(const QString& windowId, const QString& zoneId)
     {
         const QString instanceId = ::PhosphorIdentity::WindowId::extractInstanceId(windowId);

@@ -17,8 +17,9 @@ namespace PlasmaZones {
 /// Q_PROPERTY surface for the slim "Window Appearance" settings page.
 ///
 /// The page is a friendly editor for the three managed baseline appearance
-/// Rules (borders, title bars, gaps — the catch-all, lowest-priority
-/// rules the daemon seeds, one per concern). It reads and writes those rules'
+/// Rules (borders, title bars, gaps — the lowest-priority rules the daemon
+/// seeds, one per concern; borders and title bars are scoped to tiled/snapped
+/// windows by default while gaps stays the catch-all). It reads and writes those rules'
 /// actions through `settingsController.rulesPage` (RuleController),
 /// so this controller only carries the CONSTANT slider bounds and the three
 /// baseline rule ids. It holds no editable state of its own, so it is never

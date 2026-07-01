@@ -8,12 +8,12 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 // Slim "Window Appearance" page. The window border, title-bar, and gap defaults
-// are resolved from three managed baseline appearance Rules (the
-// catch-all, lowest-priority rules the daemon seeds, one per concern). This page
-// is a friendly editor for those three rules: each action's read/write routes to
-// the matching baseline rule through the Rules controller. Per-window
-// overrides are ordinary higher-priority rules edited on the Rules page
-// (the link at the bottom).
+// are resolved from three managed baseline appearance Rules (the lowest-priority
+// rules the daemon seeds, one per concern). This page is a friendly editor for
+// those three rules: each action's read/write routes to the matching baseline
+// rule through the Rules controller, and the "Apply to" selector edits the
+// border / title-bar baseline's match. Per-window overrides are ordinary
+// higher-priority rules edited on the Rules page.
 SettingsFlickable {
     id: root
 

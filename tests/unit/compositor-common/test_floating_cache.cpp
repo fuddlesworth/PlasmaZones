@@ -156,8 +156,14 @@ private Q_SLOTS:
         cache.insert(QStringLiteral("slack")); // app-wide
         cache.insert(QStringLiteral("slack|7")); // instance
         QVERIFY(cache.setFloating(QStringLiteral("slack|7"), false)); // removed both
-        // Malformed id never changes anything.
+        // The app-wide marker is genuinely gone, not just the instance entry — a
+        // sibling instance no longer resolves as floating via the appId fallback.
+        QVERIFY(!cache.isFloating(QStringLiteral("slack|other")));
+        // Malformed ids never change anything: a trailing-separator composite and
+        // an empty bare appId are both rejected.
         QVERIFY(!cache.setFloating(QStringLiteral("bad|"), true));
+        QVERIFY(!cache.setFloating(QString(), true));
+        QVERIFY(!cache.isFloating(QString()));
     }
 
     // =================================================================

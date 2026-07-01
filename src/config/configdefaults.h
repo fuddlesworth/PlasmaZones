@@ -691,19 +691,23 @@ public:
     // "Default appearance" baseline rule, since split into the three focused
     // baselines below (`...002`/`...003`/`...004`). Do not reuse it.
     //
-    // Stable id of the managed baseline BORDER rule: the catch-all,
-    // lowest-priority Rule whose actions hold the default window border
-    // appearance (visible / width / radius / colour) the Appearance settings
-    // page edits. Fixed so the daemon can re-find (and idempotently re-seed) it
-    // across restarts and the settings UI can bind to the same rule.
+    // Stable id of the managed baseline BORDER rule: the lowest-priority Rule
+    // whose actions hold the default window border appearance (visible / width /
+    // radius / colour) the Appearance settings page edits. Its match is scoped to
+    // tiled / snapped windows on a fresh install and widened by the Appearance
+    // page's "Apply to" selector, so it is not a catch-all. Fixed so the daemon
+    // can re-find (and idempotently re-seed) it across restarts and the settings
+    // UI can bind to the same rule.
     static QUuid baselineBorderRuleId()
     {
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000002}"));
     }
 
-    // Stable id of the managed baseline TITLE BAR rule: the catch-all,
-    // lowest-priority Rule whose single action holds the default
-    // hide-title-bar value the Appearance settings page edits.
+    // Stable id of the managed baseline TITLE BAR rule: the lowest-priority Rule
+    // whose single action holds the default hide-title-bar value the Appearance
+    // settings page edits. Like the border baseline, its match is scoped to tiled
+    // / snapped windows on a fresh install (widened via "Apply to"), not a
+    // catch-all.
     static QUuid baselineTitleBarRuleId()
     {
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000003}"));

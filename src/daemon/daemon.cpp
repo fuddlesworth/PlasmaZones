@@ -120,10 +120,11 @@ static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
 
 namespace {
 
-// Common skeleton for the three managed baseline rules: catch-all, lowest
-// priority, managed. Each is a focused fallback every window resolves against
-// per concern now that the per-mode global appearance settings are gone. The
-// Appearance settings page rewrites these actions; per-window overrides are
+// Common skeleton for the three managed baseline rules: catch-all match by
+// default (the border and title-bar makers below narrow it to tiled / snapped
+// windows), lowest priority, managed. Each is a focused fallback resolved
+// against per concern now that the per-mode global appearance settings are gone.
+// The Appearance settings page rewrites these actions; per-window overrides are
 // ordinary higher-priority rules that win per slot.
 PhosphorRules::Rule makeBaselineSkeleton(const QUuid& id, const QString& name)
 {
@@ -140,8 +141,10 @@ PhosphorRules::Rule makeBaselineSkeleton(const QUuid& id, const QString& name)
     return rule;
 }
 
-// Build the managed baseline BORDER rule: the catch-all, lowest-priority rule
+// Build the managed baseline BORDER rule: the lowest-priority baseline rule
 // carrying only the "show border" parent action, which defaults OFF (opt-in).
+// Its match is scoped to tiled / snapped windows on a fresh install (see below),
+// so it is no longer a catch-all.
 // The dependent border details (width, radius, active/inactive colour) are not
 // seeded here. The Appearance page adds them when the user turns "show border"
 // on and removes them when it is turned off, so the baseline stays minimal.
@@ -171,8 +174,9 @@ PhosphorRules::Rule makeBaselineBorderRule()
     return rule;
 }
 
-// Build the managed baseline TITLE BAR rule: the catch-all, lowest-priority
-// rule carrying the default hide-title-bar value.
+// Build the managed baseline TITLE BAR rule: the lowest-priority baseline rule
+// carrying the default hide-title-bar value. Its match is scoped to tiled /
+// snapped windows on a fresh install (see below), so it is not a catch-all.
 PhosphorRules::Rule makeBaselineTitleBarRule()
 {
     using namespace PhosphorRules;

@@ -89,11 +89,11 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // Remove existing border for this window first
     removeWindowBorder(windowId);
 
-    // Border appearance is resolved entirely from rules. The managed
-    // baseline rule (catch-all, lowest priority) supplies the default for every
-    // window; higher-priority per-rules override per slot. A window whose
-    // resolved appearance does not show a border draws nothing — borders are
-    // opt-in, the baseline defaults them off.
+    // Border appearance is resolved entirely from rules. The managed baseline
+    // border rule (lowest priority, scoped to tiled / snapped windows by default)
+    // supplies the default for the windows it matches, and higher-priority rules
+    // override per slot. A window whose resolved appearance does not show a border
+    // draws nothing — borders are opt-in, the baseline defaults them off.
     std::optional<ResolvedWindowAppearance> ovr;
     if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
         ovr = resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor, m_borderInactiveColor);

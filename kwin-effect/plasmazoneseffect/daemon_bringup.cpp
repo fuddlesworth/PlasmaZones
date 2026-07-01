@@ -261,12 +261,10 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
             w->deleteLater();
             QDBusPendingReply<QStringList> reply = *w;
             if (reply.isValid()) {
-                m_navigationHandler->clearAllFloatingState();
-                QStringList floatingIds = reply.value();
-                for (const QString& id : floatingIds) {
-                    m_navigationHandler->setWindowFloating(id, true);
-                }
-                qCDebug(lcEffect) << "Synced" << floatingIds.size() << "floating windows from daemon";
+                // Bulk re-seed via the direct-write path (no per-window rule
+                // invalidation), then drop every placement-scoped verdict once
+                // below — mirrors syncZonesFromDaemon.
+                m_navigationHandler->seedFloatingWindows(reply.value());
                 // Re-seeding the float cache changes the IsFloating match input for
                 // these windows; drop the stale placement-scoped opacity verdicts so
                 // a `WHEN isFloating` SetOpacity rule re-resolves against the fresh
