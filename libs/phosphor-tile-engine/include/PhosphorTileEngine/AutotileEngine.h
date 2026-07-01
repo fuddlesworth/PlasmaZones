@@ -1530,6 +1530,15 @@ private:
     // windows in tiling order). Without this, the raise loop buries the new window.
     QString m_pendingFocusWindowId;
 
+    // Focus-before-track reseed: a windowFocused() notification can arrive before
+    // the window it names is tracked in a TilingState — most visibly on daemon
+    // restart, where the effect re-notifies the active window during bring-up but
+    // the window re-announce (windowsOpenedBatch) lands afterwards. onWindowFocused
+    // would otherwise drop that focus, leaving a focus-driven layout (Theater) with
+    // no focused window until the user clicks around. Stash the dropped id here and
+    // replay it in onWindowAdded once the window is tracked.
+    QString m_pendingFocusReseedWindowId;
+
     // Drag-insert preview state. When set, applyTiling() filters the dragged
     // window out of the windowsTiled batch so the KWin interactive move isn't
     // fought, while the remaining windows animate into their new positions.

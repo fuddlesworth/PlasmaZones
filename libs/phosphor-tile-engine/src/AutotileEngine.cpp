@@ -2676,6 +2676,20 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
         m_pendingFocusWindowId = windowId;
     }
 
+    // Replay a focus notification that arrived before this window was tracked (see
+    // m_pendingFocusReseedWindowId). Seed the focus state directly rather than
+    // re-entering onWindowFocused: the scheduleRetileForScreen() below already
+    // reflows the screen, and a focus-driven layout (Theater) reads focusedIndex
+    // from focusedWindow() at that retile — so seeding here lands the spotlight on
+    // the pre-restart active window without a second, competing retile.
+    if (inserted && windowId == m_pendingFocusReseedWindowId) {
+        m_pendingFocusReseedWindowId.clear();
+        m_activeScreen = m_windowToStateKey.value(windowId).screenId;
+        if (state) {
+            state->setFocusedWindow(windowId);
+        }
+    }
+
     if (inserted) {
         // Notify algorithm via lifecycle hook before retile
         PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(screenId);
@@ -2737,10 +2751,22 @@ void AutotileEngine::onWindowFocused(const QString& windowId)
     PhosphorTiles::TilingState* state = stateForWindow(windowId);
     if (!state) {
         // Not an error — non-autotiled windows (dialogs, floating, etc.) report
-        // focus changes too, so this is the normal case for most window activations
-        qCDebug(PhosphorTileEngine::lcTileEngine) << "onWindowFocused: window not tracked" << windowId;
+        // focus changes too, so this is the normal case for most window activations.
+        // Stash the id so that if this window is a tiled window whose tracking just
+        // hasn't landed yet (daemon-restart re-announce ordering: the effect
+        // re-notifies the active window during bring-up, before windowsOpenedBatch),
+        // onWindowAdded can replay the focus once the window is tracked. A stash for a
+        // window that never gets tiled (a genuine dialog) is inert — it only replays
+        // on an exact-id add — and is overwritten by the next such notification.
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "onWindowFocused: window not tracked, stashing for reseed" << windowId;
+        m_pendingFocusReseedWindowId = windowId;
         return;
     }
+
+    // A tracked window took focus through the normal path — any earlier stash for a
+    // yet-untracked window is stale now, so drop it rather than let it replay later.
+    m_pendingFocusReseedWindowId.clear();
 
     // Track which screen has the active focus (used by tiledWindowsForFocusedScreen
     // to avoid non-deterministic QHash iteration when multiple screens have focused windows)
