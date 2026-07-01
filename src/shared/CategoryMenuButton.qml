@@ -102,9 +102,9 @@ ComboBox {
     // The category path ({ top, sub }) of the currently-selected item, or null
     // when nothing is selected or the selection is uncategorised (those items
     // live in the flat tail and carry their own checkmark). Drives the
-    // "your selection is in here" marker on the category submenu titles so the
-    // user can tell which submenu holds the current value without hovering into
-    // each one. `sub` is "" for a single-level category.
+    // "your selection is in here" checkmark icon on the category submenu that
+    // contains it, so the user can tell which submenu holds the current value
+    // without hovering into each one. `sub` is "" for a single-level category.
     readonly property var _selectedCategoryPath: {
         if (!items || !currentId)
             return null;
@@ -118,8 +118,14 @@ ComboBox {
                 return null;
 
             var slashIdx = cat.indexOf("/");
+            var top = slashIdx >= 0 ? cat.substring(0, slashIdx).trim() : cat;
+            // Mirror _categoryTree: a leading-slash / empty-top category is
+            // treated as uncategorised (flat tail), so it has no submenu to mark.
+            if (top === "")
+                return null;
+
             return {
-                "top": slashIdx >= 0 ? cat.substring(0, slashIdx).trim() : cat,
+                "top": top,
                 "sub": slashIdx >= 0 ? cat.substring(slashIdx + 1).trim() : ""
             };
         }

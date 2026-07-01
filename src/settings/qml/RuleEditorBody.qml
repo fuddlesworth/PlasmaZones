@@ -138,9 +138,10 @@ ColumnLayout {
     /// generous for any human-authored rule.
     readonly property int _maxMatchDepth: 64
 
-    /// True if every leaf predicate in @p node carries a non-empty value.
-    /// A leaf with an empty string / missing value would match an empty-string
-    /// id (e.g. the guided `ScreenId == ""` seed) — block saving that.
+    /// True if every leaf predicate in @p node is complete: a non-empty field,
+    /// a non-empty operator, and a non-empty value. A freshly-added leaf seeds
+    /// all three empty, and an empty-string value would match an empty-string
+    /// id (e.g. the guided `ScreenId == ""` seed) — block saving either.
     function _matchHasFilledLeaves(node, depth) {
         if (depth === undefined)
             depth = 0;
