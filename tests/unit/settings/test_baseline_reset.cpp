@@ -12,14 +12,18 @@
  * captureSavedSnapshot() establishes the "last saved" baseline.
  */
 
+#include <QObject>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleStore.h>
 
-#include "../../../src/core/baselinerules.h"
 #include "../../../src/config/configdefaults.h"
+#include "../../../src/core/baselinerules.h"
+#include "../../../src/dbus/ruleadaptor.h"
 #include "../../../src/settings/rulecontroller.h"
 #include "../../../src/settings/rulemodel.h"
 
@@ -160,6 +164,33 @@ private Q_SLOTS:
         QCOMPARE(controller.model()->ruleById(user.id).name, QStringLiteral("edited"));
         QVERIFY(!controller.baselinesDirty());
         QVERIFY(controller.userRulesDirty());
+    }
+
+    // Track B: the daemon-side reset (RuleAdaptor::resetManagedDefaults) restores
+    // the 3 baselines to factory in the store and preserves user rules (Policy A),
+    // persisting once.
+    void daemonResetRestoresBaselinesPreservesUserRules()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
+
+        // Seed a border baseline flipped ON (diverges from factory) + a user rule.
+        Rule border = makeBaselineBorderRule();
+        border.actions[0].params.insert(QString(PhosphorRules::ActionParam::Value), true);
+        const Rule user = makeUserRule(QStringLiteral("keep"));
+        store.setAllRules({border, makeBaselineTitleBarRule(), makeBaselineGapRule(), user});
+
+        QObject holder; // QDBusAbstractAdaptor needs a parent object.
+        RuleAdaptor adaptor(&store, &holder);
+        adaptor.resetManagedDefaults();
+
+        const auto resetBorder = store.ruleSet().ruleById(ConfigDefaults::baselineBorderRuleId());
+        QVERIFY(resetBorder.has_value());
+        QCOMPARE(resetBorder.value(), makeBaselineBorderRule());
+        // User rule preserved, total count unchanged.
+        QVERIFY(store.ruleSet().ruleById(user.id).has_value());
+        QCOMPARE(store.ruleSet().rules().size(), 4);
     }
 };
 

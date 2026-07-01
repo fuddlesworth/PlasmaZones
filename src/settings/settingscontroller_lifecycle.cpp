@@ -269,6 +269,18 @@ void SettingsController::defaults()
     // Notify daemon to reload — reset() wrote defaults to disk
     DaemonDBus::notifyReload();
 
+    // Reset the rule-backed appearance/gap baselines to factory. The KConfig
+    // reset() above cannot reach them — window border / title bar / gaps live on
+    // the daemon's managed baseline rules in rules.json. resetManagedDefaults()
+    // asks the daemon to overwrite just those three (preserving user rules) and
+    // broadcast rulesChanged; the paired revert() reloads the model from the
+    // reset set (ordered after the reset on the same D-Bus connection) and drops
+    // any staged rule edits, so the Windows appearance page shows factory values.
+    if (m_rulesPage) {
+        m_rulesPage->resetManagedDefaults();
+        m_rulesPage->revert();
+    }
+
     // Defaults is a global action — mark every valid page dirty so the
     // unsaved indicator appears next to each of them. Guard the emit
     // on actual change so a back-to-back `defaults()` (or one called
@@ -278,13 +290,11 @@ void SettingsController::defaults()
     //
     // "rules" and "window-appearance" are INTENTIONALLY excluded from the
     // blanket-mark: both are rule-backed (their source of truth is the daemon's
-    // `rules.json`, not the KConfig store reset() clears), and their commit is a
-    // no-op when clean (RuleController::asyncCommit short-circuits; the appearance
-    // page edits managed baseline rules directly). Marking them dirty here would
-    // surface a stale "unsaved changes" indicator that a subsequent Save could
-    // never clear, leaving the page dirty in perpetuity until the user touches it.
-    // Resetting rule-backed defaults (window appearance / gaps) is out of scope
-    // for this entry point — it requires a separate daemon-side "reset rules" path.
+    // `rules.json`, not the KConfig store reset() clears). The appearance/gap
+    // baselines ARE reset above (resetManagedDefaults + revert), but that path is
+    // LIVE (daemon-persisted, model reloaded) rather than staged — so the pages
+    // land clean, not dirty. Marking them here would surface a stale "unsaved
+    // changes" indicator a subsequent Save could never clear.
     QSet<QString> fullSet = validPageNames();
     fullSet.remove(QStringLiteral("rules"));
     fullSet.remove(QStringLiteral("window-appearance"));

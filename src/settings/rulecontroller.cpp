@@ -478,6 +478,16 @@ void RuleController::resetBaselines()
     Q_EMIT baselinesChanged();
 }
 
+void RuleController::resetManagedDefaults()
+{
+    // Fire-and-forget: no out-args, and the model refresh comes from the daemon's
+    // rulesChanged broadcast + the revert() the caller issues. Ordered before any
+    // subsequent getAllRules on this connection, so a paired revert() sees the
+    // reset set.
+    PhosphorProtocol::ClientHelpers::asyncCall(QString(PhosphorProtocol::Service::Interface::Rules),
+                                               QStringLiteral("resetManagedDefaults"));
+}
+
 void RuleController::discardBaselineEdits()
 {
     // Restore each managed baseline from the last synced snapshot, leaving every

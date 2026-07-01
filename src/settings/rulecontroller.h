@@ -215,6 +215,14 @@ public:
     /// user rule untouched.
     void discardBaselineEdits();
 
+    /// Fire-and-forget D-Bus call asking the daemon to reset the three managed
+    /// baseline rules to factory (org.plasmazones.Rules.resetManagedDefaults),
+    /// preserving user rules. The daemon persists + broadcasts rulesChanged;
+    /// SettingsController::defaults() pairs this with revert() to reload the
+    /// model from the reset set. This is the GLOBAL Restore Defaults path (live,
+    /// daemon-persisted) — distinct from the staged per-page resetBaselines().
+    void resetManagedDefaults();
+
     // ── Rule CRUD — keyed by UUID, never by index ─────────────────────────
 
     /// Build a fresh, never-yet-stored rule for the given guided subject and
