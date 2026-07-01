@@ -9,7 +9,6 @@
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
-#include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorSnapEngine/PlacementDirective.h>
 #include <PhosphorProtocol/NavigationTypes.h>
 #include <PhosphorProtocol/WindowTypes.h>
@@ -270,30 +269,6 @@ public:
     void setPlacementZonesResolver(PlacementZonesResolver resolver)
     {
         m_placementZonesResolver = std::move(resolver);
-    }
-
-    /**
-     * @brief Provider yielding the per-context gap override for a screen.
-     *
-     * Returns a PerScreenSnappingKey-shaped override map for the screen's
-     * CURRENT context (mode / virtual desktop / activity), or an empty map
-     * when no context rule applies. The map already folds in the per-monitor
-     * ScreenId rule, so when a provider is wired the engine consults it FIRST
-     * and only falls back to the direct per-screen snapping read when it
-     * returns empty (preserving unit-test behaviour where no provider is set).
-     *
-     * Mirrors AutotileEngine::setContextGapProvider so the snap resnap recompute
-     * honours the same context-gap cascade the snap COMMIT path resolves through
-     * DaemonGeometryResolver::contextGapOverrideFor. Daemon-injected; the engine
-     * library stays settings-agnostic (LGPL boundary). Same lifetime contract as
-     * the other std::function setters — clear with `{}` before destroying any
-     * captured state.
-     */
-    using ContextGapProvider = std::function<QVariantMap(const QString& screenId)>;
-
-    void setContextGapProvider(ContextGapProvider provider)
-    {
-        m_contextGapProvider = std::move(provider);
     }
 
     void windowClosed(const QString& windowId) override;
@@ -764,18 +739,6 @@ Q_SIGNALS:
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;
 
-    struct GapParams
-    {
-        int zonePadding;
-        ::PhosphorLayout::EdgeGaps outerGaps;
-    };
-    // Resolve zone padding + outer gaps for @p screenId, honoring the same
-    // precedence the main geometry pipeline uses (minus the context-rule tier,
-    // which the engine has no registry for): per-screen snapping override (with
-    // virtual->physical fallback) -> @p layout override -> global. An empty
-    // screenId skips the per-screen tier; a null layout skips the layout tier.
-    GapParams resolveGapParams(const QString& screenId, PhosphorZones::Layout* layout) const;
-
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                         PhosphorEngine::SnapIntent intent, int virtualDesktop = 0);
 
@@ -938,12 +901,6 @@ private:
     // wires it; while empty no window is rule-snapped. See PlacementZonesResolver
     // doc above.
     PlacementZonesResolver m_placementZonesResolver{};
-
-    // Per-context gap override provider. Empty until the daemon wires it; while
-    // empty the engine reads the per-screen snapping override directly (with
-    // virtual->physical fallback) — the historical behaviour unit tests rely on.
-    // See ContextGapProvider doc above.
-    ContextGapProvider m_contextGapProvider{};
 };
 
 } // namespace PhosphorSnapEngine

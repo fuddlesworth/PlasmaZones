@@ -55,6 +55,10 @@ add_executable(test_wts_queries core/test_wts_queries.cpp)
 target_link_libraries(test_wts_queries PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_queries COMMAND test_wts_queries)
 
+add_executable(test_daemongeometryresolver_inset core/test_daemongeometryresolver_inset.cpp)
+target_link_libraries(test_daemongeometryresolver_inset PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_daemongeometryresolver_inset COMMAND test_daemongeometryresolver_inset)
+
 add_executable(test_wts_clearfloat core/test_wts_clearfloat.cpp)
 target_link_libraries(test_wts_clearfloat PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_clearfloat COMMAND test_wts_clearfloat)
@@ -517,6 +521,10 @@ target_compile_definitions(test_engine_settings PRIVATE "P_SOURCE_DIR=\"${PROJEC
 add_executable(test_zone_shader_item ui/test_zone_shader_item.cpp)
 target_link_libraries(test_zone_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
 add_test(NAME test_zone_shader_item COMMAND test_zone_shader_item)
+
+add_executable(test_surface_shader_item ui/test_surface_shader_item.cpp)
+target_link_libraries(test_surface_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
+add_test(NAME test_surface_shader_item COMMAND test_surface_shader_item)
 
 # Pure-data byte-layout test for the zone UBO extension. No GPU / scene graph
 # required - guards against silent C++/GLSL UBO drift after a struct refactor.

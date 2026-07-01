@@ -3,6 +3,9 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
@@ -85,7 +88,10 @@ private Q_SLOTS:
         engine.refreshConfigFromSettings();
         QCoreApplication::processEvents();
 
-        QVERIFY(state->tiledWindowCount() >= 2);
+        // All three opened windows must now tile: raising the cap from 2 to 4
+        // backfills the previously-overflowed win3. >= 2 would also pass if the
+        // backfill did nothing, so assert the exact count the regression targets.
+        QCOMPARE(state->tiledWindowCount(), 3);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -302,10 +308,10 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Debounce: rapid changes coalesce
+    // Direct config mutation is silent; explicit retile drives placement
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testDebounceCoalescesRapidChanges()
+    void testDirectConfigMutationIsSilent_explicitRetileDrivesPlacement()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
@@ -322,10 +328,16 @@ private Q_SLOTS:
         engine.config()->innerGap = 8;
         engine.config()->outerGap = 12;
 
+        // Direct writes to config() mutate the struct in place, bypassing the
+        // settings-driven retile path entirely, so none of them emits
+        // placementChanged on their own.
         QCOMPARE(tilingSpy.count(), 0);
 
         engine.retile();
         QCoreApplication::processEvents();
+
+        // Only the deliberate retile() reaches the renderer.
+        QVERIFY2(tilingSpy.count() > 0, "explicit retile() must drive placementChanged");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -358,6 +370,56 @@ private Q_SLOTS:
         QVERIFY(qFuzzyCompare(state->splitRatio(), stateBefore + 0.1));
         // ...but the global settings are untouched.
         QVERIFY(qFuzzyCompare(settings.autotileSplitRatio(), ratioBefore));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Tile geometry: a tiled window fills its zone EXACTLY — there is NO border
+    // inset. The KWin effect's border shader recolours each window's own outermost
+    // band (inside the frame), so the border never pushes the tile past its slot
+    // (mirrors the snap side, DaemonGeometryResolver::snapBorderInset == 0). Tile
+    // spacing comes from the zone gap/padding settings, not the border width.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testTileGeometry_fillsZoneNoBorderInset()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+
+        // Tiling never insets by border width (the border draws inside the frame,
+        // and window border appearance is resolved through the window rules now),
+        // so tiles fill their zones exactly.
+        Settings settings;
+        engine.setEngineSettings(&settings);
+
+        engine.windowOpened(QStringLiteral("win-1"), screen);
+        engine.windowOpened(QStringLiteral("win-2"), screen);
+        QCoreApplication::processEvents();
+
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        const QRect zoneA(10, 10, 950, 1060);
+        const QRect zoneB(960, 10, 950, 1060);
+        state->setCalculatedZones({zoneA, zoneB});
+        engine.retile(screen);
+
+        QVERIFY(tiledSpy.count() >= 1);
+        const QJsonArray arr = QJsonDocument::fromJson(tiledSpy.last().first().toString().toUtf8()).array();
+        QCOMPARE(arr.size(), 2);
+        QHash<QString, QRect> emitted;
+        for (const QJsonValue& v : arr) {
+            const QJsonObject o = v.toObject();
+            emitted.insert(o.value(QLatin1String("windowId")).toString(),
+                           QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
+                                 o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt()));
+        }
+        // Tiles fill their zones exactly — no border inset (master-stack order:
+        // win-1 → zoneA, win-2 → zoneB).
+        QCOMPARE(emitted.value(QStringLiteral("win-1")), zoneA);
+        QCOMPARE(emitted.value(QStringLiteral("win-2")), zoneB);
     }
 };
 

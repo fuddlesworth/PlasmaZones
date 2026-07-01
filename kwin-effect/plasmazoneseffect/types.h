@@ -4,37 +4,219 @@
 #pragma once
 
 #include <PhosphorAnimation/AnimationShaderContract.h>
+#include <PhosphorSurface/SurfaceShaderContract.h>
 
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
-#include <scene/borderradius.h>
 
-#include <QMetaObject>
-#include <QPointer>
+#include <QColor>
 #include <QRect>
+#include <QSize>
 #include <QString>
+#include <QStringList>
 #include <QVector4D>
 
 #include <array>
 #include <memory>
+#include <vector>
 
 namespace KWin {
 class EffectWindow;
 class Item;
-class OutlinedBorderItem;
 }
 
 namespace PlasmaZones {
 
-/// Per-window native border (scene graph item).
-/// `item` is a QPointer because OutlinedBorderItem is parented to WindowItem —
-/// Qt parent-child ownership may destroy it before removeWindowBorder() runs.
+/// One compiled buffer pass of a multipass SURFACE pack (the idle drawWindow
+/// path). Each buffer.frag is a fullscreen-quad fragment that samples the
+/// captured window surface (uTexture0) plus any prior buffer outputs
+/// (iChannel0..N-1) and writes into its own FBO; the main effect.frag then
+/// samples the final buffer output(s) as iChannel0..3. Compiled in
+/// compiledPack() right after the main pack shader, cleared (fail-closed) if any
+/// buffer pass fails to compile so the pack degrades to single-pass. The vector
+/// of these is shared by every decorated window — the per-window FBO targets
+/// live in SurfaceMultipassState.
+struct CompiledSurfaceBufferPass
+{
+    std::unique_ptr<KWin::GLShader> shader;
+    int uTexture0Loc = -1; ///< the captured surface (bound to GL_TEXTURE0)
+    int uTimeLoc = -1; ///< iTime — continuous seconds (-1 for a static buffer pass)
+    /// iChannel0..3 sampler locations — prior buffer outputs feeding this pass.
+    std::array<int, 4> iChannelLoc{{-1, -1, -1, -1}};
+    /// iChannelResolution[0..3] element locations (the .xy pixel size of each).
+    std::array<int, 4> iChannelResolutionLoc{{-1, -1, -1, -1}};
+    /// Pack-declared parameter slot locations (reuse the main pass's values).
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsLoc = []() {
+        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> a;
+        a.fill(-1);
+        return a;
+    }();
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomColors> customColorsLoc = []() {
+        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomColors> a;
+        a.fill(-1);
+        return a;
+    }();
+};
+
+/// Compiled state for ONE surface shader pack (e.g. "border", "glow"), keyed by
+/// pack id in PlasmaZonesEffect::m_compiledPacks. Holds everything the old single
+/// borderShader() global produced for the one selected pack — the main MapTexture
+/// GLShader, its contract uniform locations, the pack-declared customParams /
+/// customColors locations + resolved-default VALUES, the main-pass iChannel
+/// locations, and the compiled multipass buffer passes — now parameterised per
+/// pack id so per-window decoration chains can each render their own base pack.
+///
+/// Compiled on first use (compiledPack), cached for the effect's lifetime, and
+/// fail-closed: a pack whose compile fails latches `compileFailed = true` and
+/// `shader == nullptr`, so subsequent lookups return it without re-attempting the
+/// compile every frame. The whole map is cleared on a SurfaceShaderRegistry
+/// hot-reload (effectsChanged) so the next paint recompiles against fresh source.
+///
+/// The param VALUES are baked at first-compile time from the DecorationProfile
+/// that triggered the compile (parameters[packId] merged over the pack's declared
+/// defaults). The cache is keyed by pack id alone, so two windows resolving the
+/// SAME pack with DIFFERENT param overrides share the first-resolved values;
+/// per-window param variance is a follow-up (the cache key would grow to
+/// pack-id + params hash). For this stage every window resolves the same baseline
+/// profile, so the shared values are correct.
+struct CompiledSurfacePack
+{
+    std::unique_ptr<KWin::GLShader> shader;
+    bool compileFailed = false; ///< latch a failed compile so we don't retry every frame
+
+    // Contract uniform locations (1:1 with PhosphorSurfaceShaders::SurfaceShaderContract).
+    int uSurfaceSizeLoc = -1; ///< uSurfaceSize — uTexture0 extent, device px
+    int uFrameTopLeftLoc = -1; ///< uSurfaceFrameTopLeft — frame top-left within the texture, device px
+    int uFrameSizeLoc = -1; ///< uSurfaceFrameSize — frame size excluding shadows, device px
+    int uScaleLoc = -1; ///< uSurfaceScale — logical-to-device pixel scale
+    int uFocusedLoc = -1; ///< uSurfaceFocused — 1.0 focused / 0.0 unfocused
+    int uTimeLoc = -1; ///< iTime — continuous seconds; -1 ⟺ static pack (drives the repaint gate)
+    /// uTexture0 — the input-surface sampler (unit 0). On the single-pack path
+    /// OffscreenData::paint binds the redirected surface to unit 0 automatically,
+    /// so this is unused there; the multi-pack composite (renderSurfaceChainComposite)
+    /// runs the main pass as a fullscreen FBO pass and binds the running composite
+    /// to unit 0 itself, setting this explicitly.
+    int uTexture0Loc = -1;
+
+    /// MAIN-pass iChannel0..3 sampler + iChannelResolution[0..3] element
+    /// locations. -1 when the linker dropped the uniform (single-pass pack).
+    std::array<int, 4> iChannelLoc{{-1, -1, -1, -1}};
+    std::array<int, 4> iChannelResolutionLoc{{-1, -1, -1, -1}};
+
+    /// Pack-declared parameter uniform locations + resolved-default values.
+    /// float/int/bool params pack into customParams[N], colours into
+    /// customColors[N]. The border pack declares none, so every slot is -1.
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsLoc = []() {
+        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> a;
+        a.fill(-1);
+        return a;
+    }();
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomColors> customColorsLoc = []() {
+        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomColors> a;
+        a.fill(-1);
+        return a;
+    }();
+    std::array<QVector4D, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsValues{};
+    std::array<QVector4D, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomColors> customColorsValues{};
+
+    /// Compiled multipass buffer passes (idle drawWindow path). Empty for a
+    /// single-pass pack (the border). Cleared fail-closed if any pass fails to
+    /// compile (the pack then renders single-pass). The per-window FBO targets
+    /// live in m_surfaceMultipass.
+    std::vector<CompiledSurfaceBufferPass> bufferPasses;
+};
+
+/// Per-window FBO render targets for the multipass SURFACE buffer chain (idle
+/// drawWindow path). `surfaceTex` holds the raw captured window surface (full
+/// resolution, the multipass equivalent of uTexture0); `bufferTex[i]` holds the
+/// output of buffer pass `i` (sized at textureSize × bufferScale). All are
+/// bottom-origin GL FBOs, the SAME layout as KWin's redirected uTexture0, so a
+/// passthrough buffer (fragColor = surfaceTexel(vTexCoord)) reproduces the
+/// surface upright. Reallocated only when the window's expanded size × scale
+/// changes; erased on window close / border removal to free GPU memory.
+struct SurfaceMultipassState
+{
+    // ── Single-pack-with-buffers path (renderSurfaceBufferPasses) ────────────
+    // One pack with buffer passes, presented through OffscreenData. Unused on
+    // the multi-pack path below (a window uses one path or the other).
+    std::unique_ptr<KWin::GLTexture> surfaceTex;
+    std::vector<std::unique_ptr<KWin::GLTexture>> bufferTex;
+    QSize size; ///< full textureSize the single-pack targets were allocated for
+
+    // ── Multi-pack chain compositing path (renderSurfaceChainComposite) ──────
+    // The two composite textures ping-pong as the chain is folded pack-by-pack;
+    // `finalSlot` names the slot holding the last fold (presented by drawWindow
+    // through the passthrough shader). `chainBufferTex[k]` caches pack k's
+    // buffer-pass outputs so an ANIMATED pack (future iTime support) does not
+    // reallocate its scratch textures every frame. All are sized for
+    // `compositeSize` / `chainKey` and rebuilt only when the window size or the
+    // resolved chain changes.
+    std::array<std::unique_ptr<KWin::GLTexture>, 2> compositeTex;
+    std::vector<std::vector<std::unique_ptr<KWin::GLTexture>>> chainBufferTex;
+    QStringList chainKey; ///< the chain `chainBufferTex` was allocated for
+    QSize compositeSize; ///< full textureSize the composite targets were allocated for
+    int finalSlot = 0; ///< which compositeTex slot holds the final fold
+};
+
+/// Per-window border + rounded corners, rendered by sampling the redirected
+/// window through an offscreen MapTexture fragment shader (the KDE-Rounded-
+/// Corners / shapecorners technique) rather than a scene-graph
+/// `OutlinedBorderItem`.
+///
+/// A scene-graph child item composites against KWin's own decoration frame +
+/// drop shadow, so on server-side-decorated windows an outline looks "inset".
+/// Sampling the redirected texture runs over the decoration with KWin's own MVP,
+/// so the outline is flush and the SAME path rounds the corners.
+///
+/// The shader evaluates one analytic rounded-rect signed-distance field over the
+/// window FRAME and does TWO things from it, IDENTICALLY for decorated and
+/// borderless windows: it clips the window content to the INNER rounded rect
+/// (inset by the border width) and lays the outline band OVER the background just
+/// outside it — so the content sits inside the border and a translucent border
+/// blends with the desktop, not the content. It runs over the COMPOSITED
+/// redirected texture, so it rounds the outer frame corners (titlebar included)
+/// without ever clipping an individual client subsurface. No drop shadow is drawn
+/// (KWin does not render one into this texture).
+///
+/// The border APPEARANCE (width / radius / colour) is no longer host state on
+/// this struct: it is the resolved pack's own declared PARAMETERS, baked into the
+/// CompiledSurfacePack's customParams/customColors at compile time and pushed by
+/// pushBorderUniforms. This struct now only records WHICH pack chain renders and
+/// the per-window hide-titlebar choice; the appearance lives with the pack.
 struct WindowBorder
 {
-    QPointer<KWin::OutlinedBorderItem> item;
-    QMetaObject::Connection geometryConnection;
-    QPointer<KWin::Item> clippedContainer;
-    KWin::BorderRadius savedContainerRadius;
+    /// True when THIS border owns the window's OffscreenEffect redirect +
+    /// border shader slot. False while an animation transition has taken over
+    /// the slot (the animation path's begin/end coordinates the handover) —
+    /// the per-frame uniform push and the transition-end re-apply both consult
+    /// this so the border path never fights the transition lifecycle.
+    bool shaderApplied = false;
+
+    /// The resolved decoration shader-pack chain for this window
+    /// (DecorationProfile::effectiveChain()), e.g. {"border"} or {"border",
+    /// "glow"}. Stored whole this stage so the next stage can composite
+    /// chain[1..] over the base; for now ONLY chain[0] (basePackId) renders.
+    QStringList chain;
+
+    /// The base pack id to render — chain.value(0), defaulting to "border".
+    /// The render path (drawWindow / pushBorderUniforms / renderSurfaceBufferPasses)
+    /// looks this up in m_compiledPacks to get the CompiledSurfacePack instead
+    /// of the old single global border shader.
+    QString basePackId;
+
+    /// True when the base "border" pack in `chain` is driven by the window
+    /// rules (the rule-backed appearance path) rather than a user decoration
+    /// pack. When set, the fields below carry the per-window border appearance
+    /// resolved from the rules (resolveWindowAppearance); pushBorderUniforms
+    /// pushes them in place of the "border" pack's shared metadata defaults so
+    /// each window can show a different width / radius / colour. The shader picks
+    /// activeColor vs inactiveColor by uSurfaceFocused. False for a pure
+    /// user-pack chain, where the pack's own baked param defaults apply.
+    bool ruleBorder = false;
+    int ruleBorderWidth = 0;
+    int ruleBorderRadius = 0;
+    QColor ruleBorderActiveColor;
+    QColor ruleBorderInactiveColor;
 };
 
 /// User-texture cache entry. Owns the uploaded `GLTexture` and tracks the wrap
@@ -125,6 +307,15 @@ struct CachedShader
     int iFromRectLoc = -1;
     int iToRectLoc = -1;
     int iOldWindowLoc = -1;
+    /// Surface-layer-stack uniforms (compositor path). `uSurfaceLayer` is the
+    /// pre-composited layered surface (border / rounded corners, ...) sampled in
+    /// place of the live `uTexture0` while a layered window animates;
+    /// `iHasSurfaceLayer` gates the redirect. Both resolve in every animation
+    /// shader (declared in the shared header), so they are non-negative whenever
+    /// the shader reads the surface through `surfaceColor()`. See
+    /// AnimationShaderContract::kUSurfaceLayer / kIHasSurfaceLayer.
+    int uSurfaceLayerLoc = -1;
+    int iHasSurfaceLayerLoc = -1;
 };
 
 /// Per-window in-flight shader transition.
@@ -307,6 +498,34 @@ struct ShaderTransition
     /// was not requested or failed — paintWindow then binds a transparent
     /// fallback (or the shader falls back to a non-cross-fade morph).
     std::unique_ptr<KWin::GLTexture> oldSnapshot;
+
+    /// Surface-layer-stack render targets (compositor path). The window's
+    /// surface with its active surface layers (border / rounded corners today;
+    /// tint / glow / ... in future) composited in order, rendered each animated
+    /// frame so the animation samples the LAYERED surface (bound as
+    /// `uSurfaceLayer`) instead of the bare live `uTexture0` — surface layers
+    /// stay visible for the whole transition rather than vanishing when the
+    /// animation shader takes the draw slot.
+    ///
+    /// Two textures for ping-pong chaining when more than one layer is active
+    /// (layer N reads slot `N%2`, writes slot `(N+1)%2`); a single-layer stack
+    /// (the common border-only case) uses slot 0 alone. Reused across frames and
+    /// reallocated only when the window's expanded size × scale changes; freed
+    /// with the transition. `renderSurfaceChain` returns the slot holding the
+    /// final composited surface.
+    std::array<std::unique_ptr<KWin::GLTexture>, 2> surfaceLayerChain;
+    QSize surfaceLayerChainSize;
+
+    /// Whether this window owned an APPLIED resting border when the transition
+    /// began — frozen at beginShaderTransition. renderSurfaceChain composites the
+    /// surface layer UNDER the animation only when this is true, so a window
+    /// decorated MID-transition (e.g. a fresh window the focus-refresh
+    /// updateAllBorders borders while its open animation runs — its WindowBorder
+    /// entry exists but shaderApplied is still false) does NOT engage surface
+    /// compositing, and its open animation plays on the live redirected surface.
+    /// A window that already owned its border keeps compositing it for the whole
+    /// animation, immune to a mid-animation border refresh flipping shaderApplied.
+    bool surfaceLayerActive = false;
 };
 
 /// First-frame suppression bookkeeping for a window that is about to be

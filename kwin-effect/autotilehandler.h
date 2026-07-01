@@ -6,7 +6,6 @@
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 
-#include <QColor>
 #include <QHash>
 #include <QObject>
 #include <QPair>

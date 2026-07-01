@@ -25,7 +25,6 @@
 #include <window.h>
 #include <workspace.h>
 
-#include <QColor>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
@@ -160,8 +159,8 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // the daemon's bounded LRU is empty after a fresh registration (whether
     // first-start or restart), so any handle the kwin-effect would otherwise
     // skip on assumption-of-residence must be re-captured. Without this
-    // reset, the first ~24 windows the user snap-assists toward after a
-    // daemon restart silently fall back to icons.
+    // reset, windows the user snap-assists toward shortly after a daemon
+    // restart could silently fall back to icons until the set is rebuilt.
     if (m_snapAssistHandler) {
         m_snapAssistHandler->resetRecentlyPostedThumbnails();
     }
@@ -260,6 +259,13 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QStringList> reply = *w;
+            // Clear the stale local float set unconditionally. This reply lands
+            // during daemon bringup, so the freshly-registered daemon's float
+            // state is authoritative (and empty on a fresh start). An invalid
+            // reply still means the previous session's entries must be dropped —
+            // retaining them would leave isWindowFloating() returning true for
+            // windows that are no longer floating.
+            m_navigationHandler->clearAllFloatingState();
             if (reply.isValid()) {
                 // Bulk re-seed via the direct-write path (no per-window rule
                 // invalidation), then drop every placement-scoped verdict once
@@ -733,9 +739,49 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedZoneSelectorEnabled = v.toBool();
     });
 
-    // Window border / title-bar appearance is no longer pushed as per-mode
-    // settings — it is resolved from rules (the managed baseline rule
-    // plus per-window overrides) inside updateWindowBorder / reconcileRuleHiddenTitleBar.
+    // Border / title-bar appearance is no longer pushed as per-mode settings.
+    // Border APPEARANCE (width / radius / colours / show) is sourced entirely
+    // from the per-surface decoration tree below (the border pack's params); the
+    // legacy autotile*/snapping* border-appearance keys are no longer consumed
+    // here. Rule-driven title-bar hiding is reconciled separately in
+    // updateWindowBorder / reconcileRuleHiddenTitleBar.
+
+    // Per-surface decoration profile tree (Stage 2a): the SSOT for each surface's
+    // shader-pack chain — whose emptiness is the border on/off gate (an empty
+    // chain = no border, replacing the legacy showBorder toggle) — plus the
+    // border pack's appearance params (width / radius / colours carried AS that
+    // pack's parameters, not separate decoration fields), keyed by surface path
+    // (window.tiled / window.snapped / window.floating). Supersedes the old
+    // global `surfaceShaderEffectId` selection AND the autotile/snapping
+    // border-APPEARANCE feed — updateWindowBorder now resolves appearance from
+    // this tree. The autotile/snap BorderState is still maintained (it drives
+    // MEMBERSHIP — which windows are tiled/snapped — and the daemon's retile
+    // insets), but no longer feeds appearance.
+    //
+    // On change: drop every compiled pack (a chain edit may reference a new pack,
+    // and per-pack param VALUES are baked at compile time so they must recompile)
+    // and rebuild all borders against the new tree, then repaint.
+    loadSettingAsync(QStringLiteral("decorationProfileTreeJson"), [this](const QVariant& v) {
+        const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+        if (!doc.isObject()) {
+            qCWarning(lcEffect) << "decorationProfileTreeJson is not a JSON object — keeping current tree";
+            return;
+        }
+        PhosphorSurfaceShaders::DecorationProfileTree tree =
+            PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object());
+        if (tree == m_decorationTree) {
+            return;
+        }
+        m_decorationTree = std::move(tree);
+        // Per-pack param values are baked at first compile, so a tree change that
+        // alters parameters[packId] requires a recompile of that pack — clear the
+        // whole compiled-pack cache (it lazily recompiles on the next paint).
+        m_compiledPacks.clear();
+        updateAllBorders();
+        if (KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
+    });
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
         m_autotileHandler->setFocusFollowsMouse(v.toBool());
