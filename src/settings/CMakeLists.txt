@@ -153,6 +153,9 @@ set(plasmazones_settings_SRCS
     # Five tiny pass-throughs into RuleModel; split out so
     # rulecontroller.cpp stays under the project's 800-line cap.
     rulecontroller_lookups.cpp
+    # RuleController per-page dirty split + managed-baseline reset/discard,
+    # split out so rulecontroller.cpp stays under the project's 800-line cap.
+    rulecontroller_baseline.cpp
     # RuleController authoring metadata + templates — pure read-only
     # helpers split out so rulecontroller.cpp stays under the project's
     # 800-line cap. The controller's Q_INVOKABLE entry points (matchFields,

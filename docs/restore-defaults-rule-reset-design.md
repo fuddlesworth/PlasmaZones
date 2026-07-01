@@ -5,11 +5,105 @@
 
 | | |
 |---|---|
-| **Status** | Draft / proposal |
+| **Status** | Both tracks IMPLEMENTED — **(A) per-page Reset+Discard for the Windows appearance page**; **(B) global Restore Defaults daemon-side reset** (`SettingsController::defaults()` → `RuleController::resetManagedDefaults()` over D-Bus → daemon-side `RuleAdaptor::resetManagedDefaults`). §5.3 below records the original callback proposal; the shipped code instead shares the baseline makers via `plasmazones_core/baselinerules.h` and has `RuleAdaptor` call them directly (no callback needed). |
 | **Author** | — |
-| **Date** | 2026-06-28 |
+| **Date** | 2026-06-28 (updated 2026-07-01) |
 | **Schema impact** | None (no config or rules-file schema change) |
 | **Origin** | Descoped item from the PR #699 audit ("everything is a rule" refactor) |
+
+---
+
+## 0. Update (2026-07-01) — chosen approach for the per-page feature
+
+This section supersedes the framing below for the **per-page Reset/Discard** work
+that is actually being built. Sections 1–9 remain the design for the **global**
+Restore Defaults path (track B), which is still deferred.
+
+### 0.1 Corrected premise: appearance edits are STAGED, not live
+
+The original doc reasoned from "`window-appearance`'s commit is a no-op." That is
+true only of `WindowAppearanceController` itself, which is stateless
+(`windowappearancecontroller.h`: `isDirty()` returns false, `apply()`/`discard()`
+are empty). It is **misleading**: appearance edits are NOT written live. Every
+Windows-page control routes through `RuleController` (`WindowAppearancePage.qml`
+binds `ruleController: settingsController.rulesPage`, reads `ruleJson(id)`, writes
+`updateRuleFromJson(...)`). Those edits mutate the in-memory `RuleController::m_model`
+and flip a dirty bit; nothing reaches the daemon's `rules.json` until the **global
+Save** pushes the staged set via `setAllRules`. So the Windows page is already a
+proper staged surface — it just happens to share one `RuleModel` with the Rules
+page, and its edits currently mark the **`rules`** page dirty.
+
+### 0.2 Scope decided this session
+
+- **Windows (`window-appearance`)** → per-page **Reset + Discard**, staged (commits
+  on Save, revertible before it), via the breadcrumb kebab.
+- **Rules** → **nothing** (no per-page Reset/Discard — user rules are the page's
+  content, not resettable "settings"; a full wipe would be a separate, explicit,
+  destructive action).
+- **Attribution** → split so appearance edits badge **Windows** and user-rule edits
+  badge **Rules**.
+
+### 0.3 Design (per-page, staged — track A)
+
+Because both pages stage into one shared `RuleController::m_model`, and the existing
+per-page Reset/Discard machinery is stage-only (mutates in-memory, defers to Save),
+the Windows reset/discard operate on `m_model` — **not** the daemon-side live
+primitive of §5 (that is for the global path, track B).
+
+1. **Shared baseline definitions.** Move `makeBaselineSkeleton` +
+   `makeBaseline{Border,TitleBar,Gap}Rule()` out of `daemon.cpp`'s anonymous
+   namespace into `src/core/baselinerules.{h,cpp}` (part of `plasmazones_core`,
+   which both the daemon and the settings app link, and which already links
+   `PhosphorRules` + `PhosphorCompositor` (`DecorationDefaults`) + `ConfigDefaults`
+   + `PhosphorI18n`). `daemon.cpp` includes it and drops its local copies —
+   single source of truth for the seeding path and the reset path (matches §5.2).
+
+2. **`RuleController` value-based split dirty (against a saved snapshot).** Keep the
+   existing `m_dirty` bit for the async apply/revert machinery; add
+   `m_savedRules = m_model.rules()` captured at each daemon sync (the `fetchAndLoad`
+   reply after `setRules`, and the successful `pushToDaemonAsync` reply). Derive two
+   value-based queries by comparing `m_model.rules()` to `m_savedRules`
+   (`Rule::operator==` exists):
+   - `baselinesDirty()` — any of the 3 managed baseline rules (by id) differs from
+     the snapshot → drives **window-appearance** dirty.
+   - `userRulesDirty()` — the ordered list of non-managed rules differs → drives
+     **rules** dirty.
+
+3. **Baseline-scoped ops on `RuleController`** (mutate `m_model` directly, then
+   `setDirty(baselinesDirty() || userRulesDirty())` to recompute the global bit):
+   - `resetBaselines()` → `m_model.updateRule(makeBaseline*Rule())` for the 3 ids
+     (restores factory match + actions, dropping any per-side gap actions the page
+     added — `updateRule` replaces the managed rule in place, no renormalize).
+   - `discardBaselineEdits()` → `m_model.updateRule(savedRuleById(id))` for the 3
+     ids, leaving user rules untouched.
+
+4. **`SettingsController` wiring.** A `reconcileRuleBackedDirty()` helper sets
+   `m_dirtyPages` membership for `window-appearance` (= `baselinesDirty()`) and
+   `rules` (= `userRulesDirty()`), emitting `dirtyPagesChanged` on a change. It
+   replaces the three existing `RuleController` handlers (`dirtyChanged` guarded by
+   `!m_loading && !m_saving`, plus `revertFinished`/`applyResult`) that today mark
+   only `"rules"`. `pageSupportsReset`/`pageSupportsDiscard` gain `window-appearance`;
+   `resetPage`/`discardPage("window-appearance")` call the baseline ops then
+   `reconcileRuleBackedDirty()` (explicit, because a scoped op that leaves the global
+   bit unchanged would not re-fire `dirtyChanged`). `isPageDirty` is unchanged — it
+   reads `m_dirtyPages`, which reconcile keeps accurate.
+
+5. **No new D-Bus, no daemon primitive** for track A. Save/Discard already flow
+   through the registered `RuleController` staging domain; Save pushes `setAllRules`,
+   Discard runs `revert()`.
+
+### 0.4 Track A vs track B (both shipped)
+
+Track A is the per-page (staged) affordance. Track B is the global
+**Restore Defaults** (`SettingsController::defaults()`) resetting the rule-backed
+appearance/gaps baselines — now implemented via a daemon-side, live-persisting
+primitive (`org.plasmazones.Rules.resetManagedDefaults()`), which `defaults()`
+invokes and then `revert()`s the model to pick up. `window-appearance` and `rules`
+stay excluded from `defaults()`'s dirty blanket-mark: the reset is live +
+reloaded, so those pages land clean rather than staged-dirty. The two tracks are
+independent; §2–§9 record the original track-B design (the shipped primitive lives
+on `RuleAdaptor` and reloads the store first — see §0.3 and the code — rather than
+the §5.3 callback).
 
 ---
 

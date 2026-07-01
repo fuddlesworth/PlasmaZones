@@ -3,6 +3,7 @@
 
 #include "ruleadaptor.h"
 
+#include "core/baselinerules.h"
 #include "core/logging.h"
 
 #include <PhosphorRules/Rule.h>
@@ -195,6 +196,48 @@ bool RuleAdaptor::setRulePriority(const QString& ruleId, int priority)
         return false;
     }
     return m_store->setRulePriority(id, priority);
+}
+
+void RuleAdaptor::resetManagedDefaults()
+{
+    if (!m_store) {
+        return;
+    }
+    // Reload from disk first so we operate on the CURRENTLY PERSISTED set. The
+    // global Restore Defaults calls Settings::reset() (which writes rules.json
+    // from the settings process to drop the per-mode DisableEngine rules) just
+    // before this; the daemon's borrowed rule store is NOT refreshed by the
+    // reloadSettings() that follows (only an owned store reloads there), so its
+    // in-memory set is stale. Without this reload, the setAllRules below would
+    // write those dropped disable rules back. load() is idempotent (emits only
+    // on a real change).
+    m_store->load();
+
+    // Policy A: reset ONLY the three managed baseline rules to their factory
+    // definitions; every user-authored rule is preserved. Build the merged set
+    // and persist it in one setAllRules (the load() above may already have emitted
+    // a rulesChanged if the on-disk set had changed, so this call can be the
+    // second broadcast — harmless, the consumers are idempotent).
+    QList<PhosphorRules::Rule> rules = m_store->ruleSet().rules();
+    const auto upsertBaseline = [&rules](const PhosphorRules::Rule& factory) {
+        for (PhosphorRules::Rule& existing : rules) {
+            if (existing.id == factory.id) {
+                existing = factory;
+                return;
+            }
+        }
+        // Seed if the baseline is somehow absent (e.g. a config predating it).
+        rules.append(factory);
+    };
+    upsertBaseline(makeBaselineBorderRule());
+    upsertBaseline(makeBaselineTitleBarRule());
+    upsertBaseline(makeBaselineGapRule());
+    // setAllRules returns false when the merged set could not be persisted to
+    // disk; every other mutator slot here propagates that bool, so surface it in
+    // the log rather than silently claiming a successful Restore Defaults.
+    if (!m_store->setAllRules(rules)) {
+        qCWarning(lcDbus) << "RuleAdaptor::resetManagedDefaults: failed to persist reset baseline rules";
+    }
 }
 
 } // namespace PlasmaZones

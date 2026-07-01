@@ -270,6 +270,12 @@ p_add_test(test_settings_animation_profile config/test_settings_animation_profil
 # keep each test file under the project's <800-line guideline.
 p_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
 
+# Companion test executable: per-page Discard/Reset primitives — committed
+# baseline capture, isKeyModified, discardKeys (revert-to-baseline) and
+# resetKeys (revert-to-default) with NOTIFY re-emission. Split from
+# test_settings_core to keep each test file under the <800-line guideline.
+p_add_test(test_settings_pagereset config/test_settings_pagereset.cpp)
+
 p_add_test(test_settings_validation config/test_settings_validation.cpp)
 
 p_add_test(test_settings_perscreen config/test_settings_perscreen.cpp)
@@ -820,6 +826,7 @@ add_executable(test_rule_controller
     # rulecontroller.cpp stays under the 800-line cap; the
     # controller's class definition spans both TUs.
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_lookups.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_baseline.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/ruletemplates.cpp
 )
@@ -833,6 +840,30 @@ target_link_libraries(test_rule_controller
         plasmazones_core
 )
 add_test(NAME test_rule_controller COMMAND test_rule_controller)
+
+# Per-page appearance Reset/Discard: shared baseline makers (in plasmazones_core)
+# + RuleController's baseline/user dirty split and resetBaselines/discardBaselineEdits.
+# Same RuleController TU set as test_rule_controller (the class spans several TUs).
+add_executable(test_baseline_reset
+    settings/test_baseline_reset.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulemodel.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_views.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_lookups.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_baseline.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/ruletemplates.cpp
+)
+target_link_libraries(test_baseline_reset
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        PhosphorRules::PhosphorRules
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_baseline_reset COMMAND test_baseline_reset)
 
 # Validation methods on D-Bus struct types - pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,

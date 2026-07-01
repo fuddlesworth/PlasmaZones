@@ -166,16 +166,7 @@ void Settings::load()
     // QVariant comparison is meaningful (Qt builtins, POD enums,
     // QVariantMap, QStringList). Custom Q_GADGETs without a registered
     // operator== will silently miscompare here.
-    const QMetaObject* mo = metaObject();
-    const int propCount = mo->propertyCount();
-    const int firstOwnProp = QObject::staticMetaObject.propertyCount();
-    QVector<QVariant> snapshot;
-    snapshot.resize(propCount);
-    for (int i = firstOwnProp; i < propCount; ++i) {
-        const QMetaProperty prop = mo->property(i);
-        if (prop.hasNotifySignal() && prop.isReadable())
-            snapshot[i] = prop.read(this);
-    }
+    const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
 
     // Per-mode disable lists are NOT Q_PROPERTYs (their getters take a Mode
     // argument, which Q_PROPERTY can't express). Snapshot them explicitly
@@ -253,18 +244,7 @@ void Settings::load()
     // Emit NOTIFY signals for every Q_PROPERTY whose value changed. load()
     // sets members directly (not via setters), so without this loop QML
     // bindings would never see reloaded values after discard / reset.
-    bool anyChanged = false;
-    for (int i = firstOwnProp; i < propCount; ++i) {
-        const QMetaProperty prop = mo->property(i);
-        if (!prop.hasNotifySignal() || !prop.isReadable())
-            continue;
-        const QVariant newValue = prop.read(this);
-        if (newValue != snapshot[i]) {
-            anyChanged = true;
-            const QMetaMethod notify = prop.notifySignal();
-            notify.invoke(this, Qt::DirectConnection);
-        }
-    }
+    const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
 
     // Per-mode disable lists: emit one signal per Mode whose list changed.
     // Mirrors the Q_PROPERTY loop above but keyed by (signal, mode) instead
@@ -305,6 +285,10 @@ void Settings::load()
 
     if (anyChanged || anyDisableChanged || perScreenChanged)
         Q_EMIT settingsChanged();
+
+    // The store now mirrors disk — refresh the committed baseline that
+    // per-page Discard reverts to and isKeyModified() compares against.
+    captureBaseline();
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
@@ -535,6 +519,105 @@ void Settings::save()
     saveVirtualScreenConfigs(m_configBackend);
 
     m_configBackend->sync();
+
+    // Disk now holds the flushed store — the just-saved values become the new
+    // committed baseline for per-page Discard / dirty checks.
+    captureBaseline();
+}
+
+// ── Per-page reset / discard support ────────────────────────────────────────
+
+QVector<QVariant> Settings::snapshotNotifyProperties() const
+{
+    // Index-aligned to the metaobject property table so the paired
+    // emitChangedNotifyProperties() can compare position-for-position.
+    // Inherited QObject properties (objectName) are skipped — only Settings'
+    // own NOTIFY-able readable properties participate.
+    const QMetaObject* mo = metaObject();
+    const int propCount = mo->propertyCount();
+    const int firstOwnProp = QObject::staticMetaObject.propertyCount();
+    QVector<QVariant> snapshot;
+    snapshot.resize(propCount);
+    for (int i = firstOwnProp; i < propCount; ++i) {
+        const QMetaProperty prop = mo->property(i);
+        if (prop.hasNotifySignal() && prop.isReadable())
+            snapshot[i] = prop.read(this);
+    }
+    return snapshot;
+}
+
+bool Settings::emitChangedNotifyProperties(const QVector<QVariant>& before)
+{
+    const QMetaObject* mo = metaObject();
+    const int propCount = mo->propertyCount();
+    const int firstOwnProp = QObject::staticMetaObject.propertyCount();
+    bool anyChanged = false;
+    for (int i = firstOwnProp; i < propCount; ++i) {
+        const QMetaProperty prop = mo->property(i);
+        if (!prop.hasNotifySignal() || !prop.isReadable())
+            continue;
+        const QVariant newValue = prop.read(this);
+        if (newValue != before.value(i)) {
+            anyChanged = true;
+            const QMetaMethod notify = prop.notifySignal();
+            notify.invoke(this, Qt::DirectConnection);
+        }
+    }
+    return anyChanged;
+}
+
+void Settings::captureBaseline()
+{
+    m_baseline.clear();
+    const auto& schema = m_store->schema();
+    for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+        QVariantMap groupMap;
+        for (const auto& def : it.value()) {
+            // readVariant returns the schema default for never-written keys, so
+            // the baseline always carries a concrete value per declared key.
+            groupMap.insert(def.key, m_store->readVariant(it.key(), def.key));
+        }
+        m_baseline.insert(it.key(), groupMap);
+    }
+}
+
+bool Settings::isKeyModified(const QString& group, const QString& key) const
+{
+    return m_store->readVariant(group, key) != m_baseline.value(group).value(key);
+}
+
+void Settings::discardKeys(const ConfigKeyList& keys)
+{
+    const QVector<QVariant> before = snapshotNotifyProperties();
+    for (const ConfigKey& gk : keys) {
+        // Only keys captured in the committed baseline (i.e. schema-declared) can
+        // be reverted; a mistyped manifest entry would otherwise write a default-
+        // constructed QVariant() over a live value. Skip it instead.
+        const auto groupIt = m_baseline.constFind(gk.first);
+        if (groupIt == m_baseline.constEnd())
+            continue;
+        const auto keyIt = groupIt->constFind(gk.second);
+        if (keyIt == groupIt->constEnd())
+            continue;
+        // Revert to the committed baseline, but only when it actually differs, so
+        // an unmodified key in the list is not needlessly re-written. write() runs
+        // the schema validator, so the reverted value lands in its canonical form
+        // (matching what a fresh load() would produce).
+        if (m_store->readVariant(gk.first, gk.second) != *keyIt)
+            m_store->write(gk.first, gk.second, *keyIt);
+    }
+    if (emitChangedNotifyProperties(before))
+        Q_EMIT settingsChanged();
+}
+
+void Settings::resetKeys(const ConfigKeyList& keys)
+{
+    const QVector<QVariant> before = snapshotNotifyProperties();
+    for (const ConfigKey& gk : keys) {
+        m_store->reset(gk.first, gk.second);
+    }
+    if (emitChangedNotifyProperties(before))
+        Q_EMIT settingsChanged();
 }
 
 // ── Shaders (PhosphorConfig::Store-backed) ──────────────────────────────────

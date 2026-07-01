@@ -82,6 +82,39 @@ private Q_SLOTS:
         QVERIFY2(tiledSpy.count() > 0, "focus change did not emit a retile to the compositor");
     }
 
+    void theater_focusBeforeTrack_seedsSpotlightOnAdd()
+    {
+        // Daemon-restart ordering: the effect re-notifies the active window during
+        // bring-up (windowFocused) BEFORE the window re-announce (windowOpened)
+        // lands. The focused id names a window the engine doesn't track yet, so the
+        // notification must be stashed and replayed once the window is added —
+        // otherwise Theater has no focused window and defaults the spotlight to
+        // index 0 until the user clicks around.
+        PhosphorScreens::FakeScreenProvider provider;
+        provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+        PhosphorScreens::ScreenManager manager(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        manager.start();
+
+        AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("DP-1")});
+        engine.setAlgorithm(QLatin1String("theater"));
+
+        // Focus arrives for a window that is not yet tracked (pre-announce).
+        engine.windowFocused(QStringLiteral("a2"), QStringLiteral("DP-1"));
+
+        // Windows are (re)announced afterwards. a2 is neither first nor last, so a
+        // spotlight on a2 can only come from the replayed focus, not a default.
+        engine.windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
+        engine.windowOpened(QStringLiteral("a2"), QStringLiteral("DP-1"));
+        engine.windowOpened(QStringLiteral("a3"), QStringLiteral("DP-1"));
+
+        PhosphorTiles::TilingState* d1 = engine.tilingStateForScreen(QStringLiteral("DP-1"));
+        QTRY_COMPARE(d1->calculatedZones().size(), 3);
+        QCOMPARE(d1->focusedWindow(), QStringLiteral("a2"));
+        QTRY_COMPARE(spotlightWindow(d1), QStringLiteral("a2"));
+    }
+
     void columns_focusChange_doesNotRetile()
     {
         PhosphorScreens::FakeScreenProvider provider;

@@ -76,15 +76,16 @@ ColumnLayout {
     }
 
     function _addLeafChild() {
-        // Derive the starting leaf from the controller's authoring metadata so
-        // QML never reconstructs the field/operator wire table itself. The
-        // "Add condition" button is gated on a non-empty list, so [0] is safe.
-        var firstField = matchEditor.matchFieldOptions[0];
-        var operators = matchEditor.controller.operatorsForField(firstField.value);
+        // Start the condition fully unselected so the user must pick a field
+        // rather than being handed the first field by default. MatchLeafEditor
+        // renders the "Choose…" field picker and hides the operator / value
+        // editors until a field is chosen (at which point its onSelected seeds
+        // a valid operator and a typed value). `_matchHasFilledLeaves` gates
+        // save on a filled leaf, so an unfilled placeholder can't be saved.
         var children = matchEditor._children.slice();
         children.push({
-            "field": firstField.wire,
-            "op": operators[0].wire,
+            "field": "",
+            "op": "",
             "value": ""
         });
         matchEditor._emitChildren(matchEditor._compositeKind, children);
@@ -261,8 +262,9 @@ ColumnLayout {
                             text: i18n("Add condition")
                             icon.name: "list-add"
                             flat: true
-                            // No registered match fields ⇒ nothing to seed a leaf
-                            // from; disable rather than dereferencing an empty list.
+                            // No registered match fields ⇒ nothing for the user
+                            // to ever pick; disable the button rather than adding
+                            // a condition whose field picker would be empty.
                             enabled: matchEditor.matchFieldOptions.length > 0
                             Accessible.name: i18n("Add a condition to this group")
                             onClicked: matchEditor._addLeafChild()

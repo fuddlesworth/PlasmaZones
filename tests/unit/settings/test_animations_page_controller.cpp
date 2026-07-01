@@ -275,6 +275,29 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
     }
 
+    // Backs the per-page "Reset to defaults" on the animation pages: clears
+    // every per-event override file, returning them to built-in defaults.
+    void clearAllOverrides_removesEveryOverrideFile()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        const QVariantMap profile{{QStringLiteral("duration"), 250},
+                                  {QStringLiteral("curve"), QStringLiteral("0.33,1,0.68,1")}};
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), profile));
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), profile));
+        QVERIFY(c.hasOverride(QStringLiteral("editor.snapIn")));
+        QVERIFY(c.hasOverride(QStringLiteral("osd.show")));
+
+        QCOMPARE(c.clearAllOverrides(), 2);
+        QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
+        QVERIFY(!c.hasOverride(QStringLiteral("osd.show")));
+        // Nothing left — a second sweep removes zero files.
+        QCOMPARE(c.clearAllOverrides(), 0);
+    }
+
     // ─── Effective resolution ─────────────────────────────────────────────
 
     void resolvedProfile_unsetReturnsLibraryDefaults()

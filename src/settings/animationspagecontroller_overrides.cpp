@@ -243,10 +243,26 @@ bool AnimationsPageController::clearOverride(const QString& path)
             m_pendingFileSnapshots.remove(filePath);
         return false;
     }
+    const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
-    if (wasPending != hasPendingChanges())
+    if (wasPending != nowPending)
         Q_EMIT pendingChangesChanged();
     return true;
+}
+
+int AnimationsPageController::clearAllOverrides()
+{
+    // Clear every built-in event path. clearOverride is a no-op (returns false)
+    // for paths without an override file, so only real overrides are removed and
+    // snapshotted; it emits overrideChanged / pendingChangesChanged per removed
+    // file so the pages refresh and the staged-changes state updates.
+    int cleared = 0;
+    const QStringList paths = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
+    for (const QString& path : paths) {
+        if (clearOverride(path))
+            ++cleared;
+    }
+    return cleared;
 }
 
 } // namespace PlasmaZones

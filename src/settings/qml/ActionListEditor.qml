@@ -29,25 +29,9 @@ ColumnLayout {
     required property var appSettings
     /// True when the current match expression references only context fields.
     /// When false, every context-domain action (SetEngineMode, layout/tiling,
-    /// DisableEngine) silently never fires — so the type-picker disables those
-    /// entries with a tooltip and the default "Add action" picks the first
-    /// **compatible** entry instead of always index 0.
+    /// DisableEngine) silently never fires — so the type-picker dims those
+    /// entries with a warning tooltip. Threaded through to every ActionRow.
     required property bool matchIsContextOnly
-    /// First entry in `actionTypeOptions` whose domain is compatible with the
-    /// current match. Used as the default for a freshly-added action so the
-    /// user is not handed an incompatible type by default. Falls back to the
-    /// first entry when nothing is compatible — that case is impossible today
-    /// (window-domain actions are always compatible) but the fallback keeps
-    /// the picker non-empty if the future schema ever introduces a domain
-    /// that is constrained both ways.
-    readonly property var _firstCompatibleType: {
-        for (var i = 0; i < editor.actionTypeOptions.length; ++i) {
-            var entry = editor.actionTypeOptions[i];
-            if (entry.domain !== "context" || editor.matchIsContextOnly)
-                return entry;
-        }
-        return editor.actionTypeOptions.length > 0 ? editor.actionTypeOptions[0] : undefined;
-    }
 
     signal actionsEdited(var updatedActions)
 
@@ -64,20 +48,18 @@ ColumnLayout {
     }
 
     function _append() {
-        // Guarded by the Add-action button's enabled state — there is always
-        // at least one registered type when this runs. Pre-seed every param
-        // declared by the type's descriptor via the controller's
-        // `defaultPayloadFor` so a freshly-added action carries a complete
-        // (if not yet user-filled) param set. The default type is the first
-        // **compatible** entry so a window-property match doesn't auto-stamp
-        // a context action the picker would then flag as invalid. Defaults
-        // live in the controller (not duplicated here) so a type switch in
-        // ActionRow and a fresh append hit the same seeding path — adding
-        // a new param kind only requires updating the C++ default map.
-        var typeEntry = editor._firstCompatibleType || editor.actionTypeOptions[0];
-        var action = editor.controller.defaultPayloadFor(typeEntry.value);
+        // Append a type-less placeholder so the user must explicitly choose
+        // the action from the picker. Auto-seeding a concrete type (the first
+        // compatible entry) made every new action silently default to — and
+        // look like — that type. The row renders just the "Choose…" picker
+        // until a type is picked; ActionRow's onSelected then seeds that
+        // type's param defaults via the controller's `defaultPayloadFor`
+        // (the same path a type switch uses). `canSave` gates on every action
+        // carrying a type, so an unfilled placeholder can't be saved.
         var next = editor.actions.slice();
-        next.push(action);
+        next.push({
+            "type": ""
+        });
         editor.actionsEdited(next);
     }
 

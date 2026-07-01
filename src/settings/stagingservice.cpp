@@ -365,6 +365,11 @@ void StagingService::flushVirtualScreensToDaemon()
     m_virtualScreenConfigs.clear();
 }
 
+void StagingService::clearVirtualScreenConfigs()
+{
+    m_virtualScreenConfigs.clear();
+}
+
 // ─── Quick layout slots ──────────────────────────────────────────────
 
 void StagingService::stageSnappingQuickSlot(int slotNumber, const QString& layoutId)
@@ -395,6 +400,16 @@ bool StagingService::stagedTilingQuickSlot(int slotNumber, QString& out) const
     }
     out = *it;
     return true;
+}
+
+void StagingService::clearSnappingQuickSlots()
+{
+    m_snappingQuickSlots.clear();
+}
+
+void StagingService::clearTilingQuickSlots()
+{
+    m_tilingQuickSlots.clear();
 }
 
 void StagingService::flushQuickSlotsToDaemon()

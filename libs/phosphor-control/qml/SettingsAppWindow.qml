@@ -26,6 +26,11 @@ Kirigami.ApplicationWindow {
     //* Optional content pinned to the RIGHT of the header-extras row (e.g. a
     //  status toggle), sharing the row with the centered headerExtras.
     property alias headerTrailing: headerTrailingLoader.sourceComponent
+    //* Optional content pinned to the RIGHT of the per-page breadcrumb row
+    //  (e.g. a page-scoped overflow/kebab menu). Sits on the same line as the
+    //  breadcrumbs, right-aligned; the row already reserves the leading space
+    //  via Breadcrumbs' Layout.fillWidth. Empty by default.
+    property alias breadcrumbTrailing: breadcrumbTrailingLoader.sourceComponent
     /** Alias onto the chrome Sidebar item so consumers can configure
      *  the two delegate slots and drive navigation:
      *
@@ -396,6 +401,24 @@ Kirigami.ApplicationWindow {
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignVCenter
                             controller: root.controller
+                        }
+
+                        // Page-scoped trailing slot (e.g. a per-page overflow
+                        // menu). Adopts its loaded item's implicit size when the
+                        // item is shown, and collapses to zero width both when
+                        // unfilled and when the loaded item hides itself (a
+                        // self-gating slot shown only on some pages). The slot is
+                        // collapsed via Layout.preferredWidth rather than the
+                        // Loader's own `visible`: reading `item.visible` returns
+                        // the child's EFFECTIVE visibility, so gating the Loader's
+                        // visible on it would force the child invisible (parent
+                        // suppression) and latch `item.visible` false forever, so
+                        // the slot could never reappear once first hidden.
+                        Loader {
+                            id: breadcrumbTrailingLoader
+
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: (item !== null && item.visible) ? item.implicitWidth : 0
                         }
                     }
 
