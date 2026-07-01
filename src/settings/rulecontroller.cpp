@@ -253,6 +253,13 @@ bool RuleController::pushToDaemonAsync(const QList<Rule>& rules)
         // may carry a CRUD edit that landed during the wire round-trip and was
         // NOT persisted). Baselining the pushed set keeps such an in-flight edit
         // correctly dirty (the applyResult → reconcile re-marks it).
+        //
+        // `rules` equals what the daemon persisted: pushToDaemonAsync above
+        // pre-validated with the SAME PhosphorRules::Rule::fromJson the daemon's
+        // setAllRules uses and bailed unless every rule was accepted, so the
+        // daemon cannot silently drop one (no client/daemon schema skew). As a
+        // backstop, the daemon's rulesChanged broadcast drives reload() →
+        // fetchAndLoad, which re-baselines from the daemon's authoritative set.
         m_savedRules = rules;
         setDirty(false);
         setDaemonChangedWhileDirty(false);

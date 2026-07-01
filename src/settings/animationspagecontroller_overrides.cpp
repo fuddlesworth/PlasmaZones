@@ -243,8 +243,9 @@ bool AnimationsPageController::clearOverride(const QString& path)
             m_pendingFileSnapshots.remove(filePath);
         return false;
     }
+    const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
-    if (wasPending != hasPendingChanges())
+    if (wasPending != nowPending)
         Q_EMIT pendingChangesChanged();
     return true;
 }

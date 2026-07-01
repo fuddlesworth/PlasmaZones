@@ -17,6 +17,7 @@
 #include "../core/logging.h"
 
 #include <QDebug>
+#include <QScopeGuard>
 
 namespace PlasmaZones {
 
@@ -339,9 +340,11 @@ void SettingsController::resetPage(const QString& page)
         if (m_animationsPage != nullptr) {
             const bool wasLoading = m_loading;
             m_loading = true;
+            const auto restoreLoading = qScopeGuard([this, wasLoading] {
+                m_loading = wasLoading;
+            });
             m_animationsPage->clearAllOverrides();
             m_settings.resetKeys(animationConfigKeys());
-            m_loading = wasLoading;
         }
         // isPageDirty(animation) is value-based (hasPendingChanges || any
         // animation key modified), so reconcilePageDirty syncs the active page's
@@ -418,10 +421,14 @@ void SettingsController::resetPage(const QString& page)
     // Suppress onSettingsPropertyChanged for the reset's NOTIFY storm — it
     // would otherwise mark the ACTIVE page dirty (which may differ from the
     // page being reset). We reconcile `page`'s dirty state explicitly below.
-    const bool wasLoading = m_loading;
-    m_loading = true;
-    m_settings.resetKeys(*it);
-    m_loading = wasLoading;
+    {
+        const bool wasLoading = m_loading;
+        m_loading = true;
+        const auto restoreLoading = qScopeGuard([this, wasLoading] {
+            m_loading = wasLoading;
+        });
+        m_settings.resetKeys(*it);
+    }
     // Resetting to defaults usually diverges from the saved baseline, so the
     // page normally becomes dirty (stage → Save/Discard). If the defaults
     // already matched the baseline it stays clean — reconcile handles both.
@@ -443,10 +450,14 @@ void SettingsController::discardPage(const QString& page)
     const auto& manifest = pageOwnedConfigKeys();
     const auto it = manifest.constFind(page);
     if (it != manifest.constEnd()) {
-        const bool wasLoading = m_loading;
-        m_loading = true;
-        m_settings.discardKeys(*it);
-        m_loading = wasLoading;
+        {
+            const bool wasLoading = m_loading;
+            m_loading = true;
+            const auto restoreLoading = qScopeGuard([this, wasLoading] {
+                m_loading = wasLoading;
+            });
+            m_settings.discardKeys(*it);
+        }
         // Every owned key is back at the committed baseline, so the page is clean.
         reconcilePageDirty(page);
         return;
@@ -507,10 +518,14 @@ void SettingsController::discardPage(const QString& page)
         if (m_animationsPage != nullptr) {
             m_animationsPage->revertPending();
         }
-        const bool wasLoading = m_loading;
-        m_loading = true;
-        m_settings.discardKeys(animationConfigKeys());
-        m_loading = wasLoading;
+        {
+            const bool wasLoading = m_loading;
+            m_loading = true;
+            const auto restoreLoading = qScopeGuard([this, wasLoading] {
+                m_loading = wasLoading;
+            });
+            m_settings.discardKeys(animationConfigKeys());
+        }
         // revertPending() left hasPendingChanges() false; clear every animation
         // leaf's m_dirtyPages marker so the global needsSave drops the entries
         // the pendingChangesChanged handler had attributed to the tree.
