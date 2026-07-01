@@ -6,6 +6,7 @@
 #include <PhosphorRendering/phosphorrendering_export.h>
 
 #include <PhosphorShaders/BaseUniforms.h>
+#include <PhosphorShaders/IUboProfile.h>
 #include <PhosphorShaders/IUniformExtension.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 
@@ -77,8 +78,9 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * @brief QSGRenderNode for fullscreen-quad shader rendering via Qt RHI (Vulkan / OpenGL)
  *
  * Generalized render node extracted from Phosphor's ZoneShaderNodeRhi.
- * Manages a Shadertoy-compatible UBO (BaseUniforms), multipass buffer system,
- * texture bindings (audio, user, wallpaper, depth), and shader baking.
+ * Manages a Shadertoy-compatible UBO (a profile-supplied layout, BaseUniforms
+ * by default), multipass buffer system, texture bindings (audio, user,
+ * wallpaper, depth), and shader baking.
  *
  * Application-specific UBO data is appended via IUniformExtension.
  * Application-specific texture bindings use setExtraBinding() / removeExtraBinding().
@@ -114,7 +116,17 @@ constexpr bool isConsumerBinding(int binding) noexcept
 class PHOSPHORRENDERING_EXPORT ShaderNodeRhi : public QSGRenderNode
 {
 public:
-    explicit ShaderNodeRhi(QQuickItem* item);
+    /// @param item    Owning QQuickItem (must outlive the node until
+    ///                invalidateItem() is called).
+    /// @param profile Pluggable UBO profile. The default (nullptr) installs a
+    ///                BaseUniformProfile so every existing caller — including
+    ///                ZoneShaderNodeRhi's `ShaderNodeRhi(item)` forward — keeps
+    ///                the legacy overlay/animation UBO (BaseUniforms, currently
+    ///                672 bytes) unchanged. The surface-decoration runtime passes
+    ///                a SurfaceUniformProfile here to reuse the engine with the
+    ///                leaner surface UBO. UBO size is always profile-defined
+    ///                (m_uboProfile->baseSize()), never hard-coded.
+    explicit ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::IUboProfile> profile = nullptr);
     ~ShaderNodeRhi() override;
 
     /**
@@ -158,6 +170,25 @@ public:
     // ── Custom Parameters (indexed API) ────────────────────────────────
     void setCustomParams(int index, const QVector4D& params);
     void setCustomColor(int index, const QColor& color);
+
+    // ── Surface-only state ─────────────────────────────────────────────
+    /**
+     * @brief Per-surface inputs consumed by a SurfaceUniformProfile.
+     *
+     * These feed the surface-only fields of UboFrameState that a surface UBO
+     * profile reads (opacity, logical→device scale, focus, surface/frame
+     * geometry in device px). A BaseUniformProfile ignores them, so the
+     * overlay/animation path is unaffected — the members default to the same
+     * values as UboFrameState. A border or rounded-corner pack needs the real
+     * surface/frame geometry to know where its edges are, so the host
+     * (SurfaceShaderItem) must push these each frame from updatePaintNode.
+     */
+    void setSurfaceOpacity(float opacity);
+    void setSurfaceScale(float scale);
+    void setSurfaceFocused(bool focused);
+    void setSurfaceSize(float width, float height);
+    void setSurfaceFrameTopLeft(float x, float y);
+    void setSurfaceFrameSize(float width, float height);
 
     // ── App Fields (consumer escape hatch in BaseUniforms) ─────────────
     /**
@@ -298,7 +329,10 @@ private:
     bool ensureBufferTarget();
     bool ensureDummyChannelResources(QRhi* rhi);
     bool ensureBufferSampler(QRhi* rhi, int index);
-    void syncBaseUniforms();
+    /// Snapshot the node's live members into a UboFrameState and hand it to the
+    /// installed UBO profile's fill(). @p rhi supplies the NDC Y-orientation
+    /// the profile folds into qt_Matrix.
+    void syncBaseUniforms(QRhi* rhi);
     void uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb);
     /**
      * Append the extension region to a resource update batch.
@@ -454,13 +488,20 @@ private:
     bool m_sceneDataDirty = true; ///< Scene header (resolution, mouse, date, params) changed
     bool m_appFieldsDirty = false; ///< Only appField0/appField1 changed (8-byte upload, not full scene header)
     bool m_didFullUploadOnce = false;
-    /// Epoch-ms of the last iDate recomputation. Throttles
-    /// QDateTime::currentDateTime() to once per second during mouse-driven
-    /// scene-header churn (iDate only advances at 1 Hz anyway).
-    qint64 m_lastDateRefreshMs = 0;
 
-    // ── Base Uniforms ──────────────────────────────────────────────────
-    PhosphorShaders::BaseUniforms m_baseUniforms = {};
+    // ── UBO Profile (pluggable uniform buffer concern) ─────────────────
+    /// Owns the concrete UBO struct, its byte size, per-frame fill, and the
+    /// dirty-region dispatch. Installed by the ctor (BaseUniformProfile by
+    /// default). The iDate 1 Hz throttle's lastDateRefreshMs lives inside the
+    /// profile now.
+    std::unique_ptr<PhosphorShaders::IUboProfile> m_uboProfile;
+
+    /// Node-side mirrors of the consumer escape-hatch int slots. The profile
+    /// owns the authoritative bytes (and may not expose a getter), so these
+    /// mirrors provide the cheap value-changed gate setAppField0/1 need to
+    /// avoid dirtying the UBO when nothing actually changed.
+    int m_appField0 = 0;
+    int m_appField1 = 0;
 
     // Full-precision elapsed seconds (double). Split into iTime (wrapped lo) +
     // iTimeHi (wrap offset) at upload.
@@ -480,6 +521,16 @@ private:
     std::atomic<float> m_cachedWidth{0.0f};
     std::atomic<float> m_cachedHeight{0.0f};
     QPointF m_mousePosition;
+
+    // ── Surface-only state (consumed by a SurfaceUniformProfile; ignored by
+    //    the BaseUniformProfile). Defaults mirror UboFrameState so the overlay
+    //    path is byte-identical whether or not these are ever touched. ──
+    float m_surfaceOpacity = 1.0f;
+    float m_surfaceScale = 1.0f;
+    bool m_surfaceFocused = false;
+    float m_surfaceSize[2] = {0.0f, 0.0f};
+    float m_surfaceFrameTopLeft[2] = {0.0f, 0.0f};
+    float m_surfaceFrameSize[2] = {0.0f, 0.0f};
 
     // ── Custom Parameters (indexed) ────────────────────────────────────
     std::array<QVector4D, kMaxCustomParams> m_customParams;

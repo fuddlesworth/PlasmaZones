@@ -196,6 +196,17 @@ uniform sampler2D uTexture0;
 uniform sampler2D uTexture1;
 uniform sampler2D uTexture2;
 uniform sampler2D uTexture3;
+// Surface-layer stack output (kwin path). When `iHasSurfaceLayer != 0`,
+// `surfaceColor()` samples this in place of `uTexture0`: it holds the window
+// with its surface layers (border / rounded corners, future tint, ...) already
+// composited, so an animation runs OVER the layered surface and the border
+// does not disappear when the animation shader takes the draw slot. The
+// kwin-effect renders it (PlasmaZonesEffect::renderSurfaceChain) and binds it
+// to a dedicated unit; it shares uTexture0's bottom-origin layout, so the same
+// Y-flip applies when sampling. Default unit / `iHasSurfaceLayer == 0` leaves
+// the unlayered path untouched.
+uniform sampler2D uSurfaceLayer;
+uniform int iHasSurfaceLayer;
 
 #else
 
@@ -347,7 +358,17 @@ vec4 surfaceColor(vec2 uv) {
     // surface through this helper (directly or via bmw_compat's
     // `getInputColor`), so the dim propagates uniformly without per-shader
     // edits.
-    return texture(uTexture0, vec2(t.x, 1.0 - t.y)) * iWindowOpacity;
+    vec2 fc = vec2(t.x, 1.0 - t.y);
+    // Surface-layer redirect: when the window has an active surface-layer stack
+    // (border / rounded corners, ...), sample the pre-composited layered surface
+    // so the animation runs over it. `uSurfaceLayer` shares uTexture0's
+    // bottom-origin layout and premultiplied alpha, so the flip + opacity dim
+    // are identical. Falls back to the live redirected surface when the window
+    // has no layers (`iHasSurfaceLayer == 0`).
+    if (iHasSurfaceLayer != 0) {
+        return texture(uSurfaceLayer, fc) * iWindowOpacity;
+    }
+    return texture(uTexture0, fc) * iWindowOpacity;
 #else
     // The daemon's Qt-RHI texture is top-origin (Y-down) — no flip. The
     // daemon path has no window-rule opacity (SetOpacity is a compositor

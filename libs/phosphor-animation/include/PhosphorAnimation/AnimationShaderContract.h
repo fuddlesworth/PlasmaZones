@@ -331,6 +331,26 @@ inline constexpr const char* kIToRect = "iToRect";
 /// fallback is bound when no snapshot was captured.
 inline constexpr const char* kUOldWindow = "uOldWindow";
 
+/// `sampler2D uSurfaceLayer` — COMPOSITOR PATH ONLY. The window's surface
+/// after the surface-layer stack (border / rounded corners, and any future
+/// layers such as a colour tint) has been composited into an FBO. When
+/// `iHasSurfaceLayer != 0`, `surfaceColor()` samples THIS in place of the bare
+/// live `uTexture0`, so an animation composites OVER the layered surface
+/// instead of the raw window — the border (and any other surface layer) stays
+/// visible for the whole transition instead of vanishing the instant the
+/// animation shader takes the draw slot. Bound to a dedicated texture unit on
+/// the kwin path; produced by `PlasmaZonesEffect::renderSurfaceChain`. Absent
+/// on the daemon path (the daemon composes its own multipass surface).
+inline constexpr const char* kUSurfaceLayer = "uSurfaceLayer";
+
+/// `int iHasSurfaceLayer` — COMPOSITOR PATH ONLY. 1 when `uSurfaceLayer` holds
+/// a valid layered surface for this frame (the window has ≥1 active surface
+/// layer), 0 otherwise. `surfaceColor()` branches on it so a window with no
+/// surface layers animates the bare `uTexture0` exactly as before. Pushed every
+/// frame by the kwin-effect; defaults to 0 (GL zero-init), so a shader that
+/// never receives it falls back to the unlayered path.
+inline constexpr const char* kIHasSurfaceLayer = "iHasSurfaceLayer";
+
 /// `float iWindowOpacity` — the window's effective rule-resolved opacity
 /// in [0.0, 1.0], COMPOSITOR PATH ONLY. A `SetOpacity` rule must
 /// dim the window for the whole duration of a transition, but the custom
