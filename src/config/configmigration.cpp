@@ -3346,6 +3346,12 @@ constexpr QLatin1String kV4AutoOuterGapTop{"AutotileOuterGapTop"};
 constexpr QLatin1String kV4AutoOuterGapBottom{"AutotileOuterGapBottom"};
 constexpr QLatin1String kV4AutoOuterGapLeft{"AutotileOuterGapLeft"};
 constexpr QLatin1String kV4AutoOuterGapRight{"AutotileOuterGapRight"};
+// Per-screen autotile GEOMETRY keys (disk form, "Autotile"-prefixed) that fold
+// onto per-monitor tiling rules in v5. Algorithm is intentionally NOT here — the
+// per-screen algorithm dedup is a later step; it stays in the config store for now.
+constexpr QLatin1String kV4AutoSplitRatio{"AutotileSplitRatio"};
+constexpr QLatin1String kV4AutoMasterCount{"AutotileMasterCount"};
+constexpr QLatin1String kV4AutoMaxWindows{"AutotileMaxWindows"};
 
 // ── Frozen v4 compile defaults ─────────────────────────────────────────────
 // Sourced from the (now-deleted) ConfigDefaults accessors:
@@ -3359,11 +3365,66 @@ constexpr bool kV4DefUseSystemColors = true;
 constexpr int kV4DefInnerGap = 8;
 constexpr int kV4DefOuterGap = 8;
 constexpr bool kV4DefUsePerSideOuterGap = false;
+// Per-screen tiling-geometry v4 defaults (mirror PhosphorTiles::AutotileDefaults:
+// DefaultSplitRatio 0.5, DefaultMasterCount 1, DefaultMaxWindows 5). Pinned here
+// so a clean per-screen entry (everything at default) stashes nothing.
+constexpr double kV4DefSplitRatio = 0.5;
+constexpr int kV4DefMasterCount = 1;
+constexpr int kV4DefMaxWindows = 5;
+
+// Per-screen ZONE-SELECTOR category + bare leaf keys. Stored nested at
+// PerScreen.ZoneSelector.<screenId> (the "ZoneSelector:" runtime group prefix
+// maps to the "ZoneSelector" JSON category, keys bare — no prefix, unlike the
+// autotile side). The whole category folds onto per-monitor zone-selector rules.
+constexpr QLatin1String kV4PerScreenZoneSelector{"ZoneSelector"};
+constexpr QLatin1String kV4ZsPosition{"Position"};
+constexpr QLatin1String kV4ZsLayoutMode{"LayoutMode"};
+constexpr QLatin1String kV4ZsSizeMode{"SizeMode"};
+constexpr QLatin1String kV4ZsMaxRows{"MaxRows"};
+constexpr QLatin1String kV4ZsPreviewWidth{"PreviewWidth"};
+constexpr QLatin1String kV4ZsPreviewHeight{"PreviewHeight"};
+constexpr QLatin1String kV4ZsPreviewLockAspect{"PreviewLockAspect"};
+constexpr QLatin1String kV4ZsGridColumns{"GridColumns"};
+constexpr QLatin1String kV4ZsTriggerDistance{"TriggerDistance"};
+// Frozen v4 zone-selector defaults (mirror ConfigDefaults: position 1, layoutMode
+// 0, sizeMode 0, maxRows 4, previewWidth 180, previewHeight 101, lockAspect true,
+// gridColumns 5, triggerDistance 50). A per-screen value equal to its default
+// stashes nothing (the global default already applies).
+constexpr int kV4DefZsPosition = 1;
+constexpr int kV4DefZsLayoutMode = 0;
+constexpr int kV4DefZsSizeMode = 0;
+constexpr int kV4DefZsMaxRows = 4;
+constexpr int kV4DefZsPreviewWidth = 180;
+constexpr int kV4DefZsPreviewHeight = 101;
+constexpr bool kV4DefZsPreviewLockAspect = true;
+constexpr int kV4DefZsGridColumns = 5;
+constexpr int kV4DefZsTriggerDistance = 50;
+
+// Animation min-size window-filter keys (Animations.WindowFiltering group, dot-
+// path). The two min-size knobs fold onto ExcludeAnimations rules; the two
+// boolean toggles in the same group (transient / notifications-OSD) STAY in
+// config (their effect-side type-exclusion semantics don't map to ordinary
+// exclusion rules). Default 0 = off.
+constexpr QLatin1String kV4AnimWindowFilteringGroup{"Animations.WindowFiltering"};
+constexpr QLatin1String kV4AnimMinWidth{"MinimumWindowWidth"};
+constexpr QLatin1String kV4AnimMinHeight{"MinimumWindowHeight"};
 
 // ── Stash shape: normalized field + section names ──────────────────────────
 constexpr QLatin1String kStashSnapping{"snapping"};
 constexpr QLatin1String kStashTiling{"tiling"};
 constexpr QLatin1String kStashPerScreen{"perScreen"};
+// Per-screen tiling-geometry stash section: { <screenId>: { splitRatio, masterCount,
+// maxWindows } }. Distinct from kStashTiling (which is the GLOBAL tiling-mode
+// appearance stash).
+constexpr QLatin1String kStashPerScreenTiling{"perScreenTiling"};
+// Per-screen zone-selector stash section: { <screenId>: { Position, LayoutMode,
+// … } }. The stash field names ARE the ZoneSelectorConfigKey / property tokens,
+// so the finalizer builds SetZoneSelectorProperty actions with property = field.
+constexpr QLatin1String kStashZoneSelector{"zoneSelector"};
+// Animation min-size stash section: { minWidth?, minHeight? }.
+constexpr QLatin1String kStashAnimMinSize{"animMinSize"};
+constexpr QLatin1String kFieldAnimMinWidth{"minWidth"};
+constexpr QLatin1String kFieldAnimMinHeight{"minHeight"};
 constexpr QLatin1String kFieldShowBorder{"showBorder"};
 constexpr QLatin1String kFieldBorderWidth{"borderWidth"};
 constexpr QLatin1String kFieldBorderRadius{"borderRadius"};
@@ -3377,6 +3438,10 @@ constexpr QLatin1String kFieldOuterGapTop{"outerGapTop"};
 constexpr QLatin1String kFieldOuterGapBottom{"outerGapBottom"};
 constexpr QLatin1String kFieldOuterGapLeft{"outerGapLeft"};
 constexpr QLatin1String kFieldOuterGapRight{"outerGapRight"};
+// Per-screen tiling-geometry normalized field names.
+constexpr QLatin1String kFieldSplitRatio{"splitRatio"};
+constexpr QLatin1String kFieldMasterCount{"masterCount"};
+constexpr QLatin1String kFieldMaxWindows{"maxWindows"};
 
 // ── migrate-side gating helpers ────────────────────────────────────────────
 // Insert the normalized field into @p out only when the source key is present
@@ -3386,6 +3451,17 @@ void stashIntIfDiffers(const QJsonObject& grp, QLatin1String key, int def, QJson
     const QJsonValue v = grp.value(key);
     if (v.isDouble() && v.toInt() != def) {
         out.insert(field, v.toInt());
+    }
+}
+
+// Double variant of stashIntIfDiffers for the split ratio (a [0.1, 0.9]
+// fraction). Fuzzy-compares against the default so a stored 0.5 is treated as
+// "at default" and contributes nothing.
+void stashDoubleIfDiffers(const QJsonObject& grp, QLatin1String key, double def, QJsonObject& out, QLatin1String field)
+{
+    const QJsonValue v = grp.value(key);
+    if (v.isDouble() && !qFuzzyCompare(v.toDouble(), def)) {
+        out.insert(field, v.toDouble());
     }
 }
 
@@ -3541,6 +3617,55 @@ QList<PhosphorRules::RuleAction> actionsFromFields(const QJsonObject& fields)
     return actions;
 }
 
+// Convert a normalized per-screen tiling-geometry stash field object into the
+// matching context tiling actions. Split ratio is a [0.1, 0.9] fraction; master
+// count is [1, 5]; max windows is [1, 12]. Values are CLAMPED to the
+// rule-action validators' ranges: a single out-of-range value would fail
+// Rule::isValid(), addRule would then silently drop the whole rule while the
+// stash is stripped unconditionally — losing every tiling override for that
+// screen. Clamping preserves the override at the boundary, mirroring
+// actionsFromFields' gap/border clamps.
+QList<PhosphorRules::RuleAction> tilingActionsFromFields(const QJsonObject& fields)
+{
+    namespace AT = PhosphorRules::ActionType;
+    QList<PhosphorRules::RuleAction> actions;
+    if (fields.value(kFieldSplitRatio).isDouble()) {
+        actions.append(makeValueAction(AT::SetSplitRatio, qBound(0.1, fields.value(kFieldSplitRatio).toDouble(), 0.9)));
+    }
+    if (fields.value(kFieldMasterCount).isDouble()) {
+        actions.append(makeValueAction(AT::SetMasterCount, qBound(1, fields.value(kFieldMasterCount).toInt(), 5)));
+    }
+    if (fields.value(kFieldMaxWindows).isDouble()) {
+        actions.append(makeValueAction(AT::SetMaxWindows, qBound(1, fields.value(kFieldMaxWindows).toInt(), 12)));
+    }
+    return actions;
+}
+
+// Convert a normalized per-screen zone-selector stash field object into the
+// generic SetZoneSelectorProperty actions (one per property). The stash field
+// name IS the property token (== ZoneSelectorConfigKey name), so it maps 1:1 to
+// the action's `property` param. Each candidate action is validated through the
+// ActionRegistry and SKIPPED if the descriptor rejects it (e.g. a hand-edited
+// out-of-range config value) — skipping one property falls back to the global
+// default, whereas emitting an invalid action would fail Rule::isValid() and
+// drop the whole rule (losing every zone-selector override for that screen).
+QList<PhosphorRules::RuleAction> zoneSelectorActionsFromFields(const QJsonObject& fields)
+{
+    namespace AT = PhosphorRules::ActionType;
+    namespace AP = PhosphorRules::ActionParam;
+    QList<PhosphorRules::RuleAction> actions;
+    for (auto it = fields.constBegin(); it != fields.constEnd(); ++it) {
+        PhosphorRules::RuleAction a;
+        a.type = QString(AT::SetZoneSelectorProperty);
+        a.params.insert(QString(AP::Property), it.key());
+        a.params.insert(QString(AP::Value), it.value());
+        if (PhosphorRules::ActionRegistry::instance().validate(a)) {
+            actions.append(a);
+        }
+    }
+    return actions;
+}
+
 // Non-managed override rule seed priorities. These mirror
 // RuleTemplates::kAdvancedBandBase / kContextBandBase
 // (src/settings/ruletemplates.h) — duplicated because that header lives
@@ -3553,6 +3678,9 @@ QList<PhosphorRules::RuleAction> actionsFromFields(const QJsonObject& fields)
 // re-stamp.
 constexpr int kAppearanceOverridePriority = 500;
 constexpr int kPerScreenGapPriority = 300;
+constexpr int kPerScreenTilingPriority = 300;
+constexpr int kPerScreenZoneSelectorPriority = 300;
+constexpr int kAnimationFilterPriority = 400;
 
 } // namespace
 
@@ -3582,6 +3710,12 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
     // perScreenGapRuleId). When both modes carry a differing value for the
     // same screen the autotile value wins (processed second).
     QJsonObject perScreenStash;
+    // Per-screen tiling geometry (split ratio / master count / max windows) folds
+    // onto its own per-monitor rules, separate from the gap stash above.
+    QJsonObject perScreenTilingStash;
+    // Per-screen zone-selector (the whole ZoneSelector category) folds onto its
+    // own per-monitor rules; the category is removed from config wholesale.
+    QJsonObject perScreenZsStash;
     QJsonObject perScreen = root.value(kV4PerScreen).toObject();
     if (!perScreen.isEmpty()) {
         const auto mergeInto = [&perScreenStash](const QString& screenId, const QJsonObject& gaps) {
@@ -3627,12 +3761,47 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
                                       kV4AutoOuterGapBottom, kV4AutoOuterGapLeft, kV4AutoOuterGapRight}) {
                 scr.remove(key);
             }
+            // Split ratio / master count / max windows also fold onto per-screen
+            // rules in v5, leaving Algorithm + behavioural keys live in the config
+            // store. Stash only differing-from-default values, then strip them.
+            QJsonObject tilingFields;
+            stashDoubleIfDiffers(scr, kV4AutoSplitRatio, kV4DefSplitRatio, tilingFields, kFieldSplitRatio);
+            stashIntIfDiffers(scr, kV4AutoMasterCount, kV4DefMasterCount, tilingFields, kFieldMasterCount);
+            stashIntIfDiffers(scr, kV4AutoMaxWindows, kV4DefMaxWindows, tilingFields, kFieldMaxWindows);
+            if (!tilingFields.isEmpty()) {
+                perScreenTilingStash.insert(screenId, tilingFields);
+            }
+            for (QLatin1String key : {kV4AutoSplitRatio, kV4AutoMasterCount, kV4AutoMaxWindows}) {
+                scr.remove(key);
+            }
             if (scr.isEmpty()) {
                 autoCat.remove(screenId);
             } else {
                 autoCat.insert(screenId, scr);
             }
         }
+
+        // Zone-selector per-screen category (bare keys). Unlike gaps/tiling, the
+        // ENTIRE category folds onto rules, so it is removed wholesale — stash only
+        // the differing-from-default values (a default value needs no rule).
+        const QJsonObject zsCat = perScreen.value(kV4PerScreenZoneSelector).toObject();
+        for (const QString& screenId : zsCat.keys()) {
+            const QJsonObject scr = zsCat.value(screenId).toObject();
+            QJsonObject fields;
+            stashIntIfDiffers(scr, kV4ZsPosition, kV4DefZsPosition, fields, kV4ZsPosition);
+            stashIntIfDiffers(scr, kV4ZsLayoutMode, kV4DefZsLayoutMode, fields, kV4ZsLayoutMode);
+            stashIntIfDiffers(scr, kV4ZsSizeMode, kV4DefZsSizeMode, fields, kV4ZsSizeMode);
+            stashIntIfDiffers(scr, kV4ZsMaxRows, kV4DefZsMaxRows, fields, kV4ZsMaxRows);
+            stashIntIfDiffers(scr, kV4ZsPreviewWidth, kV4DefZsPreviewWidth, fields, kV4ZsPreviewWidth);
+            stashIntIfDiffers(scr, kV4ZsPreviewHeight, kV4DefZsPreviewHeight, fields, kV4ZsPreviewHeight);
+            stashBoolIfDiffers(scr, kV4ZsPreviewLockAspect, kV4DefZsPreviewLockAspect, fields, kV4ZsPreviewLockAspect);
+            stashIntIfDiffers(scr, kV4ZsGridColumns, kV4DefZsGridColumns, fields, kV4ZsGridColumns);
+            stashIntIfDiffers(scr, kV4ZsTriggerDistance, kV4DefZsTriggerDistance, fields, kV4ZsTriggerDistance);
+            if (!fields.isEmpty()) {
+                perScreenZsStash.insert(screenId, fields);
+            }
+        }
+        perScreen.remove(kV4PerScreenZoneSelector);
 
         // Write back the pruned per-screen categories.
         if (snapCat.isEmpty()) {
@@ -3653,6 +3822,30 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
     }
     if (!perScreenStash.isEmpty()) {
         stash.insert(kStashPerScreen, perScreenStash);
+    }
+    if (!perScreenTilingStash.isEmpty()) {
+        stash.insert(kStashPerScreenTiling, perScreenTilingStash);
+    }
+    if (!perScreenZsStash.isEmpty()) {
+        stash.insert(kStashZoneSelector, perScreenZsStash);
+    }
+
+    // ── Animation min-size window filtering → ExcludeAnimations rules ────────
+    // Only the two min-size knobs fold; the boolean transient / notifications-OSD
+    // toggles in the same group stay in config. Default 0 = off, so a 0 value
+    // stashes nothing (no rule).
+    {
+        const QJsonObject wf = groupObjectAtPath(root, QString(kV4AnimWindowFilteringGroup));
+        QJsonObject animMinSize;
+        stashIntIfDiffers(wf, kV4AnimMinWidth, 0, animMinSize, kFieldAnimMinWidth);
+        stashIntIfDiffers(wf, kV4AnimMinHeight, 0, animMinSize, kFieldAnimMinHeight);
+        if (!animMinSize.isEmpty()) {
+            stash.insert(kStashAnimMinSize, animMinSize);
+        }
+        // Strip only the two min-size keys; the transient / notifications-OSD
+        // toggles survive in the group.
+        stripKeysAtPath(root, {QStringLiteral("Animations"), QStringLiteral("WindowFiltering")},
+                        {kV4AnimMinWidth, kV4AnimMinHeight});
     }
 
     // ── Remove the consumed v4 global appearance / gap keys ────────────────
@@ -3782,6 +3975,93 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
         rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QVariant(canonicalScreenId));
         rule.actions = actions;
         newRules.append(rule);
+    }
+
+    // Per-screen tiling-geometry overrides: one ScreenId-scoped rule per monitor,
+    // namespaced under perScreenTilingRuleNamespaceId (distinct from the gap
+    // namespace) so it is the SAME id Settings::perScreenTilingRuleOverrides reads
+    // and the settings UI find-or-creates. A separate rule from the gap rule for
+    // the same screen — both match ScreenId but fill different slots.
+    const QJsonObject perScreenTiling = stash.value(kStashPerScreenTiling).toObject();
+    for (auto it = perScreenTiling.constBegin(); it != perScreenTiling.constEnd(); ++it) {
+        const QString screenId = it.key();
+        if (screenId.isEmpty()) {
+            continue;
+        }
+        const QList<PhosphorRules::RuleAction> actions = tilingActionsFromFields(it.value().toObject());
+        if (actions.isEmpty()) {
+            continue;
+        }
+        const QString canonicalScreenId = Settings::canonicalPerScreenKey(screenId);
+        Rule rule;
+        rule.id = QUuid::createUuidV5(ConfigDefaults::perScreenTilingRuleNamespaceId(), canonicalScreenId.toUtf8());
+        rule.name = QStringLiteral("Tiling (%1)").arg(canonicalScreenId);
+        rule.enabled = true;
+        rule.managed = false;
+        rule.priority = kPerScreenTilingPriority;
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QVariant(canonicalScreenId));
+        rule.actions = actions;
+        newRules.append(rule);
+    }
+
+    // Per-screen zone-selector overrides: one ScreenId-scoped rule per monitor,
+    // namespaced under perScreenZoneSelectorRuleNamespaceId (distinct from the gap
+    // and tiling namespaces), carrying one SetZoneSelectorProperty action per
+    // differing property.
+    const QJsonObject perScreenZs = stash.value(kStashZoneSelector).toObject();
+    for (auto it = perScreenZs.constBegin(); it != perScreenZs.constEnd(); ++it) {
+        const QString screenId = it.key();
+        if (screenId.isEmpty()) {
+            continue;
+        }
+        const QList<PhosphorRules::RuleAction> actions = zoneSelectorActionsFromFields(it.value().toObject());
+        if (actions.isEmpty()) {
+            continue;
+        }
+        const QString canonicalScreenId = Settings::canonicalPerScreenKey(screenId);
+        Rule rule;
+        rule.id =
+            QUuid::createUuidV5(ConfigDefaults::perScreenZoneSelectorRuleNamespaceId(), canonicalScreenId.toUtf8());
+        rule.name = QStringLiteral("Zone selector (%1)").arg(canonicalScreenId);
+        rule.enabled = true;
+        rule.managed = false;
+        rule.priority = kPerScreenZoneSelectorPriority;
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QVariant(canonicalScreenId));
+        rule.actions = actions;
+        newRules.append(rule);
+    }
+
+    // Animation min-size filters: one non-managed ExcludeAnimations rule per axis
+    // whose match carries the threshold (Width / Height LessThan N). A 0 (or
+    // absent) value is "off" and produces no rule.
+    {
+        const QJsonObject animMinSize = stash.value(kStashAnimMinSize).toObject();
+        const auto addMinSizeRule = [&newRules](const QJsonValue& v, Field field, const QUuid& id,
+                                                const QString& name) {
+            if (!v.isDouble()) {
+                return;
+            }
+            const int n = v.toInt();
+            if (n <= 0) {
+                return;
+            }
+            Rule rule;
+            rule.id = id;
+            // Not translated — Rule::name is the persisted identity surface.
+            rule.name = name;
+            rule.enabled = true;
+            rule.managed = false;
+            rule.priority = kAnimationFilterPriority;
+            rule.match = MatchExpression::makeLeaf(field, Operator::LessThan, QVariant(n));
+            PhosphorRules::RuleAction exclude;
+            exclude.type = QString(PhosphorRules::ActionType::ExcludeAnimations);
+            rule.actions = {exclude};
+            newRules.append(rule);
+        };
+        addMinSizeRule(animMinSize.value(kFieldAnimMinWidth), Field::Width, ConfigDefaults::animationMinWidthRuleId(),
+                       QStringLiteral("Skip animations for narrow windows"));
+        addMinSizeRule(animMinSize.value(kFieldAnimMinHeight), Field::Height,
+                       ConfigDefaults::animationMinHeightRuleId(), QStringLiteral("Skip animations for short windows"));
     }
 
     // ── Merge into the existing rule store ─────────────────────────────────

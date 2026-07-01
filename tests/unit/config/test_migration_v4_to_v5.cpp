@@ -501,6 +501,213 @@ private Q_SLOTS:
                  "the gap key must be stripped from the config");
     }
 
+    // Per-screen tiling geometry (split ratio / master count / max windows) folds
+    // onto a dedicated per-monitor ScreenId rule, namespaced under
+    // perScreenTilingRuleNamespaceId (DISTINCT from the gap namespace) so the
+    // settings UI find-or-creates the same rule. Non-geometry autotile per-screen
+    // keys (Algorithm, behavioural flags) survive in the config.
+    void testPerScreenTiling_becomesScreenIdRule()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        // Differing-from-default split ratio (0.66 != 0.5), master count (2 != 1),
+        // max windows (3 != 5), plus a survivor (Algorithm) and a default-valued
+        // split-ratio companion that must NOT produce an action.
+        setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Autotile"), QStringLiteral("DP-1")},
+                  {{QStringLiteral("AutotileSplitRatio"), 0.66},
+                   {QStringLiteral("AutotileMasterCount"), 2},
+                   {QStringLiteral("AutotileMaxWindows"), 3},
+                   {QStringLiteral("Algorithm"), QStringLiteral("bsp")}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QString canonicalKey = Settings::canonicalPerScreenKey(QStringLiteral("DP-1"));
+        const QString expectedId =
+            QUuid::createUuidV5(ConfigDefaults::perScreenTilingRuleNamespaceId(), canonicalKey.toUtf8()).toString();
+        // The tiling namespace must be distinct from the gap namespace, so the
+        // tiling rule never collides with a per-screen gap rule for the same monitor.
+        const QString gapId =
+            QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), canonicalKey.toUtf8()).toString();
+        QVERIFY2(expectedId != gapId, "tiling and gap per-screen rule ids must not collide");
+
+        QJsonObject tilingRule;
+        for (const QJsonValue& v : rules()) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("id")).toString() == expectedId) {
+                tilingRule = r;
+            }
+        }
+        QVERIFY2(!tilingRule.isEmpty(), "per-screen tiling geometry must become a ScreenId-keyed rule");
+        QVERIFY(!tilingRule.value(QStringLiteral("managed")).toBool());
+        // All three geometry actions present; the default-valued companion is absent.
+        const QStringList types = actionTypes(tilingRule);
+        QVERIFY(types.contains(QStringLiteral("setSplitRatio")));
+        QVERIFY(types.contains(QStringLiteral("setMasterCount")));
+        QVERIFY(types.contains(QStringLiteral("setMaxWindows")));
+        QCOMPARE(actionValue(tilingRule, QStringLiteral("setSplitRatio")).toDouble(), 0.66);
+        QCOMPARE(actionValue(tilingRule, QStringLiteral("setMasterCount")).toInt(), 2);
+        QCOMPARE(actionValue(tilingRule, QStringLiteral("setMaxWindows")).toInt(), 3);
+        const QJsonObject m = matchOf(tilingRule);
+        QCOMPARE(m.value(QStringLiteral("field")).toString(), QStringLiteral("screenId"));
+        QCOMPARE(m.value(QStringLiteral("op")).toString(), QStringLiteral("equals"));
+        QCOMPARE(m.value(QStringLiteral("value")).toString(), canonicalKey);
+
+        // Survivors: Algorithm stays in config; the geometry keys are stripped.
+        const QJsonObject autoScreen = readJson(ConfigDefaults::configFilePath())
+                                           .value(QStringLiteral("PerScreen"))
+                                           .toObject()
+                                           .value(QStringLiteral("Autotile"))
+                                           .toObject()
+                                           .value(QStringLiteral("DP-1"))
+                                           .toObject();
+        QCOMPARE(autoScreen.value(QStringLiteral("Algorithm")).toString(), QStringLiteral("bsp"));
+        QVERIFY2(!autoScreen.contains(QStringLiteral("AutotileSplitRatio")), "split ratio key must be stripped");
+        QVERIFY2(!autoScreen.contains(QStringLiteral("AutotileMasterCount")), "master count key must be stripped");
+        QVERIFY2(!autoScreen.contains(QStringLiteral("AutotileMaxWindows")), "max windows key must be stripped");
+    }
+
+    // A per-screen tiling entry entirely at v4 defaults stashes nothing and
+    // produces no tiling rule (mirrors the clean-default appearance guarantee).
+    void testPerScreenTiling_cleanDefaults_noRule()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Autotile"), QStringLiteral("DP-1")},
+                  {{QStringLiteral("AutotileSplitRatio"), 0.5},
+                   {QStringLiteral("AutotileMasterCount"), 1},
+                   {QStringLiteral("AutotileMaxWindows"), 5}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QString canonicalKey = Settings::canonicalPerScreenKey(QStringLiteral("DP-1"));
+        const QString tilingId =
+            QUuid::createUuidV5(ConfigDefaults::perScreenTilingRuleNamespaceId(), canonicalKey.toUtf8()).toString();
+        for (const QJsonValue& v : rules()) {
+            QVERIFY2(v.toObject().value(QStringLiteral("id")).toString() != tilingId,
+                     "a default-valued per-screen tiling entry must not produce a rule");
+        }
+    }
+
+    // Per-screen zone-selector overrides fold onto a dedicated per-monitor
+    // ScreenId rule carrying one generic SetZoneSelectorProperty action per
+    // differing property; default-valued properties contribute no action and the
+    // ZoneSelector config category is removed wholesale.
+    void testPerScreenZoneSelector_becomesScreenIdRule()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        // Position 4 (!= default 1), GridColumns 3 (!= 5), PreviewLockAspect false
+        // (!= true) differ and fold; MaxRows 4 (== default) must contribute nothing.
+        setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("ZoneSelector"), QStringLiteral("DP-1")},
+                  {{QStringLiteral("Position"), 4},
+                   {QStringLiteral("GridColumns"), 3},
+                   {QStringLiteral("PreviewLockAspect"), false},
+                   {QStringLiteral("MaxRows"), 4}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QString canonicalKey = Settings::canonicalPerScreenKey(QStringLiteral("DP-1"));
+        const QString expectedId =
+            QUuid::createUuidV5(ConfigDefaults::perScreenZoneSelectorRuleNamespaceId(), canonicalKey.toUtf8())
+                .toString();
+        QJsonObject zsRule;
+        for (const QJsonValue& v : rules()) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("id")).toString() == expectedId) {
+                zsRule = r;
+            }
+        }
+        QVERIFY2(!zsRule.isEmpty(), "per-screen zone-selector overrides must become a ScreenId-keyed rule");
+        QVERIFY(!zsRule.value(QStringLiteral("managed")).toBool());
+
+        // Look up a SetZoneSelectorProperty action's value by its property token.
+        const auto zsValue = [&zsRule](const QString& property) -> QJsonValue {
+            for (const QJsonValue& av : zsRule.value(QStringLiteral("actions")).toArray()) {
+                const QJsonObject a = av.toObject();
+                if (a.value(QStringLiteral("type")).toString() == QLatin1String("setZoneSelectorProperty")
+                    && a.value(QStringLiteral("property")).toString() == property) {
+                    return a.value(QStringLiteral("value"));
+                }
+            }
+            return QJsonValue(QJsonValue::Undefined);
+        };
+        QCOMPARE(zsValue(QStringLiteral("Position")).toInt(), 4);
+        QCOMPARE(zsValue(QStringLiteral("GridColumns")).toInt(), 3);
+        QCOMPARE(zsValue(QStringLiteral("PreviewLockAspect")).toBool(true), false);
+        QVERIFY2(zsValue(QStringLiteral("MaxRows")).isUndefined(),
+                 "a default-valued property must not produce an action");
+
+        const QJsonObject m = matchOf(zsRule);
+        QCOMPARE(m.value(QStringLiteral("field")).toString(), QStringLiteral("screenId"));
+        QCOMPARE(m.value(QStringLiteral("value")).toString(), canonicalKey);
+
+        // The whole ZoneSelector per-screen category is folded out of config.
+        const QJsonObject perScreen =
+            readJson(ConfigDefaults::configFilePath()).value(QStringLiteral("PerScreen")).toObject();
+        QVERIFY2(!perScreen.contains(QStringLiteral("ZoneSelector")),
+                 "the ZoneSelector category must be removed from config");
+    }
+
+    // The two animation min-size window-filter knobs fold onto per-axis
+    // ExcludeAnimations rules whose match carries the threshold; a 0 (off) value
+    // produces no rule, and the boolean toggles in the same group survive.
+    void testAnimationMinSize_becomesExcludeAnimationsRules()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        // Width 300 folds; Height 0 (off) does not. A boolean toggle in the same
+        // group must survive (only the min-size knobs fold).
+        setNested(cfg, {QStringLiteral("Animations"), QStringLiteral("WindowFiltering")},
+                  {{QStringLiteral("MinimumWindowWidth"), 300},
+                   {QStringLiteral("MinimumWindowHeight"), 0},
+                   {QStringLiteral("ExcludeTransientWindows"), true}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QString widthId = ConfigDefaults::animationMinWidthRuleId().toString();
+        const QString heightId = ConfigDefaults::animationMinHeightRuleId().toString();
+        QJsonObject widthRule;
+        bool sawHeightRule = false;
+        for (const QJsonValue& v : rules()) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("id")).toString() == widthId) {
+                widthRule = r;
+            }
+            if (r.value(QStringLiteral("id")).toString() == heightId) {
+                sawHeightRule = true;
+            }
+        }
+        QVERIFY2(!widthRule.isEmpty(), "min-width must become an ExcludeAnimations rule");
+        QVERIFY2(!sawHeightRule, "a 0 (off) min-height must NOT produce a rule");
+        QVERIFY(!widthRule.value(QStringLiteral("managed")).toBool());
+        QCOMPARE(actionTypes(widthRule), (QStringList{QStringLiteral("excludeAnimations")}));
+        const QJsonObject m = matchOf(widthRule);
+        QCOMPARE(m.value(QStringLiteral("field")).toString(), QStringLiteral("width"));
+        QCOMPARE(m.value(QStringLiteral("op")).toString(), QStringLiteral("lessThan"));
+        QCOMPARE(m.value(QStringLiteral("value")).toInt(), 300);
+
+        // The min-size key is stripped; the boolean toggle survives in config.
+        const QJsonObject wf = readJson(ConfigDefaults::configFilePath())
+                                   .value(QStringLiteral("Animations"))
+                                   .toObject()
+                                   .value(QStringLiteral("WindowFiltering"))
+                                   .toObject();
+        QVERIFY2(!wf.contains(QStringLiteral("MinimumWindowWidth")), "min-width key must be stripped");
+        QCOMPARE(wf.value(QStringLiteral("ExcludeTransientWindows")).toBool(), true);
+    }
+
     // finalizeV5 defer path: if rules.json is unreadable/corrupt when the
     // override rules are merged in, the conversion must DEFER — return false and
     // leave `_v5AppearanceStash` in place so a later run (after rules.json is

@@ -211,13 +211,15 @@ private Q_SLOTS:
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QJsonObject perScreen = root.value(QStringLiteral("PerScreen")).toObject();
 
-        // ZoneSelector
-        QJsonObject zs = perScreen.value(QStringLiteral("ZoneSelector")).toObject();
-        QJsonObject edp = zs.value(QStringLiteral("eDP-1")).toObject();
-        QCOMPARE(edp.value(QStringLiteral("Position")).toInt(), 3);
-        QCOMPARE(edp.value(QStringLiteral("MaxRows")).toInt(), 5);
+        // ZoneSelector per-screen overrides fold into per-monitor rules in v5
+        // (Position 3 and MaxRows 5 both differ from their defaults), so the whole
+        // ZoneSelector category is removed from config. The rule creation itself is
+        // covered by test_migration_v4_to_v5.
+        QVERIFY2(!perScreen.contains(QStringLiteral("ZoneSelector")),
+                 "ZoneSelector per-screen category must be folded out of config in v5");
 
-        // Autotile
+        // Autotile — Algorithm is NOT folded (that dedup is a later step), so it
+        // survives in the config store.
         QJsonObject at = perScreen.value(QStringLiteral("Autotile")).toObject();
         QJsonObject hdmi = at.value(QStringLiteral("HDMI-1")).toObject();
         QCOMPARE(hdmi.value(QStringLiteral("Algorithm")).toString(), QStringLiteral("bsp"));
@@ -557,12 +559,13 @@ private Q_SLOTS:
         QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
         QCOMPARE(migrated.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
-        // PerScreen data must survive migration untouched
-        QJsonObject migratedPerScreen = migrated.value(QStringLiteral("PerScreen")).toObject();
-        QJsonObject migratedZs = migratedPerScreen.value(QStringLiteral("ZoneSelector")).toObject();
-        QJsonObject migratedEdp = migratedZs.value(QStringLiteral("eDP-1")).toObject();
-        QCOMPARE(migratedEdp.value(QStringLiteral("Position")).toInt(), 3);
-        QCOMPARE(migratedEdp.value(QStringLiteral("MaxRows")).toInt(), 5);
+        // ZoneSelector per-screen overrides fold into per-monitor rules in v5, so
+        // the category is removed from config (Position 3 / MaxRows 5 both differ
+        // from their defaults). This was the only per-screen data here, so the whole
+        // PerScreen container is pruned.
+        const QJsonObject migratedPerScreen = migrated.value(QStringLiteral("PerScreen")).toObject();
+        QVERIFY2(!migratedPerScreen.contains(QStringLiteral("ZoneSelector")),
+                 "ZoneSelector per-screen category must be folded out of config in v5");
 
         // v1 groups should still be removed
         QVERIFY(!migrated.contains(QStringLiteral("Activation")));

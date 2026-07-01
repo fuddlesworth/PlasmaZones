@@ -341,6 +341,22 @@ inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
 /// zone overlay. Resolved daemon-side via `LayoutRegistry::resolveContextOverlay`.
 inline constexpr QLatin1StringView OverrideOverlayShader{"overrideOverlayShader"};
 inline constexpr QLatin1StringView OverrideOverlayStyle{"overrideOverlayStyle"};
+// ── Per-context overlay APPEARANCE overrides (domain Context) ──
+// Extend the overlay family with the drag-time zone-overlay visual appearance:
+// fill (highlight) / inactive / border colours, active + inactive opacity, border
+// width + radius, and zone-number visibility. Match on screen/desktop/activity;
+// one slot per property. The GLOBAL default lives in the managed baseline overlay
+// rule (Settings reads these back as its highlightColor()/… getters); per-context
+// overrides layer on top, resolved via `LayoutRegistry::resolveContextOverlay`.
+// Colours are `#AARRGGBB` hex; opacities are [0.0, 1.0] fractions.
+inline constexpr QLatin1StringView SetOverlayHighlightColor{"setOverlayHighlightColor"};
+inline constexpr QLatin1StringView SetOverlayInactiveColor{"setOverlayInactiveColor"};
+inline constexpr QLatin1StringView SetOverlayBorderColor{"setOverlayBorderColor"};
+inline constexpr QLatin1StringView SetOverlayActiveOpacity{"setOverlayActiveOpacity"};
+inline constexpr QLatin1StringView SetOverlayInactiveOpacity{"setOverlayInactiveOpacity"};
+inline constexpr QLatin1StringView SetOverlayBorderWidth{"setOverlayBorderWidth"};
+inline constexpr QLatin1StringView SetOverlayBorderRadius{"setOverlayBorderRadius"};
+inline constexpr QLatin1StringView SetOverlayShowZoneNumbers{"setOverlayShowZoneNumbers"};
 /// Disable every animation override on a matched window. The opposite of
 /// the OverrideAnimation* family — the effect's shouldAnimateWindow gate
 /// surfaces this as "no animation for this window, regardless of other
@@ -392,6 +408,30 @@ inline constexpr QLatin1StringView SetOuterGapTop{"setOuterGapTop"};
 inline constexpr QLatin1StringView SetOuterGapBottom{"setOuterGapBottom"};
 inline constexpr QLatin1StringView SetOuterGapLeft{"setOuterGapLeft"};
 inline constexpr QLatin1StringView SetOuterGapRight{"setOuterGapRight"};
+
+// ── Per-context tiling-geometry overrides (domain Context) ──
+// Per-screen (and, in principle, per-desktop / activity) overrides of the global
+// autotile split ratio / master-window count / max-tiled-window count. Match on
+// screen / desktop / activity; one slot per property so independent rules cascade
+// per-property, mirroring the per-context gap actions above. Resolved daemon-side
+// through the per-screen autotile config path (`Settings::perScreenTilingRuleOverrides`
+// overlays these onto `getPerScreenAutotileSettings`), NOT through the KWin effect,
+// so they carry no `Tag::` and are not assignment-cascade actions.
+inline constexpr QLatin1StringView SetSplitRatio{"setSplitRatio"};
+inline constexpr QLatin1StringView SetMasterCount{"setMasterCount"};
+inline constexpr QLatin1StringView SetMaxWindows{"setMaxWindows"};
+
+// ── Per-context zone-selector property override (domain Context) ──
+// A SINGLE generic action carrying `{ property, value }` — `property` selects one
+// of the nine per-monitor zone-selector popup properties (position, layout mode,
+// preview size, grid columns, trigger distance, …) and the slot is computed from
+// it (`zone-selector:<property>`), so independent rules cascade per-property from
+// one action type (mirrors the event-scoped animation actions). Resolved
+// daemon-side through the per-screen zone-selector path
+// (`Settings::perScreenZoneSelectorRuleOverrides` overlays these onto
+// `getPerScreenZoneSelectorSettings`); the global zone-selector defaults stay in
+// config. Value is an int for every property except PreviewLockAspect (bool).
+inline constexpr QLatin1StringView SetZoneSelectorProperty{"setZoneSelectorProperty"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -431,6 +471,9 @@ inline constexpr QLatin1StringView Zones{"zones"};
 inline constexpr QLatin1StringView TargetScreenId{"targetScreenId"};
 // RouteToDesktop target-desktop key — wire is a 1-based virtual desktop number.
 inline constexpr QLatin1StringView TargetDesktop{"targetDesktop"};
+// SetZoneSelectorProperty selector key — which per-monitor zone-selector property
+// this action overrides. Wire value is one of the ZoneSelectorProperty tokens.
+inline constexpr QLatin1StringView Property{"property"};
 } // namespace ActionParam
 
 /// Upper bound for a `SnapToZone` zone ordinal (each `ActionParam::Zones` entry).
@@ -469,6 +512,24 @@ inline constexpr QLatin1StringView Preview{"preview"}; ///< OverlayDisplayMode::
 namespace BorderColorToken {
 inline constexpr QLatin1StringView Accent{"accent"};
 } // namespace BorderColorToken
+
+/// Wire tokens for SetZoneSelectorProperty's `property` param — the closed set of
+/// per-monitor zone-selector properties a rule can override. The token strings
+/// deliberately match the config-layer `ZoneSelectorConfigKey` spellings so the
+/// daemon consumer (`Settings::perScreenZoneSelectorRuleOverrides`) and the
+/// v4→v5 migration map property→config-key 1:1 with no translation table. Every
+/// property carries an int `value` EXCEPT PreviewLockAspect, which carries a bool.
+namespace ZoneSelectorProperty {
+inline constexpr QLatin1StringView Position{"Position"};
+inline constexpr QLatin1StringView LayoutMode{"LayoutMode"};
+inline constexpr QLatin1StringView SizeMode{"SizeMode"};
+inline constexpr QLatin1StringView MaxRows{"MaxRows"};
+inline constexpr QLatin1StringView PreviewWidth{"PreviewWidth"};
+inline constexpr QLatin1StringView PreviewHeight{"PreviewHeight"};
+inline constexpr QLatin1StringView PreviewLockAspect{"PreviewLockAspect"};
+inline constexpr QLatin1StringView GridColumns{"GridColumns"};
+inline constexpr QLatin1StringView TriggerDistance{"TriggerDistance"};
+} // namespace ZoneSelectorProperty
 
 // ── Built-in slot ids ──
 namespace ActionSlot {
@@ -516,6 +577,12 @@ inline constexpr QLatin1StringView OuterGapTop{"outer-gap-top"};
 inline constexpr QLatin1StringView OuterGapBottom{"outer-gap-bottom"};
 inline constexpr QLatin1StringView OuterGapLeft{"outer-gap-left"};
 inline constexpr QLatin1StringView OuterGapRight{"outer-gap-right"};
+// Per-context tiling-geometry slots (one per property; mirror the per-context
+// gap slots). Filled by the Set{SplitRatio,MasterCount,MaxWindows} context
+// actions, read daemon-side by `Settings::perScreenTilingRuleOverrides`.
+inline constexpr QLatin1StringView SplitRatio{"split-ratio"};
+inline constexpr QLatin1StringView MasterCount{"master-count"};
+inline constexpr QLatin1StringView MaxWindows{"max-windows"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader
@@ -523,6 +590,22 @@ inline constexpr QLatin1StringView OuterGapRight{"outer-gap-right"};
 // (ActionParam::Value).
 inline constexpr QLatin1StringView OverlayShader{"overlay-shader"};
 inline constexpr QLatin1StringView OverlayStyle{"overlay-style"};
+// Per-context overlay-appearance slots (one per property; filled by the
+// SetOverlay* appearance actions, read by resolveContextOverlay / the baseline
+// overlay rule Settings getters).
+inline constexpr QLatin1StringView OverlayHighlightColor{"overlay-highlight-color"};
+inline constexpr QLatin1StringView OverlayInactiveColor{"overlay-inactive-color"};
+inline constexpr QLatin1StringView OverlayBorderColor{"overlay-border-color"};
+inline constexpr QLatin1StringView OverlayActiveOpacity{"overlay-active-opacity"};
+inline constexpr QLatin1StringView OverlayInactiveOpacity{"overlay-inactive-opacity"};
+inline constexpr QLatin1StringView OverlayBorderWidth{"overlay-border-width"};
+inline constexpr QLatin1StringView OverlayBorderRadius{"overlay-border-radius"};
+inline constexpr QLatin1StringView OverlayZoneNumbers{"overlay-zone-numbers"};
+// Per-context zone-selector slots are property-scoped: "zone-selector:<property>"
+// (e.g. "zone-selector:Position"). SetZoneSelectorProperty computes its slot from
+// the `property` param, so independent per-property rules cascade from one action
+// type — the same computed-slot mechanic the event-scoped animation slots use.
+inline constexpr QLatin1StringView ZoneSelectorPrefix{"zone-selector:"};
 // Animation slots are event-scoped: "anim-shader:<event>" / "anim-timing:<event>"
 // / "anim-curve:<event>". Curve and timing are split so they can be overridden
 // independently per event — `resolveAnimationMotionProfile` reads the curve

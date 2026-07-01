@@ -47,11 +47,29 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetOuterGapBottom,
     ActionType::SetOuterGapLeft,
     ActionType::SetOuterGapRight,
+    // Tiling-geometry overrides are context-domain — resolved per screen/
+    // desktop/activity through the per-screen autotile path, never per-window.
+    ActionType::SetSplitRatio,
+    ActionType::SetMasterCount,
+    ActionType::SetMaxWindows,
     // Overlay-property overrides are context-domain — resolved during the
     // screen/desktop/activity pass (LayoutRegistry::resolveContextOverlay),
     // never per-window.
     ActionType::OverrideOverlayShader,
     ActionType::OverrideOverlayStyle,
+    // Overlay-appearance overrides are context-domain — resolved per
+    // screen/desktop/activity for the zone overlay.
+    ActionType::SetOverlayHighlightColor,
+    ActionType::SetOverlayInactiveColor,
+    ActionType::SetOverlayBorderColor,
+    ActionType::SetOverlayActiveOpacity,
+    ActionType::SetOverlayInactiveOpacity,
+    ActionType::SetOverlayBorderWidth,
+    ActionType::SetOverlayBorderRadius,
+    ActionType::SetOverlayShowZoneNumbers,
+    // Zone-selector per-property override is context-domain — resolved per
+    // screen/desktop/activity through the per-screen zone-selector path.
+    ActionType::SetZoneSelectorProperty,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -446,6 +464,159 @@ private Q_SLOTS:
             QVERIFY2(reloaded.has_value(), type.data());
             QCOMPARE(reloaded->params.value(QStringLiteral("value")).toInt(), 12);
         }
+    }
+
+    // Per-context tiling-geometry actions: split ratio is a [0.1, 0.9] fraction;
+    // master count is [1, 5]; max windows is [1, 12]. All three reject a value
+    // outside the closed range (0 / negative must be rejected, not clamped) and
+    // round-trip a valid value unchanged.
+    void testTilingGeometryActions_range()
+    {
+        // Split ratio — double-valued fraction.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetSplitRatio));
+            o.insert(QStringLiteral("value"), 0.05); // < 0.1
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 0.95); // > 0.9
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 0.0);
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 0.66);
+            const auto reloaded = RuleAction::fromJson(o);
+            QVERIFY(reloaded.has_value());
+            QCOMPARE(reloaded->params.value(QStringLiteral("value")).toDouble(), 0.66);
+        }
+        // Master count — int-valued, minimum 1.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetMasterCount));
+            o.insert(QStringLiteral("value"), 0);
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 6); // > 5
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 1);
+            QVERIFY(RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 3);
+            const auto reloaded = RuleAction::fromJson(o);
+            QVERIFY(reloaded.has_value());
+            QCOMPARE(reloaded->params.value(QStringLiteral("value")).toInt(), 3);
+        }
+        // Max windows — int-valued, [1, 12].
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetMaxWindows));
+            o.insert(QStringLiteral("value"), 0);
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 13); // > 12
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 1);
+            QVERIFY(RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 8);
+            const auto reloaded = RuleAction::fromJson(o);
+            QVERIFY(reloaded.has_value());
+            QCOMPARE(reloaded->params.value(QStringLiteral("value")).toInt(), 8);
+        }
+        // Stray-key rejection: only `value` is allowed.
+        for (const QLatin1StringView type :
+             {ActionType::SetSplitRatio, ActionType::SetMasterCount, ActionType::SetMaxWindows}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), (type == ActionType::SetSplitRatio) ? QJsonValue(0.5) : QJsonValue(2));
+            o.insert(QStringLiteral("bogus"), 1);
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+        }
+    }
+
+    // Per-context overlay-appearance actions: colours require hex, opacities are
+    // [0,1] fractions, border dims are bounded numbers, zone-numbers is a bool.
+    void testOverlayAppearanceActions_validation()
+    {
+        const auto make = [](QLatin1StringView type, const QJsonValue& value) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), value);
+            return o;
+        };
+        // Colours: hex accepted, non-hex rejected.
+        for (const QLatin1StringView type : {ActionType::SetOverlayHighlightColor, ActionType::SetOverlayInactiveColor,
+                                             ActionType::SetOverlayBorderColor}) {
+            QVERIFY2(RuleAction::fromJson(make(type, QStringLiteral("#80ff0000"))).has_value(), type.data());
+            QVERIFY2(!RuleAction::fromJson(make(type, QStringLiteral("red"))).has_value(), type.data());
+        }
+        // Opacities: [0,1] accepted, out-of-range rejected.
+        for (const QLatin1StringView type :
+             {ActionType::SetOverlayActiveOpacity, ActionType::SetOverlayInactiveOpacity}) {
+            QVERIFY2(RuleAction::fromJson(make(type, 0.5)).has_value(), type.data());
+            QVERIFY2(!RuleAction::fromJson(make(type, 1.5)).has_value(), type.data());
+        }
+        // Border width [0,10], radius [0,50].
+        QVERIFY(RuleAction::fromJson(make(ActionType::SetOverlayBorderWidth, 4)).has_value());
+        QVERIFY(!RuleAction::fromJson(make(ActionType::SetOverlayBorderWidth, 11)).has_value());
+        QVERIFY(RuleAction::fromJson(make(ActionType::SetOverlayBorderRadius, 12)).has_value());
+        QVERIFY(!RuleAction::fromJson(make(ActionType::SetOverlayBorderRadius, 51)).has_value());
+        // Zone numbers: bool required.
+        QVERIFY(RuleAction::fromJson(make(ActionType::SetOverlayShowZoneNumbers, true)).has_value());
+        QVERIFY(!RuleAction::fromJson(make(ActionType::SetOverlayShowZoneNumbers, 1)).has_value());
+        // Stray-key rejection.
+        {
+            QJsonObject o = make(ActionType::SetOverlayBorderWidth, 4);
+            o.insert(QStringLiteral("bogus"), 1);
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+        }
+    }
+
+    // The generic SetZoneSelectorProperty action: a known `property` token plus a
+    // `value` of the matching shape/range, with the slot computed per-property.
+    void testZoneSelectorProperty_validation()
+    {
+        const auto make = [](QLatin1StringView property, const QJsonValue& value) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetZoneSelectorProperty));
+            o.insert(QStringLiteral("property"), QString::fromLatin1(property));
+            o.insert(QStringLiteral("value"), value);
+            return o;
+        };
+
+        // Valid int property in range round-trips and carries both params.
+        {
+            const auto r = RuleAction::fromJson(make(ZoneSelectorProperty::Position, 4));
+            QVERIFY(r.has_value());
+            QCOMPARE(r->params.value(QStringLiteral("property")).toString(), QStringLiteral("Position"));
+            QCOMPARE(r->params.value(QStringLiteral("value")).toInt(), 4);
+        }
+        // Out-of-range int (Position max is 8) is rejected.
+        QVERIFY(!RuleAction::fromJson(make(ZoneSelectorProperty::Position, 9)).has_value());
+        // Unknown property token is rejected.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetZoneSelectorProperty));
+            o.insert(QStringLiteral("property"), QStringLiteral("Nonsense"));
+            o.insert(QStringLiteral("value"), 1);
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+        }
+        // PreviewLockAspect requires a bool; an int is rejected, a bool accepted.
+        QVERIFY(!RuleAction::fromJson(make(ZoneSelectorProperty::PreviewLockAspect, 1)).has_value());
+        QVERIFY(RuleAction::fromJson(make(ZoneSelectorProperty::PreviewLockAspect, false)).has_value());
+        // An int property rejects a bool value.
+        QVERIFY(!RuleAction::fromJson(make(ZoneSelectorProperty::GridColumns, true)).has_value());
+        // Stray key rejected (only property + value allowed).
+        {
+            QJsonObject o = make(ZoneSelectorProperty::MaxRows, 3);
+            o.insert(QStringLiteral("bogus"), 1);
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+        }
+        // Slot is computed per-property, so two different properties occupy
+        // distinct slots (independent cascade).
+        const auto posAction = RuleAction::fromJson(make(ZoneSelectorProperty::Position, 2));
+        const auto colAction = RuleAction::fromJson(make(ZoneSelectorProperty::GridColumns, 3));
+        QVERIFY(posAction.has_value() && colAction.has_value());
+        auto& reg = ActionRegistry::instance();
+        const QString posSlot = reg.slotFor(*posAction);
+        const QString colSlot = reg.slotFor(*colAction);
+        QCOMPARE(posSlot, QStringLiteral("zone-selector:Position"));
+        QCOMPARE(colSlot, QStringLiteral("zone-selector:GridColumns"));
+        QVERIFY(posSlot != colSlot);
     }
 
     void testGapPerSideToggle_requiresBool()

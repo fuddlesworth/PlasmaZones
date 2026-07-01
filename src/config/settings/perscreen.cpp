@@ -633,8 +633,19 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdO
 
 QVariantMap Settings::getPerScreenZoneSelectorSettings(const QString& screenIdOrName) const
 {
+    QVariantMap result;
     auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
-    return (it != m_perScreenZoneSelectorSettings.constEnd()) ? it.value() : QVariantMap();
+    if (it != m_perScreenZoneSelectorSettings.constEnd()) {
+        result = it.value();
+    }
+    // Overlay the per-monitor zone-selector rule's values on top of the
+    // config-store values; when no rule exists the keys stay absent and the
+    // consumer falls back to the global zone-selector defaults.
+    const QVariantMap ruleOverrides = perScreenZoneSelectorRuleOverrides(m_ruleStore, screenIdOrName);
+    for (auto o = ruleOverrides.constBegin(); o != ruleOverrides.constEnd(); ++o) {
+        result.insert(o.key(), o.value());
+    }
+    return result;
 }
 
 void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, const QString& key, const QVariant& value)
@@ -742,6 +753,89 @@ QVariantMap Settings::perScreenGapRuleOverrides(const PhosphorRules::RuleStore* 
     return gaps;
 }
 
+// Tiling-geometry overrides authored on the per-monitor tiling Rule for
+// @p screenIdOrName, keyed in the short engine form the autotile consumer
+// expects (SplitRatio / MasterCount / MaxWindows), or an empty map when no
+// such rule exists. Mirrors perScreenGapRuleOverrides: the per-screen rule is
+// keyed by the screen's stable EDID id under createUuidV5(
+// perScreenTilingRuleNamespaceId, <stable id>); the incoming identifier is
+// resolved to that canonical form first, with the raw and physical-parent forms
+// tried as fallbacks (perScreenGapKeyForms is screen-id-generic, not gap-specific).
+QVariantMap Settings::perScreenTilingRuleOverrides(const PhosphorRules::RuleStore* store, const QString& screenIdOrName)
+{
+    QVariantMap tiling;
+    if (store == nullptr) {
+        return tiling;
+    }
+    namespace AT = PhosphorRules::ActionType;
+    namespace PSK = PhosphorEngine::PerScreenKeys;
+    for (const QString& keyForm : perScreenGapKeyForms(screenIdOrName)) {
+        const QUuid ruleId = QUuid::createUuidV5(ConfigDefaults::perScreenTilingRuleNamespaceId(), keyForm.toUtf8());
+        if (!store->ruleSet().ruleById(ruleId)) {
+            continue;
+        }
+        // First matching rule wins. Split ratio is a [0.1, 0.9] fraction (double);
+        // master count and max windows are integers. Read each action's value
+        // through the shared gapValueFromRule helper (action-type-generic despite
+        // its name — it returns any action's Value param).
+        if (const auto v = gapValueFromRule(store, ruleId, AT::SetSplitRatio)) {
+            tiling.insert(QString(PSK::SplitRatio), v->toDouble());
+        }
+        if (const auto v = gapValueFromRule(store, ruleId, AT::SetMasterCount)) {
+            tiling.insert(QString(PSK::MasterCount), v->toInt());
+        }
+        if (const auto v = gapValueFromRule(store, ruleId, AT::SetMaxWindows)) {
+            tiling.insert(QString(PSK::MaxWindows), v->toInt());
+        }
+        return tiling;
+    }
+    return tiling;
+}
+
+// Zone-selector overrides authored on the per-monitor zone-selector Rule for
+// @p screenIdOrName, keyed by the ZoneSelectorConfigKey names the consumer
+// expects. Mirrors perScreenTilingRuleOverrides, but the per-screen zone-selector
+// rule carries the GENERIC SetZoneSelectorProperty action once per property, so
+// the reader iterates the rule's actions rather than probing by action type. The
+// property token IS the config-key name (1:1 by construction), used verbatim as
+// the override-map key. PreviewLockAspect yields a bool, every other property an int.
+QVariantMap Settings::perScreenZoneSelectorRuleOverrides(const PhosphorRules::RuleStore* store,
+                                                         const QString& screenIdOrName)
+{
+    QVariantMap overrides;
+    if (store == nullptr) {
+        return overrides;
+    }
+    namespace AT = PhosphorRules::ActionType;
+    namespace AP = PhosphorRules::ActionParam;
+    for (const QString& keyForm : perScreenGapKeyForms(screenIdOrName)) {
+        const QUuid ruleId =
+            QUuid::createUuidV5(ConfigDefaults::perScreenZoneSelectorRuleNamespaceId(), keyForm.toUtf8());
+        const auto rule = store->ruleSet().ruleById(ruleId);
+        if (!rule) {
+            continue;
+        }
+        // First matching rule wins.
+        for (const PhosphorRules::RuleAction& a : rule->actions) {
+            if (a.type != QString(AT::SetZoneSelectorProperty)) {
+                continue;
+            }
+            const QString property = a.params.value(QString(AP::Property)).toString();
+            if (property.isEmpty()) {
+                continue;
+            }
+            const QJsonValue value = a.params.value(QString(AP::Value));
+            if (property == QLatin1String(ZoneSelectorConfigKey::PreviewLockAspect)) {
+                overrides.insert(property, value.toBool());
+            } else {
+                overrides.insert(property, value.toInt());
+            }
+        }
+        return overrides;
+    }
+    return overrides;
+}
+
 // ── Per-Screen Autotile Config ───────────────────────────────────────────────
 
 QVariantMap Settings::getPerScreenAutotileSettings(const QString& screenIdOrName) const
@@ -757,6 +851,15 @@ QVariantMap Settings::getPerScreenAutotileSettings(const QString& screenIdOrName
     const QVariantMap ruleGaps = perScreenGapRuleOverrides(m_ruleStore, screenIdOrName);
     for (auto g = ruleGaps.constBegin(); g != ruleGaps.constEnd(); ++g) {
         result.insert(g.key(), g.value());
+    }
+    // Override split ratio / master count / max windows with the per-monitor
+    // tiling rule's values, if one exists. These moved from the per-screen config
+    // store onto rules in v5 (the same treatment gaps received); when no rule
+    // exists the keys stay absent and the consumer falls back to the global
+    // autotile defaults.
+    const QVariantMap ruleTiling = perScreenTilingRuleOverrides(m_ruleStore, screenIdOrName);
+    for (auto t = ruleTiling.constBegin(); t != ruleTiling.constEnd(); ++t) {
+        result.insert(t.key(), t.value());
     }
     return result;
 }

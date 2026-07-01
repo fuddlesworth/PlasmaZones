@@ -1335,6 +1335,27 @@ private:
     // forms tried as fallbacks for rules written under an alternate form.
     static QVariantMap perScreenGapRuleOverrides(const PhosphorRules::RuleStore* store, const QString& screenIdOrName);
 
+    // Tiling-geometry overrides authored on the per-monitor tiling Rule for
+    // @p screenIdOrName, keyed in the short engine form the autotile consumer
+    // expects (SplitRatio / MasterCount / MaxWindows), or an empty map when no
+    // such rule exists. Mirrors perScreenGapRuleOverrides but keyed under the
+    // dedicated createUuidV5(perScreenTilingRuleNamespaceId, <stable id>) — the
+    // global tiling defaults stay in config, so unlike gaps there is no managed
+    // baseline tiling rule; only per-screen overrides live as rules.
+    static QVariantMap perScreenTilingRuleOverrides(const PhosphorRules::RuleStore* store,
+                                                    const QString& screenIdOrName);
+
+    // Zone-selector overrides authored on the per-monitor zone-selector Rule for
+    // @p screenIdOrName, keyed by the ZoneSelectorConfigKey names the
+    // getPerScreenZoneSelectorSettings consumer expects (Position / LayoutMode /
+    // … / PreviewLockAspect), or an empty map when no such rule exists. Reads the
+    // generic SetZoneSelectorProperty actions from the rule namespaced under
+    // perScreenZoneSelectorRuleNamespaceId; PreviewLockAspect yields a bool, the
+    // rest ints. The global zone-selector defaults stay in config, so there is no
+    // managed baseline — only per-screen overrides live as rules.
+    static QVariantMap perScreenZoneSelectorRuleOverrides(const PhosphorRules::RuleStore* store,
+                                                          const QString& screenIdOrName);
+
     // Cached snapshot of the baseline rule's gap values, used by
     // onRuleStoreChanged for change detection (the getters read live, so a
     // pre-change snapshot must be retained here). Seeded in
