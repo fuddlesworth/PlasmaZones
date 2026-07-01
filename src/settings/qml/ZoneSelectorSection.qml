@@ -29,6 +29,12 @@ ColumnLayout {
     // Required: the raw ISettings object passed as `appSettings` does NOT carry
     // the scope chip's Q_INVOKABLEs, so the two must be supplied independently.
     required property var controller
+    // Per-monitor zone-selector overrides are rule-backed (the whole per-screen
+    // store folds onto a screen-scoped rule of generic SetZoneSelectorProperty
+    // actions). Read + write both route through the RuleController; bumped to
+    // re-read the value bindings after a write / scope switch / reset.
+    readonly property var ruleController: root.controller.rulesPage
+    property int zsReloadTick: 0
     required property QtObject constants
     // Screen aspect ratio for preview calculations (with safety check)
     property real screenAspectRatio: 16 / 9
@@ -55,12 +61,104 @@ ColumnLayout {
     }
     readonly property int effectiveTriggerDistance: settingValue("TriggerDistance", appSettings.zoneSelectorTriggerDistance)
 
+    // Read a zone-selector property honouring the current scope: global returns
+    // the passed-in value; a monitor scope reads its override rule's matching
+    // SetZoneSelectorProperty action, falling back to global when unset. Reading
+    // zsReloadTick makes every effective* binding re-evaluate on rule changes.
     function settingValue(key, globalValue) {
-        return psHelper.settingValue(key, globalValue);
+        root.zsReloadTick;
+        const scope = psHelper.selectedScreenName;
+        if (scope === "")
+            return globalValue;
+        const id = root.controller.perScreenZoneSelectorRuleId(scope);
+        if (!id)
+            return globalValue;
+        const rule = root.ruleController.ruleJson(id);
+        if (rule && rule.id) {
+            const actions = rule.actions || [];
+            for (var i = 0; i < actions.length; ++i) {
+                if (actions[i].type === "setZoneSelectorProperty" && actions[i].property === key && actions[i].value !== undefined)
+                    return actions[i].value;
+            }
+        }
+        return globalValue;
     }
 
+    // Merge value into the SetZoneSelectorProperty action for @p property on
+    // ruleObj (create the action if absent).
+    function _applyZsAction(ruleObj, property, value) {
+        const actions = (ruleObj.actions || []).slice();
+        var found = false;
+        for (var i = 0; i < actions.length; ++i) {
+            if (actions[i].type === "setZoneSelectorProperty" && actions[i].property === property) {
+                var updated = Object.assign({}, actions[i]);
+                updated.value = value;
+                actions[i] = updated;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            actions.push({
+                "type": "setZoneSelectorProperty",
+                "property": property,
+                "value": value
+            });
+        ruleObj.actions = actions;
+        return ruleObj;
+    }
+
+    // Write a zone-selector property honouring the current scope. Global calls the
+    // config setter; a monitor scope find-or-creates that monitor's rule and sets
+    // the matching SetZoneSelectorProperty action (other properties inherit global).
     function writeSetting(key, value, globalSetter) {
-        psHelper.writeSetting(key, value, globalSetter);
+        const scope = psHelper.selectedScreenName;
+        if (scope === "") {
+            globalSetter(value);
+            return;
+        }
+        const id = root.controller.perScreenZoneSelectorRuleId(scope);
+        if (!id)
+            return;
+        const canonical = root.controller.canonicalScreenId(scope);
+        var rule = root.ruleController.ruleJson(id);
+        if (!rule || !rule.id) {
+            rule = {
+                "id": id,
+                "name": i18n("Zone selector (%1)", canonical),
+                "enabled": true,
+                "match": {
+                    "field": "screenId",
+                    "op": "equals",
+                    "value": canonical
+                },
+                "actions": []
+            };
+            root._applyZsAction(rule, key, value);
+            root.ruleController.addRuleFromJson(rule);
+        } else {
+            root._applyZsAction(rule, key, value);
+            root.ruleController.updateRuleFromJson(rule);
+        }
+        root.zsReloadTick++;
+    }
+
+    // Re-read the value bindings on rule reload, scope change, or a per-screen
+    // override add / clear (the scope chip reset surfaces as perScreenOverridesChanged).
+    Connections {
+        target: root.ruleController
+        function onRulesLoaded() {
+            root.zsReloadTick++;
+        }
+    }
+    Connections {
+        target: root.controller
+        function onScopeScreenNameChanged() {
+            root.zsReloadTick++;
+        }
+        function onPerScreenOverridesChanged() {
+            root.zsReloadTick++;
+        }
     }
 
     spacing: Kirigami.Units.largeSpacing

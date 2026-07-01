@@ -549,6 +549,13 @@ public:
                                                      const QVariant& value);
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
+    // Per-screen zone selector is rule-backed (the whole per-monitor store folds
+    // onto a screen-scoped Rule carrying generic SetZoneSelectorProperty actions).
+    // hasPerScreenZoneSelectorSettings / clearPerScreenZoneSelectorSettings above
+    // fold in this rule so the section's scope chips keep working unchanged.
+    Q_INVOKABLE QString perScreenZoneSelectorRuleId(const QString& screenName) const;
+    Q_INVOKABLE bool hasPerScreenZoneSelectorRule(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenZoneSelectorRule(const QString& screenName);
 
     Q_INVOKABLE QVariantMap loadWindowGeometry() const;
     Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height);

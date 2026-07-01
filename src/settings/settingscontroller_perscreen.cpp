@@ -183,12 +183,50 @@ void SettingsController::setPerScreenZoneSelectorSetting(const QString& screenNa
 
 void SettingsController::clearPerScreenZoneSelectorSettings(const QString& screenName)
 {
+    // The per-monitor store is retired in favour of the rule; clear any residual
+    // config value AND remove the rule so the scope chip's reset covers both.
     m_settings.clearPerScreenZoneSelectorSettings(screenName);
+    clearPerScreenZoneSelectorRule(screenName);
 }
 
 bool SettingsController::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
-    return m_settings.hasPerScreenZoneSelectorSettings(screenName);
+    return m_settings.hasPerScreenZoneSelectorSettings(screenName) || hasPerScreenZoneSelectorRule(screenName);
+}
+
+// ── Per-screen zone selector override rule (rule-backed) ──────────────────
+// The whole per-monitor zone-selector store folds onto a screen-scoped Rule
+// carrying generic SetZoneSelectorProperty actions (one per overridden property),
+// keyed by perScreenZoneSelectorRuleNamespaceId + the screen's stable EDID id.
+
+QString SettingsController::perScreenZoneSelectorRuleId(const QString& screenName) const
+{
+    if (screenName.isEmpty()) {
+        return QString();
+    }
+    return QUuid::createUuidV5(ConfigDefaults::perScreenZoneSelectorRuleNamespaceId(),
+                               Settings::canonicalPerScreenKey(screenName).toUtf8())
+        .toString();
+}
+
+bool SettingsController::hasPerScreenZoneSelectorRule(const QString& screenName) const
+{
+    if (screenName.isEmpty() || m_rulesPage == nullptr) {
+        return false;
+    }
+    const QString id = perScreenZoneSelectorRuleId(screenName);
+    return !id.isEmpty() && !m_rulesPage->ruleJson(id).isEmpty();
+}
+
+void SettingsController::clearPerScreenZoneSelectorRule(const QString& screenName)
+{
+    if (screenName.isEmpty() || m_rulesPage == nullptr) {
+        return;
+    }
+    const QString id = perScreenZoneSelectorRuleId(screenName);
+    if (!id.isEmpty()) {
+        m_rulesPage->removeRule(id);
+    }
 }
 
 } // namespace PlasmaZones
