@@ -650,8 +650,8 @@ private:
     // Sync m_dirtyPages membership for @p page to its value-based dirty state
     // (isPageDirty) after a per-page Reset/Discard, emitting dirtyPagesChanged
     // when it flips so the footer's global needsSave stays consistent. Used for
-    // any page whose isPageDirty is value-based — manifest, shortcuts, and
-    // animation pages.
+    // any page whose isPageDirty is value-based — manifest, ordering, shortcuts,
+    // and animation pages.
     void reconcilePageDirty(const QString& page);
     // Value-based attribution for the two rule-backed pages sharing one
     // RuleController model: set m_dirtyPages membership for "window-appearance"
