@@ -15,10 +15,11 @@ namespace PlasmaZones {
 // The three managed baseline appearance/gap rules. Single source of truth for
 // BOTH the daemon's startup seeding (ensureManagedRule) AND the settings app's
 // per-page "Reset to defaults" on the Windows appearance page — keeping the two
-// from drifting. They are catch-all (border/title-bar narrowed to tiled/snapped
-// on a fresh install), managed = true, pinned to the lowest priority so any user
-// rule overrides them per slot. The Appearance page rewrites their action
-// values; a reset restores exactly these definitions.
+// from drifting. The gap rule is a true catch-all; the border and title-bar
+// rules are narrowed to tiled/snapped windows on a fresh install. All three are
+// managed = true, pinned to the lowest priority so any user rule overrides them
+// per slot. The Appearance page rewrites their action values; a reset restores
+// exactly these definitions.
 
 /// Common skeleton: empty catch-all match, managed, lowest priority.
 PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineSkeleton(const QUuid& id, const QString& name);

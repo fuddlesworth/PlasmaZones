@@ -232,7 +232,12 @@ void RuleAdaptor::resetManagedDefaults()
     upsertBaseline(makeBaselineBorderRule());
     upsertBaseline(makeBaselineTitleBarRule());
     upsertBaseline(makeBaselineGapRule());
-    m_store->setAllRules(rules);
+    // setAllRules returns false when the merged set could not be persisted to
+    // disk; every other mutator slot here propagates that bool, so surface it in
+    // the log rather than silently claiming a successful Restore Defaults.
+    if (!m_store->setAllRules(rules)) {
+        qCWarning(lcDbus) << "RuleAdaptor::resetManagedDefaults: failed to persist reset baseline rules";
+    }
 }
 
 } // namespace PlasmaZones

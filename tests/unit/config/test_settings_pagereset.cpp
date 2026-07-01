@@ -191,6 +191,51 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
         QCOMPARE(s.borderWidth(), def); // unchanged
     }
+
+    // An empty key list is a no-op for both primitives: no settingsChanged, no
+    // property NOTIFY, nothing modified. Guards the "reset a page that owns no
+    // keys" path.
+    void testEmptyList_isNoop()
+    {
+        IsolatedConfigGuard guard;
+        Settings s;
+        s.save(); // baseline = defaults
+
+        QSignalSpy settingsSpy(&s, &Settings::settingsChanged);
+        QSignalSpy widthSpy(&s, &Settings::borderWidthChanged);
+        s.discardKeys({});
+        s.resetKeys({});
+
+        QCOMPARE(settingsSpy.count(), 0);
+        QCOMPARE(widthSpy.count(), 0);
+    }
+
+    // A key absent from the schema (and thus the captured baseline) is silently
+    // skipped by discardKeys — no crash, no spurious write clobbering a live
+    // sibling, no NOTIFY. resetKeys likewise leaves the store untouched (reset()
+    // is a no-op on an undeclared key). The synthetic key is intentionally not a
+    // ConfigDefaults accessor: it names a group/key the schema does not declare.
+    void testUnknownKey_isIgnored()
+    {
+        IsolatedConfigGuard guard;
+        Settings s;
+        const auto width = widthKey();
+        const Settings::ConfigKey bogus{QStringLiteral("NoSuchGroup"), QStringLiteral("NoSuchKey")};
+
+        const int w0 = s.borderWidth();
+        const int wEdit = (w0 == 3) ? 4 : 3;
+        s.setBorderWidth(wEdit);
+        s.save(); // baseline = wEdit
+
+        QSignalSpy widthSpy(&s, &Settings::borderWidthChanged);
+        s.discardKeys({bogus});
+        s.resetKeys({bogus});
+
+        // The unknown key never reports modified, and the real sibling is intact.
+        QVERIFY(!s.isKeyModified(bogus.first, bogus.second));
+        QCOMPARE(s.borderWidth(), wEdit);
+        QCOMPARE(widthSpy.count(), 0);
+    }
 };
 
 QTEST_MAIN(TestSettingsPageReset)

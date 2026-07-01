@@ -541,17 +541,25 @@ void SettingsController::discardPage(const QString& page)
     }
 
     // Parent category (e.g. "snapping" / "tiling" / "placement"): discard every
-    // manifest-backed leaf beneath it. Lets the sidebar's section-disable
-    // confirm drop a whole mode's staged edits before flipping the enable flag,
-    // rather than relying on the framework PageAdapter::discard() no-op.
+    // discardable leaf beneath it. Lets the sidebar's section-disable confirm
+    // drop a whole mode's staged edits before flipping the enable flag, rather
+    // than relying on the framework PageAdapter::discard() no-op.
     const auto& groups = pageGroupChildren();
     const auto git = groups.constFind(page);
     if (git == groups.constEnd()) {
         qCWarning(PlasmaZones::lcCore) << "discardPage: no config manifest or child group for page" << page;
         return;
     }
+    // Dispatch on pageSupportsDiscard, not manifest membership: the ordering and
+    // Quick Shortcuts children are deliberately absent from the config manifest
+    // (they revert through their own staged machinery) yet isPageDirty recurses
+    // into them, so a parent is reported dirty when only they are edited. A
+    // manifest-only walk would leave those staged edits in place, and the
+    // section-disable confirm would then apply a partial edit — exactly what that
+    // confirm exists to prevent. Non-discardable children (e.g. shaders browser)
+    // return false and are skipped.
     for (const QString& child : *git) {
-        if (manifest.contains(child))
+        if (pageSupportsDiscard(child))
             discardPage(child);
     }
 }

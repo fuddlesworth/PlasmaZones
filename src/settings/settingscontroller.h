@@ -211,8 +211,9 @@ public:
 
     /// The per-page config-key manifest: page id → the (group, key) pairs that
     /// page owns. Phase-1 scope is the KConfig-backed settings pages; pages not
-    /// listed here have no per-page Reset/Discard. Public + static so the unit
-    /// tests can assert the partition/schema invariants.
+    /// listed here have no per-page Reset/Discard. Public + static so the manifest
+    /// (and its hand-maintained partition/schema invariants — see the definition)
+    /// can be inspected without a SettingsController instance.
     static const QHash<QString, Settings::ConfigKeyList>& pageOwnedConfigKeys();
 
     /// Override the page that the next setNeedsSave(true) calls (and any

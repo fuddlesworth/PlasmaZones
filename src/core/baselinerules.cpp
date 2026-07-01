@@ -95,11 +95,13 @@ PhosphorRules::Rule makeBaselineTitleBarRule()
 
 // Build the managed baseline GAP rule: the catch-all, lowest-priority rule that
 // is the single source of truth for the shared inner/outer gap model (Settings
-// reads these actions back as its innerGap()/outerGap*() getters). Only the
-// parent actions (inner gap, outer gap, and the per-side toggle, which defaults
-// off) are seeded. The four per-side outer-gap actions are added by the
-// Appearance page when the user turns per-side gaps on and removed when off, so
-// an absent per-side action falls back to the uniform outer gap.
+// reads these actions back as its innerGap()/outerGap*() getters). These are
+// Context-domain actions; resolveContextGaps EXCLUDES this managed rule so the
+// values surface only as the level-4 global default, never as a top-tier context
+// override. Only the parent actions (inner gap, outer gap, and the per-side
+// toggle, which defaults off) are seeded. The four per-side outer-gap actions are
+// added by the Appearance page when the user turns per-side gaps on and removed
+// when off, so an absent per-side action falls back to the uniform outer gap.
 PhosphorRules::Rule makeBaselineGapRule()
 {
     using namespace PhosphorRules;

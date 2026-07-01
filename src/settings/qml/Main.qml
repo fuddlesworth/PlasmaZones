@@ -186,9 +186,10 @@ PhosphorUi.SettingsAppWindow {
 
     // Per-page overflow (kebab) in the breadcrumb row: Reset this page to
     // defaults / Discard this page's unsaved changes. Shown on any page that
-    // supports at least one action; the two items appear independently off
-    // pageSupportsReset / pageSupportsDiscard (e.g. animation pages can Discard
-    // but have no reset-to-defaults). Both route through a window-scoped confirm.
+    // supports at least one action. The two items query pageSupportsReset /
+    // pageSupportsDiscard separately so a future discard-only page can show just
+    // Discard; today every resettable page is also discardable, so the two
+    // predicates match. Both route through a window-scoped confirm.
     breadcrumbTrailing: Component {
         ToolButton {
             id: pageActionsButton
@@ -208,6 +209,7 @@ PhosphorUi.SettingsAppWindow {
 
                 MenuItem {
                     text: i18n("Reset page to defaults")
+                    Accessible.name: text
                     icon.name: "document-revert"
                     visible: settingsController.pageSupportsReset(settingsController.activePage)
                     // Disabled while a global Save/Discard batch is in flight: a
@@ -220,6 +222,7 @@ PhosphorUi.SettingsAppWindow {
 
                 MenuItem {
                     text: i18n("Discard changes on this page")
+                    Accessible.name: text
                     icon.name: "edit-undo"
                     visible: settingsController.pageSupportsDiscard(settingsController.activePage)
                     // Enabled only when the page carries unsaved edits and no

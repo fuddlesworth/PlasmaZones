@@ -589,10 +589,21 @@ void Settings::discardKeys(const ConfigKeyList& keys)
 {
     const QVector<QVariant> before = snapshotNotifyProperties();
     for (const ConfigKey& gk : keys) {
-        // Revert to the committed baseline. write() runs the schema validator,
-        // so the reverted value lands in its canonical form (matching what a
-        // fresh load() would produce).
-        m_store->write(gk.first, gk.second, m_baseline.value(gk.first).value(gk.second));
+        // Only keys captured in the committed baseline (i.e. schema-declared) can
+        // be reverted; a mistyped manifest entry would otherwise write a default-
+        // constructed QVariant() over a live value. Skip it instead.
+        const auto groupIt = m_baseline.constFind(gk.first);
+        if (groupIt == m_baseline.constEnd())
+            continue;
+        const auto keyIt = groupIt->constFind(gk.second);
+        if (keyIt == groupIt->constEnd())
+            continue;
+        // Revert to the committed baseline, but only when it actually differs, so
+        // an unmodified key in the list is not needlessly re-written. write() runs
+        // the schema validator, so the reverted value lands in its canonical form
+        // (matching what a fresh load() would produce).
+        if (m_store->readVariant(gk.first, gk.second) != *keyIt)
+            m_store->write(gk.first, gk.second, *keyIt);
     }
     if (emitChangedNotifyProperties(before))
         Q_EMIT settingsChanged();
