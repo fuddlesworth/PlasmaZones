@@ -119,11 +119,11 @@ static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
 namespace {
 
 // The managed baseline rule makers (makeBaselineSkeleton /
-// makeBaseline{Border,TitleBar,Gap,Overlay}Rule) moved to
-// src/core/baselinerules.{h,cpp} so the settings app's per-page appearance reset
-// shares one source of truth with the seeding below. They are PlasmaZones-
-// namespace free functions, so the unqualified calls in ensureManagedRule resolve
-// to them unchanged.
+// makeBaseline{Border,TitleBar,Gap,Overlay}Rule and makeBaselineGeneralMin{Width,
+// Height}Rule) moved to src/core/baselinerules.{h,cpp} so the settings app's
+// per-page reset shares one source of truth with the seeding below. They are
+// PlasmaZones-namespace free functions, so the unqualified calls in
+// ensureManagedRule resolve to them unchanged.
 
 // Debounce interval (ms): coalesce rapid geometry changes (multi-screen, panel editor) into one update.
 // Conceptually distinct from DELAYED_PANEL_REQUERY_MS in autotile.cpp (which schedules a
@@ -284,6 +284,8 @@ Daemon::Daemon(QObject* parent)
         ensureManagedRule(makeBaselineTitleBarRule());
         ensureManagedRule(makeBaselineGapRule());
         ensureManagedRule(makeBaselineOverlayRule());
+        ensureManagedRule(makeBaselineGeneralMinWidthRule());
+        ensureManagedRule(makeBaselineGeneralMinHeightRule());
     }
 
     // Configure geometry update debounce timer

@@ -3429,6 +3429,24 @@ constexpr QLatin1String kStashAnimMinSize{"animMinSize"};
 constexpr QLatin1String kFieldAnimMinWidth{"minWidth"};
 constexpr QLatin1String kFieldAnimMinHeight{"minHeight"};
 
+// General (window-management) min-size window filtering: the two Exclusions.
+// Minimum-Window-{Width,Height} knobs fold onto per-axis Exclude rules (Width /
+// Height LessThan N). The boolean TransientWindows toggle in the same group STAYS
+// config (its effect-side handling in the KWin effect doesn't map to an ordinary
+// Exclude rule). Same "0 = off" contract as the animation min-size fold above.
+constexpr QLatin1String kV4ExclusionsGroup{"Exclusions"};
+constexpr QLatin1String kV4ExclMinWidth{"MinimumWindowWidth"};
+constexpr QLatin1String kV4ExclMinHeight{"MinimumWindowHeight"};
+constexpr QLatin1String kStashGeneralMinSize{"generalMinSize"};
+constexpr QLatin1String kFieldGeneralMinWidth{"minWidth"};
+constexpr QLatin1String kFieldGeneralMinHeight{"minHeight"};
+// Frozen v4 compile defaults for the general min-size (ConfigDefaults::
+// minimumWindowWidth/Height, which are on-by-default). Stash only a value that
+// DIFFERS from these — a config at default needs no migration rule (the daemon
+// seeds the default managed baseline); a custom or 0 (disabled) value overrides it.
+constexpr int kV4DefExclMinWidth = 200;
+constexpr int kV4DefExclMinHeight = 150;
+
 // Zone-overlay appearance (Snapping.Zones.{Colors,Opacity,Border}) → the managed
 // baseline overlay rule. Colours are gated on UseSystem (accent-on contributes
 // no colour action, as with the mode-appearance stash); the daemon seeds any
@@ -3936,6 +3954,24 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
                         {kV4AnimMinWidth, kV4AnimMinHeight});
     }
 
+    // ── General min-size window filtering → Exclude rules ───────────────────
+    // The two Exclusions.MinimumWindow-{Width,Height} knobs fold onto per-axis
+    // Exclude rules (evaluated by the snap engine / drag gate). The boolean
+    // TransientWindows toggle stays in config. Default 0 = off → no rule.
+    {
+        const QJsonObject excl = groupObjectAtPath(root, QString(kV4ExclusionsGroup));
+        QJsonObject generalMinSize;
+        // Differ from the on-by-default value (200/150): a config at default needs
+        // no rule (daemon seeds the baseline), a custom or 0 (disabled) value does.
+        stashIntIfDiffers(excl, kV4ExclMinWidth, kV4DefExclMinWidth, generalMinSize, kFieldGeneralMinWidth);
+        stashIntIfDiffers(excl, kV4ExclMinHeight, kV4DefExclMinHeight, generalMinSize, kFieldGeneralMinHeight);
+        if (!generalMinSize.isEmpty()) {
+            stash.insert(kStashGeneralMinSize, generalMinSize);
+        }
+        // Strip only the two min-size keys; the TransientWindows toggle survives.
+        stripKeysAtPath(root, {QStringLiteral("Exclusions")}, {kV4ExclMinWidth, kV4ExclMinHeight});
+    }
+
     // ── Zone-overlay appearance → managed baseline overlay rule ─────────────
     // Colours/opacity/border fold onto the baseline overlay rule. The effects
     // (blur, frame rate), zone-number, and label keys stay in config, as does
@@ -4167,6 +4203,40 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
                        QStringLiteral("Skip animations for narrow windows"));
         addMinSizeRule(animMinSize.value(kFieldAnimMinHeight), Field::Height,
                        ConfigDefaults::animationMinHeightRuleId(), QStringLiteral("Skip animations for short windows"));
+    }
+
+    // General min-size filters: the two MANAGED baseline Exclude rules, carrying the
+    // user's differing-from-default threshold in the match (Width / Height LessThan
+    // N). Seeded managed / INT_MIN to match makeBaselineGeneralMin{Width,Height}Rule
+    // so the daemon's ensureManagedRule recognises them and doesn't reset the match.
+    // The stash only holds a differing value, so a stashed threshold (including 0 =
+    // disabled) always produces the override rule; a clean default config has no
+    // stash and the daemon seeds the on-by-default baseline.
+    {
+        const QJsonObject generalMinSize = stash.value(kStashGeneralMinSize).toObject();
+        const auto addExcludeBaseline = [&newRules](const QJsonValue& v, Field field, const QUuid& id,
+                                                    const QString& name) {
+            if (!v.isDouble()) {
+                return;
+            }
+            const int n = qMax(0, v.toInt());
+            Rule rule;
+            rule.id = id;
+            // Not translated — Rule::name is the persisted identity surface.
+            rule.name = name;
+            rule.enabled = true;
+            rule.managed = true;
+            rule.priority = std::numeric_limits<int>::min();
+            rule.match = MatchExpression::makeLeaf(field, Operator::LessThan, QVariant(n));
+            PhosphorRules::RuleAction exclude;
+            exclude.type = QString(PhosphorRules::ActionType::Exclude);
+            rule.actions = {exclude};
+            newRules.append(rule);
+        };
+        addExcludeBaseline(generalMinSize.value(kFieldGeneralMinWidth), Field::Width,
+                           ConfigDefaults::generalMinWidthRuleId(), QStringLiteral("Exclude narrow windows"));
+        addExcludeBaseline(generalMinSize.value(kFieldGeneralMinHeight), Field::Height,
+                           ConfigDefaults::generalMinHeightRuleId(), QStringLiteral("Exclude short windows"));
     }
 
     // Zone-overlay appearance: the managed baseline overlay rule, carrying the

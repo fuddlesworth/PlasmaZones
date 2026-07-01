@@ -521,11 +521,15 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     static const QHash<QString, Settings::ConfigKeyList> manifest{
         {QStringLiteral("general"),
          {
+             // The min-size window filters (MinimumWindowWidth/Height) fold onto the
+             // managed general min-size baseline Exclude rules and are NOT listed here
+             // — their reset / dirty / discard route through resetGeneralMinSize-
+             // Baseline / generalMinSizeBaselineDirty / discardGeneralMinSizeBaseline
+             // (see settingscontroller_pagestate.cpp). The TransientWindows toggle
+             // stays config-backed.
              {CD::renderingGroup(), CD::backendKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::suppressDefaultLayoutAssignmentKey()},
              {CD::exclusionsGroup(), CD::transientWindowsKey()},
-             {CD::exclusionsGroup(), CD::minimumWindowWidthKey()},
-             {CD::exclusionsGroup(), CD::minimumWindowHeightKey()},
          }},
         {QStringLiteral("snapping-overlay-behavior"),
          {

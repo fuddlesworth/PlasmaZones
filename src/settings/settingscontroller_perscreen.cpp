@@ -183,6 +183,16 @@ QString SettingsController::overlayBaselineRuleId() const
     return ConfigDefaults::baselineOverlayRuleId().toString();
 }
 
+QString SettingsController::generalMinWidthRuleId() const
+{
+    return ConfigDefaults::generalMinWidthRuleId().toString();
+}
+
+QString SettingsController::generalMinHeightRuleId() const
+{
+    return ConfigDefaults::generalMinHeightRuleId().toString();
+}
+
 // ── Per-screen zone selector overrides ───────────────────────────────────
 
 QVariantMap SettingsController::getPerScreenZoneSelectorSettings(const QString& screenName) const

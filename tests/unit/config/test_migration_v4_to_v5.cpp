@@ -718,6 +718,81 @@ private Q_SLOTS:
         QCOMPARE(wf.value(QStringLiteral("ExcludeTransientWindows")).toBool(), true);
     }
 
+    // The two general (window-management) min-size knobs fold onto MANAGED baseline
+    // Exclude rules whose match carries the threshold. Unlike the animation min-size
+    // (default 0 = off), these are on-by-default (200/150): only a DIFFERING value
+    // migrates (a config at default needs no rule — the daemon seeds the baseline);
+    // the TransientWindows toggle in the same group survives.
+    void testGeneralMinSize_becomesManagedExcludeBaselines()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        // Width 300 differs from the 200 default → migrates. Height 150 IS the
+        // default → no rule (daemon seeds it). The transient toggle must survive.
+        setNested(cfg, {QStringLiteral("Exclusions")},
+                  {{QStringLiteral("MinimumWindowWidth"), 300},
+                   {QStringLiteral("MinimumWindowHeight"), 150},
+                   {QStringLiteral("TransientWindows"), false}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QString widthId = ConfigDefaults::generalMinWidthRuleId().toString();
+        const QString heightId = ConfigDefaults::generalMinHeightRuleId().toString();
+        QJsonObject widthRule;
+        bool sawHeightRule = false;
+        for (const QJsonValue& v : rules()) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("id")).toString() == widthId) {
+                widthRule = r;
+            }
+            if (r.value(QStringLiteral("id")).toString() == heightId) {
+                sawHeightRule = true;
+            }
+        }
+        QVERIFY2(!widthRule.isEmpty(), "a differing min-width must become a managed Exclude baseline");
+        QVERIFY2(!sawHeightRule, "a default (150) min-height must NOT migrate (daemon seeds it)");
+        QVERIFY2(widthRule.value(QStringLiteral("managed")).toBool(), "the min-size baseline must be managed");
+        QCOMPARE(actionTypes(widthRule), (QStringList{QStringLiteral("exclude")}));
+        const QJsonObject m = matchOf(widthRule);
+        QCOMPARE(m.value(QStringLiteral("field")).toString(), QStringLiteral("width"));
+        QCOMPARE(m.value(QStringLiteral("op")).toString(), QStringLiteral("lessThan"));
+        QCOMPARE(m.value(QStringLiteral("value")).toInt(), 300);
+
+        // The min-size key is stripped; the transient toggle survives in config.
+        const QJsonObject excl =
+            readJson(ConfigDefaults::configFilePath()).value(QStringLiteral("Exclusions")).toObject();
+        QVERIFY2(!excl.contains(QStringLiteral("MinimumWindowWidth")), "min-width key must be stripped");
+        QCOMPARE(excl.value(QStringLiteral("TransientWindows")).toBool(), false);
+    }
+
+    // A disabled general min-size (0) still migrates — as a managed baseline whose
+    // match is Width/Height LessThan 0 (never matches), so the daemon's default-seed
+    // (on) doesn't silently re-enable an axis the user turned off.
+    void testGeneralMinSize_disabledMigratesAsZeroThresholdBaseline()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {QStringLiteral("Exclusions")}, {{QStringLiteral("MinimumWindowWidth"), 0}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QString widthId = ConfigDefaults::generalMinWidthRuleId().toString();
+        QJsonObject widthRule;
+        for (const QJsonValue& v : rules()) {
+            if (v.toObject().value(QStringLiteral("id")).toString() == widthId)
+                widthRule = v.toObject();
+        }
+        QVERIFY2(!widthRule.isEmpty(), "a disabled (0) min-width must still migrate to override the default seed");
+        QVERIFY(widthRule.value(QStringLiteral("managed")).toBool());
+        QCOMPARE(matchOf(widthRule).value(QStringLiteral("value")).toInt(), 0);
+    }
+
     // finalizeV5 defer path: if rules.json is unreadable/corrupt when the
     // override rules are merged in, the conversion must DEFER — return false and
     // leave `_v5AppearanceStash` in place so a later run (after rules.json is

@@ -567,6 +567,11 @@ public:
     // Appearance page's colours / opacity / border controls read/write its actions.
     Q_INVOKABLE QString overlayBaselineRuleId() const;
 
+    // Ids of the two managed general min-size baseline Exclude rules — the General
+    // page's min-size controls read/write the threshold in each rule's match.
+    Q_INVOKABLE QString generalMinWidthRuleId() const;
+    Q_INVOKABLE QString generalMinHeightRuleId() const;
+
     Q_INVOKABLE QVariantMap loadWindowGeometry() const;
     Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height);
 

@@ -1844,12 +1844,39 @@ private Q_SLOTS:
     }
 
     // isWindowExcluded — minimum-window-size exclusion (parity with autotile)
+    // Build an Exclude RuleSet with per-axis min-size rules (Width/Height LessThan
+    // threshold), mirroring the managed general min-size baselines. A 0 threshold is
+    // "disabled" and produces no rule for that axis.
+    static PhosphorRules::RuleSet makeMinSizeExcludeSet(int minW, int minH)
+    {
+        const auto rule = [](PhosphorRules::Field field, int threshold) {
+            PhosphorRules::Rule r;
+            r.id = QUuid::createUuid();
+            r.enabled = true;
+            r.match =
+                PhosphorRules::MatchExpression::makeLeaf(field, PhosphorRules::Operator::LessThan, QVariant(threshold));
+            PhosphorRules::RuleAction a;
+            a.type = QString(PhosphorRules::ActionType::Exclude);
+            r.actions.append(a);
+            return r;
+        };
+        PhosphorRules::RuleSet set;
+        if (minW > 0)
+            set.addRule(rule(PhosphorRules::Field::Width, minW));
+        if (minH > 0)
+            set.addRule(rule(PhosphorRules::Field::Height, minH));
+        return set;
+    }
+
     void testWindowExcluded_minimumWindowSize()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
-        m_settings->setMinimumWindowWidth(200);
-        m_settings->setMinimumWindowHeight(150);
+        // Min-size exclusion is rule-based now: two Exclude rules matching Width/Height
+        // LessThan the threshold (the managed general min-size baselines), evaluated by
+        // isWindowExcluded's evaluateExcludeRules against the full query.
+        PhosphorRules::RuleSet set = makeMinSizeExcludeSet(200, 150);
+        engine.setExcludeRuleSet(&set);
 
         // Sub-threshold frame → excluded (when the full query carries the size).
         engine.setExclusionQueryProvider([](const QString&) {
@@ -1897,10 +1924,10 @@ private Q_SLOTS:
         });
         QVERIFY(engine.isWindowExcluded(QStringLiteral("app|short")));
 
-        // A zero threshold disables that dimension: a 1x1 window is NOT excluded
-        // by size when both thresholds are 0 (guards the `> 0` enable check).
-        m_settings->setMinimumWindowWidth(0);
-        m_settings->setMinimumWindowHeight(0);
+        // A zero threshold disables that dimension: with both axes off there are no
+        // min-size rules, so a 1x1 window is NOT excluded by size.
+        PhosphorRules::RuleSet emptySet = makeMinSizeExcludeSet(0, 0);
+        engine.setExcludeRuleSet(&emptySet);
         engine.setExclusionQueryProvider([](const QString&) {
             PhosphorRules::WindowQuery q;
             q.width = 1;
@@ -1909,10 +1936,9 @@ private Q_SLOTS:
         });
         QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|zero-thresh")));
 
-        // No provider → no frame size is known, so the size threshold is not
-        // applied (the appId-only fallback, preserving historical behaviour).
-        m_settings->setMinimumWindowWidth(200);
-        m_settings->setMinimumWindowHeight(150);
+        // No provider → no frame size is known, so the size rules cannot match (an
+        // absent Width/Height field never matches), preserving historical behaviour.
+        engine.setExcludeRuleSet(&set);
         engine.setExclusionQueryProvider({});
         QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|unknown")));
     }
@@ -1931,8 +1957,9 @@ private Q_SLOTS:
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
-        m_settings->setMinimumWindowWidth(200);
-        m_settings->setMinimumWindowHeight(150);
+        // Min-size exclusion is rule-based: bind Width/Height LessThan Exclude rules.
+        PhosphorRules::RuleSet set = makeMinSizeExcludeSet(200, 150);
+        engine.setExcludeRuleSet(&set);
         // Full query carries a sub-threshold frame → isWindowExcluded is true.
         engine.setExclusionQueryProvider([](const QString&) {
             PhosphorRules::WindowQuery q;

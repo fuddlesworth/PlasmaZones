@@ -16,6 +16,48 @@ SettingsFlickable {
     // Capture the context property so child components can access it
     readonly property var settingsBridge: appSettings
 
+    // The min-size window filters are rule-backed: each is the threshold in the match
+    // of a managed general min-size baseline Exclude rule (Width / Height LessThan N).
+    // The baseline is always daemon-seeded, so the controls only ever UPDATE its match
+    // threshold (0 = never matches = disabled); read/write route through the
+    // RuleController. The transient toggle stays config-backed.
+    readonly property var ruleController: settingsController.rulesPage
+    property int generalReloadTick: 0
+
+    // Threshold N of a min-size baseline (Width/Height LessThan N), or the fallback
+    // when the rule/match is absent. Reading generalReloadTick keeps it reactive.
+    function minSizeThreshold(ruleId, fallback) {
+        root.generalReloadTick;
+        const rule = root.ruleController.ruleJson(ruleId);
+        if (rule && rule.id && rule.match && rule.match.value !== undefined)
+            return rule.match.value;
+        return fallback;
+    }
+
+    // Write a min-size threshold onto the baseline rule's match (0 = disabled).
+    function writeMinSize(ruleId, field, value) {
+        var rule = root.ruleController.ruleJson(ruleId);
+        if (!rule || !rule.id)
+            return;
+        rule.match = {
+            "field": field,
+            "op": "lessThan",
+            "value": Math.max(0, value)
+        };
+        root.ruleController.updateRuleFromJson(rule);
+        root.generalReloadTick++;
+    }
+
+    Connections {
+        target: root.ruleController
+        function onRulesLoaded() {
+            root.generalReloadTick++;
+        }
+        function onBaselinesChanged() {
+            root.generalReloadTick++;
+        }
+    }
+
     contentHeight: content.implicitHeight
     clip: true
 
@@ -160,7 +202,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Minimum window width")
-                    description: appSettings.minimumWindowWidth === 0 ? i18n("Disabled (no width threshold)") : i18n("Windows narrower than this are excluded")
+                    description: root.minSizeThreshold(settingsController.generalMinWidthRuleId(), appSettings.minimumWindowWidth) === 0 ? i18n("Disabled (no width threshold)") : i18n("Windows narrower than this are excluded")
 
                     SettingsSpinBox {
                         // Schema-driven bounds — see GeneralPageController's
@@ -171,11 +213,11 @@ SettingsFlickable {
                         from: settingsController.generalPage.minimumWindowWidthMin
                         to: settingsController.generalPage.minimumWindowWidthMax
                         stepSize: 10
-                        value: appSettings.minimumWindowWidth
+                        value: root.minSizeThreshold(settingsController.generalMinWidthRuleId(), appSettings.minimumWindowWidth)
                         unitText: ""
                         Accessible.name: i18n("Minimum window width")
                         onValueModified: value => {
-                            appSettings.minimumWindowWidth = value;
+                            root.writeMinSize(settingsController.generalMinWidthRuleId(), "width", value);
                         }
                         textFromValue: function (value) {
                             return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
@@ -187,17 +229,17 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Minimum window height")
-                    description: appSettings.minimumWindowHeight === 0 ? i18n("Disabled (no height threshold)") : i18n("Windows shorter than this are excluded")
+                    description: root.minSizeThreshold(settingsController.generalMinHeightRuleId(), appSettings.minimumWindowHeight) === 0 ? i18n("Disabled (no height threshold)") : i18n("Windows shorter than this are excluded")
 
                     SettingsSpinBox {
                         from: settingsController.generalPage.minimumWindowHeightMin
                         to: settingsController.generalPage.minimumWindowHeightMax
                         stepSize: 10
-                        value: appSettings.minimumWindowHeight
+                        value: root.minSizeThreshold(settingsController.generalMinHeightRuleId(), appSettings.minimumWindowHeight)
                         unitText: ""
                         Accessible.name: i18n("Minimum window height")
                         onValueModified: value => {
-                            appSettings.minimumWindowHeight = value;
+                            root.writeMinSize(settingsController.generalMinHeightRuleId(), "height", value);
                         }
                         textFromValue: function (value) {
                             return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);

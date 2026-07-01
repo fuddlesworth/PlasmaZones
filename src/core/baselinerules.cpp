@@ -12,6 +12,7 @@
 
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
 
 #include <QJsonValue>
@@ -154,6 +155,37 @@ PhosphorRules::Rule makeBaselineOverlayRule()
         action(ActionType::SetOverlayBorderRadius, ActionParam::Value, ConfigDefaults::borderRadius()),
     };
     return rule;
+}
+
+namespace {
+// Shared builder for the two managed general min-size exclusion baselines: a
+// lowest-priority Exclude rule whose match is @p field LessThan @p threshold. The
+// threshold lives in the MATCH (Exclude is a param-less terminal action), so the
+// General page edits the match; a 0 threshold never matches (disabled).
+PhosphorRules::Rule makeBaselineMinSizeRule(const QUuid& id, const QString& name, PhosphorRules::Field field,
+                                            int threshold)
+{
+    using namespace PhosphorRules;
+    Rule rule = makeBaselineSkeleton(id, name);
+    rule.match = MatchExpression::makeLeaf(field, Operator::LessThan, QVariant(threshold));
+    RuleAction exclude;
+    exclude.type = QString(ActionType::Exclude);
+    rule.actions = {exclude};
+    return rule;
+}
+} // namespace
+
+PhosphorRules::Rule makeBaselineGeneralMinWidthRule()
+{
+    // Not translated — Rule::name is the persisted identity surface.
+    return makeBaselineMinSizeRule(ConfigDefaults::generalMinWidthRuleId(), QStringLiteral("Exclude narrow windows"),
+                                   PhosphorRules::Field::Width, ConfigDefaults::minimumWindowWidth());
+}
+
+PhosphorRules::Rule makeBaselineGeneralMinHeightRule()
+{
+    return makeBaselineMinSizeRule(ConfigDefaults::generalMinHeightRuleId(), QStringLiteral("Exclude short windows"),
+                                   PhosphorRules::Field::Height, ConfigDefaults::minimumWindowHeight());
 }
 
 } // namespace PlasmaZones

@@ -198,6 +198,11 @@ bool SettingsController::isPageDirty(const QString& page) const
         // that baseline differs from the snapshot.
         if (page == QLatin1String("snapping-overlay-appearance") && m_rulesPage != nullptr)
             return m_rulesPage->overlayBaselineDirty();
+        // The General page is likewise MIXED: its min-size window filters fold onto
+        // the managed general min-size baseline rules (the transient toggle and the
+        // rest stay config).
+        if (page == QLatin1String("general") && m_rulesPage != nullptr)
+            return m_rulesPage->generalMinSizeBaselineDirty();
         return false;
     }
 
@@ -320,6 +325,8 @@ void SettingsController::reconcileRuleBackedDirty()
     // via isPageDirty so a baseline edit badges it without clobbering a config-key
     // dirty state.
     sync(QStringLiteral("snapping-overlay-appearance"), isPageDirty(QStringLiteral("snapping-overlay-appearance")));
+    // The General page is likewise mixed (config + general min-size baselines).
+    sync(QStringLiteral("general"), isPageDirty(QStringLiteral("general")));
     if (changed) {
         Q_EMIT dirtyPagesChanged();
     }
@@ -451,6 +458,11 @@ void SettingsController::resetPage(const QString& page)
     if (page == QLatin1String("snapping-overlay-appearance") && m_rulesPage != nullptr) {
         m_rulesPage->resetOverlayBaseline();
     }
+    // The General page also owns the managed general min-size baseline rules; reset
+    // them to their on-by-default factory thresholds alongside the config keys.
+    if (page == QLatin1String("general") && m_rulesPage != nullptr) {
+        m_rulesPage->resetGeneralMinSizeBaseline();
+    }
     // Resetting to defaults usually diverges from the saved baseline, so the
     // page normally becomes dirty (stage → Save/Discard). If the defaults
     // already matched the baseline it stays clean — reconcile handles both.
@@ -484,6 +496,11 @@ void SettingsController::discardPage(const QString& page)
         // restore it from the snapshot alongside the config keys.
         if (page == QLatin1String("snapping-overlay-appearance") && m_rulesPage != nullptr) {
             m_rulesPage->discardOverlayBaseline();
+        }
+        // The General page also owns the managed general min-size baseline rules;
+        // restore them from the snapshot alongside the config keys.
+        if (page == QLatin1String("general") && m_rulesPage != nullptr) {
+            m_rulesPage->discardGeneralMinSizeBaseline();
         }
         // Every owned key is back at the committed baseline, so the page is clean.
         reconcilePageDirty(page);

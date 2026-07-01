@@ -44,6 +44,11 @@ const QSet<QUuid>& overlayBaselineIds()
     static const QSet<QUuid> ids{ConfigDefaults::baselineOverlayRuleId()};
     return ids;
 }
+const QSet<QUuid>& generalMinSizeBaselineIds()
+{
+    static const QSet<QUuid> ids{ConfigDefaults::generalMinWidthRuleId(), ConfigDefaults::generalMinHeightRuleId()};
+    return ids;
+}
 // Rules whose id is in @p ids, order preserved.
 QList<PhosphorRules::Rule> subsetByIds(const QList<PhosphorRules::Rule>& rules, const QSet<QUuid>& ids)
 {
@@ -81,6 +86,12 @@ bool RuleController::overlayBaselineDirty() const
     return subsetByIds(m_model.rules(), overlayBaselineIds()) != subsetByIds(m_savedRules, overlayBaselineIds());
 }
 
+bool RuleController::generalMinSizeBaselineDirty() const
+{
+    return subsetByIds(m_model.rules(), generalMinSizeBaselineIds())
+        != subsetByIds(m_savedRules, generalMinSizeBaselineIds());
+}
+
 bool RuleController::userRulesDirty() const
 {
     return userSubset(m_model.rules()) != userSubset(m_savedRules);
@@ -88,7 +99,7 @@ bool RuleController::userRulesDirty() const
 
 void RuleController::recomputeDirtyFromSnapshot()
 {
-    setDirty(baselinesDirty() || overlayBaselineDirty() || userRulesDirty());
+    setDirty(baselinesDirty() || overlayBaselineDirty() || generalMinSizeBaselineDirty() || userRulesDirty());
 }
 
 void RuleController::upsertRule(const PhosphorRules::Rule& rule)
@@ -119,6 +130,16 @@ void RuleController::resetOverlayBaseline()
     Q_EMIT baselinesChanged();
 }
 
+void RuleController::resetGeneralMinSizeBaseline()
+{
+    // Rewrite both managed general min-size baselines to their factory definitions
+    // (on-by-default Width/Height thresholds). Staged.
+    upsertRule(makeBaselineGeneralMinWidthRule());
+    upsertRule(makeBaselineGeneralMinHeightRule());
+    recomputeDirtyFromSnapshot();
+    Q_EMIT baselinesChanged();
+}
+
 void RuleController::resetManagedDefaults()
 {
     // Fire-and-forget: no out-args, and the model refresh comes from the daemon's
@@ -145,6 +166,17 @@ void RuleController::discardOverlayBaseline()
     // Restore the overlay baseline from the last synced snapshot, leaving the
     // appearance baselines and user rules untouched.
     const QList<PhosphorRules::Rule> saved = subsetByIds(m_savedRules, overlayBaselineIds());
+    for (const PhosphorRules::Rule& r : saved)
+        upsertRule(r);
+    recomputeDirtyFromSnapshot();
+    Q_EMIT baselinesChanged();
+}
+
+void RuleController::discardGeneralMinSizeBaseline()
+{
+    // Restore both general min-size baselines from the last synced snapshot, leaving
+    // the appearance / overlay baselines and user rules untouched.
+    const QList<PhosphorRules::Rule> saved = subsetByIds(m_savedRules, generalMinSizeBaselineIds());
     for (const PhosphorRules::Rule& r : saved)
         upsertRule(r);
     recomputeDirtyFromSnapshot();

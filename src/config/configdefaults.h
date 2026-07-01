@@ -772,6 +772,21 @@ public:
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000009}"));
     }
 
+    // Stable ids of the general (window-management) minimum-size exclusion rules:
+    // one non-managed Exclude rule per axis whose match is Width / Height LessThan
+    // the threshold. Distinct from the animation min-size rules (…007/…008), which
+    // carry ExcludeAnimations; these carry the terminal Exclude action the snap
+    // engine / drag gate evaluate to keep sub-threshold windows unmanaged.
+    static QUuid generalMinWidthRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-00000000000a}"));
+    }
+
+    static QUuid generalMinHeightRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-00000000000b}"));
+    }
+
     // Window-property match expressions that scope which windows the managed
     // baseline BORDER and TITLE BAR rules apply to. These are the canonical wire
     // shapes shared by the daemon's seeder (the fresh-install default) and the

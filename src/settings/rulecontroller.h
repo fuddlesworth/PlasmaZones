@@ -197,6 +197,10 @@ public:
     /// snapshot (drives the Overlay appearance page's dirty state).
     bool overlayBaselineDirty() const;
 
+    /// True iff either managed general MIN-SIZE baseline rule (Width / Height) differs
+    /// from the last synced snapshot (drives the General page's dirty state).
+    bool generalMinSizeBaselineDirty() const;
+
     /// True iff the non-managed (user) rules differ from the last synced
     /// snapshot, including order (drives the Rules page's dirty state).
     bool userRulesDirty() const;
@@ -220,6 +224,11 @@ public:
     /// appearance baselines and user rules untouched.
     void resetOverlayBaseline();
 
+    /// Per-page "Reset to defaults" for the General page's min-size filters: rewrite
+    /// both managed general min-size baseline rules to their on-by-default factory
+    /// definitions. Staged; leaves other baselines and user rules untouched.
+    void resetGeneralMinSizeBaseline();
+
     /// Per-page "Discard changes" for the Windows appearance page: restore the
     /// three appearance baseline rules from the last synced snapshot, leaving user
     /// rules and the overlay baseline untouched.
@@ -228,6 +237,10 @@ public:
     /// Per-page "Discard changes" for the Overlay appearance page: restore the
     /// overlay baseline rule from the last synced snapshot.
     void discardOverlayBaseline();
+
+    /// Per-page "Discard changes" for the General page's min-size filters: restore
+    /// both general min-size baseline rules from the last synced snapshot.
+    void discardGeneralMinSizeBaseline();
 
     /// Fire-and-forget D-Bus call asking the daemon to reset the three managed
     /// baseline rules to factory (org.plasmazones.Rules.resetManagedDefaults),

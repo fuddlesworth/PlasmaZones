@@ -45,4 +45,14 @@ PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineGapRule();
 /// getters. Seeds all seven appearance actions at their ConfigDefaults values.
 PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineOverlayRule();
 
+/// Baseline general MIN-WIDTH exclusion rule (id generalMinWidthRuleId()) — a
+/// managed, lowest-priority Exclude rule matching Width LessThan the default
+/// minimum window width. Keeps sub-threshold windows unmanaged out of the box; the
+/// General page edits the threshold in the match (0 = never matches = disabled).
+PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineGeneralMinWidthRule();
+
+/// Baseline general MIN-HEIGHT exclusion rule (id generalMinHeightRuleId()) — the
+/// Height LessThan sibling of makeBaselineGeneralMinWidthRule.
+PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineGeneralMinHeightRule();
+
 } // namespace PlasmaZones
