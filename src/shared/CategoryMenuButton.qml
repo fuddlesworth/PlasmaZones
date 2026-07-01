@@ -78,6 +78,13 @@ ComboBox {
     property bool includeNoneEntry: false
     property string noneText: i18nc("@item:inlistbox", "None")
     property string placeholderText: i18nc("@action:button", "Select…")
+    // Icon size for the leaf ItemDelegates' checkmark. The org.kde.desktop
+    // MenuItem sizes its content icon from a fixed style metric (this exact
+    // expression) and ignores `icon.width`, so the category-submenu checkmark
+    // is that size no matter what. Mirror the expression here so the leaf
+    // ItemDelegates — whose IconLabel DOES honour `icon.width` — render their
+    // checkmark at the identical size in both pointer and touch modes.
+    readonly property real _menuIconSize: Kirigami.Settings.hasTransientTouchInput ? Kirigami.Units.iconSizes.smallMedium : Kirigami.Units.iconSizes.small
     // Re-entry guard against rapid press / Space-down events queueing two
     // `showMenu` callbacks before the first one returns. `_opening` is set
     // when we hand off to `Qt.callLater` and cleared on `aboutToShow`.
@@ -118,9 +125,6 @@ ComboBox {
         }
         return null;
     }
-    // Leading glyph prepended to the title of the category submenu that holds
-    // the current selection.
-    readonly property string _selectedCategoryMarker: "✓ "
     readonly property var _sortedItems: {
         if (!items || items.length === 0)
             return [];
@@ -312,6 +316,8 @@ ComboBox {
 
             opacity: itemDimmed ? 0.45 : 1
             icon.name: isSelected ? "checkmark" : (itemDimmed ? "dialog-warning" : "")
+            icon.width: root._menuIconSize
+            icon.height: root._menuIconSize
             ToolTip.text: dimReason
             ToolTip.visible: itemDimmed && hovered && dimReason !== ""
             ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -359,11 +365,14 @@ ComboBox {
         // avoids the parent-pointer ambiguity entirely.
         property var _allItems: []
         property var _owned: []
-        // Category/subcategory submenus tracked with their identity
-        // (`{ obj, baseTitle, top, sub }`) so updateChecks() can (re)apply the
-        // selected-category marker to their titles on every open. The menu is
-        // built once and kept alive, so a selection change between opens must
-        // refresh the markers without a full rebuild.
+        // Category/subcategory submenu items tracked with their identity
+        // (`{ menuItem, top, sub }`) so updateChecks() can (re)apply the
+        // selected-category checkmark icon on every open. `menuItem` is the
+        // MenuItem the parent menu auto-creates for the submenu — we set its
+        // `icon.name` to the same themed "checkmark" the leaf ItemDelegates
+        // use, so the "your selection is in here" mark is visually identical at
+        // both levels. The menu is built once and kept alive, so a selection
+        // change between opens must refresh the marks without a full rebuild.
         property var _categorySubmenus: []
         property bool _built: false
         // Set when `items` changes while the menu is open; consumed by
@@ -414,6 +423,20 @@ ComboBox {
             });
         }
 
+        // Request the shared menu icon size on an auto-created submenu
+        // MenuItem. Styles that size a MenuItem's icon from `icon.width` pick
+        // this up; styles that use a fixed metric (org.kde.desktop) ignore it,
+        // which is why the leaf ItemDelegates are pinned to that same metric
+        // (`_menuIconSize`) instead of the submenu being pinned to theirs. The
+        // size is constant; updateChecks() only toggles icon.name on / off.
+        function _sizeSubmenuIcon(menuItem) {
+            if (!menuItem)
+                return;
+
+            menuItem.icon.width = root._menuIconSize;
+            menuItem.icon.height = root._menuIconSize;
+        }
+
         function updateChecks() {
             for (var i = 0; i < _allItems.length; i++) {
                 var it = _allItems[i];
@@ -428,16 +451,17 @@ ComboBox {
                 it.isSelected = sel;
             }
             // Mark the category (and subcategory) submenu that holds the
-            // current selection so the user can see where their value lives
-            // without hovering into each submenu. Recomputed on every open
-            // because the menu persists across selection changes. A top-level
-            // submenu is marked whenever the selection is anywhere inside it
-            // (including a nested subcategory); the subcategory submenu is
-            // marked only on an exact top+sub match.
+            // current selection with the same "checkmark" icon the leaf items
+            // use, so the user can see where their value lives without hovering
+            // into each submenu. Recomputed on every open because the menu
+            // persists across selection changes. A top-level submenu is marked
+            // whenever the selection is anywhere inside it (including a nested
+            // subcategory); the subcategory submenu is marked only on an exact
+            // top+sub match.
             var path = root._selectedCategoryPath;
             for (var k = 0; k < _categorySubmenus.length; k++) {
                 var cs = _categorySubmenus[k];
-                if (!cs || !cs.obj)
+                if (!cs || !cs.menuItem)
                     continue;
 
                 var holdsSelection = false;
@@ -447,7 +471,7 @@ ComboBox {
                     else
                         holdsSelection = (path.top === cs.top && path.sub === cs.sub);
                 }
-                cs.obj.title = holdsSelection ? (root._selectedCategoryMarker + cs.baseTitle) : cs.baseTitle;
+                cs.menuItem.icon.name = holdsSelection ? "checkmark" : "";
             }
         }
 
@@ -538,9 +562,14 @@ ComboBox {
                     var subMenu = _addSubmenu(categoryMenu, {
                         "title": cat.name
                     });
+                    // The MenuItem the parent auto-creates for the submenu is
+                    // the item just appended — capture it so updateChecks() can
+                    // toggle its checkmark icon, and pin its icon size to match
+                    // the leaf ItemDelegates.
+                    var topMenuItem = categoryMenu.itemAt(categoryMenu.count - 1);
+                    _sizeSubmenuIcon(topMenuItem);
                     _categorySubmenus.push({
-                        "obj": subMenu,
-                        "baseTitle": cat.name,
+                        "menuItem": topMenuItem,
                         "top": cat.name,
                         "sub": ""
                     });
@@ -554,9 +583,10 @@ ComboBox {
                         var subSubMenu = _addSubmenu(subMenu, {
                             "title": subcats[sc].name
                         });
+                        var subMenuItem = subMenu.itemAt(subMenu.count - 1);
+                        _sizeSubmenuIcon(subMenuItem);
                         _categorySubmenus.push({
-                            "obj": subSubMenu,
-                            "baseTitle": subcats[sc].name,
+                            "menuItem": subMenuItem,
                             "top": cat.name,
                             "sub": subcats[sc].name
                         });
