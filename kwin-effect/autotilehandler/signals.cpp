@@ -492,7 +492,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 const QString windowId = m_effect->getWindowId(w);
                 saveAndRecordPreAutotileGeometry(windowId, screenId, w, w->frameGeometry());
                 if (m_effect->isWindowFloating(windowId) && m_effect->m_daemonServiceRegistered) {
-                    // Correct for maximize/fullscreen, same as the sink at :493 — a
+                    // Correct for maximize/fullscreen, the same correction
+                    // saveAndRecordPreAutotileGeometry applies internally: a
                     // floating-but-maximized window's frame is the full monitor, which
                     // must not be pushed as the free-float geometry.
                     QRectF frame = PlasmaZonesEffect::freeGeometryForCapture(w, w->frameGeometry());

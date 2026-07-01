@@ -33,11 +33,9 @@
 #include <QTest>
 #include <QString>
 #include <QStringList>
-#include <QHash>
 #include <QRect>
 #include <QSet>
 #include <QUuid>
-#include <QRectF>
 #include <QGuiApplication>
 #include <memory>
 
@@ -99,6 +97,7 @@ private Q_SLOTS:
     void cleanup()
     {
         m_service->setSnapState(nullptr);
+        m_service->setSnapEngine(nullptr);
         delete m_engine;
         m_engine = nullptr;
         delete m_service;
