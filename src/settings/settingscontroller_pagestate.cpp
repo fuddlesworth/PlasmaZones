@@ -258,9 +258,11 @@ bool SettingsController::pageSupportsReset(const QString& page) const
     // Config-manifest pages write schema defaults; ordering pages drop the
     // custom order; shortcuts pages unassign every quick slot; the virtual
     // screens page unsplits every monitor; the Windows appearance page resets
-    // its 3 managed baseline rules. Animation pages have no reset-to-defaults path.
+    // its 3 managed baseline rules; animation pages clear every per-event
+    // override and reset the animation config keys.
     return pageOwnedConfigKeys().contains(page) || isOrderingPage(page) || isShortcutsPage(page)
-        || page == QLatin1String("virtualscreens") || page == QLatin1String("window-appearance");
+        || page == QLatin1String("virtualscreens") || page == QLatin1String("window-appearance")
+        || isAnimationPage(page);
 }
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
@@ -321,6 +323,40 @@ void SettingsController::resetPage(const QString& page)
             m_rulesPage->resetBaselines();
         }
         reconcileRuleBackedDirty();
+        return;
+    }
+
+    // Animation pages (whole tree, shared domain): reset to defaults =
+    // clear every per-event override file AND reset the animation config keys
+    // (Profile, ShaderProfileTree, WindowFiltering, Enabled, Backend) to their
+    // schema defaults. Both are STAGED like ordinary animation edits — the
+    // cleared files are snapshotted, so a subsequent Discard restores them, and
+    // Save commits. User presets / motion-set libraries are left alone (like
+    // user rules on the Rules page). Suppress onSettingsPropertyChanged during
+    // the config reset; mark the active page dirty explicitly below.
+    if (isAnimationPage(page)) {
+        if (m_animationsPage != nullptr) {
+            const bool wasLoading = m_loading;
+            m_loading = true;
+            m_animationsPage->clearAllOverrides();
+            m_settings.resetKeys(animationConfigKeys());
+            m_loading = wasLoading;
+        }
+        // isPageDirty(animation) is value-based (hasPendingChanges || any
+        // animation key modified); sync the active page's m_dirtyPages entry.
+        const bool nowDirty = isPageDirty(page);
+        bool changed = false;
+        if (nowDirty) {
+            if (!m_dirtyPages.contains(page)) {
+                m_dirtyPages.insert(page);
+                changed = true;
+            }
+        } else if (m_dirtyPages.remove(page)) {
+            changed = true;
+        }
+        if (changed) {
+            Q_EMIT dirtyPagesChanged();
+        }
         return;
     }
 
