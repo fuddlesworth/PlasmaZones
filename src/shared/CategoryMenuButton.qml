@@ -92,6 +92,35 @@ ComboBox {
         }
         return null;
     }
+    // The category path ({ top, sub }) of the currently-selected item, or null
+    // when nothing is selected or the selection is uncategorised (those items
+    // live in the flat tail and carry their own checkmark). Drives the
+    // "your selection is in here" marker on the category submenu titles so the
+    // user can tell which submenu holds the current value without hovering into
+    // each one. `sub` is "" for a single-level category.
+    readonly property var _selectedCategoryPath: {
+        if (!items || !currentId)
+            return null;
+
+        for (var i = 0; i < items.length; i++) {
+            if (!items[i] || items[i].id !== currentId)
+                continue;
+
+            var cat = (items[i].category || "").trim();
+            if (cat === "")
+                return null;
+
+            var slashIdx = cat.indexOf("/");
+            return {
+                "top": slashIdx >= 0 ? cat.substring(0, slashIdx).trim() : cat,
+                "sub": slashIdx >= 0 ? cat.substring(slashIdx + 1).trim() : ""
+            };
+        }
+        return null;
+    }
+    // Leading glyph prepended to the title of the category submenu that holds
+    // the current selection.
+    readonly property string _selectedCategoryMarker: "✓ "
     readonly property var _sortedItems: {
         if (!items || items.length === 0)
             return [];
@@ -330,6 +359,12 @@ ComboBox {
         // avoids the parent-pointer ambiguity entirely.
         property var _allItems: []
         property var _owned: []
+        // Category/subcategory submenus tracked with their identity
+        // (`{ obj, baseTitle, top, sub }`) so updateChecks() can (re)apply the
+        // selected-category marker to their titles on every open. The menu is
+        // built once and kept alive, so a selection change between opens must
+        // refresh the markers without a full rebuild.
+        property var _categorySubmenus: []
         property bool _built: false
         // Set when `items` changes while the menu is open; consumed by
         // onClosed to rebuild against a hidden tree (see onItemsChanged).
@@ -355,6 +390,7 @@ ComboBox {
             }
             _owned = [];
             _allItems = [];
+            _categorySubmenus = [];
             _built = false;
             root._opening = false;
         }
@@ -390,6 +426,28 @@ ComboBox {
                 else
                     sel = (it.itemId === root.currentId);
                 it.isSelected = sel;
+            }
+            // Mark the category (and subcategory) submenu that holds the
+            // current selection so the user can see where their value lives
+            // without hovering into each submenu. Recomputed on every open
+            // because the menu persists across selection changes. A top-level
+            // submenu is marked whenever the selection is anywhere inside it
+            // (including a nested subcategory); the subcategory submenu is
+            // marked only on an exact top+sub match.
+            var path = root._selectedCategoryPath;
+            for (var k = 0; k < _categorySubmenus.length; k++) {
+                var cs = _categorySubmenus[k];
+                if (!cs || !cs.obj)
+                    continue;
+
+                var holdsSelection = false;
+                if (path) {
+                    if (cs.sub === "")
+                        holdsSelection = (path.top === cs.top);
+                    else
+                        holdsSelection = (path.top === cs.top && path.sub === cs.sub);
+                }
+                cs.obj.title = holdsSelection ? (root._selectedCategoryMarker + cs.baseTitle) : cs.baseTitle;
             }
         }
 
@@ -480,6 +538,12 @@ ComboBox {
                     var subMenu = _addSubmenu(categoryMenu, {
                         "title": cat.name
                     });
+                    _categorySubmenus.push({
+                        "obj": subMenu,
+                        "baseTitle": cat.name,
+                        "top": cat.name,
+                        "sub": ""
+                    });
                     for (var s = 0; s < catItems.length; s++)
                         _addItem(subMenu, _itemProps(catItems[s]));
                     for (var sc = 0; sc < subcats.length; sc++) {
@@ -489,6 +553,12 @@ ComboBox {
 
                         var subSubMenu = _addSubmenu(subMenu, {
                             "title": subcats[sc].name
+                        });
+                        _categorySubmenus.push({
+                            "obj": subSubMenu,
+                            "baseTitle": subcats[sc].name,
+                            "top": cat.name,
+                            "sub": subcats[sc].name
                         });
                         for (var ss = 0; ss < subItems.length; ss++)
                             _addItem(subSubMenu, _itemProps(subItems[ss]));
