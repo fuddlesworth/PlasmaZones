@@ -397,6 +397,11 @@ bool StagingService::stagedTilingQuickSlot(int slotNumber, QString& out) const
     return true;
 }
 
+void StagingService::clearVirtualScreenConfigs()
+{
+    m_virtualScreenConfigs.clear();
+}
+
 void StagingService::clearSnappingQuickSlots()
 {
     m_snappingQuickSlots.clear();

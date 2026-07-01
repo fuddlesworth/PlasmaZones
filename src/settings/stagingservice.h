@@ -122,6 +122,17 @@ public:
     bool hasUnsavedVirtualScreenConfig(const QString& physicalScreenId) const;
     QVariantList stagedVirtualScreenConfig(const QString& physicalScreenId) const;
 
+    /// True if any virtual-screen edit is staged (any physical screen). Backs
+    /// the per-page dirty check for the Virtual Screens page.
+    bool hasStagedVirtualScreenConfigs() const
+    {
+        return !m_virtualScreenConfigs.isEmpty();
+    }
+
+    /// Drop all staged virtual-screen edits (per-page Discard reverts to the
+    /// saved configs; the getters fall back to the daemon otherwise).
+    void clearVirtualScreenConfigs();
+
     /// Persist staged VS configs to Settings (KConfig) for on-disk
     /// durability. Runs BEFORE `Settings::save()` — the subsequent save
     /// writes everything out in one go.

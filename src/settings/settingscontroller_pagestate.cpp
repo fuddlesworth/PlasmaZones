@@ -210,6 +210,12 @@ bool SettingsController::isPageDirty(const QString& page) const
         return m_staging.hasStagedTilingQuickSlots();
     }
 
+    // Virtual Screens page: dirty iff any physical screen has a staged
+    // virtual-screen edit (a split or a removal).
+    if (page == QLatin1String("virtualscreens")) {
+        return m_staging.hasStagedVirtualScreenConfigs();
+    }
+
     // Animation pages share one staging domain, so any of them is dirty exactly
     // when the tree has unsaved edits. Value-based like the manifest pages, so
     // the badge and the kebab's Discard-enabled state stay correct on every
@@ -250,9 +256,11 @@ bool SettingsController::isPageDirty(const QString& page) const
 bool SettingsController::pageSupportsReset(const QString& page) const
 {
     // Config-manifest pages write schema defaults; ordering pages drop the
-    // custom order; shortcuts pages unassign every quick slot. Animation pages
-    // have no reset-to-defaults path.
-    return pageOwnedConfigKeys().contains(page) || isOrderingPage(page) || isShortcutsPage(page);
+    // custom order; shortcuts pages unassign every quick slot; the virtual
+    // screens page unsplits every monitor. Animation pages have no
+    // reset-to-defaults path.
+    return pageOwnedConfigKeys().contains(page) || isOrderingPage(page) || isShortcutsPage(page)
+        || page == QLatin1String("virtualscreens");
 }
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
@@ -303,6 +311,32 @@ void SettingsController::resetPage(const QString& page)
         }
         Q_EMIT quickLayoutSlotsChanged();
         reconcilePageDirty(page);
+        return;
+    }
+
+    // Virtual Screens: "reset to defaults" unsplits every monitor. Drop any
+    // in-progress split edits, then stage a removal for each physical screen
+    // that currently HAS virtual screens (a >1-entry config). save() flushes
+    // the removals to the daemon + Settings. dirtyPagesChanged (emitted below)
+    // drives the page's _refreshConfig so the editor re-reads the reverted state.
+    if (page == QLatin1String("virtualscreens")) {
+        m_staging.clearVirtualScreenConfigs();
+        const QVariantList physicalScreens = screens();
+        for (const QVariant& entry : physicalScreens) {
+            const QString name = entry.toMap().value(QStringLiteral("name")).toString();
+            if (name.isEmpty())
+                continue;
+            const QString physId = physicalScreenId(name);
+            // A >1-entry config means the physical screen is split into virtual
+            // screens; single/empty means it is already at the native default.
+            if (!physId.isEmpty() && getVirtualScreenConfig(physId).size() > 1)
+                m_staging.stageVirtualScreenRemoval(physId);
+        }
+        if (m_staging.hasStagedVirtualScreenConfigs())
+            m_dirtyPages.insert(page);
+        else
+            m_dirtyPages.remove(page);
+        Q_EMIT dirtyPagesChanged();
         return;
     }
 
@@ -368,6 +402,18 @@ void SettingsController::discardPage(const QString& page)
             Q_EMIT quickLayoutSlotsChanged();
         }
         reconcilePageDirty(page);
+        return;
+    }
+
+    // Virtual Screens: drop every staged virtual-screen edit so the editor
+    // falls back to the daemon's saved configs. The Discard menu item is only
+    // enabled while staged edits exist, so there is always something to clear.
+    if (page == QLatin1String("virtualscreens")) {
+        m_staging.clearVirtualScreenConfigs();
+        m_dirtyPages.remove(page);
+        // Always emit so the page's dirtyPagesChanged handler re-reads the
+        // reverted config, even if other pages keep the global flag dirty.
+        Q_EMIT dirtyPagesChanged();
         return;
     }
 
