@@ -178,8 +178,40 @@ public:
     }
     QStringList dirtyPages() const;
     /// Returns true if the page (or any of its children, for parent categories
-    /// like "snapping" / "tiling") currently has unsaved changes.
+    /// like "snapping" / "tiling") currently has unsaved changes. For pages in
+    /// the per-page config manifest (@ref pageOwnedConfigKeys) the answer is
+    /// value-based — any owned key differing from the committed baseline —
+    /// which stays correct across a per-page Discard/Reset. Non-manifest pages
+    /// fall back to the m_dirtyPages membership set.
     Q_INVOKABLE bool isPageDirty(const QString& page) const;
+
+    // ── Per-page Reset / Discard (kebab menu in the breadcrumb row) ──────────
+    /// True when @p page can be reset to defaults: config-manifest pages
+    /// (write schema defaults) and the ordering pages (drop the custom order).
+    /// Animation pages have no reset-to-defaults path, so they return false.
+    Q_INVOKABLE bool pageSupportsReset(const QString& page) const;
+
+    /// True when @p page can discard its own unsaved edits: everything
+    /// pageSupportsReset covers PLUS the animation pages (which revert through
+    /// the shared AnimationsPageController staging domain). The kebab shows the
+    /// two menu items independently off these two capabilities.
+    Q_INVOKABLE bool pageSupportsDiscard(const QString& page) const;
+
+    /// Reset every config key owned by @p page to its schema default, staged
+    /// for the user to Save or Discard (never persisted here). No-op for
+    /// pages absent from the manifest.
+    Q_INVOKABLE void resetPage(const QString& page);
+
+    /// Revert every config key owned by @p page to the committed baseline,
+    /// dropping that page's unsaved edits while leaving other pages untouched.
+    /// No-op for pages absent from the manifest.
+    Q_INVOKABLE void discardPage(const QString& page);
+
+    /// The per-page config-key manifest: page id → the (group, key) pairs that
+    /// page owns. Phase-1 scope is the KConfig-backed settings pages; pages not
+    /// listed here have no per-page Reset/Discard. Public + static so the unit
+    /// tests can assert the partition/schema invariants.
+    static const QHash<QString, Settings::ConfigKeyList>& pageOwnedConfigKeys();
 
     /// Override the page that the next setNeedsSave(true) calls (and any
     /// property NOTIFY routed through onSettingsPropertyChanged) will mark
@@ -606,6 +638,10 @@ private Q_SLOTS:
 
 private:
     void setNeedsSave(bool needs);
+    // Sync m_dirtyPages membership for a manifest page to its value-based
+    // dirty state after a per-page Reset/Discard, emitting dirtyPagesChanged
+    // when it flips so the footer's global needsSave stays consistent.
+    void reconcilePageDirty(const QString& page);
     void refreshVirtualDesktops();
     void refreshActivities();
 

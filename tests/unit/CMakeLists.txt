@@ -266,6 +266,12 @@ p_add_test(test_settings_animation_profile config/test_settings_animation_profil
 # keep each test file under the project's <800-line guideline.
 p_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
 
+# Companion test executable: per-page Discard/Reset primitives — committed
+# baseline capture, isKeyModified, discardKeys (revert-to-baseline) and
+# resetKeys (revert-to-default) with NOTIFY re-emission. Split from
+# test_settings_core to keep each test file under the <800-line guideline.
+p_add_test(test_settings_pagereset config/test_settings_pagereset.cpp)
+
 p_add_test(test_settings_validation config/test_settings_validation.cpp)
 
 p_add_test(test_settings_perscreen config/test_settings_perscreen.cpp)

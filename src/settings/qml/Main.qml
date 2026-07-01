@@ -184,6 +184,54 @@ PhosphorUi.SettingsAppWindow {
         }
     }
 
+    // Per-page overflow (kebab) in the breadcrumb row: Reset this page to
+    // defaults / Discard this page's unsaved changes. Shown on any page that
+    // supports at least one action; the two items appear independently off
+    // pageSupportsReset / pageSupportsDiscard (e.g. animation pages can Discard
+    // but have no reset-to-defaults). Both route through a window-scoped confirm.
+    breadcrumbTrailing: Component {
+        ToolButton {
+            id: pageActionsButton
+
+            // Re-evaluates on activePageChanged (activePage is referenced), so
+            // the button appears/disappears as the user moves between pages.
+            visible: settingsController.pageSupportsReset(settingsController.activePage) || settingsController.pageSupportsDiscard(settingsController.activePage)
+            icon.name: "overflow-menu"
+            display: AbstractButton.IconOnly
+            text: i18n("Page actions")
+            Accessible.name: i18n("Page actions")
+
+            onClicked: pageActionsMenu.popup()
+
+            Menu {
+                id: pageActionsMenu
+
+                MenuItem {
+                    text: i18n("Reset page to defaults")
+                    icon.name: "document-revert"
+                    visible: settingsController.pageSupportsReset(settingsController.activePage)
+                    onTriggered: resetPageConfirmDialog.open()
+                }
+
+                MenuItem {
+                    text: i18n("Discard changes on this page")
+                    icon.name: "edit-undo"
+                    visible: settingsController.pageSupportsDiscard(settingsController.activePage)
+                    // Only meaningful when the page carries unsaved edits.
+                    // `dirtyPages` is referenced purely to re-run this binding
+                    // on dirtyPagesChanged (isPageDirty itself is a function
+                    // call whose only QML dependency would otherwise be
+                    // activePage).
+                    enabled: {
+                        void settingsController.dirtyPages;
+                        return settingsController.isPageDirty(settingsController.activePage);
+                    }
+                    onTriggered: discardPageConfirmDialog.open()
+                }
+            }
+        }
+    }
+
     Component.onCompleted: {
         // The header search supersedes the sidebar's page-tree search.
         window.sidebar.searchEnabled = false;
@@ -370,7 +418,7 @@ PhosphorUi.SettingsAppWindow {
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
 
     Shortcut {
         sequence: "Ctrl+PgUp"
@@ -817,6 +865,56 @@ PhosphorUi.SettingsAppWindow {
         ]
     }
 
+    // Per-page Reset — restores just the active page's settings to their
+    // defaults, staged for Save/Discard (opened from the breadcrumb kebab).
+    Kirigami.PromptDialog {
+        id: resetPageConfirmDialog
+
+        title: i18n("Reset Page to Defaults")
+        subtitle: i18n("Reset the settings on this page to their default values? You can still review the result and Save or Discard afterwards.")
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Reset Page")
+                icon.name: "document-revert"
+                onTriggered: {
+                    resetPageConfirmDialog.close();
+                    settingsController.resetPage(settingsController.activePage);
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel"
+                onTriggered: resetPageConfirmDialog.close()
+            }
+        ]
+    }
+
+    // Per-page Discard — reverts just the active page's unsaved edits to the
+    // last-saved values, leaving other pages' changes intact.
+    Kirigami.PromptDialog {
+        id: discardPageConfirmDialog
+
+        title: i18n("Discard Page Changes")
+        subtitle: i18n("Discard the unsaved changes on this page? Changes on other pages are kept.")
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Discard")
+                icon.name: "edit-undo"
+                onTriggered: {
+                    discardPageConfirmDialog.close();
+                    settingsController.discardPage(settingsController.activePage);
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel"
+                onTriggered: discardPageConfirmDialog.close()
+            }
+        ]
+    }
+
     // Confirm dialog for the sidebar's inline snapping/tiling toggle when
     // the relevant page has unsaved edits. Disabling the section through
     // beginExternalEdit/endExternalEdit commits the *_Enabled flag plus
@@ -842,15 +940,15 @@ PhosphorUi.SettingsAppWindow {
                     const section = sectionToggleDiscardConfirm.pendingSection;
                     const value = sectionToggleDiscardConfirm.pendingValue;
                     sectionToggleDiscardConfirm.close();
-                    // Discard the dirty page first, THEN flip the enable
-                    // flag — otherwise the inline beginExternalEdit /
-                    // endExternalEdit pair would surface the still-staged
-                    // edits alongside the disable. PageRegistry.controller
-                    // returns the StagingDomain whose discard() slot
-                    // reloads the backing store and clears the dirty flag.
-                    const ctrl = settingsController.app.registry.controller(section);
-                    if (ctrl)
-                        ctrl.discard();
+                    // Discard the section's staged edits first, THEN flip the
+                    // enable flag — otherwise the inline beginExternalEdit /
+                    // endExternalEdit pair would surface the still-staged edits
+                    // alongside the disable. discardPage("snapping"/"tiling")
+                    // reverts every manifest-backed leaf under that mode back to
+                    // the committed baseline (the framework PageAdapter.discard()
+                    // for these virtual parents is a no-op, so the old
+                    // registry.controller(section).discard() call did nothing).
+                    settingsController.discardPage(section);
                     settingsController.beginExternalEdit(section);
                     if (section === "snapping")
                         appSettings.snappingEnabled = value;
