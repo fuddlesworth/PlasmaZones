@@ -2684,7 +2684,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     // the pre-restart active window without a second, competing retile.
     if (inserted && windowId == m_pendingFocusReseedWindowId) {
         m_pendingFocusReseedWindowId.clear();
-        m_activeScreen = m_windowToStateKey.value(windowId).screenId;
+        m_activeScreen = screenId;
         if (state) {
             state->setFocusedWindow(windowId);
         }
