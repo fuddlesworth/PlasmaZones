@@ -188,9 +188,50 @@ private Q_SLOTS:
         const auto resetBorder = store.ruleSet().ruleById(ConfigDefaults::baselineBorderRuleId());
         QVERIFY(resetBorder.has_value());
         QCOMPARE(resetBorder.value(), makeBaselineBorderRule());
-        // User rule preserved, total count unchanged.
-        QVERIFY(store.ruleSet().ruleById(user.id).has_value());
+        // User rule preserved byte-for-byte (Policy A), total count unchanged.
+        const auto keptUser = store.ruleSet().ruleById(user.id);
+        QVERIFY(keptUser.has_value());
+        QCOMPARE(keptUser.value(), user);
         QCOMPARE(store.ruleSet().rules().size(), 4);
+    }
+
+    // resetManagedDefaults must operate on the CURRENTLY PERSISTED set, not the
+    // adaptor store's (possibly stale) in-memory set. Reproduces the real
+    // scenario: the settings process rewrote rules.json out-of-band (as
+    // Settings::reset() does to drop disable rules) while the daemon's borrowed
+    // store still holds the old in-memory set. The m_store->load() at the top of
+    // resetManagedDefaults must pick up the on-disk set first. Without it, this
+    // test fails (the stale user rule survives / the on-disk one is lost).
+    void daemonResetReloadsOnDiskSetFirst()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("rules.json"));
+
+        // Adaptor's store: in-memory set carries userStale.
+        PhosphorRules::RuleStore store(path);
+        const Rule userStale = makeUserRule(QStringLiteral("stale"));
+        store.setAllRules({makeBaselineBorderRule(), makeBaselineTitleBarRule(), makeBaselineGapRule(), userStale});
+
+        // Out-of-band write (a second process/store) replaces userStale with
+        // userDisk on disk. The adaptor's `store` does NOT see this yet.
+        const Rule userDisk = makeUserRule(QStringLiteral("on-disk"));
+        {
+            PhosphorRules::RuleStore external(path);
+            external.setAllRules(
+                {makeBaselineBorderRule(), makeBaselineTitleBarRule(), makeBaselineGapRule(), userDisk});
+        }
+
+        QObject holder;
+        RuleAdaptor adaptor(&store, &holder);
+        adaptor.resetManagedDefaults();
+
+        // The reload must have run: the on-disk user rule wins, the stale one is gone.
+        QVERIFY(store.ruleSet().ruleById(userDisk.id).has_value());
+        QVERIFY(!store.ruleSet().ruleById(userStale.id).has_value());
+        QCOMPARE(store.ruleSet().rules().size(), 4);
+        // Baselines still reset to factory.
+        QCOMPARE(store.ruleSet().ruleById(ConfigDefaults::baselineBorderRuleId()).value(), makeBaselineBorderRule());
     }
 };
 

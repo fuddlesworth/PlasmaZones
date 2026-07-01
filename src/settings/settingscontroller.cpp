@@ -487,20 +487,35 @@ SettingsController::SettingsController(QObject* parent)
     // reconcileRuleBackedDirty() is value-based — it compares the staged model
     // to the last daemon-synced snapshot — so it stays correct even when the
     // shared dirty bit does not transition (e.g. editing a baseline while user
-    // rules are already dirty). It is driven off the model's own change signals
-    // so every edit re-attributes, plus revert/apply completion for the async
-    // failure paths where the model itself did not change but the page's
-    // blanket-cleared dirty entry must be restored.
+    // rules are already dirty). It is driven off the model's per-EDIT signals
+    // (dataChanged / rows{Inserted,Removed,Moved}), plus revert/apply/load
+    // completion.
+    //
+    // NOTE: modelReset is deliberately NOT wired here. The only source of a
+    // model reset is RuleController::fetchAndLoad's setRules(), whose
+    // beginResetModel/endResetModel fires modelReset SYNCHRONOUSLY *before* the
+    // controller re-baselines its saved snapshot (captureSavedSnapshot runs on
+    // the next line). Reconciling on modelReset would therefore compare the
+    // fresh model against the STALE snapshot and spuriously mark both rule-backed
+    // pages dirty on every startup / daemon rulesChanged broadcast. That
+    // repopulation is instead handled by the rulesLoaded / revertFinished
+    // connections below, which fire AFTER the re-baseline.
     const auto reattributeRuleDirty = [this]() {
         if (m_loading || m_saving)
             return;
         reconcileRuleBackedDirty();
     };
     connect(m_rulesPage, &RuleController::dirtyChanged, this, reattributeRuleDirty);
+    // rulesLoaded fires after fetchAndLoad re-baselines the snapshot (both the
+    // initial/broadcast reload and the revert path), so reconciling here sees the
+    // fresh snapshot and clears any dirty the daemon set didn't actually change.
     // revertFinished / applyResult land after load()/save() have run their
     // setNeedsSave(false) blanket-clear; reconcile unconditionally so a failed
     // revert/push (model still divergent from the snapshot) re-marks the right
     // page, and a successful one leaves both clean.
+    connect(m_rulesPage, &RuleController::rulesLoaded, this, [this]() {
+        reconcileRuleBackedDirty();
+    });
     connect(m_rulesPage, &RuleController::revertFinished, this, [this](bool) {
         reconcileRuleBackedDirty();
     });
@@ -513,7 +528,6 @@ SettingsController::SettingsController(QObject* parent)
         connect(ruleModel, &QAbstractItemModel::rowsInserted, this, reattributeRuleDirty);
         connect(ruleModel, &QAbstractItemModel::rowsRemoved, this, reattributeRuleDirty);
         connect(ruleModel, &QAbstractItemModel::rowsMoved, this, reattributeRuleDirty);
-        connect(ruleModel, &QAbstractItemModel::modelReset, this, reattributeRuleDirty);
     }
 
     // Wire screen / activity / layout label resolvers so the rule model and

@@ -230,7 +230,7 @@ bool RuleController::pushToDaemonAsync(const QList<Rule>& rules)
     // setAllRules. Cleared in the reply lambda below before every
     // applyResult emit.
     m_asyncCommitInFlight = true;
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, rules](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         m_asyncCommitInFlight = false;
         QDBusPendingReply<bool> reply = *w;
@@ -249,9 +249,11 @@ bool RuleController::pushToDaemonAsync(const QList<Rule>& rules)
             Q_EMIT applyResult(false, PhosphorI18n::tr("The daemon rejected one or more rules."));
             return;
         }
-        // The staged set is now the daemon's persisted set — re-baseline the
-        // per-page dirty snapshot so baselinesDirty/userRulesDirty read clean.
-        captureSavedSnapshot();
+        // Re-baseline to the set we actually PUSHED (not m_model.rules(), which
+        // may carry a CRUD edit that landed during the wire round-trip and was
+        // NOT persisted). Baselining the pushed set keeps such an in-flight edit
+        // correctly dirty (the applyResult → reconcile re-marks it).
+        m_savedRules = rules;
         setDirty(false);
         setDaemonChangedWhileDirty(false);
         Q_EMIT applyResult(true, QString());
@@ -413,91 +415,10 @@ void RuleController::revert()
     fetchAndLoad(/*fromRevert=*/true);
 }
 
-// ── Per-page dirty split + baseline ops ──────────────────────────────────────
-
-namespace {
-// Partition helpers: managed rules are the appearance baselines; the rest are
-// user rules. Order is preserved so the user-rules comparison catches reorders.
-QList<PhosphorRules::Rule> managedSubset(const QList<PhosphorRules::Rule>& rules)
-{
-    QList<PhosphorRules::Rule> out;
-    for (const PhosphorRules::Rule& r : rules) {
-        if (r.managed)
-            out.append(r);
-    }
-    return out;
-}
-QList<PhosphorRules::Rule> userSubset(const QList<PhosphorRules::Rule>& rules)
-{
-    QList<PhosphorRules::Rule> out;
-    for (const PhosphorRules::Rule& r : rules) {
-        if (!r.managed)
-            out.append(r);
-    }
-    return out;
-}
-} // namespace
-
-void RuleController::captureSavedSnapshot()
-{
-    m_savedRules = m_model.rules();
-}
-
-bool RuleController::baselinesDirty() const
-{
-    return managedSubset(m_model.rules()) != managedSubset(m_savedRules);
-}
-
-bool RuleController::userRulesDirty() const
-{
-    return userSubset(m_model.rules()) != userSubset(m_savedRules);
-}
-
-void RuleController::recomputeDirtyFromSnapshot()
-{
-    setDirty(baselinesDirty() || userRulesDirty());
-}
-
-void RuleController::upsertRule(const PhosphorRules::Rule& rule)
-{
-    if (m_model.contains(rule.id))
-        m_model.updateRule(rule);
-    else
-        m_model.addRule(rule);
-}
-
-void RuleController::resetBaselines()
-{
-    // Rewrite the three managed baselines to their factory definitions. Managed
-    // rules stay in the System section, so updateRule replaces them in place
-    // (no priority renormalize). Staged — the global Save flushes it.
-    upsertRule(makeBaselineBorderRule());
-    upsertRule(makeBaselineTitleBarRule());
-    upsertRule(makeBaselineGapRule());
-    recomputeDirtyFromSnapshot();
-    Q_EMIT baselinesChanged();
-}
-
-void RuleController::resetManagedDefaults()
-{
-    // Fire-and-forget: no out-args, and the model refresh comes from the daemon's
-    // rulesChanged broadcast + the revert() the caller issues. Ordered before any
-    // subsequent getAllRules on this connection, so a paired revert() sees the
-    // reset set.
-    PhosphorProtocol::ClientHelpers::asyncCall(QString(PhosphorProtocol::Service::Interface::Rules),
-                                               QStringLiteral("resetManagedDefaults"));
-}
-
-void RuleController::discardBaselineEdits()
-{
-    // Restore each managed baseline from the last synced snapshot, leaving every
-    // user rule untouched.
-    const QList<PhosphorRules::Rule> savedBaselines = managedSubset(m_savedRules);
-    for (const PhosphorRules::Rule& saved : savedBaselines)
-        upsertRule(saved);
-    recomputeDirtyFromSnapshot();
-    Q_EMIT baselinesChanged();
-}
+// NOTE: the per-page dirty split + managed-baseline reset/discard methods
+// (captureSavedSnapshot, baselinesDirty, userRulesDirty, recomputeDirtyFromSnapshot,
+// upsertRule, resetBaselines, resetManagedDefaults, discardBaselineEdits) live in
+// rulecontroller_baseline.cpp — split out to keep this TU under the 800-line cap.
 
 int RuleController::bandBaseForSection(RuleModel::Section section)
 {

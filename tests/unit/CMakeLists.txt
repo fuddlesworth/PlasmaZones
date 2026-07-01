@@ -818,6 +818,7 @@ add_executable(test_rule_controller
     # rulecontroller.cpp stays under the 800-line cap; the
     # controller's class definition spans both TUs.
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_lookups.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_baseline.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/ruletemplates.cpp
 )
@@ -841,6 +842,7 @@ add_executable(test_baseline_reset
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_views.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_lookups.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_baseline.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/ruletemplates.cpp
 )

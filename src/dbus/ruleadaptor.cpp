@@ -215,7 +215,9 @@ void RuleAdaptor::resetManagedDefaults()
 
     // Policy A: reset ONLY the three managed baseline rules to their factory
     // definitions; every user-authored rule is preserved. Build the merged set
-    // and persist it in one setAllRules so the store emits a single rulesChanged.
+    // and persist it in one setAllRules (the load() above may already have emitted
+    // a rulesChanged if the on-disk set had changed, so this call can be the
+    // second broadcast — harmless, the consumers are idempotent).
     QList<PhosphorRules::Rule> rules = m_store->ruleSet().rules();
     const auto upsertBaseline = [&rules](const PhosphorRules::Rule& factory) {
         for (PhosphorRules::Rule& existing : rules) {

@@ -502,8 +502,13 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // reverts each to the committed baseline (see Settings::resetKeys /
     // discardKeys). ALWAYS express keys through ConfigDefaults accessors — never
     // inline literals (CLAUDE.md). The pairs mirror the store-backed getters in
-    // settings.cpp; test_settingscontroller_pagereset.cpp asserts every pair is
-    // a declared schema key and that no key is owned by two pages.
+    // settings.cpp.
+    //
+    // INVARIANTS (maintained by hand — a unit guard would have to link the whole
+    // SettingsController TU): every pair must be a schema-declared key, and no
+    // key may be owned by two pages (a shared key would let one page's Discard
+    // revert another page's edit). When adding a page, copy the (group, key)
+    // accessors verbatim from that page's getter in settings.cpp.
     //
     // Phase-1 scope: KConfig-backed settings pages only. Rule-backed pages
     // (window-appearance, rules), separate-store pages (layouts), the

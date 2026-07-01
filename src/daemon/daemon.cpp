@@ -89,14 +89,11 @@
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "../dbus/ruleadaptor.h"
-#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorRules/ExclusionRules.h>
-#include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleStore.h>
 
-#include <limits>
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>

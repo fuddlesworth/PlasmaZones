@@ -75,7 +75,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="resetManagedDefaults">
-            <annotation name="org.gtk.GDBus.DocString" value="Reset the three managed baseline appearance/gap rules (Default borders, Default title bars, Default gaps) to their factory definitions, preserving every user-authored rule. Persists once and emits rulesChanged. Backs the settings app's global Restore Defaults for the rule-backed appearance/gap surface."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Reset the three managed baseline appearance/gap rules (Default borders, Default title bars, Default gaps) to their factory definitions, preserving every user-authored rule. Reloads the store from disk first, then persists the merged set, so rulesChanged may fire up to twice (reload + write). Backs the settings app's global Restore Defaults for the rule-backed appearance/gap surface."/>
         </method>
         <signal name="rulesChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted whenever the store's rule set changes (add, update, remove, enable, priority, or full replace)."/>

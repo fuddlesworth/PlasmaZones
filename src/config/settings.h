@@ -1119,10 +1119,18 @@ public:
     /// Per-page Discard: revert each key to the committed baseline. Bracketed
     /// by the same Q_PROPERTY NOTIFY re-emit as load() so QML bindings update,
     /// and emits settingsChanged() once if anything actually changed.
+    ///
+    /// SCOPE: re-emits only Q_PROPERTY NOTIFY signals (+ settingsChanged). It
+    /// does NOT re-emit the non-Q_PROPERTY change signals load() also fires —
+    /// the per-mode disable-list signals (disabled*Changed) and the per-screen
+    /// signals (perScreen*SettingsChanged). This is correct for the current
+    /// per-page manifest (all Q_PROPERTY-backed keys); if a future page ever
+    /// owns a disable-list or per-screen key, extend this to re-emit those.
     void discardKeys(const ConfigKeyList& keys);
 
     /// Per-page Reset: set each key to its schema default. Same NOTIFY /
-    /// settingsChanged() re-emit contract as discardKeys().
+    /// settingsChanged() re-emit contract — and the same scope limit — as
+    /// discardKeys().
     void resetKeys(const ConfigKeyList& keys);
 
     // Additional methods

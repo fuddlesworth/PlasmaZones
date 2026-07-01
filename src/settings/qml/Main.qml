@@ -210,6 +210,11 @@ PhosphorUi.SettingsAppWindow {
                     text: i18n("Reset page to defaults")
                     icon.name: "document-revert"
                     visible: settingsController.pageSupportsReset(settingsController.activePage)
+                    // Disabled while a global Save/Discard batch is in flight: a
+                    // per-page reset mid-batch could race the async revert (e.g.
+                    // the animation controller's async file restore) and leave a
+                    // partial reset.
+                    enabled: !settingsController.app.applying && !settingsController.app.discarding
                     onTriggered: resetPageConfirmDialog.open()
                 }
 
@@ -217,14 +222,14 @@ PhosphorUi.SettingsAppWindow {
                     text: i18n("Discard changes on this page")
                     icon.name: "edit-undo"
                     visible: settingsController.pageSupportsDiscard(settingsController.activePage)
-                    // Only meaningful when the page carries unsaved edits.
-                    // `dirtyPages` is referenced purely to re-run this binding
-                    // on dirtyPagesChanged (isPageDirty itself is a function
-                    // call whose only QML dependency would otherwise be
-                    // activePage).
+                    // Enabled only when the page carries unsaved edits and no
+                    // global Save/Discard batch is in flight. `dirtyPages` is
+                    // referenced purely to re-run this binding on
+                    // dirtyPagesChanged (isPageDirty itself is a function call
+                    // whose only QML dependency would otherwise be activePage).
                     enabled: {
                         void settingsController.dirtyPages;
-                        return settingsController.isPageDirty(settingsController.activePage);
+                        return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.activePage);
                     }
                     onTriggered: discardPageConfirmDialog.open()
                 }

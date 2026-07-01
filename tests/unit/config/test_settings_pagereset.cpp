@@ -152,6 +152,45 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
         QVERIFY(!s.isKeyModified(key.first, key.second));
     }
+
+    // resetKeys() touches only the listed keys — a sibling edit survives.
+    void testResetKeys_leavesOtherKeysUntouched()
+    {
+        IsolatedConfigGuard guard;
+        Settings s;
+        const auto width = widthKey();
+        const auto radius = radiusKey();
+
+        const int w0 = s.borderWidth();
+        const int r0 = s.borderRadius();
+        const int wEdit = (w0 == 3) ? 4 : 3;
+        const int rEdit = (r0 == 20) ? 21 : 20;
+        s.setBorderWidth(wEdit);
+        s.setBorderRadius(rEdit);
+        s.save(); // baseline = the edited values
+
+        s.resetKeys({width}); // reset width to its schema default only
+
+        QCOMPARE(s.borderWidth(), w0); // schema default
+        QCOMPARE(s.borderRadius(), rEdit); // untouched
+        QVERIFY(s.isKeyModified(width.first, width.second)); // default != saved (wEdit)
+        QVERIFY(!s.isKeyModified(radius.first, radius.second));
+    }
+
+    // resetKeys() on a key already at its schema default emits no NOTIFY.
+    void testResetKeys_noopWhenAtDefault()
+    {
+        IsolatedConfigGuard guard;
+        Settings s;
+        const auto key = widthKey();
+        // Fresh Settings: borderWidth is already the schema default.
+        const int def = s.borderWidth();
+        QSignalSpy spy(&s, &Settings::borderWidthChanged);
+        s.resetKeys({key});
+
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(s.borderWidth(), def); // unchanged
+    }
 };
 
 QTEST_MAIN(TestSettingsPageReset)

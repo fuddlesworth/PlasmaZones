@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-| **Status** | Two tracks — **(A) per-page Reset+Discard for the Windows appearance page: designed & being implemented** (this session); **(B) global Restore Defaults daemon-side reset: still deferred** |
+| **Status** | Both tracks IMPLEMENTED — **(A) per-page Reset+Discard for the Windows appearance page**; **(B) global Restore Defaults daemon-side reset** (`RuleAdaptor::resetManagedDefaults`, called from `SettingsController::defaults()`). §5.3 below records the original callback proposal; the shipped code instead shares the baseline makers via `plasmazones_core/baselinerules.h` and has `RuleAdaptor` call them directly (no callback needed). |
 | **Author** | — |
 | **Date** | 2026-06-28 (updated 2026-07-01) |
 | **Schema impact** | None (no config or rules-file schema change) |
@@ -92,13 +92,18 @@ primitive of §5 (that is for the global path, track B).
    through the registered `RuleController` staging domain; Save pushes `setAllRules`,
    Discard runs `revert()`.
 
-### 0.4 What track A does NOT do
+### 0.4 Track A vs track B (both shipped)
 
-The **global Restore Defaults** (`SettingsController::defaults()`) still does not
-reset the rule-backed appearance/gaps baselines — it continues to exclude
-`window-appearance` and `rules` from its blanket mark. Fixing that is track B
-(§2–§9): a daemon-side, live-persisting reset primitive. The two are independent;
-track A ships the per-page affordance without it.
+Track A is the per-page (staged) affordance. Track B is the global
+**Restore Defaults** (`SettingsController::defaults()`) resetting the rule-backed
+appearance/gaps baselines — now implemented via a daemon-side, live-persisting
+primitive (`org.plasmazones.Rules.resetManagedDefaults()`), which `defaults()`
+invokes and then `revert()`s the model to pick up. `window-appearance` and `rules`
+stay excluded from `defaults()`'s dirty blanket-mark: the reset is live +
+reloaded, so those pages land clean rather than staged-dirty. The two tracks are
+independent; §2–§9 record the original track-B design (the shipped primitive lives
+on `RuleAdaptor` and reloads the store first — see §0.3 and the code — rather than
+the §5.3 callback).
 
 ---
 

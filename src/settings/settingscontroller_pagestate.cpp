@@ -267,9 +267,10 @@ bool SettingsController::pageSupportsReset(const QString& page) const
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
 {
-    // Everything resettable can also discard, plus the animation pages (revert
-    // via the shared staging domain).
-    return pageSupportsReset(page) || isAnimationPage(page);
+    // Every page that supports reset also supports discard (animation pages are
+    // already covered by pageSupportsReset). Kept as a distinct query so the two
+    // kebab items can diverge if a future page becomes discard-only.
+    return pageSupportsReset(page);
 }
 
 void SettingsController::reconcilePageDirty(const QString& page)
@@ -343,20 +344,9 @@ void SettingsController::resetPage(const QString& page)
             m_loading = wasLoading;
         }
         // isPageDirty(animation) is value-based (hasPendingChanges || any
-        // animation key modified); sync the active page's m_dirtyPages entry.
-        const bool nowDirty = isPageDirty(page);
-        bool changed = false;
-        if (nowDirty) {
-            if (!m_dirtyPages.contains(page)) {
-                m_dirtyPages.insert(page);
-                changed = true;
-            }
-        } else if (m_dirtyPages.remove(page)) {
-            changed = true;
-        }
-        if (changed) {
-            Q_EMIT dirtyPagesChanged();
-        }
+        // animation key modified), so reconcilePageDirty syncs the active page's
+        // m_dirtyPages entry against the post-reset truth.
+        reconcilePageDirty(page);
         return;
     }
 
@@ -373,11 +363,16 @@ void SettingsController::resetPage(const QString& page)
     }
 
     // Quick Shortcuts: "reset to defaults" unassigns every slot (the default is
-    // no assignment). Stage an empty id for each slot; save() flushes the clears
-    // to the daemon. quickLayoutSlotsChanged refreshes the slot cards.
+    // no assignment). Stage an empty id ONLY for slots that currently hold an
+    // assignment — an already-empty slot needs no change, so resetting an
+    // all-default page stages nothing (stays clean) and Save flushes no no-op
+    // clears. quickLayoutSlotsChanged refreshes the slot cards.
     if (isShortcutsPage(page)) {
         const bool snapping = (page == QLatin1String("snapping-shortcuts"));
         for (int slot = 1; slot <= kQuickLayoutSlotCount; ++slot) {
+            const QString current = snapping ? getQuickLayoutSlot(slot) : getTilingQuickLayoutSlot(slot);
+            if (current.isEmpty())
+                continue;
             if (snapping)
                 m_staging.stageSnappingQuickSlot(slot, QString());
             else

@@ -186,15 +186,17 @@ public:
     Q_INVOKABLE bool isPageDirty(const QString& page) const;
 
     // ── Per-page Reset / Discard (kebab menu in the breadcrumb row) ──────────
-    /// True when @p page can be reset to defaults: config-manifest pages
-    /// (write schema defaults) and the ordering pages (drop the custom order).
-    /// Animation pages have no reset-to-defaults path, so they return false.
+    /// True when @p page can be reset to defaults: config-manifest pages (schema
+    /// defaults), the ordering pages (drop the custom order), the shortcuts pages
+    /// (unassign every quick slot), the virtual screens page (unsplit every
+    /// monitor), the Windows appearance page (reset the 3 managed baseline
+    /// rules), and the animation pages (clear overrides + reset animation keys).
     Q_INVOKABLE bool pageSupportsReset(const QString& page) const;
 
-    /// True when @p page can discard its own unsaved edits: everything
-    /// pageSupportsReset covers PLUS the animation pages (which revert through
-    /// the shared AnimationsPageController staging domain). The kebab shows the
-    /// two menu items independently off these two capabilities.
+    /// True when @p page can discard its own unsaved edits. Currently every page
+    /// that supports reset also supports discard, so this mirrors
+    /// pageSupportsReset. Kept as a separate query so the kebab can show the two
+    /// items independently if the sets ever diverge.
     Q_INVOKABLE bool pageSupportsDiscard(const QString& page) const;
 
     /// Reset every config key owned by @p page to its schema default, staged
