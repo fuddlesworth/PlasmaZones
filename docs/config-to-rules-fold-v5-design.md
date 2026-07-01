@@ -187,7 +187,26 @@ Full build clean; 71/71 tests across rules/config/settings/migration/autotile pa
 
 **Settings page:** the Colors/Opacity/Border/Zone-Numbers sections of `SnappingOverlayAppearancePage.qml` become a thin editor over the baseline overlay rule (the `WindowAppearanceController` pattern).
 
-**Implementation status (this branch):** vocabulary layer landed and green — the 8 Context overlay-appearance actions + descriptors + validators (hex colour / `[0,1]` opacity / bounded border / bool), domain-completeness test updated, positive validation test added; full build clean, 100/100 tests pass. **Remaining (coupled — land together):** `baselineOverlayRuleId()` + `makeBaselineOverlayRule()` seeder, rewire the ~8 `Settings` overlay getters (+ `zoneshaderitem.cpp` direct read) to read the baseline rule, the migration, and labels — best done together with a running daemon/overlay to verify appearance, alongside the settings-page UI batch.
+**Implementation status (this branch):** vocabulary layer landed and green — the 8 Context overlay-appearance actions + descriptors + validators (hex colour / `[0,1]` opacity / bounded border / bool), domain-completeness test updated, positive validation test added; full build clean, 100/100 tests pass.
+
+**Coupling finding (why the rest can't land separately):** an attempt to land the backend (baseline seeder + Settings-getter rewiring + migration) revealed that the overlay appearance is a **config-backed "phase-1" per-page reset page** — its `borderWidth`/colours/opacity live under `pageOwnedConfigKeys` and the per-page reset/discard/dirty infrastructure operates on those **config keys**. Rewiring the getters to read the baseline rule breaks (a) `set(x); get()` round-trips (setter writes config, getter reads rule) and (b) the config-based reset/discard for those keys (`test_settings_core`, `test_settings_pagereset` fail). Fixing that requires converting the overlay page's reset/discard from config-based to rule-based — which **is** the settings-page rework. So unlike gaps (whose page was already rule-backed via `WindowAppearanceController`), fold #4-finish is **not separable** from the overlay-page UI rework; the backend attempt was reverted to keep the tree green.
+
+**Remaining (must land together, in the UI batch):** `baselineOverlayRuleId()` + `makeBaselineOverlayRule()` seeder (+ daemon `ensureManagedRule`), rewire the 7 `Settings` overlay getters (+ `zoneshaderitem.cpp` direct read) to read the baseline rule, remove the overlay keys from `pageOwnedConfigKeys`, convert `SnappingOverlayAppearancePage` to a rule editor with rule-based reset/discard (the `WindowAppearanceController` pattern), the migration, and labels — with a running daemon/overlay to verify appearance.
+
+### Settings-page UI rework plan (the interactive batch)
+
+The per-screen gap page already implements the exact pattern to replicate. Mapped:
+- **Card = "dumb" view.** `GapsSettingsCard.qml` exposes `*Value` properties and emits `*Modified` signals; it holds no scope/rule logic. The **host page** (`WindowAppearancePage.qml`) feeds the values for the current scope and handles the edits.
+- **Scope chip = `SettingsCard` header**, driven by `scopeEnabled` + `scopeAppSettings` + `scopeHasOverridesMethod` + `scopeClearerMethod`, with the active screen in `settingsController.scopeScreenName` (global = `""`).
+- **Rule id + read/write in the controller.** `WindowAppearanceController::perScreenGapRuleId(screenName)` gives the deterministic id; `settingscontroller_perscreen.cpp` reads (`Settings::perScreenGapRuleOverrides`) and writes (RuleController find-or-create). Global values read/write the managed baseline rule.
+
+**Per page:**
+1. **`TilingAlgorithmPage`** — wire the per-screen split/master/max controls to this scope-chip infra. Add `perScreenTilingRuleId(screenName)` (namespace `perScreenTilingRuleNamespaceId`) + read (`perScreenTilingRuleOverrides`) / write (RuleController) in the controller; `scopeHasOverridesMethod` = "a tiling rule exists for this screen", `scopeClearerMethod` = "delete it". Global values stay `Settings::autotileSplitRatio()` etc (config). Remove the 3 keys from `kPerScreenAutotileKeys`.
+2. **`SnappingZoneSelectorPage`** — same, over the generic `SetZoneSelectorProperty` actions (`perScreenZoneSelectorRuleNamespaceId`); the per-screen store's write path (`setPerScreenZoneSelectorSetting`) is replaced by rule writes.
+3. **`AnimationsGeneralPage` "Window Filtering"** — the min-width/height controls edit the two `ExcludeAnimations` rules' match thresholds (`animationMin{Width,Height}RuleId`); remove the two config keys + the now-inert effect min-size check.
+4. **`SnappingOverlayAppearancePage` (fold #4-finish, coupled)** — convert from a config-backed phase-1 reset page to a rule editor over the baseline overlay rule: land `baselineOverlayRuleId` + `makeBaselineOverlayRule` + daemon seeding + the 7 Settings-getter rewires + the migration, remove the overlay keys from `pageOwnedConfigKeys`, and switch the page's reset/discard to rule-based. See §Fold #4.
+
+**Verification:** each page's scope-switch / per-monitor override dot / reset / discard is visual and must be checked in the running settings app + daemon. This batch is not headless-verifiable — do it app-connected.
 
 ### Optional fold #4b — General window-management exclusion trio
 
