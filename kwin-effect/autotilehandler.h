@@ -299,8 +299,8 @@ private:
      *        the FloatingCache yet, so isWindowFloating() returns false
      *        and would incorrectly reject the one-shot initial capture.
      */
-    void saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, const QRectF& frame,
-                                          bool knownFreeFloating = false);
+    void saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, KWin::EffectWindow* w,
+                                          const QRectF& frame, bool knownFreeFloating = false);
 
     /**
      * @brief All-bucket pre-autotile geometry lookup.

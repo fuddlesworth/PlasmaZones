@@ -77,12 +77,18 @@ void AutotileHandler::setFocusFollowsMouse(bool enabled)
 }
 
 void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId,
-                                                       const QRectF& frame, bool knownFreeFloating)
+                                                       KWin::EffectWindow* w, const QRectF& frameIn,
+                                                       bool knownFreeFloating)
 {
     if (windowId.isEmpty() || screenId.isEmpty()) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry save: empty id" << windowId << screenId;
         return;
     }
+    // Correct for maximize/fullscreen (shared with SnapHandler's capture): a maximized
+    // window's frameGeometry() is the full monitor, and storing that as the float-back
+    // size floats the window back maximized. This store is the SAME daemon free-geometry
+    // record snap reads, so an unguarded capture here would poison snap's restore too.
+    const QRectF frame = PlasmaZonesEffect::freeGeometryForCapture(w, frameIn);
     if (!frame.isValid() || frame.width() <= 0 || frame.height() <= 0) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry save: invalid frame" << frame << "for" << windowId;
         return;

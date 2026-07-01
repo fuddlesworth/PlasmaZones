@@ -490,7 +490,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     continue;
                 }
                 const QString windowId = m_effect->getWindowId(w);
-                saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry());
+                saveAndRecordPreAutotileGeometry(windowId, screenId, w, w->frameGeometry());
                 if (m_effect->isWindowFloating(windowId) && m_effect->m_daemonServiceRegistered) {
                     QRectF frame = w->frameGeometry();
                     // Use overwrite=false: an overflow-floated window may still have its

@@ -449,6 +449,18 @@ private:
     KWin::EffectWindow* getValidActiveWindowOrFail(const QString& action);
 
     /**
+     * @brief Free-float geometry to CAPTURE for @p w, correcting for maximize/fullscreen.
+     *
+     * A maximized or fullscreen window's frameGeometry() is the full-monitor rect.
+     * Capturing THAT as a window's pre-tile / pre-snap / float-back geometry makes it
+     * restore to a maximized size when it later floats. Returns @p fallback unless @p w
+     * is maximized/fullscreen, in which case the pre-maximize / pre-fullscreen RESTORE
+     * rect (a sane free size). Shared by the snap and autotile capture paths, which
+     * write the SAME daemon free-geometry store.
+     */
+    static QRectF freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback);
+
+    /**
      * @brief Check if a window is floating (full windowId with appId fallback)
      * @param windowId The window identifier (full or appId-only)
      * @return true if window is floating

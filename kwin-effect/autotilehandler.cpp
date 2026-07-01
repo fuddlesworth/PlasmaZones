@@ -208,7 +208,7 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFlo
         // isWindowFloating() guard would otherwise drop the one-shot save).
         // RE-ADD callers pass false so the floating guard runs and rejects a
         // tiled zone rect instead of persisting it as free geometry.
-        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(), knownFreeFloating);
+        saveAndRecordPreAutotileGeometry(windowId, screenId, w, w->frameGeometry(), knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
 
@@ -300,7 +300,7 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         // Genuinely fresh windows (not yet tiled) keep the spawn-geometry
         // overwrite semantics — see notifyWindowAdded() for that rationale.
         const bool freshFrame = !AutotileStateHelpers::isTiledWindow(m_border, windowId);
-        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(),
+        saveAndRecordPreAutotileGeometry(windowId, screenId, w, w->frameGeometry(),
                                          /*knownFreeFloating=*/freshFrame);
 
         const QSize minSize = declaredMinSize(w);
