@@ -10,6 +10,12 @@ SettingsFlickable {
     id: root
 
     readonly property var settingsBridge: settingsController.tilingAlgorithmPage
+    // Per-monitor split/master/max are rule-backed (like the Window Appearance
+    // gaps): "All monitors" edits the global config default; picking a monitor
+    // edits that monitor's tiling override rule via the RuleController. Bumped to
+    // re-read the rule-backed value bindings after a write / scope switch / reset.
+    readonly property var ruleController: settingsController.rulesPage
+    property int tilingReloadTick: 0
     readonly property int algorithmPreviewWidth: Kirigami.Units.gridUnit * 18
     readonly property int algorithmPreviewHeight: Kirigami.Units.gridUnit * 10
     // Per-screen override helper (shared app-wide scope, bound below).
@@ -130,6 +136,126 @@ SettingsFlickable {
 
     function writeSetting(key, value, globalSetter) {
         psHelper.writeSetting(key, value, globalSetter);
+    }
+
+    // ─── Per-monitor tiling geometry (split/master/max), rule-backed ─────────
+    // Mirrors the Window Appearance page's per-screen gap rule pattern: read and
+    // write both go through the RuleController so the view stays consistent. The
+    // GLOBAL scope stays config-backed (tiling is b2 — no baseline rule).
+
+    // Read a tiling action's value honouring the current scope: global returns the
+    // passed-in global value; a monitor scope reads its override rule (falling back
+    // to the global when the monitor has no override yet).
+    function tilingRuleValue(actionType, globalValue) {
+        const scope = psHelper.selectedScreenName;
+        if (scope === "")
+            return globalValue;
+        const id = settingsController.perScreenTilingRuleId(scope);
+        if (!id)
+            return globalValue;
+        const rule = root.ruleController.ruleJson(id);
+        if (rule && rule.id) {
+            const actions = rule.actions || [];
+            for (var i = 0; i < actions.length; ++i) {
+                if (actions[i].type === actionType && actions[i].value !== undefined)
+                    return actions[i].value;
+            }
+        }
+        return globalValue;
+    }
+
+    // Merge value into the action of actionType on ruleObj (create if absent).
+    function _applyTilingRuleAction(ruleObj, actionType, value) {
+        const actions = (ruleObj.actions || []).slice();
+        var found = false;
+        for (var i = 0; i < actions.length; ++i) {
+            if (actions[i].type === actionType) {
+                var updated = Object.assign({}, actions[i]);
+                updated.value = value;
+                actions[i] = updated;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            actions.push({
+                "type": actionType,
+                "value": value
+            });
+        ruleObj.actions = actions;
+        return ruleObj;
+    }
+
+    // Build a fresh per-screen tiling rule for @p screen, seeded from the current
+    // global values so the monitor starts as an exact copy of what it inherited.
+    function buildPerScreenTilingRule(id, screen) {
+        return {
+            "id": id,
+            "name": i18n("Tiling (%1)", settingsController.canonicalScreenId(screen)),
+            "enabled": true,
+            "match": {
+                "field": "screenId",
+                "op": "equals",
+                "value": settingsController.canonicalScreenId(screen)
+            },
+            "actions": [
+                {
+                    "type": "setSplitRatio",
+                    "value": appSettings.autotileSplitRatio
+                },
+                {
+                    "type": "setMasterCount",
+                    "value": appSettings.autotileMasterCount
+                },
+                {
+                    "type": "setMaxWindows",
+                    "value": appSettings.autotileMaxWindows
+                }
+            ]
+        };
+    }
+
+    // Write a tiling geometry value honouring the current scope. Global rewrites
+    // the config default (globalSetter); a monitor scope find-or-creates that
+    // monitor's tiling override rule via the RuleController.
+    function writeTilingRuleSetting(actionType, value, globalSetter) {
+        const scope = psHelper.selectedScreenName;
+        if (scope === "") {
+            globalSetter(value);
+            return;
+        }
+        const id = settingsController.perScreenTilingRuleId(scope);
+        if (!id)
+            return;
+        var rule = root.ruleController.ruleJson(id);
+        if (!rule || !rule.id) {
+            rule = root.buildPerScreenTilingRule(id, scope);
+            root._applyTilingRuleAction(rule, actionType, value);
+            root.ruleController.addRuleFromJson(rule);
+        } else {
+            root._applyTilingRuleAction(rule, actionType, value);
+            root.ruleController.updateRuleFromJson(rule);
+        }
+        root.tilingReloadTick++;
+    }
+
+    // Re-read the rule-backed value bindings when the rule store reloads, the
+    // monitor scope changes, or a per-screen override is added / cleared (the
+    // scope chip's reset surfaces as perScreenOverridesChanged).
+    Connections {
+        target: root.ruleController
+        function onRulesLoaded() {
+            root.tilingReloadTick++;
+        }
+    }
+    Connections {
+        target: settingsController
+        function onScopeScreenNameChanged() {
+            root.tilingReloadTick++;
+        }
+        function onPerScreenOverridesChanged() {
+            root.tilingReloadTick++;
+        }
     }
 
     contentHeight: content.implicitHeight
@@ -298,13 +424,16 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileMaxWindowsMin
                         to: root.settingsBridge.autotileMaxWindowsMax
                         stepSize: 1
-                        value: root.settingValue("MaxWindows", root.liveAlgoSettings.maxWindows !== undefined ? root.liveAlgoSettings.maxWindows : appSettings.autotileMaxWindows)
+                        value: {
+                            root.tilingReloadTick;
+                            return root.tilingRuleValue("setMaxWindows", root.liveAlgoSettings.maxWindows !== undefined ? root.liveAlgoSettings.maxWindows : appSettings.autotileMaxWindows);
+                        }
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }
                         onMoved: value => {
                             root.setLiveAlgoSetting("maxWindows", Math.round(value));
-                            root.writeSetting("MaxWindows", Math.round(value), function (v) {
+                            root.writeTilingRuleSetting("setMaxWindows", Math.round(value), function (v) {
                                 root.settingsBridge.setAlgorithmMaxWindows(root.selectedAlgorithm, v);
                             });
                         }
@@ -329,13 +458,16 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileSplitRatioMin
                         to: root.settingsBridge.autotileSplitRatioMax
                         stepSize: 0.05
-                        value: root.settingValue("SplitRatio", root.liveAlgoSettings.splitRatio !== undefined ? root.liveAlgoSettings.splitRatio : appSettings.autotileSplitRatio)
+                        value: {
+                            root.tilingReloadTick;
+                            return root.tilingRuleValue("setSplitRatio", root.liveAlgoSettings.splitRatio !== undefined ? root.liveAlgoSettings.splitRatio : appSettings.autotileSplitRatio);
+                        }
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
                         onMoved: value => {
                             root.setLiveAlgoSetting("splitRatio", value);
-                            root.writeSetting("SplitRatio", value, function (v) {
+                            root.writeTilingRuleSetting("setSplitRatio", value, function (v) {
                                 root.settingsBridge.setAlgorithmSplitRatio(root.selectedAlgorithm, v);
                             });
                         }
@@ -382,13 +514,16 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileMasterCountMin
                         to: root.settingsBridge.autotileMasterCountMax
                         stepSize: 1
-                        value: root.settingValue("MasterCount", root.liveAlgoSettings.masterCount !== undefined ? root.liveAlgoSettings.masterCount : appSettings.autotileMasterCount)
+                        value: {
+                            root.tilingReloadTick;
+                            return root.tilingRuleValue("setMasterCount", root.liveAlgoSettings.masterCount !== undefined ? root.liveAlgoSettings.masterCount : appSettings.autotileMasterCount);
+                        }
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }
                         onMoved: value => {
                             root.setLiveAlgoSetting("masterCount", Math.round(value));
-                            root.writeSetting("MasterCount", Math.round(value), function (v) {
+                            root.writeTilingRuleSetting("setMasterCount", Math.round(value), function (v) {
                                 root.settingsBridge.setAlgorithmMasterCount(root.selectedAlgorithm, v);
                             });
                         }

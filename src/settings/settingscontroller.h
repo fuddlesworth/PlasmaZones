@@ -519,6 +519,19 @@ public:
     Q_INVOKABLE bool hasPerScreenGapRule(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenGapRule(const QString& screenName);
 
+    // Per-screen tiling geometry (split ratio / master count / max windows) is
+    // rule-backed too: a per-monitor override is a screen-scoped Rule (id derived
+    // from perScreenTilingRuleNamespaceId + screen name). The Tiling Algorithm
+    // card's controls read/write the rule's actions via rulesPage; its scope chip
+    // has/clear folds the tiling rule into hasPerScreenAutotileAlgorithmSettings /
+    // clearPerScreenAutotileAlgorithmSettings so one chip covers the whole card.
+    Q_INVOKABLE QString perScreenTilingRuleId(const QString& screenName) const;
+    Q_INVOKABLE bool hasPerScreenTilingRule(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenTilingRule(const QString& screenName);
+    // The screen's canonical stable (EDID) id — the form per-screen rule matches
+    // key on. Used by QML to build a per-monitor rule's ScreenId match.
+    Q_INVOKABLE QString canonicalScreenId(const QString& screenName) const;
+
     // ── Virtual screen configuration ──────────────────────────────────────────
     Q_INVOKABLE QStringList getPhysicalScreens() const;
     Q_INVOKABLE QVariantList getVirtualScreenConfig(const QString& physicalScreenId) const;
