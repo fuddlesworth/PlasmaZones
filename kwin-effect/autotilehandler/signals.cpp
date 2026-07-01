@@ -197,7 +197,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 }
                 // Drop autotile tiled tracking on every screen (title-bar
                 // restores flow through the rule path).
-                AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+                clearWindowTiledAllScreens(windowId);
                 unmaximizeMonocleWindow(windowId);
                 // Drop stale zone-centering tracking so a later
                 // frameGeometryChanged does not re-snap the window into an
@@ -285,7 +285,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // should not keep autotile borders through the transition.
             // Title-bar restores flow through the rule path.
             for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
-                AutotileStateHelpers::removeFromAllScreens(m_border, wid);
+                clearWindowTiledAllScreens(wid);
             }
 
             // Save autotile stacking order before restoring snap-mode order.
@@ -840,14 +840,14 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         if (m_effect->isWindowFloating(windowId)) {
             return;
         }
-        AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
+        markWindowTiled(screenId, windowId);
         // Title-bar (borderless) state is driven by rules.
         m_effect->updateAllBorders();
         return;
     }
     // Clear border tracking so borders are not drawn over fullscreen content
     // (title-bar restores flow through the rule path).
-    AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+    clearWindowTiledAllScreens(windowId);
     if (m_monocleMaximizedWindows.remove(windowId)) {
         qCInfo(lcEffect) << "Monocle window went fullscreen:" << windowId << "- removed from tracking";
     }

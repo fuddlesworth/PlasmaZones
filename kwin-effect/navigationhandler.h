@@ -8,6 +8,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 class QDBusPendingCallWatcher;
 
@@ -42,15 +43,20 @@ public:
     {
         return m_floatingCache.isFloating(windowId);
     }
-    void setWindowFloating(const QString& windowId, bool floating)
-    {
-        m_floatingCache.setFloating(windowId, floating);
-    }
+    /// Set @p windowId's floating state and, when it actually changes, re-resolve
+    /// the window's appearance / animation rules (IsFloating is a match field).
+    /// Out-of-line so the invalidation is welded to the write — no caller has to
+    /// remember it. Bulk re-seeds use the cache directly (see the .cpp) because
+    /// they pair with invalidateAllRuleCaches instead.
+    void setWindowFloating(const QString& windowId, bool floating);
     void clearAllFloatingState()
     {
         m_floatingCache.clear();
     }
-    void syncFloatingWindowsFromDaemon();
+    /// Bulk re-seed the floating set from a daemon snapshot (clear + direct
+    /// insert, no per-window rule invalidation). Callers pair this with a single
+    /// invalidateAllRuleCaches.
+    void seedFloatingWindows(const QStringList& floatingIds);
     void syncFloatingStateForWindow(const QString& windowId);
     void syncZonesFromDaemon();
 
@@ -71,15 +77,13 @@ public:
         return m_zoneCache.isSnapped(windowId);
     }
     /// Record @p windowId's zone. An empty @p zoneId removes the entry (the
-    /// window left its zone — unsnapped / floated / screen-changed).
-    void setWindowZone(const QString& windowId, const QString& zoneId)
-    {
-        m_zoneCache.setZone(windowId, zoneId);
-    }
-    void clearWindowZone(const QString& windowId)
-    {
-        m_zoneCache.remove(windowId);
-    }
+    /// window left its zone — unsnapped / floated / screen-changed). When the
+    /// zone actually changes, re-resolves the window's rules (IsSnapped / Zone /
+    /// Mode are match fields). Out-of-line so the invalidation is welded to the
+    /// write; bulk re-seeds use the cache directly (see the .cpp).
+    void setWindowZone(const QString& windowId, const QString& zoneId);
+    /// Remove @p windowId's zone entry, re-resolving its rules iff one existed.
+    void clearWindowZone(const QString& windowId);
     void clearAllZoneState()
     {
         m_zoneCache.clear();

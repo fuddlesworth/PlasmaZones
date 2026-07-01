@@ -479,12 +479,6 @@ bool PlasmaZonesEffect::isDaemonReady(const char* methodName) const
     return true;
 }
 
-void PlasmaZonesEffect::syncFloatingWindowsFromDaemon()
-{
-    // Delegate to NavigationHandler
-    m_navigationHandler->syncFloatingWindowsFromDaemon();
-}
-
 KWin::EffectWindow* PlasmaZonesEffect::getActiveWindow() const
 {
     // Prefer KWin's active (focused) window when it is manageable and on current desktop

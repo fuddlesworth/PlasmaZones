@@ -46,25 +46,32 @@ public:
     }
 
     /// Record @p windowId's zone. An empty @p zoneId removes the entry (the
-    /// window left its zone — unsnapped / floated / screen-changed).
-    void setZone(const QString& windowId, const QString& zoneId)
+    /// window left its zone — unsnapped / floated / screen-changed). Returns true
+    /// iff the stored zone actually changed, so a caller can drive a side effect
+    /// (e.g. re-resolving IsSnapped / Zone rules) only when the stored zone changed.
+    bool setZone(const QString& windowId, const QString& zoneId)
     {
         const QString instanceId = ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
         // A composite with an empty instanceId ("appId|") is malformed: keying it
         // would alias every empty-instance window onto one wildcard slot. Ignore.
         if (instanceId.isEmpty()) {
-            return;
+            return false;
         }
         if (zoneId.isEmpty()) {
-            m_byInstance.remove(instanceId);
-        } else {
-            m_byInstance.insert(instanceId, zoneId);
+            return m_byInstance.remove(instanceId) > 0;
         }
+        const auto it = m_byInstance.constFind(instanceId);
+        if (it != m_byInstance.constEnd() && it.value() == zoneId) {
+            return false;
+        }
+        m_byInstance.insert(instanceId, zoneId);
+        return true;
     }
 
-    void remove(const QString& windowId)
+    /// Remove @p windowId's entry. Returns true iff an entry was actually removed.
+    bool remove(const QString& windowId)
     {
-        m_byInstance.remove(::PhosphorIdentity::WindowId::extractInstanceId(windowId));
+        return m_byInstance.remove(::PhosphorIdentity::WindowId::extractInstanceId(windowId)) > 0;
     }
 
     void clear()

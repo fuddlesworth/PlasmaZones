@@ -482,6 +482,14 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // stored, so applyGeometryForFloat sends nothing). Idempotent — a
         // no-op if the window wasn't snap-tracked.
         m_snapHandler->clearWindowSnapped(windowId);
+        // Same backstop for the ZoneCache, the source of the IsSnapped / Zone
+        // rule-match fields (m_snapHandler's set is a separate border-tracking
+        // cache). Without this, a float path that doesn't emit windowStateChanged
+        // with an empty zone leaves the zone entry stale, so IsSnapped stays true
+        // and a baseline border / title-bar rule scoped to snapped windows keeps
+        // drawing / hiding on the now-floating window. clearWindowZone re-resolves
+        // the rules when it actually drops an entry.
+        m_navigationHandler->clearWindowZone(windowId);
 
         // Invalidate any stale instant-restore entry for this app. The snap
         // restore cache (SnapHandler) is a single-shot latency cache populated at
@@ -496,9 +504,10 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // appId to survive the window's identity change across close/reopen.
         m_snapHandler->invalidateRestore(::PhosphorIdentity::WindowId::extractAppId(windowId));
     }
-    // isFloating is now a rule MATCH field — re-resolve appearance / animation
-    // rules for this window so a `WHEN isFloating` border / opacity re-applies.
-    invalidateRuleCacheForStateChange(windowId);
+    // Re-resolution is welded to the writes: setWindowFloating above and (in the
+    // float branch) clearWindowZone each re-resolve this window's rules when the
+    // IsFloating / IsSnapped / Zone match field actually flips. No separate
+    // invalidate call is needed here.
 }
 
 void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state)
@@ -512,12 +521,11 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
     }
     // Keep the effect-side zone cache current so the IsSnapped / Zone rule-match
     // fields resolve against the live placement. An empty zoneId (unsnapped /
-    // floated / screen-changed) removes the entry. The isFloating cache WRITE lives
-    // on the separate windowFloatingChanged path, so it is not duplicated here; the
-    // rule-cache invalidation below coalesces with the floating path's (a float
-    // toggle emits both signals — see flushPendingRuleInvalidations).
+    // floated / screen-changed) removes the entry. setWindowZone re-resolves this
+    // window's rules when the zone actually changes (coalescing with the floating
+    // path's invalidation when a float toggle emits both signals — see
+    // flushPendingRuleInvalidations), so no separate invalidate call is needed.
     m_navigationHandler->setWindowZone(windowId, state.zoneId);
-    invalidateRuleCacheForStateChange(windowId);
 }
 
 void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowId)

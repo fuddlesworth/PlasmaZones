@@ -310,8 +310,11 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
 {
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
     // A floating window is no longer tile-managed on any screen — clear tiled
-    // tracking (title-bar restores flow through the rule path).
-    AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+    // tracking. clearWindowTiledAllScreens re-resolves the window's rules when the
+    // tiled status flips, so a baseline border / title-bar rule scoped to tiled
+    // windows stops drawing / hiding on the now-floating window (the setWindowFloating
+    // above also re-resolves on the IsFloating flip; both coalesce).
+    clearWindowTiledAllScreens(windowId);
     // Drop centering/target tracking too — a floated window isn't being
     // tiled anymore so a stale entry here would trigger centering on the
     // next frameGeometryChanged, snapping the floated window back into an
@@ -322,6 +325,33 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
     m_centeredWaylandZones.remove(windowId);
     m_effect->removeWindowBorder(windowId);
     unmaximizeMonocleWindow(windowId);
+}
+
+void AutotileHandler::markWindowTiled(const QString& screenId, const QString& windowId)
+{
+    const bool wasTiled = isTiledWindow(windowId);
+    AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
+    // Re-resolve only on the false→true transition: a window already tiled on
+    // another screen stays tiled, so re-adding it changes no rule outcome.
+    if (!wasTiled) {
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
+}
+
+void AutotileHandler::clearWindowTiledAllScreens(const QString& windowId)
+{
+    if (AutotileStateHelpers::removeFromAllScreens(m_border, windowId)) {
+        // Was tiled on at least one screen and now is not — IsTiled flipped.
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
+}
+
+void AutotileHandler::clearWindowTiledOnScreen(const QString& screenId, const QString& windowId)
+{
+    if (AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, windowId) && !isTiledWindow(windowId)) {
+        // Removed from this screen and not tiled on any other — IsTiled flipped.
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
 }
 
 } // namespace PlasmaZones

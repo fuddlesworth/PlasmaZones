@@ -412,7 +412,6 @@ private:
      */
     void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
     void connectNavigationSignals();
-    void syncFloatingWindowsFromDaemon();
 
     /**
      * @brief Check if daemon is registered and ready for D-Bus calls

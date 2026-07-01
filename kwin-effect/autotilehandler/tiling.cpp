@@ -328,10 +328,10 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 if (!win || win->isMinimized()) {
                     // Minimized windows keep their tracking quiescent: the
                     // re-tile on unminimize re-asserts.
-                    AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
+                    clearWindowTiledOnScreen(screenId, wid);
                     continue;
                 }
-                AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
+                clearWindowTiledOnScreen(screenId, wid);
                 // A daemon-initiated untile that is not a float/fullscreen/
                 // close/desktop-switch (e.g. a rule change dropping the
                 // window from the layout) must not leave a stale centering
@@ -464,7 +464,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // keeps the tracking map coherent when e.g. a window drags
             // from an autotile VS onto a sibling autotile VS.
             AutotileStateHelpers::removeFromOtherScreens(m_border, snap.windowId, snap.screenId);
-            AutotileStateHelpers::addTiledOnScreen(m_border, snap.screenId, snap.windowId);
+            markWindowTiled(snap.screenId, snap.windowId);
             // Title-bar (borderless) state is driven by rules through the
             // effect's reconcileRuleHiddenTitleBar → DecorationManager path.
 

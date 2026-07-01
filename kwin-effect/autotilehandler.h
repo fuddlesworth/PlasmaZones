@@ -195,6 +195,19 @@ public:
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);
     }
 
+    // Tiled-set mutators that re-resolve the window's rules whenever its overall
+    // tiled status flips (IsTiled is a match field). Welding the invalidation to
+    // the write mirrors NavigationHandler's snap/float setters, so a caller can't
+    // change tiling membership and forget to re-resolve a tiled-scoped border /
+    // title-bar / opacity rule. markWindowTiled only invalidates on a genuine
+    // not-tiled→tiled transition (re-adding an already-tiled window is a no-op),
+    // so a cross-screen transfer that first runs removeFromOtherScreens does
+    // invalidate (the window is briefly not-tiled), while a same-screen re-assert
+    // does not.
+    void markWindowTiled(const QString& screenId, const QString& windowId);
+    void clearWindowTiledAllScreens(const QString& windowId);
+    void clearWindowTiledOnScreen(const QString& screenId, const QString& windowId);
+
     // Set a window to re-activate after the next autotile raise loop completes.
     // Used by slotDaemonReady() to preserve focus of non-tiled windows (e.g. KCM).
     void setPendingReactivateWindow(KWin::EffectWindow* w)
