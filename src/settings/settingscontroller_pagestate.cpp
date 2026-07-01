@@ -69,8 +69,9 @@ const Settings::ConfigKeyList& animationConfigKeys()
         {CD::animationsGroup(), CD::shaderProfileTreeKey()},
         {CD::animationsWindowFilteringGroup(), CD::transientWindowsKey()},
         {CD::animationsWindowFilteringGroup(), CD::notificationsAndOsdKey()},
-        {CD::animationsWindowFilteringGroup(), CD::minimumWindowWidthKey()},
-        {CD::animationsWindowFilteringGroup(), CD::minimumWindowHeightKey()},
+        // The min-size window filters are rule-backed (ExcludeAnimations rules), no
+        // longer config keys; the animation-page reset removes those rules directly
+        // (see resetPage) rather than resetting a config key here.
     };
     return keys;
 }
@@ -345,6 +346,12 @@ void SettingsController::resetPage(const QString& page)
             });
             m_animationsPage->clearAllOverrides();
             m_settings.resetKeys(animationConfigKeys());
+            // The min-size window filters are rule-backed now; "reset to defaults"
+            // (0 = off) removes those ExcludeAnimations rules.
+            if (m_rulesPage != nullptr) {
+                m_rulesPage->removeRule(ConfigDefaults::animationMinWidthRuleId().toString());
+                m_rulesPage->removeRule(ConfigDefaults::animationMinHeightRuleId().toString());
+            }
         }
         // isPageDirty(animation) is value-based (hasPendingChanges || any
         // animation key modified), so reconcilePageDirty syncs the active page's

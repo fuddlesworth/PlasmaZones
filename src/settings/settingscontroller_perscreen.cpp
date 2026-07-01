@@ -168,6 +168,16 @@ QString SettingsController::canonicalScreenId(const QString& screenName) const
     return Settings::canonicalPerScreenKey(screenName);
 }
 
+QString SettingsController::animationMinWidthRuleId() const
+{
+    return ConfigDefaults::animationMinWidthRuleId().toString();
+}
+
+QString SettingsController::animationMinHeightRuleId() const
+{
+    return ConfigDefaults::animationMinHeightRuleId().toString();
+}
+
 // ── Per-screen zone selector overrides ───────────────────────────────────
 
 QVariantMap SettingsController::getPerScreenZoneSelectorSettings(const QString& screenName) const

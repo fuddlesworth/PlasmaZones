@@ -557,6 +557,12 @@ public:
     Q_INVOKABLE bool hasPerScreenZoneSelectorRule(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenZoneSelectorRule(const QString& screenName);
 
+    // Stable ids of the two animation min-size ExcludeAnimations rules (match
+    // Width/Height LessThan N). The Animations → General "Window filtering"
+    // min-size controls edit these rules' match threshold; 0 = off = no rule.
+    Q_INVOKABLE QString animationMinWidthRuleId() const;
+    Q_INVOKABLE QString animationMinHeightRuleId() const;
+
     Q_INVOKABLE QVariantMap loadWindowGeometry() const;
     Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height);
 
