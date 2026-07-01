@@ -305,6 +305,10 @@ public:
     // dirty-tracking / notifyReload plumbing).
     Q_PROPERTY(QString shaderProfileTreeJson READ shaderProfileTreeJson WRITE setShaderProfileTreeJson NOTIFY
                    shaderProfileTreeChanged)
+    // JSON string facade for the per-surface decoration tree — same
+    // meta-object dirty-tracking rationale as shaderProfileTreeJson above.
+    Q_PROPERTY(QString decorationProfileTreeJson READ decorationProfileTreeJson WRITE setDecorationProfileTreeJson
+                   NOTIFY decorationProfileTreeChanged)
 
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
@@ -877,6 +881,14 @@ public:
     /// loop in SettingsController catches it.
     QString shaderProfileTreeJson() const;
     void setShaderProfileTreeJson(const QString& json);
+
+    // Per-surface decoration tree (DecorationProfile chain + border/titlebar
+    // appearance), persisted under the Surface group. Typed accessors mirror
+    // shaderProfileTree; the JSON-string facade backs the Q_PROPERTY above.
+    PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override;
+    void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) override;
+    QString decorationProfileTreeJson() const override;
+    void setDecorationProfileTreeJson(const QString& json) override;
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;

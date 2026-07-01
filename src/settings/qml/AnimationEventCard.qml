@@ -522,6 +522,13 @@ Item {
                     void (root._shaderRegistryRev);
                     return settingsController.animationsPage.availableShaderEffectsForPath(root.eventPath);
                 }
+                // Parameter schema for the picked shader, fed in the same
+                // registry-tick-bound way so the editor doesn't reach the
+                // settingsController context itself.
+                shaderParamSchema: {
+                    void (root._shaderRegistryRev);
+                    return editor.shaderEffectId.length > 0 ? settingsController.animationsPage.shaderParameters(editor.shaderEffectId) : [];
+                }
                 onShaderEffectActivated: function (id) {
                     var sid = id || "";
                     var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);

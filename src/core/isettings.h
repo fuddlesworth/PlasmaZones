@@ -20,6 +20,10 @@
 #include <QString>
 #include <QStringList>
 
+namespace PhosphorSurfaceShaders {
+class DecorationProfileTree;
+}
+
 namespace PlasmaZones {
 
 /**
@@ -172,6 +176,19 @@ public:
     // depend on ISettings without dragging in PhosphorTileEngine.
     virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
     virtual void setAutotilePerAlgorithmSettings(const QVariantMap& settings) = 0;
+
+    // Hierarchical per-surface decoration tree — a DecorationProfile (surface
+    // shader-pack chain + border/titlebar appearance) keyed on a dot-path
+    // surface namespace. Mirrors the animation shaderProfileTree pair (which
+    // lives on IAnimationSettings): the typed getter returns the parsed tree,
+    // the
+    // JSON-string facade routes through it for the Q_PROPERTY meta-object
+    // dirty-tracking loop. Lives on the interface so page controllers and the
+    // settings adaptor depend on ISettings, not the concrete Settings.
+    virtual PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const = 0;
+    virtual void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) = 0;
+    virtual QString decorationProfileTreeJson() const = 0;
+    virtual void setDecorationProfileTreeJson(const QString& json) = 0;
 
     // Color-import helper used by SnappingZonesController. Returns
     // an empty string on success, a user-readable error message
@@ -483,6 +500,7 @@ Q_SIGNALS:
     void autotilePerAlgorithmSettingsChanged();
     // Autotile inner/outer gap change signals are unified with snapping —
     // listeners use innerGapChanged / outerGap*Changed above.
+    void decorationProfileTreeChanged();
     void autotileSmartGapsChanged();
     void autotileMaxWindowsChanged();
     void autotileFocusNewWindowsChanged();

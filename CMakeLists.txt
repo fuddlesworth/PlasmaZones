@@ -308,6 +308,7 @@ add_subdirectory(libs/phosphor-rules)  # unified window/context rule engine (Mat
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
 add_subdirectory(libs/phosphor-shaders)     # shader-domain primitives (BaseUniforms, IUniformExtension, ShaderRegistry)
+add_subdirectory(libs/phosphor-surface)     # surface-shader pack subsystem (SurfaceShaderContract/Effect/Registry) - depends on phosphor-shaders/registry/fsloader
 add_subdirectory(libs/phosphor-wayland)       # Wayland layer-shell QPA plugin + LayerSurface - needed by phosphor-screens
 add_subdirectory(libs/phosphor-geometry)    # pure geometry math (coordinate transforms, overlap, min-size) - needed by phosphor-screens (swapper directional selector)
 add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision - needed by phosphor-zones
@@ -607,6 +608,21 @@ install(DIRECTORY data/animations/
     PATTERN "*.frag"
     PATTERN "*.vert"
     # GLSL include files (shared/animation_uniforms.glsl, shared/animation.vert).
+    PATTERN "*.glsl"
+    PATTERN "*.png"
+)
+
+# Install bundled surface shader packs (window border / rounded corners today;
+# the third shader-pack category alongside shaders + animations). The kwin-effect
+# discovers ${XDG_DATA_DIRS}/plasmazones/surface via the SurfaceShaderRegistry;
+# user overrides at ~/.local/share/plasmazones/surface win.
+install(DIRECTORY data/surface/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/surface
+    FILES_MATCHING
+    PATTERN "metadata.json"
+    PATTERN "*.frag"
+    PATTERN "*.vert"
+    # GLSL include files (shared/surface_uniforms.glsl).
     PATTERN "*.glsl"
     PATTERN "*.png"
 )

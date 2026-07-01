@@ -218,6 +218,13 @@ target_link_libraries(plasmazones_core
         # default constants ConfigDefaults delegates to (PUBLIC because
         # configdefaults.h includes the header).
         PhosphorCompositor::PhosphorCompositor
+        # PhosphorSurface: DecorationProfileTree / DecorationProfile — the
+        # per-surface decoration tree type. PUBLIC because configdefaults.h,
+        # config/settings.h and core/isettings.h expose the type by value in
+        # their public API (the decorationProfileTree accessors + the
+        # ConfigDefaults baseline), so consumers linking plasmazones_core need
+        # the include path + link edge.
+        PhosphorSurface::PhosphorSurface
         # PhosphorRules: the unified LGPL rule engine. PUBLIC since
         # Phase 3 — config/settings.h owns a RuleStore for the per-mode
         # disable lists, the RuleAdaptor exposes the store on D-Bus, and
@@ -338,6 +345,8 @@ set(plasmazones_rendering_SRCS
     daemon/rendering/zoneshaderitem.h
     daemon/rendering/zoneshaderitem.cpp
     daemon/rendering/zoneshaderitem/setters.cpp
+    daemon/rendering/surfaceshaderitem.h
+    daemon/rendering/surfaceshaderitem.cpp
     daemon/rendering/zonelabeltexturebuilder.h
     daemon/rendering/zonelabeltexturebuilder.cpp
 )
@@ -354,6 +363,12 @@ target_link_libraries(plasmazones_rendering
         plasmazones_core
         Qt6::Quick
         PhosphorRendering::PhosphorRendering
+        # SurfaceShaderItem constructs a PhosphorSurfaceShaders::SurfaceUniformProfile
+        # to drive the shared render node's surface UBO. Reachable transitively via
+        # plasmazones_core (which PUBLIC-links it for DecorationProfileTree), but
+        # named explicitly here because surfaceshaderitem.{h,cpp} depend on the
+        # surface library's symbols directly.
+        PhosphorSurface::PhosphorSurface
     PRIVATE
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
@@ -854,6 +869,7 @@ target_link_libraries(plasmazones-shader-validate
         PhosphorRendering::PhosphorRendering
         PhosphorShaders::PhosphorShaders
         PhosphorAnimation::PhosphorAnimation
+        PhosphorSurface::PhosphorSurface
         Qt6::Core
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
@@ -870,6 +886,8 @@ if(BUILD_TESTING)
              COMMAND plasmazones-shader-validate --overlay ${PROJECT_SOURCE_DIR}/data/shaders)
     add_test(NAME shader_validate_animations
              COMMAND plasmazones-shader-validate --animation ${PROJECT_SOURCE_DIR}/data/animations)
+    add_test(NAME shader_validate_surface
+             COMMAND plasmazones-shader-validate --surface ${PROJECT_SOURCE_DIR}/data/surface)
 endif()
 
 # Standalone settings app (no KDE Frameworks required)

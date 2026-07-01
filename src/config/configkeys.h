@@ -107,6 +107,14 @@ public:
     P_CONFIG_GROUP(tilingBehaviorTriggersGroup, "Tiling.Behavior.Triggers")
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
 
+    // Surface — per-surface decoration tree (DecorationProfileTree: shader-pack
+    // chain + border/titlebar appearance, keyed on a dot-path surface
+    // namespace). A flat top-level group rather than a per-mode sub-group of
+    // Tiling/Snapping because decoration is product-wide, not bound to a
+    // tiling/snapping appearance axis. (ShaderEffectId survives only as a
+    // migration-read legacy source key, not a live setting.)
+    P_CONFIG_GROUP(surfaceGroup, "Surface")
+
     // Parent groups (for purge enumeration — covers all sub-groups)
     P_CONFIG_GROUP(shortcutsGroup, "Shortcuts")
     P_CONFIG_GROUP(editorGroup, "Editor")
@@ -329,6 +337,16 @@ public:
     P_CONFIG_KEY(dragBehaviorKey, "DragBehavior")
     P_CONFIG_KEY(overflowBehaviorKey, "OverflowBehavior")
     P_CONFIG_KEY(lockedScreensKey, "LockedScreens")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Surface
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // DecorationProfileTree JSON blob — the user-applied per-surface decoration
+    // (shader-pack chain). Mirrors the animation ShaderProfileTree blob under
+    // Animations; persisted as a nested JSON object under the Surface group.
+    P_CONFIG_KEY(surfaceDecorationTreeKey, "DecorationProfileTree")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Gaps

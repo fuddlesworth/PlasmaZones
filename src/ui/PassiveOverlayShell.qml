@@ -167,6 +167,15 @@ Window {
         property int windowCount: 1
         property color errorColor: Kirigami.Theme.negativeTextColor
 
+        // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
+        // resolves the "osd" pack from DecorationProfileTree and writes these
+        // before each show; empty source = no decoration (card draws natively).
+        // Consumed by the SurfaceDecoration sibling below, which captures the
+        // loaded card's PopupFrame shaderAnchor and re-renders it rounded.
+        property url decorationShaderSource
+        property string decorationParamPreamble: ""
+        property var decorationShaderParams: ({})
+
         /// Restart the loaded OSD content's auto-dismiss timer. C++
         /// invokes this after every OSD show via QMetaObject::invokeMethod.
         function restartDismissTimer() {
@@ -266,6 +275,20 @@ Window {
                 errorColor: osdSlot.errorColor
             }
         }
+
+        // Surface-shader decoration (Stage d). SIBLING of osdLoader (never an
+        // ancestor of the captured card — a feedback loop). Captures the loaded
+        // card's PopupFrame shaderAnchor and re-renders it through the resolved
+        // "osd" surface pack (rounded corners + border), suppressing the card's
+        // own square-cornered direct draw via the snapshot's hideSource. Inert
+        // when decorationShaderSource is empty — the card then draws natively.
+        SurfaceDecoration {
+            anchors.fill: parent
+            contentItem: osdLoader.item
+            decorationShaderSource: osdSlot.decorationShaderSource
+            decorationParamPreamble: osdSlot.decorationParamPreamble
+            decorationShaderParams: osdSlot.decorationShaderParams
+        }
     }
 
     Item {
@@ -289,6 +312,14 @@ Window {
         // fresh shaderAnchor QQuickItem per show — avoids stale FBO content
         // on subsequent vertex-shader transitions.
         property bool loaded: false
+
+        // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
+        // resolves the "popup.snapAssist" pack and writes these before each show;
+        // empty source = no decoration (card draws natively). Consumed by the
+        // SurfaceDecoration sibling below.
+        property url decorationShaderSource
+        property string decorationParamPreamble: ""
+        property var decorationShaderParams: ({})
 
         anchors.fill: parent
         // Popup tier — modal pickers paint above the zone selector and
@@ -334,6 +365,18 @@ Window {
                 borderRadius: snapAssistSlot.borderRadius
             }
         }
+
+        // Surface-shader decoration (Stage d). SIBLING of snapAssistLoader.
+        // Captures the loaded content's shaderAnchor (the SnapAssistContent root
+        // itself carries `shaderAnchor: true`) and re-renders it through the
+        // resolved "popup.snapAssist" surface pack. Inert when the source is empty.
+        SurfaceDecoration {
+            anchors.fill: parent
+            contentItem: snapAssistLoader.item
+            decorationShaderSource: snapAssistSlot.decorationShaderSource
+            decorationParamPreamble: snapAssistSlot.decorationParamPreamble
+            decorationShaderParams: snapAssistSlot.decorationShaderParams
+        }
     }
 
     Item {
@@ -364,6 +407,14 @@ Window {
         // OSD-style content lifecycle gate. C++ toggles false→true around
         // each show so LayoutPickerContent is re-instantiated.
         property bool loaded: false
+
+        // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
+        // resolves the "popup.layoutPicker" pack and writes these before each
+        // show; empty source = no decoration. Consumed by the SurfaceDecoration
+        // sibling below.
+        property url decorationShaderSource
+        property string decorationParamPreamble: ""
+        property var decorationShaderParams: ({})
 
         // Forwards to LayoutPickerContent.moveSelection / confirmSelection
         // — invoked by C++ on global-accel callbacks since the shell is
@@ -430,6 +481,18 @@ Window {
                 fontStrikeout: layoutPickerSlot.fontStrikeout
                 locked: layoutPickerSlot.locked
             }
+        }
+
+        // Surface-shader decoration (Stage d). SIBLING of layoutPickerLoader.
+        // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
+        // through the resolved "popup.layoutPicker" surface pack. Inert when the
+        // source is empty.
+        SurfaceDecoration {
+            anchors.fill: parent
+            contentItem: layoutPickerLoader.item
+            decorationShaderSource: layoutPickerSlot.decorationShaderSource
+            decorationParamPreamble: layoutPickerSlot.decorationParamPreamble
+            decorationShaderParams: layoutPickerSlot.decorationShaderParams
         }
     }
 
@@ -505,6 +568,14 @@ Window {
         property color textColor: Kirigami.Theme.textColor
         property real activeOpacity: 0.5
         property real inactiveOpacity: 0.3
+
+        // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
+        // resolves the "popup.zoneSelector" pack and writes these before each
+        // show; empty source = no decoration. Consumed by the SurfaceDecoration
+        // sibling below.
+        property url decorationShaderSource
+        property string decorationParamPreamble: ""
+        property var decorationShaderParams: ({})
 
         function applyScrollDelta(angleDeltaY) {
             if (zoneSelectorLoader.item)
@@ -610,6 +681,18 @@ Window {
                 activeOpacity: zoneSelectorSlot.activeOpacity
                 inactiveOpacity: zoneSelectorSlot.inactiveOpacity
             }
+        }
+
+        // Surface-shader decoration (Stage d). SIBLING of zoneSelectorLoader.
+        // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
+        // through the resolved "popup.zoneSelector" surface pack. Inert when the
+        // source is empty.
+        SurfaceDecoration {
+            anchors.fill: parent
+            contentItem: zoneSelectorLoader.item
+            decorationShaderSource: zoneSelectorSlot.decorationShaderSource
+            decorationParamPreamble: zoneSelectorSlot.decorationParamPreamble
+            decorationShaderParams: zoneSelectorSlot.decorationShaderParams
         }
     }
 

@@ -43,5 +43,6 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema);
 void appendActivationSchema(PhosphorConfig::Schema& schema);
 void appendBehaviorSchema(PhosphorConfig::Schema& schema);
 void appendAutotilingSchema(PhosphorConfig::Schema& schema);
+void appendSurfaceSchema(PhosphorConfig::Schema& schema);
 
 } // namespace PlasmaZones

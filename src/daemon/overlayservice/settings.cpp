@@ -90,6 +90,27 @@ void OverlayService::setSettings(ISettings* settings)
                 }
             });
 
+            // Per-surface decoration tree drives each overlay's decoration
+            // (border/titlebar + shader-pack chain), resolved + pushed at show
+            // time. Re-apply it to any currently-visible transient overlay on a
+            // live edit so the decoration preview updates without waiting for the
+            // next show. Connected to the specific signal (not the settingsChanged
+            // catch-all) so unrelated edits don't re-bake decoration; each
+            // applyDecoration is null-safe per slot, so screens without a wired
+            // slot are skipped. OSDs are intentionally omitted — they auto-dismiss
+            // sub-second, so a live re-decorate has no observable effect.
+            connect(m_settings, &ISettings::decorationProfileTreeChanged, this, [this]() {
+                for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                    const auto& state = it.value();
+                    if (m_zoneSelectorVisible)
+                        applyDecoration(state.zoneSelectorSlot(), QStringLiteral("popup.zoneSelector"));
+                    if (m_snapAssistVisible)
+                        applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
+                    if (m_layoutPickerVisible)
+                        applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
+                }
+            });
+
             // Global animations toggle: when off, SurfaceAnimator snaps
             // beginShow / beginHide to the target opacity and fires
             // completion synchronously, skipping motion + shader legs.

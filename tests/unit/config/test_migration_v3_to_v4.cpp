@@ -23,7 +23,8 @@
  *   - the zone-overlay appearance groups are renamed from
  *     `Snapping.Appearance.*` to `Snapping.Zones.*` (key-for-key move,
  *     absent-source no-op, idempotent, coexisting with the folds above),
- *   - config.json is stamped `_version == 4`,
+ *   - config.json is stamped at the current schema version (the chain runs
+ *     past the v3→v4 step to ConfigSchemaVersion),
  *   - the conversion is idempotent (running twice is a no-op).
  *
  * rules.json SUPERSEDES the v3 inputs: the migration renames
@@ -71,7 +72,8 @@ private:
         QDir().mkpath(QFileInfo(path).absolutePath());
         QFile f(path);
         QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(QJsonDocument(obj).toJson());
+        const QByteArray bytes = QJsonDocument(obj).toJson();
+        QCOMPARE(f.write(bytes), static_cast<qint64>(bytes.size()));
     }
 
     QJsonObject readJson(const QString& path)
@@ -305,7 +307,8 @@ private Q_SLOTS:
         const QJsonObject wr = readJson(ConfigDefaults::rulesFilePath());
         QCOMPARE(wr.value(QStringLiteral("_version")).toInt(), 4);
 
-        // config.json stamped v4.
+        // config.json stamped at the current schema version (migrateV3ToV4 also
+        // seeds the decoration tree before stamping ConfigSchemaVersion).
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
         // The migration chain now runs v3 → v4 → v5, so config.json lands at
         // the current schema version (the v3→v4 step still stamps 4 mid-chain).
@@ -774,8 +777,6 @@ private Q_SLOTS:
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
         QVERIFY(!firstRun.isEmpty());
-        const int firstCount =
-            QJsonDocument::fromJson(firstRun).object().value(QStringLiteral("rules")).toArray().size();
 
         // The process-level migration guard would normally short-circuit;
         // reset it so the second call re-runs the full logic against the
@@ -793,9 +794,6 @@ private Q_SLOTS:
         // cleanup steps instead of rebuilding — rules.json is
         // byte-identical, the rule count is unchanged.
         QCOMPARE(secondRun, firstRun);
-        const int secondCount =
-            QJsonDocument::fromJson(secondRun).object().value(QStringLiteral("rules")).toArray().size();
-        QCOMPARE(secondCount, firstCount);
     }
 
     // ─── No-assignments fixture ───────────────────────────────────────────
@@ -2101,9 +2099,11 @@ private:
         return root;
     }
 
-    /// Animation-exclude rules are the only ExcludeAnimations-action
-    /// shape the migration produces, so a simple "rules whose actions
-    /// contain excludeAnimations" filter cleanly isolates them.
+    /// Animation-exclude rules are the only ExcludeAnimations-action shape the
+    /// migration produces, with exactly one action, so filtering for the exact
+    /// single-action list {excludeAnimations} cleanly isolates them. (Exact
+    /// match, not "contains": if the migration ever emits a second action
+    /// alongside it, this filter must be revisited rather than silently passing.)
     QList<QJsonObject> animationExclusionRules(const QJsonArray& rules)
     {
         QList<QJsonObject> out;

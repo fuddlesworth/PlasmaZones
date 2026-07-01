@@ -69,6 +69,10 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         }
         updateZoneSelectorWindow(screenId);
         auto* slot = state->zoneSelectorSlot();
+        // Stage d: resolve + push the zone-selector surface-shader decoration
+        // (same SurfaceDecoration host the OSD uses, retargeted to the
+        // "popup.zoneSelector" surface path). Empty source = no decoration.
+        applyDecoration(slot, QStringLiteral("popup.zoneSelector"));
         // OSD-style content lifecycle: toggle `loaded` false→true so the
         // Loader re-instantiates ZoneSelectorContent fresh per show.
         writeQmlProperty(slot, QStringLiteral("loaded"), false);

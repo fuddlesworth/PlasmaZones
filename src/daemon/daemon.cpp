@@ -33,6 +33,7 @@
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
 
 #include <array>
 
@@ -461,6 +462,7 @@ Daemon::Daemon(QObject* parent)
     // an empty registry for the brief window before loaders run.
     setupAnimationProfiles();
     setupAnimationShaderEffects();
+    setupSurfaceShaderEffects();
 }
 
 // Paths that follow the user's `Settings.animationProfile` slider
@@ -719,6 +721,43 @@ void Daemon::setupAnimationShaderEffects()
     }
 }
 
+void Daemon::setupSurfaceShaderEffects()
+{
+    m_surfaceShaderRegistry = std::make_unique<PhosphorSurfaceShaders::SurfaceShaderRegistry>(nullptr);
+
+    // System dirs from XDG_DATA_DIRS in descending priority. Reverse so the
+    // first registered is the lowest-priority system dir — the loader applies
+    // first-registration-wins, yielding `user > sys-highest > ... > sys-lowest`
+    // after the user dir is appended last. Surface packs install to
+    // `plasmazones/surface` (singular), the third category beside
+    // `plasmazones/shaders` and `plasmazones/animations`.
+    QStringList surfaceDirs = QStandardPaths::locateAll(
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/surface"), QStandardPaths::LocateDirectory);
+    std::reverse(surfaceDirs.begin(), surfaceDirs.end());
+
+    const QString userSurfaceDir =
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/surface");
+    if (!surfaceDirs.contains(userSurfaceDir))
+        surfaceDirs.append(userSurfaceDir);
+
+    // Materialise the user dir BEFORE registering so the watcher attaches a
+    // direct watch instead of a parent-watch proxy (mirrors the animation /
+    // curve / profile setup). Failures are non-fatal — the on-demand scan still
+    // runs without a watch.
+    QDir().mkpath(userSurfaceDir);
+
+    m_surfaceShaderRegistry->setUserPath(userSurfaceDir);
+    m_surfaceShaderRegistry->addSearchPaths(surfaceDirs);
+
+    // Stage d: hand the registry to the overlay service so the OSD show path can
+    // resolve its decoration pack's fragment shader + translated params. Borrow
+    // is nulled in stop() before the registry is reset, mirroring the animation
+    // registry's teardown.
+    if (m_overlayService) {
+        m_overlayService->setSurfaceShaderRegistry(m_surfaceShaderRegistry.get());
+    }
+}
+
 Daemon::~Daemon()
 {
     stop();
@@ -897,6 +936,82 @@ bool Daemon::init()
         for (const PhosphorAnimationShaders::AnimationShaderEffect& info :
              m_animationShaderRegistry->availableEffects()) {
             scheduleWarmForAnimEffect(info);
+        }
+    }
+
+    // Warm-bake SURFACE shaders (window border / rounded corners / glow) the
+    // same way zone + animation shaders are warmed above, so the first surface
+    // paint never blocks the render thread on a cold glslang compile. Shares the
+    // single-threaded m_shaderBakePool, so all three categories serialise.
+    //
+    // Two differences from the zone/animation warm-bakes:
+    //   • Surface packs ship NO entry-point scaffold (each pack's effect.frag
+    //     carries its own main()), so no prologue/candidates are passed — the
+    //     bake key is keyed on include paths + param preamble only, matching
+    //     SurfaceShaderItem's live load.
+    //   • Surface packs ship NO vertex shader; the vert is resolved from a
+    //     shared `surface.vert` in the include paths (same resolution as
+    //     SurfaceShaderItem). A pack with no resolvable vert is skipped — the
+    //     live path would error on it too, so there is nothing to warm.
+    if (m_surfaceShaderRegistry) {
+        auto scheduleWarmForSurfaceEffect =
+            [this,
+             registryPtr = QPointer<PhosphorSurfaceShaders::SurfaceShaderRegistry>(m_surfaceShaderRegistry.get())](
+                const PhosphorSurfaceShaders::SurfaceShaderEffect& info) {
+                if (!info.isValid() || info.fragmentShaderPath.isEmpty() || !QFile::exists(info.fragmentShaderPath)) {
+                    return;
+                }
+                PhosphorSurfaceShaders::SurfaceShaderRegistry* reg = registryPtr.data();
+                if (!reg) {
+                    return;
+                }
+                QString vertPath = info.vertexShaderPath;
+                QStringList includePaths;
+                for (const QString& sp : reg->searchPaths()) {
+                    const QString sharedDir = sp + QStringLiteral("/shared");
+                    if (QDir(sharedDir).exists()) {
+                        includePaths.append(sharedDir);
+                    }
+                    includePaths.append(sp);
+                    if (vertPath.isEmpty()) {
+                        const QString candidate = sp + QStringLiteral("/surface.vert");
+                        if (QFile::exists(candidate)) {
+                            vertPath = candidate;
+                        }
+                    }
+                }
+                if (vertPath.isEmpty() || !QFile::exists(vertPath)) {
+                    return;
+                }
+                const QString effectId = info.id;
+                const QString paramPreamble = PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(info);
+                auto* watcher = new QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>(this);
+                connect(watcher, &QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>::finished, this,
+                        [watcher, effectId]() {
+                            const PhosphorRendering::WarmShaderBakeResult r = watcher->result();
+                            if (!r.success) {
+                                qCWarning(lcDaemon) << "Surface shader bake: failed for" << effectId << r.errorMessage;
+                            }
+                            watcher->deleteLater();
+                        });
+                watcher->setFuture(QtConcurrent::run(
+                    &m_shaderBakePool, [vertPath, fragPath = info.fragmentShaderPath, includePaths, paramPreamble]() {
+                        return warmShaderBakeCacheForPaths(vertPath, fragPath, includePaths, paramPreamble);
+                    }));
+            };
+        connect(m_surfaceShaderRegistry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                [this, scheduleWarmForSurfaceEffect]() {
+                    if (!m_surfaceShaderRegistry) {
+                        return;
+                    }
+                    const QList<PhosphorSurfaceShaders::SurfaceShaderEffect> effects =
+                        m_surfaceShaderRegistry->availableEffects();
+                    for (const PhosphorSurfaceShaders::SurfaceShaderEffect& info : effects) {
+                        scheduleWarmForSurfaceEffect(info);
+                    }
+                });
+        for (const PhosphorSurfaceShaders::SurfaceShaderEffect& info : m_surfaceShaderRegistry->availableEffects()) {
+            scheduleWarmForSurfaceEffect(info);
         }
     }
 
@@ -1372,27 +1487,6 @@ bool Daemon::init()
             // the per-side toggle gating the per-side entries).
             return GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
                 screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling")));
-        });
-    }
-
-    // Symmetric per-context (window-rule) gap overrides for snapping. The snap
-    // COMMIT path already honours the full context cascade via
-    // DaemonGeometryResolver::contextGapOverrideFor; this wires the resnap
-    // RECOMPUTE (SnapEngine::resolveGapParams) to the same cascade so a per-mode
-    // `Mode Equals "snapping"` gap rule (and per-desktop/activity gap rules)
-    // apply on resnap, not just in preview. setContextGapProvider is derived-only
-    // (SnapEngine); m_snapEngine is held as the base PlacementEngineBase, so the
-    // qobject_cast mirrors the narrowing used at the autotile-toggle branch above.
-    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-        concreteSnap->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
-            if (!m_layoutManager || screenId.isEmpty()) {
-                return {};
-            }
-            // This is the snap gap path, so resolve against the "snapping"
-            // placement mode — a per-mode `Mode Equals "snapping"` gap rule then
-            // applies here and a "tiling" one stays inert.
-            return GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
-                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("snapping")));
         });
     }
 
@@ -2285,6 +2379,15 @@ void Daemon::stop()
         m_overlayService->setAnimationShaderRegistry(nullptr);
     }
     m_animationShaderRegistry.reset();
+    // Reset the surface registry here too so its QFileSystemWatcher and the
+    // effectsChanged → warm-bake connection (captured by value into the init()
+    // lambda, targeting `this`) are torn down before the event loop can spin
+    // during shutdown. Null the overlay service's borrow FIRST (Stage d wired
+    // the OSD decoration consumer), mirroring the animation registry above.
+    if (m_overlayService) {
+        m_overlayService->setSurfaceShaderRegistry(nullptr);
+    }
+    m_surfaceShaderRegistry.reset();
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();
@@ -2437,14 +2540,6 @@ void Daemon::stop()
     // `PlacementEngineBase*`; setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
-    }
-    // Clear the symmetric snap context-gap provider, which captures `this`
-    // (Daemon, via m_layoutManager / currentDesktopForScreen / currentActivity).
-    // Same teardown contract as the autotile provider above. `m_snapEngine` is
-    // base-typed `PlacementEngineBase*`; setContextGapProvider lives on the
-    // concrete SnapEngine.
-    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-        concreteSnap->setContextGapProvider({});
     }
 
     // Destroy engines now (during stop(), before Qt child destruction order).

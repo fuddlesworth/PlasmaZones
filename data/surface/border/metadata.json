@@ -1,0 +1,50 @@
+{
+    "id": "border",
+    "name": "Border",
+    "description": "Rounded corners and a window border. Clips the surface to a rounded rectangle and lays a configurable border band over the desktop, so a translucent border blends with what is behind the surface rather than its own content. Width, corner radius and colour are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Decoration",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "borderWidth",
+            "name": "Border width",
+            "type": "int",
+            "default": 2,
+            "min": 0,
+            "max": 10,
+            "description": "Thickness of the coloured border (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Roundness of the corners (px, 0 for square)"
+        },
+        {
+            "id": "useSystemAccent",
+            "name": "Use system accent colour",
+            "type": "bool",
+            "default": true,
+            "description": "Derive the border colours from the system colour scheme"
+        },
+        {
+            "id": "activeColor",
+            "name": "Active colour",
+            "type": "color",
+            "default": "#ff3daee9",
+            "description": "Border colour when the window is focused"
+        },
+        {
+            "id": "inactiveColor",
+            "name": "Inactive colour",
+            "type": "color",
+            "default": "#ff5c6370",
+            "description": "Border colour when the window is unfocused"
+        }
+    ]
+}
