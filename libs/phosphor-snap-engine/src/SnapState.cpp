@@ -425,9 +425,12 @@ QStringList SnapState::preFloatZones(const QString& rawWindowId) const
 void SnapState::clearPreFloatZone(const QString& rawWindowId)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
-    // Emit only when an entry actually went away, mirroring the add-side
-    // (addPreFloatZone/addPreFloatScreen) so a clear schedules a persist on its
-    // own instead of relying on a sibling mutation to fire stateChanged.
+    // Emit only when an entry actually went away, matching this class's uniform
+    // mutate-then-signal contract (the add-side and the other removers all do this;
+    // clearPreFloatZone was the lone exception). stateChanged has no persistence
+    // consumer today: pre-float state is persisted through the WindowPlacement record
+    // that SnapEngine::capturePlacement reads from preFloatZones(), so this emit is
+    // for contract consistency, not to drive a save.
     const int removed = m_preFloatZoneAssignments.remove(windowId) + m_preFloatScreenAssignments.remove(windowId);
     if (removed > 0) {
         Q_EMIT stateChanged();

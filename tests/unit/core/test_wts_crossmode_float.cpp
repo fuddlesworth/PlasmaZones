@@ -14,7 +14,7 @@
  *    clears pre-float -> unfloat on VS2 must not restore stale state
  * 3. normalSnapFloatUnfloatCyclePreservesState: normal (non-cross-mode) cycle
  *    still works correctly end-to-end
- * 4. testPerEngineFloatIndependence: a window's float bit in one mode does not
+ * 4. perEngineFloatIndependence: a window's float bit in one mode does not
  *    leak into the other mode
  *
  * Cross-MONITOR variants (Discussion #724): a window floated on monitor A then
