@@ -14,15 +14,20 @@
  *    clears pre-float -> unfloat on VS2 must not restore stale state
  * 3. normalSnapFloatUnfloatCyclePreservesState: normal (non-cross-mode) cycle
  *    still works correctly end-to-end
+ * 4. testPerEngineFloatIndependence: a window's float bit in one mode does not
+ *    leak into the other mode
  *
  * Cross-MONITOR variants (Discussion #724): a window floated on monitor A then
  * moved to monitor B must not re-snap to A's stale zone when later unfloated
  * (e.g. via the snap minimize->unminimize float driver):
- * 4. crossMonitorFloatHandoffClearsStalePreFloat: the cross-engine handoff that
+ * 5. crossMonitorFloatHandoffClearsStalePreFloat: the cross-engine handoff that
  *    carries a floating window to another monitor clears the source-monitor
  *    pre-float zone/screen.
- * 5. unfloatDoesNotRestoreAcrossMonitors: resolveUnfloatGeometry refuses to
+ * 6. unfloatDoesNotRestoreAcrossMonitors: resolveUnfloatGeometry refuses to
  *    restore to a pre-float zone whose screen differs from the unfloat screen.
+ * 7. unfloatRestoresWithinSamePhysicalMonitorAcrossIdForms: the guard compares
+ *    by physical monitor (samePhysical), so a virtual-vs-bare id form of the
+ *    same monitor still restores rather than being refused.
  */
 
 #include <QTest>
@@ -385,6 +390,38 @@ private Q_SLOTS:
         if (QGuiApplication::screens().size() > 0) {
             QVERIFY2(sameMonitor.found, "same-monitor unfloat must still restore the pre-float zone");
             QCOMPARE(sameMonitor.zoneIds, QStringList{m_zoneIds[0]});
+        }
+    }
+
+    // =====================================================================
+    // Test 7 (Discussion #724): the cross-monitor guard compares by PHYSICAL
+    // monitor (VirtualScreenId::samePhysical), NOT screensMatch.
+    //
+    // A window floated on a virtual-screen id ("DP-1/vs:0") and unfloated on the
+    // bare physical id ("DP-1") of the SAME monitor must NOT be refused. This
+    // pins the samePhysical choice: screensMatch would treat the virtual-vs-bare
+    // pair as a monitor change and wrongly refuse the restore, so swapping the
+    // guard back to screensMatch would make this test's positive restore fail.
+    // =====================================================================
+    void testUnfloatRestoresWithinSamePhysicalMonitorAcrossIdForms()
+    {
+        const QString windowId = QStringLiteral("dolphin|00000000-0000-0000-0000-000000000007");
+        const QString virtualId = QStringLiteral("DP-1/vs:0");
+        const QString physicalId = QStringLiteral("DP-1");
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], virtualId, 1);
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        QCOMPARE(m_service->preFloatScreen(windowId), virtualId);
+
+        // Unfloat on the bare physical id of the same monitor: samePhysical is true,
+        // so the guard must NOT refuse. Geometry needs a real QScreen, so gate the
+        // positive assertion like the sibling same-monitor case. Under screensMatch
+        // this would be refused (found == false) and the assertion would fail.
+        UnfloatResult samePhysMonitor = m_engine->resolveUnfloatGeometry(windowId, physicalId);
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(samePhysMonitor.found,
+                     "unfloat within the same physical monitor (virtual vs bare id) must not be refused");
         }
     }
 

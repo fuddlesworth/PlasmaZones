@@ -425,8 +425,13 @@ QStringList SnapState::preFloatZones(const QString& rawWindowId) const
 void SnapState::clearPreFloatZone(const QString& rawWindowId)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
-    m_preFloatZoneAssignments.remove(windowId);
-    m_preFloatScreenAssignments.remove(windowId);
+    // Emit only when an entry actually went away, mirroring the add-side
+    // (addPreFloatZone/addPreFloatScreen) so a clear schedules a persist on its
+    // own instead of relying on a sibling mutation to fire stateChanged.
+    const int removed = m_preFloatZoneAssignments.remove(windowId) + m_preFloatScreenAssignments.remove(windowId);
+    if (removed > 0) {
+        Q_EMIT stateChanged();
+    }
 }
 
 void SnapState::addPreFloatZone(const QString& rawWindowId, const QStringList& zoneIds)

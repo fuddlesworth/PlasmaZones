@@ -4,9 +4,9 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
@@ -254,7 +254,7 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         return result;
     }
 
-    const QString preFloatScreen = m_windowTracker->preFloatScreen(windowId);
+    const QString preFloatScreenId = m_windowTracker->preFloatScreen(windowId);
 
     // Cross-monitor guard: a pre-float zone id belongs to the layout of the monitor
     // the window was floated from. If the window is being unfloated on a DIFFERENT
@@ -265,15 +265,15 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
     // differing-virtual pair as a mismatch) so a same-monitor id-form difference is
     // never misread as a monitor change. Backstops the pre-float clear on the
     // cross-monitor handoff (handoffReceive) for move routes that skip that branch.
-    if (!preFloatScreen.isEmpty() && !fallbackScreen.isEmpty()
-        && !PhosphorIdentity::VirtualScreenId::samePhysical(preFloatScreen, fallbackScreen)) {
+    if (!preFloatScreenId.isEmpty() && !fallbackScreen.isEmpty()
+        && !PhosphorIdentity::VirtualScreenId::samePhysical(preFloatScreenId, fallbackScreen)) {
         qCInfo(PhosphorSnapEngine::lcSnapEngine)
-            << "resolveUnfloatGeometry:" << windowId << "pre-float screen" << preFloatScreen
+            << "resolveUnfloatGeometry:" << windowId << "pre-float screen" << preFloatScreenId
             << "is a different monitor than unfloat screen" << fallbackScreen << "- not restoring across monitors";
         return result;
     }
 
-    const QString restoreScreen = resolveUnfloatScreen(preFloatScreen, fallbackScreen);
+    const QString restoreScreen = resolveUnfloatScreen(preFloatScreenId, fallbackScreen);
 
     QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
     if (!geo.isValid()) {
