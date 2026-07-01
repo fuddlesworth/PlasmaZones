@@ -125,20 +125,16 @@ const QLatin1String kPerScreenKeys[] = {
 // are rule-backed (per-monitor gap Rules) and merged into the accessor's
 // result by perScreenGapRuleOverrides, never stored in this per-screen map.
 // SmartGaps stays — it is a tiling behaviour flag, not a gap dimension.
+// SplitRatio / MasterCount / MaxWindows are likewise ABSENT: the per-screen
+// spatial tiling knobs folded onto per-monitor tiling Rules in v5 and are merged
+// in by perScreenTilingRuleOverrides, never stored here. SplitRatioStep did NOT
+// fold (no rule action for it) and stays a plain per-screen config key.
 const QLatin1String kPerScreenAutotileKeys[] = {
-    QLatin1String(PerScreenAutotileKey::Algorithm),
-    QLatin1String(PerScreenAutotileKey::SplitRatio),
-    QLatin1String(PerScreenAutotileKey::SplitRatioStep),
-    QLatin1String(PerScreenAutotileKey::MasterCount),
-    QLatin1String(PerScreenAutotileKey::FocusNewWindows),
-    QLatin1String(PerScreenAutotileKey::SmartGaps),
-    QLatin1String(PerScreenAutotileKey::MaxWindows),
-    QLatin1String(PerScreenAutotileKey::InsertPosition),
-    QLatin1String(PerScreenAutotileKey::FocusFollowsMouse),
-    QLatin1String(PerScreenAutotileKey::RespectMinimumSize),
-    QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
-    QLatin1String(PerScreenAutotileKey::AnimationDuration),
-    QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
+    QLatin1String(PerScreenAutotileKey::Algorithm),          QLatin1String(PerScreenAutotileKey::SplitRatioStep),
+    QLatin1String(PerScreenAutotileKey::FocusNewWindows),    QLatin1String(PerScreenAutotileKey::SmartGaps),
+    QLatin1String(PerScreenAutotileKey::InsertPosition),     QLatin1String(PerScreenAutotileKey::FocusFollowsMouse),
+    QLatin1String(PerScreenAutotileKey::RespectMinimumSize), QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
+    QLatin1String(PerScreenAutotileKey::AnimationDuration),  QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
 };
 
 // Gaps sub-domain of the autotile per-screen keys. The inner/outer gap
@@ -192,20 +188,13 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     // QML PerScreenOverrideHelper sends short keys; config storage uses prefixed keys.
     const QString k = stripAutotilePrefix(key);
 
-    if (k == PerScreenKeys::SplitRatio) {
-        return boundedDouble(value, ConfigDefaults::autotileSplitRatioMin(), ConfigDefaults::autotileSplitRatioMax());
-    }
     if (k == PerScreenKeys::SplitRatioStep) {
         return boundedDouble(value, ConfigDefaults::autotileSplitRatioStepMin(),
                              ConfigDefaults::autotileSplitRatioStepMax());
     }
-    if (k == PerScreenKeys::MasterCount)
-        return boundedInt(value, ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax());
-    // Inner/outer gap dimensions are rule-backed (per-monitor gap Rules),
-    // not per-screen Settings keys, so they are intentionally not validated here
-    // — a write of one is rejected like any unknown key.
-    if (k == PerScreenKeys::MaxWindows)
-        return boundedInt(value, ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax());
+    // SplitRatio / MasterCount / MaxWindows, like the inner/outer gap dimensions,
+    // are rule-backed now (per-monitor tiling / gap Rules), not per-screen Settings
+    // keys — a write of one is rejected here like any unknown key.
     if (k == PerScreenKeys::InsertPosition)
         return boundedInt(value, ConfigDefaults::autotileInsertPositionMin(),
                           ConfigDefaults::autotileInsertPositionMax());
@@ -229,8 +218,6 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
 
 QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
-    if (key == QLatin1String(PerScreenAutotileKey::SplitRatio))
-        return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatio()));
     if (key == QLatin1String(PerScreenAutotileKey::SplitRatioStep))
         return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatioStep()));
     if (key == QLatin1String(PerScreenAutotileKey::Algorithm)
