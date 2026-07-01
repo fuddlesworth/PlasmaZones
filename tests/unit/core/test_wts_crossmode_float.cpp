@@ -33,9 +33,7 @@
 #include <QTest>
 #include <QString>
 #include <QStringList>
-#include <QRect>
 #include <QSet>
-#include <QUuid>
 #include <QGuiApplication>
 #include <memory>
 

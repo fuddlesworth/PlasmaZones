@@ -454,9 +454,10 @@ private:
      * A maximized or fullscreen window's frameGeometry() is the full-monitor rect.
      * Capturing THAT as a window's pre-tile / pre-snap / float-back geometry makes it
      * restore to a maximized size when it later floats. Returns @p fallback unless @p w
-     * is maximized/fullscreen, in which case the pre-maximize / pre-fullscreen RESTORE
-     * rect (a sane free size). Shared by the snap and autotile capture paths, which
-     * write the SAME daemon free-geometry store.
+     * is maximized/fullscreen, in which case it returns the pre-maximize / pre-fullscreen
+     * RESTORE rect (a sane free size), falling back to @p fallback again if that restore
+     * rect is empty. Shared by the snap and autotile capture paths, which write the SAME
+     * daemon free-geometry store.
      */
     static QRectF freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback);
 
