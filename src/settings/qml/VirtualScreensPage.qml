@@ -430,13 +430,16 @@ SettingsFlickable {
         target: settingsController
     }
 
-    // Refresh when a global discard resets needsSave to false. The `needsSave`
-    // property's NOTIFY is `dirtyPagesChanged` (there is no `needsSaveChanged`
-    // signal), so the handler must listen to that.
+    // Re-read the selected screen's config whenever the dirty set changes.
+    // Covers a global discard (needsSave → false), a global save, AND the
+    // per-page Reset/Discard of this page (which revert the staged VS configs
+    // and emit dirtyPagesChanged even when other pages keep the global flag
+    // dirty). Unconditional is safe: every editor mutation stages immediately
+    // (_stageCurrentConfig), so _refreshConfig always reads back the staged
+    // value that mirrors _pendingScreens — never clobbering an in-progress edit.
     Connections {
         function onDirtyPagesChanged() {
-            if (!settingsController.needsSave)
-                root._refreshConfig();
+            root._refreshConfig();
         }
 
         target: settingsController

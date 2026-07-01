@@ -22,8 +22,11 @@
 #include <QFont>
 #include <QHash>
 #include <QJsonValue>
+#include <QList>
+#include <QPair>
 #include <QUuid>
 #include <QVariantMap>
+#include <QVector>
 
 namespace PlasmaZones {
 
@@ -1096,6 +1099,34 @@ public:
     void save() override;
     void reset() override;
 
+    // ── Per-page reset / discard support (settings app) ─────────────────────
+    // A config key addressed as (group, key). A page "owns" a list of these;
+    // SettingsController holds the page→keys manifest and drives the two
+    // mutators below for the active page.
+    using ConfigKey = QPair<QString, QString>;
+    using ConfigKeyList = QList<ConfigKey>;
+
+    /// True when the current in-memory value of (@p group, @p key) differs
+    /// from the committed baseline — i.e. the key carries an unsaved edit.
+    bool isKeyModified(const QString& group, const QString& key) const;
+
+    /// Per-page Discard: revert each key to the committed baseline. Bracketed
+    /// by the same Q_PROPERTY NOTIFY re-emit as load() so QML bindings update,
+    /// and emits settingsChanged() once if anything actually changed.
+    ///
+    /// SCOPE: re-emits only Q_PROPERTY NOTIFY signals (+ settingsChanged). It
+    /// does NOT re-emit the non-Q_PROPERTY change signals load() also fires —
+    /// the per-mode disable-list signals (disabled*Changed) and the per-screen
+    /// signals (perScreen*SettingsChanged). This is correct for the current
+    /// per-page manifest (all Q_PROPERTY-backed keys); if a future page ever
+    /// owns a disable-list or per-screen key, extend this to re-emit those.
+    void discardKeys(const ConfigKeyList& keys);
+
+    /// Per-page Reset: set each key to its schema default. Same NOTIFY /
+    /// settingsChanged() re-emit contract — and the same scope limit — as
+    /// discardKeys().
+    void resetKeys(const ConfigKeyList& keys);
+
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
     Q_INVOKABLE void applySystemColorScheme();
@@ -1169,6 +1200,23 @@ private:
     void saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend);
     void saveVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
 
+    // ── NOTIFY re-emit machinery (shared by load / discardKeys / resetKeys) ──
+    // load() and the per-page mutators write backing state directly (bypassing
+    // the property setters), so they must re-emit NOTIFY by hand or QML
+    // bindings never refresh. snapshotNotifyProperties() captures every own
+    // NOTIFY-able Q_PROPERTY value (index-aligned to the metaobject) BEFORE the
+    // mutation; emitChangedNotifyProperties() fires the NOTIFY of each property
+    // whose value changed and returns whether any fired.
+    QVector<QVariant> snapshotNotifyProperties() const;
+    bool emitChangedNotifyProperties(const QVector<QVariant>& before);
+
+    // Refresh the committed baseline — the last-persisted value of every
+    // schema-declared key. Called at the end of load() and save() (the only
+    // points where the in-memory store equals disk); discardKeys() reverts to
+    // this baseline and isKeyModified() compares against it. Private: mutating
+    // the baseline anywhere but a load/save commit point desyncs dirty tracking.
+    void captureBaseline();
+
     // Groups that save() writes exhaustively (excludes unmanaged groups).
     static QStringList managedGroupNames();
     // Delete all per-screen override groups (ZoneSelector:*, AutotileScreen:*, SnappingScreen:*).
@@ -1221,6 +1269,13 @@ private:
     // from hand-written load*/save* functions routes through here. See
     // settingsschema.cpp for the current list of migrated groups.
     std::unique_ptr<PhosphorConfig::Store> m_store;
+
+    // Committed baseline: the last-persisted value of every schema-declared
+    // key, keyed group → {key → value}. Refreshed by captureBaseline() at the
+    // end of load() and save(). Backs per-page Discard (revert to baseline)
+    // and value-based per-page dirty checks (isKeyModified).
+    QHash<QString, QVariantMap> m_baseline;
+
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Per-mode disable lists are stored as `DisableEngine` context rules in

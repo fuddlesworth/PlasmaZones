@@ -6,6 +6,7 @@
 #include "ruleauthoring.h"
 #include "ruletemplates.h"
 
+#include "../core/baselinerules.h"
 #include "../core/logging.h"
 #include "../phosphor_i18n.h"
 
@@ -229,7 +230,7 @@ bool RuleController::pushToDaemonAsync(const QList<Rule>& rules)
     // setAllRules. Cleared in the reply lambda below before every
     // applyResult emit.
     m_asyncCommitInFlight = true;
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, rules](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         m_asyncCommitInFlight = false;
         QDBusPendingReply<bool> reply = *w;
@@ -248,6 +249,18 @@ bool RuleController::pushToDaemonAsync(const QList<Rule>& rules)
             Q_EMIT applyResult(false, PhosphorI18n::tr("The daemon rejected one or more rules."));
             return;
         }
+        // Re-baseline to the set we actually PUSHED (not m_model.rules(), which
+        // may carry a CRUD edit that landed during the wire round-trip and was
+        // NOT persisted). Baselining the pushed set keeps such an in-flight edit
+        // correctly dirty (the applyResult → reconcile re-marks it).
+        //
+        // `rules` equals what the daemon persisted: pushToDaemonAsync above
+        // pre-validated with the SAME PhosphorRules::Rule::fromJson the daemon's
+        // setAllRules uses and bailed unless every rule was accepted, so the
+        // daemon cannot silently drop one (no client/daemon schema skew). As a
+        // backstop, the daemon's rulesChanged broadcast drives reload() →
+        // fetchAndLoad, which re-baselines from the daemon's authoritative set.
+        m_savedRules = rules;
         setDirty(false);
         setDaemonChangedWhileDirty(false);
         Q_EMIT applyResult(true, QString());
@@ -323,6 +336,8 @@ void RuleController::fetchAndLoad(bool fromRevert)
             return;
         }
         m_model.setRules(set.rules());
+        // Re-baseline the per-page dirty snapshot to the daemon's authoritative set.
+        captureSavedSnapshot();
         setDirty(false);
         setDaemonChangedWhileDirty(false);
         Q_EMIT rulesLoaded();
@@ -406,6 +421,11 @@ void RuleController::revert()
     // as fromRevert, emitting a spurious revertFinished(true).
     fetchAndLoad(/*fromRevert=*/true);
 }
+
+// NOTE: the per-page dirty split + managed-baseline reset/discard methods
+// (captureSavedSnapshot, baselinesDirty, userRulesDirty, recomputeDirtyFromSnapshot,
+// upsertRule, resetBaselines, resetManagedDefaults, discardBaselineEdits) live in
+// rulecontroller_baseline.cpp — split out to keep this TU under the 800-line cap.
 
 int RuleController::bandBaseForSection(RuleModel::Section section)
 {

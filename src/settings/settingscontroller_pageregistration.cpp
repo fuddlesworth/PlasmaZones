@@ -494,6 +494,140 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     return groups;
 }
 
+const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConfigKeys()
+{
+    // Per-page config-key manifest driving the breadcrumb kebab's Reset /
+    // Discard actions. Each leaf lists the (group, key) pairs it edits; a
+    // per-page Reset writes each key's schema default and a per-page Discard
+    // reverts each to the committed baseline (see Settings::resetKeys /
+    // discardKeys). ALWAYS express keys through ConfigDefaults accessors — never
+    // inline literals (CLAUDE.md). The pairs mirror the store-backed getters in
+    // settings.cpp.
+    //
+    // INVARIANTS (maintained by hand — a unit guard would have to link the whole
+    // SettingsController TU): every pair must be a schema-declared key, and no
+    // key may be owned by two pages (a shared key would let one page's Discard
+    // revert another page's edit). When adding a page, copy the (group, key)
+    // accessors verbatim from that page's getter in settings.cpp.
+    //
+    // Phase-1 scope: KConfig-backed settings pages only. Rule-backed pages
+    // (window-appearance, rules), separate-store pages (layouts), the
+    // controller-mediated ordering/shortcuts pages, and the Animations tree are
+    // deliberately absent because they revert through their own machinery
+    // (the special-case branches in reset/discardPage), not because Reset/Discard
+    // is unsupported — pageSupportsReset returns true for all but the pure
+    // separate-store pages (layouts, rules).
+    using CD = ConfigDefaults;
+    static const QHash<QString, Settings::ConfigKeyList> manifest{
+        {QStringLiteral("general"),
+         {
+             {CD::renderingGroup(), CD::backendKey()},
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::suppressDefaultLayoutAssignmentKey()},
+             {CD::exclusionsGroup(), CD::transientWindowsKey()},
+             {CD::exclusionsGroup(), CD::minimumWindowWidthKey()},
+             {CD::exclusionsGroup(), CD::minimumWindowHeightKey()},
+         }},
+        {QStringLiteral("snapping-overlay-behavior"),
+         {
+             {CD::snappingBehaviorGroup(), CD::toggleActivationKey()},
+             {CD::snappingBehaviorZoneSpanGroup(), CD::enabledKey()},
+             {CD::snappingBehaviorZoneSpanGroup(), CD::toggleActivationKey()},
+             {CD::snappingGapsGroup(), CD::adjacentThresholdKey()},
+             {CD::snappingBehaviorDisplayGroup(), CD::showOnAllMonitorsKey()},
+             {CD::snappingBehaviorDisplayGroup(), CD::filterByAspectRatioKey()},
+         }},
+        {QStringLiteral("snapping-overlay-appearance"),
+         {
+             {CD::snappingZonesColorsGroup(), CD::useSystemKey()},
+             {CD::snappingZonesColorsGroup(), CD::highlightKey()},
+             {CD::snappingZonesColorsGroup(), CD::inactiveKey()},
+             {CD::snappingZonesColorsGroup(), CD::borderKey()},
+             {CD::snappingZonesLabelsGroup(), CD::fontColorKey()},
+             {CD::snappingZonesLabelsGroup(), CD::fontFamilyKey()},
+             {CD::snappingZonesLabelsGroup(), CD::fontSizeScaleKey()},
+             {CD::snappingZonesLabelsGroup(), CD::fontWeightKey()},
+             {CD::snappingZonesLabelsGroup(), CD::fontItalicKey()},
+             {CD::snappingZonesLabelsGroup(), CD::fontUnderlineKey()},
+             {CD::snappingZonesLabelsGroup(), CD::fontStrikeoutKey()},
+             {CD::snappingZonesOpacityGroup(), CD::activeKey()},
+             {CD::snappingZonesOpacityGroup(), CD::inactiveKey()},
+             {CD::snappingZonesBorderGroup(), CD::widthKey()},
+             {CD::snappingZonesBorderGroup(), CD::radiusKey()},
+             {CD::snappingEffectsGroup(), CD::blurKey()},
+             {CD::snappingEffectsGroup(), CD::showNumbersKey()},
+             {CD::snappingEffectsGroup(), CD::flashOnSwitchKey()},
+             {CD::shadersGroup(), CD::enabledKey()},
+             {CD::shadersGroup(), CD::frameRateKey()},
+             {CD::shadersGroup(), CD::audioVisualizerKey()},
+             {CD::shadersGroup(), CD::audioSpectrumBarCountKey()},
+         }},
+        {QStringLiteral("snapping-zoneselector"),
+         {
+             {CD::snappingZoneSelectorGroup(), CD::enabledKey()},
+             {CD::snappingZoneSelectorGroup(), CD::triggerDistanceKey()},
+             {CD::snappingZoneSelectorGroup(), CD::positionKey()},
+             {CD::snappingZoneSelectorGroup(), CD::layoutModeKey()},
+             {CD::snappingZoneSelectorGroup(), CD::sizeModeKey()},
+             {CD::snappingZoneSelectorGroup(), CD::gridColumnsKey()},
+             {CD::snappingZoneSelectorGroup(), CD::maxRowsKey()},
+             {CD::snappingZoneSelectorGroup(), CD::previewWidthKey()},
+             {CD::snappingZoneSelectorGroup(), CD::previewHeightKey()},
+         }},
+        {QStringLiteral("snapping-window-behavior"),
+         {
+             {CD::snappingBehaviorSnapAssistGroup(), CD::featureEnabledKey()},
+             {CD::snappingBehaviorSnapAssistGroup(), CD::enabledKey()},
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::keepOnResolutionChangeKey()},
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::moveNewToLastZoneKey()},
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::autoAssignAllLayoutsKey()},
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::restoreOnUnsnapKey()},
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::restoreOnLoginKey()},
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::restoreFloatedOnLoginKey()},
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::unfloatFallbackToZoneKey()},
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::stickyWindowHandlingKey()},
+             {CD::snappingBehaviorGroup(), CD::focusNewWindowsKey()},
+             {CD::snappingBehaviorGroup(), CD::focusFollowsMouseKey()},
+         }},
+        {QStringLiteral("tiling-behavior"),
+         {
+             {CD::tilingBehaviorGroup(), CD::toggleActivationKey()},
+             {CD::tilingBehaviorGroup(), CD::insertPositionKey()},
+             {CD::tilingBehaviorGroup(), CD::respectMinimumSizeKey()},
+             {CD::tilingBehaviorGroup(), CD::stickyWindowHandlingKey()},
+             {CD::tilingBehaviorGroup(), CD::dragBehaviorKey()},
+             {CD::tilingBehaviorGroup(), CD::overflowBehaviorKey()},
+             {CD::tilingBehaviorGroup(), CD::focusNewWindowsKey()},
+             {CD::tilingBehaviorGroup(), CD::focusFollowsMouseKey()},
+             {CD::tilingBehaviorGroup(), CD::restoreFloatedOnLoginKey()},
+             {CD::tilingGapsGroup(), CD::smartGapsKey()},
+         }},
+        {QStringLiteral("tiling-algorithm"),
+         {
+             {CD::tilingAlgorithmGroup(), CD::defaultKey()},
+             {CD::tilingAlgorithmGroup(), CD::splitRatioKey()},
+             {CD::tilingAlgorithmGroup(), CD::splitRatioStepKey()},
+             {CD::tilingAlgorithmGroup(), CD::masterCountKey()},
+             {CD::tilingAlgorithmGroup(), CD::maxWindowsKey()},
+             {CD::tilingAlgorithmGroup(), CD::perAlgorithmSettingsKey()},
+         }},
+        {QStringLiteral("editor"),
+         {
+             {CD::editorShortcutsGroup(), CD::duplicateKey()},
+             {CD::editorShortcutsGroup(), CD::splitHorizontalKey()},
+             {CD::editorShortcutsGroup(), CD::splitVerticalKey()},
+             {CD::editorShortcutsGroup(), CD::fillKey()},
+             {CD::editorSnappingGroup(), CD::gridEnabledKey()},
+             {CD::editorSnappingGroup(), CD::edgeEnabledKey()},
+             {CD::editorSnappingGroup(), CD::intervalXKey()},
+             {CD::editorSnappingGroup(), CD::intervalYKey()},
+             {CD::editorSnappingGroup(), CD::overrideModifierKey()},
+             {CD::editorFillOnDropGroup(), CD::enabledKey()},
+             {CD::editorFillOnDropGroup(), CD::modifierKey()},
+         }},
+    };
+    return manifest;
+}
+
 const QSet<QString>& SettingsController::validPageNames()
 {
     // Keep in sync with the `regPage` / `regVirtual` registrations in

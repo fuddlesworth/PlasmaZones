@@ -16,6 +16,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Separate focused and unfocused border colors**: the border color is now two actions, "Set focused border color" and "Set unfocused border color", each with its own swatch ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **App-managed default rules**: the default rules (Default borders, Default title bars, Default gaps) cannot be deleted and stay pinned to the lowest priority ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Choose which windows the appearance defaults apply to**: the Borders and Title bars cards on the Appearance Windows page have an "Apply to" option with three scopes, tiled and snapped windows, all normal windows, and all windows. New installs default to tiled and snapped windows, so the default border and hidden title bar stay off the desktop, panels, popups, and on-screen displays. Existing setups keep their current scope and can switch at any time ([#721](https://github.com/fuddlesworth/PlasmaZones/pull/721)).
+- **Reset or discard one settings page at a time**: most settings pages now have a menu in the breadcrumb row with "Reset page to defaults" and "Discard changes on this page". Both stage the change so you can review it and then Save or Discard like any other edit, and discarding one page leaves your edits on other pages alone. The global Restore Defaults now also resets the rule-backed window appearance and gap defaults ([#726](https://github.com/fuddlesworth/PlasmaZones/pull/726)).
 
 ### Changed
 

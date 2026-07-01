@@ -169,6 +169,15 @@ public:
     /// as `setOverride`. @return true when a file was removed.
     Q_INVOKABLE bool clearOverride(const QString& path);
 
+    /// Clear every per-event override file (each built-in event path falls back
+    /// to its built-in default). Backs the settings app's per-page "Reset to
+    /// defaults" for the animation pages: each cleared file is snapshotted like
+    /// a normal edit, so the change stages and a subsequent Discard restores it.
+    /// The shader tree, animation Profile blob, and window filtering are separate
+    /// Settings keys the caller resets alongside this. @return the number of
+    /// override files actually removed.
+    int clearAllOverrides();
+
     /// Library of user-saved Profile presets. Each entry is a Profile JSON
     /// (`curve`, `duration`, `name`, …) sitting in the same `profiles/`
     /// dir as overrides — distinguished by the `name` field NOT matching
