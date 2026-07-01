@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-| **Status** | Both tracks IMPLEMENTED — **(A) per-page Reset+Discard for the Windows appearance page**; **(B) global Restore Defaults daemon-side reset** (`RuleAdaptor::resetManagedDefaults`, called from `SettingsController::defaults()`). §5.3 below records the original callback proposal; the shipped code instead shares the baseline makers via `plasmazones_core/baselinerules.h` and has `RuleAdaptor` call them directly (no callback needed). |
+| **Status** | Both tracks IMPLEMENTED — **(A) per-page Reset+Discard for the Windows appearance page**; **(B) global Restore Defaults daemon-side reset** (`SettingsController::defaults()` → `RuleController::resetManagedDefaults()` over D-Bus → daemon-side `RuleAdaptor::resetManagedDefaults`). §5.3 below records the original callback proposal; the shipped code instead shares the baseline makers via `plasmazones_core/baselinerules.h` and has `RuleAdaptor` call them directly (no callback needed). |
 | **Author** | — |
 | **Date** | 2026-06-28 (updated 2026-07-01) |
 | **Schema impact** | None (no config or rules-file schema change) |
