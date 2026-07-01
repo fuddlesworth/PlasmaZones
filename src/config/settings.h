@@ -1106,12 +1106,6 @@ public:
     using ConfigKey = QPair<QString, QString>;
     using ConfigKeyList = QList<ConfigKey>;
 
-    /// Refresh the committed baseline — the last-persisted value of every
-    /// schema-declared key. Called automatically at the end of load() and
-    /// save() (the only points where the in-memory store equals disk).
-    /// discardKeys() reverts to this baseline; isKeyModified() compares to it.
-    void captureBaseline();
-
     /// True when the current in-memory value of (@p group, @p key) differs
     /// from the committed baseline — i.e. the key carries an unsaved edit.
     bool isKeyModified(const QString& group, const QString& key) const;
@@ -1215,6 +1209,13 @@ private:
     // whose value changed and returns whether any fired.
     QVector<QVariant> snapshotNotifyProperties() const;
     bool emitChangedNotifyProperties(const QVector<QVariant>& before);
+
+    // Refresh the committed baseline — the last-persisted value of every
+    // schema-declared key. Called at the end of load() and save() (the only
+    // points where the in-memory store equals disk); discardKeys() reverts to
+    // this baseline and isKeyModified() compares against it. Private: mutating
+    // the baseline anywhere but a load/save commit point desyncs dirty tracking.
+    void captureBaseline();
 
     // Groups that save() writes exhaustively (excludes unmanaged groups).
     static QStringList managedGroupNames();

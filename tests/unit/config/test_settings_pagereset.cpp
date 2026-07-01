@@ -231,9 +231,11 @@ private Q_SLOTS:
         s.discardKeys({bogus});
         s.resetKeys({bogus});
 
-        // The unknown key never reports modified, and the real sibling is intact.
+        // The unknown key never reports modified, and the real sibling is intact
+        // (value and modified-flag both undisturbed by the bogus operations).
         QVERIFY(!s.isKeyModified(bogus.first, bogus.second));
         QCOMPARE(s.borderWidth(), wEdit);
+        QVERIFY(!s.isKeyModified(width.first, width.second));
         QCOMPARE(widthSpy.count(), 0);
     }
 };

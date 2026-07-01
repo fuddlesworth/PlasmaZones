@@ -200,20 +200,26 @@ public:
     Q_INVOKABLE bool pageSupportsDiscard(const QString& page) const;
 
     /// Reset every config key owned by @p page to its schema default, staged
-    /// for the user to Save or Discard (never persisted here). No-op for
-    /// pages absent from the manifest.
+    /// for the user to Save or Discard (never persisted here). Manifest pages
+    /// reset their keys; the ordering / shortcuts / virtual-screens / window-
+    /// appearance / animation pages reset through their own staged machinery.
+    /// No-op only for a page with none of those.
     Q_INVOKABLE void resetPage(const QString& page);
 
     /// Revert every config key owned by @p page to the committed baseline,
     /// dropping that page's unsaved edits while leaving other pages untouched.
-    /// No-op for pages absent from the manifest.
+    /// Handles the same special pages as resetPage, plus parent categories
+    /// (discards every discardable child leaf). No-op only for a page with
+    /// neither a manifest entry, a special-case branch, nor a child group.
     Q_INVOKABLE void discardPage(const QString& page);
 
     /// The per-page config-key manifest: page id → the (group, key) pairs that
     /// page owns. Phase-1 scope is the KConfig-backed settings pages; pages not
-    /// listed here have no per-page Reset/Discard. Public + static so the manifest
-    /// (and its hand-maintained partition/schema invariants — see the definition)
-    /// can be inspected without a SettingsController instance.
+    /// listed here revert through their own staged machinery rather than the
+    /// config manifest (see resetPage / discardPage), not because they lack
+    /// Reset/Discard. Public + static so the manifest (and its hand-maintained
+    /// partition/schema invariants — see the definition) can be inspected
+    /// without a SettingsController instance.
     static const QHash<QString, Settings::ConfigKeyList>& pageOwnedConfigKeys();
 
     /// Override the page that the next setNeedsSave(true) calls (and any
