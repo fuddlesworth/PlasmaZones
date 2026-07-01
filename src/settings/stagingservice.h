@@ -143,6 +143,23 @@ public:
     bool stagedSnappingQuickSlot(int slotNumber, QString& out) const;
     bool stagedTilingQuickSlot(int slotNumber, QString& out) const;
 
+    /// True if any quick-slot edit is staged for the mode. Backs the per-page
+    /// dirty check for the Quick Shortcuts pages.
+    bool hasStagedSnappingQuickSlots() const
+    {
+        return !m_snappingQuickSlots.isEmpty();
+    }
+    bool hasStagedTilingQuickSlots() const
+    {
+        return !m_tilingQuickSlots.isEmpty();
+    }
+
+    /// Drop all staged quick-slot edits for the mode (per-page Discard reverts
+    /// to the daemon's saved slots; the getters fall back to the daemon when a
+    /// slot is not staged).
+    void clearSnappingQuickSlots();
+    void clearTilingQuickSlots();
+
     /// Push staged quick-layout slots (both snapping and tiling modes) to the
     /// daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER `notifyReload`
     /// so the daemon has the fresh config. Clears both staging maps on

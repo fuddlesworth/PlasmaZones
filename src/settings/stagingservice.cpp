@@ -397,6 +397,16 @@ bool StagingService::stagedTilingQuickSlot(int slotNumber, QString& out) const
     return true;
 }
 
+void StagingService::clearSnappingQuickSlots()
+{
+    m_snappingQuickSlots.clear();
+}
+
+void StagingService::clearTilingQuickSlots()
+{
+    m_tilingQuickSlots.clear();
+}
+
 void StagingService::flushQuickSlotsToDaemon()
 {
     // Quick slots are mode-keyed in the daemon's LayoutRegistry: snapping

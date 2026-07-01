@@ -31,6 +31,18 @@ bool isOrderingPage(const QString& page)
     return page == QLatin1String("snapping-ordering") || page == QLatin1String("tiling-ordering");
 }
 
+// The two Quick Shortcuts pages. Their editable state is the per-mode staged
+// quick-slot layout assignments in StagingService (daemon-backed); the shortcut
+// keysequence is a read-only default in the standalone. Reset unassigns every
+// slot (the default), Discard drops the staged edits.
+bool isShortcutsPage(const QString& page)
+{
+    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts");
+}
+
+// Quick-layout slots are numbered 1..9 (see SettingsController::getQuickLayoutSlot).
+constexpr int kQuickLayoutSlotCount = 9;
+
 // Every animation leaf shares the single AnimationsPageController staging
 // domain (there is no per-subpage granularity), so pageGroupChildren("animations")
 // — the canonical leaf set — identifies them all. Discard reverts the whole tree.
@@ -190,6 +202,14 @@ bool SettingsController::isPageDirty(const QString& page) const
         return m_stagedTilingOrder.has_value() && *m_stagedTilingOrder != m_settings.tilingAlgorithmOrder();
     }
 
+    // Quick Shortcuts pages: dirty iff a quick-slot edit is staged for the mode.
+    if (page == QLatin1String("snapping-shortcuts")) {
+        return m_staging.hasStagedSnappingQuickSlots();
+    }
+    if (page == QLatin1String("tiling-shortcuts")) {
+        return m_staging.hasStagedTilingQuickSlots();
+    }
+
     // Animation pages share one staging domain, so any of them is dirty exactly
     // when the tree has unsaved edits. Value-based like the manifest pages, so
     // the badge and the kebab's Discard-enabled state stay correct on every
@@ -230,8 +250,9 @@ bool SettingsController::isPageDirty(const QString& page) const
 bool SettingsController::pageSupportsReset(const QString& page) const
 {
     // Config-manifest pages write schema defaults; ordering pages drop the
-    // custom order. Animation pages have no reset-to-defaults path.
-    return pageOwnedConfigKeys().contains(page) || isOrderingPage(page);
+    // custom order; shortcuts pages unassign every quick slot. Animation pages
+    // have no reset-to-defaults path.
+    return pageOwnedConfigKeys().contains(page) || isOrderingPage(page) || isShortcutsPage(page);
 }
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
@@ -266,6 +287,22 @@ void SettingsController::resetPage(const QString& page)
     }
     if (page == QLatin1String("tiling-ordering")) {
         resetTilingOrder();
+        return;
+    }
+
+    // Quick Shortcuts: "reset to defaults" unassigns every slot (the default is
+    // no assignment). Stage an empty id for each slot; save() flushes the clears
+    // to the daemon. quickLayoutSlotsChanged refreshes the slot cards.
+    if (isShortcutsPage(page)) {
+        const bool snapping = (page == QLatin1String("snapping-shortcuts"));
+        for (int slot = 1; slot <= kQuickLayoutSlotCount; ++slot) {
+            if (snapping)
+                m_staging.stageSnappingQuickSlot(slot, QString());
+            else
+                m_staging.stageTilingQuickSlot(slot, QString());
+        }
+        Q_EMIT quickLayoutSlotsChanged();
+        reconcilePageDirty(page);
         return;
     }
 
@@ -312,6 +349,23 @@ void SettingsController::discardPage(const QString& page)
                 Q_EMIT stagedSnappingOrderChanged();
             else
                 Q_EMIT stagedTilingOrderChanged();
+        }
+        reconcilePageDirty(page);
+        return;
+    }
+
+    // Quick Shortcuts: drop the mode's staged quick-slot edits so the getters
+    // fall back to the daemon's saved slots.
+    if (isShortcutsPage(page)) {
+        const bool snapping = (page == QLatin1String("snapping-shortcuts"));
+        const bool hadStaged =
+            snapping ? m_staging.hasStagedSnappingQuickSlots() : m_staging.hasStagedTilingQuickSlots();
+        if (hadStaged) {
+            if (snapping)
+                m_staging.clearSnappingQuickSlots();
+            else
+                m_staging.clearTilingQuickSlots();
+            Q_EMIT quickLayoutSlotsChanged();
         }
         reconcilePageDirty(page);
         return;
