@@ -144,6 +144,9 @@ public:
     {
         return {};
     }
+    void clearPreFloatZone(const QString&) override
+    {
+    }
     bool clearAutoSnapped(const QString&) override
     {
         return false;

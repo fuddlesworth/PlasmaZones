@@ -6,6 +6,7 @@
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
@@ -253,7 +254,26 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         return result;
     }
 
-    const QString restoreScreen = resolveUnfloatScreen(m_windowTracker->preFloatScreen(windowId), fallbackScreen);
+    const QString preFloatScreen = m_windowTracker->preFloatScreen(windowId);
+
+    // Cross-monitor guard: a pre-float zone id belongs to the layout of the monitor
+    // the window was floated from. If the window is being unfloated on a DIFFERENT
+    // physical monitor (it crossed monitors while floating), that zone is stale and
+    // restoring to it would teleport the window back to the source monitor. Refuse —
+    // the caller keeps it floating / falls back to a current-screen zone. Compare by
+    // PHYSICAL monitor (not screensMatch, which treats any virtual-vs-physical or
+    // differing-virtual pair as a mismatch) so a same-monitor id-form difference is
+    // never misread as a monitor change. Backstops the pre-float clear on the
+    // cross-monitor handoff (handoffReceive) for move routes that skip that branch.
+    if (!preFloatScreen.isEmpty() && !fallbackScreen.isEmpty()
+        && !PhosphorIdentity::VirtualScreenId::samePhysical(preFloatScreen, fallbackScreen)) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine)
+            << "resolveUnfloatGeometry:" << windowId << "pre-float screen" << preFloatScreen
+            << "is a different monitor than unfloat screen" << fallbackScreen << "- not restoring across monitors";
+        return result;
+    }
+
+    const QString restoreScreen = resolveUnfloatScreen(preFloatScreen, fallbackScreen);
 
     QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
     if (!geo.isValid()) {
@@ -401,6 +421,18 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     const int currentDesktop = ctx.toDesktop > 0 ? ctx.toDesktop : currentVirtualDesktopForScreen(ctx.toScreenId);
     m_snapState->setFloatingOnScreen(ctx.windowId, ctx.toScreenId, currentDesktop);
     m_windowTracker->setWindowFloating(ctx.windowId, true);
+    // The window's floating-screen association is now the destination monitor, so
+    // any saved pre-float zone/screen (from the source-monitor float that started
+    // this cross-screen move) is stale: it names a zone in the SOURCE monitor's
+    // layout. Left in place, the next unfloat (Meta+F float-toggle, or the snap
+    // minimize→unminimize float driver) restores the window to that source zone,
+    // teleporting it back across monitors. Clear it so unfloat resolves against the
+    // destination monitor instead. Mirrors the screen-assignment refresh this same
+    // cross-monitor move path already performs (see WindowTrackingAdaptor::
+    // windowScreenChanged), which historically only covered snap assignments.
+    // Route through the tracker (not SnapState directly) so BOTH the windowId key
+    // and its appId alias are dropped — the pre-float save writes both.
+    m_windowTracker->clearPreFloatZone(ctx.windowId);
     Q_EMIT windowFloatingChanged(ctx.windowId, true, ctx.toScreenId);
 }
 

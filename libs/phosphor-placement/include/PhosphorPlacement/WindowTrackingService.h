@@ -492,7 +492,7 @@ public:
     /**
      * @brief Clear pre-float zone after restore (both windowId and appId keys)
      */
-    void clearPreFloatZone(const QString& windowId);
+    void clearPreFloatZone(const QString& windowId) override;
 
     /**
      * @brief Clear pre-float zone for a specific window only (not appId)
