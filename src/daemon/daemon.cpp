@@ -1878,9 +1878,7 @@ void Daemon::warnCompositorBridgeMissing()
                             diagnosis = PhosphorI18n::tr(
                                             "The PlasmaZones KWin effect was built for KWin %1 but "
                                             "KWin %2 is running, so KWin will not load it. Rebuild and "
-                                            "reinstall PlasmaZones against the running KWin. On NixOS, "
-                                            "install via the flake's nixosModules or overlay (not "
-                                            "packages.default).")
+                                            "reinstall PlasmaZones against the running KWin.")
                                             .arg(effectKWinVersion, runningKWinVersion);
                         }
                     }
