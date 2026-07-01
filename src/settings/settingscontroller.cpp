@@ -481,61 +481,40 @@ SettingsController::SettingsController(QObject* parent)
     if (m_rulesPage->model() != nullptr) {
         connect(m_rulesPage->model(), &RuleModel::countChanged, this, &SettingsController::perScreenOverridesChanged);
     }
-    connect(m_rulesPage, &RuleController::dirtyChanged, this, [this]() {
+    // Attribute rule-model dirtiness to the two rule-backed pages that share
+    // this one controller: appearance (managed baseline) edits mark
+    // "window-appearance", user-rule edits mark "rules".
+    // reconcileRuleBackedDirty() is value-based — it compares the staged model
+    // to the last daemon-synced snapshot — so it stays correct even when the
+    // shared dirty bit does not transition (e.g. editing a baseline while user
+    // rules are already dirty). It is driven off the model's own change signals
+    // so every edit re-attributes, plus revert/apply completion for the async
+    // failure paths where the model itself did not change but the page's
+    // blanket-cleared dirty entry must be restored.
+    const auto reattributeRuleDirty = [this]() {
         if (m_loading || m_saving)
             return;
-        if (m_rulesPage->isDirty()) {
-            // A window-rule edit can be driven by a background daemon signal, not
-            // just by the user viewing the page — so mark the "rules" page
-            // explicitly rather than letting setNeedsSave() target m_activePage.
-            beginExternalEdit(QStringLiteral("rules"));
-            setNeedsSave(true);
-            endExternalEdit();
-            return;
-        }
-        // Controller transitioned to clean (e.g. a successful fetchAndLoad
-        // flipped m_dirty false→true→false during initial async load, or a
-        // direct revert from QML). Mirror the dirty-side behaviour: remove
-        // "rules" from m_dirtyPages and emit dirtyPagesChanged when
-        // the set actually shrinks. setNeedsSave(false) cannot be used here
-        // — it blanket-clears every page, which would wipe other unrelated
-        // dirty leaves.
-        if (m_dirtyPages.remove(QStringLiteral("rules"))) {
-            Q_EMIT dirtyPagesChanged();
-        }
+        reconcileRuleBackedDirty();
+    };
+    connect(m_rulesPage, &RuleController::dirtyChanged, this, reattributeRuleDirty);
+    // revertFinished / applyResult land after load()/save() have run their
+    // setNeedsSave(false) blanket-clear; reconcile unconditionally so a failed
+    // revert/push (model still divergent from the snapshot) re-marks the right
+    // page, and a successful one leaves both clean.
+    connect(m_rulesPage, &RuleController::revertFinished, this, [this](bool) {
+        reconcileRuleBackedDirty();
     });
-    // A user-driven Discard fires RuleController::revert() inside our
-    // load() under m_loading=true, which suppresses the dirtyChanged → dirty
-    // pages plumbing for the duration of the call. The async re-fetch lands
-    // AFTER load() has already done `setNeedsSave(false)` (which blanket-
-    // clears m_dirtyPages). If the re-fetch *fails*, the controller's m_dirty
-    // stays true per its documented contract — but its dirtyChanged signal
-    // never fires (value didn't change) and the cleared dirty-page entry is
-    // never re-added. Listen to revertFinished here so a failed revert can
-    // re-mark the page dirty.
-    connect(m_rulesPage, &RuleController::revertFinished, this, [this](bool success) {
-        if (success || !m_rulesPage->isDirty()) {
-            return;
-        }
-        // m_loading is already false by the time this async reply lands.
-        beginExternalEdit(QStringLiteral("rules"));
-        setNeedsSave(true);
-        endExternalEdit();
+    connect(m_rulesPage, &RuleController::applyResult, this, [this](bool, const QString&) {
+        reconcileRuleBackedDirty();
     });
-    // Same asymmetry on the SAVE path: a failed/partial daemon rules push keeps
-    // RuleController m_dirty=true per its contract, but its dirtyChanged signal
-    // never fires (the value didn't change false→true), so the "rules" entry
-    // that save()'s setNeedsSave(false) blanket-cleared is never re-added — the
-    // per-page badge wrongly clears while the domain stays dirty. Re-mark on a
-    // failed apply so isPageDirty("rules") stays true, mirroring revertFinished.
-    connect(m_rulesPage, &RuleController::applyResult, this, [this](bool ok, const QString&) {
-        if (ok || !m_rulesPage->isDirty()) {
-            return;
-        }
-        beginExternalEdit(QStringLiteral("rules"));
-        setNeedsSave(true);
-        endExternalEdit();
-    });
+    if (m_rulesPage->model() != nullptr) {
+        RuleModel* ruleModel = m_rulesPage->model();
+        connect(ruleModel, &QAbstractItemModel::dataChanged, this, reattributeRuleDirty);
+        connect(ruleModel, &QAbstractItemModel::rowsInserted, this, reattributeRuleDirty);
+        connect(ruleModel, &QAbstractItemModel::rowsRemoved, this, reattributeRuleDirty);
+        connect(ruleModel, &QAbstractItemModel::rowsMoved, this, reattributeRuleDirty);
+        connect(ruleModel, &QAbstractItemModel::modelReset, this, reattributeRuleDirty);
+    }
 
     // Wire screen / activity / layout label resolvers so the rule model and
     // monitor-overview render friendly names instead of raw connector strings,

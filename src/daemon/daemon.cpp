@@ -70,6 +70,7 @@
 #include "../core/utils.h"
 #include "../phosphor_i18n.h"
 #include "../config/configdefaults.h"
+#include "../core/baselinerules.h"
 #include "../config/settingsconfigstore.h"
 #include <PhosphorScreens/DBusScreenAdaptor.h>
 #include <PhosphorScreens/Swapper.h>
@@ -120,117 +121,11 @@ static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
 
 namespace {
 
-// Common skeleton for the three managed baseline rules: catch-all match by
-// default (the border and title-bar makers below narrow it to tiled / snapped
-// windows), lowest priority, managed. Each is a focused fallback resolved
-// against per concern now that the per-mode global appearance settings are gone.
-// The Appearance settings page rewrites these actions; per-window overrides are
-// ordinary higher-priority rules that win per slot.
-PhosphorRules::Rule makeBaselineSkeleton(const QUuid& id, const QString& name)
-{
-    using namespace PhosphorRules;
-    Rule rule;
-    rule.id = id;
-    rule.name = name;
-    rule.managed = true;
-    // Lowest possible precedence — any user rule (all of which carry a higher
-    // priority) overrides the baseline per slot. renormalizePriorities in the
-    // settings controller deliberately leaves managed rules pinned here.
-    rule.priority = std::numeric_limits<int>::min();
-    rule.match = MatchExpression{}; // empty All{} — matches every window
-    return rule;
-}
-
-// Build the managed baseline BORDER rule: the lowest-priority baseline rule
-// carrying only the "show border" parent action, which defaults OFF (opt-in).
-// Its match is scoped to tiled / snapped windows on a fresh install (see below),
-// so it is no longer a catch-all.
-// The dependent border details (width, radius, active/inactive colour) are not
-// seeded here. The Appearance page adds them when the user turns "show border"
-// on and removes them when it is turned off, so the baseline stays minimal.
-// Consumers that read an absent detail fall back to their own defaults, and a
-// hidden border draws nothing regardless.
-PhosphorRules::Rule makeBaselineBorderRule()
-{
-    using namespace PhosphorRules;
-    namespace DD = PhosphorCompositor::DecorationDefaults;
-
-    const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
-        RuleAction a;
-        a.type = QString(type);
-        a.params.insert(QString(key), value);
-        return a;
-    };
-
-    Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineBorderRuleId(), PhosphorI18n::tr("Default borders"));
-    // Fresh-install default: draw the baseline border only on tiled / snapped
-    // windows, the behaviour before appearance moved onto rules. The Appearance
-    // page's "Apply to" selector rewrites this match; the seeder never re-pins it,
-    // so an existing install keeps whatever scope it already carries.
-    rule.match = ConfigDefaults::tiledAndSnappedScopeMatch();
-    rule.actions = {
-        action(ActionType::SetBorderVisible, ActionParam::Value, DD::ShowBorder),
-    };
-    return rule;
-}
-
-// Build the managed baseline TITLE BAR rule: the lowest-priority baseline rule
-// carrying the default hide-title-bar value. Its match is scoped to tiled /
-// snapped windows on a fresh install (see below), so it is not a catch-all.
-PhosphorRules::Rule makeBaselineTitleBarRule()
-{
-    using namespace PhosphorRules;
-    namespace DD = PhosphorCompositor::DecorationDefaults;
-
-    const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
-        RuleAction a;
-        a.type = QString(type);
-        a.params.insert(QString(key), value);
-        return a;
-    };
-
-    Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineTitleBarRuleId(), PhosphorI18n::tr("Default title bars"));
-    // Fresh-install default: hide the title bar only on tiled / snapped windows,
-    // the behaviour before appearance moved onto rules. The Appearance page's
-    // "Apply to" selector rewrites this match; the seeder never re-pins it, so an
-    // existing install keeps whatever scope it already carries.
-    rule.match = ConfigDefaults::tiledAndSnappedScopeMatch();
-    rule.actions = {
-        action(ActionType::SetHideTitleBar, ActionParam::Value, DD::HideTitleBars),
-    };
-    return rule;
-}
-
-// Build the managed baseline GAP rule: the catch-all, lowest-priority rule that
-// is the single source of truth for the shared inner/outer gap model (Settings
-// reads these actions back as its innerGap()/outerGap*() getters). These are
-// Context-domain actions; resolveContextGaps EXCLUDES this managed rule so the
-// values surface only as the level-4 global default, never as a top-tier
-// context override. Seeded from the same ConfigDefaults accessors the schema
-// validators and the compile-time defaults use. Only the parent actions
-// (inner gap, outer gap, and the per-side toggle, which defaults off) are
-// seeded. The four per-side outer gap actions are added by the Appearance page
-// when the user turns per-side gaps on and removed when it is turned off, so an
-// absent per-side action falls back to the uniform outer gap.
-PhosphorRules::Rule makeBaselineGapRule()
-{
-    using namespace PhosphorRules;
-
-    const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
-        RuleAction a;
-        a.type = QString(type);
-        a.params.insert(QString(key), value);
-        return a;
-    };
-
-    Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineGapRuleId(), PhosphorI18n::tr("Default gaps"));
-    rule.actions = {
-        action(ActionType::SetInnerGap, ActionParam::Value, ConfigDefaults::innerGap()),
-        action(ActionType::SetOuterGap, ActionParam::Value, ConfigDefaults::outerGap()),
-        action(ActionType::SetUsePerSideOuterGap, ActionParam::Value, ConfigDefaults::usePerSideOuterGap()),
-    };
-    return rule;
-}
+// The three managed baseline rule makers (makeBaselineSkeleton /
+// makeBaseline{Border,TitleBar,Gap}Rule) moved to src/core/baselinerules.{h,cpp}
+// so the settings app's per-page appearance reset shares one source of truth
+// with the seeding below. They are PlasmaZones-namespace free functions, so the
+// unqualified calls in ensureManagedRule resolve to them unchanged.
 
 // Debounce interval (ms): coalesce rapid geometry changes (multi-screen, panel editor) into one update.
 // Conceptually distinct from DELAYED_PANEL_REQUERY_MS in autotile.cpp (which schedules a

@@ -382,6 +382,11 @@ SettingsFlickable {
         function onRulesLoaded() {
             root.reloadTick++;
         }
+        // The per-page Reset / Discard rewrite the managed baselines in place
+        // (no rulesLoaded), so re-read the controls when that fires.
+        function onBaselinesChanged() {
+            root.reloadTick++;
+        }
     }
 
     // Re-evaluate the gap value bindings when the monitor scope chip changes the

@@ -257,10 +257,10 @@ bool SettingsController::pageSupportsReset(const QString& page) const
 {
     // Config-manifest pages write schema defaults; ordering pages drop the
     // custom order; shortcuts pages unassign every quick slot; the virtual
-    // screens page unsplits every monitor. Animation pages have no
-    // reset-to-defaults path.
+    // screens page unsplits every monitor; the Windows appearance page resets
+    // its 3 managed baseline rules. Animation pages have no reset-to-defaults path.
     return pageOwnedConfigKeys().contains(page) || isOrderingPage(page) || isShortcutsPage(page)
-        || page == QLatin1String("virtualscreens");
+        || page == QLatin1String("virtualscreens") || page == QLatin1String("window-appearance");
 }
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
@@ -284,8 +284,46 @@ void SettingsController::reconcilePageDirty(const QString& page)
     }
 }
 
+void SettingsController::reconcileRuleBackedDirty()
+{
+    if (m_rulesPage == nullptr)
+        return;
+    // The Windows appearance page and the Rules page stage into one shared
+    // RuleController model; attribute the two independently from the value-based
+    // subset-dirty queries so an appearance edit badges Windows and a user-rule
+    // edit badges Rules — even when the shared dirty bit does not transition.
+    bool changed = false;
+    const auto sync = [this, &changed](const QString& page, bool dirty) {
+        if (dirty) {
+            if (!m_dirtyPages.contains(page)) {
+                m_dirtyPages.insert(page);
+                changed = true;
+            }
+        } else if (m_dirtyPages.remove(page)) {
+            changed = true;
+        }
+    };
+    sync(QStringLiteral("window-appearance"), m_rulesPage->baselinesDirty());
+    sync(QStringLiteral("rules"), m_rulesPage->userRulesDirty());
+    if (changed) {
+        Q_EMIT dirtyPagesChanged();
+    }
+}
+
 void SettingsController::resetPage(const QString& page)
 {
+    // Windows appearance: reset the 3 managed baseline rules to factory (staged),
+    // then re-attribute. reconcileRuleBackedDirty is explicit because the reset
+    // may leave the shared dirty bit unchanged (user rules already dirty), so it
+    // can't rely on a dirtyChanged transition.
+    if (page == QLatin1String("window-appearance")) {
+        if (m_rulesPage != nullptr) {
+            m_rulesPage->resetBaselines();
+        }
+        reconcileRuleBackedDirty();
+        return;
+    }
+
     // Ordering pages: "reset to defaults" means dropping the custom order.
     // resetSnappingOrder/resetTilingOrder stage the empty (default) order and
     // mark the active page dirty themselves.
@@ -361,6 +399,16 @@ void SettingsController::resetPage(const QString& page)
 
 void SettingsController::discardPage(const QString& page)
 {
+    // Windows appearance: restore the 3 managed baseline rules from the last
+    // saved snapshot (leaving user rules untouched), then re-attribute.
+    if (page == QLatin1String("window-appearance")) {
+        if (m_rulesPage != nullptr) {
+            m_rulesPage->discardBaselineEdits();
+        }
+        reconcileRuleBackedDirty();
+        return;
+    }
+
     const auto& manifest = pageOwnedConfigKeys();
     const auto it = manifest.constFind(page);
     if (it != manifest.constEnd()) {

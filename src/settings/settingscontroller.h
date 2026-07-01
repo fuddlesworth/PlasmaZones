@@ -642,6 +642,12 @@ private:
     // dirty state after a per-page Reset/Discard, emitting dirtyPagesChanged
     // when it flips so the footer's global needsSave stays consistent.
     void reconcilePageDirty(const QString& page);
+    // Value-based attribution for the two rule-backed pages sharing one
+    // RuleController model: set m_dirtyPages membership for "window-appearance"
+    // (= baselinesDirty) and "rules" (= userRulesDirty), emitting
+    // dirtyPagesChanged on a change. Called on every rule-model mutation and on
+    // revert/apply completion so the badges follow which subset actually changed.
+    void reconcileRuleBackedDirty();
     void refreshVirtualDesktops();
     void refreshActivities();
 
