@@ -257,28 +257,29 @@ private Q_SLOTS:
     }
 
     /**
-     * The Algorithm / AnimationEasingCurve validators canonicalize the
-     * accepted value to QString so the in-memory type matches what the
-     * backend round-trips (writeString → readString). A non-string payload
-     * (e.g. an int arriving over D-Bus) must therefore store as a QString
-     * immediately, keeping the observable type stable across restart — a
-     * regression to pass-through QVariant(value) would store it int-typed
-     * in the writing session but string-typed after reload.
+     * The string-token validator (AnimationEasingCurve — the Algorithm token is
+     * rule-backed now) canonicalizes the accepted value to QString so the in-memory
+     * type matches what the backend round-trips (writeString → readString). A
+     * non-string payload (e.g. an int arriving over D-Bus) must therefore store as a
+     * QString immediately, keeping the observable type stable across restart — a
+     * regression to pass-through QVariant(value) would store it int-typed in the
+     * writing session but string-typed after reload.
      */
-    void testPerScreenAutotile_algorithmValueIsCanonicalizedToString()
+    void testPerScreenAutotile_stringTokenIsCanonicalizedToString()
     {
         IsolatedConfigGuard guard;
         Settings settings;
         const QString screen = QStringLiteral("test-screen-1");
 
-        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileAlgorithm"), 5);
-        const QVariant stored = settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("Algorithm"));
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AnimationEasingCurve"), 5);
+        const QVariant stored =
+            settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("AnimationEasingCurve"));
         QCOMPARE(stored.typeId(), static_cast<int>(QMetaType::QString));
         QCOMPARE(stored.toString(), QStringLiteral("5"));
 
         // Empty string is still rejected (no meaningful per-screen override).
         QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
-        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileAlgorithm"), QString());
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AnimationEasingCurve"), QString());
         QCOMPARE(spy.count(), 0);
     }
 
@@ -304,12 +305,11 @@ private Q_SLOTS:
         // The inner/outer gap keys are intentionally absent: per-screen gaps are
         // rule-backed now, so the per-screen autotile validator rejects them
         // (covered by testPerScreenAutotile_gapKeysAreRejected). SmartGaps stays.
-        // SplitRatio / MasterCount / MaxWindows are likewise absent — they folded
-        // onto per-monitor tiling Rules in v5, so the validator rejects them too
-        // (covered by testPerScreenAutotile_tilingKeysAreRejected). SplitRatioStep
-        // did not fold and stays a plain per-screen config key.
+        // SplitRatio / MasterCount / MaxWindows / Algorithm are likewise absent —
+        // they folded onto per-monitor tiling Rules in v5, so the validator rejects
+        // them too (covered by testPerScreenAutotile_tilingKeysAreRejected).
+        // SplitRatioStep did not fold and stays a plain per-screen config key.
         const QList<KeyProbe> probes{
-            {PerScreenAutotileKey::Algorithm, QStringLiteral("bsp")},
             {PerScreenAutotileKey::FocusNewWindows, true},
             {PerScreenAutotileKey::SmartGaps, true},
             {PerScreenAutotileKey::InsertPosition, 1},
@@ -443,11 +443,14 @@ private Q_SLOTS:
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileSplitRatio"), 0.5);
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 2);
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMaxWindows"), 3);
+        // Algorithm folded too (a SetTilingAlgorithm action on the tiling rule).
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileAlgorithm"), QStringLiteral("bsp"));
         QCOMPARE(spy.count(), 0);
         const QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
         QVERIFY(!overrides.contains(QStringLiteral("SplitRatio")));
         QVERIFY(!overrides.contains(QStringLiteral("MasterCount")));
         QVERIFY(!overrides.contains(QStringLiteral("MaxWindows")));
+        QVERIFY(!overrides.contains(QStringLiteral("Algorithm")));
 
         // SplitRatioStep is unaffected (no rule action for it) and still accepted.
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileSplitRatioStep"), 0.05);

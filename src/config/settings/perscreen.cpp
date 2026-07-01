@@ -125,16 +125,22 @@ const QLatin1String kPerScreenKeys[] = {
 // are rule-backed (per-monitor gap Rules) and merged into the accessor's
 // result by perScreenGapRuleOverrides, never stored in this per-screen map.
 // SmartGaps stays — it is a tiling behaviour flag, not a gap dimension.
-// SplitRatio / MasterCount / MaxWindows are likewise ABSENT: the per-screen
-// spatial tiling knobs folded onto per-monitor tiling Rules in v5 and are merged
-// in by perScreenTilingRuleOverrides, never stored here. SplitRatioStep did NOT
-// fold (no rule action for it) and stays a plain per-screen config key.
+// SplitRatio / MasterCount / MaxWindows / Algorithm are likewise ABSENT: the
+// per-screen spatial tiling knobs folded onto per-monitor tiling Rules in v5.
+// Split/master/max are merged into the accessor by perScreenTilingRuleOverrides;
+// the Algorithm is a SetTilingAlgorithm action on the same rule, resolved through
+// the daemon's authoritative assignment path (not this map), so it is not merged
+// here. SplitRatioStep did NOT fold (no rule action for it) and stays config.
 const QLatin1String kPerScreenAutotileKeys[] = {
-    QLatin1String(PerScreenAutotileKey::Algorithm),          QLatin1String(PerScreenAutotileKey::SplitRatioStep),
-    QLatin1String(PerScreenAutotileKey::FocusNewWindows),    QLatin1String(PerScreenAutotileKey::SmartGaps),
-    QLatin1String(PerScreenAutotileKey::InsertPosition),     QLatin1String(PerScreenAutotileKey::FocusFollowsMouse),
-    QLatin1String(PerScreenAutotileKey::RespectMinimumSize), QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
-    QLatin1String(PerScreenAutotileKey::AnimationDuration),  QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
+    QLatin1String(PerScreenAutotileKey::SplitRatioStep),
+    QLatin1String(PerScreenAutotileKey::FocusNewWindows),
+    QLatin1String(PerScreenAutotileKey::SmartGaps),
+    QLatin1String(PerScreenAutotileKey::InsertPosition),
+    QLatin1String(PerScreenAutotileKey::FocusFollowsMouse),
+    QLatin1String(PerScreenAutotileKey::RespectMinimumSize),
+    QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
+    QLatin1String(PerScreenAutotileKey::AnimationDuration),
+    QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
 };
 
 // Gaps sub-domain of the autotile per-screen keys. The inner/outer gap
@@ -198,11 +204,14 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == PerScreenKeys::InsertPosition)
         return boundedInt(value, ConfigDefaults::autotileInsertPositionMin(),
                           ConfigDefaults::autotileInsertPositionMax());
-    // Algorithm / easing-curve tokens are resolved (with a fallback) at the
-    // daemon, so the registry isn't available here to validate them — but
-    // reject an empty override outright, since a blank per-screen algorithm or
-    // curve is never a meaningful override.
-    if (k == PerScreenKeys::Algorithm || k == PerScreenKeys::AnimationEasingCurve)
+    // The per-screen Algorithm is rule-backed now (a SetTilingAlgorithm action on
+    // the per-monitor tiling rule, resolved via the daemon's assignment path), so
+    // it is rejected here like any unknown key — a write never round-trips into the
+    // per-screen config map. The easing-curve token is resolved (with a fallback)
+    // at the daemon, so the registry isn't available here to validate it — but
+    // reject an empty override outright, since a blank per-screen curve is never a
+    // meaningful override.
+    if (k == PerScreenKeys::AnimationEasingCurve)
         // Canonicalize to QString: the backend round-trips these via
         // writeString/readString, so a non-string payload accepted here
         // (e.g. an int over D-Bus) would change observable type across a
@@ -220,8 +229,7 @@ QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString
 {
     if (key == QLatin1String(PerScreenAutotileKey::SplitRatioStep))
         return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatioStep()));
-    if (key == QLatin1String(PerScreenAutotileKey::Algorithm)
-        || key == QLatin1String(PerScreenAutotileKey::AnimationEasingCurve))
+    if (key == QLatin1String(PerScreenAutotileKey::AnimationEasingCurve))
         return QVariant(group.readString(key));
     if (key == QLatin1String(PerScreenAutotileKey::FocusNewWindows))
         return QVariant(group.readBool(key, ConfigDefaults::autotileFocusNewWindows()));

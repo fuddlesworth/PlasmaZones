@@ -501,11 +501,12 @@ private Q_SLOTS:
                  "the gap key must be stripped from the config");
     }
 
-    // Per-screen tiling geometry (split ratio / master count / max windows) folds
-    // onto a dedicated per-monitor ScreenId rule, namespaced under
-    // perScreenTilingRuleNamespaceId (DISTINCT from the gap namespace) so the
-    // settings UI find-or-creates the same rule. Non-geometry autotile per-screen
-    // keys (Algorithm, behavioural flags) survive in the config.
+    // Per-screen tiling geometry (split ratio / master count / max windows) AND the
+    // per-screen Algorithm fold onto a dedicated per-monitor ScreenId rule,
+    // namespaced under perScreenTilingRuleNamespaceId (DISTINCT from the gap
+    // namespace) so the settings UI find-or-creates the same rule. The Algorithm
+    // becomes a SetTilingAlgorithm action (the dedup); only behavioural flags
+    // survive in the config.
     void testPerScreenTiling_becomesScreenIdRule()
     {
         IsolatedConfigGuard guard;
@@ -513,13 +514,13 @@ private Q_SLOTS:
 
         QJsonObject cfg = baseV4Config();
         // Differing-from-default split ratio (0.66 != 0.5), master count (2 != 1),
-        // max windows (3 != 5), plus a survivor (Algorithm) and a default-valued
-        // split-ratio companion that must NOT produce an action.
+        // max windows (3 != 5), plus a per-screen Algorithm ("AutotileAlgorithm" is
+        // the prefixed disk spelling) that folds into a SetTilingAlgorithm action.
         setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Autotile"), QStringLiteral("DP-1")},
                   {{QStringLiteral("AutotileSplitRatio"), 0.66},
                    {QStringLiteral("AutotileMasterCount"), 2},
                    {QStringLiteral("AutotileMaxWindows"), 3},
-                   {QStringLiteral("Algorithm"), QStringLiteral("bsp")}});
+                   {QStringLiteral("AutotileAlgorithm"), QStringLiteral("bsp")}});
         writeJson(ConfigDefaults::configFilePath(), cfg);
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -547,15 +548,23 @@ private Q_SLOTS:
         QVERIFY(types.contains(QStringLiteral("setSplitRatio")));
         QVERIFY(types.contains(QStringLiteral("setMasterCount")));
         QVERIFY(types.contains(QStringLiteral("setMaxWindows")));
+        QVERIFY(types.contains(QStringLiteral("setTilingAlgorithm")));
         QCOMPARE(actionValue(tilingRule, QStringLiteral("setSplitRatio")).toDouble(), 0.66);
         QCOMPARE(actionValue(tilingRule, QStringLiteral("setMasterCount")).toInt(), 2);
         QCOMPARE(actionValue(tilingRule, QStringLiteral("setMaxWindows")).toInt(), 3);
+        // SetTilingAlgorithm carries its token under the `algorithm` param, not `value`.
+        QString foldedAlgo;
+        for (const QJsonValue& av : tilingRule.value(QStringLiteral("actions")).toArray()) {
+            if (av.toObject().value(QStringLiteral("type")).toString() == QLatin1String("setTilingAlgorithm"))
+                foldedAlgo = av.toObject().value(QStringLiteral("algorithm")).toString();
+        }
+        QCOMPARE(foldedAlgo, QStringLiteral("bsp"));
         const QJsonObject m = matchOf(tilingRule);
         QCOMPARE(m.value(QStringLiteral("field")).toString(), QStringLiteral("screenId"));
         QCOMPARE(m.value(QStringLiteral("op")).toString(), QStringLiteral("equals"));
         QCOMPARE(m.value(QStringLiteral("value")).toString(), canonicalKey);
 
-        // Survivors: Algorithm stays in config; the geometry keys are stripped.
+        // The geometry keys AND the Algorithm key are stripped from the config.
         const QJsonObject autoScreen = readJson(ConfigDefaults::configFilePath())
                                            .value(QStringLiteral("PerScreen"))
                                            .toObject()
@@ -563,7 +572,8 @@ private Q_SLOTS:
                                            .toObject()
                                            .value(QStringLiteral("DP-1"))
                                            .toObject();
-        QCOMPARE(autoScreen.value(QStringLiteral("Algorithm")).toString(), QStringLiteral("bsp"));
+        QVERIFY2(!autoScreen.contains(QStringLiteral("AutotileAlgorithm")),
+                 "per-screen algorithm key must be stripped");
         QVERIFY2(!autoScreen.contains(QStringLiteral("AutotileSplitRatio")), "split ratio key must be stripped");
         QVERIFY2(!autoScreen.contains(QStringLiteral("AutotileMasterCount")), "master count key must be stripped");
         QVERIFY2(!autoScreen.contains(QStringLiteral("AutotileMaxWindows")), "max windows key must be stripped");

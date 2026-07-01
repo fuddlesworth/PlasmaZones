@@ -30,7 +30,7 @@ SettingsFlickable {
     // the controller and silently dropped every algorithm change. Read/write the
     // algorithm through this reference so it always targets ISettings.
     readonly property var appSettingsObj: appSettings
-    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettingsObj.defaultAutotileAlgorithm)
+    readonly property string effectiveAlgorithm: tilingRuleAlgorithm(appSettingsObj.defaultAutotileAlgorithm)
     // Working algorithm for the whole page (preview, custom-param controls,
     // capability lookups). Driven imperatively rather than bound to
     // algorithmCombo.currentValue: that value transiently resets to the first
@@ -239,6 +239,66 @@ SettingsFlickable {
         root.tilingReloadTick++;
     }
 
+    // The per-screen ALGORITHM is a SetTilingAlgorithm action on the same tiling
+    // rule, but it carries its token under the `algorithm` param (not `value`) and
+    // the daemon resolves it via the assignment path (not perScreenTilingRule-
+    // Overrides), so it needs its own read/write helpers. Reading tilingReloadTick
+    // keeps the binding reactive.
+    function tilingRuleAlgorithm(globalValue) {
+        root.tilingReloadTick;
+        const scope = psHelper.selectedScreenName;
+        if (scope === "")
+            return globalValue;
+        const id = settingsController.perScreenTilingRuleId(scope);
+        if (!id)
+            return globalValue;
+        const rule = root.ruleController.ruleJson(id);
+        if (rule && rule.id) {
+            const actions = rule.actions || [];
+            for (var i = 0; i < actions.length; ++i) {
+                if (actions[i].type === "setTilingAlgorithm" && actions[i].algorithm !== undefined)
+                    return actions[i].algorithm;
+            }
+        }
+        return globalValue;
+    }
+
+    function writeTilingRuleAlgorithm(value, globalSetter) {
+        const scope = psHelper.selectedScreenName;
+        if (scope === "") {
+            globalSetter(value);
+            return;
+        }
+        const id = settingsController.perScreenTilingRuleId(scope);
+        if (!id)
+            return;
+        const existing = root.ruleController.ruleJson(id);
+        const isNew = !existing || !existing.id;
+        var rule = isNew ? root.buildPerScreenTilingRule(id, scope) : existing;
+        const actions = (rule.actions || []).slice();
+        var found = false;
+        for (var i = 0; i < actions.length; ++i) {
+            if (actions[i].type === "setTilingAlgorithm") {
+                var updated = Object.assign({}, actions[i]);
+                updated.algorithm = value;
+                actions[i] = updated;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            actions.push({
+                "type": "setTilingAlgorithm",
+                "algorithm": value
+            });
+        rule.actions = actions;
+        if (isNew)
+            root.ruleController.addRuleFromJson(rule);
+        else
+            root.ruleController.updateRuleFromJson(rule);
+        root.tilingReloadTick++;
+    }
+
     // Re-read the rule-backed value bindings when the rule store reloads, the
     // monitor scope changes, or a per-screen override is added / cleared (the
     // scope chip's reset surfaces as perScreenOverridesChanged).
@@ -402,7 +462,7 @@ SettingsFlickable {
                             // Resetting global max-windows / split-ratio / master-count
                             // here would clobber a sibling algorithm's per-algorithm slot.
                             root.selectedAlgorithm = selectedId;
-                            root.writeSetting("Algorithm", selectedId, function (v) {
+                            root.writeTilingRuleAlgorithm(selectedId, function (v) {
                                 root.appSettingsObj.defaultAutotileAlgorithm = v;
                             });
                         }

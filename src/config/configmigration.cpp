@@ -3347,11 +3347,14 @@ constexpr QLatin1String kV4AutoOuterGapBottom{"AutotileOuterGapBottom"};
 constexpr QLatin1String kV4AutoOuterGapLeft{"AutotileOuterGapLeft"};
 constexpr QLatin1String kV4AutoOuterGapRight{"AutotileOuterGapRight"};
 // Per-screen autotile GEOMETRY keys (disk form, "Autotile"-prefixed) that fold
-// onto per-monitor tiling rules in v5. Algorithm is intentionally NOT here — the
-// per-screen algorithm dedup is a later step; it stays in the config store for now.
+// onto per-monitor tiling rules in v5, together with the per-screen Algorithm key
+// (the algorithm dedup: it becomes a SetTilingAlgorithm action on the same
+// per-screen tiling rule, feeding the daemon's authoritative assignment algorithm
+// path — the config Algorithm key is retired).
 constexpr QLatin1String kV4AutoSplitRatio{"AutotileSplitRatio"};
 constexpr QLatin1String kV4AutoMasterCount{"AutotileMasterCount"};
 constexpr QLatin1String kV4AutoMaxWindows{"AutotileMaxWindows"};
+constexpr QLatin1String kV4AutoAlgorithm{"AutotileAlgorithm"};
 
 // ── Frozen v4 compile defaults ─────────────────────────────────────────────
 // Sourced from the (now-deleted) ConfigDefaults accessors:
@@ -3465,6 +3468,7 @@ constexpr QLatin1String kFieldOuterGapRight{"outerGapRight"};
 constexpr QLatin1String kFieldSplitRatio{"splitRatio"};
 constexpr QLatin1String kFieldMasterCount{"masterCount"};
 constexpr QLatin1String kFieldMaxWindows{"maxWindows"};
+constexpr QLatin1String kFieldTilingAlgorithm{"algorithm"};
 
 // ── migrate-side gating helpers ────────────────────────────────────────────
 // Insert the normalized field into @p out only when the source key is present
@@ -3704,6 +3708,16 @@ QList<PhosphorRules::RuleAction> tilingActionsFromFields(const QJsonObject& fiel
     if (fields.value(kFieldMaxWindows).isDouble()) {
         actions.append(makeValueAction(AT::SetMaxWindows, qBound(1, fields.value(kFieldMaxWindows).toInt(), 12)));
     }
+    // SetTilingAlgorithm carries the token under ActionParam::Algorithm (a
+    // layout-only algorithm override the daemon resolves via assignmentEntryForScreen
+    // — it does not force autotile mode, mirroring the retired per-screen Algorithm).
+    const QString algo = fields.value(kFieldTilingAlgorithm).toString();
+    if (!algo.isEmpty()) {
+        PhosphorRules::RuleAction a;
+        a.type = QString(AT::SetTilingAlgorithm);
+        a.params.insert(QString(PhosphorRules::ActionParam::Algorithm), algo);
+        actions.append(a);
+    }
     return actions;
 }
 
@@ -3827,17 +3841,25 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
                                       kV4AutoOuterGapBottom, kV4AutoOuterGapLeft, kV4AutoOuterGapRight}) {
                 scr.remove(key);
             }
-            // Split ratio / master count / max windows also fold onto per-screen
-            // rules in v5, leaving Algorithm + behavioural keys live in the config
-            // store. Stash only differing-from-default values, then strip them.
+            // Split ratio / master count / max windows fold onto per-screen tiling
+            // rules in v5, and so does the per-screen Algorithm (the dedup: it
+            // becomes a SetTilingAlgorithm action on the same rule). Stash the
+            // differing-from-default numeric values; stash the Algorithm whenever a
+            // non-empty override is present (its "default" is the runtime global
+            // algorithm, not a compile constant, so a differ-check isn't possible
+            // here — an explicit per-screen token is always a real override).
             QJsonObject tilingFields;
             stashDoubleIfDiffers(scr, kV4AutoSplitRatio, kV4DefSplitRatio, tilingFields, kFieldSplitRatio);
             stashIntIfDiffers(scr, kV4AutoMasterCount, kV4DefMasterCount, tilingFields, kFieldMasterCount);
             stashIntIfDiffers(scr, kV4AutoMaxWindows, kV4DefMaxWindows, tilingFields, kFieldMaxWindows);
+            const QString perScreenAlgo = scr.value(kV4AutoAlgorithm).toString();
+            if (!perScreenAlgo.isEmpty()) {
+                tilingFields.insert(kFieldTilingAlgorithm, perScreenAlgo);
+            }
             if (!tilingFields.isEmpty()) {
                 perScreenTilingStash.insert(screenId, tilingFields);
             }
-            for (QLatin1String key : {kV4AutoSplitRatio, kV4AutoMasterCount, kV4AutoMaxWindows}) {
+            for (QLatin1String key : {kV4AutoSplitRatio, kV4AutoMasterCount, kV4AutoMaxWindows, kV4AutoAlgorithm}) {
                 scr.remove(key);
             }
             if (scr.isEmpty()) {
