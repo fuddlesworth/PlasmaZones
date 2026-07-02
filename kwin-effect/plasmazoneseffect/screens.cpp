@@ -104,34 +104,6 @@ void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop
     }
 }
 
-namespace {
-// Physical screen id for a QScreen, byte-identical to the daemon's
-// PhosphorScreens::ScreenIdentity::identifierFor(): derive the base id from the
-// QScreen's OWN EDID fields (manufacturer/model/serial keyed by the QScreen
-// connector name), then disambiguate identical monitors with a "/CONNECTOR"
-// suffix. Deriving from the QScreen — not the window's KWin LogicalOutput — is
-// what makes the effect agree with the daemon for identical-model monitors,
-// whose per-window output the compositor and daemon can otherwise resolve to
-// different serials (Discussion #724 follow-up).
-QString screenIdForQScreen(const QScreen* screen)
-{
-    if (!screen) {
-        return QString();
-    }
-    const QString baseId = PhosphorIdentity::ScreenId::buildScreenBaseId(screen->manufacturer(), screen->model(),
-                                                                         screen->serialNumber(), screen->name());
-    for (const QScreen* other : QGuiApplication::screens()) {
-        if (other != screen
-            && PhosphorIdentity::ScreenId::buildScreenBaseId(other->manufacturer(), other->model(),
-                                                             other->serialNumber(), other->name())
-                == baseId) {
-            return baseId + QLatin1Char('/') + screen->name();
-        }
-    }
-    return baseId;
-}
-} // namespace
-
 QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
 {
     if (!w) {
@@ -140,20 +112,21 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
     const QPointF cf = w->frameGeometry().center();
     const QPoint c(qRound(cf.x()), qRound(cf.y()));
 
-    // Resolve the PHYSICAL monitor by the window's POSITION and derive its id from
-    // the QScreen exactly as the daemon does — NOT from the window's KWin output
-    // (w->screen()), whose EDID-serial derivation names the wrong panel for
-    // identical-model monitors, so the effect and daemon disagreed on which serial
-    // a window sits on (Discussion #724 follow-up). Fall back to the output-based
-    // id only when no QScreen contains the point.
-    QString physId;
-    if (const QScreen* screen = QGuiApplication::screenAt(c)) {
-        physId = screenIdForQScreen(screen);
+    // Resolve the monitor by the window's POSITION — the KWin output whose geometry
+    // contains the window centre — NOT w->screen(). KWin can assign a window the
+    // wrong one of two identical-model outputs, so trusting w->screen() made the
+    // effect disagree with the daemon about which monitor a window sits on, which
+    // then bounced a snapped window off to the other monitor (Discussion #724).
+    // outputScreenId derives the id from the KWin output's OWN EDID (manufacturer /
+    // model / connector), which agrees with the daemon per-output — the bug was only
+    // the window→output trust. Mirrors the snap-assist path in snaphandler.cpp.
+    // (QScreen can't be used here: inside the compositor QScreen::manufacturer() /
+    // model() are empty, so a QScreen-derived id degrades to "::serial".)
+    const KWin::LogicalOutput* output = KWin::effects->screenAt(c);
+    if (!output) {
+        output = w->screen();
     }
-    if (physId.isEmpty()) {
-        physId = outputScreenId(w->screen());
-    }
-    return resolveEffectiveScreenId(c, physId);
+    return resolveEffectiveScreenId(c, output);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
