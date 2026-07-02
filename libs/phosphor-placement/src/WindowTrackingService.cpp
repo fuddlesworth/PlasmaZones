@@ -187,11 +187,7 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
         return;
     }
     bool lastUsedCleared = result.lastUsedZoneCleared;
-    if (PhosphorSnapEngine::SnapState* globals = snapGlobals(); globals && globals != snapState
-        && !globals->lastUsedZoneId().isEmpty() && removedZones.contains(globals->lastUsedZoneId())) {
-        globals->restoreLastUsedZone({}, {}, {}, 0);
-        lastUsedCleared = true;
-    }
+    lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, snapState);
 
     Q_EMIT windowZoneChanged(windowId, QString());
     markDirty(DirtyZoneAssignments | (lastUsedCleared ? DirtyLastUsedZone : DirtyNone));
@@ -657,11 +653,7 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
     // per-key last-used if it named the floated zone. The global holder still carries
     // the representative restored from disk, so clear it too if it named the zone.
     bool lastUsedCleared = unassignResult.lastUsedZoneCleared;
-    if (PhosphorSnapEngine::SnapState* globals = snapGlobals(); globals && globals != snapState
-        && !globals->lastUsedZoneId().isEmpty() && zoneIds.contains(globals->lastUsedZoneId())) {
-        globals->restoreLastUsedZone({}, {}, {}, 0);
-        lastUsedCleared = true;
-    }
+    lastUsedCleared |= clearGlobalLastUsedIfRemoved(zoneIds, snapState);
 
     Q_EMIT windowZoneChanged(windowId, QString());
     markDirty(DirtyZoneAssignments | (lastUsedCleared ? DirtyLastUsedZone : DirtyNone));
@@ -849,9 +841,21 @@ const QHash<QString, int>& WindowTrackingService::desktopAssignments() const
     return m_aggDesktopAssignments;
 }
 
+bool WindowTrackingService::clearGlobalLastUsedIfRemoved(const QStringList& removedZones,
+                                                         const PhosphorSnapEngine::SnapState* owningStore)
+{
+    PhosphorSnapEngine::SnapState* globals = snapGlobals();
+    if (globals && globals != owningStore && !globals->lastUsedZoneId().isEmpty()
+        && removedZones.contains(globals->lastUsedZoneId())) {
+        globals->restoreLastUsedZone({}, {}, {}, 0);
+        return true;
+    }
+    return false;
+}
+
 // The lastUsed* accessors are read during the WTA constructor's loadState()
-// call — which runs BEFORE Daemon::init wires SnapState via setSnapState().
-// Returning a sentinel (empty string / 0) when SnapState isn't yet
+// call — which runs BEFORE Daemon::init wires the snap-state resolver via
+// setSnapStateResolver(). Returning a sentinel (empty string / 0) when SnapState isn't yet
 // attached lets early-init readers (the setLastUsedZone restore in
 // WindowTrackingAdaptor::loadState) pass through harmlessly instead of
 // asserting and crashing the daemon on startup. The snap-engine's own lastUsedZone
@@ -866,10 +870,11 @@ PhosphorSnapEngine::SnapState* WindowTrackingService::snapRepresentativeLastUsed
         if (!state || state->lastUsedZoneId().isEmpty()) {
             continue;
         }
-        // Strict `>` (first-wins on an equal seq) keeps the winner independent of
-        // allSnapStates()'s unordered iteration. Seqs are effectively unique among
-        // non-empty-last-used stores, so this is a determinism guard, not a behaviour
-        // change.
+        // Seqs are unique among non-empty-last-used stores (nextLastUsedSeq() is
+        // monotonic; only fromJson — dead in the live path — sets a last-used zone
+        // without bumping the seq), so there is never a tie here. Strict `>` over `>=`
+        // is a harmless no-tie guard, not a substitute for that uniqueness: a genuine
+        // tie would still resolve by unordered iteration order.
         if (!best || state->lastUsedSeq() > bestSeq) {
             best = state;
             bestSeq = state->lastUsedSeq();

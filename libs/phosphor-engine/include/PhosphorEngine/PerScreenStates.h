@@ -12,6 +12,7 @@
 
 #include <QHash>
 #include <QString>
+#include <QtGlobal>
 
 namespace PhosphorEngine {
 

@@ -194,16 +194,11 @@ bool SnapEngine::isFloating(const QString& windowId) const
 
 void SnapEngine::setFloating(const QString& windowId, bool floating)
 {
-    if (SnapState* state = stateForWindow(windowId)) {
-        state->setFloating(windowId, floating);
-        return;
-    }
-    // Untracked window: floating a never-placed window has no screen context, so
-    // park the bookkeeping on the global holder (mirrors the former single store's
-    // screen-agnostic floating set). Unfloating an untracked window is a no-op there.
-    if (m_globals) {
-        m_globals->setFloating(windowId, floating);
-    }
+    // stateForWindow never returns null: a tracked window resolves to its owning
+    // per-key store; an untracked one falls back to m_globals (constructed in the
+    // ctor), which holds the screen-agnostic float bookkeeping the former single
+    // store kept. Unfloating an untracked window is a no-op there.
+    stateForWindow(windowId)->setFloating(windowId, floating);
 }
 
 QStringList SnapEngine::floatingWindows() const

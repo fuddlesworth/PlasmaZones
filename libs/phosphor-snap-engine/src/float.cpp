@@ -55,10 +55,9 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
     //    threaded from setWindowFloatingForScreen) — ALWAYS preferred when set.
     //    The tracked association below is stale after a floating window drifts
     //    across monitors (the daemon never saw a windowScreenChanged for the
-    //    drift), and feeding that stale screen to unfloatToZone makes the
-    //    cross-monitor guard non-deterministic: it sometimes teleports the
-    //    window back to its source monitor's zone and sometimes doesn't
-    //    (Discussion #724). The effect always knows the real screen here.
+    //    drift), and feeding that stale screen to unfloatToZone/applyGeometryForFloat
+    //    would resolve the float-back geometry and the unfloat fallback screen on the
+    //    wrong monitor (Discussion #724). The effect always knows the real screen here.
     // 2. The window's tracked screen from SnapState (internal 2-arg callers).
     // 3. m_lastActiveScreenId (from last windowFocused).
     // 4. Empty (unfloatToZone/applyGeometryForFloat handle it gracefully).
@@ -388,8 +387,8 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
                 // (commitSnap would stamp the current desktop) and refresh the
                 // placement-store record. This is the same path tryCrossDesktopMove
                 // uses, and it is safe to bypass commitSnap's WTS orchestration
-                // here: SnapState is the very store WTS queries (Daemon wires
-                // setSnapState(snapEngine->snapState())), so zoneForWindow et al.
+                // here: this SnapState is a store the WTS facade queries through the
+                // snap-state resolver (Daemon wires setSnapStateResolver()), so zoneForWindow et al.
                 // see this assignment; the snap chrome is applied below via the
                 // non-empty-zoneId applyGeometryRequested (→ markWindowSnapped); and
                 // persistence flows through the placement-store record. The only
@@ -430,11 +429,10 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     // Re-home the window onto the destination monitor's per-key store when it is
     // already tracked here (same-engine cross-screen float drift). This moves its
     // per-window state (including the floating bit and the live screen, rewritten to
-    // the destination) so screenForTrackedWindow reflects the new monitor and the
-    // unfloat cross-monitor guard resolves deterministically (#724). The pre-float
-    // zone rides along UNCHANGED (behaviour A): an unfloat back on the SOURCE monitor
-    // still restores the home zone, while the guard — fed the now-correct destination
-    // screen — prevents a cross-monitor teleport. A no-op when the window is being
+    // the destination) so screenForTrackedWindow reflects the new monitor (#724). The
+    // pre-float zone rides along UNCHANGED (behaviour A): an unfloat on any monitor
+    // restores the home zone, and cross-monitor restore is allowed (there is no
+    // refusal guard). A no-op when the window is being
     // adopted fresh from another engine (untracked here); stateForWindowOnScreen then
     // registers it under the destination key below.
     migrateWindowToScreen(ctx.windowId, ctx.toScreenId);

@@ -3555,9 +3555,9 @@ bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QStri
             priorState->removeWindow(windowId);
         }
         if (targetState->containsWindow(windowId)) {
-            // Defensive: stale m_states entry left the window in the target
-            // state without a matching m_states mapping. Remove it first
-            // so addWindow() can place it cleanly at the end.
+            // Defensive: a stale forward TilingState left the window in the target
+            // state without a matching m_states reverse-map (windowKeys) entry.
+            // Remove it first so addWindow() can place it cleanly at the end.
             targetState->removeWindow(windowId);
         }
         targetState->addWindow(windowId);

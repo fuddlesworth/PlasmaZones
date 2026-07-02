@@ -1033,7 +1033,7 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     // migration): if the snap engine tracks this window but its owning per-key
     // store names a DIFFERENT monitor than the one it activated on, migrate its
     // snap state onto the activation screen so screenForTrackedWindow and the
-    // unfloat cross-monitor guard resolve against the real monitor (#724). Guarded
+    // unfloat fallback-screen resolution report the real monitor (#724). Guarded
     // by screensMatch so a mere virtual/physical id-form difference on the same
     // monitor never churns the stores. windowScreenChanged handles the primary
     // drift path; this catches activations that arrive without a screen-change report.

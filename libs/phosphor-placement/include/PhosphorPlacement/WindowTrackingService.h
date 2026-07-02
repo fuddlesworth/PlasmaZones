@@ -1175,6 +1175,13 @@ private:
     /// getters and the persistence layer read. (Defined out-of-line: SnapState is
     /// only forward-declared here.)
     PhosphorSnapEngine::SnapState* snapRepresentativeLastUsed() const;
+    /// Clear the GLOBAL holder's last-used zone if it names a zone in @p removedZones
+    /// and the holder is not @p owningStore (whose own last-used the caller already
+    /// handled). Returns true if it cleared. Shared by the unassign / unsnap-for-float
+    /// paths, which both drop a store's zones and must scrub the disk-restored
+    /// representative that lives on the global holder.
+    bool clearGlobalLastUsedIfRemoved(const QStringList& removedZones,
+                                      const PhosphorSnapEngine::SnapState* owningStore);
     PhosphorSnapEngine::SnapState* snapGlobals() const
     {
         return m_snapResolver.globals ? m_snapResolver.globals() : nullptr;
@@ -1196,10 +1203,14 @@ private:
     SnapStateResolver m_snapResolver;
     // Rebuilt-on-read materialisations of the aggregate flat-map views so the
     // const-ref facade getters keep their signatures while the underlying stores
-    // are per-screen. Each window lives in exactly one store, so the union carries
-    // no key collisions and equals the former single store's flat map. mutable:
-    // the const getters refresh them; the returned reference is valid until the
-    // SAME getter is called again (separate members so cross-field reads coexist).
+    // are per-screen. For the windowId-keyed maps (zone/screen/desktop) each window
+    // lives in exactly one store, so the union carries no key collisions and equals
+    // the former single store's flat map. The pre-float maps are ALSO keyed by appId
+    // aliases, and the same alias can live in two stores (two windows sharing an appId
+    // floated on different monitors); those unions collapse such collisions
+    // last-write-wins, which also matches the former single store. mutable: the const
+    // getters refresh them; the returned reference is valid until the SAME getter is
+    // called again (separate members so cross-field reads coexist).
     mutable QHash<QString, QStringList> m_aggZoneAssignments;
     mutable QHash<QString, QString> m_aggScreenAssignments;
     mutable QHash<QString, int> m_aggDesktopAssignments;

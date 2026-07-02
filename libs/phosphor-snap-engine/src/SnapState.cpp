@@ -556,6 +556,7 @@ void SnapState::clear()
     m_lastUsedScreenId.clear();
     m_lastUsedZoneClass.clear();
     m_lastUsedDesktop = 0;
+    m_lastUsedSeq = 0;
     m_userSnappedClasses.clear();
     m_autoSnappedWindows.clear();
     Q_EMIT stateChanged();
@@ -782,10 +783,12 @@ SnapState* SnapState::fromJson(const QJsonObject& json, QObject* parent)
     }
 
     const QJsonObject lastUsed = json.value(QLatin1String("lastUsedZone")).toObject();
-    state->m_lastUsedZoneId = lastUsed.value(QLatin1String("zoneId")).toString();
-    state->m_lastUsedScreenId = lastUsed.value(QLatin1String("screenId")).toString();
-    state->m_lastUsedZoneClass = lastUsed.value(QLatin1String("class")).toString();
-    state->m_lastUsedDesktop = lastUsed.value(QLatin1String("desktop")).toInt();
+    // Route through restoreLastUsedZone so a non-empty restored zone also stamps
+    // m_lastUsedSeq (recency). A direct field write would leave seq == 0, making
+    // snapRepresentativeLastUsed's cross-store tiebreak iteration-order-dependent.
+    state->restoreLastUsedZone(
+        lastUsed.value(QLatin1String("zoneId")).toString(), lastUsed.value(QLatin1String("screenId")).toString(),
+        lastUsed.value(QLatin1String("class")).toString(), lastUsed.value(QLatin1String("desktop")).toInt());
 
     const QJsonArray userSnapped = json.value(QLatin1String("userSnappedClasses")).toArray();
     for (const auto& v : userSnapped) {

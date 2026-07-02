@@ -28,6 +28,13 @@
  *    monitor it is currently on.
  * 7. unfloatRestoresWithinSamePhysicalMonitorAcrossIdForms: an id-form difference
  *    (virtual vs bare) of the same monitor still restores.
+ * 8. migrateWindowToScreen_movesSnapStateAndReverseMap: the per-monitor migration
+ *    mechanism moves a window's snap state and reverse-map entry to the destination
+ *    monitor's store.
+ *
+ * Phase 4 (per-(screen,desktop,activity) last-used):
+ * 9. lastUsedZoneIsPerScreen: last-used zone is tracked per store, so recording it
+ *    for a window on monitor A does not disturb monitor B's last-used.
  */
 
 #include <QTest>
@@ -474,6 +481,9 @@ private Q_SLOTS:
         if (QGuiApplication::screens().size() > 0) {
             QVERIFY2(samePhysMonitor.found,
                      "unfloat within the same physical monitor (virtual vs bare id) must restore");
+            // Pin the restored zone: the id-form difference must resolve the SAME home
+            // zone, not merely produce some result.
+            QCOMPARE(samePhysMonitor.zoneIds, QStringList{m_zoneIds[0]});
         }
     }
 
