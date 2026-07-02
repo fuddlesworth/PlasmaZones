@@ -19,6 +19,12 @@ PlacementStateKey ScreenContextTracker::currentKeyForScreen(const QString& scree
 
 ContextChange ScreenContextTracker::setCurrentDesktop(int desktop)
 {
+    // KWin desktops are >= 1 and there is no reserved "unset" value, so a spurious
+    // 0/negative push would poison m_currentDesktop and every key derived from it.
+    // Reject it, symmetric with the same guard in setCurrentDesktopForScreen.
+    if (desktop < 1) {
+        return {};
+    }
     if (desktop == m_currentDesktop) {
         // A same-desktop push still ESTABLISHES the desktop context: the daemon's
         // startup push lands here whenever the session begins on the default

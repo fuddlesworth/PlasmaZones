@@ -1153,9 +1153,11 @@ private:
     QString resolveEffectiveScreenId(const QPoint& pos, const KWin::LogicalOutput* output) const;
 
     /// Apply virtual-screen subdivisions for an already-resolved PHYSICAL screen id.
-    /// The output-taking overload above is a thin wrapper around this; getWindowScreenId
-    /// uses this directly so it can resolve the physical id by POSITION (matching the
-    /// daemon) rather than trusting the window's KWin output.
+    /// This is the shared implementation; the output-taking overload above wraps it
+    /// via outputScreenId(). getWindowScreenId resolves the output by POSITION
+    /// (KWin::effects->screenAt) rather than trusting the window's own KWin output,
+    /// then calls the output overload — so position-based resolution comes from the
+    /// caller's screenAt, not from this overload.
     QString resolveEffectiveScreenId(const QPoint& pos, const QString& physId) const;
 
     /// Fetch virtual screen config from daemon for a single physical screen

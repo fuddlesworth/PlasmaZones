@@ -149,10 +149,12 @@ public:
 
     /// Move a window's reverse-map entry from `oldKey` to `newKey`. Only the
     /// reverse map moves; the engine wraps its own remove-from-old / add-to-new
-    /// state lifecycle hooks around this call. `oldKey` documents intent and is
-    /// not otherwise consulted (the reverse map is authoritative).
+    /// state lifecycle hooks around this call. `oldKey` is the caller's asserted
+    /// current key: the reverse map is authoritative, so `oldKey` only guards against
+    /// a stale-caller bug (in debug builds) rather than driving the move.
     void migrate(const QString& windowId, const PlacementStateKey& oldKey, const PlacementStateKey& newKey)
     {
+        Q_ASSERT(!m_windowToKey.contains(windowId) || m_windowToKey.value(windowId) == oldKey);
         Q_UNUSED(oldKey)
         m_windowToKey.insert(windowId, newKey);
     }

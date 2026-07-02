@@ -866,7 +866,11 @@ PhosphorSnapEngine::SnapState* WindowTrackingService::snapRepresentativeLastUsed
         if (!state || state->lastUsedZoneId().isEmpty()) {
             continue;
         }
-        if (!best || state->lastUsedSeq() >= bestSeq) {
+        // Strict `>` (first-wins on an equal seq) keeps the winner independent of
+        // allSnapStates()'s unordered iteration. Seqs are effectively unique among
+        // non-empty-last-used stores, so this is a determinism guard, not a behaviour
+        // change.
+        if (!best || state->lastUsedSeq() > bestSeq) {
             best = state;
             bestSeq = state->lastUsedSeq();
         }

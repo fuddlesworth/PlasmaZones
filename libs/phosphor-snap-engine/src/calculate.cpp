@@ -177,9 +177,13 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
 
     // Need a last used zone. Resolve the last-used from the store that owns the
     // OPENING screen's context (per-key), falling back to the global holder's
-    // representative for the restored-from-disk case. Because the store is already
-    // scoped to windowScreenId, no explicit cross-screen guard is needed: monitor
-    // A's live last-used can never be read for a window opening on monitor B.
+    // representative for the restored-from-disk case. The per-key tier is scoped to
+    // windowScreenId, so monitor A's LIVE last-used is never read for a window
+    // opening on monitor B. The global fallback is neutral because the disk restore
+    // lands an EMPTY lastUsedScreenId on m_globals: effectiveScreenId below then
+    // resolves empty and zoneGeometry() returns invalid → noSnap. (If a future path
+    // ever wrote a non-empty FOREIGN lastUsedScreenId onto the global holder, this
+    // would need an explicit screensMatch(windowScreenId, effectiveScreenId) guard.)
     const SnapState* lastUsedState = lastUsedStateForScreen(windowScreenId);
     const QString lastUsedZoneId = lastUsedState->lastUsedZoneId();
     if (lastUsedZoneId.isEmpty()) {

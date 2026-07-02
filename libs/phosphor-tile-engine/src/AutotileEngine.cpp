@@ -3017,9 +3017,9 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     }
 
     // Check if window already tracked in this screen's tiling state
-    // Note: We check the PhosphorTiles::TilingState (not m_windowToStateKey) because windowOpened()
-    // stores the screen mapping in m_windowToStateKey *before* calling onWindowAdded(),
-    // so m_states.hasWindow() would always be true via that path.
+    // Note: we check the PhosphorTiles::TilingState (not the m_states reverse map)
+    // because windowOpened() records the screen mapping in m_states *before* calling
+    // onWindowAdded(), so m_states.hasWindow() would always be true via that path.
     if (state->containsWindow(windowId)) {
         return false;
     }

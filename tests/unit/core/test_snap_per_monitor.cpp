@@ -189,6 +189,11 @@ private Q_SLOTS:
 
         if (QGuiApplication::screens().size() > 0) {
             QVERIFY2(applySpy.count() >= 1, "unfloat must restore the window to its home zone");
+            // Pin WHICH zone the restore targeted: the applyGeometryRequested zoneId
+            // arg (index 5) must be the home zone (zone0), not an empty string (the
+            // effect's float-restore discriminator). Asserting the re-snap alone would
+            // pass even if it landed on the wrong zone.
+            QCOMPARE(applySpy.at(0).at(5).toString(), m_zoneIds[0]);
             QVERIFY(m_service->isWindowSnapped(windowId));
             QVERIFY(!m_service->isWindowFloating(windowId));
         }

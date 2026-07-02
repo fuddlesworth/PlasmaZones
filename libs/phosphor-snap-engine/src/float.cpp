@@ -460,9 +460,12 @@ void SnapEngine::handoffRelease(const QString& windowId)
         if (state->isFloating(windowId)) {
             state->setFloating(windowId, false);
         }
-        // The destination engine now owns the window; drop the source store's
-        // reverse-map entry so this engine no longer claims it (unassignWindow
-        // cleared the per-window data above, this clears the ownership record).
+        // The destination engine now owns the window. unassignWindow / setFloating
+        // above cleared its zone/screen/desktop and floating bit — but NOT the
+        // pre-float capture, which is deliberately PRESERVED (see
+        // testHandoffRelease_preservesPreFloatCapture): a future return handoff may
+        // consult it for size restoration. Finally drop the reverse-map ownership
+        // record so this engine no longer claims the window.
         forgetWindow(windowId);
     }
 }

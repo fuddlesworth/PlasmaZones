@@ -311,15 +311,16 @@ private Q_SLOTS:
 
     // =====================================================================
     // Test 5 (Discussion #724): cross-MONITOR float handoff PRESERVES the
-    // source-monitor pre-float zone/screen (behaviour A) while the unfloat
-    // cross-monitor guard prevents a teleport.
+    // source-monitor pre-float zone/screen (behaviour A) and re-homes the window
+    // onto the destination monitor's store.
     //
     // A window snapped on monitor A, floated (drag-out), then moved to monitor
-    // B while floating must not re-snap to A's old zone when unfloated ON B (the
-    // snap minimize->unminimize float driver unfloats on restore). Under the
-    // per-monitor model the handoff re-homes the window onto B's store and keeps
-    // the pre-float zone/screen that names A — so an unfloat on ANY monitor restores the home zone (cross-monitor
-    // restore is allowed).
+    // B while floating must restore to its remembered home zone, not to a stale
+    // target, when unfloated ON B (the snap minimize->unminimize float driver
+    // unfloats on restore). Under the per-monitor model the handoff re-homes the
+    // window onto B's store and keeps the pre-float zone/screen that names A, so an
+    // unfloat on ANY monitor restores the home zone (cross-monitor restore is
+    // allowed; there is no refusal guard).
     // =====================================================================
     void testCrossMonitorFloatHandoffPreservesHomeZone()
     {
@@ -414,8 +415,8 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // Test 6 (Discussion #724): resolveUnfloatGeometry refuses a cross-monitor
-    // restore even if a stale pre-float zone/screen survives.
+    // Test 6 (Discussion #724): resolveUnfloatGeometry restores to the HOME zone
+    // across monitors, resolving against the surviving pre-float zone/screen.
     //
     // Cross-monitor restore is now ALLOWED (Discussion #724 follow-up): unfloat
     // returns the window to its remembered HOME zone regardless of the monitor it
