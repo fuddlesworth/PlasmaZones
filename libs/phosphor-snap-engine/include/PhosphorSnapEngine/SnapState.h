@@ -178,6 +178,18 @@ public:
     bool isEmpty() const;
     void clear();
 
+    /// Move @p windowId's per-window placement entries (zone assignment, live
+    /// screen, desktop, floating bit, pre-float zone/screen, auto-snap flag) OUT
+    /// of this store and INTO @p target, rewriting the LIVE screen assignment to
+    /// @p newScreenId so target->screenForWindow(windowId) reports the destination
+    /// monitor (the #724 cross-monitor determinism requirement). The pre-float
+    /// zone/screen ride along UNCHANGED: they name the SOURCE monitor's home zone,
+    /// preserved so an unfloat back on the source restores it (the unfloat
+    /// cross-monitor guard alone prevents the teleport). The global-scalar fields
+    /// (last-used-zone, user-snapped classes) are NOT moved — they stay global.
+    /// No-op when @p target is null/this or the window has no entry in this store.
+    void migrateWindowTo(SnapState* target, const QString& windowId, const QString& newScreenId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Rotation
     // ═══════════════════════════════════════════════════════════════════════════

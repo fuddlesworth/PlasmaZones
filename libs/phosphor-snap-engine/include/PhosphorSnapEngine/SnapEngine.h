@@ -465,11 +465,9 @@ public:
         return m_globals;
     }
 
-    /// The single snap store. Phase 2 keeps one store (behaviour-identical to the
-    /// former single global SnapState); this returns it. The daemon wires the WTS
-    /// facade through the resolver seam (setSnapStateResolver), but this accessor
-    /// stays for callers/tests that only need the one store. Phase 3, which feeds
-    /// the ScreenContextTracker real context, retires it in favour of stateForWindow.
+    /// The global-scalar holder (alias of globalState). Callers/tests that only need
+    /// the still-global last-used-zone / user-snapped scalars use this; per-window
+    /// data now lives in the per-screen stores, reached via stateForWindow.
     SnapState* snapState() const
     {
         return m_globals;
@@ -491,6 +489,35 @@ public:
     /// Drop the reverse-map entry for @p windowId (window closed / fully removed).
     /// Does not touch state objects.
     void forgetWindow(const QString& windowId);
+
+    /// Re-home a tracked window's snap state onto @p newScreenId's per-key store
+    /// when it crosses monitors. Moves the window's per-window entries (zone, live
+    /// screen, desktop, floating bit, pre-float zone/screen, auto-snap flag) from
+    /// its current owning store to the store for @p newScreenId's current context
+    /// and updates the reverse map. The live screen value is rewritten to
+    /// @p newScreenId so screenForTrackedWindow reflects the destination (the #724
+    /// cross-monitor determinism requirement); the pre-float zone is preserved so an
+    /// unfloat back on the source monitor still restores the home zone. No-op when
+    /// the window is untracked here (e.g. adopted fresh from another engine) or the
+    /// resolved key is unchanged. Returns true when a migration happened. Driven by
+    /// the daemon's per-window screen handlers (windowScreenChanged / windowActivated)
+    /// and by handoffReceive; the analogue of AutotileEngine's windowFocused
+    /// cross-screen migration.
+    bool migrateWindowToScreen(const QString& windowId, const QString& newScreenId);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Current-context feed (ScreenContextTracker)
+    //
+    // The daemon pushes the current virtual desktop / per-output desktop (#648) /
+    // activity here so currentKeyForScreen resolves a window's owning
+    // (screen, desktop, activity) key, mirroring the pushes it already makes into
+    // AutotileEngine. Snap keys are per-monitor first (the load-bearing #724 fix);
+    // the desktop/activity dimensions match autotile's per-context semantics.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void setCurrentDesktop(int desktop) override;
+    void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
+    void setCurrentActivity(const QString& activity) override;
 
     // Float facade over the per-screen stores (the daemon's engine float
     // resolver/writer/lister route here instead of a single SnapState).
@@ -687,10 +714,9 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — state access
     //
-    // Returns the single SnapState wired by Daemon::init(). Currently a
-    // global state (not per-screen); a future PR will introduce per-screen
-    // ownership. Returns nullptr in headless unit tests that don't wire a
-    // SnapState.
+    // Resolves the per-(screen,desktop,activity) SnapState for a screen via the
+    // shared ScreenContextTracker + PerScreenStates. The non-const overload lazily
+    // creates the store; an empty screenId resolves to the global-scalar holder.
     // ═══════════════════════════════════════════════════════════════════════════
 
     PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) override;
@@ -881,11 +907,12 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     // Per-(screen,desktop,activity) snap stores + the current-context tracker that
-    // resolves a screen to its owning key. In this phase the daemon does not feed
-    // the tracker any desktop/activity context, so every screen resolves to
-    // {screenId, 1, ""} — one store per screen. m_globals holds the still-global
-    // last-used-zone / user-snapped scalars (and any screenless float) under the
-    // empty-screen key so whole-store iterations pick it up transparently.
+    // resolves a screen to its owning key. The daemon feeds the tracker the current
+    // desktop / per-output desktop (#648) / activity, so each screen resolves to a
+    // real {screenId, desktop, activity} key and gets its own SnapState (created
+    // lazily on first placement). m_globals holds the still-global last-used-zone /
+    // user-snapped scalars (and any screenless float) under the empty-screen key so
+    // whole-store iterations pick it up transparently.
     PhosphorEngine::PerScreenStates<SnapState> m_states;
     PhosphorEngine::ScreenContextTracker m_context;
     SnapState* m_globals = nullptr;

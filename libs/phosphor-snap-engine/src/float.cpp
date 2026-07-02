@@ -436,21 +436,20 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     }
 
     const int currentDesktop = ctx.toDesktop > 0 ? ctx.toDesktop : currentVirtualDesktopForScreen(ctx.toScreenId);
+    // Re-home the window onto the destination monitor's per-key store when it is
+    // already tracked here (same-engine cross-screen float drift). This moves its
+    // per-window state (including the floating bit and the live screen, rewritten to
+    // the destination) so screenForTrackedWindow reflects the new monitor and the
+    // unfloat cross-monitor guard resolves deterministically (#724). The pre-float
+    // zone rides along UNCHANGED (behaviour A): an unfloat back on the SOURCE monitor
+    // still restores the home zone, while the guard — fed the now-correct destination
+    // screen — prevents a cross-monitor teleport. A no-op when the window is being
+    // adopted fresh from another engine (untracked here); stateForWindowOnScreen then
+    // registers it under the destination key below.
+    migrateWindowToScreen(ctx.windowId, ctx.toScreenId);
     stateForWindowOnScreen(ctx.windowId, ctx.toScreenId)
         ->setFloatingOnScreen(ctx.windowId, ctx.toScreenId, currentDesktop);
     m_windowTracker->setWindowFloating(ctx.windowId, true);
-    // The window's floating-screen association is now the destination monitor, so
-    // any saved pre-float zone/screen (from the source-monitor float that started
-    // this cross-screen move) is stale: it names a zone in the SOURCE monitor's
-    // layout. Left in place, the next unfloat (Meta+F float-toggle, or the snap
-    // minimize→unminimize float driver) restores the window to that source zone,
-    // teleporting it back across monitors. Clear it so unfloat resolves against the
-    // destination monitor instead. Mirrors the screen-assignment refresh this same
-    // cross-monitor move path already performs (see WindowTrackingAdaptor::
-    // windowScreenChanged), which historically only covered snap assignments.
-    // Route through the tracker (not SnapState directly) so BOTH the windowId key
-    // and its appId alias are dropped — the pre-float save writes both.
-    m_windowTracker->clearPreFloatZone(ctx.windowId);
     Q_EMIT windowFloatingChanged(ctx.windowId, true, ctx.toScreenId);
 }
 
@@ -470,6 +469,10 @@ void SnapEngine::handoffRelease(const QString& windowId)
         if (state->isFloating(windowId)) {
             state->setFloating(windowId, false);
         }
+        // The destination engine now owns the window; drop the source store's
+        // reverse-map entry so this engine no longer claims it (unassignWindow
+        // cleared the per-window data above, this clears the ownership record).
+        forgetWindow(windowId);
     }
 }
 

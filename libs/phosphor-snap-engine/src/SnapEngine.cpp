@@ -59,42 +59,108 @@ QString SnapEngine::canonicalWindowId(const QString& rawWindowId) const
 
 SnapState* SnapEngine::ensureStateForKey(const PhosphorEngine::PlacementStateKey& key)
 {
-    // Phase 2 collapses every key onto the single store (m_globals, held under the
-    // empty-screen key) so behaviour is identical to the former single global
-    // SnapState: nothing feeds the ScreenContextTracker context yet, so there is no
-    // basis to split state per monitor without the cross-screen migration that
-    // Phase 3 adds. The seam is fully in place — currentKeyForScreen resolves a real
-    // key, the reverse map is maintained, and enumerations iterate m_states.states()
-    // — so Phase 3 only has to let the factory create a per-key store here. Until
-    // then, snapState() must return the ONE store the engine and the WTS facade both
-    // read, which forbids lazily creating a distinct per-screen store the tests'
-    // eagerly-wired handle could not see.
-    Q_UNUSED(key)
-    return m_globals;
+    // The empty-screen key is the still-global-scalar holder (last-used-zone +
+    // user-snapped classes, plus any screenless float bookkeeping). Every real
+    // (screen, desktop, activity) key gets its own SnapState, lazily created and
+    // parented to the engine, seeded with the shared window registry so its keys
+    // canonicalize like every other store (issue #628).
+    if (key.screenId.isEmpty()) {
+        return m_globals;
+    }
+    return m_states.forKey(key, [this, &key]() -> SnapState* {
+        auto* state = new SnapState(key.screenId, this);
+        state->setWindowRegistry(m_windowRegistry);
+        return state;
+    });
 }
 
 SnapState* SnapEngine::stateForWindow(const QString& windowId)
 {
-    // Collapse: every tracked or untracked window resolves to the single store, so
-    // reads return that store's (possibly empty) per-window data — identical to the
-    // former single SnapState. Canonicalize for parity with the reverse-map contract.
-    Q_UNUSED(windowId)
+    // The reverse map is authoritative: it names the per-screen store a window was
+    // placed into on first snap/float. A window with no reverse-map entry falls back
+    // to m_globals — the holder where screenless float bookkeeping lives (and the
+    // store the single-store test convenience writes to). A genuinely untracked
+    // window then reads EMPTY per-window data from the holder, observably identical
+    // to the null the null-guarding callers handle, so no caller misbehaves.
+    // migrateWindowToScreen deliberately bypasses this fallback (it queries the
+    // reverse map directly) so an untracked window is never "migrated" out of globals.
+    if (SnapState* state = m_states.forWindow(canonicalWindowId(windowId))) {
+        return state;
+    }
     return m_globals;
 }
 
 const SnapState* SnapEngine::stateForWindow(const QString& windowId) const
 {
-    Q_UNUSED(windowId)
+    if (const SnapState* state = m_states.forWindow(canonicalWindowId(windowId))) {
+        return state;
+    }
     return m_globals;
 }
 
 SnapState* SnapEngine::stateForWindowOnScreen(const QString& windowId, const QString& screenId)
 {
-    // Record the (collapsed) reverse-map entry so the seam is exercised end to end;
-    // it resolves back to the single store today and becomes the per-key home once
-    // Phase 3 lets ensureStateForKey create per-monitor stores.
-    m_states.setKeyForWindow(canonicalWindowId(windowId), PhosphorEngine::PlacementStateKey{});
-    return ensureStateForKey(currentKeyForScreen(screenId));
+    const QString canonical = canonicalWindowId(windowId);
+    // An already-tracked window keeps its existing owning store — a screen-carrying
+    // write only updates the per-window screen VALUE in place, it does not re-home
+    // the window (cross-monitor re-homing is an explicit migrateWindowToScreen).
+    if (const auto existing = m_states.windowKey(canonical)) {
+        if (SnapState* state = m_states.stateForKey(*existing)) {
+            return state;
+        }
+    }
+    // First placement: derive the key from the screen, lazily create the store, and
+    // record the reverse-map entry. A screenless call resolves to the global holder
+    // and is NOT recorded in the reverse map (untracked stays untracked).
+    const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
+    SnapState* state = ensureStateForKey(key);
+    if (state && !key.screenId.isEmpty()) {
+        m_states.setKeyForWindow(canonical, key);
+    }
+    return state;
+}
+
+bool SnapEngine::migrateWindowToScreen(const QString& windowId, const QString& newScreenId)
+{
+    if (newScreenId.isEmpty()) {
+        return false;
+    }
+    const QString canonical = canonicalWindowId(windowId);
+    PhosphorEngine::PlacementStateKey oldKey;
+    SnapState* oldState = m_states.forWindow(canonical, &oldKey);
+    if (!oldState) {
+        // Not tracked in the per-screen stores (e.g. a window being adopted fresh
+        // from another engine via handoffReceive) — nothing to migrate.
+        return false;
+    }
+    const PhosphorEngine::PlacementStateKey newKey = currentKeyForScreen(newScreenId);
+    if (newKey == oldKey || newKey.screenId.isEmpty()) {
+        return false; // same (screen, desktop, activity) context — nothing to move
+    }
+    SnapState* newState = ensureStateForKey(newKey);
+    if (!newState || newState == oldState) {
+        return false;
+    }
+    oldState->migrateWindowTo(newState, canonical, newScreenId);
+    m_states.migrate(canonical, oldKey, newKey);
+    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+        << "SnapEngine::migrateWindowToScreen:" << canonical << "from" << oldKey.screenId << "to" << newKey.screenId;
+    return true;
+}
+
+void SnapEngine::setCurrentDesktop(int desktop)
+{
+    m_context.setCurrentDesktop(desktop);
+}
+
+void SnapEngine::setCurrentDesktopForScreen(const QString& screenId, int desktop)
+{
+    m_context.setCurrentDesktopForScreen(screenId, desktop);
+}
+
+void SnapEngine::setCurrentActivity(const QString& activity)
+{
+    m_context.setCurrentActivity(activity);
 }
 
 void SnapEngine::forgetWindow(const QString& windowId)
@@ -547,9 +613,13 @@ PhosphorEngine::IPlacementState* SnapEngine::stateForScreen(const QString& scree
     return ensureStateForKey(currentKeyForScreen(screenId));
 }
 
-const PhosphorEngine::IPlacementState* SnapEngine::stateForScreen(const QString& /*screenId*/) const
+const PhosphorEngine::IPlacementState* SnapEngine::stateForScreen(const QString& screenId) const
 {
-    return m_globals;
+    const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
+    if (key.screenId.isEmpty()) {
+        return m_globals;
+    }
+    return m_states.stateForKey(key);
 }
 
 } // namespace PhosphorSnapEngine

@@ -310,16 +310,19 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // Test 5 (Discussion #724): cross-MONITOR float handoff clears the stale
-    // source-monitor pre-float zone/screen.
+    // Test 5 (Discussion #724): cross-MONITOR float handoff PRESERVES the
+    // source-monitor pre-float zone/screen (behaviour A) while the unfloat
+    // cross-monitor guard prevents a teleport.
     //
     // A window snapped on monitor A, floated (drag-out), then moved to monitor
-    // B while floating must not re-snap to A's old zone when later unfloated
-    // (the snap minimize->unminimize float driver unfloats on restore). The
-    // cross-engine handoff that carries the floating window to B must drop the
-    // pre-float zone/screen that named monitor A.
+    // B while floating must not re-snap to A's old zone when unfloated ON B (the
+    // snap minimize->unminimize float driver unfloats on restore). Under the
+    // per-monitor model the handoff re-homes the window onto B's store and keeps
+    // the pre-float zone/screen that names A — so an unfloat back on A can still
+    // restore the home zone — while resolveUnfloatGeometry's guard (pre-float
+    // screen A != unfloat screen B) refuses the cross-monitor restore.
     // =====================================================================
-    void testCrossMonitorFloatHandoffClearsStalePreFloat()
+    void testCrossMonitorFloatHandoffPreservesHomeZoneAndGuards()
     {
         const QString windowId = QStringLiteral("dolphin|eeeeeeee-0000-0000-0000-000000000005");
         const QString monitorA = QStringLiteral("DP-1");
@@ -342,16 +345,72 @@ private Q_SLOTS:
         ctx.wasFloating = true;
         m_engine->handoffReceive(ctx);
 
-        // The stale pre-float zone/screen (monitor A) must be gone.
-        QVERIFY2(m_service->preFloatZone(windowId).isEmpty(),
-                 "cross-monitor float handoff must clear the stale pre-float zone");
-        QVERIFY(m_service->preFloatZones(windowId).isEmpty());
-        QVERIFY(m_service->preFloatScreen(windowId).isEmpty());
+        // Behaviour A: the pre-float home zone/screen (monitor A) is PRESERVED so an
+        // unfloat back on A can restore it; the window now lives on monitor B.
+        QCOMPARE(m_service->preFloatScreen(windowId), monitorA);
+        QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
+        QCOMPARE(m_engine->screenForTrackedWindow(windowId), monitorB);
 
-        // Unfloating on monitor B must therefore NOT restore A's zone.
-        UnfloatResult result = m_engine->resolveUnfloatGeometry(windowId, monitorB);
-        QCOMPARE(result.found, false);
-        QVERIFY(result.zoneIds.isEmpty());
+        // Unfloating on monitor B must NOT restore A's zone — the guard refuses the
+        // cross-monitor restore (no teleport).
+        UnfloatResult onB = m_engine->resolveUnfloatGeometry(windowId, monitorB);
+        QCOMPARE(onB.found, false);
+        QVERIFY(onB.zoneIds.isEmpty());
+
+        // Unfloating back on monitor A restores the preserved home zone (the guard
+        // passes — same monitor). Geometry resolution needs a real QScreen, so gate
+        // the positive assertion like the sibling same-monitor restore case.
+        UnfloatResult onA = m_engine->resolveUnfloatGeometry(windowId, monitorA);
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(onA.found, "unfloat back on the source monitor must restore the preserved home zone");
+            QCOMPARE(onA.zoneIds, QStringList{m_zoneIds[0]});
+        }
+    }
+
+    // =====================================================================
+    // Test 8 (Discussion #724): the per-monitor migration MECHANISM.
+    //
+    // Acceptance test for SnapEngine::migrateWindowToScreen: a window snapped on
+    // monitor A moves to monitor B's per-(screen,desktop,activity) store, the
+    // reverse map re-points at B, and its live screen (screenForTrackedWindow —
+    // the unfloat cross-monitor guard's input) reflects B. This is the mechanism
+    // that makes the #724 unfloat resolve deterministically.
+    // =====================================================================
+    void testMigrateWindowToScreen_movesSnapStateAndReverseMap()
+    {
+        const QString windowId = QStringLiteral("konsole|dddddddd-0000-0000-0000-000000000009");
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        // Place the window into monitor A's per-key store (registers the reverse map).
+        SnapState* stateA = m_engine->stateForWindowOnScreen(windowId, monitorA);
+        QVERIFY(stateA);
+        stateA->assignWindowToZone(windowId, m_zoneIds[0], monitorA, 1);
+        QVERIFY(stateA->isWindowSnapped(windowId));
+        QCOMPARE(stateA->screenId(), monitorA);
+        QCOMPARE(m_engine->stateForWindow(windowId), stateA);
+
+        // Migrate to monitor B.
+        QVERIFY(m_engine->migrateWindowToScreen(windowId, monitorB));
+
+        // The snap state moved to B's store and the reverse map now resolves to it.
+        SnapState* stateB = m_engine->stateForWindow(windowId);
+        QVERIFY(stateB);
+        QVERIFY(stateB != stateA);
+        QCOMPARE(stateB->screenId(), monitorB);
+        QVERIFY(stateB->isWindowSnapped(windowId));
+        QCOMPARE(stateB->zonesForWindow(windowId), QStringList{m_zoneIds[0]});
+        QCOMPARE(stateB->screenForWindow(windowId), monitorB);
+
+        // The source store no longer holds the window.
+        QVERIFY(!stateA->isWindowSnapped(windowId));
+        QVERIFY(stateA->screenForWindow(windowId).isEmpty());
+
+        // screenForTrackedWindow (the guard input) reflects the destination monitor.
+        QCOMPARE(m_engine->screenForTrackedWindow(windowId), monitorB);
+
+        // Re-migrating to the same monitor is a no-op.
+        QVERIFY(!m_engine->migrateWindowToScreen(windowId, monitorB));
     }
 
     // =====================================================================

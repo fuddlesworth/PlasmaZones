@@ -480,6 +480,58 @@ void SnapState::windowClosed(const QString& rawWindowId)
     }
 }
 
+void SnapState::migrateWindowTo(SnapState* target, const QString& rawWindowId, const QString& newScreenId)
+{
+    if (!target || target == this) {
+        return;
+    }
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    bool moved = false;
+
+    if (const auto it = m_windowZoneAssignments.constFind(windowId); it != m_windowZoneAssignments.constEnd()) {
+        target->m_windowZoneAssignments[windowId] = it.value();
+        m_windowZoneAssignments.remove(windowId);
+        moved = true;
+    }
+    // Live screen: rewrite to the destination monitor so target->screenForWindow
+    // reflects where the window now lives. An empty newScreenId falls back to the
+    // target store's own screen so the value is never blanked mid-migration.
+    if (m_windowScreenAssignments.remove(windowId) > 0) {
+        target->m_windowScreenAssignments[windowId] = newScreenId.isEmpty() ? target->m_screenId : newScreenId;
+        moved = true;
+    }
+    if (const auto it = m_windowDesktopAssignments.constFind(windowId); it != m_windowDesktopAssignments.constEnd()) {
+        target->m_windowDesktopAssignments[windowId] = it.value();
+        m_windowDesktopAssignments.remove(windowId);
+        moved = true;
+    }
+    if (m_floatingWindows.remove(windowId)) {
+        target->m_floatingWindows.insert(windowId);
+        moved = true;
+    }
+    // Pre-float zone/screen carry over UNCHANGED (they name the source monitor's
+    // home zone — behaviour A).
+    if (const auto it = m_preFloatZoneAssignments.constFind(windowId); it != m_preFloatZoneAssignments.constEnd()) {
+        target->m_preFloatZoneAssignments[windowId] = it.value();
+        m_preFloatZoneAssignments.remove(windowId);
+        moved = true;
+    }
+    if (const auto it = m_preFloatScreenAssignments.constFind(windowId); it != m_preFloatScreenAssignments.constEnd()) {
+        target->m_preFloatScreenAssignments[windowId] = it.value();
+        m_preFloatScreenAssignments.remove(windowId);
+        moved = true;
+    }
+    if (m_autoSnappedWindows.remove(windowId)) {
+        target->m_autoSnappedWindows.insert(windowId);
+        moved = true;
+    }
+
+    if (moved) {
+        Q_EMIT stateChanged();
+        Q_EMIT target->stateChanged();
+    }
+}
+
 bool SnapState::isEmpty() const
 {
     return m_windowZoneAssignments.isEmpty() && m_windowScreenAssignments.isEmpty()

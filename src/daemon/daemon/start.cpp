@@ -261,6 +261,12 @@ void Daemon::connectDesktopActivity()
                 if (m_autotileEngine) {
                     m_autotileEngine->setCurrentDesktopForScreen(screenId, desktop);
                 }
+                // Feed the SAME per-output desktop into the snap engine so its
+                // per-(screen,desktop,activity) key tracker resolves the right store
+                // (symmetric with autotile; per-monitor keying is the #724 fix).
+                if (m_snapEngine) {
+                    m_snapEngine->setCurrentDesktopForScreen(screenId, desktop);
+                }
                 // [SEQ D] Per-screen layout/overlay resolution context. The
                 // overlay service delegates to the layout registry for per-output
                 // desktop resolution, so this one push drives both (#648).
@@ -331,6 +337,9 @@ void Daemon::connectDesktopActivity()
     if (m_autotileEngine) {
         m_autotileEngine->setCurrentDesktop(initialDesktop);
     }
+    if (m_snapEngine) {
+        m_snapEngine->setCurrentDesktop(initialDesktop);
+    }
 
     // Initialize and start activity manager
     // Connect to PhosphorWorkspaces::VirtualDesktopManager for desktop+activity coordinate lookup
@@ -374,6 +383,9 @@ void Daemon::connectDesktopActivity()
         if (m_autotileEngine) {
             m_autotileEngine->setCurrentActivity(initialActivity);
         }
+        if (m_snapEngine) {
+            m_snapEngine->setCurrentActivity(initialActivity);
+        }
 
         // Connect activity changes: update all components
         connect(m_activityManager.get(), &PhosphorWorkspaces::ActivityManager::currentActivityChanged, this,
@@ -398,6 +410,9 @@ void Daemon::connectDesktopActivity()
                     // Set engine's activity context BEFORE updateAutotileScreens()
                     if (m_autotileEngine) {
                         m_autotileEngine->setCurrentActivity(activityId);
+                    }
+                    if (m_snapEngine) {
+                        m_snapEngine->setCurrentActivity(activityId);
                     }
                     // Per-activity assignments may differ — recompute autotile screens
                     updateAutotileScreens();

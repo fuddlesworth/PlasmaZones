@@ -202,31 +202,33 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     // so re-configuration (VS config changed) re-migrates windows from old virtual IDs to new ones.
     const QString prefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
 
-    // Take a mutable copy of the screen assignments from SnapState for migration.
-    // After applying changes, push the whole map back.
-    QHash<QString, QString> screenAssigns = screenAssignments();
-    const QHash<QString, QStringList>& zoneAssigns = zoneAssignments();
-
-    for (auto it = screenAssigns.begin(); it != screenAssigns.end(); ++it) {
-        if (it.value() != physicalScreenId && !it.value().startsWith(prefix)) {
-            continue;
+    // Rewrite each per-screen store's OWN live-screen map in place. A window's
+    // screen VALUE moves from the physical id (or an old virtual id) to the new
+    // virtual sub-screen its zone falls in; the store the window lives in is
+    // unchanged (per-window lookups key off the screen value + the reverse map, so
+    // a now-stale store key is benign and self-heals on the next genuine
+    // cross-monitor migration). Pushing the aggregated union onto the global holder
+    // instead would strand duplicate stale entries in every other store.
+    const QHash<QString, QStringList> zoneAssigns = zoneAssignments();
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        QHash<QString, QString> assigns = state->screenAssignments();
+        bool storeChanged = false;
+        for (auto it = assigns.begin(); it != assigns.end(); ++it) {
+            if (it.value() != physicalScreenId && !it.value().startsWith(prefix)) {
+                continue;
+            }
+            // If the window already has a valid virtual screen ID that matches the
+            // current config, skip migration — the saved assignment is correct.
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
+                continue;
+            }
+            it.value() = resolveVirtualScreen(zoneAssigns.value(it.key()), it.value());
+            storeChanged = true;
+            migrated++;
         }
-
-        // If the window already has a valid virtual screen ID that matches the
-        // current config, skip migration — the saved assignment is correct.
-        if (PhosphorIdentity::VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
-            continue;
+        if (storeChanged) {
+            state->setScreenAssignments(assigns);
         }
-
-        QStringList zoneIds = zoneAssigns.value(it.key());
-        QString targetVs = resolveVirtualScreen(zoneIds, it.value());
-        it.value() = targetVs;
-        migrated++;
-    }
-
-    if (migrated > 0) {
-        if (auto* store = snapGlobals())
-            store->setScreenAssignments(screenAssigns);
     }
 
     // Also migrate pre-float screen assignments (owned by SnapState).
@@ -393,17 +395,23 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     int migrated = 0;
     bool anyStateMigrated = false;
 
-    // Take a mutable copy of the screen assignments for migration.
-    QHash<QString, QString> screenAssigns = screenAssignments();
-    for (auto it = screenAssigns.begin(); it != screenAssigns.end(); ++it) {
-        if (it.value().startsWith(prefix)) {
-            it.value() = physicalScreenId;
-            migrated++;
+    // Rewrite each per-screen store's OWN live-screen map in place, folding virtual
+    // sub-screen ids on this monitor back to the physical id (see the sibling
+    // migrateScreenAssignmentsToVirtual for why this is per-store, not a union push
+    // onto the global holder).
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        QHash<QString, QString> assigns = state->screenAssignments();
+        bool storeChanged = false;
+        for (auto it = assigns.begin(); it != assigns.end(); ++it) {
+            if (it.value().startsWith(prefix)) {
+                it.value() = physicalScreenId;
+                storeChanged = true;
+                migrated++;
+            }
         }
-    }
-    if (migrated > 0) {
-        if (auto* store = snapGlobals())
-            store->setScreenAssignments(screenAssigns);
+        if (storeChanged) {
+            state->setScreenAssignments(assigns);
+        }
     }
 
     // Also migrate pre-float screen assignments (owned by SnapState).
