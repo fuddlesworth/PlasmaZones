@@ -207,7 +207,7 @@ QRect NavigationController::rectForWindowInState(PhosphorTiles::TilingState* sta
 QString NavigationController::entryWindowOnScreen(const QString& screenId, const QString& direction) const
 {
     // Non-creating lookup: a miss must not persist an empty state.
-    PhosphorTiles::TilingState* state = m_engine->m_screenStates.value(m_engine->currentKeyForScreen(screenId));
+    PhosphorTiles::TilingState* state = m_engine->m_states.stateForKey(m_engine->currentKeyForScreen(screenId));
     if (!state) {
         return QString();
     }
@@ -243,7 +243,7 @@ QString NavigationController::entryWindowOnScreen(const QString& screenId, const
 
 int NavigationController::windowOrderIndexOnScreen(const QString& screenId, const QString& windowId) const
 {
-    PhosphorTiles::TilingState* state = m_engine->m_screenStates.value(m_engine->currentKeyForScreen(screenId));
+    PhosphorTiles::TilingState* state = m_engine->m_states.stateForKey(m_engine->currentKeyForScreen(screenId));
     if (!state) {
         return -1;
     }
@@ -268,7 +268,7 @@ QString NavigationController::crossOutputFocusTarget(const QString& sourceScreen
     // would CREATE and persist an empty TilingState for the neighbour on a miss,
     // leaking a state on every directional-focus keypress at a layout edge with
     // no neighbour window.
-    PhosphorTiles::TilingState* neighborState = m_engine->m_screenStates.value(m_engine->currentKeyForScreen(neighbor));
+    PhosphorTiles::TilingState* neighborState = m_engine->m_states.stateForKey(m_engine->currentKeyForScreen(neighbor));
     if (!neighborState) {
         return QString();
     }
@@ -288,7 +288,7 @@ QString NavigationController::crossOutputFocusTarget(const QString& sourceScreen
     // true), and rectForWindowInState null-guards its argument, so a miss yields
     // the same first-tiled-window fallback without persisting an empty state.
     const QRect focusRect =
-        rectForWindowInState(m_engine->m_screenStates.value(m_engine->currentKeyForScreen(sourceScreenId)), focused);
+        rectForWindowInState(m_engine->m_states.stateForKey(m_engine->currentKeyForScreen(sourceScreenId)), focused);
     const auto dir = PhosphorGeometry::directionFromString(direction);
     const QVector<QRect> neighborZones = neighborState->calculatedZones();
     if (dir.has_value() && focusRect.isValid() && neighborZones.size() == neighborWindows.size()) {
@@ -351,7 +351,7 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     // window without returning a partner.
     const PhosphorEngine::TilingStateKey oldKey = m_engine->currentKeyForScreen(sourceScreenId);
     const PhosphorEngine::TilingStateKey newKey = m_engine->currentKeyForScreen(neighbor);
-    if (const PhosphorTiles::TilingState* destState = m_engine->m_screenStates.value(newKey);
+    if (const PhosphorTiles::TilingState* destState = m_engine->m_states.stateForKey(newKey);
         destState && destState->tiledWindowCount() >= m_engine->effectiveMaxWindows(neighbor)) {
         return false;
     }
@@ -367,7 +367,7 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     // windowFocused() path does: migrateWindowBetweenKeys re-adds the window via
     // onWindowAdded() → screenForWindow(), which reads this map. Without the
     // update it would resolve back to the source screen and re-add it there.
-    m_engine->m_windowToStateKey[focused] = newKey;
+    m_engine->m_states.setKeyForWindow(focused, newKey);
     // migrateWindowBetweenKeys removes the window from the source state (with
     // its onWindowRemoved lifecycle) and adds it on the neighbour output. It
     // schedules DEFERRED retiles for both — but those can be raced by the
@@ -407,11 +407,12 @@ QString NavigationController::crossDesktopFocusTarget(const QString& sourceScree
     if (targetDesktop <= 0) {
         return QString();
     }
-    const PhosphorEngine::TilingStateKey targetKey{sourceScreenId, targetDesktop, m_engine->m_currentActivity};
+    const PhosphorEngine::TilingStateKey targetKey{sourceScreenId, targetDesktop,
+                                                   m_engine->m_context.currentActivity()};
     // Non-creating lookup: stateForKey would CREATE and persist an empty
     // TilingState for the target desktop on a miss, leaking a state on every
     // cross-desktop focus probe to a desktop with no tiled windows.
-    PhosphorTiles::TilingState* targetState = m_engine->m_screenStates.value(targetKey);
+    PhosphorTiles::TilingState* targetState = m_engine->m_states.stateForKey(targetKey);
     if (!targetState) {
         return QString();
     }
@@ -445,7 +446,8 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     // the window into the equivalent zone on the target snap desktop. The daemon
     // slot is a direct (synchronous) connection.
     if (m_engine->m_layoutManager
-        && m_engine->m_layoutManager->modeForScreen(sourceScreenId, targetDesktop, m_engine->m_currentActivity)
+        && m_engine->m_layoutManager->modeForScreen(sourceScreenId, targetDesktop,
+                                                    m_engine->m_context.currentActivity())
             == PhosphorZones::AssignmentEntry::Snapping) {
         // Only a MOVE reaches here (swap doesn't cross desktops), so this is
         // always the one-way cross-mode move into the equivalent snap zone.
@@ -765,11 +767,7 @@ PhosphorTiles::TilingState* NavigationController::resolveActiveState(QString& ou
     }
 
     const auto key = m_engine->currentKeyForScreen(outScreenId);
-    auto sit = m_engine->m_screenStates.find(key);
-    if (sit == m_engine->m_screenStates.end() || !sit.value()) {
-        return nullptr;
-    }
-    return sit.value();
+    return m_engine->m_states.stateForKey(key);
 }
 
 QString NavigationController::resolveActiveScreen() const
@@ -814,7 +812,7 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     // through floating, snapped, or never-tracked windows that don't update
     // it — using the daemon's value avoids operating on the wrong window.
     if (!explicitWindowId.isEmpty()) {
-        for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
+        for (auto it = m_engine->m_states.states().constBegin(); it != m_engine->m_states.states().constEnd(); ++it) {
             // Match each screen's EFFECTIVE desktop, not the raw global one: a
             // screen sticky-pinned by the "virtualdesktopsonlyonprimary" model
             // (m_screenDesktopOverride) keeps its TilingState on its pinned
@@ -822,7 +820,7 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
             // screen and miss the explicit window living there. currentKeyForScreen
             // resolves the override; for unpinned screens it is m_currentDesktop.
             if (it.key().desktop != m_engine->currentKeyForScreen(it.key().screenId).desktop
-                || it.key().activity != m_engine->m_currentActivity) {
+                || it.key().activity != m_engine->m_context.currentActivity()) {
                 continue;
             }
             PhosphorTiles::TilingState* state = it.value();
@@ -840,8 +838,8 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     // non-deterministic QHash iteration when multiple screens have focused windows
     if (!m_engine->m_activeScreen.isEmpty()) {
         const auto key = m_engine->currentKeyForScreen(m_engine->m_activeScreen);
-        auto sit = m_engine->m_screenStates.constFind(key);
-        if (sit != m_engine->m_screenStates.constEnd()) {
+        auto sit = m_engine->m_states.states().constFind(key);
+        if (sit != m_engine->m_states.states().constEnd()) {
             PhosphorTiles::TilingState* state = sit.value();
             if (state && !state->focusedWindow().isEmpty()) {
                 outScreenId = m_engine->m_activeScreen;
@@ -853,9 +851,9 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
 
     // Fallback: scan states for current desktop/activity (e.g., if m_activeScreen is stale).
     // Same sticky-pin-aware desktop match as the explicit-window scan above.
-    for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
+    for (auto it = m_engine->m_states.states().constBegin(); it != m_engine->m_states.states().constEnd(); ++it) {
         if (it.key().desktop != m_engine->currentKeyForScreen(it.key().screenId).desktop
-            || it.key().activity != m_engine->m_currentActivity) {
+            || it.key().activity != m_engine->m_context.currentActivity()) {
             continue;
         }
         PhosphorTiles::TilingState* state = it.value();
@@ -872,8 +870,8 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     if (primaryScreen.isValid()) {
         outScreenId = primaryScreen.identifier;
         const auto key = m_engine->currentKeyForScreen(outScreenId);
-        auto sit = m_engine->m_screenStates.constFind(key);
-        if (sit != m_engine->m_screenStates.constEnd() && sit.value()) {
+        auto sit = m_engine->m_states.states().constFind(key);
+        if (sit != m_engine->m_states.states().constEnd() && sit.value()) {
             outState = sit.value();
             return sit.value()->tiledWindows();
         }
@@ -885,16 +883,16 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
 
 void NavigationController::applyToAllStates(const std::function<void(PhosphorTiles::TilingState*)>& operation)
 {
-    if (m_engine->m_screenStates.isEmpty()) {
+    if (m_engine->m_states.states().isEmpty()) {
         return; // No states to modify
     }
 
     // Only apply to states for each screen's current desktop/activity. Under
     // per-output virtual desktops (#648) the desktop is resolved per-screen,
     // matching propagateGlobalSplitRatio/propagateGlobalMasterCount.
-    for (auto it = m_engine->m_screenStates.begin(); it != m_engine->m_screenStates.end(); ++it) {
+    for (auto it = m_engine->m_states.states().constBegin(); it != m_engine->m_states.states().constEnd(); ++it) {
         if (it.key().desktop == m_engine->currentKeyForScreen(it.key().screenId).desktop
-            && it.key().activity == m_engine->m_currentActivity && it.value()) {
+            && it.key().activity == m_engine->m_context.currentActivity() && it.value()) {
             operation(it.value());
         }
     }

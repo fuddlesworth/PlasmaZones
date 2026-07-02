@@ -299,7 +299,7 @@ public:
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
-    void setWindowFloat(const QString& windowId, bool shouldFloat) override;
+    void setWindowFloat(const QString& windowId, bool shouldFloat, const QString& screenId = QString()) override;
     void saveState() override;
     void loadState() override;
 

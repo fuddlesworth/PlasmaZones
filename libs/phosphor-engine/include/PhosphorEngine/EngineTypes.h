@@ -12,22 +12,32 @@
 
 namespace PhosphorEngine {
 
-struct TilingStateKey
+/// Identity of a per-screen placement state: a window's placement is scoped to
+/// the (screen, virtual desktop, activity) triple it was created in. Both the
+/// snap engine and the autotile engine key their per-screen state on this so a
+/// window keeps distinct placement per context (e.g. per desktop) and migrates
+/// between contexts as the window crosses monitors / desktops.
+struct PlacementStateKey
 {
     QString screenId;
     int desktop = 1;
     QString activity;
 
-    bool operator==(const TilingStateKey& other) const
+    bool operator==(const PlacementStateKey& other) const
     {
         return screenId == other.screenId && desktop == other.desktop && activity == other.activity;
     }
 };
 
-inline size_t qHash(const TilingStateKey& key, size_t seed = 0)
+inline size_t qHash(const PlacementStateKey& key, size_t seed = 0)
 {
     return qHashMulti(seed, key.screenId, key.desktop, key.activity);
 }
+
+/// Backwards-compatible spelling for autotile's existing sources. The autotile
+/// engine predates the shared base primitives and refers to this triple as
+/// `TilingStateKey`; keep the alias so that source keeps compiling unchanged.
+using TilingStateKey = PlacementStateKey;
 
 enum class SnapIntent {
     UserInitiated,

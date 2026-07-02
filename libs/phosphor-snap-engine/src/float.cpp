@@ -48,13 +48,24 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
     }
 }
 
-void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
+void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const QString& callerScreenId)
 {
-    // IPlacementEngine::setWindowFloat has no screenId param, so resolve it:
-    // 1. Try the window's tracked screen from WTS (most accurate)
-    // 2. Fall back to m_lastActiveScreenId (from last windowFocused)
-    // 3. Fall back to empty (unfloatToZone/applyGeometryForFloat handle gracefully)
-    QString screenId = m_snapState->screenForWindow(windowId);
+    // Resolve the screen this float/unfloat acts on:
+    // 1. The caller-provided screen (the effect's authoritative live output,
+    //    threaded from setWindowFloatingForScreen) — ALWAYS preferred when set.
+    //    The tracked association below is stale after a floating window drifts
+    //    across monitors (the daemon never saw a windowScreenChanged for the
+    //    drift), and feeding that stale screen to unfloatToZone makes the
+    //    cross-monitor guard non-deterministic: it sometimes teleports the
+    //    window back to its source monitor's zone and sometimes doesn't
+    //    (Discussion #724). The effect always knows the real screen here.
+    // 2. The window's tracked screen from SnapState (internal 2-arg callers).
+    // 3. m_lastActiveScreenId (from last windowFocused).
+    // 4. Empty (unfloatToZone/applyGeometryForFloat handle it gracefully).
+    QString screenId = callerScreenId;
+    if (screenId.isEmpty()) {
+        screenId = m_snapState->screenForWindow(windowId);
+    }
     if (screenId.isEmpty()) {
         screenId = m_lastActiveScreenId;
     }
