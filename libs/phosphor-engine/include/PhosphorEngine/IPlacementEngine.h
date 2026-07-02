@@ -547,6 +547,16 @@ public:
     {
         Q_UNUSED(validActivities)
     }
+    /// Prune per-(screen, desktop, activity) state for a PHYSICALLY REMOVED output
+    /// (monitor hot-unplug), matching every virtual sub-screen of the removed
+    /// physical id. AutotileEngine self-prunes screens via its autotile-screens set,
+    /// so it leaves this a no-op; a per-screen engine WITHOUT such a set (SnapEngine,
+    /// whose stores are created lazily on placement) overrides it and is driven by
+    /// the daemon's screenRemoved signal, otherwise the removed monitor's stores leak.
+    virtual void pruneStatesForRemovedScreen(const QString& physicalScreenId)
+    {
+        Q_UNUSED(physicalScreenId)
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Settings synchronization (override if engine caches config)

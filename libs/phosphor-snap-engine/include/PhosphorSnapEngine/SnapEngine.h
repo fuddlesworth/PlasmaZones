@@ -20,6 +20,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QRect>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
@@ -520,6 +521,16 @@ public:
     void setCurrentDesktop(int desktop) override;
     void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
     void setCurrentActivity(const QString& activity) override;
+
+    // Reclaim per-(screen,desktop,activity) stores whose context no longer exists.
+    // Without these the per-monitor stores accumulate across desktop/activity/output
+    // removal (the global holder, empty screenId + desktop 0 + empty activity, is
+    // never a prune target). The daemon drives them from its desktop-count /
+    // activities-changed / screenRemoved signals, mirroring AutotileEngine.
+    QSet<int> desktopsWithActiveState() const override;
+    void pruneStatesForDesktop(int removedDesktop) override;
+    void pruneStatesForActivities(const QStringList& validActivities) override;
+    void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
 
     // Float facade over the per-screen stores (the daemon's engine float
     // resolver/writer/lister route here instead of a single SnapState).

@@ -24,6 +24,13 @@
  * 4. migrationMovesAllPerWindowFields: SnapState::migrateWindowTo carries zone, screen,
  *    desktop, floating bit, pre-float zone/screen and the auto-snap flag to the
  *    destination store and leaves none behind in the source.
+ * 5. pruneRemovedScreenDropsOnlyThatMonitor: a physically removed output's stores
+ *    (including its virtual sub-screens) are reclaimed; the other monitor and the
+ *    global holder survive.
+ * 6. pruneRemovedDesktopDropsOnlyThatDesktop: a destroyed desktop's stores are
+ *    reclaimed; other desktops and the desktop-0 global holder survive.
+ * 7. pruneRemovedActivityDropsOnlyThatActivity: removed activities' stores are
+ *    reclaimed; the empty-activity global holder is never a target.
  */
 
 #include <QGuiApplication>
@@ -322,6 +329,102 @@ private Q_SLOTS:
         QVERIFY(!stateA->isAutoSnapped(windowId));
         QVERIFY(stateA->preFloatZones(windowId).isEmpty());
         QVERIFY(stateA->preFloatScreen(windowId).isEmpty());
+    }
+
+    // =====================================================================
+    // Test 5 (#724 follow-up): a physically removed monitor's per-key stores are
+    // reclaimed. pruneStatesForRemovedScreen drops every store on the removed physical
+    // output — including its virtual sub-screens ("DP-1/vs:0") — while the other
+    // monitor's store and the global holder survive. Without this the per-monitor
+    // stores leak across monitor hot-unplug.
+    // =====================================================================
+    void pruneRemovedScreenDropsOnlyThatMonitor()
+    {
+        const QString winA = QStringLiteral("firefox|aaaa0000-0000-0000-0000-000000000010");
+        const QString winAvs = QStringLiteral("kate|aaaa0000-0000-0000-0000-000000000011");
+        const QString winB = QStringLiteral("dolphin|bbbb0000-0000-0000-0000-000000000012");
+        const QString monitorAphys = QStringLiteral("DP-1");
+        const QString monitorAvs = QStringLiteral("DP-1/vs:0");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        m_engine->stateForWindowOnScreen(winA, monitorAphys)->assignWindowToZone(winA, m_zoneIds[0], monitorAphys, 1);
+        m_engine->stateForWindowOnScreen(winAvs, monitorAvs)->assignWindowToZone(winAvs, m_zoneIds[1], monitorAvs, 1);
+        m_engine->stateForWindowOnScreen(winB, monitorB)->assignWindowToZone(winB, m_zoneIds[0], monitorB, 1);
+
+        SnapState* storeB = m_engine->stateForWindow(winB);
+        QVERIFY(storeB != m_engine->globalState());
+        const int before = m_engine->allSnapStates().size();
+
+        m_engine->pruneStatesForRemovedScreen(monitorAphys);
+
+        // Both DP-1 stores (physical id + virtual sub-screen) are gone: their windows
+        // fall back to the global holder now the reverse-map entry is dropped.
+        QCOMPARE(m_engine->stateForWindow(winA), m_engine->globalState());
+        QCOMPARE(m_engine->stateForWindow(winAvs), m_engine->globalState());
+        // The other monitor's store and the global holder survive.
+        QCOMPARE(m_engine->stateForWindow(winB), storeB);
+        QVERIFY(m_engine->globalState() != nullptr);
+        QCOMPARE(m_engine->allSnapStates().size(), before - 2);
+    }
+
+    // =====================================================================
+    // Test 6 (#724 follow-up): a destroyed virtual desktop's per-key stores are
+    // reclaimed. pruneStatesForDesktop drops stores on that desktop only; other
+    // desktops and the desktop-0 global holder survive.
+    // =====================================================================
+    void pruneRemovedDesktopDropsOnlyThatDesktop()
+    {
+        const QString win2 = QStringLiteral("firefox|cccc0000-0000-0000-0000-000000000020");
+        const QString win3 = QStringLiteral("dolphin|dddd0000-0000-0000-0000-000000000021");
+        const QString monitor = QStringLiteral("DP-1");
+
+        m_engine->setCurrentDesktop(2);
+        m_engine->stateForWindowOnScreen(win2, monitor)->assignWindowToZone(win2, m_zoneIds[0], monitor, 2);
+        m_engine->setCurrentDesktop(3);
+        m_engine->stateForWindowOnScreen(win3, monitor)->assignWindowToZone(win3, m_zoneIds[1], monitor, 3);
+
+        QVERIFY(m_engine->desktopsWithActiveState().contains(2));
+        QVERIFY(m_engine->desktopsWithActiveState().contains(3));
+        SnapState* store2 = m_engine->stateForWindow(win2);
+        const int before = m_engine->allSnapStates().size();
+
+        m_engine->pruneStatesForDesktop(3);
+
+        QCOMPARE(m_engine->stateForWindow(win3), m_engine->globalState()); // desktop-3 store gone
+        QCOMPARE(m_engine->stateForWindow(win2), store2); // desktop-2 store survives
+        QVERIFY(!m_engine->desktopsWithActiveState().contains(3));
+        QVERIFY(m_engine->desktopsWithActiveState().contains(2));
+        QCOMPARE(m_engine->allSnapStates().size(), before - 1);
+    }
+
+    // =====================================================================
+    // Test 7 (#724 follow-up): removed activities' per-key stores are reclaimed.
+    // pruneStatesForActivities keeps only stores whose activity is still valid; the
+    // empty-activity global holder is never a prune target.
+    // =====================================================================
+    void pruneRemovedActivityDropsOnlyThatActivity()
+    {
+        const QString winA = QStringLiteral("firefox|eeee0000-0000-0000-0000-000000000030");
+        const QString winB = QStringLiteral("dolphin|ffff0000-0000-0000-0000-000000000031");
+        const QString monitor = QStringLiteral("DP-1");
+        const QString actKeep = QStringLiteral("activity-keep");
+        const QString actGone = QStringLiteral("activity-gone");
+
+        m_engine->setCurrentDesktop(1);
+        m_engine->setCurrentActivity(actKeep);
+        m_engine->stateForWindowOnScreen(winA, monitor)->assignWindowToZone(winA, m_zoneIds[0], monitor, 1);
+        m_engine->setCurrentActivity(actGone);
+        m_engine->stateForWindowOnScreen(winB, monitor)->assignWindowToZone(winB, m_zoneIds[1], monitor, 1);
+
+        SnapState* storeKeep = m_engine->stateForWindow(winA);
+        const int before = m_engine->allSnapStates().size();
+
+        m_engine->pruneStatesForActivities(QStringList{actKeep});
+
+        QCOMPARE(m_engine->stateForWindow(winB), m_engine->globalState()); // removed-activity store gone
+        QCOMPARE(m_engine->stateForWindow(winA), storeKeep); // kept-activity store survives
+        QVERIFY(m_engine->globalState() != nullptr); // empty-activity global untouched
+        QCOMPARE(m_engine->allSnapStates().size(), before - 1);
     }
 
 private:

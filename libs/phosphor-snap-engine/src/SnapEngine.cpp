@@ -238,6 +238,84 @@ void SnapEngine::syncGlobalLastUsedForRemovedZones(const QStringList& removedZon
     }
 }
 
+QSet<int> SnapEngine::desktopsWithActiveState() const
+{
+    QSet<int> out;
+    const auto& states = m_states.states();
+    for (auto it = states.constBegin(); it != states.constEnd(); ++it) {
+        out.insert(it.key().desktop);
+    }
+    return out;
+}
+
+void SnapEngine::pruneStatesForDesktop(int removedDesktop)
+{
+    // removedDesktop is a real (>= 1) destroyed desktop, so the global holder
+    // (empty screenId, desktop 0) never matches; the !screenId.isEmpty() guard makes
+    // that explicit. Drop every per-key store on the desktop, its reverse-map
+    // entries, and the per-output desktop-map entries naming it.
+    const auto matches = [removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
+        return !key.screenId.isEmpty() && key.desktop == removedDesktop;
+    };
+    m_states.removeStatesIf(
+        [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {
+            return matches(key);
+        },
+        [](const PhosphorEngine::PlacementStateKey&, SnapState* state) {
+            state->deleteLater();
+        });
+    m_states.removeWindowsIf([&](const QString&, const PhosphorEngine::PlacementStateKey& key) {
+        return matches(key);
+    });
+    m_context.pruneDesktop(removedDesktop);
+}
+
+void SnapEngine::pruneStatesForActivities(const QStringList& validActivities)
+{
+    const QSet<QString> valid(validActivities.begin(), validActivities.end());
+    // The global holder has an empty activity, so !activity.isEmpty() excludes it.
+    const auto matches = [&valid](const PhosphorEngine::PlacementStateKey& key) {
+        return !key.activity.isEmpty() && !valid.contains(key.activity);
+    };
+    m_states.removeStatesIf(
+        [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {
+            return matches(key);
+        },
+        [](const PhosphorEngine::PlacementStateKey&, SnapState* state) {
+            state->deleteLater();
+        });
+    m_states.removeWindowsIf([&](const QString&, const PhosphorEngine::PlacementStateKey& key) {
+        return matches(key);
+    });
+}
+
+void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
+{
+    if (physicalScreenId.isEmpty()) {
+        return;
+    }
+    // Match every virtual sub-screen of the removed physical monitor: samePhysical
+    // strips the "/vs:N" suffix before comparing. The global holder (empty screenId)
+    // never matches.
+    const auto matches = [&physicalScreenId](const PhosphorEngine::PlacementStateKey& key) {
+        return !key.screenId.isEmpty()
+            && PhosphorIdentity::VirtualScreenId::samePhysical(key.screenId, physicalScreenId);
+    };
+    m_states.removeStatesIf(
+        [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {
+            return matches(key);
+        },
+        [](const PhosphorEngine::PlacementStateKey&, SnapState* state) {
+            state->deleteLater();
+        });
+    m_states.removeWindowsIf([&](const QString&, const PhosphorEngine::PlacementStateKey& key) {
+        return matches(key);
+    });
+    m_context.removeScreensIf([&physicalScreenId](const QString& screenId) {
+        return PhosphorIdentity::VirtualScreenId::samePhysical(screenId, physicalScreenId);
+    });
+}
+
 const SnapState* SnapEngine::lastUsedStateForScreen(const QString& screenId) const
 {
     const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
