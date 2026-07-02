@@ -200,8 +200,8 @@ PickerCategory actionCategory(const QString& type)
     }
     const QString& cat = desc->category;
     // Two groups, alphabetised within each: the context-domain categories
-    // (resolved per screen/desktop/activity/mode) come first (orders 0-2), then
-    // the window-domain categories (orders 3-5). Keep these orders in lockstep
+    // (resolved per screen/desktop/activity/mode) come first (orders 0-3), then
+    // the window-domain categories (orders 4-6). Keep these orders in lockstep
     // with each category's action domains in RuleAction.cpp.
     if (cat == QLatin1String("gap")) {
         return {PhosphorI18n::tr("Gaps"), 0};
@@ -212,14 +212,17 @@ PickerCategory actionCategory(const QString& type)
     if (cat == QLatin1String("overlay")) {
         return {PhosphorI18n::tr("Overlay"), 2};
     }
+    if (cat == QLatin1String("zoneSelector")) {
+        return {PhosphorI18n::tr("Zone selector"), 3};
+    }
     if (cat == QLatin1String("animation")) {
-        return {PhosphorI18n::tr("Animation"), 3};
+        return {PhosphorI18n::tr("Animation"), 4};
     }
     if (cat == QLatin1String("appearance") || cat == QLatin1String("borderAppearance")) {
-        return {PhosphorI18n::tr("Appearance"), 4};
+        return {PhosphorI18n::tr("Appearance"), 5};
     }
     if (cat == QLatin1String("windowManagement")) {
-        return {PhosphorI18n::tr("Window"), 5};
+        return {PhosphorI18n::tr("Window"), 6};
     }
     return {PhosphorI18n::tr("Other"), 99};
 }
@@ -317,6 +320,26 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetOuterGapRight && key == ActionParam::Value) {
         return PhosphorI18n::tr("Right gap (px)");
     }
+    // Per-context tiling-geometry overrides (single-value, keyed ActionParam::Value).
+    if (type == ActionType::SetSplitRatio && key == ActionParam::Value) {
+        // Presented as a percentage (the descriptor's `percent` kind), e.g. 66 %
+        // master. Stored as a [0.1, 0.9] fraction.
+        return PhosphorI18n::tr("Split ratio (%)");
+    }
+    if (type == ActionType::SetMasterCount && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Master window count");
+    }
+    if (type == ActionType::SetMaxWindows && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Max tiled windows");
+    }
+    // The generic zone-selector action: `property` picks which per-monitor
+    // property to override, `value` is that property's value.
+    if (type == ActionType::SetZoneSelectorProperty && key == ActionParam::Property) {
+        return PhosphorI18n::tr("Zone selector property");
+    }
+    if (type == ActionType::SetZoneSelectorProperty && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Value");
+    }
     // Context overlay-property overrides. These come BEFORE the generic
     // EffectId / Value fallbacks so they win for the overlay actions.
     if (type == ActionType::OverrideOverlayShader && key == ActionParam::EffectId) {
@@ -386,6 +409,36 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
         }
         if (wireValue == PhosphorRules::OverlayStyleToken::Preview) {
             return PhosphorI18n::tr("Layout preview");
+        }
+    }
+    if (type == ActionType::SetZoneSelectorProperty && key == ActionParam::Property) {
+        namespace ZSP = PhosphorRules::ZoneSelectorProperty;
+        if (wireValue == ZSP::Position) {
+            return PhosphorI18n::tr("Position");
+        }
+        if (wireValue == ZSP::LayoutMode) {
+            return PhosphorI18n::tr("Layout mode");
+        }
+        if (wireValue == ZSP::SizeMode) {
+            return PhosphorI18n::tr("Size mode");
+        }
+        if (wireValue == ZSP::MaxRows) {
+            return PhosphorI18n::tr("Max rows");
+        }
+        if (wireValue == ZSP::PreviewWidth) {
+            return PhosphorI18n::tr("Preview width");
+        }
+        if (wireValue == ZSP::PreviewHeight) {
+            return PhosphorI18n::tr("Preview height");
+        }
+        if (wireValue == ZSP::PreviewLockAspect) {
+            return PhosphorI18n::tr("Lock preview aspect ratio");
+        }
+        if (wireValue == ZSP::GridColumns) {
+            return PhosphorI18n::tr("Grid columns");
+        }
+        if (wireValue == ZSP::TriggerDistance) {
+            return PhosphorI18n::tr("Trigger distance");
         }
     }
     return wireValue;
@@ -554,6 +607,18 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetOuterGapRight) {
         return PhosphorI18n::tr("Set right gap");
+    }
+    if (type == ActionType::SetSplitRatio) {
+        return PhosphorI18n::tr("Set split ratio");
+    }
+    if (type == ActionType::SetMasterCount) {
+        return PhosphorI18n::tr("Set master count");
+    }
+    if (type == ActionType::SetMaxWindows) {
+        return PhosphorI18n::tr("Set max tiled windows");
+    }
+    if (type == ActionType::SetZoneSelectorProperty) {
+        return PhosphorI18n::tr("Set zone selector property");
     }
     if (type == ActionType::RouteToScreen) {
         return PhosphorI18n::tr("Open on monitor");

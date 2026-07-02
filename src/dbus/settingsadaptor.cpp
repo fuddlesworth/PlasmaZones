@@ -341,7 +341,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("osdStyle")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= 0 && val <= static_cast<int>(OsdStyle::Preview)) {
             m_settings->setOsdStyle(static_cast<OsdStyle>(val));
             return true;
         }
@@ -354,7 +354,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("overlayDisplayMode")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 1) {
+        if (val >= 0 && val <= static_cast<int>(OverlayDisplayMode::LayoutPreview)) {
             m_settings->setOverlayDisplayMode(static_cast<OverlayDisplayMode>(val));
             return true;
         }
@@ -390,16 +390,42 @@ void SettingsAdaptor::initializeRegistry()
                               disabledActivities, setDisabledActivities)
 #undef REGISTER_PER_MODE_DISABLE
 
-    // Appearance settings
+    // Appearance settings. The seven zone-overlay values are rule-backed in
+    // v5 (managed baseline overlay rule) and registered READ-ONLY — a getter
+    // with no setter, the same shape as motionProfileTree — so consumers like
+    // the KWin effect keep fetching them while a setSetting write is an
+    // honest "key not found" instead of a silent write to dead config keys.
+    // Edits go through the Rules D-Bus surface (RuleController).
     REGISTER_BOOL_SETTING("useSystemColors", useSystemColors, setUseSystemColors)
-    REGISTER_COLOR_SETTING("highlightColor", highlightColor, setHighlightColor)
-    REGISTER_COLOR_SETTING("inactiveColor", inactiveColor, setInactiveColor)
-    REGISTER_COLOR_SETTING("borderColor", borderColor, setBorderColor)
+    m_getters[QStringLiteral("highlightColor")] = [this]() {
+        return m_settings->highlightColor().name(QColor::HexArgb);
+    };
+    m_schemas[QStringLiteral("highlightColor")] = QStringLiteral("color");
+    m_getters[QStringLiteral("inactiveColor")] = [this]() {
+        return m_settings->inactiveColor().name(QColor::HexArgb);
+    };
+    m_schemas[QStringLiteral("inactiveColor")] = QStringLiteral("color");
+    m_getters[QStringLiteral("borderColor")] = [this]() {
+        return m_settings->borderColor().name(QColor::HexArgb);
+    };
+    m_schemas[QStringLiteral("borderColor")] = QStringLiteral("color");
     REGISTER_COLOR_SETTING("labelFontColor", labelFontColor, setLabelFontColor)
-    REGISTER_DOUBLE_SETTING("activeOpacity", activeOpacity, setActiveOpacity)
-    REGISTER_DOUBLE_SETTING("inactiveOpacity", inactiveOpacity, setInactiveOpacity)
-    REGISTER_INT_SETTING("borderWidth", borderWidth, setBorderWidth)
-    REGISTER_INT_SETTING("borderRadius", borderRadius, setBorderRadius)
+    m_getters[QStringLiteral("activeOpacity")] = [this]() {
+        return m_settings->activeOpacity();
+    };
+    m_schemas[QStringLiteral("activeOpacity")] = QStringLiteral("double");
+    m_getters[QStringLiteral("inactiveOpacity")] = [this]() {
+        return m_settings->inactiveOpacity();
+    };
+    m_schemas[QStringLiteral("inactiveOpacity")] = QStringLiteral("double");
+    m_getters[QStringLiteral("borderWidth")] = [this]() {
+        return m_settings->borderWidth();
+    };
+    m_schemas[QStringLiteral("borderWidth")] = QStringLiteral("int");
+    m_getters[QStringLiteral("borderRadius")] = [this]() {
+        return m_settings->borderRadius();
+    };
+    m_schemas[QStringLiteral("borderRadius")] = QStringLiteral("int");
     REGISTER_BOOL_SETTING("enableBlur", enableBlur, setEnableBlur)
     REGISTER_STRING_SETTING("labelFontFamily", labelFontFamily, setLabelFontFamily)
     // Custom setter with range validation (0.25-3.0) instead of REGISTER_DOUBLE_SETTING
@@ -481,21 +507,21 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
 
     // Window filtering — the per-app / per-class exclusion lists
-    // (excludedApplications, excludedWindowClasses) retired in v4 along
-    // with their settings page; only the three global knobs below remain.
+    // (excludedApplications, excludedWindowClasses) retired in v4 along with
+    // their settings page, and the min-size knobs retired in v5 (folded onto
+    // the managed baseline Exclude rules, served over the Rules D-Bus
+    // surface); only the transient toggle remains.
     REGISTER_BOOL_SETTING("excludeTransientWindows", excludeTransientWindows, setExcludeTransientWindows)
-    REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
-    REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)
 
     // Animation window filtering — exposed on the same getSetting/setSetting
     // wire as the snapping/tiling exclusions but stored independently so a
-    // user can disable animations for an app while still snapping it.
+    // user can disable animations for an app while still snapping it. The
+    // animation min-size knobs retired in v5 alongside the general ones
+    // (managed baseline ExcludeAnimations rules).
     REGISTER_BOOL_SETTING("animationExcludeTransientWindows", animationExcludeTransientWindows,
                           setAnimationExcludeTransientWindows)
     REGISTER_BOOL_SETTING("animationExcludeNotificationsAndOsd", animationExcludeNotificationsAndOsd,
                           setAnimationExcludeNotificationsAndOsd)
-    REGISTER_INT_SETTING("animationMinimumWindowWidth", animationMinimumWindowWidth, setAnimationMinimumWindowWidth)
-    REGISTER_INT_SETTING("animationMinimumWindowHeight", animationMinimumWindowHeight, setAnimationMinimumWindowHeight)
     // animationExcludedApplications / animationExcludedWindowClasses
     // retired in v4 — folded into ExcludeAnimations Rules; the
     // effect derives its animation exclusion rule set from the unified

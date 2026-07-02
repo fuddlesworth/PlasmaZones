@@ -723,6 +723,73 @@ public:
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000004}"));
     }
 
+    // Stable namespace id for the per-monitor TILING override rules
+    // (SetSplitRatio / SetMasterCount / SetMaxWindows / SetTilingAlgorithm).
+    // Unlike gaps there is no
+    // managed baseline tiling rule — the global tiling defaults stay in config —
+    // so this id is used ONLY as the QUuid::createUuidV5 namespace for the
+    // per-screen override rules, keeping them deterministic and distinct from the
+    // per-screen gap rules (namespaced under baselineGapRuleId()). The v4→v5
+    // migration writes rules under this namespace and getPerScreenAutotileSettings
+    // reads them back via Settings::perScreenTilingRuleOverrides.
+    static QUuid perScreenTilingRuleNamespaceId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000005}"));
+    }
+
+    // Stable namespace id for the per-monitor ZONE-SELECTOR override rules
+    // (SetZoneSelectorProperty actions). Like the tiling namespace, this is used
+    // only as the QUuid::createUuidV5 namespace for the per-screen override rules
+    // — the global zone-selector defaults stay in config, so there is no managed
+    // baseline. The v4→v5 migration writes rules under this namespace and
+    // getPerScreenZoneSelectorSettings reads them back via
+    // Settings::perScreenZoneSelectorRuleOverrides.
+    static QUuid perScreenZoneSelectorRuleNamespaceId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000006}"));
+    }
+
+    // Stable ids of the two MANAGED baseline animation min-size
+    // ExcludeAnimations rules (Width/Height LessThan N; 0 = never matches =
+    // filter off, the default). Seeded by the daemon from
+    // makeBaselineAnimationMin{Width,Height}Rule; the migration overrides the
+    // threshold from a user's non-default v4 min-size, and the Animations page
+    // edits the match threshold by the same ids. Singletons, so fixed ids.
+    static QUuid animationMinWidthRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000007}"));
+    }
+    static QUuid animationMinHeightRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000008}"));
+    }
+
+    // Stable id of the managed baseline ZONE-OVERLAY appearance rule: the
+    // lowest-priority Rule whose actions hold the global default drag-overlay
+    // appearance (fill / inactive / border colours, active + inactive opacity,
+    // border width + radius). Settings reads these back as its highlightColor()
+    // / activeOpacity() / … getters (mirroring the gap baseline).
+    static QUuid baselineOverlayRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000009}"));
+    }
+
+    // Stable ids of the general (window-management) minimum-size exclusion rules:
+    // one MANAGED baseline Exclude rule per axis whose match is Width / Height
+    // LessThan the threshold. Distinct from the animation min-size baselines
+    // (…007/…008), which carry ExcludeAnimations; these carry the terminal
+    // Exclude action the snap engine / drag gate evaluate to keep sub-threshold
+    // windows unmanaged.
+    static QUuid generalMinWidthRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-00000000000a}"));
+    }
+
+    static QUuid generalMinHeightRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-00000000000b}"));
+    }
+
     // Window-property match expressions that scope which windows the managed
     // baseline BORDER and TITLE BAR rules apply to. These are the canonical wire
     // shapes shared by the daemon's seeder (the fresh-install default) and the

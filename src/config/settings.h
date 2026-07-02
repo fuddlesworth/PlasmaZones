@@ -129,16 +129,19 @@ public:
     Q_PROPERTY(int overlayDisplayMode READ overlayDisplayModeInt WRITE setOverlayDisplayModeInt NOTIFY
                    overlayDisplayModeChanged)
 
-    // Appearance (ricer-friendly)
+    // Appearance (ricer-friendly). The seven zone-overlay properties are
+    // rule-backed in v5 and READ-only here — edits go through the
+    // RuleController onto the managed baseline overlay rule (see the
+    // accessor block below for the full note).
     Q_PROPERTY(bool useSystemColors READ useSystemColors WRITE setUseSystemColors NOTIFY useSystemColorsChanged)
-    Q_PROPERTY(QColor highlightColor READ highlightColor WRITE setHighlightColor NOTIFY highlightColorChanged)
-    Q_PROPERTY(QColor inactiveColor READ inactiveColor WRITE setInactiveColor NOTIFY inactiveColorChanged)
-    Q_PROPERTY(QColor borderColor READ borderColor WRITE setBorderColor NOTIFY borderColorChanged)
+    Q_PROPERTY(QColor highlightColor READ highlightColor NOTIFY highlightColorChanged)
+    Q_PROPERTY(QColor inactiveColor READ inactiveColor NOTIFY inactiveColorChanged)
+    Q_PROPERTY(QColor borderColor READ borderColor NOTIFY borderColorChanged)
     Q_PROPERTY(QColor labelFontColor READ labelFontColor WRITE setLabelFontColor NOTIFY labelFontColorChanged)
-    Q_PROPERTY(qreal activeOpacity READ activeOpacity WRITE setActiveOpacity NOTIFY activeOpacityChanged)
-    Q_PROPERTY(qreal inactiveOpacity READ inactiveOpacity WRITE setInactiveOpacity NOTIFY inactiveOpacityChanged)
-    Q_PROPERTY(int borderWidth READ borderWidth WRITE setBorderWidth NOTIFY borderWidthChanged)
-    Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
+    Q_PROPERTY(qreal activeOpacity READ activeOpacity NOTIFY activeOpacityChanged)
+    Q_PROPERTY(qreal inactiveOpacity READ inactiveOpacity NOTIFY inactiveOpacityChanged)
+    Q_PROPERTY(int borderWidth READ borderWidth NOTIFY borderWidthChanged)
+    Q_PROPERTY(int borderRadius READ borderRadius NOTIFY borderRadiusChanged)
     Q_PROPERTY(bool enableBlur READ enableBlur WRITE setEnableBlur NOTIFY enableBlurChanged)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily WRITE setLabelFontFamily NOTIFY labelFontFamilyChanged)
     Q_PROPERTY(
@@ -217,24 +220,21 @@ public:
     // excludedWindowClasses) retired in v4 along with the standalone
     // Exclusions settings page; the lists folded into Rules and
     // the daemon serves the runtime evaluator from
-    // PhosphorRules::ExclusionRules over the unified rule store.
+    // PhosphorRules::ExclusionRules over the unified rule store. The
+    // minimumWindowWidth/Height Q_PROPERTYs followed in v5: the min-size
+    // thresholds live in the matches of the two managed baseline Exclude
+    // rules and are edited through the RuleController.
     Q_PROPERTY(bool excludeTransientWindows READ excludeTransientWindows WRITE setExcludeTransientWindows NOTIFY
                    excludeTransientWindowsChanged)
-    Q_PROPERTY(
-        int minimumWindowWidth READ minimumWindowWidth WRITE setMinimumWindowWidth NOTIFY minimumWindowWidthChanged)
-    Q_PROPERTY(
-        int minimumWindowHeight READ minimumWindowHeight WRITE setMinimumWindowHeight NOTIFY minimumWindowHeightChanged)
 
     // Animation window filtering — separate group from snapping/tiling
-    // exclusions so the two filter sets can diverge.
+    // exclusions so the two filter sets can diverge. The animation min-size
+    // Q_PROPERTYs retired in v5 alongside the general ones (rule-backed
+    // managed baseline ExcludeAnimations rules).
     Q_PROPERTY(bool animationExcludeTransientWindows READ animationExcludeTransientWindows WRITE
                    setAnimationExcludeTransientWindows NOTIFY animationExcludeTransientWindowsChanged)
     Q_PROPERTY(bool animationExcludeNotificationsAndOsd READ animationExcludeNotificationsAndOsd WRITE
                    setAnimationExcludeNotificationsAndOsd NOTIFY animationExcludeNotificationsAndOsdChanged)
-    Q_PROPERTY(int animationMinimumWindowWidth READ animationMinimumWindowWidth WRITE setAnimationMinimumWindowWidth
-                   NOTIFY animationMinimumWindowWidthChanged)
-    Q_PROPERTY(int animationMinimumWindowHeight READ animationMinimumWindowHeight WRITE setAnimationMinimumWindowHeight
-                   NOTIFY animationMinimumWindowHeightChanged)
     // The animationExcludedApplications / animationExcludedWindowClasses
     // Q_PROPERTYs retired in v4 — the lists folded into `ExcludeAnimations`
     // Rules and the effect's `shouldAnimateWindow` gate now resolves
@@ -567,27 +567,27 @@ public:
     int overlayDisplayModeInt() const;
     void setOverlayDisplayModeInt(int mode);
 
-    // Appearance — backed by PhosphorConfig::Store (see settingsschema.cpp).
-    // Getters read through the store on demand with validator-driven
-    // clamping; setters go through the store so persistence is immediate.
+    // Appearance. The label-font keys and enableBlur are backed by
+    // PhosphorConfig::Store (see settingsschema.cpp): getters read through the
+    // store on demand with validator-driven clamping, setters go through the
+    // store so persistence is immediate. The seven zone-overlay properties
+    // (highlight / inactive / border colours, active + inactive opacity,
+    // border width + radius) are rule-backed in v5: their getters read the
+    // managed baseline overlay rule (no store clamping) with a live
+    // system-palette gate on the colours while useSystemColors is on, and the
+    // Overlay Appearance page writes the rule through the RuleController —
+    // so those seven have no setters.
     bool useSystemColors() const override;
     void setUseSystemColors(bool use) override;
     QColor highlightColor() const override;
-    void setHighlightColor(const QColor& color) override;
     QColor inactiveColor() const override;
-    void setInactiveColor(const QColor& color) override;
     QColor borderColor() const override;
-    void setBorderColor(const QColor& color) override;
     QColor labelFontColor() const override;
     void setLabelFontColor(const QColor& color) override;
     qreal activeOpacity() const override;
-    void setActiveOpacity(qreal opacity) override;
     qreal inactiveOpacity() const override;
-    void setInactiveOpacity(qreal opacity) override;
     int borderWidth() const override;
-    void setBorderWidth(int width) override;
     int borderRadius() const override;
-    void setBorderRadius(int radius) override;
     bool enableBlur() const override;
     void setEnableBlur(bool enable) override;
     QString labelFontFamily() const override;
@@ -681,14 +681,10 @@ public:
     void setTilingAlgorithmOrder(const QStringList& order) override;
 
     // Window filtering — PhosphorConfig::Store-backed. The per-app /
-    // per-class exclusion list accessors retired in v4 — see the
-    // Q_PROPERTY block above for the migration notes.
+    // per-class exclusion list accessors retired in v4, the min-size
+    // accessors in v5 — see the Q_PROPERTY block above for the notes.
     bool excludeTransientWindows() const override;
     void setExcludeTransientWindows(bool exclude) override;
-    int minimumWindowWidth() const override;
-    void setMinimumWindowWidth(int width) override;
-    int minimumWindowHeight() const override;
-    void setMinimumWindowHeight(int height) override;
 
     // Animation window filtering — same shape as snapping/tiling
     // exclusions but stored under `Animations.WindowFiltering`.
@@ -696,10 +692,6 @@ public:
     void setAnimationExcludeTransientWindows(bool exclude) override;
     bool animationExcludeNotificationsAndOsd() const override;
     void setAnimationExcludeNotificationsAndOsd(bool exclude) override;
-    int animationMinimumWindowWidth() const override;
-    void setAnimationMinimumWindowWidth(int width) override;
-    int animationMinimumWindowHeight() const override;
-    void setAnimationMinimumWindowHeight(int height) override;
     // animationExcludedApplications / animationExcludedWindowClasses
     // (+ their add*/remove* convenience methods) retired in v4 — see the
     // Q_PROPERTY block above for the migration notes.
@@ -1127,9 +1119,11 @@ public:
     /// discardKeys().
     void resetKeys(const ConfigKeyList& keys);
 
-    // Additional methods
-    Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
-    Q_INVOKABLE void applySystemColorScheme();
+    // loadColorsFromFile / applySystemColorScheme retired in v5 — colour
+    // import writes the managed baseline overlay rule through the
+    // RuleController (SnappingZonesController + Overlay Appearance page), and
+    // "use system colours" is a live gate in the colour getters rather than a
+    // persisted palette copy.
 
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via
@@ -1300,27 +1294,29 @@ private:
     PhosphorRules::RuleStore* m_ruleStore = nullptr;
 
     // Connect the active rule store's rulesChanged to onRuleStoreChanged and
-    // seed the gap cache from the current baseline rule. Called once at the end
-    // of every constructor (after load()), so both the owned and borrowed store
-    // paths get the reactive wiring.
-    void connectRuleStoreGapReactivity();
+    // seed the gap + overlay caches from the current baseline rules. Called
+    // once at the end of every constructor (after load()), so both the owned
+    // and borrowed store paths get the reactive wiring.
+    void connectRuleStoreReactivity();
 
-    // Recompute the rule-backed global gap values; emit the per-property NOTIFY
-    // signals for those that changed and a single settingsChanged if any did.
-    // Driven by the baseline rule's gap actions, so a gap edit on the Window
-    // Appearance page retiles autotiled windows and re-spaces snapped zones
-    // exactly as the old stored-setting setters did. Bound to the store's
-    // rulesChanged signal.
+    // Recompute the rule-backed global gap AND overlay-appearance values; emit
+    // the per-property NOTIFY signals for those that changed and a single
+    // settingsChanged if any did. Driven by the baseline rules' actions, so a
+    // gap edit on the Window Appearance page retiles autotiled windows and
+    // re-spaces snapped zones exactly as the old stored-setting setters did,
+    // and an overlay edit honours the Q_PROPERTY NOTIFY contract for the
+    // seven overlay getters. Bound to the store's rulesChanged signal.
     void onRuleStoreChanged();
 
     // Fingerprint of every gap action across the rule set, used to gate the
     // per-screen gap re-sync in onRuleStoreChanged so only real gap edits fire it.
     QString gapRulesFingerprint() const;
 
-    // Read one gap action's Value param from the rule @p ruleId in @p store, or
-    // std::nullopt when the store / rule / action is absent. Backs both the
-    // global gap getters (the managed baseline rule id) and the per-screen gap
-    // accessors (the per-monitor gap rule id).
+    // Read one action's Value param from the rule @p ruleId in @p store, or
+    // std::nullopt when the store / rule / action is absent. Action-type-
+    // generic despite the historical name: backs the global gap getters and
+    // per-screen gap accessors (gap rules), the seven overlay appearance
+    // getters (the baseline overlay rule), and the per-screen tiling reader.
     static std::optional<QJsonValue> gapValueFromRule(const PhosphorRules::RuleStore* store, const QUuid& ruleId,
                                                       QLatin1StringView actionType);
 
@@ -1335,10 +1331,31 @@ private:
     // forms tried as fallbacks for rules written under an alternate form.
     static QVariantMap perScreenGapRuleOverrides(const PhosphorRules::RuleStore* store, const QString& screenIdOrName);
 
-    // Cached snapshot of the baseline rule's gap values, used by
+    // Tiling-geometry overrides authored on the per-monitor tiling Rule for
+    // @p screenIdOrName, keyed in the short engine form the autotile consumer
+    // expects (SplitRatio / MasterCount / MaxWindows), or an empty map when no
+    // such rule exists. Mirrors perScreenGapRuleOverrides but keyed under the
+    // dedicated createUuidV5(perScreenTilingRuleNamespaceId, <stable id>) — the
+    // global tiling defaults stay in config, so unlike gaps there is no managed
+    // baseline tiling rule; only per-screen overrides live as rules.
+    static QVariantMap perScreenTilingRuleOverrides(const PhosphorRules::RuleStore* store,
+                                                    const QString& screenIdOrName);
+
+    // Zone-selector overrides authored on the per-monitor zone-selector Rule for
+    // @p screenIdOrName, keyed by the ZoneSelectorConfigKey names the
+    // getPerScreenZoneSelectorSettings consumer expects (Position / LayoutMode /
+    // … / PreviewLockAspect), or an empty map when no such rule exists. Reads the
+    // generic SetZoneSelectorProperty actions from the rule namespaced under
+    // perScreenZoneSelectorRuleNamespaceId; PreviewLockAspect yields a bool, the
+    // rest ints. The global zone-selector defaults stay in config, so there is no
+    // managed baseline — only per-screen overrides live as rules.
+    static QVariantMap perScreenZoneSelectorRuleOverrides(const PhosphorRules::RuleStore* store,
+                                                          const QString& screenIdOrName);
+
+    // Cached snapshot of the baseline rules' gap + overlay values, used by
     // onRuleStoreChanged for change detection (the getters read live, so a
     // pre-change snapshot must be retained here). Seeded in
-    // connectRuleStoreGapReactivity.
+    // connectRuleStoreReactivity.
     int m_cachedInnerGap = 0;
     int m_cachedOuterGap = 0;
     bool m_cachedUsePerSideOuterGap = false;
@@ -1346,6 +1363,16 @@ private:
     int m_cachedOuterGapBottom = 0;
     int m_cachedOuterGapLeft = 0;
     int m_cachedOuterGapRight = 0;
+    // Overlay-appearance snapshot — the EFFECTIVE getter values (so the
+    // system-palette gate is part of the comparison, exactly what a bound
+    // consumer sees).
+    QColor m_cachedHighlightColor;
+    QColor m_cachedInactiveColor;
+    QColor m_cachedBorderColor;
+    qreal m_cachedActiveOpacity = 0.0;
+    qreal m_cachedInactiveOpacity = 0.0;
+    int m_cachedBorderWidth = 0;
+    int m_cachedBorderRadius = 0;
     // Snapshot of all gap actions across the rule set; gates the per-screen gap
     // re-sync so non-gap rule writes (mode/assignment toggles) don't fire it.
     QString m_cachedGapFingerprint;

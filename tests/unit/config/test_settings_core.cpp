@@ -164,10 +164,7 @@ private Q_SLOTS:
         // Set non-default values across different groups. Inner/outer gaps are
         // no longer stored config keys (the global default is rule-backed), so
         // they are not part of this config-persistence round-trip.
-        settings.setBorderWidth(5);
-        settings.setBorderRadius(25);
-        settings.setActiveOpacity(0.8);
-        settings.setInactiveOpacity(0.2);
+        settings.setZoneSelectorMaxRows(5);
         settings.setShowZoneNumbers(false);
         settings.setToggleActivation(true);
         settings.setSnappingFocusNewWindows(true);
@@ -188,16 +185,10 @@ private Q_SLOTS:
         // (re-reads from disk after save() flushed). Uses v2 dot-path groups.
         auto backend = PlasmaZones::createDefaultConfigBackend();
 
-        {
-            auto border = backend->group(ConfigDefaults::snappingZonesBorderGroup());
-            QCOMPARE(border->readInt(ConfigDefaults::widthKey(), 0), 5);
-            QCOMPARE(border->readInt(ConfigDefaults::radiusKey(), 0), 25);
-        }
-        {
-            auto opacity = backend->group(ConfigDefaults::snappingZonesOpacityGroup());
-            QVERIFY(qFuzzyCompare(opacity->readDouble(ConfigDefaults::activeKey(), 0.0), 0.8));
-            QVERIFY(qFuzzyCompare(opacity->readDouble(ConfigDefaults::inactiveKey(), 0.0), 0.2));
-        }
+        // The zone-overlay colours / opacity / border width+radius are rule-backed
+        // now (folded onto the managed baseline overlay rule), so they are not part
+        // of this config-persistence round-trip. The global zone-selector max-rows
+        // (still config) is verified in the zone-selector block below.
         {
             auto labels = backend->group(ConfigDefaults::snappingZonesLabelsGroup());
             QCOMPARE(labels->readInt(ConfigDefaults::fontWeightKey(), 0), 400);
@@ -225,6 +216,7 @@ private Q_SLOTS:
             QCOMPARE(zoneSelector->readBool(ConfigDefaults::enabledKey(), true), false);
             QCOMPARE(zoneSelector->readInt(ConfigDefaults::triggerDistanceKey(), 0), 100);
             QCOMPARE(zoneSelector->readInt(ConfigDefaults::gridColumnsKey(), 0), 3);
+            QCOMPARE(zoneSelector->readInt(ConfigDefaults::maxRowsKey(), 0), 5);
         }
 
         {
@@ -256,7 +248,11 @@ private Q_SLOTS:
     // =========================================================================
 
     /**
-     * load() must emit settingsChanged() so that listeners can re-read all values.
+     * load() must emit settingsChanged() when an on-disk value changed since
+     * the last load, so listeners re-read the reloaded values. (A load that
+     * finds nothing changed emits nothing — the emit-on-change rule; the
+     * pre-v5 unconditional emit was an artifact of applySystemColorScheme
+     * re-baking palette colours through the config setters on every load.)
      */
     void testLoad_emitsSettingsChanged()
     {
@@ -266,9 +262,19 @@ private Q_SLOTS:
         QSignalSpy spy(&settings, &Settings::settingsChanged);
         QVERIFY(spy.isValid());
 
+        // Mutate a plain config value behind the instance's back — the
+        // reload must pick it up and notify.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
+            gaps->writeInt(ConfigDefaults::adjacentThresholdKey(), settings.adjacentThreshold() + 1);
+            gaps.reset();
+            backend->sync();
+        }
+
         settings.load();
 
-        QVERIFY2(spy.count() >= 1, "load() must emit settingsChanged() at least once");
+        QVERIFY2(spy.count() >= 1, "load() must emit settingsChanged() when a reloaded value differs");
     }
 
     /**
@@ -340,26 +346,26 @@ private Q_SLOTS:
         // Seed disk with a known value via save().
         {
             Settings settings;
-            settings.setBorderWidth(3);
+            settings.setZoneSelectorMaxRows(3);
             settings.save();
         }
 
         // Open Settings — getter now reads 3 from the freshly loaded backend.
         Settings settings;
-        QCOMPARE(settings.borderWidth(), 3);
+        QCOMPARE(settings.zoneSelectorMaxRows(), 3);
 
         // Mutate in-memory only — disk still says 3.
-        settings.setBorderWidth(7);
-        QCOMPARE(settings.borderWidth(), 7);
+        settings.setZoneSelectorMaxRows(7);
+        QCOMPARE(settings.zoneSelectorMaxRows(), 7);
 
         // The discard-changes flow: load() reverts in-memory state to
-        // disk and must emit borderWidthChanged() so QML rebinds.
-        QSignalSpy specificSpy(&settings, &Settings::borderWidthChanged);
+        // disk and must emit zoneSelectorMaxRowsChanged() so QML rebinds.
+        QSignalSpy specificSpy(&settings, &Settings::zoneSelectorMaxRowsChanged);
         QVERIFY(specificSpy.isValid());
 
         settings.load();
 
-        QCOMPARE(settings.borderWidth(), 3);
+        QCOMPARE(settings.zoneSelectorMaxRows(), 3);
         QCOMPARE(specificSpy.count(), 1);
     }
 
@@ -691,8 +697,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        settings.setBorderWidth(7);
-        settings.setActiveOpacity(0.65);
+        settings.setZoneSelectorMaxRows(7);
         settings.setShowZoneNumbers(false);
         settings.setAutotileEnabled(true);
         settings.setAnimationDuration(500);
@@ -700,8 +705,7 @@ private Q_SLOTS:
 
         // Reload from disk
         Settings reloaded;
-        QCOMPARE(reloaded.borderWidth(), 7);
-        QCOMPARE(reloaded.activeOpacity(), 0.65);
+        QCOMPARE(reloaded.zoneSelectorMaxRows(), 7);
         QCOMPARE(reloaded.showZoneNumbers(), false);
         QCOMPARE(reloaded.autotileEnabled(), true);
         QCOMPARE(reloaded.animationDuration(), 500);

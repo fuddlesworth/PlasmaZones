@@ -29,15 +29,17 @@ class TestSettingsPageReset : public QObject
 {
     Q_OBJECT
 
-    // Two scalar keys in the same group, both with wide integer ranges
-    // (border width 0-10, radius 0-50) so the test's chosen values never clamp.
+    // Two scalar config keys in the same group (both integer, range 1-10) so the
+    // test's chosen values never clamp. NB the zone-overlay border width/radius are
+    // rule-backed now, so this uses the still-config global zone-selector max-rows
+    // and grid-columns keys as the representative config-key pair.
     static Settings::ConfigKey widthKey()
     {
-        return {ConfigDefaults::snappingZonesBorderGroup(), ConfigDefaults::widthKey()};
+        return {ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::maxRowsKey()};
     }
     static Settings::ConfigKey radiusKey()
     {
-        return {ConfigDefaults::snappingZonesBorderGroup(), ConfigDefaults::radiusKey()};
+        return {ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::gridColumnsKey()};
     }
 
 private Q_SLOTS:
@@ -53,9 +55,9 @@ private Q_SLOTS:
         // Freshly constructed: store equals the on-disk baseline.
         QVERIFY(!s.isKeyModified(key.first, key.second));
 
-        const int def = s.borderWidth();
+        const int def = s.zoneSelectorMaxRows();
         const int edited = (def == 3) ? 4 : 3;
-        s.setBorderWidth(edited);
+        s.setZoneSelectorMaxRows(edited);
         QVERIFY(s.isKeyModified(key.first, key.second));
 
         // Saving re-baselines: the edited value is now the committed value.
@@ -71,19 +73,19 @@ private Q_SLOTS:
         Settings s;
         const auto key = widthKey();
 
-        const int def = s.borderWidth();
+        const int def = s.zoneSelectorMaxRows();
         const int saved = (def == 3) ? 4 : 3;
         const int edited = (def == 7) ? 6 : 7;
-        s.setBorderWidth(saved);
+        s.setZoneSelectorMaxRows(saved);
         s.save(); // baseline = saved
 
-        s.setBorderWidth(edited);
+        s.setZoneSelectorMaxRows(edited);
         QVERIFY(s.isKeyModified(key.first, key.second));
 
-        QSignalSpy spy(&s, &Settings::borderWidthChanged);
+        QSignalSpy spy(&s, &Settings::zoneSelectorMaxRowsChanged);
         s.discardKeys({key});
 
-        QCOMPARE(s.borderWidth(), saved);
+        QCOMPARE(s.zoneSelectorMaxRows(), saved);
         QCOMPARE(spy.count(), 1);
         QVERIFY(!s.isKeyModified(key.first, key.second));
     }
@@ -97,17 +99,17 @@ private Q_SLOTS:
         Settings s;
         const auto key = widthKey();
 
-        const int def = s.borderWidth();
-        const int saved = (def == 3) ? 4 : 3; // != def, in [0,10]
+        const int def = s.zoneSelectorMaxRows();
+        const int saved = (def == 3) ? 4 : 3; // != def, in [1,10] (maxRowsMin()..maxRowsMax())
         const int edited = (def == 7) ? 6 : 7; // != def and != saved
-        s.setBorderWidth(saved);
+        s.setZoneSelectorMaxRows(saved);
         s.save(); // baseline = saved
 
-        s.setBorderWidth(edited);
-        QSignalSpy spy(&s, &Settings::borderWidthChanged);
+        s.setZoneSelectorMaxRows(edited);
+        QSignalSpy spy(&s, &Settings::zoneSelectorMaxRowsChanged);
         s.resetKeys({key});
 
-        QCOMPARE(s.borderWidth(), def); // schema default, not the baseline
+        QCOMPARE(s.zoneSelectorMaxRows(), def); // schema default, not the baseline
         QCOMPARE(spy.count(), 1);
         QVERIFY(s.isKeyModified(key.first, key.second)); // def != saved baseline
     }
@@ -121,19 +123,19 @@ private Q_SLOTS:
         const auto width = widthKey();
         const auto radius = radiusKey();
 
-        const int w0 = s.borderWidth();
-        const int r0 = s.borderRadius();
+        const int w0 = s.zoneSelectorMaxRows();
+        const int r0 = s.zoneSelectorGridColumns();
         s.save(); // baseline = defaults
 
         const int wEdit = (w0 == 3) ? 4 : 3;
-        const int rEdit = (r0 == 20) ? 21 : 20;
-        s.setBorderWidth(wEdit);
-        s.setBorderRadius(rEdit);
+        const int rEdit = (r0 == 5) ? 6 : 5;
+        s.setZoneSelectorMaxRows(wEdit);
+        s.setZoneSelectorGridColumns(rEdit);
 
         s.discardKeys({width}); // revert width only
 
-        QCOMPARE(s.borderWidth(), w0); // reverted
-        QCOMPARE(s.borderRadius(), rEdit); // untouched
+        QCOMPARE(s.zoneSelectorMaxRows(), w0); // reverted
+        QCOMPARE(s.zoneSelectorGridColumns(), rEdit); // untouched
         QVERIFY(!s.isKeyModified(width.first, width.second));
         QVERIFY(s.isKeyModified(radius.first, radius.second));
     }
@@ -146,7 +148,7 @@ private Q_SLOTS:
         const auto key = widthKey();
         s.save(); // baseline = current value, nothing dirty
 
-        QSignalSpy spy(&s, &Settings::borderWidthChanged);
+        QSignalSpy spy(&s, &Settings::zoneSelectorMaxRowsChanged);
         s.discardKeys({key});
 
         QCOMPARE(spy.count(), 0);
@@ -161,18 +163,18 @@ private Q_SLOTS:
         const auto width = widthKey();
         const auto radius = radiusKey();
 
-        const int w0 = s.borderWidth();
-        const int r0 = s.borderRadius();
+        const int w0 = s.zoneSelectorMaxRows();
+        const int r0 = s.zoneSelectorGridColumns();
         const int wEdit = (w0 == 3) ? 4 : 3;
-        const int rEdit = (r0 == 20) ? 21 : 20;
-        s.setBorderWidth(wEdit);
-        s.setBorderRadius(rEdit);
+        const int rEdit = (r0 == 5) ? 6 : 5;
+        s.setZoneSelectorMaxRows(wEdit);
+        s.setZoneSelectorGridColumns(rEdit);
         s.save(); // baseline = the edited values
 
         s.resetKeys({width}); // reset width to its schema default only
 
-        QCOMPARE(s.borderWidth(), w0); // schema default
-        QCOMPARE(s.borderRadius(), rEdit); // untouched
+        QCOMPARE(s.zoneSelectorMaxRows(), w0); // schema default
+        QCOMPARE(s.zoneSelectorGridColumns(), rEdit); // untouched
         QVERIFY(s.isKeyModified(width.first, width.second)); // default != saved (wEdit)
         QVERIFY(!s.isKeyModified(radius.first, radius.second));
     }
@@ -183,13 +185,13 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         Settings s;
         const auto key = widthKey();
-        // Fresh Settings: borderWidth is already the schema default.
-        const int def = s.borderWidth();
-        QSignalSpy spy(&s, &Settings::borderWidthChanged);
+        // Fresh Settings: the key is already at its schema default.
+        const int def = s.zoneSelectorMaxRows();
+        QSignalSpy spy(&s, &Settings::zoneSelectorMaxRowsChanged);
         s.resetKeys({key});
 
         QCOMPARE(spy.count(), 0);
-        QCOMPARE(s.borderWidth(), def); // unchanged
+        QCOMPARE(s.zoneSelectorMaxRows(), def); // unchanged
     }
 
     // An empty key list is a no-op for both primitives: no settingsChanged, no
@@ -202,7 +204,7 @@ private Q_SLOTS:
         s.save(); // baseline = defaults
 
         QSignalSpy settingsSpy(&s, &Settings::settingsChanged);
-        QSignalSpy widthSpy(&s, &Settings::borderWidthChanged);
+        QSignalSpy widthSpy(&s, &Settings::zoneSelectorMaxRowsChanged);
         s.discardKeys({});
         s.resetKeys({});
 
@@ -222,19 +224,19 @@ private Q_SLOTS:
         const auto width = widthKey();
         const Settings::ConfigKey bogus{QStringLiteral("NoSuchGroup"), QStringLiteral("NoSuchKey")};
 
-        const int w0 = s.borderWidth();
+        const int w0 = s.zoneSelectorMaxRows();
         const int wEdit = (w0 == 3) ? 4 : 3;
-        s.setBorderWidth(wEdit);
+        s.setZoneSelectorMaxRows(wEdit);
         s.save(); // baseline = wEdit
 
-        QSignalSpy widthSpy(&s, &Settings::borderWidthChanged);
+        QSignalSpy widthSpy(&s, &Settings::zoneSelectorMaxRowsChanged);
         s.discardKeys({bogus});
         s.resetKeys({bogus});
 
         // The unknown key never reports modified, and the real sibling is intact
         // (value and modified-flag both undisturbed by the bogus operations).
         QVERIFY(!s.isKeyModified(bogus.first, bogus.second));
-        QCOMPARE(s.borderWidth(), wEdit);
+        QCOMPARE(s.zoneSelectorMaxRows(), wEdit);
         QVERIFY(!s.isKeyModified(width.first, width.second));
         QCOMPARE(widthSpy.count(), 0);
     }

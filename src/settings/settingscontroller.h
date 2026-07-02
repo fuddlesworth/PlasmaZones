@@ -181,8 +181,10 @@ public:
     /// like "snapping" / "tiling") currently has unsaved changes. For pages in
     /// the per-page config manifest (@ref pageOwnedConfigKeys) the answer is
     /// value-based — any owned key differing from the committed baseline —
-    /// which stays correct across a per-page Discard/Reset. Non-manifest pages
-    /// fall back to the m_dirtyPages membership set.
+    /// which stays correct across a per-page Discard/Reset. The MIXED manifest
+    /// pages ("general", "snapping-overlay-appearance") and the animation tree
+    /// additionally OR in their folded managed-baseline dirty state. Other
+    /// non-manifest pages fall back to the m_dirtyPages membership set.
     Q_INVOKABLE bool isPageDirty(const QString& page) const;
 
     // ── Per-page Reset / Discard (kebab menu in the breadcrumb row) ──────────
@@ -519,6 +521,22 @@ public:
     Q_INVOKABLE bool hasPerScreenGapRule(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenGapRule(const QString& screenName);
 
+    // Per-screen tiling geometry (split ratio / master count / max windows) is
+    // rule-backed too: a per-monitor override is a screen-scoped Rule (id derived
+    // from perScreenTilingRuleNamespaceId + screen name). The Tiling Algorithm
+    // card's controls read/write the rule's actions via rulesPage; its scope chip
+    // has/clear folds the tiling rule into hasPerScreenAutotileAlgorithmSettings /
+    // clearPerScreenAutotileAlgorithmSettings so one chip covers the whole card.
+    Q_INVOKABLE QString perScreenTilingRuleId(const QString& screenName) const;
+    // Internal helpers (no QML callers — the scope chip goes through
+    // hasPerScreenAutotileAlgorithmSettings / clearPerScreenAutotileAlgorithm-
+    // Settings, which fold these in), so not Q_INVOKABLE.
+    bool hasPerScreenTilingRule(const QString& screenName) const;
+    void clearPerScreenTilingRule(const QString& screenName);
+    // The screen's canonical stable (EDID) id — the form per-screen rule matches
+    // key on. Used by QML to build a per-monitor rule's ScreenId match.
+    Q_INVOKABLE QString canonicalScreenId(const QString& screenName) const;
+
     // ── Virtual screen configuration ──────────────────────────────────────────
     Q_INVOKABLE QStringList getPhysicalScreens() const;
     Q_INVOKABLE QVariantList getVirtualScreenConfig(const QString& physicalScreenId) const;
@@ -536,6 +554,32 @@ public:
                                                      const QVariant& value);
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
+    // Per-screen zone selector is rule-backed (the whole per-monitor store folds
+    // onto a screen-scoped Rule carrying generic SetZoneSelectorProperty actions).
+    // hasPerScreenZoneSelectorSettings / clearPerScreenZoneSelectorSettings above
+    // fold in this rule so the section's scope chips keep working unchanged.
+    Q_INVOKABLE QString perScreenZoneSelectorRuleId(const QString& screenName) const;
+    // Internal helpers (no QML callers — the scope chip goes through
+    // hasPerScreenZoneSelectorSettings / clearPerScreenZoneSelectorSettings,
+    // which fold these in), so not Q_INVOKABLE.
+    bool hasPerScreenZoneSelectorRule(const QString& screenName) const;
+    void clearPerScreenZoneSelectorRule(const QString& screenName);
+
+    // Stable ids of the two MANAGED animation min-size baseline
+    // ExcludeAnimations rules (match Width/Height LessThan N; 0 = never
+    // matches = off, the default). The Animations → General "Window filtering"
+    // min-size controls edit the threshold in each rule's match.
+    Q_INVOKABLE QString animationMinWidthRuleId() const;
+    Q_INVOKABLE QString animationMinHeightRuleId() const;
+
+    // Id of the managed baseline zone-overlay appearance rule — the Overlay
+    // Appearance page's colours / opacity / border controls read/write its actions.
+    Q_INVOKABLE QString overlayBaselineRuleId() const;
+
+    // Ids of the two managed general min-size baseline Exclude rules — the General
+    // page's min-size controls read/write the threshold in each rule's match.
+    Q_INVOKABLE QString generalMinWidthRuleId() const;
+    Q_INVOKABLE QString generalMinHeightRuleId() const;
 
     Q_INVOKABLE QVariantMap loadWindowGeometry() const;
     Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height);
@@ -653,11 +697,14 @@ private:
     // any page whose isPageDirty is value-based — manifest, ordering, shortcuts,
     // and animation pages.
     void reconcilePageDirty(const QString& page);
-    // Value-based attribution for the two rule-backed pages sharing one
+    // Value-based attribution for the rule-backed pages sharing one
     // RuleController model: set m_dirtyPages membership for "window-appearance"
-    // (= baselinesDirty) and "rules" (= userRulesDirty), emitting
-    // dirtyPagesChanged on a change. Called on every rule-model mutation and on
-    // revert/apply completion so the badges follow which subset actually changed.
+    // (= baselinesDirty) and "rules" (= userRulesDirty), plus the mixed pages
+    // "snapping-overlay-appearance", "general", and "animations-general"
+    // (attributed via isPageDirty, which ORs their config-key state with their
+    // folded baseline dirty), emitting dirtyPagesChanged on a change. Called on
+    // every rule-model mutation and on revert/apply completion so the badges
+    // follow which subset actually changed.
     void reconcileRuleBackedDirty();
     void refreshVirtualDesktops();
     void refreshActivities();

@@ -125,14 +125,16 @@ const QLatin1String kPerScreenKeys[] = {
 // are rule-backed (per-monitor gap Rules) and merged into the accessor's
 // result by perScreenGapRuleOverrides, never stored in this per-screen map.
 // SmartGaps stays — it is a tiling behaviour flag, not a gap dimension.
+// SplitRatio / MasterCount / MaxWindows / Algorithm are likewise ABSENT: the
+// per-screen spatial tiling knobs folded onto per-monitor tiling Rules in v5.
+// Split/master/max are merged into the accessor by perScreenTilingRuleOverrides;
+// the Algorithm is a SetTilingAlgorithm action on the same rule, resolved through
+// the daemon's authoritative assignment path (not this map), so it is not merged
+// here. SplitRatioStep did NOT fold (no rule action for it) and stays config.
 const QLatin1String kPerScreenAutotileKeys[] = {
-    QLatin1String(PerScreenAutotileKey::Algorithm),
-    QLatin1String(PerScreenAutotileKey::SplitRatio),
     QLatin1String(PerScreenAutotileKey::SplitRatioStep),
-    QLatin1String(PerScreenAutotileKey::MasterCount),
     QLatin1String(PerScreenAutotileKey::FocusNewWindows),
     QLatin1String(PerScreenAutotileKey::SmartGaps),
-    QLatin1String(PerScreenAutotileKey::MaxWindows),
     QLatin1String(PerScreenAutotileKey::InsertPosition),
     QLatin1String(PerScreenAutotileKey::FocusFollowsMouse),
     QLatin1String(PerScreenAutotileKey::RespectMinimumSize),
@@ -192,28 +194,24 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     // QML PerScreenOverrideHelper sends short keys; config storage uses prefixed keys.
     const QString k = stripAutotilePrefix(key);
 
-    if (k == PerScreenKeys::SplitRatio) {
-        return boundedDouble(value, ConfigDefaults::autotileSplitRatioMin(), ConfigDefaults::autotileSplitRatioMax());
-    }
     if (k == PerScreenKeys::SplitRatioStep) {
         return boundedDouble(value, ConfigDefaults::autotileSplitRatioStepMin(),
                              ConfigDefaults::autotileSplitRatioStepMax());
     }
-    if (k == PerScreenKeys::MasterCount)
-        return boundedInt(value, ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax());
-    // Inner/outer gap dimensions are rule-backed (per-monitor gap Rules),
-    // not per-screen Settings keys, so they are intentionally not validated here
-    // — a write of one is rejected like any unknown key.
-    if (k == PerScreenKeys::MaxWindows)
-        return boundedInt(value, ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax());
+    // SplitRatio / MasterCount / MaxWindows, like the inner/outer gap dimensions,
+    // are rule-backed now (per-monitor tiling / gap Rules), not per-screen Settings
+    // keys — a write of one is rejected here like any unknown key.
     if (k == PerScreenKeys::InsertPosition)
         return boundedInt(value, ConfigDefaults::autotileInsertPositionMin(),
                           ConfigDefaults::autotileInsertPositionMax());
-    // Algorithm / easing-curve tokens are resolved (with a fallback) at the
-    // daemon, so the registry isn't available here to validate them — but
-    // reject an empty override outright, since a blank per-screen algorithm or
-    // curve is never a meaningful override.
-    if (k == PerScreenKeys::Algorithm || k == PerScreenKeys::AnimationEasingCurve)
+    // The per-screen Algorithm is rule-backed now (a SetTilingAlgorithm action on
+    // the per-monitor tiling rule, resolved via the daemon's assignment path), so
+    // it is rejected here like any unknown key — a write never round-trips into the
+    // per-screen config map. The easing-curve token is resolved (with a fallback)
+    // at the daemon, so the registry isn't available here to validate it — but
+    // reject an empty override outright, since a blank per-screen curve is never a
+    // meaningful override.
+    if (k == PerScreenKeys::AnimationEasingCurve)
         // Canonicalize to QString: the backend round-trips these via
         // writeString/readString, so a non-string payload accepted here
         // (e.g. an int over D-Bus) would change observable type across a
@@ -229,12 +227,9 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
 
 QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
-    if (key == QLatin1String(PerScreenAutotileKey::SplitRatio))
-        return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatio()));
     if (key == QLatin1String(PerScreenAutotileKey::SplitRatioStep))
         return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatioStep()));
-    if (key == QLatin1String(PerScreenAutotileKey::Algorithm)
-        || key == QLatin1String(PerScreenAutotileKey::AnimationEasingCurve))
+    if (key == QLatin1String(PerScreenAutotileKey::AnimationEasingCurve))
         return QVariant(group.readString(key));
     if (key == QLatin1String(PerScreenAutotileKey::FocusNewWindows))
         return QVariant(group.readBool(key, ConfigDefaults::autotileFocusNewWindows()));
@@ -623,18 +618,38 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdO
         it = findPerScreenEntry(m_perScreenZoneSelectorSettings,
                                 PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenIdOrName));
     }
-    if (it == m_perScreenZoneSelectorSettings.constEnd()) {
-        return config;
+    if (it != m_perScreenZoneSelectorSettings.constEnd()) {
+        applyPerScreenOverrides(config, it.value());
     }
 
-    applyPerScreenOverrides(config, it.value());
+    // Per-monitor zone-selector overrides authored as RULES (the v5 source of
+    // per-monitor values — the config store above only carries legacy
+    // in-memory writes) overlay last, so the rule wins where both exist.
+    // perScreenZoneSelectorRuleOverrides already resolves the canonical /
+    // physical-parent key forms (perScreenGapKeyForms covers the virtual
+    // sub-screen fallback) and validates every value.
+    const QVariantMap ruleOverrides = perScreenZoneSelectorRuleOverrides(m_ruleStore, screenIdOrName);
+    if (!ruleOverrides.isEmpty()) {
+        applyPerScreenOverrides(config, ruleOverrides);
+    }
     return config;
 }
 
 QVariantMap Settings::getPerScreenZoneSelectorSettings(const QString& screenIdOrName) const
 {
+    QVariantMap result;
     auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
-    return (it != m_perScreenZoneSelectorSettings.constEnd()) ? it.value() : QVariantMap();
+    if (it != m_perScreenZoneSelectorSettings.constEnd()) {
+        result = it.value();
+    }
+    // Overlay the per-monitor zone-selector rule's values on top of the
+    // config-store values; when no rule exists the keys stay absent and the
+    // consumer falls back to the global zone-selector defaults.
+    const QVariantMap ruleOverrides = perScreenZoneSelectorRuleOverrides(m_ruleStore, screenIdOrName);
+    for (auto o = ruleOverrides.constBegin(); o != ruleOverrides.constEnd(); ++o) {
+        result.insert(o.key(), o.value());
+    }
+    return result;
 }
 
 void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, const QString& key, const QVariant& value)
@@ -742,6 +757,100 @@ QVariantMap Settings::perScreenGapRuleOverrides(const PhosphorRules::RuleStore* 
     return gaps;
 }
 
+// Tiling-geometry overrides authored on the per-monitor tiling Rule for
+// @p screenIdOrName, keyed in the short engine form the autotile consumer
+// expects (SplitRatio / MasterCount / MaxWindows), or an empty map when no
+// such rule exists. Mirrors perScreenGapRuleOverrides: the per-screen rule is
+// keyed by the screen's stable EDID id under createUuidV5(
+// perScreenTilingRuleNamespaceId, <stable id>); the incoming identifier is
+// resolved to that canonical form first, with the raw and physical-parent forms
+// tried as fallbacks (perScreenGapKeyForms is screen-id-generic, not gap-specific).
+QVariantMap Settings::perScreenTilingRuleOverrides(const PhosphorRules::RuleStore* store, const QString& screenIdOrName)
+{
+    QVariantMap tiling;
+    if (store == nullptr) {
+        return tiling;
+    }
+    namespace AT = PhosphorRules::ActionType;
+    namespace PSK = PhosphorEngine::PerScreenKeys;
+    for (const QString& keyForm : perScreenGapKeyForms(screenIdOrName)) {
+        const QUuid ruleId = QUuid::createUuidV5(ConfigDefaults::perScreenTilingRuleNamespaceId(), keyForm.toUtf8());
+        if (!store->ruleSet().ruleById(ruleId)) {
+            continue;
+        }
+        // First matching rule wins. Split ratio is a fraction (double, bounds
+        // ConfigDefaults::autotileSplitRatioMin/Max); master count and max
+        // windows are integers. Read each action's value through the shared
+        // gapValueFromRule helper (action-type-generic despite its name — it
+        // returns any action's Value param), clamped to the same bounds the
+        // retired config path's validator enforced so a hand-edited rule
+        // can't smuggle an out-of-range value into the engine.
+        if (const auto v = gapValueFromRule(store, ruleId, AT::SetSplitRatio)) {
+            tiling.insert(QString(PSK::SplitRatio),
+                          qBound(ConfigDefaults::autotileSplitRatioMin(), v->toDouble(),
+                                 ConfigDefaults::autotileSplitRatioMax()));
+        }
+        if (const auto v = gapValueFromRule(store, ruleId, AT::SetMasterCount)) {
+            tiling.insert(
+                QString(PSK::MasterCount),
+                qBound(ConfigDefaults::autotileMasterCountMin(), v->toInt(), ConfigDefaults::autotileMasterCountMax()));
+        }
+        if (const auto v = gapValueFromRule(store, ruleId, AT::SetMaxWindows)) {
+            tiling.insert(
+                QString(PSK::MaxWindows),
+                qBound(ConfigDefaults::autotileMaxWindowsMin(), v->toInt(), ConfigDefaults::autotileMaxWindowsMax()));
+        }
+        return tiling;
+    }
+    return tiling;
+}
+
+// Zone-selector overrides authored on the per-monitor zone-selector Rule for
+// @p screenIdOrName, keyed by the ZoneSelectorConfigKey names the consumer
+// expects. Mirrors perScreenTilingRuleOverrides, but the per-screen zone-selector
+// rule carries the GENERIC SetZoneSelectorProperty action once per property, so
+// the reader iterates the rule's actions rather than probing by action type. The
+// property token IS the config-key name (1:1 by construction), used verbatim as
+// the override-map key. PreviewLockAspect yields a bool, every other property an int.
+QVariantMap Settings::perScreenZoneSelectorRuleOverrides(const PhosphorRules::RuleStore* store,
+                                                         const QString& screenIdOrName)
+{
+    QVariantMap overrides;
+    if (store == nullptr) {
+        return overrides;
+    }
+    namespace AT = PhosphorRules::ActionType;
+    namespace AP = PhosphorRules::ActionParam;
+    for (const QString& keyForm : perScreenGapKeyForms(screenIdOrName)) {
+        const QUuid ruleId =
+            QUuid::createUuidV5(ConfigDefaults::perScreenZoneSelectorRuleNamespaceId(), keyForm.toUtf8());
+        const auto rule = store->ruleSet().ruleById(ruleId);
+        if (!rule) {
+            continue;
+        }
+        // First matching rule wins. Each property value is routed through the
+        // same validatePerScreenValue the retired config path used (enum
+        // range checks + bounded ints + bool coercion for PreviewLockAspect),
+        // so a malformed rule value surfaces as its validated form or is
+        // dropped — never as an out-of-range enum/int.
+        for (const PhosphorRules::RuleAction& a : rule->actions) {
+            if (a.type != QString(AT::SetZoneSelectorProperty)) {
+                continue;
+            }
+            const QString property = a.params.value(QString(AP::Property)).toString();
+            if (property.isEmpty()) {
+                continue;
+            }
+            const QVariant validated = validatePerScreenValue(property, a.params.value(QString(AP::Value)).toVariant());
+            if (validated.isValid()) {
+                overrides.insert(property, validated);
+            }
+        }
+        return overrides;
+    }
+    return overrides;
+}
+
 // ── Per-Screen Autotile Config ───────────────────────────────────────────────
 
 QVariantMap Settings::getPerScreenAutotileSettings(const QString& screenIdOrName) const
@@ -757,6 +866,15 @@ QVariantMap Settings::getPerScreenAutotileSettings(const QString& screenIdOrName
     const QVariantMap ruleGaps = perScreenGapRuleOverrides(m_ruleStore, screenIdOrName);
     for (auto g = ruleGaps.constBegin(); g != ruleGaps.constEnd(); ++g) {
         result.insert(g.key(), g.value());
+    }
+    // Override split ratio / master count / max windows with the per-monitor
+    // tiling rule's values, if one exists. These moved from the per-screen config
+    // store onto rules in v5 (the same treatment gaps received); when no rule
+    // exists the keys stay absent and the consumer falls back to the global
+    // autotile defaults.
+    const QVariantMap ruleTiling = perScreenTilingRuleOverrides(m_ruleStore, screenIdOrName);
+    for (auto t = ruleTiling.constBegin(); t != ruleTiling.constEnd(); ++t) {
+        result.insert(t.key(), t.value());
     }
     return result;
 }

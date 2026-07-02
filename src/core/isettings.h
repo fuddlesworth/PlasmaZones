@@ -173,11 +173,11 @@ public:
     virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
     virtual void setAutotilePerAlgorithmSettings(const QVariantMap& settings) = 0;
 
-    // Color-import helper used by SnappingZonesController. Returns
-    // an empty string on success, a user-readable error message
-    // otherwise. The signature mirrors Settings::loadColorsFromFile
-    // exactly so its existing Q_INVOKABLE annotation overrides this.
-    virtual QString loadColorsFromFile(const QString& filePath) = 0;
+    // loadColorsFromFile retired in v5 — the overlay colours it imported
+    // live on the managed baseline overlay rule now, so the import flow
+    // (SnappingZonesController + the Overlay Appearance page) parses via
+    // ColorImporter and writes the rule through the RuleController instead
+    // of round-tripping through config setters.
 
     // Snapping behavior triggers (dragActivation, zoneSpan, snapAssist)
     // are declared by the IZoneActivationSettings / IZoneSelectorSettings
@@ -356,17 +356,17 @@ Q_SIGNALS:
     // unified Exclude Rules; consumers subscribe to the rule store
     // through PhosphorRules::RuleStore::rulesChanged instead).
     void excludeTransientWindowsChanged();
-    void minimumWindowWidthChanged();
-    void minimumWindowHeightChanged();
+    // minimumWindowWidthChanged / minimumWindowHeightChanged retired in v5 —
+    // the min-size thresholds are rule-backed (managed baseline Exclude
+    // rules); consumers subscribe to the rule store instead.
     // Animation window filtering — paired with the IAnimationSettings
     // virtuals. Same shape as the snapping/tiling exclusion signals; lives
     // in its own change-set so animation-only consumers (the kwin-effect,
     // the AnimationsPageController) don't have to discriminate when
-    // filtering NOTIFY traffic.
+    // filtering NOTIFY traffic. The animation min-size signals retired in
+    // v5 alongside the general ones (rule-backed ExcludeAnimations baselines).
     void animationExcludeTransientWindowsChanged();
     void animationExcludeNotificationsAndOsdChanged();
-    void animationMinimumWindowWidthChanged();
-    void animationMinimumWindowHeightChanged();
     // animationExcludedApplicationsChanged / animationExcludedWindowClassesChanged
     // signals retired in v4 alongside the list virtuals above.
     void zoneSelectorEnabledChanged();

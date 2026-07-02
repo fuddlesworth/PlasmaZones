@@ -4,12 +4,11 @@
 #pragma once
 
 #include <PhosphorControl/PageController.h>
+#include <QColor>
 #include <QObject>
 #include <QString>
 
 namespace PlasmaZones {
-
-class ISettings;
 
 /// Q_PROPERTY surface for the "Snapping → Zones" settings page (the
 /// drag-time zone overlay).
@@ -20,12 +19,13 @@ class ISettings;
 ///      borderRadiusMin/Max.
 ///   2. Own the color-import action surface: `loadColorsFromPywal()` and
 ///      `loadColorsFromFile(path)`, plus their `colorImportError(msg)` /
-///      `colorImportSuccess()` signals. Each successful import emits
-///      `changed()` so SettingsController's dirty tracking flips to the
-///      appropriate page — the live color properties themselves are
-///      Q_PROPERTY on Settings and mark dirty through the meta-loop, but
-///      the top-level load path needs the explicit signal to cover any
-///      batched writes that don't individually trip a NOTIFY.
+///      `colorImportSuccess()` signals. Since v5 the overlay colours are
+///      rule-backed, so the controller only PARSES the file (ColorImporter)
+///      and hands the extracted colours to the Overlay Appearance page via
+///      `colorsImported(...)` — the page writes them onto the managed
+///      baseline overlay rule through the RuleController (staged like any
+///      other overlay edit), sets the config-backed label colour, and turns
+///      the system-colours gate off.
 class SnappingZonesController : public PhosphorControl::PageController
 {
     Q_OBJECT
@@ -40,7 +40,7 @@ class SnappingZonesController : public PhosphorControl::PageController
     Q_PROPERTY(double labelFontScaleMax READ labelFontScaleMax CONSTANT)
 
 public:
-    explicit SnappingZonesController(ISettings& settings, QObject* parent = nullptr);
+    explicit SnappingZonesController(QObject* parent = nullptr);
 
     bool isDirty() const override
     {
@@ -74,14 +74,15 @@ Q_SIGNALS:
     void colorImportError(const QString& error);
     void colorImportSuccess();
 
-    /// Generic "something changed" — SettingsController hooks this to
-    /// `onSettingsPropertyChanged()` so successful imports mark the page
-    /// dirty even if the underlying Settings property fan-out didn't
-    /// individually trip a NOTIFY.
-    void changed();
-
-private:
-    ISettings* m_settings = nullptr;
+    /// Parsed colours from a successful import. The Overlay Appearance page
+    /// applies them: the three overlay colours go onto the managed baseline
+    /// overlay rule (RuleController), the label colour onto the config-backed
+    /// labelFontColor, and useSystemColors switches off so the imported
+    /// colours are actually visible.
+    void colorsImported(const QColor& highlight, const QColor& inactive, const QColor& border, const QColor& labelFont);
+    // The old generic `changed()` signal retired with the v5 import rework:
+    // every applied value now flows through a tracked path (rule-model writes
+    // or Q_PROPERTY NOTIFYs), so there is no batched write left for it to cover.
 };
 
 } // namespace PlasmaZones

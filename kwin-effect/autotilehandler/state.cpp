@@ -295,20 +295,15 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
                           << m_effect->getWindowId(w);
         return false;
     }
-    // Reject windows smaller than the user-configured minimum size.
-    // Prevents small utility windows (emoji picker, color picker, etc.)
-    // from entering the tiling tree and disrupting the layout.
-    const QRectF frame = w->frameGeometry();
-    if ((m_effect->m_cachedMinWindowWidth > 0 && frame.width() < m_effect->m_cachedMinWindowWidth)
-        || (m_effect->m_cachedMinWindowHeight > 0 && frame.height() < m_effect->m_cachedMinWindowHeight)) {
-        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (too small)" << m_effect->getWindowId(w)
-                          << "size=" << frame.size() << "threshold=" << m_effect->m_cachedMinWindowWidth << "x"
-                          << m_effect->m_cachedMinWindowHeight;
-        return false;
-    }
-    qCDebug(lcEffect) << "isEligibleForAutotileNotify: accepted" << m_effect->getWindowId(w) << "size=" << frame.size()
-                      << "class=" << w->windowClass() << "skipSwitcher=" << w->isSkipSwitcher()
-                      << "keepAbove=" << w->keepAbove() << "transient=" << (w->transientFor() != nullptr);
+    // Windows smaller than the user-configured minimum size (emoji picker,
+    // color picker, etc.) are rejected by the "not handleable" gate above:
+    // since v5 the managed baseline Exclude rules (Width / Height LessThan N)
+    // ride shouldHandleWindow's exclusion-rule evaluation, so no separate
+    // size check runs here.
+    qCDebug(lcEffect) << "isEligibleForAutotileNotify: accepted" << m_effect->getWindowId(w)
+                      << "size=" << w->frameGeometry().size() << "class=" << w->windowClass()
+                      << "skipSwitcher=" << w->isSkipSwitcher() << "keepAbove=" << w->keepAbove()
+                      << "transient=" << (w->transientFor() != nullptr);
     return true;
 }
 

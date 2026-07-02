@@ -581,21 +581,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     // migration folded those lists into the unified Rule store, and
     // the effect's drag-gate exclusion rule set is now derived from the
     // store-side Exclude rules pulled via Rules.rulesChanged →
-    // loadRuleAnimationsFromDbus. No D-Bus settings fetch needed.
-    // isValid + clamp: a failed/invalid reply would otherwise toInt() to 0
-    // and silently disable the min-size gate the permissive member defaults
-    // exist to protect across the startup race (same hardening as the
-    // animation min-size loaders below).
-    loadSettingAsync(QStringLiteral("minimumWindowWidth"), [this](const QVariant& v) {
-        if (v.isValid()) {
-            m_cachedMinWindowWidth = qMax(0, v.toInt());
-        }
-    });
-    loadSettingAsync(QStringLiteral("minimumWindowHeight"), [this](const QVariant& v) {
-        if (v.isValid()) {
-            m_cachedMinWindowHeight = qMax(0, v.toInt());
-        }
-    });
+    // loadRuleAnimationsFromDbus. No D-Bus settings fetch needed. The
+    // min-size thresholds followed in v5: they live in the matches of the
+    // two managed baseline Exclude rules (Width / Height LessThan N) inside
+    // that same slice, so shouldHandleWindow's rule evaluation gates them
+    // and the old minimumWindowWidth/Height settings fetches are gone.
     // System colours for window-border rules: the zone highlight / inactive
     // colours track the Plasma colour scheme (when "use system colours" is on the
     // daemon keeps them in sync), and they are what a border-colour `accent`
@@ -670,18 +660,11 @@ void PlasmaZonesEffect::loadCachedSettings()
             m_animationExcludeNotificationsAndOsd = v.toBool();
         }
     });
-    // Clamp on the effect side as a defence-in-depth — the daemon's
-    // schema validator already bounds these to [0, 2000], but a
-    // malformed reply (`toInt()` returning 0 on a non-int variant or
-    // a negative value from an out-of-spec callsite) would otherwise
-    // silently disable / invert the min-size gate. Kept symmetric with
-    // `animationDuration`'s `qBound` clamp above.
-    loadSettingAsync(QStringLiteral("animationMinimumWindowWidth"), [this](const QVariant& v) {
-        m_animationMinWindowWidth = qBound(0, v.toInt(), 2000);
-    });
-    loadSettingAsync(QStringLiteral("animationMinimumWindowHeight"), [this](const QVariant& v) {
-        m_animationMinWindowHeight = qBound(0, v.toInt(), 2000);
-    });
+    // The animation min-size thresholds are rule-backed in v5: they live in
+    // the matches of the two managed baseline ExcludeAnimations rules
+    // (Width / Height LessThan N) inside m_animationExclusionRuleSet, so
+    // shouldAnimateWindow's exclusion-rule evaluation gates them and the old
+    // animationMinimumWindowWidth/Height settings fetches are gone.
     // animationExcludedApplications / animationExcludedWindowClasses are
     // GONE — the v4 migration folded those lists into the unified
     // Rule store as `ExcludeAnimations`-action rules, and

@@ -188,9 +188,23 @@ public:
     // (`m_savedRules`) so `SettingsController` can badge each page independently:
     // the managed baseline rules are "appearance", everything else is "rules".
 
-    /// True iff any managed baseline rule differs from the last synced snapshot
-    /// (drives the Windows appearance page's dirty state).
+    /// True iff any of the three APPEARANCE baseline rules (border / title bar /
+    /// gap) differs from the last synced snapshot (drives the Windows appearance
+    /// page's dirty state).
     bool baselinesDirty() const;
+
+    /// True iff the managed OVERLAY baseline rule differs from the last synced
+    /// snapshot (drives the Overlay appearance page's dirty state).
+    bool overlayBaselineDirty() const;
+
+    /// True iff either managed general MIN-SIZE baseline rule (Width / Height) differs
+    /// from the last synced snapshot (drives the General page's dirty state).
+    bool generalMinSizeBaselineDirty() const;
+
+    /// True iff either managed ANIMATION min-size baseline rule (Width / Height)
+    /// differs from the last synced snapshot (drives the Animations → General
+    /// page's dirty state).
+    bool animationMinSizeBaselineDirty() const;
 
     /// True iff the non-managed (user) rules differ from the last synced
     /// snapshot, including order (drives the Rules page's dirty state).
@@ -210,13 +224,41 @@ public:
     /// flushes it. Leaves user rules untouched.
     void resetBaselines();
 
+    /// Per-page "Reset to defaults" for the Overlay appearance page: rewrite the
+    /// managed overlay baseline rule to its factory definition. Staged; leaves the
+    /// appearance baselines and user rules untouched.
+    void resetOverlayBaseline();
+
+    /// Per-page "Reset to defaults" for the General page's min-size filters: rewrite
+    /// both managed general min-size baseline rules to their on-by-default factory
+    /// definitions. Staged; leaves other baselines and user rules untouched.
+    void resetGeneralMinSizeBaseline();
+
+    /// Per-page "Reset to defaults" for the Animations → General page's min-size
+    /// filters: rewrite both managed animation min-size baseline rules to their
+    /// off-by-default (0 threshold) factory definitions. Staged.
+    void resetAnimationMinSizeBaseline();
+
     /// Per-page "Discard changes" for the Windows appearance page: restore the
-    /// three managed baseline rules from the last synced snapshot, leaving every
-    /// user rule untouched.
+    /// three appearance baseline rules from the last synced snapshot, leaving user
+    /// rules and the overlay baseline untouched.
     void discardBaselineEdits();
 
-    /// Fire-and-forget D-Bus call asking the daemon to reset the three managed
-    /// baseline rules to factory (org.plasmazones.Rules.resetManagedDefaults),
+    /// Per-page "Discard changes" for the Overlay appearance page: restore the
+    /// overlay baseline rule from the last synced snapshot.
+    void discardOverlayBaseline();
+
+    /// Per-page "Discard changes" for the General page's min-size filters: restore
+    /// both general min-size baseline rules from the last synced snapshot.
+    void discardGeneralMinSizeBaseline();
+
+    /// Per-page "Discard changes" for the Animations → General page's min-size
+    /// filters: restore both animation min-size baseline rules from the last
+    /// synced snapshot.
+    void discardAnimationMinSizeBaseline();
+
+    /// Fire-and-forget D-Bus call asking the daemon to reset every managed
+    /// baseline rule to factory (org.plasmazones.Rules.resetManagedDefaults),
     /// preserving user rules. The daemon persists + broadcasts rulesChanged;
     /// SettingsController::defaults() pairs this with revert() to reload the
     /// model from the reset set. This is the GLOBAL Restore Defaults path (live,
@@ -490,6 +532,9 @@ private:
     /// Replace the rule by id if present, else append it. Used by the baseline
     /// reset/discard so a (theoretically) unseeded baseline is still restored.
     void upsertRule(const PhosphorRules::Rule& rule);
+    /// Shared tail of every per-group baseline reset/discard: upsert @p rules,
+    /// recompute the dirty split, emit baselinesChanged.
+    void applyBaselineGroup(const QList<PhosphorRules::Rule>& rules);
 
     RuleModel m_model;
     /// The rule set as last synced with the daemon. Backs the value-based

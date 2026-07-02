@@ -76,9 +76,10 @@ private Q_SLOTS:
     /**
      * The validColorOr validator must fall back to the schema default when
      * the stored string fails to parse as a valid QColor. Seeds at
-     * Snapping.Zones.Colors/Highlight and disables useSystemColors so
-     * Settings::load() doesn't call applySystemColorScheme and overwrite the
-     * validated value with a palette-derived tint.
+     * Snapping.Zones.Labels/FontColor (the zone colours retired from config
+     * in v5 — the label colour is the schema-validated colour that remains)
+     * and disables useSystemColors so the getters' live palette gate doesn't
+     * shadow the validated value with a palette-derived tint.
      */
     void testReadValidatedColor_invalidColor_returnsDefault()
     {
@@ -86,16 +87,18 @@ private Q_SLOTS:
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto appearance = backend->group(ConfigDefaults::snappingZonesColorsGroup());
-            appearance->writeBool(ConfigDefaults::useSystemKey(), false);
-            appearance->writeString(ConfigDefaults::highlightKey(), QStringLiteral("not-a-color"));
-            appearance.reset();
+            auto colors = backend->group(ConfigDefaults::snappingZonesColorsGroup());
+            colors->writeBool(ConfigDefaults::useSystemKey(), false);
+            colors.reset();
+            auto labels = backend->group(ConfigDefaults::snappingZonesLabelsGroup());
+            labels->writeString(ConfigDefaults::fontColorKey(), QStringLiteral("not-a-color"));
+            labels.reset();
             backend->sync();
         }
 
         Settings settings;
         // Must fall back to the schema default (which is always valid).
-        QCOMPARE(settings.highlightColor(), ConfigDefaults::highlightColor());
+        QCOMPARE(settings.labelFontColor(), ConfigDefaults::labelFontColor());
     }
 
     // =========================================================================

@@ -572,15 +572,20 @@ bool RuleController::updateRuleFromJson(const QVariantMap& ruleJson)
         qCWarning(lcConfig) << "RuleController::updateRuleFromJson: rejecting malformed rule payload";
         return false;
     }
-    // The baseline appearance rule is editable (the Appearance page rewrites
-    // its actions) but its identity is app-owned: a save must never demote it
-    // to a user rule, retarget its catch-all match, or unpin its priority.
-    // Force-preserve those from the stored rule regardless of the payload.
+    // A managed baseline rule is editable — the owning settings pages rewrite
+    // its actions (appearance / overlay values), and since v5 its MATCH too
+    // (the Apply-to scope selector on the border/title-bar baselines, the
+    // min-size thresholds carried in the general/animation baselines' Width /
+    // Height LessThan leaves). Its IDENTITY stays app-owned, however: a save
+    // must never demote it to a user rule or unpin its lowest priority, so
+    // force-preserve exactly those two from the stored rule regardless of the
+    // payload. (The match was force-preserved too until the v5 folds made it
+    // a legitimate page-editing surface; a per-page Reset restores the factory
+    // match from core/baselinerules.h.)
     const Rule existing = m_model.ruleById(rule.id);
     if (existing.managed) {
         rule.managed = true;
         rule.priority = existing.priority;
-        rule.match = existing.match;
     }
     const RuleModel::UpdateResult result = m_model.updateRule(rule);
     switch (result) {

@@ -69,8 +69,9 @@ const Settings::ConfigKeyList& animationConfigKeys()
         {CD::animationsGroup(), CD::shaderProfileTreeKey()},
         {CD::animationsWindowFilteringGroup(), CD::transientWindowsKey()},
         {CD::animationsWindowFilteringGroup(), CD::notificationsAndOsdKey()},
-        {CD::animationsWindowFilteringGroup(), CD::minimumWindowWidthKey()},
-        {CD::animationsWindowFilteringGroup(), CD::minimumWindowHeightKey()},
+        // The min-size window filters are rule-backed (ExcludeAnimations rules), no
+        // longer config keys; the animation-page reset removes those rules directly
+        // (see resetPage) rather than resetting a config key here.
     };
     return keys;
 }
@@ -191,6 +192,17 @@ bool SettingsController::isPageDirty(const QString& page) const
             if (m_settings.isKeyModified(gk.first, gk.second))
                 return true;
         }
+        // The Overlay Appearance page is MIXED: its colours / opacity / border fold
+        // onto the managed overlay baseline rule (the rest of the group — effects,
+        // labels, colour-source toggle — stays config), so it is also dirty when
+        // that baseline differs from the snapshot.
+        if (page == QLatin1String("snapping-overlay-appearance") && m_rulesPage != nullptr)
+            return m_rulesPage->overlayBaselineDirty();
+        // The General page is likewise MIXED: its min-size window filters fold onto
+        // the managed general min-size baseline rules (the transient toggle and the
+        // rest stay config).
+        if (page == QLatin1String("general") && m_rulesPage != nullptr)
+            return m_rulesPage->generalMinSizeBaselineDirty();
         return false;
     }
 
@@ -220,9 +232,11 @@ bool SettingsController::isPageDirty(const QString& page) const
     // Animation pages share one staging domain, so any of them is dirty exactly
     // when the tree has unsaved edits. Value-based like the manifest pages, so
     // the badge and the kebab's Discard-enabled state stay correct on every
-    // subpage. Two sources: the controller's file/shader-tree pending state
-    // (hasPendingChanges) AND the plain animation Settings keys (profile,
-    // shader tree value, window filtering) tracked against the baseline.
+    // subpage. Three sources: the controller's file/shader-tree pending state
+    // (hasPendingChanges), the plain animation Settings keys (profile, shader
+    // tree value, window filtering) tracked against the baseline, AND the
+    // managed animation min-size baseline rules (the Animations → General
+    // min-size filters fold onto them in v5).
     if (isAnimationPage(page)) {
         if (m_animationsPage != nullptr && m_animationsPage->hasPendingChanges())
             return true;
@@ -230,7 +244,7 @@ bool SettingsController::isPageDirty(const QString& page) const
             if (m_settings.isKeyModified(gk.first, gk.second))
                 return true;
         }
-        return false;
+        return m_rulesPage != nullptr && m_rulesPage->animationMinSizeBaselineDirty();
     }
 
     if (m_dirtyPages.contains(page))
@@ -309,6 +323,16 @@ void SettingsController::reconcileRuleBackedDirty()
     };
     sync(QStringLiteral("window-appearance"), m_rulesPage->baselinesDirty());
     sync(QStringLiteral("rules"), m_rulesPage->userRulesDirty());
+    // The Overlay Appearance page is mixed (config + overlay baseline); attribute
+    // via isPageDirty so a baseline edit badges it without clobbering a config-key
+    // dirty state.
+    sync(QStringLiteral("snapping-overlay-appearance"), isPageDirty(QStringLiteral("snapping-overlay-appearance")));
+    // The General page is likewise mixed (config + general min-size baselines).
+    sync(QStringLiteral("general"), isPageDirty(QStringLiteral("general")));
+    // The Animations → General page is mixed too (shared animation staging
+    // domain + the animation min-size baselines); attribute via isPageDirty so
+    // a min-size baseline edit badges the animation tree.
+    sync(QStringLiteral("animations-general"), isPageDirty(QStringLiteral("animations-general")));
     if (changed) {
         Q_EMIT dirtyPagesChanged();
     }
@@ -346,9 +370,19 @@ void SettingsController::resetPage(const QString& page)
             m_animationsPage->clearAllOverrides();
             m_settings.resetKeys(animationConfigKeys());
         }
+        // The min-size window filters live on the managed animation min-size
+        // baselines; reset them to the off-by-default (0 threshold) factory
+        // definitions. OUTSIDE the m_loading window above — the rule model's
+        // change signals must reach reattributeRuleDirty/reconcileRuleBackedDirty
+        // so the staged reset badges and the global Save picks it up (inside
+        // the window it would be a silent, unsaveable edit).
+        if (m_rulesPage != nullptr) {
+            m_rulesPage->resetAnimationMinSizeBaseline();
+        }
         // isPageDirty(animation) is value-based (hasPendingChanges || any
-        // animation key modified), so reconcilePageDirty syncs the active page's
-        // m_dirtyPages entry against the post-reset truth.
+        // animation key modified || min-size baseline dirty), so
+        // reconcilePageDirty syncs the active page's m_dirtyPages entry against
+        // the post-reset truth.
         reconcilePageDirty(page);
         return;
     }
@@ -429,6 +463,16 @@ void SettingsController::resetPage(const QString& page)
         });
         m_settings.resetKeys(*it);
     }
+    // The Overlay Appearance page also owns the managed overlay baseline rule
+    // (colours / opacity / border); reset it to factory alongside the config keys.
+    if (page == QLatin1String("snapping-overlay-appearance") && m_rulesPage != nullptr) {
+        m_rulesPage->resetOverlayBaseline();
+    }
+    // The General page also owns the managed general min-size baseline rules; reset
+    // them to their on-by-default factory thresholds alongside the config keys.
+    if (page == QLatin1String("general") && m_rulesPage != nullptr) {
+        m_rulesPage->resetGeneralMinSizeBaseline();
+    }
     // Resetting to defaults usually diverges from the saved baseline, so the
     // page normally becomes dirty (stage → Save/Discard). If the defaults
     // already matched the baseline it stays clean — reconcile handles both.
@@ -457,6 +501,16 @@ void SettingsController::discardPage(const QString& page)
                 m_loading = wasLoading;
             });
             m_settings.discardKeys(*it);
+        }
+        // The Overlay Appearance page also owns the managed overlay baseline rule;
+        // restore it from the snapshot alongside the config keys.
+        if (page == QLatin1String("snapping-overlay-appearance") && m_rulesPage != nullptr) {
+            m_rulesPage->discardOverlayBaseline();
+        }
+        // The General page also owns the managed general min-size baseline rules;
+        // restore them from the snapshot alongside the config keys.
+        if (page == QLatin1String("general") && m_rulesPage != nullptr) {
+            m_rulesPage->discardGeneralMinSizeBaseline();
         }
         // Every owned key is back at the committed baseline, so the page is clean.
         reconcilePageDirty(page);
@@ -525,6 +579,12 @@ void SettingsController::discardPage(const QString& page)
                 m_loading = wasLoading;
             });
             m_settings.discardKeys(animationConfigKeys());
+        }
+        // The animation min-size baselines are part of the tree's staged state;
+        // restore them from the last synced snapshot (outside the m_loading
+        // window, same rationale as resetPage's baseline reset above).
+        if (m_rulesPage != nullptr) {
+            m_rulesPage->discardAnimationMinSizeBaseline();
         }
         // revertPending() left hasPendingChanges() false; clear every animation
         // leaf's m_dirtyPages marker so the global needsSave drops the entries

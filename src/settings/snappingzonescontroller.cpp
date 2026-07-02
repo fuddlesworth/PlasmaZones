@@ -3,8 +3,8 @@
 
 #include "snappingzonescontroller.h"
 
+#include "../config/colorimporter.h"
 #include "../config/configdefaults.h"
-#include "../core/isettings.h"
 #include "../phosphor_i18n.h"
 
 #include <QFile>
@@ -13,9 +13,8 @@
 
 namespace PlasmaZones {
 
-SnappingZonesController::SnappingZonesController(ISettings& settings, QObject* parent)
+SnappingZonesController::SnappingZonesController(QObject* parent)
     : PhosphorControl::PageController(QStringLiteral("snapping-zones"), parent)
-    , m_settings(&settings)
 {
 }
 
@@ -60,7 +59,7 @@ void SnappingZonesController::loadColorsFromPywal()
     // uses so the defence-in-depth (canonical-path + suffix +
     // regular-file check) applies symmetrically. A user-controllable
     // symlink at ~/.cache/wal/colors.json would otherwise bypass
-    // those checks if we forwarded directly to m_settings.
+    // those checks if we forwarded directly to the importer.
     loadColorsFromFile(pywalPath);
 }
 
@@ -102,14 +101,22 @@ void SnappingZonesController::loadColorsFromFile(const QString& filePath)
         return;
     }
 
-    const QString error = m_settings->loadColorsFromFile(canonInfo.absoluteFilePath());
-    if (!error.isEmpty()) {
-        Q_EMIT colorImportError(error);
+    // Parse only — the overlay colours are rule-backed in v5, so applying
+    // them is the Overlay Appearance page's job (it writes the managed
+    // baseline overlay rule through the RuleController on colorsImported,
+    // staged like any other overlay edit).
+    const ColorImportResult result = ColorImporter::importFromFile(canonInfo.absoluteFilePath());
+    if (!result.success) {
+        Q_EMIT colorImportError(result.errorMessage);
         return;
     }
 
+    // No dirty-marking here: the QML colorsImported handler applies every
+    // value through tracked paths (rule-model writes reconcile via
+    // reconcileRuleBackedDirty; labelFontColor / useSystemColors are
+    // Q_PROPERTY writes that trip their own NOTIFY → onSettingsPropertyChanged).
+    Q_EMIT colorsImported(result.highlightColor, result.inactiveColor, result.borderColor, result.labelFontColor);
     Q_EMIT colorImportSuccess();
-    Q_EMIT changed();
 }
 
 } // namespace PlasmaZones

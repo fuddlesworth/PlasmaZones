@@ -76,12 +76,18 @@ void SettingsController::clearPerScreenAutotileGapsSettings(const QString& scree
 
 bool SettingsController::hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const
 {
-    return m_settings.hasPerScreenAutotileAlgorithmSettings(screenName);
+    // The algorithm card spans the config-backed sub-domain (algorithm token,
+    // behavioural flags) AND the rule-backed tiling geometry (split/master/max),
+    // so its scope chip reports an override when EITHER carries one.
+    return m_settings.hasPerScreenAutotileAlgorithmSettings(screenName) || hasPerScreenTilingRule(screenName);
 }
 
 void SettingsController::clearPerScreenAutotileAlgorithmSettings(const QString& screenName)
 {
+    // Reset the whole card: clear the config sub-domain AND remove the per-screen
+    // tiling geometry rule.
     m_settings.clearPerScreenAutotileAlgorithmSettings(screenName);
+    clearPerScreenTilingRule(screenName);
 }
 
 // ── Per-screen gap overrides (rule-backed) ───────────────────────────────
@@ -119,6 +125,74 @@ void SettingsController::clearPerScreenGapRule(const QString& screenName)
     m_rulesPage->removeRule(id);
 }
 
+// ── Per-screen tiling geometry overrides (rule-backed) ───────────────────
+// The split/master/max per-monitor override is a screen-scoped Rule whose id is
+// derived from perScreenTilingRuleNamespaceId + the screen's STABLE EDID id (the
+// same derivation Settings::perScreenTilingRuleOverrides and the v4→v5 migration
+// use). The Tiling Algorithm card's controls find-or-create the rule's actions via
+// rulesPage; its scope chip has/clear routes through hasPerScreenAutotileAlgorithm-
+// Settings / clearPerScreenAutotileAlgorithmSettings above.
+
+QString SettingsController::perScreenTilingRuleId(const QString& screenName) const
+{
+    if (screenName.isEmpty()) {
+        return QString();
+    }
+    return QUuid::createUuidV5(ConfigDefaults::perScreenTilingRuleNamespaceId(),
+                               Settings::canonicalPerScreenKey(screenName).toUtf8())
+        .toString();
+}
+
+bool SettingsController::hasPerScreenTilingRule(const QString& screenName) const
+{
+    if (screenName.isEmpty() || m_rulesPage == nullptr) {
+        return false;
+    }
+    const QString id = perScreenTilingRuleId(screenName);
+    return !id.isEmpty() && !m_rulesPage->ruleJson(id).isEmpty();
+}
+
+void SettingsController::clearPerScreenTilingRule(const QString& screenName)
+{
+    if (screenName.isEmpty() || m_rulesPage == nullptr) {
+        return;
+    }
+    const QString id = perScreenTilingRuleId(screenName);
+    if (!id.isEmpty()) {
+        m_rulesPage->removeRule(id);
+    }
+}
+
+QString SettingsController::canonicalScreenId(const QString& screenName) const
+{
+    return Settings::canonicalPerScreenKey(screenName);
+}
+
+QString SettingsController::animationMinWidthRuleId() const
+{
+    return ConfigDefaults::animationMinWidthRuleId().toString();
+}
+
+QString SettingsController::animationMinHeightRuleId() const
+{
+    return ConfigDefaults::animationMinHeightRuleId().toString();
+}
+
+QString SettingsController::overlayBaselineRuleId() const
+{
+    return ConfigDefaults::baselineOverlayRuleId().toString();
+}
+
+QString SettingsController::generalMinWidthRuleId() const
+{
+    return ConfigDefaults::generalMinWidthRuleId().toString();
+}
+
+QString SettingsController::generalMinHeightRuleId() const
+{
+    return ConfigDefaults::generalMinHeightRuleId().toString();
+}
+
 // ── Per-screen zone selector overrides ───────────────────────────────────
 
 QVariantMap SettingsController::getPerScreenZoneSelectorSettings(const QString& screenName) const
@@ -134,12 +208,50 @@ void SettingsController::setPerScreenZoneSelectorSetting(const QString& screenNa
 
 void SettingsController::clearPerScreenZoneSelectorSettings(const QString& screenName)
 {
+    // The per-monitor store is retired in favour of the rule; clear any residual
+    // config value AND remove the rule so the scope chip's reset covers both.
     m_settings.clearPerScreenZoneSelectorSettings(screenName);
+    clearPerScreenZoneSelectorRule(screenName);
 }
 
 bool SettingsController::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
-    return m_settings.hasPerScreenZoneSelectorSettings(screenName);
+    return m_settings.hasPerScreenZoneSelectorSettings(screenName) || hasPerScreenZoneSelectorRule(screenName);
+}
+
+// ── Per-screen zone selector override rule (rule-backed) ──────────────────
+// The whole per-monitor zone-selector store folds onto a screen-scoped Rule
+// carrying generic SetZoneSelectorProperty actions (one per overridden property),
+// keyed by perScreenZoneSelectorRuleNamespaceId + the screen's stable EDID id.
+
+QString SettingsController::perScreenZoneSelectorRuleId(const QString& screenName) const
+{
+    if (screenName.isEmpty()) {
+        return QString();
+    }
+    return QUuid::createUuidV5(ConfigDefaults::perScreenZoneSelectorRuleNamespaceId(),
+                               Settings::canonicalPerScreenKey(screenName).toUtf8())
+        .toString();
+}
+
+bool SettingsController::hasPerScreenZoneSelectorRule(const QString& screenName) const
+{
+    if (screenName.isEmpty() || m_rulesPage == nullptr) {
+        return false;
+    }
+    const QString id = perScreenZoneSelectorRuleId(screenName);
+    return !id.isEmpty() && !m_rulesPage->ruleJson(id).isEmpty();
+}
+
+void SettingsController::clearPerScreenZoneSelectorRule(const QString& screenName)
+{
+    if (screenName.isEmpty() || m_rulesPage == nullptr) {
+        return;
+    }
+    const QString id = perScreenZoneSelectorRuleId(screenName);
+    if (!id.isEmpty()) {
+        m_rulesPage->removeRule(id);
+    }
 }
 
 } // namespace PlasmaZones

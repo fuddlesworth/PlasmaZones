@@ -917,24 +917,18 @@ private:
     // loadRuleAnimationsFromDbus's parse step (which already
     // deserialises the full rule set for the animation override path),
     // via `PhosphorRules::ExclusionRules::excludeRulesFrom`. The
-    // bound RuleEvaluator drives shouldHandleWindow()'s exclusion gate.
+    // bound RuleEvaluator drives shouldHandleWindow()'s exclusion gate,
+    // which since v5 includes the min-size thresholds (the managed baseline
+    // Exclude rules match Width / Height LessThan N). Seeded at construction
+    // with the default min-size baselines (see defaultMinSizeExcludeSeed in
+    // lifecycle.cpp) so the min-size filter is active from effect load —
+    // preventing small ephemeral windows (Steam splash, Electron
+    // notification popups) from entering the autotile tree during the
+    // startup race window before the first D-Bus rule pull replaces the set.
     // Declaration ORDER MATTERS — the rule set must precede (and outlive)
     // the evaluator that binds a reference to it.
     PhosphorRules::RuleSet m_snappingExclusionRuleSet;
     PhosphorRules::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
-
-    // Minimum window size for autotile eligibility. Windows smaller than this
-    // are rejected by isEligibleForAutotileNotify() to prevent small utility
-    // windows (emoji picker, color picker, etc.) from entering the tiling tree.
-    // Defaults match ConfigDefaults::minimumWindowWidth/Height() (200/150).
-    // The async loadSettingAsync() call in loadCachedSettings() overrides
-    // with the user's actual setting once daemon settings arrive via D-Bus.
-    // Until then, these defaults keep the min-size filter active from
-    // effect load — preventing small ephemeral windows (Steam splash,
-    // Electron notification popups) from entering the autotile tree during
-    // the startup race window.
-    int m_cachedMinWindowWidth = 200;
-    int m_cachedMinWindowHeight = 150;
 
     // Animation window filtering — separate cache from the snapping/tiling
     // exclusions because the user can opt for divergent filter sets. The
@@ -952,8 +946,10 @@ private:
     // to the exclude default rather than the permissive value above so
     // a pre-D-Bus window event doesn't flash a shader on a notification.
     bool m_animationExcludeNotificationsAndOsd = true;
-    int m_animationMinWindowWidth = 0;
-    int m_animationMinWindowHeight = 0;
+    // The animation min-size thresholds are rule-backed in v5 — they live in
+    // the matches of the managed baseline ExcludeAnimations rules inside
+    // m_animationExclusionRuleSet below, so there are no cached members.
+    // (No startup seed either: the animation filter defaults to off.)
 
     // Animation exclusion rule set — the `ExcludeAnimations`-action slice
     // of the unified Rule store the effect mirrors over D-Bus.

@@ -192,17 +192,18 @@ private Q_SLOTS:
 
         QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
 
+        // MasterCount / SplitRatio / MaxWindows are rule-backed now, so this uses
+        // the still-config AnimationDuration (int, range 50-2000) as the
+        // representative clamped/validated per-screen key.
         // Valid value (long-form key -- normalized to short form internally)
-        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 3);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AnimationDuration"), 200);
         QCOMPARE(spy.count(), 1);
 
-        // Value is clamped (not rejected outright): 100 should clamp to MaxMasterCount (5)
-        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 100);
+        // Value is clamped (not rejected outright): 100000 should clamp to the max.
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AnimationDuration"), 100000);
         QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
-        // Key is stored in short form ("MasterCount") after normalization
-        int stored = overrides.value(QStringLiteral("MasterCount")).toInt();
-        QVERIFY2(stored >= PhosphorTiles::AutotileDefaults::MinMasterCount
-                     && stored <= PhosphorTiles::AutotileDefaults::MaxMasterCount,
+        int stored = overrides.value(QStringLiteral("AnimationDuration")).toInt();
+        QVERIFY2(stored >= ConfigDefaults::animationDurationMin() && stored <= ConfigDefaults::animationDurationMax(),
                  "Per-screen autotile value must be clamped to valid range");
 
         // Non-numeric payloads are REJECTED, not coerced: QVariant::toInt()
@@ -211,14 +212,15 @@ private Q_SLOTS:
         // TopLeft). The D-Bus dispatch path delivers raw QVariants, making
         // this a genuine input boundary.
         const int before = spy.count();
-        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), QStringLiteral("garbage"));
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AnimationDuration"), QStringLiteral("garbage"));
         QCOMPARE(spy.count(), before);
-        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("MasterCount")).toInt(), stored);
+        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("AnimationDuration")).toInt(),
+                 stored);
 
         // Numeric STRINGS still convert (JSON string storage compatibility):
-        // QVariant("3").toInt(&ok) sets ok=true.
-        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), QStringLiteral("3"));
-        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("MasterCount")).toInt(), 3);
+        // QVariant("200").toInt(&ok) sets ok=true.
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AnimationDuration"), QStringLiteral("200"));
+        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("AnimationDuration")).toInt(), 200);
 
         // Same rejection contract on the zone-selector validator.
         QSignalSpy zsSpy(&settings, &Settings::perScreenZoneSelectorSettingsChanged);
@@ -255,28 +257,29 @@ private Q_SLOTS:
     }
 
     /**
-     * The Algorithm / AnimationEasingCurve validators canonicalize the
-     * accepted value to QString so the in-memory type matches what the
-     * backend round-trips (writeString → readString). A non-string payload
-     * (e.g. an int arriving over D-Bus) must therefore store as a QString
-     * immediately, keeping the observable type stable across restart — a
-     * regression to pass-through QVariant(value) would store it int-typed
-     * in the writing session but string-typed after reload.
+     * The string-token validator (AnimationEasingCurve — the Algorithm token is
+     * rule-backed now) canonicalizes the accepted value to QString so the in-memory
+     * type matches what the backend round-trips (writeString → readString). A
+     * non-string payload (e.g. an int arriving over D-Bus) must therefore store as a
+     * QString immediately, keeping the observable type stable across restart — a
+     * regression to pass-through QVariant(value) would store it int-typed in the
+     * writing session but string-typed after reload.
      */
-    void testPerScreenAutotile_algorithmValueIsCanonicalizedToString()
+    void testPerScreenAutotile_stringTokenIsCanonicalizedToString()
     {
         IsolatedConfigGuard guard;
         Settings settings;
         const QString screen = QStringLiteral("test-screen-1");
 
-        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileAlgorithm"), 5);
-        const QVariant stored = settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("Algorithm"));
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AnimationEasingCurve"), 5);
+        const QVariant stored =
+            settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("AnimationEasingCurve"));
         QCOMPARE(stored.typeId(), static_cast<int>(QMetaType::QString));
         QCOMPARE(stored.toString(), QStringLiteral("5"));
 
         // Empty string is still rejected (no meaningful per-screen override).
         QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
-        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileAlgorithm"), QString());
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AnimationEasingCurve"), QString());
         QCOMPARE(spy.count(), 0);
     }
 
@@ -302,13 +305,13 @@ private Q_SLOTS:
         // The inner/outer gap keys are intentionally absent: per-screen gaps are
         // rule-backed now, so the per-screen autotile validator rejects them
         // (covered by testPerScreenAutotile_gapKeysAreRejected). SmartGaps stays.
+        // SplitRatio / MasterCount / MaxWindows / Algorithm are likewise absent —
+        // they folded onto per-monitor tiling Rules in v5, so the validator rejects
+        // them too (covered by testPerScreenAutotile_tilingKeysAreRejected).
+        // SplitRatioStep did not fold and stays a plain per-screen config key.
         const QList<KeyProbe> probes{
-            {PerScreenAutotileKey::Algorithm, QStringLiteral("bsp")},
-            {PerScreenAutotileKey::SplitRatio, 0.5},
-            {PerScreenAutotileKey::MasterCount, 2},
             {PerScreenAutotileKey::FocusNewWindows, true},
             {PerScreenAutotileKey::SmartGaps, true},
-            {PerScreenAutotileKey::MaxWindows, 3},
             {PerScreenAutotileKey::InsertPosition, 1},
             {PerScreenAutotileKey::FocusFollowsMouse, true},
             {PerScreenAutotileKey::RespectMinimumSize, true},
@@ -364,10 +367,11 @@ private Q_SLOTS:
 
         // A gaps-sub-domain override (SmartGaps — the only remaining per-screen
         // gaps-card key now that the inner/outer gaps are rule-backed) and an
-        // algorithm override (MasterCount) coexist in the one shared per-screen
-        // autotile map.
+        // algorithm override (InsertPosition — a still-config algorithm-card key,
+        // since split/master/max folded onto tiling Rules) coexist in the one
+        // shared per-screen autotile map.
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileSmartGaps"), true);
-        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 2);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInsertPosition"), 1);
 
         QVERIFY(settings.hasPerScreenAutotileGapsSettings(screen));
         QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
@@ -383,7 +387,7 @@ private Q_SLOTS:
         QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
         QVariantMap afterGapsClear = settings.getPerScreenAutotileSettings(screen);
         QVERIFY2(!afterGapsClear.contains(QStringLiteral("SmartGaps")), "gaps key must be cleared");
-        QCOMPARE(afterGapsClear.value(QStringLiteral("MasterCount")).toInt(), 2);
+        QCOMPARE(afterGapsClear.value(QStringLiteral("InsertPosition")).toInt(), 1);
 
         // A no-op gaps clear (no gaps remain) changes nothing and does not emit.
         settings.clearPerScreenAutotileGapsSettings(screen);
@@ -422,6 +426,38 @@ private Q_SLOTS:
         QVERIFY(!overrides.contains(QStringLiteral("OuterGap")));
     }
 
+    /**
+     * Per-screen split ratio / master count / max windows are rule-backed (per-
+     * monitor tiling Rules), not Settings-stored: the per-screen autotile validator
+     * must reject them like any unknown key so a write never round-trips into the
+     * per-screen map (the rule owns the value). SplitRatioStep did NOT fold, so it
+     * is still accepted.
+     */
+    void testPerScreenAutotile_tilingKeysAreRejected()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        const QString screen = QStringLiteral("test-screen-1");
+
+        QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileSplitRatio"), 0.5);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 2);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMaxWindows"), 3);
+        // Algorithm folded too (a SetTilingAlgorithm action on the tiling rule).
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileAlgorithm"), QStringLiteral("bsp"));
+        QCOMPARE(spy.count(), 0);
+        const QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
+        QVERIFY(!overrides.contains(QStringLiteral("SplitRatio")));
+        QVERIFY(!overrides.contains(QStringLiteral("MasterCount")));
+        QVERIFY(!overrides.contains(QStringLiteral("MaxWindows")));
+        QVERIFY(!overrides.contains(QStringLiteral("Algorithm")));
+
+        // SplitRatioStep is unaffected (no rule action for it) and still accepted.
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileSplitRatioStep"), 0.05);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(settings.getPerScreenAutotileSettings(screen).contains(QStringLiteral("SplitRatioStep")));
+    }
+
     // =========================================================================
     // Rule-backed per-screen gaps (autotile + snapping)
     // =========================================================================
@@ -449,14 +485,16 @@ private Q_SLOTS:
         Settings settings(store.get(), nullptr);
 
         // A non-gap per-screen autotile override coexists with the rule gaps.
-        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 2);
+        // (InsertPosition — a still-config algorithm-card key, since split/master/max
+        // folded onto tiling Rules.)
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInsertPosition"), 1);
 
         const QVariantMap autotile = settings.getPerScreenAutotileSettings(screen);
         QCOMPARE(autotile.value(QString(PSK::InnerGap)).toInt(), 13);
         QCOMPARE(autotile.value(QString(PSK::OuterGap)).toInt(), 21);
         QCOMPARE(autotile.value(QString(PSK::OuterGapTop)).toInt(), 21);
         QCOMPARE(autotile.value(QString(PSK::UsePerSideOuterGap)).toBool(), false);
-        QCOMPARE(autotile.value(QStringLiteral("MasterCount")).toInt(), 2);
+        QCOMPARE(autotile.value(QStringLiteral("InsertPosition")).toInt(), 1);
 
         const QVariantMap snapping = settings.getPerScreenSnappingSettings(screen);
         QCOMPARE(snapping.value(QString(PSK::InnerGap)).toInt(), 13);
@@ -603,7 +641,7 @@ private Q_SLOTS:
     // test_rule_store; the empty-rule-set case is exercised there.
 };
 
-// NOT guiless: Settings::load → applySystemColorScheme reads
+// NOT guiless: the Settings colour getters' "use system colours" gate reads
 // QGuiApplication::palette(), which requires a QGuiApplication instance
 // (crashes under QCoreApplication).
 QTEST_MAIN(TestSettingsPerScreen)

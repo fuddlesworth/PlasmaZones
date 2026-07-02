@@ -149,15 +149,21 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
-        // The v3→v4 step renames the zone-overlay groups Snapping.Appearance.*
-        // → Snapping.Zones.*, so the fully-migrated config lands them here.
-        QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
-        QJsonObject colors = zones.value(QStringLiteral("Colors")).toObject();
-
-        // Colors should be converted to hex
-        QString highlight = colors.value(QStringLiteral("Highlight")).toString();
+        // The zone-overlay colours fold onto the managed baseline overlay rule in
+        // v5 (converted to hex along the way), no longer stored in config.
+        const QJsonObject rulesRoot = readJsonConfig(ConfigDefaults::rulesFilePath());
+        const QString overlayId = ConfigDefaults::baselineOverlayRuleId().toString();
+        QJsonObject overlayRule;
+        for (const QJsonValue& v : rulesRoot.value(QStringLiteral("rules")).toArray()) {
+            if (v.toObject().value(QStringLiteral("id")).toString() == overlayId)
+                overlayRule = v.toObject();
+        }
+        QVERIFY2(!overlayRule.isEmpty(), "colours must fold onto the baseline overlay rule");
+        QString highlight;
+        for (const QJsonValue& av : overlayRule.value(QStringLiteral("actions")).toArray()) {
+            if (av.toObject().value(QStringLiteral("type")).toString() == QLatin1String("setOverlayHighlightColor"))
+                highlight = av.toObject().value(QStringLiteral("value")).toString();
+        }
         QVERIFY2(highlight.startsWith(QLatin1Char('#')),
                  qPrintable(QStringLiteral("Expected hex color, got: ") + highlight));
 
@@ -195,13 +201,20 @@ private Q_SLOTS:
     void testMigratePerScreenGroups()
     {
         IsolatedConfigGuard guard;
+        // The per-screen autotile keys were PREFIXED on disk in every shipped
+        // version (kPerScreenAutotileKeys has always listed "AutotileAlgorithm";
+        // expandAutotileKeys wrote the prefixed form even in the INI era), so
+        // the realistic legacy fixture seeds the prefixed spelling. An
+        // InsertPosition behavioural key proves the fold strips per-key, not
+        // per-subtree.
         writeIniFile(ConfigDefaults::legacyConfigFilePath(),
                      QStringLiteral("[ZoneSelector:eDP-1]\n"
                                     "Position=3\n"
                                     "MaxRows=5\n"
                                     "\n"
                                     "[AutotileScreen:HDMI-1]\n"
-                                    "Algorithm=bsp\n"
+                                    "AutotileAlgorithm=bsp\n"
+                                    "AutotileInsertPosition=1\n"
                                     "\n"
                                     "[SnappingScreen:DP-2]\n"
                                     "SnapAssistEnabled=true\n"));
@@ -211,16 +224,21 @@ private Q_SLOTS:
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QJsonObject perScreen = root.value(QStringLiteral("PerScreen")).toObject();
 
-        // ZoneSelector
-        QJsonObject zs = perScreen.value(QStringLiteral("ZoneSelector")).toObject();
-        QJsonObject edp = zs.value(QStringLiteral("eDP-1")).toObject();
-        QCOMPARE(edp.value(QStringLiteral("Position")).toInt(), 3);
-        QCOMPARE(edp.value(QStringLiteral("MaxRows")).toInt(), 5);
+        // ZoneSelector per-screen overrides fold into per-monitor rules in v5
+        // (Position 3 and MaxRows 5 both differ from their defaults), so the whole
+        // ZoneSelector category is removed from config. The rule creation itself is
+        // covered by test_migration_v4_to_v5.
+        QVERIFY2(!perScreen.contains(QStringLiteral("ZoneSelector")),
+                 "ZoneSelector per-screen category must be folded out of config in v5");
 
-        // Autotile
+        // Autotile — the per-screen AutotileAlgorithm folds onto the per-screen
+        // tiling rule's SetTilingAlgorithm action in v5 (the dedup) and is
+        // stripped from config; the behavioural InsertPosition key stays live.
         QJsonObject at = perScreen.value(QStringLiteral("Autotile")).toObject();
         QJsonObject hdmi = at.value(QStringLiteral("HDMI-1")).toObject();
-        QCOMPARE(hdmi.value(QStringLiteral("Algorithm")).toString(), QStringLiteral("bsp"));
+        QVERIFY2(!hdmi.contains(QStringLiteral("AutotileAlgorithm")),
+                 "the per-screen algorithm must be folded out of config in v5");
+        QCOMPARE(hdmi.value(QStringLiteral("AutotileInsertPosition")).toInt(), 1);
 
         // Snapping
         QJsonObject sn = perScreen.value(QStringLiteral("Snapping")).toObject();
@@ -341,10 +359,19 @@ private Q_SLOTS:
         // no top-level "Gaps" group is produced.
         QVERIFY(!root.contains(QStringLiteral("Gaps")));
 
-        // Zone-overlay groups land under Snapping.Zones.* after the v3→v4 rename.
-        QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
-        QJsonObject opacity = zones.value(QStringLiteral("Opacity")).toObject();
-        QCOMPARE(opacity.value(QStringLiteral("Active")).toDouble(), 0.3);
+        // Zone-overlay opacity folds onto the managed baseline overlay rule in v5.
+        const QJsonObject rulesRoot = readJsonConfig(ConfigDefaults::rulesFilePath());
+        const QString overlayId = ConfigDefaults::baselineOverlayRuleId().toString();
+        double activeOpacity = -1.0;
+        for (const QJsonValue& v : rulesRoot.value(QStringLiteral("rules")).toArray()) {
+            if (v.toObject().value(QStringLiteral("id")).toString() != overlayId)
+                continue;
+            for (const QJsonValue& av : v.toObject().value(QStringLiteral("actions")).toArray()) {
+                if (av.toObject().value(QStringLiteral("type")).toString() == QLatin1String("setOverlayActiveOpacity"))
+                    activeOpacity = av.toObject().value(QStringLiteral("value")).toDouble();
+            }
+        }
+        QCOMPARE(activeOpacity, 0.3);
     }
 
     void testMigrateRootLevelKeys()
@@ -529,10 +556,12 @@ private Q_SLOTS:
         QVERIFY(!migrated.contains(QStringLiteral("AutotileShortcuts")));
     }
 
-    void testV1JsonMigration_preservesPerScreenGroups()
+    void testV1JsonMigration_foldsPerScreenZoneSelectorOut()
     {
         IsolatedConfigGuard guard;
-        // Create a v1 JSON config with PerScreen data — migration must preserve it
+        // Create a v1 JSON config with PerScreen zone-selector data — since the
+        // v5 fold, the chain must carry it forward and fold it onto a per-monitor
+        // rule (removing the category from config) rather than preserving it.
         QJsonObject root;
         root[QStringLiteral("_version")] = 1;
 
@@ -557,12 +586,46 @@ private Q_SLOTS:
         QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
         QCOMPARE(migrated.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
-        // PerScreen data must survive migration untouched
-        QJsonObject migratedPerScreen = migrated.value(QStringLiteral("PerScreen")).toObject();
-        QJsonObject migratedZs = migratedPerScreen.value(QStringLiteral("ZoneSelector")).toObject();
-        QJsonObject migratedEdp = migratedZs.value(QStringLiteral("eDP-1")).toObject();
-        QCOMPARE(migratedEdp.value(QStringLiteral("Position")).toInt(), 3);
-        QCOMPARE(migratedEdp.value(QStringLiteral("MaxRows")).toInt(), 5);
+        // ZoneSelector per-screen overrides fold into per-monitor rules in v5, so
+        // the category is removed from config (Position 3 / MaxRows 5 both differ
+        // from their defaults). This was the only per-screen data here, so the whole
+        // PerScreen container is pruned.
+        const QJsonObject migratedPerScreen = migrated.value(QStringLiteral("PerScreen")).toObject();
+        QVERIFY2(!migratedPerScreen.contains(QStringLiteral("ZoneSelector")),
+                 "ZoneSelector per-screen category must be folded out of config in v5");
+
+        // The fold must PRODUCE the per-monitor rule, not merely drop the keys:
+        // a screenId-matched rule carrying the folded Position / MaxRows values
+        // as SetZoneSelectorProperty actions must exist in rules.json.
+        bool sawFoldedRule = false;
+        const QJsonArray migratedRules =
+            readJsonConfig(ConfigDefaults::rulesFilePath()).value(QStringLiteral("rules")).toArray();
+        for (const QJsonValue& rv : migratedRules) {
+            const QJsonObject r = rv.toObject();
+            if (r.value(QStringLiteral("match")).toObject().value(QStringLiteral("field")).toString()
+                != QLatin1String("screenId")) {
+                continue;
+            }
+            int position = -1;
+            int maxRows = -1;
+            for (const QJsonValue& av : r.value(QStringLiteral("actions")).toArray()) {
+                const QJsonObject a = av.toObject();
+                if (a.value(QStringLiteral("type")).toString() != QLatin1String("setZoneSelectorProperty")) {
+                    continue;
+                }
+                const QString property = a.value(QStringLiteral("property")).toString();
+                if (property == QLatin1String("Position")) {
+                    position = a.value(QStringLiteral("value")).toInt(-1);
+                } else if (property == QLatin1String("MaxRows")) {
+                    maxRows = a.value(QStringLiteral("value")).toInt(-1);
+                }
+            }
+            if (position == 3 && maxRows == 5) {
+                sawFoldedRule = true;
+            }
+        }
+        QVERIFY2(sawFoldedRule,
+                 "the folded Position/MaxRows must land on a screenId-matched SetZoneSelectorProperty rule");
 
         // v1 groups should still be removed
         QVERIFY(!migrated.contains(QStringLiteral("Activation")));
@@ -995,18 +1058,8 @@ private Q_SLOTS:
             auto g = backend->group(QStringLiteral("Snapping"));
             QCOMPARE(g->readBool(QStringLiteral("Enabled")), true);
         }
-        {
-            // Zone-overlay groups land under Snapping.Zones.* after the v3→v4 rename.
-            auto g = backend->group(QStringLiteral("Snapping.Zones.Colors"));
-            QColor c = g->readColor(QStringLiteral("Highlight"));
-            QCOMPARE(c.red(), 82);
-            QCOMPARE(c.green(), 148);
-            QCOMPARE(c.blue(), 226);
-        }
-        {
-            auto g = backend->group(QStringLiteral("Snapping.Zones.Opacity"));
-            QCOMPARE(g->readDouble(QStringLiteral("Active")), 0.3);
-        }
+        // The zone-overlay highlight colour and active opacity fold onto the managed
+        // baseline overlay rule in v5, so they are no longer readable from config.
     }
 
     /// v1→v2 animation migration: the five legacy per-field keys

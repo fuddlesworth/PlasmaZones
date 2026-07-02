@@ -165,13 +165,15 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Appearance ─────────────────────────────────────────────────────────────
-// Declares four zone-overlay sub-groups under Snapping.Zones.*: Colors (system
-// toggle + 3 zone colors), Labels (font family/color/scale/weight + italic/
-// underline/strikeout toggles), Opacity (active + inactive), Border (width +
-// radius). (Effects.Blur is a zone-overlay setting too but shares the Effects
-// container declared in appendDisplaySchema.) The per-mode snapped-window
-// decoration groups that used to live here are gone — snapped-window appearance
-// is now rule-backed (the v4→v5 appearance-to-rules move).
+// Declares the zone-overlay sub-groups under Snapping.Zones.* that remain
+// config-backed: Colors (the UseSystem toggle only) and Labels (font family/
+// color/scale/weight + italic/underline/strikeout toggles). (Effects.Blur is
+// a zone-overlay setting too but shares the Effects container declared in
+// appendDisplaySchema.) The zone colours, opacities, and border width/radius
+// retired in v5 — the v5 migration folds them onto the managed baseline
+// overlay rule, so re-declaring them here would re-write dead defaults. The
+// per-mode snapped-window decoration groups that used to live here are gone
+// too — snapped-window appearance is rule-backed since the v4→v5 move.
 
 void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 {
@@ -179,9 +181,6 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 
     schema.groups[CD::snappingZonesColorsGroup()] = {
         {CD::useSystemKey(), CD::useSystemColors(), QMetaType::Bool},
-        {CD::highlightKey(), CD::highlightColor(), QMetaType::QColor, {}, validColorOr(CD::highlightColor())},
-        {CD::inactiveKey(), CD::inactiveColor(), QMetaType::QColor, {}, validColorOr(CD::inactiveColor())},
-        {CD::borderKey(), CD::borderColor(), QMetaType::QColor, {}, validColorOr(CD::borderColor())},
     };
 
     schema.groups[CD::snappingZonesLabelsGroup()] = {
@@ -202,27 +201,8 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
         {CD::fontStrikeoutKey(), CD::labelFontStrikeout(), QMetaType::Bool},
     };
 
-    schema.groups[CD::snappingZonesOpacityGroup()] = {
-        {CD::activeKey(),
-         CD::activeOpacity(),
-         QMetaType::Double,
-         {},
-         clampDouble(CD::activeOpacityMin(), CD::activeOpacityMax())},
-        {CD::inactiveKey(),
-         CD::inactiveOpacity(),
-         QMetaType::Double,
-         {},
-         clampDouble(CD::inactiveOpacityMin(), CD::inactiveOpacityMax())},
-    };
-
-    schema.groups[CD::snappingZonesBorderGroup()] = {
-        {CD::widthKey(), CD::borderWidth(), QMetaType::Int, {}, clampInt(CD::borderWidthMin(), CD::borderWidthMax())},
-        {CD::radiusKey(),
-         CD::borderRadius(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::borderRadiusMin(), CD::borderRadiusMax())},
-    };
+    // The Snapping.Zones.Opacity and Snapping.Zones.Border groups retired in
+    // v5 alongside the zone colours (rule-backed, see the header comment).
     // Effects.Blur lives in the Effects group alongside the display-OSD keys;
     // the whole Effects group is declared in one shot by appendDisplaySchema
     // below to avoid split-across-two-call-sites ordering bugs.
@@ -489,13 +469,13 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
 
 // ─── Exclusions + Animation Window Filtering ────────────────────────────────
 // Two distinct schema groups declared together:
-//   1. `Exclusions` — snapping/tiling minimum-size + transient-window
-//      globals.
-//   2. `Animations.WindowFiltering` — animation-side equivalents plus a
+//   1. `Exclusions` — the transient-window global toggle.
+//   2. `Animations.WindowFiltering` — the animation-side equivalent plus a
 //      NotificationsAndOsd knob.
 // Both retired their per-app / per-class string lists in v4 (folded into
-// Application-subject Rules); only the global behavioural knobs
-// survive. Ints are clamped via schema validators.
+// Application-subject Rules) and their minimum-size ints in v5 (folded onto
+// the managed baseline Exclude / ExcludeAnimations rules); only the boolean
+// behavioural knobs survive.
 
 void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 {
@@ -503,21 +483,13 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::exclusionsGroup()] = {
         // The `Applications` / `WindowClasses` leaf keys retired in v4 —
         // the v4 migration drains them into Application-subject Exclude
-        // Rules. Re-declaring them here would let the schema-driven
+        // Rules. The MinimumWindowWidth/Height keys retired in v5 — the
+        // v5 migration folds them onto the managed baseline Exclude rules.
+        // Re-declaring retired keys here would let the schema-driven
         // backend silently re-write dead defaults under the Exclusions
-        // group, re-introducing keys we explicitly migrated out in v3→v4.
-        // Only the three global knobs survive in this group.
+        // group, re-introducing keys we explicitly migrated out.
+        // Only the transient toggle survives in this group.
         {CD::transientWindowsKey(), CD::excludeTransientWindows(), QMetaType::Bool},
-        {CD::minimumWindowWidthKey(),
-         CD::minimumWindowWidth(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::minimumWindowWidthMin(), CD::minimumWindowWidthMax())},
-        {CD::minimumWindowHeightKey(),
-         CD::minimumWindowHeight(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::minimumWindowHeightMin(), CD::minimumWindowHeightMax())},
     };
 
     // Animation window filtering — same shape as the Exclusions group
@@ -525,21 +497,12 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
     // user can disable animations for an app while still snapping it
     // (or vice versa).
     schema.groups[CD::animationsWindowFilteringGroup()] = {
-        // The `Applications` / `WindowClasses` leaf keys retired in v4 —
-        // the v4 migration drains them into ExcludeAnimations Rules.
-        // Only the four global knobs survive in this group.
+        // The `Applications` / `WindowClasses` leaf keys retired in v4 (into
+        // ExcludeAnimations Rules); the MinimumWindowWidth/Height keys
+        // retired in v5 (managed baseline ExcludeAnimations rules).
+        // Only the two boolean knobs survive in this group.
         {CD::transientWindowsKey(), CD::animationExcludeTransientWindows(), QMetaType::Bool},
         {CD::notificationsAndOsdKey(), CD::animationExcludeNotificationsAndOsd(), QMetaType::Bool},
-        {CD::minimumWindowWidthKey(),
-         CD::animationMinimumWindowWidth(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::animationMinimumWindowWidthMin(), CD::animationMinimumWindowWidthMax())},
-        {CD::minimumWindowHeightKey(),
-         CD::animationMinimumWindowHeight(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::animationMinimumWindowHeightMin(), CD::animationMinimumWindowHeightMax())},
     };
 }
 
@@ -601,8 +564,16 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::triggerDistanceMin(), CD::triggerDistanceMax())},
-        {CD::positionKey(), CD::position(), QMetaType::Int, {}, clampInt(0, 8)},
-        {CD::layoutModeKey(), CD::layoutMode(), QMetaType::Int, {}, clampInt(0, 2)},
+        {CD::positionKey(),
+         CD::position(),
+         QMetaType::Int,
+         {},
+         clampInt(0, static_cast<int>(ZoneSelectorPosition::BottomRight))},
+        {CD::layoutModeKey(),
+         CD::layoutMode(),
+         QMetaType::Int,
+         {},
+         clampInt(0, static_cast<int>(ZoneSelectorLayoutMode::Vertical))},
         {CD::previewWidthKey(),
          CD::previewWidth(),
          QMetaType::Int,
@@ -619,7 +590,14 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::gridColumnsMin(), CD::gridColumnsMax())},
-        {CD::sizeModeKey(), CD::sizeMode(), QMetaType::Int, {}, clampInt(0, 2)},
+        // Derived from the enum: the old literal clampInt(0, 2) admitted 2, one
+        // past ZoneSelectorSizeMode::Manual (= 1), letting an out-of-enum value
+        // through to the static_cast in the getter.
+        {CD::sizeModeKey(),
+         CD::sizeMode(),
+         QMetaType::Int,
+         {},
+         clampInt(0, static_cast<int>(ZoneSelectorSizeMode::Manual))},
         {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, {}, clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
     };
 }

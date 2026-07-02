@@ -374,11 +374,10 @@ SettingsController::SettingsController(QObject* parent)
     m_snappingZoneSelectorPage = new SnappingZoneSelectorController(this);
 
     // Snapping→Zones page sub-controller (the drag-time zone overlay). Owns
-    // border bounds plus the color-import action surface; its changed() signal
-    // drives dirty tracking on successful imports.
-    m_snappingZonesPage = new SnappingZonesController(m_settings, this);
-    connect(m_snappingZonesPage, &SnappingZonesController::changed, this,
-            &SettingsController::onSettingsPropertyChanged);
+    // border bounds plus the color-import action surface. Import dirty
+    // tracking flows through the applied values' own paths (the QML handler's
+    // rule-model writes + Q_PROPERTY NOTIFYs), so no extra signal wiring.
+    m_snappingZonesPage = new SnappingZonesController(this);
 
     // Snapping→Effects + the Window Appearance page — CONSTANT-only bounds
     // facades. Window Appearance edits the managed baseline appearance Rule

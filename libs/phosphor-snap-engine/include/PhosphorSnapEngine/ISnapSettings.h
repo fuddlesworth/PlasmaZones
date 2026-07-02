@@ -25,16 +25,11 @@ public:
     // migration folded those flat lists into the unified Rule store.
     // The daemon now wires a filtered Exclude rule set directly into the
     // SnapEngine via `setExcludeRuleSet`; consumers that previously called
-    // these accessors evaluate against the rule set instead.
-
-    // Global minimum-window-size exclusion (the shared Exclusions surface, not a
-    // snapping-only knob): a window whose frame is smaller than these thresholds
-    // is excluded from auto-snap, matching the autotile engine which already
-    // honours them. 0 disables the respective dimension. The engine only applies
-    // these when a full WindowQuery (carrying the frame size) is available via
-    // the injected exclusion query provider; the appId-only fast path skips them.
-    virtual int minimumWindowWidth() const = 0;
-    virtual int minimumWindowHeight() const = 0;
+    // these accessors evaluate against the rule set instead. The
+    // minimumWindowWidth()/minimumWindowHeight() accessors followed in v5:
+    // the min-size thresholds live in the matches of two managed baseline
+    // Exclude rules (Width / Height LessThan N) inside that same rule set,
+    // so the engine needs no settings-side gate.
 
     virtual StickyWindowHandling snappingStickyWindowHandling() const = 0;
     virtual bool moveNewWindowsToLastZone() const = 0;

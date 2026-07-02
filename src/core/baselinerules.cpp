@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The three managed baseline appearance/gap rule definitions. Moved out of the
-// daemon's anonymous namespace so the settings app's per-page reset shares one
-// source of truth with the daemon's startup seeding (see baselinerules.h).
+// The managed baseline rule definitions (border, title bar, gap, zone overlay,
+// general min-size, animation min-size). Moved out of the daemon's anonymous
+// namespace so the settings app's per-page reset shares one source of truth
+// with the daemon's startup seeding (see baselinerules.h).
 
 #include "baselinerules.h"
 
@@ -12,6 +13,7 @@
 
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
 
 #include <QJsonValue>
@@ -120,6 +122,89 @@ PhosphorRules::Rule makeBaselineGapRule()
         action(ActionType::SetUsePerSideOuterGap, ActionParam::Value, ConfigDefaults::usePerSideOuterGap()),
     };
     return rule;
+}
+
+// Build the managed baseline ZONE-OVERLAY appearance rule: the catch-all,
+// lowest-priority rule that is the single source of truth for the global
+// drag-overlay appearance (Settings reads these actions back as its
+// highlightColor()/activeOpacity()/… getters). All seven appearance actions are
+// seeded at their ConfigDefaults values; colours are `#AARRGGBB` hex. The
+// `showZoneNumbers` toggle is deliberately NOT here — it lives in the effects
+// group and stays plain config.
+PhosphorRules::Rule makeBaselineOverlayRule()
+{
+    using namespace PhosphorRules;
+
+    const auto action = [](QLatin1StringView type, QLatin1StringView key, const QJsonValue& value) {
+        RuleAction a;
+        a.type = QString(type);
+        a.params.insert(QString(key), value);
+        return a;
+    };
+
+    Rule rule = makeBaselineSkeleton(ConfigDefaults::baselineOverlayRuleId(), PhosphorI18n::tr("Default zone overlay"));
+    rule.actions = {
+        action(ActionType::SetOverlayHighlightColor, ActionParam::Value,
+               ConfigDefaults::highlightColor().name(QColor::HexArgb)),
+        action(ActionType::SetOverlayInactiveColor, ActionParam::Value,
+               ConfigDefaults::inactiveColor().name(QColor::HexArgb)),
+        action(ActionType::SetOverlayBorderColor, ActionParam::Value,
+               ConfigDefaults::borderColor().name(QColor::HexArgb)),
+        action(ActionType::SetOverlayActiveOpacity, ActionParam::Value, ConfigDefaults::activeOpacity()),
+        action(ActionType::SetOverlayInactiveOpacity, ActionParam::Value, ConfigDefaults::inactiveOpacity()),
+        action(ActionType::SetOverlayBorderWidth, ActionParam::Value, ConfigDefaults::borderWidth()),
+        action(ActionType::SetOverlayBorderRadius, ActionParam::Value, ConfigDefaults::borderRadius()),
+    };
+    return rule;
+}
+
+namespace {
+// Shared builder for the managed min-size baselines (general exclusion and
+// animation exclusion): a lowest-priority rule carrying the single param-less
+// terminal @p actionType whose match is @p field LessThan @p threshold. The
+// threshold lives in the MATCH (the terminal actions carry no params), so the
+// owning settings page edits the match; a 0 threshold never matches (disabled).
+PhosphorRules::Rule makeBaselineMinSizeRule(const QUuid& id, const QString& name, PhosphorRules::Field field,
+                                            int threshold, QLatin1StringView actionType)
+{
+    using namespace PhosphorRules;
+    Rule rule = makeBaselineSkeleton(id, name);
+    rule.match = MatchExpression::makeLeaf(field, Operator::LessThan, QVariant(threshold));
+    RuleAction terminal;
+    terminal.type = QString(actionType);
+    rule.actions = {terminal};
+    return rule;
+}
+} // namespace
+
+PhosphorRules::Rule makeBaselineGeneralMinWidthRule()
+{
+    return makeBaselineMinSizeRule(ConfigDefaults::generalMinWidthRuleId(), PhosphorI18n::tr("Exclude narrow windows"),
+                                   PhosphorRules::Field::Width, ConfigDefaults::minimumWindowWidth(),
+                                   PhosphorRules::ActionType::Exclude);
+}
+
+PhosphorRules::Rule makeBaselineGeneralMinHeightRule()
+{
+    return makeBaselineMinSizeRule(ConfigDefaults::generalMinHeightRuleId(), PhosphorI18n::tr("Exclude short windows"),
+                                   PhosphorRules::Field::Height, ConfigDefaults::minimumWindowHeight(),
+                                   PhosphorRules::ActionType::Exclude);
+}
+
+PhosphorRules::Rule makeBaselineAnimationMinWidthRule()
+{
+    return makeBaselineMinSizeRule(ConfigDefaults::animationMinWidthRuleId(),
+                                   PhosphorI18n::tr("Skip animations for narrow windows"), PhosphorRules::Field::Width,
+                                   ConfigDefaults::animationMinimumWindowWidth(),
+                                   PhosphorRules::ActionType::ExcludeAnimations);
+}
+
+PhosphorRules::Rule makeBaselineAnimationMinHeightRule()
+{
+    return makeBaselineMinSizeRule(ConfigDefaults::animationMinHeightRuleId(),
+                                   PhosphorI18n::tr("Skip animations for short windows"), PhosphorRules::Field::Height,
+                                   ConfigDefaults::animationMinimumWindowHeight(),
+                                   PhosphorRules::ActionType::ExcludeAnimations);
 }
 
 } // namespace PlasmaZones

@@ -1847,12 +1847,44 @@ private Q_SLOTS:
     }
 
     // isWindowExcluded — minimum-window-size exclusion (parity with autotile)
+    // Build an Exclude RuleSet with per-axis min-size rules (Width/Height LessThan
+    // threshold), mirroring the managed general min-size baselines' field /
+    // operator / action shape. The managed flag and INT_MIN priority of the
+    // production baselines are deliberately omitted — neither participates in
+    // Exclude evaluation (ExclusionRules slices by enabled + action type). A 0
+    // threshold produces no rule for that axis here; the production disabled
+    // shape (a present rule whose threshold IS 0) is pinned separately in
+    // testWindowExcluded_zeroThresholdRulePresent_neverMatches.
+    static PhosphorRules::RuleSet makeMinSizeExcludeSet(int minW, int minH)
+    {
+        const auto rule = [](PhosphorRules::Field field, int threshold) {
+            PhosphorRules::Rule r;
+            r.id = QUuid::createUuid();
+            r.enabled = true;
+            r.match =
+                PhosphorRules::MatchExpression::makeLeaf(field, PhosphorRules::Operator::LessThan, QVariant(threshold));
+            PhosphorRules::RuleAction a;
+            a.type = QString(PhosphorRules::ActionType::Exclude);
+            r.actions.append(a);
+            return r;
+        };
+        PhosphorRules::RuleSet set;
+        if (minW > 0)
+            set.addRule(rule(PhosphorRules::Field::Width, minW));
+        if (minH > 0)
+            set.addRule(rule(PhosphorRules::Field::Height, minH));
+        return set;
+    }
+
     void testWindowExcluded_minimumWindowSize()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_settings->setMinimumWindowWidth(200);
-        m_settings->setMinimumWindowHeight(150);
+        // Min-size exclusion is rule-based now: two Exclude rules matching Width/Height
+        // LessThan the threshold (the managed general min-size baselines), evaluated by
+        // isWindowExcluded's evaluateExcludeRules against the full query. No
+        // engine settings are bound — exclusion must work without them.
+        PhosphorRules::RuleSet set = makeMinSizeExcludeSet(200, 150);
+        engine.setExcludeRuleSet(&set);
 
         // Sub-threshold frame → excluded (when the full query carries the size).
         engine.setExclusionQueryProvider([](const QString&) {
@@ -1900,10 +1932,10 @@ private Q_SLOTS:
         });
         QVERIFY(engine.isWindowExcluded(QStringLiteral("app|short")));
 
-        // A zero threshold disables that dimension: a 1x1 window is NOT excluded
-        // by size when both thresholds are 0 (guards the `> 0` enable check).
-        m_settings->setMinimumWindowWidth(0);
-        m_settings->setMinimumWindowHeight(0);
+        // A zero threshold disables that dimension: with both axes off there are no
+        // min-size rules, so a 1x1 window is NOT excluded by size.
+        PhosphorRules::RuleSet emptySet = makeMinSizeExcludeSet(0, 0);
+        engine.setExcludeRuleSet(&emptySet);
         engine.setExclusionQueryProvider([](const QString&) {
             PhosphorRules::WindowQuery q;
             q.width = 1;
@@ -1912,12 +1944,58 @@ private Q_SLOTS:
         });
         QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|zero-thresh")));
 
-        // No provider → no frame size is known, so the size threshold is not
-        // applied (the appId-only fallback, preserving historical behaviour).
-        m_settings->setMinimumWindowWidth(200);
-        m_settings->setMinimumWindowHeight(150);
+        // No provider → no frame size is known, so the size rules cannot match (an
+        // absent Width/Height field never matches), preserving historical behaviour.
+        engine.setExcludeRuleSet(&set);
         engine.setExclusionQueryProvider({});
         QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|unknown")));
+    }
+
+    // The production "disabled" shape is NOT an absent rule: the daemon always
+    // seeds the managed min-size baselines, and a disabled axis is a PRESENT
+    // rule whose threshold is 0 (`Width LessThan 0` never matches a >= 0
+    // frame). Pin that a threshold-0 rule in a NON-empty set excludes nothing:
+    // an inverted or wrong-direction comparison in the numeric evaluator would
+    // surface here, where the empty-set fast path in the test above could
+    // never catch it (that path never evaluates a rule at all).
+    void testWindowExcluded_zeroThresholdRulePresent_neverMatches()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        PhosphorRules::RuleSet set = makeMinSizeExcludeSet(0, 150);
+        // Manually add the disabled-width rule (threshold 0) alongside the
+        // enabled height rule, mirroring a daemon-seeded store where the user
+        // disabled one axis.
+        {
+            PhosphorRules::Rule r;
+            r.id = QUuid::createUuid();
+            r.enabled = true;
+            r.match = PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::Width,
+                                                               PhosphorRules::Operator::LessThan, QVariant(0));
+            PhosphorRules::RuleAction a;
+            a.type = QString(PhosphorRules::ActionType::Exclude);
+            r.actions.append(a);
+            QVERIFY(set.addRule(r));
+        }
+        engine.setExcludeRuleSet(&set);
+
+        // A 1-px-wide window sails past the disabled width axis (1 < 0 is
+        // false) but is tall enough for the height axis → not excluded.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorRules::WindowQuery q;
+            q.width = 1;
+            q.height = 600;
+            return std::optional<PhosphorRules::WindowQuery>(q);
+        });
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|narrow-but-allowed")));
+
+        // The enabled height axis still works in the same set.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorRules::WindowQuery q;
+            q.width = 1;
+            q.height = 90;
+            return std::optional<PhosphorRules::WindowQuery>(q);
+        });
+        QVERIFY(engine.isWindowExcluded(QStringLiteral("app|short")));
     }
 
     // resolveWindowRestore — full-query/size exclusion path (parity consumer)
@@ -1934,8 +2012,9 @@ private Q_SLOTS:
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
-        m_settings->setMinimumWindowWidth(200);
-        m_settings->setMinimumWindowHeight(150);
+        // Min-size exclusion is rule-based: bind Width/Height LessThan Exclude rules.
+        PhosphorRules::RuleSet set = makeMinSizeExcludeSet(200, 150);
+        engine.setExcludeRuleSet(&set);
         // Full query carries a sub-threshold frame → isWindowExcluded is true.
         engine.setExclusionQueryProvider([](const QString&) {
             PhosphorRules::WindowQuery q;

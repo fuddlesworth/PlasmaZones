@@ -156,8 +156,9 @@ public:
     virtual void setShowZonesOnAllMonitors(bool show) = 0;
     // Per-mode disable lists. The `mode` argument selects which list to read
     // or write — disabling a monitor for snap leaves the autotile gate untouched
-    // and vice versa. Storage is `Display.{Snapping,Autotile}Disabled*`
-    // in the v3 schema.
+    // and vice versa. Storage is rule-backed: each entry is a DisableEngine
+    // context rule in rules.json (the v3 `Display.{Snapping,Autotile}Disabled*`
+    // config keys were folded into rules by the window-rule refactor).
     virtual QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const = 0;
     virtual void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames) = 0;
     virtual bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const = 0;
@@ -191,25 +192,23 @@ public:
     virtual OverlayDisplayMode overlayDisplayMode() const = 0;
     virtual void setOverlayDisplayMode(OverlayDisplayMode mode) = 0;
 
-    // Appearance settings
+    // Appearance settings. The seven zone-overlay values (highlight /
+    // inactive / border colours, active + inactive opacity, border width +
+    // radius) are rule-backed in v5: their getters read the managed baseline
+    // overlay rule (with a live system-palette gate on the colours while
+    // useSystemColors is on) and edits go through the RuleController, so the
+    // setters retired — only read accessors remain.
     virtual bool useSystemColors() const = 0;
     virtual void setUseSystemColors(bool use) = 0;
     virtual QColor highlightColor() const = 0;
-    virtual void setHighlightColor(const QColor& color) = 0;
     virtual QColor inactiveColor() const = 0;
-    virtual void setInactiveColor(const QColor& color) = 0;
     virtual QColor borderColor() const = 0;
-    virtual void setBorderColor(const QColor& color) = 0;
     virtual QColor labelFontColor() const = 0;
     virtual void setLabelFontColor(const QColor& color) = 0;
     virtual qreal activeOpacity() const = 0;
-    virtual void setActiveOpacity(qreal opacity) = 0;
     virtual qreal inactiveOpacity() const = 0;
-    virtual void setInactiveOpacity(qreal opacity) = 0;
     virtual int borderWidth() const = 0;
-    virtual void setBorderWidth(int width) = 0;
     virtual int borderRadius() const = 0;
-    virtual void setBorderRadius(int radius) = 0;
     virtual bool enableBlur() const = 0;
     virtual void setEnableBlur(bool enable) = 0;
 
@@ -284,10 +283,11 @@ public:
 
     virtual bool excludeTransientWindows() const = 0;
     virtual void setExcludeTransientWindows(bool exclude) = 0;
-    virtual int minimumWindowWidth() const = 0;
-    virtual void setMinimumWindowWidth(int width) = 0;
-    virtual int minimumWindowHeight() const = 0;
-    virtual void setMinimumWindowHeight(int height) = 0;
+    // minimumWindowWidth()/minimumWindowHeight() retired in v5 — the min-size
+    // thresholds live in the matches of the two managed baseline Exclude rules
+    // (ConfigDefaults::generalMin{Width,Height}RuleId()); the snap engine
+    // evaluates them through its bound Exclude rule set and the General page
+    // edits them through the RuleController.
 };
 
 /**
@@ -469,10 +469,11 @@ public:
     virtual void setAnimationExcludeTransientWindows(bool exclude) = 0;
     virtual bool animationExcludeNotificationsAndOsd() const = 0;
     virtual void setAnimationExcludeNotificationsAndOsd(bool exclude) = 0;
-    virtual int animationMinimumWindowWidth() const = 0;
-    virtual void setAnimationMinimumWindowWidth(int width) = 0;
-    virtual int animationMinimumWindowHeight() const = 0;
-    virtual void setAnimationMinimumWindowHeight(int height) = 0;
+    // animationMinimumWindowWidth()/Height() retired in v5 — the animation
+    // min-size thresholds live in the matches of the two managed baseline
+    // ExcludeAnimations rules (ConfigDefaults::animationMin{Width,Height}-
+    // RuleId()); the effect evaluates them through the rule store and the
+    // Animations page edits them through the RuleController.
 };
 
 /**

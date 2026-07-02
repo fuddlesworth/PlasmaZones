@@ -183,19 +183,11 @@ bool SnapEngine::isWindowExcluded(const QString& windowId) const
         query = std::move(q);
     }
 
-    // Minimum-window-size exclusion — only meaningful when the query carries the
-    // frame size (full-query path). Mirrors the autotile eligibility filter, so
-    // a sub-threshold utility window is excluded from auto-snap in both modes.
-    if (auto* s = snapSettings()) {
-        const int minW = s->minimumWindowWidth();
-        const int minH = s->minimumWindowHeight();
-        if ((minW > 0 && query->width && *query->width < minW)
-            || (minH > 0 && query->height && *query->height < minH)) {
-            return true;
-        }
-    }
-
     // Rule-based exclusion against the full query (no rules → nothing to match).
+    // The minimum-window-size exclusion is now part of this: the two managed general
+    // min-size baseline Exclude rules (Width / Height LessThan threshold) live in the
+    // Exclude slice bound here, so a sub-threshold window is excluded via the same
+    // evaluator — no separate settings-read gate.
     return evaluateExcludeRules(*query);
 }
 

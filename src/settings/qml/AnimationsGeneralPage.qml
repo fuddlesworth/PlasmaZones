@@ -30,6 +30,53 @@ SettingsFlickable {
     id: page
 
     readonly property QtObject appSettings: settingsController.settings
+    // The min-size window filters are rule-backed: each is the threshold in the
+    // match of a managed animation min-size baseline ExcludeAnimations rule
+    // (Width / Height LessThan N). The baseline is always daemon-seeded (0 =
+    // never matches = off, the default), so the controls only ever UPDATE its
+    // match threshold; read/write route through the RuleController. The
+    // transient / notification toggles stay config-backed.
+    readonly property var ruleController: settingsController.rulesPage
+    property int animReloadTick: 0
+
+    // Threshold N of a min-size baseline (Width/Height LessThan N), or 0 when
+    // the rule is absent (fresh profile before the daemon seeds — 0 matches the
+    // seeded off-by-default threshold, so nothing jumps once it lands). Reading
+    // animReloadTick re-reads the value bindings after a write / rule reload.
+    function minSizeThreshold(ruleId) {
+        page.animReloadTick;
+        const rule = page.ruleController.ruleJson(ruleId);
+        if (rule && rule.id && rule.match && rule.match.value !== undefined)
+            return rule.match.value;
+        return 0;
+    }
+
+    // Write a min-size threshold onto the baseline rule's match (0 = disabled).
+    // Mirrors GeneralPage.writeMinSize: no find-or-create — the daemon seeds the
+    // baseline, so a missing rule is the transient pre-seed state and the write
+    // is dropped (the spinbox snaps back to the current threshold).
+    function writeMinSize(ruleId, field, value) {
+        var rule = page.ruleController.ruleJson(ruleId);
+        if (!rule || !rule.id)
+            return;
+        rule.match = {
+            "field": field,
+            "op": "lessThan",
+            "value": Math.max(0, value)
+        };
+        page.ruleController.updateRuleFromJson(rule);
+        page.animReloadTick++;
+    }
+
+    Connections {
+        target: page.ruleController
+        function onRulesLoaded() {
+            page.animReloadTick++;
+        }
+        function onBaselinesChanged() {
+            page.animReloadTick++;
+        }
+    }
     // ── Timing-mode state ───────────────────────────────────────────────
     // Computed from the live `animationEasingCurve` string: the "spring:"
     // prefix is the on-disk discriminator. Defining this as a binding
@@ -259,7 +306,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Minimum distance")
                     searchAnchor: "minimumDistance"
-                    description: page.appSettings.animationMinDistance === 0 ? i18n("Currently: always animate, no threshold") : i18n("Skip animation when geometry changes less than this")
+                    description: page.appSettings.animationMinDistance === 0 ? i18n("Always animates. No distance threshold is set.") : i18n("Skip animation when geometry changes less than this")
 
                     SettingsSpinBox {
                         Accessible.name: i18n("Minimum distance")
@@ -342,7 +389,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Minimum window width")
                     searchAnchor: "minimumWindowWidth"
-                    description: page.appSettings.animationMinimumWindowWidth === 0 ? i18n("Disabled. No width threshold.") : i18n("Windows narrower than this will not animate")
+                    description: page.minSizeThreshold(settingsController.animationMinWidthRuleId()) === 0 ? i18n("Disabled. No width threshold.") : i18n("Windows narrower than this will not animate")
 
                     SettingsSpinBox {
                         // Schema-driven bounds — see GeneralPageController's
@@ -353,14 +400,16 @@ SettingsFlickable {
                         from: settingsController.generalPage.animationMinimumWindowWidthMin
                         to: settingsController.generalPage.animationMinimumWindowWidthMax
                         stepSize: 10
-                        value: page.appSettings.animationMinimumWindowWidth
+                        value: page.minSizeThreshold(settingsController.animationMinWidthRuleId())
                         // textFromValue already emits the localised "%1 px" suffix; suppress
                         // SettingsSpinBox's default "px" Label so the displayed value reads
                         // "100 px" rather than "100 px px" (and "Off" rather than "Off px").
                         unitText: ""
                         Accessible.name: i18n("Minimum window width for animations")
                         onValueModified: value => {
-                            page.appSettings.animationMinimumWindowWidth = value;
+                            // Not translated — Rule::name is the persisted identity
+                            // surface and must match the v4→v5 migration's spelling.
+                            page.writeMinSize(settingsController.animationMinWidthRuleId(), "width", value);
                         }
                         textFromValue: function (value) {
                             return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
@@ -373,20 +422,20 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Minimum window height")
                     searchAnchor: "minimumWindowHeight"
-                    description: page.appSettings.animationMinimumWindowHeight === 0 ? i18n("Disabled. No height threshold.") : i18n("Windows shorter than this will not animate")
+                    description: page.minSizeThreshold(settingsController.animationMinHeightRuleId()) === 0 ? i18n("Disabled. No height threshold.") : i18n("Windows shorter than this will not animate")
 
                     SettingsSpinBox {
                         from: settingsController.generalPage.animationMinimumWindowHeightMin
                         to: settingsController.generalPage.animationMinimumWindowHeightMax
                         stepSize: 10
-                        value: page.appSettings.animationMinimumWindowHeight
+                        value: page.minSizeThreshold(settingsController.animationMinHeightRuleId())
                         // textFromValue already emits the localised "%1 px" suffix; see the
                         // width SettingsSpinBox above for rationale on suppressing
                         // SettingsSpinBox's default "px" Label.
                         unitText: ""
                         Accessible.name: i18n("Minimum window height for animations")
                         onValueModified: value => {
-                            page.appSettings.animationMinimumWindowHeight = value;
+                            page.writeMinSize(settingsController.animationMinHeightRuleId(), "height", value);
                         }
                         textFromValue: function (value) {
                             return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);

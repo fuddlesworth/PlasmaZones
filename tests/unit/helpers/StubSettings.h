@@ -222,26 +222,19 @@ public:
     void setUseSystemColors(bool) override
     {
     }
+    // The seven zone-overlay values are rule-backed in v5 — read-only here,
+    // matching the retired setters on the interface.
     QColor highlightColor() const override
     {
         return Qt::blue;
-    }
-    void setHighlightColor(const QColor&) override
-    {
     }
     QColor inactiveColor() const override
     {
         return Qt::gray;
     }
-    void setInactiveColor(const QColor&) override
-    {
-    }
     QColor borderColor() const override
     {
         return Qt::white;
-    }
-    void setBorderColor(const QColor&) override
-    {
     }
     QColor labelFontColor() const override
     {
@@ -254,29 +247,17 @@ public:
     {
         return 0.5;
     }
-    void setActiveOpacity(qreal) override
-    {
-    }
     qreal inactiveOpacity() const override
     {
         return 0.3;
-    }
-    void setInactiveOpacity(qreal) override
-    {
     }
     int borderWidth() const override
     {
         return 2;
     }
-    void setBorderWidth(int) override
-    {
-    }
     int borderRadius() const override
     {
         return 8;
-    }
-    void setBorderRadius(int) override
-    {
     }
     bool enableBlur() const override
     {
@@ -424,22 +405,9 @@ public:
     void setExcludeTransientWindows(bool) override
     {
     }
-    int minimumWindowWidth() const override
-    {
-        return m_minimumWindowWidth;
-    }
-    void setMinimumWindowWidth(int w) override
-    {
-        m_minimumWindowWidth = w;
-    }
-    int minimumWindowHeight() const override
-    {
-        return m_minimumWindowHeight;
-    }
-    void setMinimumWindowHeight(int h) override
-    {
-        m_minimumWindowHeight = h;
-    }
+    // minimumWindowWidth/Height retired in v5 — the min-size thresholds are
+    // rule-backed (managed baseline Exclude rules); snap-engine tests bind an
+    // Exclude rule set instead of stubbing settings values.
 
     // Animation window filtering — pure-stub no-op accessors backed by
     // m_animation* state so tests that exercise the filter cascade can
@@ -472,35 +440,11 @@ public:
         Q_EMIT animationExcludeNotificationsAndOsdChanged();
         Q_EMIT settingsChanged();
     }
-    int animationMinimumWindowWidth() const override
-    {
-        return m_animationMinimumWindowWidth;
-    }
-    void setAnimationMinimumWindowWidth(int width) override
-    {
-        if (m_animationMinimumWindowWidth == width) {
-            return;
-        }
-        m_animationMinimumWindowWidth = width;
-        Q_EMIT animationMinimumWindowWidthChanged();
-        Q_EMIT settingsChanged();
-    }
-    int animationMinimumWindowHeight() const override
-    {
-        return m_animationMinimumWindowHeight;
-    }
-    void setAnimationMinimumWindowHeight(int height) override
-    {
-        if (m_animationMinimumWindowHeight == height) {
-            return;
-        }
-        m_animationMinimumWindowHeight = height;
-        Q_EMIT animationMinimumWindowHeightChanged();
-        Q_EMIT settingsChanged();
-    }
-    // animationExcludedApplications / animationExcludedWindowClasses
-    // overrides retired in v4 alongside the ISettings virtuals — the
-    // lists folded into ExcludeAnimations Rules.
+    // animationMinimumWindowWidth/Height overrides retired in v5 alongside
+    // the ISettings virtuals — the thresholds live on the managed baseline
+    // ExcludeAnimations rules. animationExcludedApplications /
+    // animationExcludedWindowClasses retired in v4 (lists folded into
+    // ExcludeAnimations Rules).
 
     // IZoneSelectorSettings
     bool zoneSelectorEnabled() const override
@@ -857,14 +801,9 @@ public:
         Q_EMIT autotilePerAlgorithmSettingsChanged();
         Q_EMIT settingsChanged();
     }
-    QString loadColorsFromFile(const QString&) override
-    {
-        // Stub returns "not supported" so a test that exercised this
-        // path could distinguish a real failure from a missing impl,
-        // but the controllers under test don't reach this in their
-        // unit-test paths today.
-        return QStringLiteral("loadColorsFromFile: stub not supported");
-    }
+    // loadColorsFromFile retired in v5 — colour import parses via
+    // ColorImporter and writes the overlay baseline rule through the
+    // RuleController, so ISettings no longer declares it.
 
     // Editor settings — round-trip the stub members so a test can
     // exercise the EditorPageController setter/getter contract.
@@ -1069,15 +1008,11 @@ private:
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
-    int m_minimumWindowWidth = 0;
-    int m_minimumWindowHeight = 0;
     // Animation-filter defaults routed through ConfigDefaults so a future
     // tweak to the production defaults flows into tests automatically — keeps
     // the stub from drifting into "tests pass against a stale baseline".
     bool m_animationExcludeTransientWindows = ConfigDefaults::animationExcludeTransientWindows();
     bool m_animationExcludeNotificationsAndOsd = ConfigDefaults::animationExcludeNotificationsAndOsd();
-    int m_animationMinimumWindowWidth = ConfigDefaults::animationMinimumWindowWidth();
-    int m_animationMinimumWindowHeight = ConfigDefaults::animationMinimumWindowHeight();
     QVariantMap m_autotilePerAlgorithmSettings;
     QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();
     QString m_editorSplitHorizontalShortcut = ConfigDefaults::editorSplitHorizontalShortcut();
