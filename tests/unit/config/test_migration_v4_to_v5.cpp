@@ -46,6 +46,8 @@
 
 #include <PhosphorRules/RuleSet.h>
 
+#include <limits>
+
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
@@ -870,6 +872,57 @@ private Q_SLOTS:
         const QJsonObject border = zones.value(QStringLiteral("Border")).toObject();
         QVERIFY2(!border.contains(QStringLiteral("Width")), "border width key must be stripped");
         QVERIFY2(!border.contains(QStringLiteral("Radius")), "border radius key must be stripped");
+    }
+
+    // Deferred-retry hardening: when a MANAGED baseline id already exists in
+    // rules.json at finalize time (the daemon seeded the default baseline
+    // between an earlier deferred finalize and this retry), the migrated
+    // custom values must REPLACE the seeded default rather than being
+    // silently rejected by addRule's collision check — otherwise the retry
+    // strips the stash and the user's v4 values are permanently lost.
+    void testFinalizeV5_managedBaselineCollision_replacesSeededDefault()
+    {
+        IsolatedConfigGuard guard;
+
+        // Seed rules.json with a daemon-style DEFAULT overlay baseline (the
+        // collision target), written directly as JSON.
+        QJsonObject seeded;
+        seeded.insert(QStringLiteral("id"), ConfigDefaults::baselineOverlayRuleId().toString());
+        seeded.insert(QStringLiteral("name"), QStringLiteral("Default zone overlay"));
+        seeded.insert(QStringLiteral("enabled"), true);
+        seeded.insert(QStringLiteral("managed"), true);
+        seeded.insert(QStringLiteral("priority"), std::numeric_limits<int>::min());
+        seeded.insert(QStringLiteral("match"), QJsonObject{{QStringLiteral("all"), QJsonArray{}}});
+        QJsonArray seededActions;
+        seededActions.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("setOverlayBorderWidth")},
+                                         {QStringLiteral("value"), ConfigDefaults::borderWidth()}});
+        seeded.insert(QStringLiteral("actions"), seededActions);
+        QJsonObject store;
+        store.insert(QStringLiteral("rules"), QJsonArray{seeded});
+        writeJson(ConfigDefaults::rulesFilePath(), store);
+
+        // v4 config carries a CUSTOM border width that must survive the retry.
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Zones"), QStringLiteral("Border")},
+                  {{QStringLiteral("Width"), 7}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QString overlayId = ConfigDefaults::baselineOverlayRuleId().toString();
+        QJsonObject overlayRule;
+        int overlayCount = 0;
+        for (const QJsonValue& v : rules()) {
+            if (v.toObject().value(QStringLiteral("id")).toString() == overlayId) {
+                overlayRule = v.toObject();
+                ++overlayCount;
+            }
+        }
+        // Exactly one overlay baseline, carrying the MIGRATED value, and the
+        // stash is stripped (the retry completed).
+        QCOMPARE(overlayCount, 1);
+        QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayBorderWidth")).toInt(), 7);
+        QVERIFY(!readJson(ConfigDefaults::configFilePath()).contains(QStringLiteral("_v5AppearanceStash")));
     }
 
     // finalizeV5 defer path: if rules.json is unreadable/corrupt when the

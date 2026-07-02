@@ -4318,6 +4318,19 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
             // succeeds cannot duplicate a rule.
             if (ruleSet.addRule(rule)) {
                 ++added;
+                continue;
+            }
+            // Colliding MANAGED baseline: on the deferred-retry path (this run
+            // is a retry after an earlier defer), the daemon may have seeded the
+            // DEFAULT baseline in between, and rejecting here would silently
+            // drop the user's migrated custom values on the retry that then
+            // strips the stash. Replace it with the migrated rule — the only
+            // way the id exists is the daemon's default seed (or at most one
+            // interim boot's edit, which the user's own v4 values supersede).
+            // Non-managed rules keep the reject-only semantics: their
+            // deterministic ids may legitimately carry newer user edits.
+            if (rule.managed && ruleSet.updateRule(rule)) {
+                ++added;
             }
         }
         if (added > 0 && !ruleSet.saveToFile(rulesPath)) {
