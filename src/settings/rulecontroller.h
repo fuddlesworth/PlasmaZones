@@ -201,6 +201,11 @@ public:
     /// from the last synced snapshot (drives the General page's dirty state).
     bool generalMinSizeBaselineDirty() const;
 
+    /// True iff either managed ANIMATION min-size baseline rule (Width / Height)
+    /// differs from the last synced snapshot (drives the Animations → General
+    /// page's dirty state).
+    bool animationMinSizeBaselineDirty() const;
+
     /// True iff the non-managed (user) rules differ from the last synced
     /// snapshot, including order (drives the Rules page's dirty state).
     bool userRulesDirty() const;
@@ -229,6 +234,11 @@ public:
     /// definitions. Staged; leaves other baselines and user rules untouched.
     void resetGeneralMinSizeBaseline();
 
+    /// Per-page "Reset to defaults" for the Animations → General page's min-size
+    /// filters: rewrite both managed animation min-size baseline rules to their
+    /// off-by-default (0 threshold) factory definitions. Staged.
+    void resetAnimationMinSizeBaseline();
+
     /// Per-page "Discard changes" for the Windows appearance page: restore the
     /// three appearance baseline rules from the last synced snapshot, leaving user
     /// rules and the overlay baseline untouched.
@@ -242,8 +252,13 @@ public:
     /// both general min-size baseline rules from the last synced snapshot.
     void discardGeneralMinSizeBaseline();
 
-    /// Fire-and-forget D-Bus call asking the daemon to reset the three managed
-    /// baseline rules to factory (org.plasmazones.Rules.resetManagedDefaults),
+    /// Per-page "Discard changes" for the Animations → General page's min-size
+    /// filters: restore both animation min-size baseline rules from the last
+    /// synced snapshot.
+    void discardAnimationMinSizeBaseline();
+
+    /// Fire-and-forget D-Bus call asking the daemon to reset every managed
+    /// baseline rule to factory (org.plasmazones.Rules.resetManagedDefaults),
     /// preserving user rules. The daemon persists + broadcasts rulesChanged;
     /// SettingsController::defaults() pairs this with revert() to reload the
     /// model from the reset set. This is the GLOBAL Restore Defaults path (live,

@@ -3448,16 +3448,17 @@ constexpr int kV4DefExclMinWidth = 200;
 constexpr int kV4DefExclMinHeight = 150;
 
 // Zone-overlay appearance (Snapping.Zones.{Colors,Opacity,Border}) → the managed
-// baseline overlay rule. Colours are gated on UseSystem (accent-on contributes
-// no colour action, as with the mode-appearance stash); the daemon seeds any
-// action the migration doesn't carry. The effects/label keys stay in config.
+// baseline overlay rule. Colours are carried regardless of the UseSystem toggle
+// (which stays in config — the getter applies the system palette live on top, so
+// discarding a custom colour here would lose it for a later toggle-off); the
+// daemon seeds any action the migration doesn't carry. The effects/label keys
+// stay in config.
 constexpr QLatin1String kV4OvColorsPath{"Snapping.Zones.Colors"};
 constexpr QLatin1String kV4OvOpacityPath{"Snapping.Zones.Opacity"};
 constexpr QLatin1String kV4OvBorderPath{"Snapping.Zones.Border"};
 constexpr QLatin1String kV4OvHighlightKey{"Highlight"};
 constexpr QLatin1String kV4OvInactiveKey{"Inactive"}; // used by both Colors and Opacity groups
 constexpr QLatin1String kV4OvBorderColorKey{"Border"};
-constexpr QLatin1String kV4OvUseSystemKey{"UseSystem"};
 constexpr QLatin1String kV4OvActiveKey{"Active"};
 constexpr QLatin1String kV4OvWidthKey{"Width"};
 constexpr QLatin1String kV4OvRadiusKey{"Radius"};
@@ -3778,7 +3779,6 @@ constexpr int kAppearanceOverridePriority = 500;
 constexpr int kPerScreenGapPriority = 300;
 constexpr int kPerScreenTilingPriority = 300;
 constexpr int kPerScreenZoneSelectorPriority = 300;
-constexpr int kAnimationFilterPriority = 400;
 
 } // namespace
 
@@ -3847,8 +3847,11 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
         }
 
         // Autotile per-screen gaps (Autotile-prefixed). The autotile
-        // per-screen category ALSO holds non-gap keys (algorithm, master
-        // count, behaviour) that stay live in v5 — strip only the gap keys.
+        // per-screen category ALSO holds behaviour keys (InsertPosition,
+        // FocusFollowsMouse, SplitRatioStep, animation keys, …) that stay live
+        // in v5 — strip only the gap keys here. The tiling-geometry keys
+        // (split ratio / master count / max windows) and the Algorithm fold
+        // onto per-screen tiling rules in the stash block below.
         QJsonObject autoCat = perScreen.value(kV4PerScreenAutotile).toObject();
         for (const QString& screenId : autoCat.keys()) {
             QJsonObject scr = autoCat.value(screenId).toObject();
@@ -4172,13 +4175,18 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
         newRules.append(rule);
     }
 
-    // Animation min-size filters: one non-managed ExcludeAnimations rule per axis
-    // whose match carries the threshold (Width / Height LessThan N). A 0 (or
-    // absent) value is "off" and produces no rule.
+    // Animation min-size filters: the two MANAGED baseline ExcludeAnimations
+    // rules, carrying the user's non-default threshold in the match (Width /
+    // Height LessThan N). Seeded managed / INT_MIN to match
+    // makeBaselineAnimationMin{Width,Height}Rule so the daemon's
+    // ensureManagedRule recognises them and doesn't reset the match. The stash
+    // only holds a value differing from the off-by-default 0, so a 0 (or
+    // absent / junk) value produces no rule and the daemon seeds the disabled
+    // (threshold-0) baseline.
     {
         const QJsonObject animMinSize = stash.value(kStashAnimMinSize).toObject();
-        const auto addMinSizeRule = [&newRules](const QJsonValue& v, Field field, const QUuid& id,
-                                                const QString& name) {
+        const auto addMinSizeBaseline = [&newRules](const QJsonValue& v, Field field, const QUuid& id,
+                                                    const QString& name) {
             if (!v.isDouble()) {
                 return;
             }
@@ -4188,21 +4196,24 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
             }
             Rule rule;
             rule.id = id;
-            // Not translated — Rule::name is the persisted identity surface.
+            // Not translated — frozen migration text (the daemon's tr()'d seeder
+            // never renames an existing rule, so this stays as written).
             rule.name = name;
             rule.enabled = true;
-            rule.managed = false;
-            rule.priority = kAnimationFilterPriority;
+            rule.managed = true;
+            rule.priority = std::numeric_limits<int>::min();
             rule.match = MatchExpression::makeLeaf(field, Operator::LessThan, QVariant(n));
             PhosphorRules::RuleAction exclude;
             exclude.type = QString(PhosphorRules::ActionType::ExcludeAnimations);
             rule.actions = {exclude};
             newRules.append(rule);
         };
-        addMinSizeRule(animMinSize.value(kFieldAnimMinWidth), Field::Width, ConfigDefaults::animationMinWidthRuleId(),
-                       QStringLiteral("Skip animations for narrow windows"));
-        addMinSizeRule(animMinSize.value(kFieldAnimMinHeight), Field::Height,
-                       ConfigDefaults::animationMinHeightRuleId(), QStringLiteral("Skip animations for short windows"));
+        addMinSizeBaseline(animMinSize.value(kFieldAnimMinWidth), Field::Width,
+                           ConfigDefaults::animationMinWidthRuleId(),
+                           QStringLiteral("Skip animations for narrow windows"));
+        addMinSizeBaseline(animMinSize.value(kFieldAnimMinHeight), Field::Height,
+                           ConfigDefaults::animationMinHeightRuleId(),
+                           QStringLiteral("Skip animations for short windows"));
     }
 
     // General min-size filters: the two MANAGED baseline Exclude rules, carrying the
@@ -4222,7 +4233,8 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
             const int n = qMax(0, v.toInt());
             Rule rule;
             rule.id = id;
-            // Not translated — Rule::name is the persisted identity surface.
+            // Not translated — frozen migration text (the daemon's tr()'d seeder
+            // never renames an existing rule, so this stays as written).
             rule.name = name;
             rule.enabled = true;
             rule.managed = true;
@@ -4272,7 +4284,8 @@ bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
         if (!actions.isEmpty()) {
             Rule rule;
             rule.id = ConfigDefaults::baselineOverlayRuleId();
-            // Not translated — Rule::name is the persisted identity surface.
+            // Not translated — frozen migration text (the daemon's tr()'d seeder
+            // never renames an existing rule, so this stays as written).
             rule.name = QStringLiteral("Default zone overlay");
             rule.enabled = true;
             rule.managed = true;

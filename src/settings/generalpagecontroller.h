@@ -62,6 +62,12 @@ class GeneralPageController : public PhosphorControl::PageController
     Q_PROPERTY(int minimumWindowWidthMax READ minimumWindowWidthMax CONSTANT)
     Q_PROPERTY(int minimumWindowHeightMin READ minimumWindowHeightMin CONSTANT)
     Q_PROPERTY(int minimumWindowHeightMax READ minimumWindowHeightMax CONSTANT)
+    // Fallback shown by the General page's min-size spinboxes while the
+    // daemon-seeded managed baseline rule is absent (fresh profile before the
+    // first seed) — the on-by-default thresholds the seed will carry, so the
+    // display doesn't jump when it lands.
+    Q_PROPERTY(int minimumWindowWidthDefault READ minimumWindowWidthDefault CONSTANT)
+    Q_PROPERTY(int minimumWindowHeightDefault READ minimumWindowHeightDefault CONSTANT)
     Q_PROPERTY(int animationMinimumWindowWidthMin READ animationMinimumWindowWidthMin CONSTANT)
     Q_PROPERTY(int animationMinimumWindowWidthMax READ animationMinimumWindowWidthMax CONSTANT)
     Q_PROPERTY(int animationMinimumWindowHeightMin READ animationMinimumWindowHeightMin CONSTANT)
@@ -139,6 +145,14 @@ public:
     int minimumWindowHeightMax() const
     {
         return ConfigDefaults::minimumWindowHeightMax();
+    }
+    int minimumWindowWidthDefault() const
+    {
+        return ConfigDefaults::minimumWindowWidth();
+    }
+    int minimumWindowHeightDefault() const
+    {
+        return ConfigDefaults::minimumWindowHeight();
     }
     int animationMinimumWindowWidthMin() const
     {

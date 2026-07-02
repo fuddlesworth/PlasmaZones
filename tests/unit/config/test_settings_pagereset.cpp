@@ -100,7 +100,7 @@ private Q_SLOTS:
         const auto key = widthKey();
 
         const int def = s.zoneSelectorMaxRows();
-        const int saved = (def == 3) ? 4 : 3; // != def, in [0,10]
+        const int saved = (def == 3) ? 4 : 3; // != def, in [1,10] (maxRowsMin()..maxRowsMax())
         const int edited = (def == 7) ? 6 : 7; // != def and != saved
         s.setZoneSelectorMaxRows(saved);
         s.save(); // baseline = saved

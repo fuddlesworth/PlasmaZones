@@ -724,7 +724,8 @@ public:
     }
 
     // Stable namespace id for the per-monitor TILING override rules
-    // (SetSplitRatio / SetMasterCount / SetMaxWindows). Unlike gaps there is no
+    // (SetSplitRatio / SetMasterCount / SetMaxWindows / SetTilingAlgorithm).
+    // Unlike gaps there is no
     // managed baseline tiling rule — the global tiling defaults stay in config —
     // so this id is used ONLY as the QUuid::createUuidV5 namespace for the
     // per-screen override rules, keeping them deterministic and distinct from the
@@ -748,11 +749,12 @@ public:
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000006}"));
     }
 
-    // Stable ids of the two animation min-size ExcludeAnimations rules
-    // (Width/Height LessThan N). The animation min-size window-filter knobs folded
-    // onto these non-managed rules in v5; the migration find-or-creates them from
-    // a user's non-default min-size, and the (future) Animations page edits their
-    // match threshold by the same ids. Singletons, so fixed ids (not per-screen).
+    // Stable ids of the two MANAGED baseline animation min-size
+    // ExcludeAnimations rules (Width/Height LessThan N; 0 = never matches =
+    // filter off, the default). Seeded by the daemon from
+    // makeBaselineAnimationMin{Width,Height}Rule; the migration overrides the
+    // threshold from a user's non-default v4 min-size, and the Animations page
+    // edits the match threshold by the same ids. Singletons, so fixed ids.
     static QUuid animationMinWidthRuleId()
     {
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000007}"));
@@ -773,10 +775,11 @@ public:
     }
 
     // Stable ids of the general (window-management) minimum-size exclusion rules:
-    // one non-managed Exclude rule per axis whose match is Width / Height LessThan
-    // the threshold. Distinct from the animation min-size rules (…007/…008), which
-    // carry ExcludeAnimations; these carry the terminal Exclude action the snap
-    // engine / drag gate evaluate to keep sub-threshold windows unmanaged.
+    // one MANAGED baseline Exclude rule per axis whose match is Width / Height
+    // LessThan the threshold. Distinct from the animation min-size baselines
+    // (…007/…008), which carry ExcludeAnimations; these carry the terminal
+    // Exclude action the snap engine / drag gate evaluate to keep sub-threshold
+    // windows unmanaged.
     static QUuid generalMinWidthRuleId()
     {
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-00000000000a}"));

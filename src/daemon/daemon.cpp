@@ -119,11 +119,12 @@ static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
 namespace {
 
 // The managed baseline rule makers (makeBaselineSkeleton /
-// makeBaseline{Border,TitleBar,Gap,Overlay}Rule and makeBaselineGeneralMin{Width,
-// Height}Rule) moved to src/core/baselinerules.{h,cpp} so the settings app's
-// per-page reset shares one source of truth with the seeding below. They are
-// PlasmaZones-namespace free functions, so the unqualified calls in
-// ensureManagedRule resolve to them unchanged.
+// makeBaseline{Border,TitleBar,Gap,Overlay}Rule, makeBaselineGeneralMin{Width,
+// Height}Rule, and makeBaselineAnimationMin{Width,Height}Rule) moved to
+// src/core/baselinerules.{h,cpp} so the settings app's per-page reset shares
+// one source of truth with the seeding below. They are PlasmaZones-namespace
+// free functions, so the unqualified calls in ensureManagedRule resolve to
+// them unchanged.
 
 // Debounce interval (ms): coalesce rapid geometry changes (multi-screen, panel editor) into one update.
 // Conceptually distinct from DELAYED_PANEL_REQUERY_MS in autotile.cpp (which schedules a
@@ -234,8 +235,9 @@ Daemon::Daemon(QObject* parent)
     // because that idiom reads as an accidental typo.
     ensureScreenIdResolver();
 
-    // Seed the three managed baseline appearance rules (borders, title bars,
-    // gaps) if the store doesn't already carry them. The store loaded in its
+    // Seed the managed baseline rules (borders, title bars, gaps, zone overlay,
+    // general min-size, animation min-size) if the store doesn't already carry
+    // them. The store loaded in its
     // constructor, so this runs every startup (not first-run only) — existing
     // rules.json files predating these rules gain them too. addRule
     // persists and emits rulesChanged, but the daemon's rulesChanged consumers
@@ -286,6 +288,8 @@ Daemon::Daemon(QObject* parent)
         ensureManagedRule(makeBaselineOverlayRule());
         ensureManagedRule(makeBaselineGeneralMinWidthRule());
         ensureManagedRule(makeBaselineGeneralMinHeightRule());
+        ensureManagedRule(makeBaselineAnimationMinWidthRule());
+        ensureManagedRule(makeBaselineAnimationMinHeightRule());
     }
 
     // Configure geometry update debounce timer

@@ -29,10 +29,11 @@ namespace PlasmaZones {
 
 namespace {
 // The managed baselines split by owning page: the three appearance baselines
-// (Window Appearance page) and the overlay baseline (Overlay Appearance page).
-// Kept separate so each page's dirty / reset / discard covers ONLY its own
-// baseline(s); a shared "all managed" bit would cross-attribute overlay edits to
-// the Window Appearance page.
+// (Window Appearance page), the overlay baseline (Overlay Appearance page),
+// the general min-size baselines (General page), and the animation min-size
+// baselines (Animations → General page). Kept separate so each page's dirty /
+// reset / discard covers ONLY its own baseline(s); a shared "all managed" bit
+// would cross-attribute overlay edits to the Window Appearance page.
 const QSet<QUuid>& appearanceBaselineIds()
 {
     static const QSet<QUuid> ids{ConfigDefaults::baselineBorderRuleId(), ConfigDefaults::baselineTitleBarRuleId(),
@@ -47,6 +48,11 @@ const QSet<QUuid>& overlayBaselineIds()
 const QSet<QUuid>& generalMinSizeBaselineIds()
 {
     static const QSet<QUuid> ids{ConfigDefaults::generalMinWidthRuleId(), ConfigDefaults::generalMinHeightRuleId()};
+    return ids;
+}
+const QSet<QUuid>& animationMinSizeBaselineIds()
+{
+    static const QSet<QUuid> ids{ConfigDefaults::animationMinWidthRuleId(), ConfigDefaults::animationMinHeightRuleId()};
     return ids;
 }
 // Rules whose id is in @p ids, order preserved.
@@ -92,6 +98,12 @@ bool RuleController::generalMinSizeBaselineDirty() const
         != subsetByIds(m_savedRules, generalMinSizeBaselineIds());
 }
 
+bool RuleController::animationMinSizeBaselineDirty() const
+{
+    return subsetByIds(m_model.rules(), animationMinSizeBaselineIds())
+        != subsetByIds(m_savedRules, animationMinSizeBaselineIds());
+}
+
 bool RuleController::userRulesDirty() const
 {
     return userSubset(m_model.rules()) != userSubset(m_savedRules);
@@ -99,7 +111,8 @@ bool RuleController::userRulesDirty() const
 
 void RuleController::recomputeDirtyFromSnapshot()
 {
-    setDirty(baselinesDirty() || overlayBaselineDirty() || generalMinSizeBaselineDirty() || userRulesDirty());
+    setDirty(baselinesDirty() || overlayBaselineDirty() || generalMinSizeBaselineDirty()
+             || animationMinSizeBaselineDirty() || userRulesDirty());
 }
 
 void RuleController::upsertRule(const PhosphorRules::Rule& rule)
@@ -136,6 +149,16 @@ void RuleController::resetGeneralMinSizeBaseline()
     // (on-by-default Width/Height thresholds). Staged.
     upsertRule(makeBaselineGeneralMinWidthRule());
     upsertRule(makeBaselineGeneralMinHeightRule());
+    recomputeDirtyFromSnapshot();
+    Q_EMIT baselinesChanged();
+}
+
+void RuleController::resetAnimationMinSizeBaseline()
+{
+    // Rewrite both managed animation min-size baselines to their factory
+    // definitions (off-by-default 0 thresholds). Staged.
+    upsertRule(makeBaselineAnimationMinWidthRule());
+    upsertRule(makeBaselineAnimationMinHeightRule());
     recomputeDirtyFromSnapshot();
     Q_EMIT baselinesChanged();
 }
@@ -177,6 +200,17 @@ void RuleController::discardGeneralMinSizeBaseline()
     // Restore both general min-size baselines from the last synced snapshot, leaving
     // the appearance / overlay baselines and user rules untouched.
     const QList<PhosphorRules::Rule> saved = subsetByIds(m_savedRules, generalMinSizeBaselineIds());
+    for (const PhosphorRules::Rule& r : saved)
+        upsertRule(r);
+    recomputeDirtyFromSnapshot();
+    Q_EMIT baselinesChanged();
+}
+
+void RuleController::discardAnimationMinSizeBaseline()
+{
+    // Restore both animation min-size baselines from the last synced snapshot,
+    // leaving every other baseline group and user rules untouched.
+    const QList<PhosphorRules::Rule> saved = subsetByIds(m_savedRules, animationMinSizeBaselineIds());
     for (const PhosphorRules::Rule& r : saved)
         upsertRule(r);
     recomputeDirtyFromSnapshot();

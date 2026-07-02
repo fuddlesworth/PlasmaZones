@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The three managed baseline appearance/gap rule definitions. Moved out of the
-// daemon's anonymous namespace so the settings app's per-page reset shares one
-// source of truth with the daemon's startup seeding (see baselinerules.h).
+// The managed baseline rule definitions (border, title bar, gap, zone overlay,
+// general min-size, animation min-size). Moved out of the daemon's anonymous
+// namespace so the settings app's per-page reset shares one source of truth
+// with the daemon's startup seeding (see baselinerules.h).
 
 #include "baselinerules.h"
 
@@ -158,34 +159,52 @@ PhosphorRules::Rule makeBaselineOverlayRule()
 }
 
 namespace {
-// Shared builder for the two managed general min-size exclusion baselines: a
-// lowest-priority Exclude rule whose match is @p field LessThan @p threshold. The
-// threshold lives in the MATCH (Exclude is a param-less terminal action), so the
-// General page edits the match; a 0 threshold never matches (disabled).
+// Shared builder for the managed min-size baselines (general exclusion and
+// animation exclusion): a lowest-priority rule carrying the single param-less
+// terminal @p actionType whose match is @p field LessThan @p threshold. The
+// threshold lives in the MATCH (the terminal actions carry no params), so the
+// owning settings page edits the match; a 0 threshold never matches (disabled).
 PhosphorRules::Rule makeBaselineMinSizeRule(const QUuid& id, const QString& name, PhosphorRules::Field field,
-                                            int threshold)
+                                            int threshold, QLatin1StringView actionType)
 {
     using namespace PhosphorRules;
     Rule rule = makeBaselineSkeleton(id, name);
     rule.match = MatchExpression::makeLeaf(field, Operator::LessThan, QVariant(threshold));
-    RuleAction exclude;
-    exclude.type = QString(ActionType::Exclude);
-    rule.actions = {exclude};
+    RuleAction terminal;
+    terminal.type = QString(actionType);
+    rule.actions = {terminal};
     return rule;
 }
 } // namespace
 
 PhosphorRules::Rule makeBaselineGeneralMinWidthRule()
 {
-    // Not translated — Rule::name is the persisted identity surface.
-    return makeBaselineMinSizeRule(ConfigDefaults::generalMinWidthRuleId(), QStringLiteral("Exclude narrow windows"),
-                                   PhosphorRules::Field::Width, ConfigDefaults::minimumWindowWidth());
+    return makeBaselineMinSizeRule(ConfigDefaults::generalMinWidthRuleId(), PhosphorI18n::tr("Exclude narrow windows"),
+                                   PhosphorRules::Field::Width, ConfigDefaults::minimumWindowWidth(),
+                                   PhosphorRules::ActionType::Exclude);
 }
 
 PhosphorRules::Rule makeBaselineGeneralMinHeightRule()
 {
-    return makeBaselineMinSizeRule(ConfigDefaults::generalMinHeightRuleId(), QStringLiteral("Exclude short windows"),
-                                   PhosphorRules::Field::Height, ConfigDefaults::minimumWindowHeight());
+    return makeBaselineMinSizeRule(ConfigDefaults::generalMinHeightRuleId(), PhosphorI18n::tr("Exclude short windows"),
+                                   PhosphorRules::Field::Height, ConfigDefaults::minimumWindowHeight(),
+                                   PhosphorRules::ActionType::Exclude);
+}
+
+PhosphorRules::Rule makeBaselineAnimationMinWidthRule()
+{
+    return makeBaselineMinSizeRule(ConfigDefaults::animationMinWidthRuleId(),
+                                   PhosphorI18n::tr("Skip animations for narrow windows"), PhosphorRules::Field::Width,
+                                   ConfigDefaults::animationMinimumWindowWidth(),
+                                   PhosphorRules::ActionType::ExcludeAnimations);
+}
+
+PhosphorRules::Rule makeBaselineAnimationMinHeightRule()
+{
+    return makeBaselineMinSizeRule(ConfigDefaults::animationMinHeightRuleId(),
+                                   PhosphorI18n::tr("Skip animations for short windows"), PhosphorRules::Field::Height,
+                                   ConfigDefaults::animationMinimumWindowHeight(),
+                                   PhosphorRules::ActionType::ExcludeAnimations);
 }
 
 } // namespace PlasmaZones

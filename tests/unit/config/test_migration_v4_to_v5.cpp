@@ -516,11 +516,15 @@ private Q_SLOTS:
         // Differing-from-default split ratio (0.66 != 0.5), master count (2 != 1),
         // max windows (3 != 5), plus a per-screen Algorithm ("AutotileAlgorithm" is
         // the prefixed disk spelling) that folds into a SetTilingAlgorithm action.
+        // AutotileInsertPosition is a behavioural key that STAYS live — seeding it
+        // proves the folded keys were stripped individually, not the whole
+        // subtree dropped.
         setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Autotile"), QStringLiteral("DP-1")},
                   {{QStringLiteral("AutotileSplitRatio"), 0.66},
                    {QStringLiteral("AutotileMasterCount"), 2},
                    {QStringLiteral("AutotileMaxWindows"), 3},
-                   {QStringLiteral("AutotileAlgorithm"), QStringLiteral("bsp")}});
+                   {QStringLiteral("AutotileAlgorithm"), QStringLiteral("bsp")},
+                   {QStringLiteral("AutotileInsertPosition"), 1}});
         writeJson(ConfigDefaults::configFilePath(), cfg);
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -572,6 +576,10 @@ private Q_SLOTS:
                                            .toObject()
                                            .value(QStringLiteral("DP-1"))
                                            .toObject();
+        // The surviving behavioural key proves the entry itself is intact — the
+        // !contains checks below are testing real per-key strips, not a
+        // vanished subtree that would make them vacuously true.
+        QCOMPARE(autoScreen.value(QStringLiteral("AutotileInsertPosition")).toInt(), 1);
         QVERIFY2(!autoScreen.contains(QStringLiteral("AutotileAlgorithm")),
                  "per-screen algorithm key must be stripped");
         QVERIFY2(!autoScreen.contains(QStringLiteral("AutotileSplitRatio")), "split ratio key must be stripped");
@@ -667,9 +675,10 @@ private Q_SLOTS:
                  "the ZoneSelector category must be removed from config");
     }
 
-    // The two animation min-size window-filter knobs fold onto per-axis
-    // ExcludeAnimations rules whose match carries the threshold; a 0 (off) value
-    // produces no rule, and the boolean toggles in the same group survive.
+    // The two animation min-size window-filter knobs fold onto per-axis MANAGED
+    // baseline ExcludeAnimations rules whose match carries the threshold; a 0
+    // (off — the default) value produces no rule (the daemon seeds the disabled
+    // baseline), and the boolean toggles in the same group survive.
     void testAnimationMinSize_becomesExcludeAnimationsRules()
     {
         IsolatedConfigGuard guard;
@@ -700,8 +709,9 @@ private Q_SLOTS:
             }
         }
         QVERIFY2(!widthRule.isEmpty(), "min-width must become an ExcludeAnimations rule");
-        QVERIFY2(!sawHeightRule, "a 0 (off) min-height must NOT produce a rule");
-        QVERIFY(!widthRule.value(QStringLiteral("managed")).toBool());
+        QVERIFY2(!sawHeightRule, "a 0 (off) min-height must NOT produce a rule (daemon seeds it)");
+        QVERIFY2(widthRule.value(QStringLiteral("managed")).toBool(),
+                 "the animation min-size baseline must be managed");
         QCOMPARE(actionTypes(widthRule), (QStringList{QStringLiteral("excludeAnimations")}));
         const QJsonObject m = matchOf(widthRule);
         QCOMPARE(m.value(QStringLiteral("field")).toString(), QStringLiteral("width"));
@@ -799,6 +809,73 @@ private Q_SLOTS:
     // re-established) retries, rather than stripping the stash and permanently
     // losing the user's appearance/gap overrides. This guards the data-loss
     // failure mode of finalizeV5Conversion's load-failure branch.
+    // The seven zone-overlay appearance values fold onto the MANAGED baseline
+    // overlay rule: colours as #AARRGGBB hex, opacities clamped to [0,1],
+    // border ints clamped to their validator bounds. The source config keys
+    // are stripped from all three Snapping.Zones sub-groups while the
+    // UseSystem toggle (still config) survives.
+    void testOverlayAppearance_becomesManagedBaselineOverlayRule()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Zones"), QStringLiteral("Colors")},
+                  {{QStringLiteral("UseSystem"), true},
+                   {QStringLiteral("Highlight"), QStringLiteral("#FF112233")},
+                   {QStringLiteral("Inactive"), QStringLiteral("#80445566")},
+                   {QStringLiteral("Border"), QStringLiteral("#FF778899")}});
+        // Out-of-range opacity (1.7) and border width (99) prove the clamps.
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Zones"), QStringLiteral("Opacity")},
+                  {{QStringLiteral("Active"), 1.7}, {QStringLiteral("Inactive"), 0.25}});
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Zones"), QStringLiteral("Border")},
+                  {{QStringLiteral("Width"), 99}, {QStringLiteral("Radius"), 12}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QString overlayId = ConfigDefaults::baselineOverlayRuleId().toString();
+        QJsonObject overlayRule;
+        for (const QJsonValue& v : rules()) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("id")).toString() == overlayId) {
+                overlayRule = r;
+            }
+        }
+        QVERIFY2(!overlayRule.isEmpty(), "the overlay appearance must land on the baseline overlay rule");
+        QVERIFY2(overlayRule.value(QStringLiteral("managed")).toBool(), "the overlay baseline must be managed");
+        // Colours are carried even with UseSystem=true — the getter's live
+        // palette gate decides application, not the migration.
+        QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayHighlightColor")).toString(),
+                 QStringLiteral("#ff112233"));
+        QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayInactiveColor")).toString(),
+                 QStringLiteral("#80445566"));
+        QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayBorderColor")).toString(),
+                 QStringLiteral("#ff778899"));
+        QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayActiveOpacity")).toDouble(), 1.0);
+        QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayInactiveOpacity")).toDouble(), 0.25);
+        QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayBorderWidth")).toInt(), 10);
+        QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayBorderRadius")).toInt(), 12);
+
+        // The folded keys are stripped; the UseSystem toggle survives.
+        const QJsonObject zones = readJson(ConfigDefaults::configFilePath())
+                                      .value(QStringLiteral("Snapping"))
+                                      .toObject()
+                                      .value(QStringLiteral("Zones"))
+                                      .toObject();
+        const QJsonObject colors = zones.value(QStringLiteral("Colors")).toObject();
+        QCOMPARE(colors.value(QStringLiteral("UseSystem")).toBool(), true);
+        QVERIFY2(!colors.contains(QStringLiteral("Highlight")), "highlight colour key must be stripped");
+        QVERIFY2(!colors.contains(QStringLiteral("Inactive")), "inactive colour key must be stripped");
+        QVERIFY2(!colors.contains(QStringLiteral("Border")), "border colour key must be stripped");
+        const QJsonObject opacity = zones.value(QStringLiteral("Opacity")).toObject();
+        QVERIFY2(!opacity.contains(QStringLiteral("Active")), "active opacity key must be stripped");
+        QVERIFY2(!opacity.contains(QStringLiteral("Inactive")), "inactive opacity key must be stripped");
+        const QJsonObject border = zones.value(QStringLiteral("Border")).toObject();
+        QVERIFY2(!border.contains(QStringLiteral("Width")), "border width key must be stripped");
+        QVERIFY2(!border.contains(QStringLiteral("Radius")), "border radius key must be stripped");
+    }
+
     void testFinalizeV5_deferredWhenRulesFileCorrupt()
     {
         IsolatedConfigGuard guard;
@@ -876,10 +953,23 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         seedEmptyRules();
 
+        // One representative of EVERY v5 fold, so a re-run is proven a no-op
+        // across all of them: per-mode appearance + gaps, per-screen tiling,
+        // per-screen zone-selector, animation min-size, general min-size, and
+        // the overlay baseline.
         QJsonObject cfg = baseV4Config();
         setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Appearance"), QStringLiteral("Borders")},
                   {{QStringLiteral("Width"), 5}});
         setNested(cfg, {QStringLiteral("Tiling"), QStringLiteral("Gaps")}, {{QStringLiteral("Inner"), 12}});
+        setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Autotile"), QStringLiteral("DP-1")},
+                  {{QStringLiteral("AutotileSplitRatio"), 0.66}});
+        setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("ZoneSelector"), QStringLiteral("DP-1")},
+                  {{QStringLiteral("Position"), 4}});
+        setNested(cfg, {QStringLiteral("Animations"), QStringLiteral("WindowFiltering")},
+                  {{QStringLiteral("MinimumWindowWidth"), 300}});
+        setNested(cfg, {QStringLiteral("Exclusions")}, {{QStringLiteral("MinimumWindowWidth"), 300}});
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Zones"), QStringLiteral("Border")},
+                  {{QStringLiteral("Width"), 5}});
         writeJson(ConfigDefaults::configFilePath(), cfg);
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -888,7 +978,9 @@ private Q_SLOTS:
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
         const int firstCount = rules().size();
-        QCOMPARE(firstCount, 2);
+        // 2 per-mode rules + tiling + zone-selector + animation min-size +
+        // general min-size + overlay baseline = 7.
+        QCOMPARE(firstCount, 7);
 
         // Re-run against the now-v5 tree: no chain step runs, finalizeV5 sees
         // no stash and no-ops. rules.json is byte-identical.

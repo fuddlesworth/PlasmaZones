@@ -248,7 +248,11 @@ private Q_SLOTS:
     // =========================================================================
 
     /**
-     * load() must emit settingsChanged() so that listeners can re-read all values.
+     * load() must emit settingsChanged() when an on-disk value changed since
+     * the last load, so listeners re-read the reloaded values. (A load that
+     * finds nothing changed emits nothing — the emit-on-change rule; the
+     * pre-v5 unconditional emit was an artifact of applySystemColorScheme
+     * re-baking palette colours through the config setters on every load.)
      */
     void testLoad_emitsSettingsChanged()
     {
@@ -258,9 +262,19 @@ private Q_SLOTS:
         QSignalSpy spy(&settings, &Settings::settingsChanged);
         QVERIFY(spy.isValid());
 
+        // Mutate a plain config value behind the instance's back — the
+        // reload must pick it up and notify.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
+            gaps->writeInt(ConfigDefaults::adjacentThresholdKey(), settings.adjacentThreshold() + 1);
+            gaps.reset();
+            backend->sync();
+        }
+
         settings.load();
 
-        QVERIFY2(spy.count() >= 1, "load() must emit settingsChanged() at least once");
+        QVERIFY2(spy.count() >= 1, "load() must emit settingsChanged() when a reloaded value differs");
     }
 
     /**

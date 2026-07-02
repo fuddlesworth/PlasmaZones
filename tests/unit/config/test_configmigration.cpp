@@ -201,13 +201,20 @@ private Q_SLOTS:
     void testMigratePerScreenGroups()
     {
         IsolatedConfigGuard guard;
+        // The per-screen autotile keys were PREFIXED on disk in every shipped
+        // version (kPerScreenAutotileKeys has always listed "AutotileAlgorithm";
+        // expandAutotileKeys wrote the prefixed form even in the INI era), so
+        // the realistic legacy fixture seeds the prefixed spelling. An
+        // InsertPosition behavioural key proves the fold strips per-key, not
+        // per-subtree.
         writeIniFile(ConfigDefaults::legacyConfigFilePath(),
                      QStringLiteral("[ZoneSelector:eDP-1]\n"
                                     "Position=3\n"
                                     "MaxRows=5\n"
                                     "\n"
                                     "[AutotileScreen:HDMI-1]\n"
-                                    "Algorithm=bsp\n"
+                                    "AutotileAlgorithm=bsp\n"
+                                    "AutotileInsertPosition=1\n"
                                     "\n"
                                     "[SnappingScreen:DP-2]\n"
                                     "SnapAssistEnabled=true\n"));
@@ -224,11 +231,14 @@ private Q_SLOTS:
         QVERIFY2(!perScreen.contains(QStringLiteral("ZoneSelector")),
                  "ZoneSelector per-screen category must be folded out of config in v5");
 
-        // Autotile — Algorithm is NOT folded (that dedup is a later step), so it
-        // survives in the config store.
+        // Autotile — the per-screen AutotileAlgorithm folds onto the per-screen
+        // tiling rule's SetTilingAlgorithm action in v5 (the dedup) and is
+        // stripped from config; the behavioural InsertPosition key stays live.
         QJsonObject at = perScreen.value(QStringLiteral("Autotile")).toObject();
         QJsonObject hdmi = at.value(QStringLiteral("HDMI-1")).toObject();
-        QCOMPARE(hdmi.value(QStringLiteral("Algorithm")).toString(), QStringLiteral("bsp"));
+        QVERIFY2(!hdmi.contains(QStringLiteral("AutotileAlgorithm")),
+                 "the per-screen algorithm must be folded out of config in v5");
+        QCOMPARE(hdmi.value(QStringLiteral("AutotileInsertPosition")).toInt(), 1);
 
         // Snapping
         QJsonObject sn = perScreen.value(QStringLiteral("Snapping")).toObject();

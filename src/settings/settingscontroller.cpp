@@ -376,7 +376,7 @@ SettingsController::SettingsController(QObject* parent)
     // Snapping→Zones page sub-controller (the drag-time zone overlay). Owns
     // border bounds plus the color-import action surface; its changed() signal
     // drives dirty tracking on successful imports.
-    m_snappingZonesPage = new SnappingZonesController(m_settings, this);
+    m_snappingZonesPage = new SnappingZonesController(this);
     connect(m_snappingZonesPage, &SnappingZonesController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
 

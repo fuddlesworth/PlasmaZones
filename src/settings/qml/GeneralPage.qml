@@ -35,6 +35,9 @@ SettingsFlickable {
     }
 
     // Write a min-size threshold onto the baseline rule's match (0 = disabled).
+    // No find-or-create: the daemon seeds the baseline, so a missing rule is
+    // only the transient fresh-profile state before the first seed — the write
+    // is dropped and the spinbox snaps back to the displayed fallback.
     function writeMinSize(ruleId, field, value) {
         var rule = root.ruleController.ruleJson(ruleId);
         if (!rule || !rule.id)
@@ -202,7 +205,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Minimum window width")
-                    description: root.minSizeThreshold(settingsController.generalMinWidthRuleId(), appSettings.minimumWindowWidth) === 0 ? i18n("Disabled (no width threshold)") : i18n("Windows narrower than this are excluded")
+                    description: root.minSizeThreshold(settingsController.generalMinWidthRuleId(), settingsController.generalPage.minimumWindowWidthDefault) === 0 ? i18n("Disabled (no width threshold)") : i18n("Windows narrower than this are excluded")
 
                     SettingsSpinBox {
                         // Schema-driven bounds — see GeneralPageController's
@@ -213,7 +216,7 @@ SettingsFlickable {
                         from: settingsController.generalPage.minimumWindowWidthMin
                         to: settingsController.generalPage.minimumWindowWidthMax
                         stepSize: 10
-                        value: root.minSizeThreshold(settingsController.generalMinWidthRuleId(), appSettings.minimumWindowWidth)
+                        value: root.minSizeThreshold(settingsController.generalMinWidthRuleId(), settingsController.generalPage.minimumWindowWidthDefault)
                         unitText: ""
                         Accessible.name: i18n("Minimum window width")
                         onValueModified: value => {
@@ -229,13 +232,13 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Minimum window height")
-                    description: root.minSizeThreshold(settingsController.generalMinHeightRuleId(), appSettings.minimumWindowHeight) === 0 ? i18n("Disabled (no height threshold)") : i18n("Windows shorter than this are excluded")
+                    description: root.minSizeThreshold(settingsController.generalMinHeightRuleId(), settingsController.generalPage.minimumWindowHeightDefault) === 0 ? i18n("Disabled (no height threshold)") : i18n("Windows shorter than this are excluded")
 
                     SettingsSpinBox {
                         from: settingsController.generalPage.minimumWindowHeightMin
                         to: settingsController.generalPage.minimumWindowHeightMax
                         stepSize: 10
-                        value: root.minSizeThreshold(settingsController.generalMinHeightRuleId(), appSettings.minimumWindowHeight)
+                        value: root.minSizeThreshold(settingsController.generalMinHeightRuleId(), settingsController.generalPage.minimumWindowHeightDefault)
                         unitText: ""
                         Accessible.name: i18n("Minimum window height")
                         onValueModified: value => {

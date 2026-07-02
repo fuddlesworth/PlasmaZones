@@ -641,7 +641,7 @@ private Q_SLOTS:
     // test_rule_store; the empty-rule-set case is exercised there.
 };
 
-// NOT guiless: Settings::load → applySystemColorScheme reads
+// NOT guiless: the Settings colour getters' "use system colours" gate reads
 // QGuiApplication::palette(), which requires a QGuiApplication instance
 // (crashes under QCoreApplication).
 QTEST_MAIN(TestSettingsPerScreen)

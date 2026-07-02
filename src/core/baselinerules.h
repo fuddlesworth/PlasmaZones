@@ -12,14 +12,16 @@
 
 namespace PlasmaZones {
 
-// The three managed baseline appearance/gap rules. Single source of truth for
-// BOTH the daemon's startup seeding (ensureManagedRule) AND the settings app's
-// per-page "Reset to defaults" on the Windows appearance page — keeping the two
-// from drifting. The gap rule is a true catch-all; the border and title-bar
-// rules are narrowed to tiled/snapped windows on a fresh install. All three are
-// managed = true, pinned to the lowest priority so any user rule overrides them
-// per slot. The Appearance page rewrites their action values; a reset restores
-// exactly these definitions.
+// The managed baseline rules: border, title bar, gap, zone overlay, general
+// min-size (Exclude), and animation min-size (ExcludeAnimations). Single source
+// of truth for BOTH the daemon's startup seeding (ensureManagedRule) AND the
+// settings app's per-page "Reset to defaults" — keeping the two from drifting.
+// The gap and overlay rules are true catch-alls; the border and title-bar rules
+// are narrowed to tiled/snapped windows on a fresh install; the min-size rules
+// match Width/Height LessThan their threshold. All are managed = true, pinned
+// to the lowest priority so any user rule overrides them per slot. The owning
+// settings pages rewrite their action values (or, for the min-size rules, the
+// match threshold); a reset restores exactly these definitions.
 
 /// Common skeleton: empty catch-all match, managed, lowest priority.
 PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineSkeleton(const QUuid& id, const QString& name);
@@ -54,5 +56,15 @@ PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineGeneralMinWidthRule();
 /// Baseline general MIN-HEIGHT exclusion rule (id generalMinHeightRuleId()) — the
 /// Height LessThan sibling of makeBaselineGeneralMinWidthRule.
 PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineGeneralMinHeightRule();
+
+/// Baseline animation MIN-WIDTH filter rule (id animationMinWidthRuleId()) — a
+/// managed, lowest-priority ExcludeAnimations rule matching Width LessThan the
+/// threshold. Defaults to 0 (never matches = filter off); the Animations page
+/// edits the threshold in the match.
+PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineAnimationMinWidthRule();
+
+/// Baseline animation MIN-HEIGHT filter rule (id animationMinHeightRuleId()) —
+/// the Height LessThan sibling of makeBaselineAnimationMinWidthRule.
+PLASMAZONES_EXPORT PhosphorRules::Rule makeBaselineAnimationMinHeightRule();
 
 } // namespace PlasmaZones

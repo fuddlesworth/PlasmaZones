@@ -35,11 +35,47 @@
 #include "../snaphandler.h"
 #include "../windowanimator.h"
 
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleAction.h>
+
 namespace PlasmaZones {
 
 // `lcEffect` is defined in plasmazoneseffect.cpp via Q_LOGGING_CATEGORY. Re-declare
 // here so this TU can log under the same category without re-defining storage.
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+
+namespace {
+// Pre-D-Bus seed for the drag-gate exclusion slice: the two default min-size
+// baseline Exclude rules (Width / Height LessThan 200 / 150, mirroring the
+// daemon-seeded managed baselines built from ConfigDefaults::minimumWindow-
+// Width/Height()). Keeps the min-size filter active from effect load —
+// preventing small ephemeral windows (Steam splash, Electron notification
+// popups) from entering the autotile tree during the startup race window —
+// until the first rulesChanged pull replaces the whole set with the real
+// store slice (including any user-edited or disabled thresholds). The ids
+// mirror ConfigDefaults::generalMin{Width,Height}RuleId() so the seed and its
+// store-side replacement describe the same rule.
+QList<PhosphorRules::Rule> defaultMinSizeExcludeSeed()
+{
+    using namespace PhosphorRules;
+    const auto makeSeed = [](const QUuid& id, Field field, int threshold) {
+        Rule rule;
+        rule.id = id;
+        rule.name = QStringLiteral("Startup min-size seed");
+        rule.enabled = true;
+        rule.managed = true;
+        rule.match = MatchExpression::makeLeaf(field, Operator::LessThan, QVariant(threshold));
+        RuleAction exclude;
+        exclude.type = QString(ActionType::Exclude);
+        rule.actions = {exclude};
+        return rule;
+    };
+    return {makeSeed(QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-00000000000a}")), Field::Width, 200),
+            makeSeed(QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-00000000000b}")), Field::Height, 150)};
+}
+} // namespace
 
 PlasmaZonesEffect::PlasmaZonesEffect()
     : OffscreenEffect()
@@ -65,6 +101,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_decorationManager(std::make_unique<DecorationManager>(*m_compositorBridge))
 {
     PhosphorProtocol::registerWireTypes();
+
+    // Startup-race hardening: pre-seed the drag-gate exclusion slice with the
+    // default min-size baselines (see defaultMinSizeExcludeSeed above).
+    m_snappingExclusionRuleSet.setRules(defaultMinSizeExcludeSeed());
 
     // Decoration-manager wiring (veto + signal connections) lives with the
     // rest of the border/decoration code in borders.cpp.

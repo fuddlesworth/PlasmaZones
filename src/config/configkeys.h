@@ -234,25 +234,11 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping.Zones.Colors
     // ═══════════════════════════════════════════════════════════════════════════
+    // Only the UseSystem toggle remains config-backed; the zone colour /
+    // opacity / border keys retired in v5 (folded onto the managed baseline
+    // overlay rule — the migration reads their frozen kV4Ov* literals).
 
     P_CONFIG_KEY(useSystemKey, "UseSystem")
-    P_CONFIG_KEY(highlightKey, "Highlight")
-    P_CONFIG_KEY(inactiveKey, "Inactive")
-    P_CONFIG_KEY(borderKey, "Border")
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.Zones.Opacity
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    P_CONFIG_KEY(activeKey, "Active")
-    // (also uses inactiveKey)
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.Zones.Border
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    P_CONFIG_KEY(widthKey, "Width")
-    P_CONFIG_KEY(radiusKey, "Radius")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping.Zones.Labels
@@ -341,8 +327,9 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     P_CONFIG_KEY(transientWindowsKey, "TransientWindows")
-    P_CONFIG_KEY(minimumWindowWidthKey, "MinimumWindowWidth")
-    P_CONFIG_KEY(minimumWindowHeightKey, "MinimumWindowHeight")
+    // The MinimumWindowWidth/Height key accessors retired in v5 — the
+    // min-size thresholds folded onto the managed baseline Exclude /
+    // ExcludeAnimations rules (the migration reads their frozen kV4* literals).
     // `notificationsAndOsdKey` is consumed exclusively by the
     // Animations.WindowFiltering schema (no equivalent in the Exclusions
     // group), so it is declared with the rest of the animation keys below

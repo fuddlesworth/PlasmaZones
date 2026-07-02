@@ -75,10 +75,10 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
         if (!PlasmaZonesEffect::isOwnPassthroughOverlayClass(active->windowClass())
             && m_effect->getWindowScreenId(active) == screenId) {
-            // Filter first, then size-check. This mirrors the under-cursor
-            // guard below so the two predicates stay structurally aligned.
-            // The cheap-to-skip min-size check is only paid when the active
-            // window is otherwise tileable.
+            // shouldHandleWindow covers the min-size threshold too since v5:
+            // the managed baseline Exclude rules (Width / Height LessThan N)
+            // ride its exclusion-rule evaluation, so a sub-threshold active
+            // window pauses FFM here without a separate size check.
             if (!m_effect->isTileableWindow(active) || !m_effect->shouldHandleWindow(active)) {
                 return;
             }
@@ -91,11 +91,6 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
             // background — the same regression the excluded-active guard
             // above fixes (discussion #461 follow-up).
             if (m_effect->isWindowFloating(m_effect->getWindowId(active))) {
-                return;
-            }
-            const QRectF aframe = active->frameGeometry();
-            if ((m_effect->m_cachedMinWindowWidth > 0 && aframe.width() < m_effect->m_cachedMinWindowWidth)
-                || (m_effect->m_cachedMinWindowHeight > 0 && aframe.height() < m_effect->m_cachedMinWindowHeight)) {
                 return;
             }
         }
@@ -127,20 +122,14 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
         // A non-autotile window (excluded app, keep-above overlay, popup, dialog,
         // Spectacle, etc.) occludes the cursor — don't look through it to focus a
         // tiled window beneath. This prevents focus-stealing from emoji pickers,
-        // screenshot tools, and other excluded/overlay windows.
+        // screenshot tools, and other excluded/overlay windows. Windows below
+        // the min-size threshold (emoji picker, small utilities) are covered by
+        // the same gate since v5: the managed baseline Exclude rules (Width /
+        // Height LessThan N) ride shouldHandleWindow's exclusion-rule
+        // evaluation, so hovering a too-small normal window blocks auto-focus
+        // here without a separate size check.
         if (!m_effect->isTileableWindow(w) || !m_effect->shouldHandleWindow(w)) {
             return;
-        }
-        // Also block focus for windows below the minimum size threshold.
-        // These are normal windows (pass isTileableWindow) but too small
-        // for autotile — e.g., emoji picker, small utilities. Without this,
-        // hovering over them triggers auto-focus even though they're not tiled.
-        {
-            const QRectF frame = w->frameGeometry();
-            if ((m_effect->m_cachedMinWindowWidth > 0 && frame.width() < m_effect->m_cachedMinWindowWidth)
-                || (m_effect->m_cachedMinWindowHeight > 0 && frame.height() < m_effect->m_cachedMinWindowHeight)) {
-                return;
-            }
         }
         // Skip the activateWindow call when the window under the cursor
         // already holds compositor focus. The live activeWindow() read is

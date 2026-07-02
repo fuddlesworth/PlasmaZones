@@ -232,9 +232,11 @@ bool SettingsController::isPageDirty(const QString& page) const
     // Animation pages share one staging domain, so any of them is dirty exactly
     // when the tree has unsaved edits. Value-based like the manifest pages, so
     // the badge and the kebab's Discard-enabled state stay correct on every
-    // subpage. Two sources: the controller's file/shader-tree pending state
-    // (hasPendingChanges) AND the plain animation Settings keys (profile,
-    // shader tree value, window filtering) tracked against the baseline.
+    // subpage. Three sources: the controller's file/shader-tree pending state
+    // (hasPendingChanges), the plain animation Settings keys (profile, shader
+    // tree value, window filtering) tracked against the baseline, AND the
+    // managed animation min-size baseline rules (the Animations → General
+    // min-size filters fold onto them in v5).
     if (isAnimationPage(page)) {
         if (m_animationsPage != nullptr && m_animationsPage->hasPendingChanges())
             return true;
@@ -242,7 +244,7 @@ bool SettingsController::isPageDirty(const QString& page) const
             if (m_settings.isKeyModified(gk.first, gk.second))
                 return true;
         }
-        return false;
+        return m_rulesPage != nullptr && m_rulesPage->animationMinSizeBaselineDirty();
     }
 
     if (m_dirtyPages.contains(page))
@@ -327,6 +329,10 @@ void SettingsController::reconcileRuleBackedDirty()
     sync(QStringLiteral("snapping-overlay-appearance"), isPageDirty(QStringLiteral("snapping-overlay-appearance")));
     // The General page is likewise mixed (config + general min-size baselines).
     sync(QStringLiteral("general"), isPageDirty(QStringLiteral("general")));
+    // The Animations → General page is mixed too (shared animation staging
+    // domain + the animation min-size baselines); attribute via isPageDirty so
+    // a min-size baseline edit badges the animation tree.
+    sync(QStringLiteral("animations-general"), isPageDirty(QStringLiteral("animations-general")));
     if (changed) {
         Q_EMIT dirtyPagesChanged();
     }
@@ -363,16 +369,20 @@ void SettingsController::resetPage(const QString& page)
             });
             m_animationsPage->clearAllOverrides();
             m_settings.resetKeys(animationConfigKeys());
-            // The min-size window filters are rule-backed now; "reset to defaults"
-            // (0 = off) removes those ExcludeAnimations rules.
-            if (m_rulesPage != nullptr) {
-                m_rulesPage->removeRule(ConfigDefaults::animationMinWidthRuleId().toString());
-                m_rulesPage->removeRule(ConfigDefaults::animationMinHeightRuleId().toString());
-            }
+        }
+        // The min-size window filters live on the managed animation min-size
+        // baselines; reset them to the off-by-default (0 threshold) factory
+        // definitions. OUTSIDE the m_loading window above — the rule model's
+        // change signals must reach reattributeRuleDirty/reconcileRuleBackedDirty
+        // so the staged reset badges and the global Save picks it up (inside
+        // the window it would be a silent, unsaveable edit).
+        if (m_rulesPage != nullptr) {
+            m_rulesPage->resetAnimationMinSizeBaseline();
         }
         // isPageDirty(animation) is value-based (hasPendingChanges || any
-        // animation key modified), so reconcilePageDirty syncs the active page's
-        // m_dirtyPages entry against the post-reset truth.
+        // animation key modified || min-size baseline dirty), so
+        // reconcilePageDirty syncs the active page's m_dirtyPages entry against
+        // the post-reset truth.
         reconcilePageDirty(page);
         return;
     }
@@ -569,6 +579,12 @@ void SettingsController::discardPage(const QString& page)
                 m_loading = wasLoading;
             });
             m_settings.discardKeys(animationConfigKeys());
+        }
+        // The animation min-size baselines are part of the tree's staged state;
+        // restore them from the last synced snapshot (outside the m_loading
+        // window, same rationale as resetPage's baseline reset above).
+        if (m_rulesPage != nullptr) {
+            m_rulesPage->discardAnimationMinSizeBaseline();
         }
         // revertPending() left hasPendingChanges() false; clear every animation
         // leaf's m_dirtyPages marker so the global needsSave drops the entries

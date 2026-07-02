@@ -269,13 +269,14 @@ void SettingsController::defaults()
     // Notify daemon to reload — reset() wrote defaults to disk
     DaemonDBus::notifyReload();
 
-    // Reset the rule-backed appearance/gap baselines to factory. The KConfig
-    // reset() above cannot reach them — window border / title bar / gaps live on
-    // the daemon's managed baseline rules in rules.json. resetManagedDefaults()
-    // asks the daemon to overwrite just those three (preserving user rules) and
-    // broadcast rulesChanged; the paired revert() reloads the model from the
-    // reset set (ordered after the reset on the same D-Bus connection) and drops
-    // any staged rule edits, so the Windows appearance page shows factory values.
+    // Reset the rule-backed baselines to factory. The KConfig reset() above
+    // cannot reach them — window border / title bar / gaps / zone overlay /
+    // general + animation min-size live on the daemon's managed baseline rules
+    // in rules.json. resetManagedDefaults() asks the daemon to overwrite just
+    // those baselines (preserving user rules) and broadcast rulesChanged; the
+    // paired revert() reloads the model from the reset set (ordered after the
+    // reset on the same D-Bus connection) and drops any staged rule edits, so
+    // the rule-backed pages show factory values.
     if (m_rulesPage) {
         m_rulesPage->resetManagedDefaults();
         m_rulesPage->revert();

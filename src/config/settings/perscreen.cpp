@@ -618,11 +618,20 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdO
         it = findPerScreenEntry(m_perScreenZoneSelectorSettings,
                                 PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenIdOrName));
     }
-    if (it == m_perScreenZoneSelectorSettings.constEnd()) {
-        return config;
+    if (it != m_perScreenZoneSelectorSettings.constEnd()) {
+        applyPerScreenOverrides(config, it.value());
     }
 
-    applyPerScreenOverrides(config, it.value());
+    // Per-monitor zone-selector overrides authored as RULES (the v5 source of
+    // per-monitor values — the config store above only carries legacy
+    // in-memory writes) overlay last, so the rule wins where both exist.
+    // perScreenZoneSelectorRuleOverrides already resolves the canonical /
+    // physical-parent key forms (perScreenGapKeyForms covers the virtual
+    // sub-screen fallback) and validates every value.
+    const QVariantMap ruleOverrides = perScreenZoneSelectorRuleOverrides(m_ruleStore, screenIdOrName);
+    if (!ruleOverrides.isEmpty()) {
+        applyPerScreenOverrides(config, ruleOverrides);
+    }
     return config;
 }
 
@@ -769,18 +778,27 @@ QVariantMap Settings::perScreenTilingRuleOverrides(const PhosphorRules::RuleStor
         if (!store->ruleSet().ruleById(ruleId)) {
             continue;
         }
-        // First matching rule wins. Split ratio is a [0.1, 0.9] fraction (double);
-        // master count and max windows are integers. Read each action's value
-        // through the shared gapValueFromRule helper (action-type-generic despite
-        // its name — it returns any action's Value param).
+        // First matching rule wins. Split ratio is a fraction (double, bounds
+        // ConfigDefaults::autotileSplitRatioMin/Max); master count and max
+        // windows are integers. Read each action's value through the shared
+        // gapValueFromRule helper (action-type-generic despite its name — it
+        // returns any action's Value param), clamped to the same bounds the
+        // retired config path's validator enforced so a hand-edited rule
+        // can't smuggle an out-of-range value into the engine.
         if (const auto v = gapValueFromRule(store, ruleId, AT::SetSplitRatio)) {
-            tiling.insert(QString(PSK::SplitRatio), v->toDouble());
+            tiling.insert(QString(PSK::SplitRatio),
+                          qBound(ConfigDefaults::autotileSplitRatioMin(), v->toDouble(),
+                                 ConfigDefaults::autotileSplitRatioMax()));
         }
         if (const auto v = gapValueFromRule(store, ruleId, AT::SetMasterCount)) {
-            tiling.insert(QString(PSK::MasterCount), v->toInt());
+            tiling.insert(
+                QString(PSK::MasterCount),
+                qBound(ConfigDefaults::autotileMasterCountMin(), v->toInt(), ConfigDefaults::autotileMasterCountMax()));
         }
         if (const auto v = gapValueFromRule(store, ruleId, AT::SetMaxWindows)) {
-            tiling.insert(QString(PSK::MaxWindows), v->toInt());
+            tiling.insert(
+                QString(PSK::MaxWindows),
+                qBound(ConfigDefaults::autotileMaxWindowsMin(), v->toInt(), ConfigDefaults::autotileMaxWindowsMax()));
         }
         return tiling;
     }
@@ -810,7 +828,11 @@ QVariantMap Settings::perScreenZoneSelectorRuleOverrides(const PhosphorRules::Ru
         if (!rule) {
             continue;
         }
-        // First matching rule wins.
+        // First matching rule wins. Each property value is routed through the
+        // same validatePerScreenValue the retired config path used (enum
+        // range checks + bounded ints + bool coercion for PreviewLockAspect),
+        // so a malformed rule value surfaces as its validated form or is
+        // dropped — never as an out-of-range enum/int.
         for (const PhosphorRules::RuleAction& a : rule->actions) {
             if (a.type != QString(AT::SetZoneSelectorProperty)) {
                 continue;
@@ -819,11 +841,9 @@ QVariantMap Settings::perScreenZoneSelectorRuleOverrides(const PhosphorRules::Ru
             if (property.isEmpty()) {
                 continue;
             }
-            const QJsonValue value = a.params.value(QString(AP::Value));
-            if (property == QLatin1String(ZoneSelectorConfigKey::PreviewLockAspect)) {
-                overrides.insert(property, value.toBool());
-            } else {
-                overrides.insert(property, value.toInt());
+            const QVariant validated = validatePerScreenValue(property, a.params.value(QString(AP::Value)).toVariant());
+            if (validated.isValid()) {
+                overrides.insert(property, validated);
             }
         }
         return overrides;

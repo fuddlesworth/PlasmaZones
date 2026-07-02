@@ -356,28 +356,17 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
         return true;
     }
 
-    // Min-size filter — windows narrower or shorter than the threshold
-    // are excluded. Zero (the default) disables each axis independently
-    // so a user can set just one bound. Frame geometry is read live —
-    // during minimize/close lifecycle a window may already be collapsed
-    // when this fires, which is acceptable: the user opted into the
-    // size threshold so a transient sub-threshold frame should suppress
-    // the animation consistently with explicit-size cases.
-    const QRectF frame = w->frameGeometry();
-    if (m_animationMinWindowWidth > 0 && frame.width() < m_animationMinWindowWidth) {
-        return false;
-    }
-    if (m_animationMinWindowHeight > 0 && frame.height() < m_animationMinWindowHeight) {
-        return false;
-    }
-
-    // User-configured exclusion lists — routed through the unified
-    // RuleEvaluator over the animation exclusion rule set, the same path
+    // User-configured exclusions — routed through the unified RuleEvaluator
+    // over the animation exclusion rule set, the same path
     // `shouldHandleWindow` uses for the snapping exclusions. Both filter
     // sets walk the full WindowQuery match expression (AppId / WindowClass /
-    // Title / WindowRole / DesktopFile / WindowType / Pid / state flags),
-    // so the two are in lockstep on match semantics even though their rule
-    // sets are independent. The `!isEmpty()` fast path keeps a no-exclusions
+    // Title / WindowRole / DesktopFile / WindowType / Pid / width + height /
+    // state flags), so the two are in lockstep on match semantics even
+    // though their rule sets are independent. Since v5 this also gates the
+    // animation min-size filter: the managed baseline ExcludeAnimations
+    // rules match Width / Height LessThan the user's threshold (0 = never
+    // matches = off), reproducing the old cached-member gate through the
+    // same evaluator. The `!isEmpty()` fast path keeps a no-exclusions
     // user free.
     if (!m_animationExclusionRuleSet.isEmpty()) {
         if (m_animationExclusionEvaluator.resolve(query()).isExcluded()) {

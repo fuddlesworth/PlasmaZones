@@ -142,7 +142,10 @@ SettingsFlickable {
                         ColorSwatchRow {
                             color: root.overlayValue("setOverlayHighlightColor", appSettings.highlightColor)
                             onClicked: {
-                                highlightColorDialog.selectedColor = appSettings.highlightColor;
+                                // Seed from the same staged rule view the swatch renders
+                                // (appSettings reads a separate store that only syncs on
+                                // reload, so it can lag right after an edit).
+                                highlightColorDialog.selectedColor = root.overlayValue("setOverlayHighlightColor", appSettings.highlightColor);
                                 highlightColorDialog.open();
                             }
                         }
@@ -161,7 +164,7 @@ SettingsFlickable {
                         ColorSwatchRow {
                             color: root.overlayValue("setOverlayInactiveColor", appSettings.inactiveColor)
                             onClicked: {
-                                inactiveColorDialog.selectedColor = appSettings.inactiveColor;
+                                inactiveColorDialog.selectedColor = root.overlayValue("setOverlayInactiveColor", appSettings.inactiveColor);
                                 inactiveColorDialog.open();
                             }
                         }
@@ -180,7 +183,7 @@ SettingsFlickable {
                         ColorSwatchRow {
                             color: root.overlayValue("setOverlayBorderColor", appSettings.borderColor)
                             onClicked: {
-                                borderColorDialog.selectedColor = appSettings.borderColor;
+                                borderColorDialog.selectedColor = root.overlayValue("setOverlayBorderColor", appSettings.borderColor);
                                 borderColorDialog.open();
                             }
                         }
@@ -667,6 +670,20 @@ SettingsFlickable {
         function onColorImportError(message) {
             colorImportErrorDialog.subtitle = message;
             colorImportErrorDialog.open();
+        }
+
+        // Apply the parsed import: the three overlay colours go onto the
+        // managed baseline overlay rule (the same staged writeOverlayAction
+        // path the colour dialogs use), the label colour onto the
+        // config-backed property, and the system-colours gate switches off
+        // so the imported colours are actually visible.
+        function onColorsImported(highlight, inactive, border, labelFont) {
+            root.writeOverlayAction("setOverlayHighlightColor", root.colorToHex(highlight));
+            root.writeOverlayAction("setOverlayInactiveColor", root.colorToHex(inactive));
+            root.writeOverlayAction("setOverlayBorderColor", root.colorToHex(border));
+            appSettings.labelFontColor = labelFont;
+            if (appSettings.useSystemColors)
+                appSettings.useSystemColors = false;
         }
 
         function onColorImportSuccess() {

@@ -213,7 +213,7 @@ void RuleAdaptor::resetManagedDefaults()
     // on a real change).
     m_store->load();
 
-    // Policy A: reset ONLY the three managed baseline rules to their factory
+    // Policy A: reset ONLY the managed baseline rules to their factory
     // definitions; every user-authored rule is preserved. Build the merged set
     // and persist it in one setAllRules (the load() above may already have emitted
     // a rulesChanged if the on-disk set had changed, so this call can be the
@@ -232,6 +232,11 @@ void RuleAdaptor::resetManagedDefaults()
     upsertBaseline(makeBaselineBorderRule());
     upsertBaseline(makeBaselineTitleBarRule());
     upsertBaseline(makeBaselineGapRule());
+    upsertBaseline(makeBaselineOverlayRule());
+    upsertBaseline(makeBaselineGeneralMinWidthRule());
+    upsertBaseline(makeBaselineGeneralMinHeightRule());
+    upsertBaseline(makeBaselineAnimationMinWidthRule());
+    upsertBaseline(makeBaselineAnimationMinHeightRule());
     // setAllRules returns false when the merged set could not be persisted to
     // disk; every other mutator slot here propagates that bool, so surface it in
     // the log rather than silently claiming a successful Restore Defaults.

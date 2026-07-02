@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "settings.h"
-#include "colorimporter.h"
 #include "configdefaults.h"
 #include "configbackends.h"
 #include "configmigration.h"
@@ -81,7 +80,7 @@ Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRe
     // (The owning ctor below routes through migrateAndCreateOwnedBackend
     // which performs the migration itself for standalone tools and tests.)
     load();
-    connectRuleStoreGapReactivity();
+    connectRuleStoreReactivity();
 }
 
 Settings::Settings(QObject* parent)
@@ -104,7 +103,7 @@ Settings::Settings(QObject* parent)
     // fixture and standalone-settings launch.
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
-    connectRuleStoreGapReactivity();
+    connectRuleStoreReactivity();
 }
 
 Settings::Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent)
@@ -125,7 +124,7 @@ Settings::Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent)
     // preserved across the Settings ↔ daemon boundary in this configuration.
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
-    connectRuleStoreGapReactivity();
+    connectRuleStoreReactivity();
 }
 
 // ── Helper Methods ───────────────────────────────────────────────────────────
@@ -235,9 +234,8 @@ void Settings::load()
     // this config reload.
     const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged;
 
-    if (useSystemColors()) {
-        applySystemColorScheme();
-    }
+    // "Use system colours" is a live gate in the colour getters (see
+    // highlightColor() below) — nothing to apply or persist at load time.
 
     qCInfo(lcConfig) << "Settings loaded";
 
@@ -768,26 +766,63 @@ void Settings::setAudioSpectrumBarCount(int count)
 // ── Appearance (PhosphorConfig::Store-backed) ───────────────────────────────
 // Colors group
 P_STORE_GET(bool, useSystemColors, snappingZonesColorsGroup, useSystemKey, bool)
+
+// System-palette source for the live "use system colours" gate below. Reads
+// the CURRENT application palette (which follows the desktop colour scheme in
+// every process that renders — daemon, settings, editor) and stamps the
+// overlay alpha the old applySystemColorScheme baked in at toggle time. Being
+// a live read, a colour-scheme change is picked up on the next getter call
+// with no persisted copy to go stale.
+static QColor systemPaletteColor(QPalette::ColorRole role, int alpha)
+{
+    QColor c = QGuiApplication::palette().color(QPalette::Active, role);
+    c.setAlpha(alpha);
+    return c;
+}
+
 void Settings::setUseSystemColors(bool use)
 {
     if (useSystemColors() == use) {
         return;
     }
+    // The toggle flips the live gate in the colour getters, so the EFFECTIVE
+    // colours change without any rule/store write. Capture them before the
+    // flip and emit only the NOTIFYs whose value actually moved (CLAUDE.md
+    // emit-on-change rule).
+    const QColor beforeHighlight = highlightColor();
+    const QColor beforeInactive = inactiveColor();
+    const QColor beforeBorder = borderColor();
+    const QColor beforeLabelFont = labelFontColor();
     m_store->write(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::useSystemKey(), use);
-    if (use) {
-        applySystemColorScheme();
-    }
     Q_EMIT useSystemColorsChanged();
+    if (highlightColor() != beforeHighlight) {
+        Q_EMIT highlightColorChanged();
+    }
+    if (inactiveColor() != beforeInactive) {
+        Q_EMIT inactiveColorChanged();
+    }
+    if (borderColor() != beforeBorder) {
+        Q_EMIT borderColorChanged();
+    }
+    if (labelFontColor() != beforeLabelFont) {
+        Q_EMIT labelFontColorChanged();
+    }
     Q_EMIT settingsChanged();
 }
 // Zone-overlay appearance getters read the managed baseline overlay rule (the v5
 // source of truth, seeded by makeBaselineOverlayRule / updated by the migration),
 // falling back to ConfigDefaults when the rule/action is absent — mirroring the
 // gap getters (innerGap() etc). Colours are stored as `#AARRGGBB` hex on the
-// action; an invalid/absent value falls back. The setters still write config
-// (unused by the rule-backed Overlay Appearance page, kept for API completeness).
+// action; an invalid/absent value falls back. While useSystemColors is on, the
+// colour getters short-circuit to the live system palette (the gate), leaving
+// the rule's custom colours untouched underneath for a later toggle-off. The
+// setters retired in v5 — the Overlay Appearance page writes the rule through
+// the RuleController.
 QColor Settings::highlightColor() const
 {
+    if (useSystemColors()) {
+        return systemPaletteColor(QPalette::Highlight, ::PhosphorZones::ZoneDefaults::HighlightAlpha);
+    }
     if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
                                         PhosphorRules::ActionType::SetOverlayHighlightColor)) {
         const QColor c(v->toString());
@@ -797,9 +832,11 @@ QColor Settings::highlightColor() const
     }
     return ConfigDefaults::highlightColor();
 }
-P_STORE_SET_COLOR(setHighlightColor, snappingZonesColorsGroup, highlightKey, highlightColorChanged)
 QColor Settings::inactiveColor() const
 {
+    if (useSystemColors()) {
+        return systemPaletteColor(QPalette::Text, ::PhosphorZones::ZoneDefaults::InactiveAlpha);
+    }
     if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
                                         PhosphorRules::ActionType::SetOverlayInactiveColor)) {
         const QColor c(v->toString());
@@ -809,9 +846,11 @@ QColor Settings::inactiveColor() const
     }
     return ConfigDefaults::inactiveColor();
 }
-P_STORE_SET_COLOR(setInactiveColor, snappingZonesColorsGroup, inactiveKey, inactiveColorChanged)
 QColor Settings::borderColor() const
 {
+    if (useSystemColors()) {
+        return systemPaletteColor(QPalette::Text, ::PhosphorZones::ZoneDefaults::BorderAlpha);
+    }
     if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
                                         PhosphorRules::ActionType::SetOverlayBorderColor)) {
         const QColor c(v->toString());
@@ -821,10 +860,17 @@ QColor Settings::borderColor() const
     }
     return ConfigDefaults::borderColor();
 }
-P_STORE_SET_COLOR(setBorderColor, snappingZonesColorsGroup, borderKey, borderColorChanged)
 
-// Labels group
-P_STORE_GET(QColor, labelFontColor, snappingZonesLabelsGroup, fontColorKey, QColor)
+// Labels group. labelFontColor stays config-backed but shares the system-
+// palette gate (the old applySystemColorScheme also drove it from the theme's
+// text colour, opaque).
+QColor Settings::labelFontColor() const
+{
+    if (useSystemColors()) {
+        return QGuiApplication::palette().color(QPalette::Active, QPalette::Text);
+    }
+    return m_store->read<QColor>(ConfigDefaults::snappingZonesLabelsGroup(), ConfigDefaults::fontColorKey());
+}
 P_STORE_SET_COLOR(setLabelFontColor, snappingZonesLabelsGroup, fontColorKey, labelFontColorChanged)
 P_STORE_GET(QString, labelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, QString)
 P_STORE_SET_STRING(setLabelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, labelFontFamilyChanged)
@@ -839,7 +885,8 @@ P_STORE_SET_BOOL(setLabelFontUnderline, snappingZonesLabelsGroup, fontUnderlineK
 P_STORE_GET(bool, labelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, bool)
 P_STORE_SET_BOOL(setLabelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, labelFontStrikeoutChanged)
 
-// Opacity group — rule-backed getters (baseline overlay rule), config setters.
+// Opacity group — rule-backed getters (baseline overlay rule); setters
+// retired in v5 (edits go through the RuleController).
 qreal Settings::activeOpacity() const
 {
     if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
@@ -848,7 +895,6 @@ qreal Settings::activeOpacity() const
     }
     return ConfigDefaults::activeOpacity();
 }
-P_STORE_SET_DOUBLE(setActiveOpacity, snappingZonesOpacityGroup, activeKey, activeOpacityChanged)
 qreal Settings::inactiveOpacity() const
 {
     if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
@@ -857,9 +903,9 @@ qreal Settings::inactiveOpacity() const
     }
     return ConfigDefaults::inactiveOpacity();
 }
-P_STORE_SET_DOUBLE(setInactiveOpacity, snappingZonesOpacityGroup, inactiveKey, inactiveOpacityChanged)
 
-// Border group — rule-backed getters (baseline overlay rule), config setters.
+// Border group — rule-backed getters (baseline overlay rule); setters retired
+// in v5 (edits go through the RuleController).
 int Settings::borderWidth() const
 {
     if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
@@ -868,7 +914,6 @@ int Settings::borderWidth() const
     }
     return ConfigDefaults::borderWidth();
 }
-P_STORE_SET_INT(setBorderWidth, snappingZonesBorderGroup, widthKey, borderWidthChanged)
 int Settings::borderRadius() const
 {
     if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineOverlayRuleId(),
@@ -877,7 +922,6 @@ int Settings::borderRadius() const
     }
     return ConfigDefaults::borderRadius();
 }
-P_STORE_SET_INT(setBorderRadius, snappingZonesBorderGroup, radiusKey, borderRadiusChanged)
 
 // Effects group (blur lives here for historical reasons)
 P_STORE_GET(bool, enableBlur, snappingEffectsGroup, blurKey, bool)
@@ -1472,12 +1516,12 @@ int Settings::outerGapRight() const
     return ConfigDefaults::outerGapRight();
 }
 
-void Settings::connectRuleStoreGapReactivity()
+void Settings::connectRuleStoreReactivity()
 {
     if (m_ruleStore == nullptr) {
         return;
     }
-    // Seed the change-detection cache from the current baseline rule so the
+    // Seed the change-detection caches from the current baseline rules so the
     // first rulesChanged emit compares against a real snapshot.
     m_cachedInnerGap = innerGap();
     m_cachedOuterGap = outerGap();
@@ -1486,6 +1530,13 @@ void Settings::connectRuleStoreGapReactivity()
     m_cachedOuterGapBottom = outerGapBottom();
     m_cachedOuterGapLeft = outerGapLeft();
     m_cachedOuterGapRight = outerGapRight();
+    m_cachedHighlightColor = highlightColor();
+    m_cachedInactiveColor = inactiveColor();
+    m_cachedBorderColor = borderColor();
+    m_cachedActiveOpacity = activeOpacity();
+    m_cachedInactiveOpacity = inactiveOpacity();
+    m_cachedBorderWidth = borderWidth();
+    m_cachedBorderRadius = borderRadius();
     m_cachedGapFingerprint = gapRulesFingerprint();
     connect(m_ruleStore, &PhosphorRules::RuleStore::rulesChanged, this, [this](bool /*persisted*/) {
         onRuleStoreChanged();
@@ -1529,6 +1580,42 @@ void Settings::onRuleStoreChanged()
         Q_EMIT outerGapRightChanged();
     });
 
+    // The baseline overlay rule backs the seven overlay-appearance getters
+    // (highlightColor() etc.), so an overlay edit must honour their Q_PROPERTY
+    // NOTIFY contract the same way the gap edits above do. The comparisons use
+    // the EFFECTIVE getter values, so while the system-palette gate is on a
+    // rule-side colour edit correctly emits nothing (the effective colour is
+    // the palette's). `overlayChanged` feeds the settingsChanged emission
+    // below so the daemon re-renders overlays for overlay-only edits too.
+    bool overlayChanged = false;
+    const auto detectOverlay = [&overlayChanged, &detect](auto& cached, auto current, auto emitSignal) {
+        detect(cached, current, [&overlayChanged, &emitSignal]() {
+            overlayChanged = true;
+            emitSignal();
+        });
+    };
+    detectOverlay(m_cachedHighlightColor, highlightColor(), [this]() {
+        Q_EMIT highlightColorChanged();
+    });
+    detectOverlay(m_cachedInactiveColor, inactiveColor(), [this]() {
+        Q_EMIT inactiveColorChanged();
+    });
+    detectOverlay(m_cachedBorderColor, borderColor(), [this]() {
+        Q_EMIT borderColorChanged();
+    });
+    detectOverlay(m_cachedActiveOpacity, activeOpacity(), [this]() {
+        Q_EMIT activeOpacityChanged();
+    });
+    detectOverlay(m_cachedInactiveOpacity, inactiveOpacity(), [this]() {
+        Q_EMIT inactiveOpacityChanged();
+    });
+    detectOverlay(m_cachedBorderWidth, borderWidth(), [this]() {
+        Q_EMIT borderWidthChanged();
+    });
+    detectOverlay(m_cachedBorderRadius, borderRadius(), [this]() {
+        Q_EMIT borderRadiusChanged();
+    });
+
     // A rule edit can also change a per-monitor (or per-mode) gap rule, which
     // feeds the rule-backed getPerScreenAutotileSettings / getPerScreenSnapping-
     // Settings. Re-sync those consumers — the daemon's perScreenSnappingSettings-
@@ -1541,10 +1628,17 @@ void Settings::onRuleStoreChanged()
     // fingerprint covers every gap action across all rules (baseline + per-screen
     // + per-mode), so non-gap rule writes no longer trigger a gap re-sync.
     const QString gapFingerprint = gapRulesFingerprint();
-    if (gapFingerprint != m_cachedGapFingerprint) {
+    const bool gapsChanged = gapFingerprint != m_cachedGapFingerprint;
+    if (gapsChanged) {
         m_cachedGapFingerprint = gapFingerprint;
         Q_EMIT perScreenAutotileSettingsChanged();
         Q_EMIT perScreenSnappingSettingsChanged();
+    }
+    // One settingsChanged covers both kinds of baseline edit (gap and
+    // overlay) — the daemon's settingsChanged handler re-reads the overlay
+    // properties alongside its config refresh, so an overlay-only rule edit
+    // repaints without a second broadcast.
+    if (gapsChanged || overlayChanged) {
         Q_EMIT settingsChanged();
     }
 }
@@ -2037,39 +2131,40 @@ P_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, fi
 
 // ── Global exclusion knobs (PhosphorConfig::Store-backed) ──────────────────
 //
-// Three global behavioural knobs survive in the `Exclusions` group:
-// `excludeTransientWindows` (boolean), `minimumWindowWidth` (int px),
-// `minimumWindowHeight` (int px). Per-app / per-class exclusion lists
+// One global behavioural knob survives in the `Exclusions` group:
+// `excludeTransientWindows` (boolean). Per-app / per-class exclusion lists
 // retired in v4 — the migration in src/config/configmigration.cpp drains
 // the legacy lists into Application-subject Rules, and runtime
 // evaluators in SnapEngine, the KWin effect, and the WTA
 // pending-restore prune route through `PhosphorRules::ExclusionRules`
-// over the unified store.
+// over the unified store. The min-size knobs followed in v5 — folded onto
+// the managed baseline Exclude rules.
 //
 // The on-disk group name `"Exclusions"` is INTENTIONALLY kept after the
 // UI moved these knobs into a card relabeled "Window filtering" on the
 // General page (see src/settings/qml/GeneralPage.qml). Renaming the
-// group would require a v4→v5 schema migration to remap every existing
-// user config without losing the three preserved knobs — disproportionate
+// group would require another schema migration to remap every existing
+// user config without losing the preserved knob — disproportionate
 // for a label change. The accessor name `exclusionsGroup()` keeps the
 // disk shape, and the runtime UI label is independent.
 
 P_STORE_GET(bool, excludeTransientWindows, exclusionsGroup, transientWindowsKey, bool)
 P_STORE_SET_BOOL(setExcludeTransientWindows, exclusionsGroup, transientWindowsKey, excludeTransientWindowsChanged)
-P_STORE_GET(int, minimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, int)
-P_STORE_SET_INT(setMinimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, minimumWindowWidthChanged)
-P_STORE_GET(int, minimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, int)
-P_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, minimumWindowHeightChanged)
+// minimumWindowWidth/Height retired in v5 — the min-size thresholds live in
+// the matches of the two managed baseline Exclude rules and are edited
+// through the RuleController; the Exclusions config group keeps only the
+// TransientWindows toggle.
 
 // ── Animation Window Filtering (PhosphorConfig::Store-backed) ──────────────
 //
-// Four global animation-filtering knobs in `Animations.WindowFiltering`:
-// `animationExcludeTransientWindows`, `animationExcludeNotificationsAndOsd`,
-// `animationMinimumWindowWidth`, `animationMinimumWindowHeight`. Mirrors
-// the Exclusions block above (plus a NotificationsAndOsd knob), stored
-// independently so a user can disable animations for an app while still
-// snapping it (or vice versa). Per-app / per-class animation exclusion
-// lists retired in v4 — they fold into ExcludeAnimations Rules.
+// Two global animation-filtering knobs in `Animations.WindowFiltering`:
+// `animationExcludeTransientWindows` and
+// `animationExcludeNotificationsAndOsd`. Mirrors the Exclusions block above
+// (plus a NotificationsAndOsd knob), stored independently so a user can
+// disable animations for an app while still snapping it (or vice versa).
+// Per-app / per-class animation exclusion lists retired in v4 (folded into
+// ExcludeAnimations Rules); the animation min-size knobs retired in v5
+// (folded onto the managed baseline ExcludeAnimations rules).
 
 P_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
 P_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
@@ -2077,12 +2172,6 @@ P_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringG
 P_STORE_GET(bool, animationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey, bool)
 P_STORE_SET_BOOL(setAnimationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey,
                  animationExcludeNotificationsAndOsdChanged)
-P_STORE_GET(int, animationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey, int)
-P_STORE_SET_INT(setAnimationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey,
-                animationMinimumWindowWidthChanged)
-P_STORE_GET(int, animationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey, int)
-P_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey,
-                animationMinimumWindowHeightChanged)
 
 // animationExcludedApplications / animationExcludedWindowClasses (+ their
 // add*/remove* convenience methods) retired in v4 — the v4 migration drains
@@ -3172,44 +3261,12 @@ P_STORE_GET(int, fillOnDropModifier, editorFillOnDropGroup, modifierKey, int)
 P_STORE_SET_INT(setFillOnDropModifier, editorFillOnDropGroup, modifierKey, fillOnDropModifierChanged)
 
 // ── Color helpers ────────────────────────────────────────────────────────────
-
-QString Settings::loadColorsFromFile(const QString& filePath)
-{
-    ColorImportResult result = ColorImporter::importFromFile(filePath);
-    if (!result.success) {
-        return result.errorMessage;
-    }
-    setHighlightColor(result.highlightColor);
-    setInactiveColor(result.inactiveColor);
-    setBorderColor(result.borderColor);
-    setLabelFontColor(result.labelFontColor);
-    if (useSystemColors()) {
-        setUseSystemColors(false);
-    }
-    return QString(); // Success - no error
-}
-
-void Settings::applySystemColorScheme()
-{
-    // QPalette respects QT_QPA_PLATFORMTHEME — on non-KDE desktops, Qt reads
-    // the platform theme (qt6ct, gnome, lxqt) to populate the palette.
-    const QPalette pal = QGuiApplication::palette();
-
-    QColor highlight = pal.color(QPalette::Active, QPalette::Highlight);
-    highlight.setAlpha(::PhosphorZones::ZoneDefaults::HighlightAlpha);
-    setHighlightColor(highlight);
-
-    QColor inactive = pal.color(QPalette::Active, QPalette::Text);
-    inactive.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
-    setInactiveColor(inactive);
-
-    QColor border = pal.color(QPalette::Active, QPalette::Text);
-    border.setAlpha(::PhosphorZones::ZoneDefaults::BorderAlpha);
-    setBorderColor(border);
-
-    const QColor fontColor = pal.color(QPalette::Active, QPalette::Text);
-    setLabelFontColor(fontColor);
-}
+// loadColorsFromFile / applySystemColorScheme retired in v5. Colour import is
+// parsed by SnappingZonesController (ColorImporter) and written onto the
+// managed baseline overlay rule through the RuleController by the Overlay
+// Appearance page; "use system colours" is the live palette gate in the
+// colour getters above (QPalette respects QT_QPA_PLATFORMTHEME, so non-KDE
+// desktops resolve through qt6ct / gnome / lxqt exactly as before).
 
 #undef P_STORE_GET
 #undef P_STORE_SET_BOOL

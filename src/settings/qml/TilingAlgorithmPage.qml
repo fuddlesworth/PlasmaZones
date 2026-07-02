@@ -145,8 +145,11 @@ SettingsFlickable {
 
     // Read a tiling action's value honouring the current scope: global returns the
     // passed-in global value; a monitor scope reads its override rule (falling back
-    // to the global when the monitor has no override yet).
+    // to the global when the monitor has no override yet). Reads tilingReloadTick
+    // internally (like tilingRuleAlgorithm) so every caller is reactive without
+    // having to remember the tick itself.
     function tilingRuleValue(actionType, globalValue) {
+        root.tilingReloadTick;
         const scope = psHelper.selectedScreenName;
         if (scope === "")
             return globalValue;
@@ -186,8 +189,12 @@ SettingsFlickable {
         return ruleObj;
     }
 
-    // Build a fresh per-screen tiling rule for @p screen, seeded from the current
-    // global values so the monitor starts as an exact copy of what it inherited.
+    // Build a fresh per-screen tiling rule for @p screen, seeded from the
+    // EFFECTIVE values the sliders display in global scope (the selected
+    // algorithm's per-algorithm tuning where present, else the global config
+    // scalar) so the monitor starts as an exact copy of what the user was
+    // looking at — not the raw config default hiding under a per-algorithm
+    // override.
     function buildPerScreenTilingRule(id, screen) {
         return {
             "id": id,
@@ -201,15 +208,15 @@ SettingsFlickable {
             "actions": [
                 {
                     "type": "setSplitRatio",
-                    "value": appSettings.autotileSplitRatio
+                    "value": root.liveAlgoSettings.splitRatio !== undefined ? root.liveAlgoSettings.splitRatio : appSettings.autotileSplitRatio
                 },
                 {
                     "type": "setMasterCount",
-                    "value": appSettings.autotileMasterCount
+                    "value": root.liveAlgoSettings.masterCount !== undefined ? root.liveAlgoSettings.masterCount : appSettings.autotileMasterCount
                 },
                 {
                     "type": "setMaxWindows",
-                    "value": appSettings.autotileMaxWindows
+                    "value": root.liveAlgoSettings.maxWindows !== undefined ? root.liveAlgoSettings.maxWindows : appSettings.autotileMaxWindows
                 }
             ]
         };

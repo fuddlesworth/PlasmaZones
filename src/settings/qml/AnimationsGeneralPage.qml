@@ -30,15 +30,19 @@ SettingsFlickable {
     id: page
 
     readonly property QtObject appSettings: settingsController.settings
-    // The min-size window filters are rule-backed (ExcludeAnimations rules matching
-    // Width/Height LessThan N); 0 = off = no rule. Read/write route through the
-    // RuleController; the transient / notification toggles stay config-backed.
+    // The min-size window filters are rule-backed: each is the threshold in the
+    // match of a managed animation min-size baseline ExcludeAnimations rule
+    // (Width / Height LessThan N). The baseline is always daemon-seeded (0 =
+    // never matches = off, the default), so the controls only ever UPDATE its
+    // match threshold; read/write route through the RuleController. The
+    // transient / notification toggles stay config-backed.
     readonly property var ruleController: settingsController.rulesPage
     property int animReloadTick: 0
 
-    // Threshold N of a min-size ExcludeAnimations rule (Width/Height LessThan N),
-    // or 0 when the rule is absent (filter off). Reading animReloadTick re-reads
-    // the value bindings after a write / rule reload.
+    // Threshold N of a min-size baseline (Width/Height LessThan N), or 0 when
+    // the rule is absent (fresh profile before the daemon seeds — 0 matches the
+    // seeded off-by-default threshold, so nothing jumps once it lands). Reading
+    // animReloadTick re-reads the value bindings after a write / rule reload.
     function minSizeThreshold(ruleId) {
         page.animReloadTick;
         const rule = page.ruleController.ruleJson(ruleId);
@@ -47,45 +51,29 @@ SettingsFlickable {
         return 0;
     }
 
-    // Write a min-size threshold: 0 removes the rule; N>0 find-or-creates the
-    // ExcludeAnimations rule matching @p field LessThan N.
-    function writeMinSize(ruleId, field, ruleName, value) {
-        if (value <= 0) {
-            page.ruleController.removeRule(ruleId);
-        } else {
-            var rule = page.ruleController.ruleJson(ruleId);
-            if (!rule || !rule.id) {
-                rule = {
-                    "id": ruleId,
-                    "name": ruleName,
-                    "enabled": true,
-                    "match": {
-                        "field": field,
-                        "op": "lessThan",
-                        "value": value
-                    },
-                    "actions": [
-                        {
-                            "type": "excludeAnimations"
-                        }
-                    ]
-                };
-                page.ruleController.addRuleFromJson(rule);
-            } else {
-                rule.match = {
-                    "field": field,
-                    "op": "lessThan",
-                    "value": value
-                };
-                page.ruleController.updateRuleFromJson(rule);
-            }
-        }
+    // Write a min-size threshold onto the baseline rule's match (0 = disabled).
+    // Mirrors GeneralPage.writeMinSize: no find-or-create — the daemon seeds the
+    // baseline, so a missing rule is the transient pre-seed state and the write
+    // is dropped (the spinbox snaps back to the current threshold).
+    function writeMinSize(ruleId, field, value) {
+        var rule = page.ruleController.ruleJson(ruleId);
+        if (!rule || !rule.id)
+            return;
+        rule.match = {
+            "field": field,
+            "op": "lessThan",
+            "value": Math.max(0, value)
+        };
+        page.ruleController.updateRuleFromJson(rule);
         page.animReloadTick++;
     }
 
     Connections {
         target: page.ruleController
         function onRulesLoaded() {
+            page.animReloadTick++;
+        }
+        function onBaselinesChanged() {
             page.animReloadTick++;
         }
     }
@@ -421,7 +409,7 @@ SettingsFlickable {
                         onValueModified: value => {
                             // Not translated — Rule::name is the persisted identity
                             // surface and must match the v4→v5 migration's spelling.
-                            page.writeMinSize(settingsController.animationMinWidthRuleId(), "width", "Skip animations for narrow windows", value);
+                            page.writeMinSize(settingsController.animationMinWidthRuleId(), "width", value);
                         }
                         textFromValue: function (value) {
                             return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
@@ -447,7 +435,7 @@ SettingsFlickable {
                         unitText: ""
                         Accessible.name: i18n("Minimum window height for animations")
                         onValueModified: value => {
-                            page.writeMinSize(settingsController.animationMinHeightRuleId(), "height", "Skip animations for short windows", value);
+                            page.writeMinSize(settingsController.animationMinHeightRuleId(), "height", value);
                         }
                         textFromValue: function (value) {
                             return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);

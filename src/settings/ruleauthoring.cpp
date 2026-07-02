@@ -200,8 +200,8 @@ PickerCategory actionCategory(const QString& type)
     }
     const QString& cat = desc->category;
     // Two groups, alphabetised within each: the context-domain categories
-    // (resolved per screen/desktop/activity/mode) come first (orders 0-2), then
-    // the window-domain categories (orders 3-5). Keep these orders in lockstep
+    // (resolved per screen/desktop/activity/mode) come first (orders 0-3), then
+    // the window-domain categories (orders 4-6). Keep these orders in lockstep
     // with each category's action domains in RuleAction.cpp.
     if (cat == QLatin1String("gap")) {
         return {PhosphorI18n::tr("Gaps"), 0};
