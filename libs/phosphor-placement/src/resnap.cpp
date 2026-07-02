@@ -28,7 +28,7 @@ namespace PhosphorPlacement {
 void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens,
                                                               const QSet<QString>& includeScreens, int desktopFilter)
 {
-    if (!m_snapState || !m_layoutManager)
+    if (!hasSnapState() || !m_layoutManager)
         return;
 
     QVector<ResnapEntry> newBuffer;
@@ -53,9 +53,9 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     const QHash<QString, int> globalZoneIdToPosition =
         PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts());
 
-    const QHash<QString, QStringList>& snapZones = m_snapState->zoneAssignments();
-    const QHash<QString, QString>& snapScreens = m_snapState->screenAssignments();
-    const QHash<QString, int>& snapDesktops = m_snapState->desktopAssignments();
+    const QHash<QString, QStringList>& snapZones = zoneAssignments();
+    const QHash<QString, QString>& snapScreens = screenAssignments();
+    const QHash<QString, int>& snapDesktops = desktopAssignments();
 
     // Per-window candidate processing, shared by the live and durable passes below.
     const auto addCandidate = [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
@@ -108,7 +108,7 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
 
     // 2. Restart-robustness: a window snapped in a PRIOR session and then autotiled
     // has its snap zones only in the durable WindowPlacement record — the live
-    // m_snapState map above is cold after a daemon restart. Without this pass an
+    // snap store map above is cold after a daemon restart. Without this pass an
     // autotile→snapping swap right after a restart resnaps nothing (empty buffer →
     // no applyGeometriesBatch → the effect never marks the windows snapped, so the
     // per-mode snap border / title-bar appearance is never applied). Mirrors the
@@ -150,9 +150,9 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     // Collect (zoneNumber, insertionIndex, windowId) for windows on this screen.
     // Screen assignments may store connector names or EDID-based screen IDs
     // depending on the code path. Use screensMatch() for format-agnostic comparison.
-    const QHash<QString, QString>& snapScreens = m_snapState->screenAssignments();
-    const QHash<QString, QStringList>& snapZones = m_snapState->zoneAssignments();
-    const QHash<QString, int>& snapDesktops = m_snapState->desktopAssignments();
+    const QHash<QString, QString>& snapScreens = screenAssignments();
+    const QHash<QString, QStringList>& snapZones = zoneAssignments();
+    const QHash<QString, int>& snapDesktops = desktopAssignments();
 
     // This list SEEDS the autotile state for (screenId, CURRENT virtual desktop).
     // Snap assignments are screen-keyed but desktop-agnostic, so the same screen
@@ -228,8 +228,8 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
         return result;
     }
 
-    const QHash<QString, QStringList>& uwgZones = m_snapState->zoneAssignments();
-    const QHash<QString, QString>& uwgScreens = m_snapState->screenAssignments();
+    const QHash<QString, QStringList>& uwgZones = zoneAssignments();
+    const QHash<QString, QString>& uwgScreens = screenAssignments();
 
     for (auto it = uwgZones.constBegin(); it != uwgZones.constEnd(); ++it) {
         QString windowId = it.key();

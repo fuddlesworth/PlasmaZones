@@ -30,10 +30,144 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
     : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
-    , m_snapState(new SnapState(QString(), this))
+    , m_globals(new SnapState(QString(), this))
     , m_zoneDetector(zoneDetector)
     , m_virtualDesktopManager(vdm)
 {
+    // The global-scalar holder lives in the per-screen map under the empty-screen
+    // key so whole-store enumerations (snappedWindows / floatingWindows /
+    // buildOccupiedZoneSet / the flat-map views) iterate it transparently. It
+    // carries no zone/screen assignments — only the still-global last-used-zone and
+    // user-snapped scalars, plus any screenless float bookkeeping.
+    m_states.insertState(PhosphorEngine::PlacementStateKey{}, m_globals);
+}
+
+void SnapEngine::setWindowRegistry(PhosphorEngine::IWindowRegistry* registry)
+{
+    m_windowRegistry = registry;
+    for (SnapState* state : m_states.states()) {
+        if (state) {
+            state->setWindowRegistry(registry);
+        }
+    }
+}
+
+QString SnapEngine::canonicalWindowId(const QString& rawWindowId) const
+{
+    return m_windowRegistry ? m_windowRegistry->canonicalizeForLookup(rawWindowId) : rawWindowId;
+}
+
+SnapState* SnapEngine::ensureStateForKey(const PhosphorEngine::PlacementStateKey& key)
+{
+    // Phase 2 collapses every key onto the single store (m_globals, held under the
+    // empty-screen key) so behaviour is identical to the former single global
+    // SnapState: nothing feeds the ScreenContextTracker context yet, so there is no
+    // basis to split state per monitor without the cross-screen migration that
+    // Phase 3 adds. The seam is fully in place — currentKeyForScreen resolves a real
+    // key, the reverse map is maintained, and enumerations iterate m_states.states()
+    // — so Phase 3 only has to let the factory create a per-key store here. Until
+    // then, snapState() must return the ONE store the engine and the WTS facade both
+    // read, which forbids lazily creating a distinct per-screen store the tests'
+    // eagerly-wired handle could not see.
+    Q_UNUSED(key)
+    return m_globals;
+}
+
+SnapState* SnapEngine::stateForWindow(const QString& windowId)
+{
+    // Collapse: every tracked or untracked window resolves to the single store, so
+    // reads return that store's (possibly empty) per-window data — identical to the
+    // former single SnapState. Canonicalize for parity with the reverse-map contract.
+    Q_UNUSED(windowId)
+    return m_globals;
+}
+
+const SnapState* SnapEngine::stateForWindow(const QString& windowId) const
+{
+    Q_UNUSED(windowId)
+    return m_globals;
+}
+
+SnapState* SnapEngine::stateForWindowOnScreen(const QString& windowId, const QString& screenId)
+{
+    // Record the (collapsed) reverse-map entry so the seam is exercised end to end;
+    // it resolves back to the single store today and becomes the per-key home once
+    // Phase 3 lets ensureStateForKey create per-monitor stores.
+    m_states.setKeyForWindow(canonicalWindowId(windowId), PhosphorEngine::PlacementStateKey{});
+    return ensureStateForKey(currentKeyForScreen(screenId));
+}
+
+void SnapEngine::forgetWindow(const QString& windowId)
+{
+    m_states.removeWindow(canonicalWindowId(windowId));
+}
+
+QList<SnapState*> SnapEngine::allSnapStates() const
+{
+    QList<SnapState*> out;
+    out.reserve(m_states.stateCount());
+    for (SnapState* state : m_states.states()) {
+        if (state) {
+            out.append(state);
+        }
+    }
+    return out;
+}
+
+bool SnapEngine::isFloating(const QString& windowId) const
+{
+    if (const SnapState* state = stateForWindow(windowId)) {
+        if (state->isFloating(windowId)) {
+            return true;
+        }
+    }
+    // Screenless float bookkeeping falls to the global holder, which is not in the
+    // reverse map; check it explicitly so isFloating stays symmetric with setFloating.
+    return m_globals && m_globals->isFloating(windowId);
+}
+
+void SnapEngine::setFloating(const QString& windowId, bool floating)
+{
+    if (SnapState* state = stateForWindow(windowId)) {
+        state->setFloating(windowId, floating);
+        return;
+    }
+    // Untracked window: floating a never-placed window has no screen context, so
+    // park the bookkeeping on the global holder (mirrors the former single store's
+    // screen-agnostic floating set). Unfloating an untracked window is a no-op there.
+    if (m_globals) {
+        m_globals->setFloating(windowId, floating);
+    }
+}
+
+QStringList SnapEngine::floatingWindows() const
+{
+    QStringList out;
+    for (SnapState* state : m_states.states()) {
+        if (state) {
+            out += state->floatingWindows();
+        }
+    }
+    return out;
+}
+
+QString SnapEngine::zoneForWindow(const QString& windowId) const
+{
+    if (const SnapState* state = stateForWindow(windowId)) {
+        return state->zoneForWindow(windowId);
+    }
+    return {};
+}
+
+void SnapEngine::syncGlobalLastUsedForRemovedZones(const QStringList& removedZones)
+{
+    if (!m_globals) {
+        return;
+    }
+    const QString lastUsed = m_globals->lastUsedZoneId();
+    if (!lastUsed.isEmpty() && removedZones.contains(lastUsed)) {
+        m_globals->restoreLastUsedZone({}, {}, {}, 0);
+    }
 }
 
 PhosphorEngine::ISnapSettings* SnapEngine::snapSettings() const
@@ -352,10 +486,7 @@ void SnapEngine::reapplyLayout(const NavigationContext& /*ctx*/)
 
 void SnapEngine::reapplyManagedWindowAppearance()
 {
-    // Both are dereferenced below (m_snapState for the snapped-window set,
-    // m_windowTracker for resolveZoneGeometry); guard both, matching the rest
-    // of the file.
-    if (!m_snapState || !m_windowTracker) {
+    if (!m_windowTracker) {
         return;
     }
     // Re-emit the current zone geometry for every snapped, non-floating window.
@@ -364,25 +495,31 @@ void SnapEngine::reapplyManagedWindowAppearance()
     // redraws the snap border. The window is already in its zone, so the
     // compositor's applyWindowGeometry no-ops the move — this only re-drives the
     // chrome the compositor dropped on bridge reconnect. No zone reassignment.
-    const QStringList snapped = m_snapState->snappedWindows();
-    for (const QString& windowId : snapped) {
-        if (m_snapState->isFloating(windowId)) {
+    // Iterate every per-screen store so windows on all monitors are refreshed.
+    for (SnapState* state : m_states.states()) {
+        if (!state) {
             continue;
         }
-        const QStringList zoneIds = m_snapState->zonesForWindow(windowId);
-        if (zoneIds.isEmpty()) {
-            continue;
+        const QStringList snapped = state->snappedWindows();
+        for (const QString& windowId : snapped) {
+            if (state->isFloating(windowId)) {
+                continue;
+            }
+            const QStringList zoneIds = state->zonesForWindow(windowId);
+            if (zoneIds.isEmpty()) {
+                continue;
+            }
+            const QString screenId = state->screenForWindow(windowId);
+            if (screenId.isEmpty()) {
+                continue;
+            }
+            const QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, screenId);
+            if (!geo.isValid()) {
+                continue;
+            }
+            Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), zoneIds.first(),
+                                          screenId, false);
         }
-        const QString screenId = m_snapState->screenForWindow(windowId);
-        if (screenId.isEmpty()) {
-            continue;
-        }
-        const QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, screenId);
-        if (!geo.isValid()) {
-            continue;
-        }
-        Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), zoneIds.first(), screenId,
-                                      false);
     }
 }
 
@@ -399,22 +536,20 @@ void SnapEngine::pushToEmptyZone(const NavigationContext& ctx)
 // ═══════════════════════════════════════════════════════════════════════════════
 // IPlacementEngine — state access
 //
-// Returns the single SnapState instance wired by Daemon::init(). Currently a
-// global state (not per-screen); a future PR will introduce per-screen
-// ownership. Callers should null-check — headless unit tests may not wire a
-// SnapState.
+// Resolves the per-(screen,desktop,activity) SnapState for a screen via the
+// shared ScreenContextTracker + PerScreenStates. An empty screenId resolves to
+// the global-scalar holder. The non-const overload lazily creates the store; the
+// const overload never creates (returns nullptr for an as-yet-unseen screen).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 PhosphorEngine::IPlacementState* SnapEngine::stateForScreen(const QString& screenId)
 {
-    Q_UNUSED(screenId)
-    return m_snapState;
+    return ensureStateForKey(currentKeyForScreen(screenId));
 }
 
-const PhosphorEngine::IPlacementState* SnapEngine::stateForScreen(const QString& screenId) const
+const PhosphorEngine::IPlacementState* SnapEngine::stateForScreen(const QString& /*screenId*/) const
 {
-    Q_UNUSED(screenId)
-    return m_snapState;
+    return m_globals;
 }
 
 } // namespace PhosphorSnapEngine

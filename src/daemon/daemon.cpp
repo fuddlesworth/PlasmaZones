@@ -1329,16 +1329,39 @@ bool Daemon::init()
     // Uses the base-class pointer — WDA only needs isActiveOnScreen().
     m_windowDragAdaptor->setAutotileEngine(m_autotileEngine.get());
 
-    // SnapEngine creates its own SnapState internally (symmetric with
-    // AutotileEngine/TilingState). WTS references it for zone queries.
-    m_windowTrackingAdaptor->service()->setSnapState(snapEngine->snapState());
+    // SnapEngine owns its per-(screen,desktop,activity) snap stores (symmetric with
+    // AutotileEngine/TilingState). Wire the WTS facade through the engine's resolver
+    // seam so each windowId-keyed query reaches the store that owns the window and
+    // each screen-carrying write reaches — and registers — the store for that screen.
+    {
+        PhosphorPlacement::WindowTrackingService::SnapStateResolver snapResolver;
+        snapResolver.forWindow = [e = QPointer(snapEngine)](const QString& id) -> PhosphorSnapEngine::SnapState* {
+            return e ? e->stateForWindow(id) : nullptr;
+        };
+        snapResolver.forWindowOnScreen =
+            [e = QPointer(snapEngine)](const QString& id, const QString& screenId) -> PhosphorSnapEngine::SnapState* {
+            return e ? e->stateForWindowOnScreen(id, screenId) : nullptr;
+        };
+        snapResolver.globals = [e = QPointer(snapEngine)]() -> PhosphorSnapEngine::SnapState* {
+            return e ? e->globalState() : nullptr;
+        };
+        snapResolver.allStates = [e = QPointer(snapEngine)]() -> QList<PhosphorSnapEngine::SnapState*> {
+            return e ? e->allSnapStates() : QList<PhosphorSnapEngine::SnapState*>{};
+        };
+        snapResolver.forgetWindow = [e = QPointer(snapEngine)](const QString& id) {
+            if (e) {
+                e->forgetWindow(id);
+            }
+        };
+        m_windowTrackingAdaptor->service()->setSnapStateResolver(std::move(snapResolver));
+    }
     m_windowTrackingAdaptor->service()->setSnapEngine(snapEngine);
-    // Inject the shared window registry so SnapState canonicalizes its
+    // Inject the shared window registry so each SnapState canonicalizes its
     // windowId-keyed stores to the stable first-seen composite (instanceId →
     // first observed appId|instanceId). This makes snap float/zone/screen state
     // immune to the effect-restart-after-WM_CLASS-mutation re-identification
     // skew, mirroring how AutotileEngine canonicalizes tiling state (issue #628).
-    snapEngine->snapState()->setWindowRegistry(m_windowRegistry.get());
+    snapEngine->setWindowRegistry(m_windowRegistry.get());
 
     // Filter the unified rule store down to its Exclude-shaped slice and
     // hand the address to SnapEngine for its isAppIdExcluded probe. The
@@ -1515,7 +1538,7 @@ bool Daemon::init()
                 if (screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile) {
                     return autotilePtr && autotilePtr->isWindowFloatingInAutotile(windowId);
                 }
-                return snapEnginePtr && snapEnginePtr->snapState() && snapEnginePtr->snapState()->isFloating(windowId);
+                return snapEnginePtr && snapEnginePtr->isFloating(windowId);
             });
 
         m_windowTrackingAdaptor->service()->setEngineFloatWriter(
@@ -1535,16 +1558,16 @@ bool Daemon::init()
                 if (screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile) {
                     return;
                 }
-                if (snapEnginePtr && snapEnginePtr->snapState()) {
-                    snapEnginePtr->snapState()->setFloating(windowId, floating);
+                if (snapEnginePtr) {
+                    snapEnginePtr->setFloating(windowId, floating);
                 }
             });
 
         m_windowTrackingAdaptor->service()->setEngineFloatLister(
             [snapEnginePtr = QPointer(snapEngine), autotilePtr = QPointer(autotileEngine)]() -> QStringList {
                 QStringList all;
-                if (snapEnginePtr && snapEnginePtr->snapState()) {
-                    all += snapEnginePtr->snapState()->floatingWindows();
+                if (snapEnginePtr) {
+                    all += snapEnginePtr->floatingWindows();
                 }
                 if (autotilePtr) {
                     all += autotilePtr->allFloatingWindows();

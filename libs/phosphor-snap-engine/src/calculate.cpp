@@ -177,20 +177,20 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
     }
 
     // Need a last used zone
-    const QString lastUsedZoneId = m_snapState->lastUsedZoneId();
+    const QString lastUsedZoneId = m_globals->lastUsedZoneId();
     if (lastUsedZoneId.isEmpty()) {
         return SnapResult::noSnap();
     }
 
     // Check if window class was ever user-snapped
     QString windowClass = m_windowTracker->currentAppIdFor(windowId);
-    if (!m_snapState->userSnappedClasses().contains(windowClass)) {
+    if (!m_globals->userSnappedClasses().contains(windowClass)) {
         return SnapResult::noSnap();
     }
 
     // Validate virtual screen still exists — configuration may have changed since last snap.
     // Fall back to physical screen ID if the virtual screen was removed.
-    const QString lastUsedScreenId = m_snapState->lastUsedScreenId();
+    const QString lastUsedScreenId = m_globals->lastUsedScreenId();
     QString effectiveScreenId = m_windowTracker->resolveEffectiveScreenId(lastUsedScreenId);
 
     // Don't cross-screen snap
@@ -200,7 +200,7 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
     }
 
     // Check virtual desktop match (unless sticky or desktop 0 = all)
-    const int lastUsedDesktop = m_snapState->lastUsedDesktop();
+    const int lastUsedDesktop = m_globals->lastUsedDesktop();
     if (!isSticky && m_virtualDesktopManager && lastUsedDesktop > 0) {
         int currentDesktop = currentVirtualDesktopForScreen(windowScreenId);
         if (currentDesktop != lastUsedDesktop) {

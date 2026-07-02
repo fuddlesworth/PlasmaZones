@@ -8,7 +8,10 @@
 #include <PhosphorEngine/IVirtualDesktopManager.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
+#include <PhosphorEngine/PerScreenStates.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorEngine/ScreenContextTracker.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorSnapEngine/PlacementDirective.h>
 #include <PhosphorProtocol/NavigationTypes.h>
@@ -30,6 +33,10 @@ class LayoutRegistry;
 class Layout;
 }
 
+namespace PhosphorEngine {
+class IWindowRegistry;
+}
+
 // PhosphorRules::RuleEvaluator is included as a member type of
 // std::optional below (needs a complete type at declaration); RuleSet
 // is referenced only by pointer / reference, so a forward declaration would
@@ -42,7 +49,6 @@ namespace PhosphorSnapEngine {
 class INavigationStateProvider;
 class IZoneAdjacencyResolver;
 class SnapNavigationTargetResolver;
-class SnapState;
 
 /**
  * @brief Engine for manual zone-based window snapping
@@ -429,10 +435,72 @@ public:
      */
     void setAutotileEngine(PhosphorEngine::IPlacementEngine* engine);
 
+    /// Attach the daemon's shared window registry. Threaded into every SnapState
+    /// (the per-screen stores, the global-scalar holder, and any created later)
+    /// plus the engine's own canonicalization so the reverse map keys on the same
+    /// stable first-seen composite the stores do (issue #628). Not owned.
+    void setWindowRegistry(PhosphorEngine::IWindowRegistry* registry);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Per-screen state resolution
+    //
+    // The engine owns one SnapState per (screen, desktop, activity)
+    // PlacementStateKey (via PerScreenStates) plus a single global-scalar holder
+    // (m_globals, keyed under the empty-screen sentinel) for last-used-zone and
+    // user-snapped classes, which stay global in this phase. A window is placed
+    // under the key derived from its screen on first snap/float and stays there
+    // for its lifetime (the reverse map is authoritative); its screen is recorded
+    // as a per-window value, updated in place, exactly as the former single store.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// The SnapState that owns @p windowId (via the reverse map), or nullptr when
+    /// the window is untracked. Never creates.
+    SnapState* stateForWindow(const QString& windowId);
+    const SnapState* stateForWindow(const QString& windowId) const;
+
+    /// The global-scalar holder (last-used-zone + user-snapped classes). Also the
+    /// fallback home for screenless float bookkeeping. Never null after construction.
+    SnapState* globalState() const
+    {
+        return m_globals;
+    }
+
+    /// The single snap store. Phase 2 keeps one store (behaviour-identical to the
+    /// former single global SnapState); this returns it. The daemon wires the WTS
+    /// facade through the resolver seam (setSnapStateResolver), but this accessor
+    /// stays for callers/tests that only need the one store. Phase 3, which feeds
+    /// the ScreenContextTracker real context, retires it in favour of stateForWindow.
     SnapState* snapState() const
     {
-        return m_snapState;
+        return m_globals;
     }
+
+    /// Every SnapState the engine owns, including the global holder, for whole-store
+    /// enumerations (occupied zones, snapped/floating windows, flat-map views).
+    QList<SnapState*> allSnapStates() const;
+
+    /// Resolve-or-register the owning state for @p windowId placed/acting on
+    /// @p screenId, and return it. On first placement it derives the key from the
+    /// screen, lazily creates the state, and records the reverse-map entry; an
+    /// already-tracked window keeps its existing owning state (its screen value is
+    /// updated in place by the store call the caller makes). A screenless call
+    /// resolves to the global holder. Public so the WTS facade routes its
+    /// screen-carrying writes here.
+    SnapState* stateForWindowOnScreen(const QString& windowId, const QString& screenId);
+
+    /// Drop the reverse-map entry for @p windowId (window closed / fully removed).
+    /// Does not touch state objects.
+    void forgetWindow(const QString& windowId);
+
+    // Float facade over the per-screen stores (the daemon's engine float
+    // resolver/writer/lister route here instead of a single SnapState).
+    bool isFloating(const QString& windowId) const;
+    void setFloating(const QString& windowId, bool floating);
+    QStringList floatingWindows() const;
+
+    /// Primary zone of @p windowId across the per-screen stores (empty if none).
+    /// Used by the cross-mode handoff to read a snap partner's slot.
+    QString zoneForWindow(const QString& windowId) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Zone adjacency resolver (for daemon-driven navigation)
@@ -764,6 +832,30 @@ Q_SIGNALS:
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;
 
+    /// Canonicalize a raw windowId to its stable first-seen composite via the
+    /// shared registry (passthrough when no registry is attached). The reverse map
+    /// and every per-state lookup key on this, matching SnapState's own internal
+    /// canonicalization.
+    QString canonicalWindowId(const QString& rawWindowId) const;
+
+    /// The owning key for a screen in the current context. Delegates to the shared
+    /// ScreenContextTracker (an empty screenId maps to the global holder's key).
+    PhosphorEngine::PlacementStateKey currentKeyForScreen(const QString& screenId) const
+    {
+        return m_context.currentKeyForScreen(screenId);
+    }
+
+    /// Lazily create (or fetch) the SnapState for @p key. The empty-screen key
+    /// resolves to the global holder; a non-empty key creates a per-screen store on
+    /// first use, seeding it with the shared window registry.
+    SnapState* ensureStateForKey(const PhosphorEngine::PlacementStateKey& key);
+
+    /// Replicate the former single store's coupling: last-used-zone is now held
+    /// GLOBALLY on m_globals, but a per-screen unassign that removes the zone the
+    /// global tracker points at must still clear it. Call with the window's zones
+    /// captured BEFORE the unassign.
+    void syncGlobalLastUsedForRemovedZones(const QStringList& removedZones);
+
     struct GapParams
     {
         int zonePadding;
@@ -788,7 +880,16 @@ private:
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
-    SnapState* m_snapState = nullptr;
+    // Per-(screen,desktop,activity) snap stores + the current-context tracker that
+    // resolves a screen to its owning key. In this phase the daemon does not feed
+    // the tracker any desktop/activity context, so every screen resolves to
+    // {screenId, 1, ""} — one store per screen. m_globals holds the still-global
+    // last-used-zone / user-snapped scalars (and any screenless float) under the
+    // empty-screen key so whole-store iterations pick it up transparently.
+    PhosphorEngine::PerScreenStates<SnapState> m_states;
+    PhosphorEngine::ScreenContextTracker m_context;
+    SnapState* m_globals = nullptr;
+    PhosphorEngine::IWindowRegistry* m_windowRegistry = nullptr;
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
     PhosphorEngine::IVirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QPointer<QObject> m_autotileEngineObj;
