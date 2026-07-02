@@ -616,7 +616,11 @@ private Q_SLOTS:
         QCOMPARE(
             QRect(spy.at(0).at(1).toInt(), spy.at(0).at(2).toInt(), spy.at(0).at(3).toInt(), spy.at(0).at(4).toInt()),
             floatedGeo);
-        QVERIFY(m_snapEngine->snapState()->isFloating(w2)); // reopened floating, not snapped
+        // Reopened floating in the screen's per-key store (the engine's open path
+        // registers it there). This test wires the single-store facade convenience,
+        // which only sees the global holder, so check the engine's own store-agnostic
+        // float view instead of snapState() (globals).
+        QVERIFY(m_snapEngine->isFloating(w2)); // reopened floating, not snapped
         // The record is re-recorded under the LIVE windowId (w2) so the window's
         // float-back survives logout/login — KWin assigns a new uuid at login, so the
         // record matched by appId FIFO, and consuming it (the old behaviour) lost the
@@ -626,7 +630,11 @@ private Q_SLOTS:
         QVERIFY(!m_wta->service()->placementStore().contains(w1));
         // Pre-float zone is restored so a subsequent float-toggle resnaps the
         // window back into its original zone (unfloatToZone reads preFloatZones).
-        QCOMPARE(m_snapEngine->snapState()->preFloatZones(w2), QStringList{m_zoneIds[0]});
+        // stateForWindow can return nullptr for an unregistered window; fail cleanly
+        // instead of dereferencing null.
+        PhosphorSnapEngine::SnapState* w2State = m_snapEngine->stateForWindow(w2);
+        QVERIFY(w2State);
+        QCOMPARE(w2State->preFloatZones(w2), QStringList{m_zoneIds[0]});
     }
 
     void testFloatRestore_loadedAssignmentDoesNotMaskFloatedRecord()
@@ -669,7 +677,7 @@ private Q_SLOTS:
         QCOMPARE(
             QRect(spy.at(0).at(1).toInt(), spy.at(0).at(2).toInt(), spy.at(0).at(3).toInt(), spy.at(0).at(4).toInt()),
             floatedGeo);
-        QVERIFY(m_snapEngine->snapState()->isFloating(w));
+        QVERIFY(m_snapEngine->isFloating(w));
         // Same-uuid restart re-records the floated entry so it survives further restarts.
         QVERIFY(m_wta->service()->placementStore().contains(w, QStringLiteral("settings")));
     }

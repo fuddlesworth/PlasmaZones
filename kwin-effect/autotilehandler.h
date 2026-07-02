@@ -285,13 +285,16 @@ private:
     /**
      * @brief Save the pre-autotile free-float geometry for @p windowId.
      *
-     * The caller passes the window's current frame. The default safety
-     * guard skips the save when the window is not currently floating —
-     * snapped/tiled windows have zone dimensions in frameGeometry() and
-     * capturing them would poison the pre-tile entry. Invalid input and
-     * deliberately-skipped saves are both silent no-ops (logged at debug);
+     * The caller passes the window's current frame in @p frameIn; it is corrected
+     * for a maximized/fullscreen window via PlasmaZonesEffect::freeGeometryForCapture
+     * (the pre-maximize restore rect) so a full-monitor frame is never stored as the
+     * free-float geometry. The default safety guard skips the save when the window is
+     * not currently floating — snapped/tiled windows have zone dimensions in
+     * frameGeometry() and capturing them would poison the pre-tile entry. Invalid
+     * input and deliberately-skipped saves are both silent no-ops (logged at debug);
      * no caller distinguishes them.
      *
+     * @param w The window, used to read its maximize/fullscreen restore rect.
      * @param knownFreeFloating Bypass the isWindowFloating guard when the
      *        caller knows the frame is authoritatively a free-float rect.
      *        Use true from the window-added paths (notifyWindowAdded and
@@ -299,8 +302,8 @@ private:
      *        the FloatingCache yet, so isWindowFloating() returns false
      *        and would incorrectly reject the one-shot initial capture.
      */
-    void saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, const QRectF& frame,
-                                          bool knownFreeFloating = false);
+    void saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, KWin::EffectWindow* w,
+                                          const QRectF& frameIn, bool knownFreeFloating = false);
 
     /**
      * @brief All-bucket pre-autotile geometry lookup.

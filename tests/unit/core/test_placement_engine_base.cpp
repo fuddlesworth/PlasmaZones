@@ -35,7 +35,7 @@ public:
     void toggleWindowFloat(const QString&, const QString&) override
     {
     }
-    void setWindowFloat(const QString&, bool) override
+    void setWindowFloat(const QString&, bool, const QString&) override
     {
     }
     void focusInDirection(const QString&, const NavigationContext&) override
