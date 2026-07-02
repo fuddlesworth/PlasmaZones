@@ -306,7 +306,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Minimum distance")
                     searchAnchor: "minimumDistance"
-                    description: page.appSettings.animationMinDistance === 0 ? i18n("Currently: always animate, no threshold") : i18n("Skip animation when geometry changes less than this")
+                    description: page.appSettings.animationMinDistance === 0 ? i18n("Always animates. No distance threshold is set.") : i18n("Skip animation when geometry changes less than this")
 
                     SettingsSpinBox {
                         Accessible.name: i18n("Minimum distance")

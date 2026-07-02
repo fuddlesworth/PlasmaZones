@@ -341,7 +341,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("osdStyle")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= 0 && val <= static_cast<int>(OsdStyle::Preview)) {
             m_settings->setOsdStyle(static_cast<OsdStyle>(val));
             return true;
         }
@@ -354,7 +354,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("overlayDisplayMode")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 1) {
+        if (val >= 0 && val <= static_cast<int>(OverlayDisplayMode::LayoutPreview)) {
             m_settings->setOverlayDisplayMode(static_cast<OverlayDisplayMode>(val));
             return true;
         }

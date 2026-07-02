@@ -57,8 +57,9 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     // never per-window.
     ActionType::OverrideOverlayShader,
     ActionType::OverrideOverlayStyle,
-    // Overlay-appearance overrides are context-domain — resolved per
-    // screen/desktop/activity for the zone overlay.
+    // Overlay-appearance actions are context-domain; today they back only the
+    // global baseline overlay rule (no per-context resolver reads their slots
+    // yet — see the ActionType block comment in RuleAction.h).
     ActionType::SetOverlayHighlightColor,
     ActionType::SetOverlayInactiveColor,
     ActionType::SetOverlayBorderColor,
@@ -66,7 +67,6 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetOverlayInactiveOpacity,
     ActionType::SetOverlayBorderWidth,
     ActionType::SetOverlayBorderRadius,
-    ActionType::SetOverlayShowZoneNumbers,
     // Zone-selector per-property override is context-domain — resolved per
     // screen/desktop/activity through the per-screen zone-selector path.
     ActionType::SetZoneSelectorProperty,
@@ -487,13 +487,15 @@ private Q_SLOTS:
             QVERIFY(reloaded.has_value());
             QCOMPARE(reloaded->params.value(QStringLiteral("value")).toDouble(), 0.66);
         }
-        // Master count — int-valued, minimum 1.
+        // Master count — int-valued, minimum 1, integral only.
         {
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetMasterCount));
             o.insert(QStringLiteral("value"), 0);
             QVERIFY(!RuleAction::fromJson(o).has_value());
             o.insert(QStringLiteral("value"), 6); // > 5
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 2.5); // fractional count is malformed
             QVERIFY(!RuleAction::fromJson(o).has_value());
             o.insert(QStringLiteral("value"), 1);
             QVERIFY(RuleAction::fromJson(o).has_value());
@@ -502,13 +504,15 @@ private Q_SLOTS:
             QVERIFY(reloaded.has_value());
             QCOMPARE(reloaded->params.value(QStringLiteral("value")).toInt(), 3);
         }
-        // Max windows — int-valued, [1, 12].
+        // Max windows — int-valued, [1, 12], integral only.
         {
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetMaxWindows));
             o.insert(QStringLiteral("value"), 0);
             QVERIFY(!RuleAction::fromJson(o).has_value());
             o.insert(QStringLiteral("value"), 13); // > 12
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 7.5); // fractional count is malformed
             QVERIFY(!RuleAction::fromJson(o).has_value());
             o.insert(QStringLiteral("value"), 1);
             QVERIFY(RuleAction::fromJson(o).has_value());
@@ -528,8 +532,8 @@ private Q_SLOTS:
         }
     }
 
-    // Per-context overlay-appearance actions: colours require hex, opacities are
-    // [0,1] fractions, border dims are bounded numbers, zone-numbers is a bool.
+    // Overlay-appearance actions: colours require hex, opacities are [0,1]
+    // fractions, border dims are bounded numbers.
     void testOverlayAppearanceActions_validation()
     {
         const auto make = [](QLatin1StringView type, const QJsonValue& value) {
@@ -555,9 +559,6 @@ private Q_SLOTS:
         QVERIFY(!RuleAction::fromJson(make(ActionType::SetOverlayBorderWidth, 11)).has_value());
         QVERIFY(RuleAction::fromJson(make(ActionType::SetOverlayBorderRadius, 12)).has_value());
         QVERIFY(!RuleAction::fromJson(make(ActionType::SetOverlayBorderRadius, 51)).has_value());
-        // Zone numbers: bool required.
-        QVERIFY(RuleAction::fromJson(make(ActionType::SetOverlayShowZoneNumbers, true)).has_value());
-        QVERIFY(!RuleAction::fromJson(make(ActionType::SetOverlayShowZoneNumbers, 1)).has_value());
         // Stray-key rejection.
         {
             QJsonObject o = make(ActionType::SetOverlayBorderWidth, 4);

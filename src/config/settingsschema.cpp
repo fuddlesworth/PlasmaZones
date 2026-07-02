@@ -564,8 +564,16 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::triggerDistanceMin(), CD::triggerDistanceMax())},
-        {CD::positionKey(), CD::position(), QMetaType::Int, {}, clampInt(0, 8)},
-        {CD::layoutModeKey(), CD::layoutMode(), QMetaType::Int, {}, clampInt(0, 2)},
+        {CD::positionKey(),
+         CD::position(),
+         QMetaType::Int,
+         {},
+         clampInt(0, static_cast<int>(ZoneSelectorPosition::BottomRight))},
+        {CD::layoutModeKey(),
+         CD::layoutMode(),
+         QMetaType::Int,
+         {},
+         clampInt(0, static_cast<int>(ZoneSelectorLayoutMode::Vertical))},
         {CD::previewWidthKey(),
          CD::previewWidth(),
          QMetaType::Int,
@@ -582,7 +590,14 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::gridColumnsMin(), CD::gridColumnsMax())},
-        {CD::sizeModeKey(), CD::sizeMode(), QMetaType::Int, {}, clampInt(0, 2)},
+        // Derived from the enum: the old literal clampInt(0, 2) admitted 2, one
+        // past ZoneSelectorSizeMode::Manual (= 1), letting an out-of-enum value
+        // through to the static_cast in the getter.
+        {CD::sizeModeKey(),
+         CD::sizeMode(),
+         QMetaType::Int,
+         {},
+         clampInt(0, static_cast<int>(ZoneSelectorSizeMode::Manual))},
         {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, {}, clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
     };
 }

@@ -898,8 +898,20 @@ private Q_SLOTS:
                                          {QStringLiteral("value"), ConfigDefaults::borderWidth()}});
         seeded.insert(QStringLiteral("actions"), seededActions);
         QJsonObject store;
+        store.insert(QStringLiteral("_version"), 4);
         store.insert(QStringLiteral("rules"), QJsonArray{seeded});
         writeJson(ConfigDefaults::rulesFilePath(), store);
+        // Guard the test's own premise: the seeded baseline must PARSE into the
+        // rule set before the migration — if it silently failed to load,
+        // addRule would not collide and the updateRule branch under test would
+        // pass vacuously (the migrated value lands either way). This guard
+        // already caught one such fixture bug (a missing _version stamp).
+        {
+            const auto premise = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
+            QVERIFY(premise.has_value());
+            QVERIFY2(premise->ruleById(ConfigDefaults::baselineOverlayRuleId()).has_value(),
+                     "the seeded default baseline must parse, or the collision branch is never exercised");
+        }
 
         // v4 config carries a CUSTOM border width that must survive the retry.
         QJsonObject cfg = baseV4Config();

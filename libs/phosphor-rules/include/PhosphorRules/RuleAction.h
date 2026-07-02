@@ -341,13 +341,16 @@ inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
 /// zone overlay. Resolved daemon-side via `LayoutRegistry::resolveContextOverlay`.
 inline constexpr QLatin1StringView OverrideOverlayShader{"overrideOverlayShader"};
 inline constexpr QLatin1StringView OverrideOverlayStyle{"overrideOverlayStyle"};
-// ── Per-context overlay APPEARANCE overrides (domain Context) ──
+// ── Overlay APPEARANCE actions (domain Context) ──
 // Extend the overlay family with the drag-time zone-overlay visual appearance:
-// fill (highlight) / inactive / border colours, active + inactive opacity, border
-// width + radius, and zone-number visibility. Match on screen/desktop/activity;
-// one slot per property. The GLOBAL default lives in the managed baseline overlay
-// rule (Settings reads these back as its highlightColor()/… getters); per-context
-// overrides layer on top, resolved via `LayoutRegistry::resolveContextOverlay`.
+// fill (highlight) / inactive / border colours, active + inactive opacity, and
+// border width + radius; one slot per property. These currently back ONLY the
+// GLOBAL default: they live on the managed baseline overlay rule, and Settings
+// reads them back by rule id as its highlightColor()/… getters. Unlike the
+// OverrideOverlay{Shader,Style} siblings, no per-context resolver consumes
+// their slots yet — `LayoutRegistry::resolveContextOverlay` reads only the
+// shader/style slots — so a screen/desktop/activity-matched appearance rule
+// validates and persists but is not applied until such a resolver exists.
 // Colours are `#AARRGGBB` hex; opacities are [0.0, 1.0] fractions.
 inline constexpr QLatin1StringView SetOverlayHighlightColor{"setOverlayHighlightColor"};
 inline constexpr QLatin1StringView SetOverlayInactiveColor{"setOverlayInactiveColor"};
@@ -356,7 +359,8 @@ inline constexpr QLatin1StringView SetOverlayActiveOpacity{"setOverlayActiveOpac
 inline constexpr QLatin1StringView SetOverlayInactiveOpacity{"setOverlayInactiveOpacity"};
 inline constexpr QLatin1StringView SetOverlayBorderWidth{"setOverlayBorderWidth"};
 inline constexpr QLatin1StringView SetOverlayBorderRadius{"setOverlayBorderRadius"};
-inline constexpr QLatin1StringView SetOverlayShowZoneNumbers{"setOverlayShowZoneNumbers"};
+// setOverlayShowZoneNumbers is deliberately NOT an action: zone-number
+// visibility stays plain config (the effects group) — see baselinerules.cpp.
 /// Disable every animation override on a matched window. The opposite of
 /// the OverrideAnimation* family — the effect's shouldAnimateWindow gate
 /// surfaces this as "no animation for this window, regardless of other
@@ -590,9 +594,10 @@ inline constexpr QLatin1StringView MaxWindows{"max-windows"};
 // (ActionParam::Value).
 inline constexpr QLatin1StringView OverlayShader{"overlay-shader"};
 inline constexpr QLatin1StringView OverlayStyle{"overlay-style"};
-// Per-context overlay-appearance slots (one per property; filled by the
-// SetOverlay* appearance actions, read by resolveContextOverlay / the baseline
-// overlay rule Settings getters).
+// Overlay-appearance slots (one per property; filled by the SetOverlay*
+// appearance actions). No per-context resolver reads them yet — the values
+// surface globally through the baseline overlay rule's Settings getters,
+// which look the rule up by id rather than through slot resolution.
 inline constexpr QLatin1StringView OverlayHighlightColor{"overlay-highlight-color"};
 inline constexpr QLatin1StringView OverlayInactiveColor{"overlay-inactive-color"};
 inline constexpr QLatin1StringView OverlayBorderColor{"overlay-border-color"};
@@ -600,7 +605,6 @@ inline constexpr QLatin1StringView OverlayActiveOpacity{"overlay-active-opacity"
 inline constexpr QLatin1StringView OverlayInactiveOpacity{"overlay-inactive-opacity"};
 inline constexpr QLatin1StringView OverlayBorderWidth{"overlay-border-width"};
 inline constexpr QLatin1StringView OverlayBorderRadius{"overlay-border-radius"};
-inline constexpr QLatin1StringView OverlayZoneNumbers{"overlay-zone-numbers"};
 // Per-context zone-selector slots are property-scoped: "zone-selector:<property>"
 // (e.g. "zone-selector:Position"). SetZoneSelectorProperty computes its slot from
 // the `property` param, so independent per-property rules cascade from one action

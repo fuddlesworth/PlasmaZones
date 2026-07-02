@@ -2221,7 +2221,7 @@ void Settings::setZoneSelectorPosition(ZoneSelectorPosition value)
 }
 void Settings::setZoneSelectorPositionInt(int value)
 {
-    if (value >= 0 && value <= 8) {
+    if (value >= 0 && value <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
         setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
     }
 }

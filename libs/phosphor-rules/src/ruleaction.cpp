@@ -63,6 +63,20 @@ bool hasNumberInClosedRange(const QJsonObject& params, QLatin1StringView key, do
     return d >= minValue && d <= maxValue;
 }
 
+/// Like @ref hasNumberInClosedRange but additionally requires an integral
+/// value — the count-shaped tiling actions (master count, max windows) are
+/// whole numbers, and a fractional payload (e.g. 2.5) is a malformed
+/// hand-edit, matching the integrality check the zone-selector int
+/// properties already enforce.
+bool hasIntInClosedRange(const QJsonObject& params, QLatin1StringView key, double minValue, double maxValue)
+{
+    if (!hasNumberInClosedRange(params, key, minValue, maxValue)) {
+        return false;
+    }
+    const double d = params.value(key).toDouble();
+    return static_cast<double>(static_cast<int>(d)) == d;
+}
+
 /// Validates that @p params has a `#`-prefixed hex colour string at @p key.
 /// Accepts the standard QColor hex shapes the effect-side consumer parses via
 /// `QColor(QString)`: `#RGB` (4), `#RRGGBB` (7) and `#AARRGGBB` (9 — QColor reads
@@ -1119,7 +1133,7 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::MasterCount),
         .validate =
             [](const QJsonObject& p) {
-                return hasNumberInClosedRange(p, ActionParam::Value, 1.0, kMaxMasterCount);
+                return hasIntInClosedRange(p, ActionParam::Value, 1.0, kMaxMasterCount);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -1137,7 +1151,7 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::MaxWindows),
         .validate =
             [](const QJsonObject& p) {
-                return hasNumberInClosedRange(p, ActionParam::Value, 1.0, kMaxMaxWindows);
+                return hasIntInClosedRange(p, ActionParam::Value, 1.0, kMaxMaxWindows);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -1291,21 +1305,10 @@ void ActionRegistry::registerBuiltins()
         .displayOrder = 8,
         .tags = {QString(Tag::Overlay)},
     });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetOverlayShowZoneNumbers),
-        .slotFor = constantSlot(ActionSlot::OverlayZoneNumbers),
-        .validate =
-            [](const QJsonObject& p) {
-                return p.value(ActionParam::Value).isBool();
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool")}},
-        .category = QStringLiteral("overlay"),
-        .displayOrder = 9,
-        .tags = {QString(Tag::Overlay)},
-    });
+    // No SetOverlayShowZoneNumbers action: zone-number visibility stays plain
+    // config (the effects group; see makeBaselineOverlayRule's commentary), so
+    // registering an action for it would create an authorable no-op — nothing
+    // consumes such a slot and no Settings getter reads it back.
 }
 
 } // namespace PhosphorRules

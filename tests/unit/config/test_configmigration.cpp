@@ -594,6 +594,39 @@ private Q_SLOTS:
         QVERIFY2(!migratedPerScreen.contains(QStringLiteral("ZoneSelector")),
                  "ZoneSelector per-screen category must be folded out of config in v5");
 
+        // The fold must PRODUCE the per-monitor rule, not merely drop the keys:
+        // a screenId-matched rule carrying the folded Position / MaxRows values
+        // as SetZoneSelectorProperty actions must exist in rules.json.
+        bool sawFoldedRule = false;
+        const QJsonArray migratedRules =
+            readJsonConfig(ConfigDefaults::rulesFilePath()).value(QStringLiteral("rules")).toArray();
+        for (const QJsonValue& rv : migratedRules) {
+            const QJsonObject r = rv.toObject();
+            if (r.value(QStringLiteral("match")).toObject().value(QStringLiteral("field")).toString()
+                != QLatin1String("screenId")) {
+                continue;
+            }
+            int position = -1;
+            int maxRows = -1;
+            for (const QJsonValue& av : r.value(QStringLiteral("actions")).toArray()) {
+                const QJsonObject a = av.toObject();
+                if (a.value(QStringLiteral("type")).toString() != QLatin1String("setZoneSelectorProperty")) {
+                    continue;
+                }
+                const QString property = a.value(QStringLiteral("property")).toString();
+                if (property == QLatin1String("Position")) {
+                    position = a.value(QStringLiteral("value")).toInt(-1);
+                } else if (property == QLatin1String("MaxRows")) {
+                    maxRows = a.value(QStringLiteral("value")).toInt(-1);
+                }
+            }
+            if (position == 3 && maxRows == 5) {
+                sawFoldedRule = true;
+            }
+        }
+        QVERIFY2(sawFoldedRule,
+                 "the folded Position/MaxRows must land on a screenId-matched SetZoneSelectorProperty rule");
+
         // v1 groups should still be removed
         QVERIFY(!migrated.contains(QStringLiteral("Activation")));
     }
