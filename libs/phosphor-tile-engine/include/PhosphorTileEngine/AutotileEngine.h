@@ -8,8 +8,11 @@
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorEngine/IWindowRegistry.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
+#include <PhosphorEngine/PerScreenStates.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorEngine/ScreenContextTracker.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
+#include <PhosphorTiles/TilingState.h>
 #include <QHash>
 #include <QObject>
 #include <QRect>
@@ -126,7 +129,7 @@ public:
      *
      * Callers that need the raw state map should add a purpose-built
      * query method rather than iterating private state. The
-     * `m_screenStates` map itself stays private (no public map
+     * `m_states` map itself stays private (no public map
      * accessor exists); per-screen lookup is available through
      * `tilingStateForScreen(screenId)`
      * which returns a (non-const) `PhosphorTiles::TilingState*` for
@@ -150,11 +153,11 @@ public:
      *
      * Used by the drag protocol (beginDrag) to decide whether to apply an
      * immediate free-floating-size restore when a tiled window is picked up.
-     * Reads m_windowToStateKey which is authoritative.
+     * Reads the reverse window→key map which is authoritative.
      */
     bool isWindowTracked(const QString& windowId) const override
     {
-        return m_windowToStateKey.contains(windowId);
+        return m_states.hasWindow(windowId);
     }
 
     /**
@@ -284,7 +287,7 @@ public:
      * @brief Set a single screen's current virtual desktop (Plasma 6.7 per-output
      *        virtual desktops, #648)
      *
-     * Pure context swap: records the screen's desktop in m_screenCurrentDesktop so
+     * Pure context swap: records the screen's desktop in m_context's per-output map so
      * currentKeyForScreen() resolves that screen's per-(screen, desktop) state. Does
      * NOT migrate windows between states — the other desktop's state stays put so it
      * reappears when the screen returns. Like setCurrentDesktop(), call BEFORE
@@ -292,7 +295,7 @@ public:
      */
     void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
 
-    /// Drop a screen's per-output desktop, reverting it to the global m_currentDesktop.
+    /// Drop a screen's per-output desktop, reverting it to m_context's global desktop.
     void clearCurrentDesktopForScreen(const QString& screenId) override;
 
     /// Inject the cross-surface resolver (neighbouring output / desktop lookup)
@@ -320,7 +323,7 @@ public:
      * TilingStateKey desktop to the current effective desktop so that
      * currentKeyForScreen() continues to resolve the existing state after
      * a desktop switch. Screens where not all windows are sticky are unpinned,
-     * with state migrated to m_currentDesktop if necessary.
+     * with state migrated to m_context's global desktop if necessary.
      *
      * Must be called BEFORE setCurrentDesktop()/setCurrentActivity() so the
      * pins are evaluated against the pre-switch context.
@@ -350,7 +353,7 @@ public:
      */
     int currentDesktop() const noexcept
     {
-        return m_currentDesktop;
+        return m_context.currentDesktop();
     }
 
     /**
@@ -358,7 +361,7 @@ public:
      */
     const QString& currentActivity() const noexcept
     {
-        return m_currentActivity;
+        return m_context.currentActivity();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -495,8 +498,7 @@ public:
     void handoffRelease(const QString& windowId) override;
     QString screenForTrackedWindow(const QString& windowId) const override
     {
-        const auto it = m_windowToStateKey.constFind(canonicalizeForLookup(windowId));
-        return it == m_windowToStateKey.constEnd() ? QString() : it.value().screenId;
+        return m_states.keyForWindow(canonicalizeForLookup(windowId)).screenId;
     }
 
     /**
@@ -833,8 +835,11 @@ public:
      *
      * @param windowId Window identifier from KWin
      * @param shouldFloat True to float, false to unfloat
+     * @param screenId Authoritative current screen (unused: autotile re-tiles
+     *        fresh on the window's live screen); present to match the interface.
      */
-    Q_INVOKABLE void setWindowFloat(const QString& windowId, bool shouldFloat) override;
+    Q_INVOKABLE void setWindowFloat(const QString& windowId, bool shouldFloat,
+                                    const QString& screenId = QString()) override;
 
     /**
      * @brief Float a specific window by its ID (convenience forwarder)
@@ -1168,7 +1173,7 @@ private:
      * overflow set (AFTER capture — the discriminator needs it), appends the
      * released windows, clears the pending-order bookkeeping, and
      * deleteLater()s the state. Callers own the divergent parts: removing
-     * the state from m_screenStates (they iterate it) and the per-path
+     * the state from m_states (they iterate it) and the per-path
      * override policy — toggle-off drops only the resolver's in-memory
      * overrides, the orphaned-VS teardown purges persisted settings too.
      *
@@ -1188,7 +1193,7 @@ private:
      * algorithm lifecycle hook), migrates overflow tracking, retiles the
      * source screen, and re-adds via onWindowAdded() when @p newScreenId is
      * an autotile screen. The caller updates/removes the
-     * m_windowToStateKey entry FIRST. No-op when the old state doesn't
+     * m_states entry FIRST. No-op when the old state doesn't
      * contain the window.
      */
     void migrateWindowBetweenKeys(const QString& windowId, const PhosphorEngine::TilingStateKey& oldKey,
@@ -1216,21 +1221,10 @@ private:
      */
     PhosphorEngine::TilingStateKey currentKeyForScreen(const QString& screenId) const
     {
-        // Precedence (highest first):
-        //   1. sticky-pin override (m_screenDesktopOverride) — a CORRECTNESS
-        //      constraint: sticky on-all-desktops windows must keep their state on
-        //      the desktop where they live, so the pin must win;
-        //   2. per-output virtual desktop (m_screenCurrentDesktop, Plasma 6.7) —
-        //      the normal per-screen input;
-        //   3. the global current desktop (m_currentDesktop) — fallback.
-        int desktop = m_currentDesktop;
-        if (auto perOut = m_screenCurrentDesktop.constFind(screenId); perOut != m_screenCurrentDesktop.constEnd()) {
-            desktop = perOut.value();
-        }
-        if (auto pin = m_screenDesktopOverride.constFind(screenId); pin != m_screenDesktopOverride.constEnd()) {
-            desktop = pin.value();
-        }
-        return PhosphorEngine::TilingStateKey{screenId, desktop, m_currentActivity};
+        // Precedence and the sticky-pin / per-output subtleties live in the
+        // shared ScreenContextTracker (sticky-pin override > per-output desktop >
+        // global desktop; activity = current activity).
+        return m_context.currentKeyForScreen(screenId);
     }
 
     /**
@@ -1238,7 +1232,7 @@ private:
      *
      * Creates the state if it doesn't exist. Used by loadState() to restore states
      * for arbitrary desktop/activity combinations without temporarily mutating
-     * m_currentDesktop/m_currentActivity.
+     * m_context's current desktop/activity.
      */
     PhosphorTiles::TilingState* stateForKey(const PhosphorEngine::TilingStateKey& key);
 
@@ -1259,7 +1253,7 @@ private:
      * gate check remain untiled. This method iterates autotile screens and inserts
      * tracked-but-untiled windows up to the per-screen effective limit.
      *
-     * Note: Iteration order over m_windowToStateKey (QHash) is non-deterministic.
+     * Note: Iteration order over m_states (QHash) is non-deterministic.
      * Backfill order may differ between runs; this is acceptable since all
      * candidates are equally valid.
      */
@@ -1321,7 +1315,7 @@ private:
 
     /**
      * @brief Normalize a window id received from D-Bus to the canonical key
-     *        used by internal storage (m_windowToStateKey, PhosphorTiles::TilingState::m_windowOrder, …).
+     *        used by internal storage (m_states, PhosphorTiles::TilingState::m_windowOrder, …).
      *
      * Why this exists: KWin apps like Emby (CEF/Electron) mutate their
      * resourceClass / desktopFileName after the surface is already mapped, so
@@ -1377,7 +1371,7 @@ private:
     /**
      * @brief Get PhosphorTiles::TilingState for a window by looking up its screen
      *
-     * Consolidates the common pattern of m_windowToStateKey lookup + state resolution.
+     * Consolidates the common pattern of m_states lookup + state resolution.
      *
      * @param windowId Window ID to look up
      * @param outScreenId If non-null, receives the screen ID
@@ -1419,7 +1413,11 @@ private:
     QString m_algorithmId;
     bool m_algorithmEverSet = false; ///< True after first successful setAlgorithm() call
     QString m_activeScreen; // Last-focused screen (updated by onWindowFocused)
-    QHash<PhosphorEngine::TilingStateKey, PhosphorTiles::TilingState*> m_screenStates; // Owned via Qt parent (this)
+
+    // Per-screen tiling states + the windowId→owning-key reverse map. States are
+    // owned via Qt parent (this); PerScreenStates holds only the two maps and
+    // their lockstep bookkeeping — engine-specific lifecycle stays in this class.
+    PhosphorEngine::PerScreenStates<PhosphorTiles::TilingState> m_states;
 
     // Screen+desktop states whose split ratio / master count the user has
     // explicitly tuned (keyboard shortcut or interactive resize). propagateGlobal*
@@ -1433,7 +1431,6 @@ private:
     QSet<PhosphorEngine::TilingStateKey> m_userTunedSplitRatio;
     QSet<PhosphorEngine::TilingStateKey> m_userTunedMasterCount;
 
-    QHash<QString, PhosphorEngine::TilingStateKey> m_windowToStateKey; // windowId -> owning state key
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
 
     // Instance id → first-seen canonical windowId.
@@ -1448,40 +1445,18 @@ private:
     // form so every map/PhosphorTiles::TilingState key in the engine stays consistent.
     QHash<QString, QString> m_canonicalByInstance;
 
-    // Current desktop/activity context — used by tilingStateForScreen() to construct
-    // TilingStateKey. Updated by setCurrentDesktop()/setCurrentActivity() BEFORE
-    // updateAutotileScreens() runs on desktop/activity switch.
-    int m_currentDesktop = 1;
-    QString m_currentActivity;
+    // Current desktop/activity context — the global current desktop, per-output
+    // desktop overrides (#648), the sticky-desktop pin, the current activity, and
+    // the "ever set" arming flags. Used by tilingStateForScreen() to construct
+    // the owning key via currentKeyForScreen(). Fed by setCurrentDesktop()/
+    // setCurrentActivity()/setCurrentDesktopForScreen() BEFORE updateAutotileScreens()
+    // runs on a desktop/activity switch.
+    PhosphorEngine::ScreenContextTracker m_context;
+
+    // Armed by a genuine desktop/activity switch (see the setCurrent* mutators);
+    // consumed by setAutotileScreens()/the desktop-switch pass. Engine-specific,
+    // so it stays here rather than in the shared ScreenContextTracker.
     bool m_isDesktopContextSwitch = false;
-    /// True once setCurrentDesktop() has been called at least once. Carries
-    /// "a desktop context was established" for the switch-arming logic —
-    /// m_currentDesktop has no reserved unset value (defaults to 1, KWin
-    /// desktops are >= 1), so the daemon's initial startup push must be told
-    /// apart from a genuine switch by this flag, not a value comparison.
-    bool m_desktopContextEverSet = false;
-    /// Activity counterpart: true once a NON-EMPTY activity was pushed.
-    /// Keeps "a" → "" → "b" (activities-service restart) armed on the
-    /// second leg, which a bare previous-value-empty sentinel would
-    /// misread as initialization.
-    bool m_activityContextEverSet = false;
-
-    // Per-screen desktop override for sticky screens. When the KWin script
-    // "virtualdesktopsonlyonprimary" pins all secondary-screen windows to all
-    // desktops, the TilingStateKey desktop dimension becomes meaningless for
-    // those screens. This map pins such screens to their original desktop so
-    // currentKeyForScreen() returns the key of the existing PhosphorTiles::TilingState rather
-    // than a new (empty) key after a desktop switch.
-    QHash<QString, int> m_screenDesktopOverride;
-
-    // Per-screen current virtual desktop under Plasma 6.7 "switch desktops
-    // independently for each screen" (#648). Fed by setCurrentDesktopForScreen
-    // from the daemon's per-output desktop reports. Distinct from
-    // m_screenDesktopOverride (the sticky-pin map): the sticky pin is a
-    // correctness constraint and wins in currentKeyForScreen; this is the normal
-    // per-screen input. Empty when per-output desktops aren't in use, so every
-    // screen falls back to m_currentDesktop.
-    QHash<QString, int> m_screenCurrentDesktop;
 
     // Pre-seeded window order for snapping → autotile transitions.
     // Keyed by stable EDID-based screen ID (PhosphorScreens::ScreenIdentity::identifierFor).
@@ -1553,7 +1528,7 @@ private:
         int lastInsertIndex = -1;
 
         // Prior-state restoration info (used on cancel)
-        bool hadPriorState = false; // True if m_windowToStateKey contained windowId at begin
+        bool hadPriorState = false; // True if m_states contained windowId at begin
         PhosphorEngine::TilingStateKey
             priorKey; // Key of the prior PhosphorTiles::TilingState (meaningful iff hadPriorState)
         int priorRawIndex = -1; // Raw index in priorState->windowOrder() at begin

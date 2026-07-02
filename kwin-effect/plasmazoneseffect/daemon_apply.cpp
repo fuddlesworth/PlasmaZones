@@ -504,10 +504,18 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // appId to survive the window's identity change across close/reopen.
         m_snapHandler->invalidateRestore(::PhosphorIdentity::WindowId::extractAppId(windowId));
     }
-    // Re-resolution is welded to the writes: setWindowFloating above and (in the
-    // float branch) clearWindowZone each re-resolve this window's rules when the
-    // IsFloating / IsSnapped / Zone match field actually flips. No separate
-    // invalidate call is needed here.
+    // The change-gated writes above (setWindowFloating / clearWindowZone) re-resolve
+    // this window's rules only when a match field actually flips. That is not enough
+    // on the cross-monitor drag-out path: the cross-screen handoff pre-sets the
+    // floating / zone caches while the window is still moving, so by the time this
+    // authoritative windowFloatingChanged arrives both writes are no-ops and the
+    // hide-title-bar / border reconcile never runs — the floated window keeps its
+    // snap chrome (hidden title bar), ignoring the show-title-bar-when-floating rule.
+    // This signal IS the authoritative placement-state change, so reconcile
+    // unconditionally; invalidateRuleCacheForStateChange coalesces to a single flush
+    // per event-loop turn, so the redundant call when a write did flip the cache is
+    // cheap. Mirrors the drag-end paths, which invalidate directly and unconditionally.
+    invalidateRuleCacheForStateChange(windowId);
 }
 
 void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state)

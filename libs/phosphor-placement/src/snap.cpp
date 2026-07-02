@@ -30,14 +30,15 @@ namespace PhosphorPlacement {
 
 void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUserInitiated)
 {
-    Q_ASSERT(m_snapState);
-    if (!m_snapState) {
+    Q_ASSERT(hasSnapState());
+    PhosphorSnapEngine::SnapState* globals = snapGlobals();
+    if (!globals) {
         return;
     }
     if (wasUserInitiated) {
         QString windowClass = currentAppIdFor(windowId);
         if (!windowClass.isEmpty()) {
-            m_snapState->recordSnapIntent(windowClass, true);
+            globals->recordSnapIntent(windowClass, true);
             markDirty(DirtyUserSnapped);
         }
     }
@@ -46,11 +47,19 @@ void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUs
 void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QString& screenId,
                                                const QString& windowClass, int virtualDesktop)
 {
-    Q_ASSERT(m_snapState);
-    if (!m_snapState) {
+    Q_ASSERT(hasSnapState());
+    // Last-used is per-key: record it on the store that owns @p screenId's current
+    // (screen, desktop, activity) context so a window opening on this screen later
+    // restores to a zone THIS screen was snapped to. An empty screenId resolves to
+    // the global holder.
+    PhosphorSnapEngine::SnapState* store = snapForScreen(screenId);
+    if (!store) {
+        store = snapGlobals();
+    }
+    if (!store) {
         return;
     }
-    m_snapState->updateLastUsedZone(zoneId, screenId, windowClass, virtualDesktop);
+    store->updateLastUsedZone(zoneId, screenId, windowClass, virtualDesktop);
     markDirty(DirtyLastUsedZone);
 }
 
@@ -68,29 +77,41 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
 
 void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
 {
-    Q_ASSERT(m_snapState);
-    if (!m_snapState || windowId.isEmpty()) {
+    Q_ASSERT(hasSnapState());
+    if (windowId.isEmpty()) {
         return;
     }
-    m_snapState->markAsAutoSnapped(windowId);
+    // Prefer the window's owning store; a not-yet-placed window (marked before its
+    // commit registers it) has none, so park the flag on the global holder. The
+    // is/clear paths scan every store, so it is found wherever it landed.
+    PhosphorSnapEngine::SnapState* store = snapForWindow(windowId);
+    if (!store) {
+        store = snapGlobals();
+    }
+    if (store) {
+        store->markAsAutoSnapped(windowId);
+    }
 }
 
 bool WindowTrackingService::isAutoSnapped(const QString& windowId) const
 {
-    Q_ASSERT(m_snapState);
-    if (!m_snapState) {
-        return false;
+    Q_ASSERT(hasSnapState());
+    for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        if (state->isAutoSnapped(windowId)) {
+            return true;
+        }
     }
-    return m_snapState->isAutoSnapped(windowId);
+    return false;
 }
 
 bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
 {
-    Q_ASSERT(m_snapState);
-    if (!m_snapState) {
-        return false;
+    Q_ASSERT(hasSnapState());
+    bool cleared = false;
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        cleared |= state->clearAutoSnapped(windowId);
     }
-    return m_snapState->clearAutoSnapped(windowId);
+    return cleared;
 }
 
 bool WindowTrackingService::consumePendingAssignment(const QString& windowId)

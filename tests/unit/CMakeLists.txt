@@ -83,6 +83,12 @@ add_executable(test_snap_engine core/test_snap_engine.cpp)
 target_link_libraries(test_snap_engine PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_engine COMMAND test_snap_engine)
 
+# End-to-end per-monitor snap acceptance (Discussion #724): cross-monitor unfloat
+# determinism, threaded-screen authority, per-screen independence, migration completeness.
+add_executable(test_snap_per_monitor core/test_snap_per_monitor.cpp)
+target_link_libraries(test_snap_per_monitor PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_per_monitor COMMAND test_snap_per_monitor)
+
 # resolveFallbackUnfloatGeometry on-success coverage. QTEST_MAIN (not GUILESS) so a
 # QGuiApplication + offscreen primary screen exists and zoneGeometry() resolves —
 # the geometry-dependent path test_snap_engine.cpp (guiless) cannot reach.

@@ -23,7 +23,7 @@ using namespace PhosphorTileEngine;
  * adoption, and fresh adoption paths, plus eviction undo on cancel.
  *
  * Uses windowOpened() + processEvents() to register windows through the proper
- * lifecycle (populating m_windowToStateKey), which is required for the engine
+ * lifecycle (populating m_states), which is required for the engine
  * to detect same-screen vs cross-screen vs fresh adoption paths.
  */
 class TestAutotileDragInsert : public QObject
@@ -36,7 +36,7 @@ private:
     static constexpr auto Screen1 = "eDP-1";
     static constexpr auto Screen2 = "HDMI-1";
 
-    /// Helper: open windows through the engine lifecycle so m_windowToStateKey
+    /// Helper: open windows through the engine lifecycle so m_states
     /// is properly populated (unlike direct PhosphorTiles::TilingState::addWindow).
     void openWindows(AutotileEngine& engine, const QString& screenId, const QStringList& windowIds)
     {
@@ -47,7 +47,7 @@ private:
     }
 
     /// Helper: add windows directly to PhosphorTiles::TilingState WITHOUT populating
-    /// m_windowToStateKey. Use only for "fresh adoption" tests where the
+    /// m_states. Use only for "fresh adoption" tests where the
     /// window is intentionally untracked by the engine.
     void addWindowsToState(AutotileEngine& engine, const QString& screenId, const QStringList& windowIds)
     {

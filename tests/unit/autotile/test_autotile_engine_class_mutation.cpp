@@ -8,7 +8,7 @@
  *        already mapped, so successive D-Bus calls arrive with different
  *        "appId|uuid" composites for the same underlying window.
  *
- * Before the fix, AutotileEngine stored m_windowToStateKey / PhosphorTiles::TilingState under
+ * Before the fix, AutotileEngine stored m_states / PhosphorTiles::TilingState under
  * the first-seen composite; the second composite hit the "window not found in
  * any autotile state" path and the user's toggleWindowFloat / navigation
  * shortcuts silently failed until a mode toggle rebuilt state from scratch.

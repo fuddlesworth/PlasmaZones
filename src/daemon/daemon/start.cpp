@@ -167,6 +167,15 @@ void Daemon::connectScreenSignals()
                     m_layoutManager->clearCurrentVirtualDesktopForScreen(removedScreenId);
                 }
 
+                // The snap engine's per-(screen,desktop,activity) stores are created
+                // lazily on placement, not from an autotile-screens set, so the removed
+                // output's stores must be pruned explicitly here (autotile self-prunes
+                // via updateAutotileScreens). Matches every virtual sub-screen of the
+                // removed physical id.
+                if (m_snapEngine) {
+                    m_snapEngine->pruneStatesForRemovedScreen(removedScreenId);
+                }
+
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
                 PhosphorScreens::ScreenIdentity::invalidateEdidCache(removedName);
 
@@ -261,6 +270,12 @@ void Daemon::connectDesktopActivity()
                 if (m_autotileEngine) {
                     m_autotileEngine->setCurrentDesktopForScreen(screenId, desktop);
                 }
+                // Feed the SAME per-output desktop into the snap engine so its
+                // per-(screen,desktop,activity) key tracker resolves the right store
+                // (symmetric with autotile; per-monitor keying is the #724 fix).
+                if (m_snapEngine) {
+                    m_snapEngine->setCurrentDesktopForScreen(screenId, desktop);
+                }
                 // [SEQ D] Per-screen layout/overlay resolution context. The
                 // overlay service delegates to the layout registry for per-output
                 // desktop resolution, so this one push drives both (#648).
@@ -306,16 +321,19 @@ void Daemon::connectDesktopActivity()
                     }
                 }
 
-                if (m_autotileEngine) {
-                    // Desktop numbers are 1-based. Any state with desktop > newCount
-                    // is stale. desktopsWithActiveState() returns the set of desktops
-                    // currently holding tiling state — we filter that for anything
-                    // past the new count and prune, avoiding the arbitrary upper
-                    // bound of the old newCount+20 sweep.
-                    const QSet<int> active = m_autotileEngine->desktopsWithActiveState();
+                // Desktop numbers are 1-based. Any state with desktop > newCount is
+                // stale. desktopsWithActiveState() returns the desktops currently
+                // holding state — filter for anything past the new count and prune,
+                // avoiding the arbitrary upper bound of the old newCount+20 sweep. Both
+                // per-monitor engines carry their own stores, so prune both.
+                for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.get(), m_snapEngine.get()}) {
+                    if (!engine) {
+                        continue;
+                    }
+                    const QSet<int> active = engine->desktopsWithActiveState();
                     for (int d : active) {
                         if (d > newCount) {
-                            m_autotileEngine->pruneStatesForDesktop(d);
+                            engine->pruneStatesForDesktop(d);
                         }
                     }
                 }
@@ -330,6 +348,9 @@ void Daemon::connectDesktopActivity()
     m_layoutManager->setCurrentVirtualDesktop(initialDesktop);
     if (m_autotileEngine) {
         m_autotileEngine->setCurrentDesktop(initialDesktop);
+    }
+    if (m_snapEngine) {
+        m_snapEngine->setCurrentDesktop(initialDesktop);
     }
 
     // Initialize and start activity manager
@@ -361,8 +382,12 @@ void Daemon::connectDesktopActivity()
                 }
             }
 
-            if (m_autotileEngine) {
-                m_autotileEngine->pruneStatesForActivities(activities);
+            // Both per-monitor engines carry their own per-(screen,desktop,activity)
+            // stores, so prune removed activities from both.
+            for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.get(), m_snapEngine.get()}) {
+                if (engine) {
+                    engine->pruneStatesForActivities(activities);
+                }
             }
             pruneContextMapsForActivities(validSet);
         });
@@ -373,6 +398,9 @@ void Daemon::connectDesktopActivity()
         m_layoutManager->setCurrentActivity(initialActivity);
         if (m_autotileEngine) {
             m_autotileEngine->setCurrentActivity(initialActivity);
+        }
+        if (m_snapEngine) {
+            m_snapEngine->setCurrentActivity(initialActivity);
         }
 
         // Connect activity changes: update all components
@@ -398,6 +426,9 @@ void Daemon::connectDesktopActivity()
                     // Set engine's activity context BEFORE updateAutotileScreens()
                     if (m_autotileEngine) {
                         m_autotileEngine->setCurrentActivity(activityId);
+                    }
+                    if (m_snapEngine) {
+                        m_snapEngine->setCurrentActivity(activityId);
                     }
                     // Per-activity assignments may differ — recompute autotile screens
                     updateAutotileScreens();

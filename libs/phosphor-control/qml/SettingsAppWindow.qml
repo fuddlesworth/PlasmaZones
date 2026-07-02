@@ -404,16 +404,21 @@ Kirigami.ApplicationWindow {
                         }
 
                         // Page-scoped trailing slot (e.g. a per-page overflow
-                        // menu). Adopts its loaded item's implicit size. Collapses
-                        // to zero width both when unfilled and when the loaded item
-                        // hides itself (a self-gating slot shown only on some pages)
-                        // — without gating the Loader's own visibility the row would
-                        // still reserve the hidden item's implicit width.
+                        // menu). Adopts its loaded item's implicit size when the
+                        // item is shown, and collapses to zero width both when
+                        // unfilled and when the loaded item hides itself (a
+                        // self-gating slot shown only on some pages). The slot is
+                        // collapsed via Layout.preferredWidth rather than the
+                        // Loader's own `visible`: reading `item.visible` returns
+                        // the child's EFFECTIVE visibility, so gating the Loader's
+                        // visible on it would force the child invisible (parent
+                        // suppression) and latch `item.visible` false forever, so
+                        // the slot could never reappear once first hidden.
                         Loader {
                             id: breadcrumbTrailingLoader
 
                             Layout.alignment: Qt.AlignVCenter
-                            visible: item !== null && item.visible
+                            Layout.preferredWidth: (item !== null && item.visible) ? item.implicitWidth : 0
                         }
                     }
 

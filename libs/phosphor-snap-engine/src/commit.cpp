@@ -18,8 +18,8 @@ using PhosphorEngine::ZoneAssignmentEntry;
 void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                 SnapIntent intent, int virtualDesktop)
 {
-    Q_ASSERT(m_snapState);
-    if (!m_snapState) {
+    Q_ASSERT(m_globals);
+    if (!m_globals) {
         return;
     }
     Q_ASSERT(!zoneIds.isEmpty());
@@ -106,15 +106,15 @@ void SnapEngine::commitMultiZoneSnap(const QString& windowId, const QStringList&
 
 void SnapEngine::uncommitSnap(const QString& windowId)
 {
-    Q_ASSERT(m_snapState);
-    if (!m_snapState) {
+    Q_ASSERT(m_globals);
+    if (!m_globals) {
         return;
     }
     if (windowId.isEmpty()) {
         return;
     }
 
-    const QString previousZoneId = m_snapState->zoneForWindow(windowId);
+    const QString previousZoneId = zoneForWindow(windowId);
     if (previousZoneId.isEmpty()) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "uncommitSnap: window not in any zone:" << windowId;
         return;
@@ -141,11 +141,11 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
     }
 
     // Every non-restore entry below routes through commitSnap/commitMultiZoneSnap,
-    // which require a live m_snapState. Guard the whole batch symmetrically with
+    // which require a live engine. Guard the whole batch symmetrically with
     // commitSnapImpl/uncommitSnap rather than doing the full per-entry resolution
     // pass against a half-dead engine.
-    Q_ASSERT(m_snapState);
-    if (!m_snapState) {
+    Q_ASSERT(m_globals);
+    if (!m_globals) {
         return geometries;
     }
 

@@ -533,7 +533,7 @@ void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAn
     // desktop move. The reactive windowClosed (effect: "moved off current
     // desktop") reflows the source, and windowOpened tiles it on the target when
     // that desktop becomes visible. Proactively shuffling state here is what
-    // corrupted m_windowToStateKey and left windows tracked nowhere (stuck
+    // corrupted m_states and left windows tracked nowhere (stuck
     // decoration / no reflow). End-to-end reflow is covered by
     // test_navigation_retile with a real algorithm.
     //
