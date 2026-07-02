@@ -48,6 +48,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
     plasmazoneseffect/borders.cpp
+    plasmazoneseffect/surfacelayers.cpp
     plasmazoneseffect/window_identity.cpp
     plasmazoneseffect/mouse_drag.cpp
     plasmazoneseffect/window_filtering.cpp
@@ -146,6 +147,11 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # the `#define PLASMAZONES_KWIN` injection selects its default-block
     # branch (KWin::GLShader's classic-GL pipeline doesn't bind UBOs).
     PhosphorShaders::PhosphorShaders
+    # PhosphorSurface: the surface-shader pack registry/contract. The effect
+    # compiles the selected surface pack (window border / rounded corners) from
+    # data/surface via SurfaceShaderRegistry, the third shader-pack category
+    # alongside animations + overlay shaders. GPL->LGPL link is fine.
+    PhosphorSurface::PhosphorSurface
     # libepoxy: EGL dma-buf export entry points for snap-assist thumbnail
     # zero-copy delivery (snapassistthumbnailcapture.cpp). Qt6::DBus's
     # QDBusUnixFileDescriptor carries the exported fd to the daemon.

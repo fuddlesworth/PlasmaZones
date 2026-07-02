@@ -16,6 +16,9 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/SurfaceShaderContract.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
 
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorRules/RuleSet.h>
@@ -36,9 +39,11 @@
 #include <QPointer>
 #include <QRect>
 
+#include <array>
 #include <functional>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include "shadertransitionmanager.h"
 
@@ -47,7 +52,6 @@
 #include "plasmazoneseffect/types.h"
 
 namespace KWin {
-class OutlinedBorderItem;
 class SurfaceItem;
 class LogicalOutput;
 }
@@ -129,11 +133,21 @@ public:
     void prePaintScreen(KWin::ScreenPrePaintData& data) override;
     void postPaintScreen() override;
     void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data) override;
-    // paintScreen override removed — borders are now rendered natively by KWin's
-    // scene graph (OutlinedBorderItem), no custom GL drawing needed.
+    // paintScreen override removed — per-window borders are rendered by routing
+    // the redirected window through the offscreen border MapTexture shader (see
+    // the drawWindow override below + borders.cpp); no separate paintScreen-level
+    // GL drawing is needed.
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                      KWin::WindowPaintData& data) override;
+    // Border render path (implemented in borders.cpp). A static bordered window
+    // is rendered through the offscreen border shader PASSIVELY here: we bind the
+    // border shader + push its uniforms, then let OffscreenEffect::drawWindow
+    // re-blit the redirected FBO through it on EVERY composite (idle included),
+    // with no FBO re-render and no forced per-frame repaints — the
+    // KDE-Rounded-Corners model. paintWindow no longer touches the border.
+    void drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
+                    int mask, const KWin::Region& deviceRegion, KWin::WindowPaintData& data) override;
     void grabbedKeyboardEvent(QKeyEvent* e) override;
 
 protected:
@@ -728,6 +742,193 @@ private:
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
     void clearAllBorders();
+
+    // ── Offscreen border shader (flush rounded corners + per-window outline) ──
+    //
+    // A bordered window is rendered THROUGH a MapTexture fragment shader that
+    // evaluates one rounded-rect SDF over the frame to clip the corners AND draw
+    // the `width` outline band, using KWin's own MVP so it is flush over the
+    // server-side decoration (the prior scene-graph OutlinedBorderItem composited
+    // UNDER the decoration and looked inset). Same path for decorated + borderless
+    // windows; it clips the COMPOSITED texture, never the client surface, so the
+    // window's own BorderRadius is left untouched (setting it inset the corner and
+    // clipped the inner surface). Coordinated with the per-window animation
+    // transition on the SAME OffscreenEffect setShader() slot — see borders.cpp.
+
+    /// Compile-on-first-use + cache the surface shader pack @p packId (window
+    /// border / rounded corners / glow / …) from data/surface via the
+    /// SurfaceShaderRegistry, keyed by pack id in m_compiledPacks. Returns the
+    /// cached CompiledSurfacePack (whose `shader` may be nullptr + `compileFailed`
+    /// set when the pack is missing or its compile failed — decoration then
+    /// no-ops for that pack), or nullptr only when there is no GL context yet.
+    /// The whole cache is cleared on a SurfaceShaderRegistry hot-reload
+    /// (effectsChanged) and on teardown.
+    ///
+    /// @p profile supplies the pack's parameter overrides (parameters[packId])
+    /// merged over the pack's declared defaults; baked into the compiled pack's
+    /// customParams/customColors VALUES at first compile (the cache is pack-keyed,
+    /// not pack+params-keyed — see CompiledSurfacePack).
+    CompiledSurfacePack* compiledPack(const QString& packId, const PhosphorSurfaceShaders::DecorationProfile& profile);
+
+    /// Resolve the CompiledSurfacePack for the window @p windowId's stored base
+    /// pack id (WindowBorder::basePackId), re-resolving its DecorationProfile from
+    /// the window's surface path to feed the pack's parameter overrides. Returns
+    /// nullptr when the window has no border entry, no GL context, or the pack's
+    /// compile failed (compileFailed latch / null shader) — the caller then
+    /// renders nothing for it. The single render-path lookup shared by
+    /// reconcileBorderShader / drawWindow / renderSurfaceChain /
+    /// renderSurfaceBufferPasses, replacing the old single m_borderShader.
+    CompiledSurfacePack* compiledPackForWindow(const QString& windowId);
+
+    /// Populate the surface-shader registry's search paths (the bundled
+    /// ${XDG_DATA_DIRS}/plasmazones/surface dirs + the user override) on first
+    /// use. One-shot: the registry's live-reload watcher then tracks pack edits.
+    void ensureSurfaceRegistryPaths();
+
+    /// Decide and apply the desired offscreen shader for @p windowId / @p w:
+    ///   • a transition is active (animation owns the slot) → leave it alone;
+    ///   • else the window has a border in m_windowBorders → redirect + set the
+    ///     border shader, marking the WindowBorder `shaderApplied`;
+    ///   • else if WE applied the border shader → setShader(nullptr) + unredirect.
+    /// Idempotent and safe to call from updateWindowBorder / removeWindowBorder /
+    /// transition end. Never unredirects a window the animation system owns.
+    void reconcileBorderShader(const QString& windowId, KWin::EffectWindow* w);
+
+    /// Per-frame uniform push for a bordered window painted through @p pack's
+    /// surface shader. Sets the geometry uniforms (uSurfaceSize, uSurfaceFrameTopLeft,
+    /// uSurfaceFrameSize) from the window's frame/expanded geometry × @p scale, the
+    /// logical-to-device @p scale itself (uSurfaceScale), the focus flag
+    /// (uSurfaceFocused), plus @p pack's resolved customParams/customColors — which
+    /// now carry the border APPEARANCE (width / radius / colours) baked at compile
+    /// time from the pack's parameters. Writes onto the ALREADY-BOUND pack shader:
+    /// the caller owns the KWin::ShaderBinder (bound to @p pack.shader) and routes
+    /// the actual draw through OffscreenEffect::drawWindow, whose OffscreenData::paint
+    /// re-binds the same program and runs the shader. Does NOT bind/unbind or
+    /// re-validate the window: drawWindow is the sole caller and has already resolved
+    /// @p pack, confirmed the border is applied, and ruled out a transition owning
+    /// the slot.
+    void pushBorderUniforms(KWin::EffectWindow* w, const CompiledSurfacePack& pack, qreal scale);
+
+    /// Render the window's active surface-layer stack into @p transition's
+    /// ping-pong FBO chain and return the texture holding the final composited
+    /// surface, or nullptr when the window has no active surface layers (the
+    /// caller then animates the bare `uTexture0`). Called once per animated frame
+    /// from paintWindow's transition branch BEFORE the animation draw: the
+    /// returned texture is bound as `uSurfaceLayer` so the animation composites
+    /// over the layered surface (border / rounded corners, future tint/glow) and
+    /// the border stays visible through the whole transition.
+    ///
+    /// Layer 0 is the border: the raw window is rendered through the border
+    /// shader into the chain via OffscreenData (mirrors captureOldWindowSnapshot,
+    /// reusing the existing border shader + its MVP vertex path), so it shares
+    /// uTexture0's layout. Additional layers chain as passthrough-quad FBO→FBO
+    /// blits (ping-pong). Implemented in surfacelayers.cpp.
+    KWin::GLTexture* renderSurfaceChain(ShaderTransition& transition, KWin::EffectWindow* w, qreal scale);
+
+    /// Render the MULTIPASS surface pack's buffer passes for @p w into its
+    /// per-window FBO chain (m_surfaceMultipass), so the IDLE drawWindow path can
+    /// bind the buffer outputs as iChannel0..3 for the main pass. Returns true
+    /// when the buffer textures are ready (the caller then binds them + sets the
+    /// main shader's m_surfaceIChannel*Loc), false otherwise (single-pass pack,
+    /// allocation failure, or collapsed surface — the caller renders single-pass,
+    /// iChannels unbound → sampled as 0). Implemented in surfacelayers.cpp.
+    ///
+    /// IDLE-path only. During a window-animation transition a multipass pack
+    /// degrades to single-pass (renderSurfaceChain runs the border via the main
+    /// shader with iChannels unbound); wiring buffer passes into the transition
+    /// chain is a follow-up.
+    bool renderSurfaceBufferPasses(KWin::EffectWindow* w, qreal scale);
+
+    /// Composite a MULTI-PACK decoration chain (chain.size() > 1) for @p w into a
+    /// per-window ping-pong FBO and return the texture holding the final fold (or
+    /// nullptr — single-pack / no border / allocation failure — the caller then
+    /// takes the single-pack path). Captures the raw surface, then folds each pack
+    /// over the running composite: the pack's buffer passes run sampling the
+    /// composite, then its main runs as a fullscreen FBO pass (composite on unit
+    /// 0, its buffers as iChannels) into the other slot. drawWindow presents the
+    /// final slot through surfacePresentShader(). Buffers are cached per
+    /// window+chain (animation-ready). Implemented in surfacelayers.cpp; like
+    /// renderSurfaceBufferPasses it MUST be driven from paintWindow (it captures
+    /// via effects->drawWindow).
+    KWin::GLTexture* renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale);
+
+    /// Lazily-compiled passthrough shader that samples a bound texture (uFinal)
+    /// at vTexCoord and writes it verbatim. Used as the redirect shader for a
+    /// multi-pack window so OffscreenData::paint presents the pre-composited
+    /// final FBO at window geometry. nullptr if the one-shot compile failed.
+    KWin::GLShader* surfacePresentShader();
+    std::unique_ptr<KWin::GLShader> m_surfacePresentShader; ///< compiled passthrough present shader
+    int m_surfacePresentFinalLoc = -1; ///< uFinal sampler location on the present shader
+    bool m_surfacePresentFailed = false; ///< latch a failed present-shader compile
+
+    /// Continuous seconds for the surface contract's `iTime`, relative to an
+    /// epoch captured at first use (so the value starts near 0 and keeps float
+    /// precision over a long session). Monotonic (steady_clock). Pushed to every
+    /// pass whose shader references iTime.
+    float surfaceShaderTimeSeconds();
+    qint64 m_surfaceTimeEpochMs = -1; ///< steady-clock ms captured on the first iTime push
+
+    /// True when ANY pack in @p windowId's resolved chain references iTime (main
+    /// or a buffer pass). Such a window is driven to repaint every frame by
+    /// postPaintScreen so its animation advances even with no content damage; a
+    /// purely static decoration (e.g. border-only) returns false and costs nothing.
+    bool windowSurfaceAnimates(const QString& windowId);
+
+    /// Surface-shader pack registry (the "surface" category: window border /
+    /// rounded corners / glow / …). Discovers data/surface packs; the effect
+    /// compiles each pack a resolved decoration chain references. Search paths
+    /// populated lazily via ensureSurfaceRegistryPaths.
+    PhosphorSurfaceShaders::SurfaceShaderRegistry m_surfaceShaderRegistry;
+    bool m_surfaceRegistryPathsAdded = false; ///< one-shot guard for the search-path population
+
+    /// Per-surface decoration profile tree, delivered by the daemon as
+    /// `decorationProfileTreeJson` (Settings::decorationProfileTree). resolve()
+    /// over a window's surface path (window.tiled / window.snapped /
+    /// window.floating) yields the DecorationProfile that drives the window's
+    /// surface-pack chain and the per-pack parameters that style it (border
+    /// width / radius / colours are the pack's own params, not host fields).
+    /// Seeded in the constructor with a baseline matching
+    /// today's per-field defaults so decoration renders correctly before the
+    /// async fetch lands; replaced wholesale when the setting arrives.
+    PhosphorSurfaceShaders::DecorationProfileTree m_decorationTree;
+
+    /// Compiled surface-shader packs keyed by pack id (CompiledSurfacePack holds
+    /// the main MapTexture shader, contract uniform locations, pack-declared
+    /// param values, the main-pass iChannel locations, and the multipass buffer
+    /// passes for that one pack). Populated on first use by compiledPack();
+    /// cleared wholesale on a SurfaceShaderRegistry hot-reload (effectsChanged)
+    /// and on teardown. A window's render path looks up its resolved base pack id
+    /// (WindowBorder::basePackId) here.
+    std::unordered_map<QString, CompiledSurfacePack> m_compiledPacks;
+
+    /// Per-window multipass FBO targets (surfaceTex + bufferTex chain). Keyed by
+    /// getWindowId(w). Allocated lazily by renderSurfaceBufferPasses, reallocated
+    /// when the window's expanded size × scale changes, and erased on window
+    /// close / border removal (removeWindowBorder) to free GPU memory.
+    std::unordered_map<QString, SurfaceMultipassState> m_surfaceMultipass;
+
+    /// Resolve the DECORATION SURFACE PATH for @p windowId based on MEMBERSHIP
+    /// alone:
+    ///   • autotile member (AutotileStateHelpers::isTiledWindow) → "window.tiled"
+    ///   • else snap member (SnapHandler::isTiledWindow)         → "window.snapped"
+    ///   • else                                                  → "window.floating"
+    /// Autotile-first precedence. The resolved profile's effectiveChain() (an
+    /// empty chain = no decoration) is the sole render gate (see
+    /// updateWindowBorder); there is no separate show-border gate.
+    QString resolveSurfacePathFor(const QString& windowId) const;
+
+    /// Seed m_decorationTree's baseline so decoration renders sensibly before the
+    /// async `decorationProfileTreeJson` fetch lands (mirrors how BorderState
+    /// seeds DecorationDefaults pre-load). Called once from the constructor. The
+    /// effect cannot reach the GPL daemon ConfigDefaults, so it builds a TRANSIENT
+    /// placeholder from the shared DecorationDefaults constants (ShowBorder gate,
+    /// width, radius) plus the default "border" pack's OWN metadata-default
+    /// colours. The daemon's fetch overwrites the whole tree on arrival with its
+    /// authoritative colours (ZoneDefaults / system-accent-resolved), so the
+    /// placeholder's colours may differ from the daemon's for the brief pre-fetch
+    /// window; that is the same transient as BorderState's pre-load colours and is
+    /// corrected the instant the fetch lands.
+    void seedDecorationTreeBaseline();
 
     /// Drop the per-rule match cache and refresh @p windowId's border /
     /// opacity after its placement state (snapped / floating / zone) changed.

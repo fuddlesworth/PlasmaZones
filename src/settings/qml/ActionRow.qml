@@ -117,7 +117,7 @@ ColumnLayout {
     }
     /// The active shader-uniform schema for whichever shader-override action is
     /// being edited (animation or overlay) — drives the inline
-    /// ShaderParameterEditor below the row.
+    /// ShaderParamsEditor below the row.
     readonly property var _activeShaderParamSchema: {
         if (row.action.type === "overrideAnimationShader")
             return row._shaderParamSchema;
@@ -125,14 +125,6 @@ ColumnLayout {
             return row._overlayShaderParamSchema;
         return [];
     }
-    /// Working-state lock map for the shader-params editor — mirrors the
-    /// per-event animation editor's behaviour. Locks influence randomize
-    /// (locked params are kept) but are NOT persisted to the rule, so a
-    /// reopened rule starts with no locks (same as the per-event card).
-    /// The map is reset whenever the selected `effectId` changes so locks
-    /// for the previous effect don't leak into the new effect's params
-    /// (e.g. `intensity` locked under Smoke shouldn't carry into BMW).
-    property var _shaderParamLocks: ({})
     /// Stable empty-object fallback for the inline shader params editor's
     /// `currentValues` binding — using `({})` inline would allocate a new
     /// object identity per binding evaluation and churn the editor.
@@ -276,17 +268,19 @@ ColumnLayout {
 
     spacing: Kirigami.Units.smallSpacing
 
-    // Reset session locks when the user switches the effect. Tracking via
-    // a Connections handler so the reset fires every time the effectId
-    // transitions (not just on the initial set). `target` is declared
-    // BEFORE the signal-handler function — strict QML resolves signal
-    // names against the target's metaobject at parse time.
+    // Reset session locks when the user switches the effect. The shared
+    // ShaderParamsEditor owns the working-state lock map, so the reset
+    // clears it on the loaded editor instance. Tracking via a Connections
+    // handler so the reset fires every time the effectId transitions (not
+    // just on the initial set). `target` is declared BEFORE the
+    // signal-handler function — strict QML resolves signal names against
+    // the target's metaobject at parse time.
     Connections {
         function onActionEdited(updated) {
             // Compare against the action BEFORE the edit lands — `row.action`
             // is still the previous state until the parent re-feeds us.
-            if ((row.action.type === "overrideAnimationShader" || row.action.type === "overrideOverlayShader") && updated && updated.effectId !== row.action.effectId)
-                row._shaderParamLocks = ({});
+            if ((row.action.type === "overrideAnimationShader" || row.action.type === "overrideOverlayShader") && updated && updated.effectId !== row.action.effectId && shaderParamsLoader.item)
+                shaderParamsLoader.item.lockedParams = ({});
         }
 
         target: row
@@ -471,6 +465,8 @@ ColumnLayout {
     // registry's schema). Matches the per-event editor on the animation settings
     // page so users can tweak uniforms without leaving the rule editor.
     Loader {
+        id: shaderParamsLoader
+
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
         active: row._activeShaderParamSchema.length > 0
@@ -612,7 +608,7 @@ ColumnLayout {
     _colorParamEditor: Component {
         RowLayout {
             readonly property var _param: parent.modelData
-            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : "#FF3DAEE9"
+            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : (_param.default !== undefined ? String(_param.default) : "#FF3DAEE9")
             // A border-colour action's single `value` param may carry the "accent"
             // sentinel ("follow the system accent") instead of a hex string. It is
             // not a QColor, so render the live system colour for the swatch and a
@@ -992,18 +988,20 @@ ColumnLayout {
     }
 
     _shaderParamsEditor: Component {
-        PZCommon.ShaderParameterEditor {
+        PZCommon.ShaderParamsEditor {
             id: paramEditor
 
             parameters: row._activeShaderParamSchema
             currentValues: row.action.params || row._emptyShaderParams
-            lockedParams: row._shaderParamLocks
+            effectId: row.action.effectId || ""
             enableLocking: true
             enableRandomize: true
-            enableGroups: true
             enableImage: false
             compact: true
-            onValueChanged: function (paramId, value) {
+            // The shared editor owns the session-only lock map and hosts the
+            // colour dialog; the rule only persists values. Locks reset on
+            // effect switch via the Loader (see the Connections handler above).
+            onValueChanged: function (effectId, paramId, value) {
                 // Clone the current param map and stamp the new value so the
                 // binding re-evaluates (mutating in place wouldn't trigger).
                 var next = ({});
@@ -1013,19 +1011,9 @@ ColumnLayout {
                 next[paramId] = value;
                 row.actionEdited(row._withParam("params", next));
             }
-            onLockToggled: function (paramId, locked) {
-                // Mirror AnimationProfileEditor — the editor's helper computes
-                // the post-toggle map so the same merge logic lives in one
-                // place. Locks are session state, not persisted to the rule.
-                row._shaderParamLocks = paramEditor.lockedAfterToggle(paramId, locked);
-            }
-            onLockAllRequested: function (lock) {
-                row._shaderParamLocks = paramEditor.lockedAfterAllToggle(lock);
-            }
-            onRandomizeRequested: {
+            onRandomizeRequested: function (rolled) {
                 // computeRandomized respects locks: locked params keep their
                 // current value, the rest are rolled per their schema range.
-                var rolled = paramEditor.computeRandomized();
                 row.actionEdited(row._withParam("params", rolled));
             }
         }

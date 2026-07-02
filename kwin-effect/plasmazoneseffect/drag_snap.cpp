@@ -259,19 +259,20 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // the non-animated path just runs the moveResize without the snap
     // motion / shader.
     //
-    // First-placement-on-open carve-out: a window moved into its zone/tile
-    // moments after opening still has its window.open shader in flight —
-    // uniquely marked by the held WindowAddedGrabRole (addedGrabHeld, set only
-    // by the slotWindowAdded open path). Installing the snap/tile morph would
-    // supersede it (one transition per window), so the open animation never
-    // plays. Skip the morph and fall through to the plain moveResize: the
-    // first-frame open suppression keeps the window hidden until the move
-    // lands, so the open shader plays into the destination rect. Later moves
-    // (no open shader in flight) morph normally.
-    const auto* inFlightTransition = m_shaderManager.findTransition(window);
-    const bool firstPlacementWithOpenShader = inFlightTransition && inFlightTransition->addedGrabHeld;
-
-    if (!skipAnimation && !allowDuringDrag && !firstPlacementWithOpenShader && m_windowAnimator->isEnabled()
+    // BUT never let the snap/move geometry morph supersede an in-flight
+    // window.open animation. A window that is snapped / placed AS IT OPENS
+    // (snap-restore, autotile, daemon placement) should show its OPEN animation
+    // at the snapped position, not a move morph — otherwise the geometry morph
+    // (the default for snap/move) installs over the just-started open transition
+    // and the open animation never plays. The open transition holds the
+    // WindowAddedGrabRole (addedGrabHeld), so detect it and fall through to the
+    // instant-moveResize path below: the window jumps to its snapped geometry and
+    // the open animation plays over it. A snap that is NOT on a freshly-opened
+    // window (drag-snap, retile, focus move) has no such transition and morphs
+    // normally.
+    const PlasmaZones::ShaderTransition* const inFlight = m_shaderManager.findTransition(window);
+    const bool openAnimationInFlight = inFlight && inFlight->addedGrabHeld;
+    if (!skipAnimation && !allowDuringDrag && !openAnimationInFlight && m_windowAnimator->isEnabled()
         && shouldAnimateWindow(window)) {
         const QRectF targetFrame(geo);
 

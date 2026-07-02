@@ -23,6 +23,10 @@
 #include <PhosphorTiles/AutotileConstants.h>
 // Animation duration / stagger UI bounds — generic policy, not autotile-specific.
 #include <PhosphorAnimation/AnimationLimits.h>
+// Surface-shader decoration tree — the user-applied pack stack (border is NOT a
+// pack here; window border/title-bar appearance is owned by v3.2's window rules).
+#include <PhosphorSurface/DecorationProfile.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -884,6 +888,34 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Surface shader Settings
+    //
+    // The canonical "border" surface-shader pack id. The group/key accessors
+    // (surfaceGroup / surfaceDecorationTreeKey) are inherited from ConfigKeys —
+    // no forwarding accessors needed here (same as every other group:
+    // ConfigDefaults derives from ConfigKeys).
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString surfaceShaderEffectId()
+    {
+        return QStringLiteral("border");
+    }
+
+    /// Default DecorationProfileTree — the fallback the typed
+    /// `Settings::decorationProfileTree()` returns when the Surface group holds
+    /// no `DecorationProfileTree` entry.
+    ///
+    /// The decoration tree is the user-applied surface-shader pack stack. Window
+    /// border and title-bar appearance are owned by the window rules, not by this
+    /// tree, so the default auto-inserts NOTHING: it is an empty/neutral tree and
+    /// every surface (window / osd / popup) starts undecorated until the user
+    /// engages a pack (e.g. glow) from the Decoration pages.
+    static ::PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree()
+    {
+        return ::PhosphorSurfaceShaders::DecorationProfileTree{};
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1485,6 +1517,14 @@ public:
     static QString userOverlayShadersSubdir()
     {
         return QStringLiteral("/plasmazones/shaders");
+    }
+
+    /// Surface shader packs (the `data/surface/` family — border, etc.).
+    /// Mirrors the `userAnimationsSubdir()` convention so settings + daemon
+    /// + compositor code share one source of truth for the on-disk location.
+    static QString userSurfaceSubdir()
+    {
+        return QStringLiteral("/plasmazones/surface");
     }
 
 private:

@@ -785,6 +785,20 @@ public:
     void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree&) override
     {
     }
+    PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override
+    {
+        return ConfigDefaults::decorationProfileTree();
+    }
+    void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree&) override
+    {
+    }
+    QString decorationProfileTreeJson() const override
+    {
+        return {};
+    }
+    void setDecorationProfileTreeJson(const QString&) override
+    {
+    }
 
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override
@@ -1066,6 +1080,13 @@ private:
     bool m_snapUnfloatFallbackToZone = false;
     bool m_snappingFocusNewWindows = false;
     bool m_snappingFocusFollowsMouse = false;
+    // Defaults mirror the prior hardcoded returns (show-border off, 2px width)
+    // so tests that read the stub's defaults are unaffected; settable so the
+    // DaemonGeometryResolver inset-gate test can flip the show-border state.
+    bool m_snappingShowBorder = false;
+    bool m_snappingHideTitleBars = true;
+    int m_snappingBorderWidth = 2;
+    int m_snappingBorderRadius = 0;
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;

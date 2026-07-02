@@ -56,9 +56,10 @@ private Q_SLOTS:
      */
     void testAllDefaults_withinKcfgBounds()
     {
-        // Activation
-        QVERIFY(ConfigDefaults::zoneSpanModifier() >= 0);
-        QVERIFY(ConfigDefaults::zoneSpanModifier() <= 10);
+        // Activation. Enum-valued settings derive their bounds from the enum
+        // (not magic literals) so the tripwire tracks the enum if it grows.
+        QVERIFY(ConfigDefaults::zoneSpanModifier() >= static_cast<int>(DragModifier::Disabled));
+        QVERIFY(ConfigDefaults::zoneSpanModifier() <= static_cast<int>(DragModifier::CtrlAltMeta));
 
         // Display
         QVERIFY(ConfigDefaults::osdStyle() >= ConfigDefaults::osdStyleMin());
@@ -101,8 +102,9 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::minimumZoneDisplaySizePx() <= ConfigDefaults::minimumZoneDisplaySizePxMax());
 
         // Behavior
-        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() >= 0);
-        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() <= 2);
+        QVERIFY(ConfigDefaults::snappingStickyWindowHandling()
+                >= static_cast<int>(StickyWindowHandling::TreatAsNormal));
+        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() <= static_cast<int>(StickyWindowHandling::IgnoreAll));
         QVERIFY(ConfigDefaults::minimumWindowWidth() >= ConfigDefaults::minimumWindowWidthMin());
         QVERIFY(ConfigDefaults::minimumWindowWidth() <= ConfigDefaults::minimumWindowWidthMax());
         QVERIFY(ConfigDefaults::minimumWindowHeight() >= ConfigDefaults::minimumWindowHeightMin());
@@ -111,12 +113,12 @@ private Q_SLOTS:
         // PhosphorZones::Zone Selector
         QVERIFY(ConfigDefaults::triggerDistance() >= ConfigDefaults::triggerDistanceMin());
         QVERIFY(ConfigDefaults::triggerDistance() <= ConfigDefaults::triggerDistanceMax());
-        QVERIFY(ConfigDefaults::position() >= 0);
-        QVERIFY(ConfigDefaults::position() <= 8);
-        QVERIFY(ConfigDefaults::layoutMode() >= 0);
-        QVERIFY(ConfigDefaults::layoutMode() <= 2);
-        QVERIFY(ConfigDefaults::sizeMode() >= 0);
-        QVERIFY(ConfigDefaults::sizeMode() <= 1);
+        QVERIFY(ConfigDefaults::position() >= static_cast<int>(ZoneSelectorPosition::TopLeft));
+        QVERIFY(ConfigDefaults::position() <= static_cast<int>(ZoneSelectorPosition::BottomRight));
+        QVERIFY(ConfigDefaults::layoutMode() >= static_cast<int>(ZoneSelectorLayoutMode::Grid));
+        QVERIFY(ConfigDefaults::layoutMode() <= static_cast<int>(ZoneSelectorLayoutMode::Vertical));
+        QVERIFY(ConfigDefaults::sizeMode() >= static_cast<int>(ZoneSelectorSizeMode::Auto));
+        QVERIFY(ConfigDefaults::sizeMode() <= static_cast<int>(ZoneSelectorSizeMode::Manual));
         QVERIFY(ConfigDefaults::maxRows() >= ConfigDefaults::maxRowsMin());
         QVERIFY(ConfigDefaults::maxRows() <= ConfigDefaults::maxRowsMax());
         QVERIFY(ConfigDefaults::previewWidth() >= ConfigDefaults::previewWidthMin());

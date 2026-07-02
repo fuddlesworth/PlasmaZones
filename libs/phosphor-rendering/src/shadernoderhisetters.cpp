@@ -147,15 +147,81 @@ void ShaderNodeRhi::setCustomColor(int index, const QColor& color)
 }
 
 // ============================================================================
+// Surface-only state
+// ============================================================================
+//
+// Each of these lands in the surface UBO's scene region (a SurfaceUniformProfile
+// reads them from UboFrameState; a BaseUniformProfile ignores them), so they
+// mark m_sceneDataDirty just like the custom params/colours above.
+
+void ShaderNodeRhi::setSurfaceOpacity(float opacity)
+{
+    if (m_surfaceOpacity != opacity) {
+        m_surfaceOpacity = opacity;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+void ShaderNodeRhi::setSurfaceScale(float scale)
+{
+    if (m_surfaceScale != scale) {
+        m_surfaceScale = scale;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+void ShaderNodeRhi::setSurfaceFocused(bool focused)
+{
+    if (m_surfaceFocused != focused) {
+        m_surfaceFocused = focused;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+void ShaderNodeRhi::setSurfaceSize(float width, float height)
+{
+    if (m_surfaceSize[0] != width || m_surfaceSize[1] != height) {
+        m_surfaceSize[0] = width;
+        m_surfaceSize[1] = height;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+void ShaderNodeRhi::setSurfaceFrameTopLeft(float x, float y)
+{
+    if (m_surfaceFrameTopLeft[0] != x || m_surfaceFrameTopLeft[1] != y) {
+        m_surfaceFrameTopLeft[0] = x;
+        m_surfaceFrameTopLeft[1] = y;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+void ShaderNodeRhi::setSurfaceFrameSize(float width, float height)
+{
+    if (m_surfaceFrameSize[0] != width || m_surfaceFrameSize[1] != height) {
+        m_surfaceFrameSize[0] = width;
+        m_surfaceFrameSize[1] = height;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+// ============================================================================
 // App Fields
 // ============================================================================
 
 void ShaderNodeRhi::setAppField0(int value)
 {
-    if (m_baseUniforms.appField0 == value) {
+    if (m_appField0 == value) {
         return;
     }
-    m_baseUniforms.appField0 = value;
+    m_appField0 = value;
+    m_uboProfile->setAppField0(value);
     m_uniformsDirty = true;
     // Use the granular K_APP_FIELDS region (8 bytes) instead of the full
     // scene header (~512 bytes). Phosphor updates these on every hover.
@@ -164,10 +230,11 @@ void ShaderNodeRhi::setAppField0(int value)
 
 void ShaderNodeRhi::setAppField1(int value)
 {
-    if (m_baseUniforms.appField1 == value) {
+    if (m_appField1 == value) {
         return;
     }
-    m_baseUniforms.appField1 = value;
+    m_appField1 = value;
+    m_uboProfile->setAppField1(value);
     m_uniformsDirty = true;
     m_appFieldsDirty = true;
 }

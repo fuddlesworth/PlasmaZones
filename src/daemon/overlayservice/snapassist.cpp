@@ -212,6 +212,11 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
         writeQmlProperty(slot, QStringLiteral("borderRadius"), m_settings->borderRadius());
     }
 
+    // Stage d: resolve + push the snap-assist surface-shader decoration (same
+    // SurfaceDecoration host the OSD uses, retargeted to the "popup.snapAssist"
+    // surface path). Empty source = no decoration (card draws natively).
+    applyDecoration(slot, QStringLiteral("popup.snapAssist"));
+
     // Resize the shell window to the target screen geometry (matches
     // OSD path's sizeOsdToScreen). The shell is shared with OSD,
     // selector, and picker slots: sizing it to anything other than the
@@ -571,6 +576,11 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
     writeQmlProperty(slot, QStringLiteral("locked"), locked);
     writeColorSettings(slot, m_settings);
+
+    // Stage d: resolve + push the layout-picker surface-shader decoration (same
+    // SurfaceDecoration host the OSD uses, retargeted to the "popup.layoutPicker"
+    // surface path). Empty source = no decoration (card draws natively).
+    applyDecoration(slot, QStringLiteral("popup.layoutPicker"));
 
     if (shellWindow) {
         assertWindowOnScreen(shellWindow, screen, screenGeom);

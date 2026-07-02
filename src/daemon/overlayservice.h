@@ -67,6 +67,10 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PhosphorSurfaceShaders {
+class SurfaceShaderRegistry;
+}
+
 namespace PlasmaZones {
 class ShaderRegistry;
 class SnapAssistThumbnailProvider;
@@ -178,6 +182,11 @@ public:
     void updateLayout(PhosphorZones::Layout* layout) override;
     void updateSettings(ISettings* settings) override;
     void setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry);
+    /// Borrowed Daemon-owned surface-shader registry, used to resolve the OSD's
+    /// decoration pack (Stage d). Same lifetime contract as the animation
+    /// registry: declared before m_overlayService in daemon.h so reverse
+    /// destruction guarantees it outlives this service.
+    void setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry);
     void updateGeometries() override;
 
     // PhosphorZones::Zone highlighting for overlay display (IOverlayService interface)
@@ -609,6 +618,11 @@ private:
     /// guarantees the registry outlives this service.
     PhosphorAnimationShaders::AnimationShaderRegistry* m_animShaderRegistry = nullptr;
 
+    /// Borrowed Daemon-owned surface-shader registry (Stage d). Resolves the
+    /// "osd" decoration pack's fragment shader + translated params for the OSD
+    /// slot. Same outlives-this-service contract as m_animShaderRegistry.
+    PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
+
     /// Phase-5 SurfaceAnimator. Drives show/hide visual transitions for
     /// every Surface this service creates. Forward-declared to keep the
     /// phosphor-animation-layer header out of the daemon's public surface;
@@ -865,6 +879,15 @@ private:
         int masterCount = 1;
     };
     void pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdContentParams& params);
+
+    /// Resolve a surface-decoration pack from the settings' DecorationProfileTree
+    /// (@p surfacePath, e.g. "osd" / "popup.snapAssist" / "popup.zoneSelector" /
+    /// "popup.layoutPicker") and push it onto @p slot's decoration properties
+    /// (Stage d). Shared by every OSD show path (all modes: layout / locked /
+    /// disabled / navigation) and the three transient popup show paths. Clears
+    /// the slot's decorationShaderSource when no pack resolves so a stale
+    /// decoration never renders.
+    void applyDecoration(QObject* slot, const QString& surfacePath);
 
     void destroyIfTypeMismatch(const QString& screenId);
     void createShaderPreviewWindow(QScreen* screen, const QString& screenId = QString());

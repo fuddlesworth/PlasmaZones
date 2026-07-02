@@ -704,6 +704,27 @@ void SettingsAdaptor::initializeRegistry()
         m_schemas[QStringLiteral("autotileInsertPosition")] = QStringLiteral("int");
     }
 
+    // Per-surface decoration tree (JSON blob round-trip via D-Bus), mirroring
+    // the animation shaderProfileTree registration above. The kwin-effect lives
+    // in a separate process and fetches this by name via getSetting to resolve
+    // each surface's decoration (the user-applied shader-pack chain).
+    m_getters[QStringLiteral("decorationProfileTreeJson")] = [this]() {
+        return m_settings->decorationProfileTreeJson();
+    };
+    m_setters[QStringLiteral("decorationProfileTreeJson")] = [this](const QVariant& v) -> bool {
+        // Gate on UTF-8 byte length, not QString::size() — same rationale as
+        // the shaderProfileTree setter: a multi-byte payload encodes to more
+        // bytes on the wire than QString::size() reports.
+        const QByteArray raw = v.toString().toUtf8();
+        if (raw.size() > kMaxShaderProfileTreeBytes)
+            return false;
+        const QJsonDocument doc = QJsonDocument::fromJson(raw);
+        if (!doc.isObject())
+            return false;
+        m_settings->setDecorationProfileTreeJson(v.toString());
+        return true;
+    };
+    m_schemas[QStringLiteral("decorationProfileTreeJson")] = QStringLiteral("string");
     REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
     m_getters[QStringLiteral("autotileStickyWindowHandling")] = [this]() {
         return static_cast<int>(m_settings->autotileStickyWindowHandling());

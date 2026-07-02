@@ -7,5 +7,6 @@ CategoryMenuButton 1.0 CategoryMenuButton.qml
 ShaderParameterRow 1.0 ShaderParameterRow.qml
 ShaderParameterSection 1.0 ShaderParameterSection.qml
 ShaderParameterEditor 1.0 ShaderParameterEditor.qml
+ShaderParamsEditor 1.0 ShaderParamsEditor.qml
 ShaderCompileErrorBanner 1.0 ShaderCompileErrorBanner.qml
 ZoneShaderRenderer 1.0 ZoneShaderRenderer.qml

@@ -71,8 +71,9 @@ struct alignas(16) BaseUniforms
     int iAudioSpectrumSize; // offset 576
     int iFlipBufferY; // offset 580 — always 1 for Y-flip
     // The two pad ints at offsets 584 and 588 are explicitly written as zero
-    // by the C-side upload path (see shadernoderhiuniforms.cpp's syncBaseUniforms)
-    // — readers should not assume the bytes are skipped on the wire. On the
+    // by the C-side upload path (see BaseUniformProfile::fill in
+    // baseuniformprofile.cpp) — readers should not assume the bytes are skipped
+    // on the wire. On the
     // GLSL side they are absorbed by std140's vec4 alignment of the following
     // `iTextureResolution` (vec4[4]) member, which forces the next field onto
     // a 16-byte boundary at offset 592. Removing the pad would shift the

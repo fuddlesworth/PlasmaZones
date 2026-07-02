@@ -4,6 +4,7 @@
 #include "internal.h"
 
 #include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorShaders/BaseUniformProfile.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QFile>
@@ -167,14 +168,14 @@ QRhi* ShaderNodeRhi::safeRhi() const
                                                                                        : nullptr;
 }
 
-ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item)
+ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::IUboProfile> profile)
     : m_item(item)
+    , m_uboProfile(profile ? std::move(profile) : std::make_unique<PhosphorShaders::BaseUniformProfile>())
 {
     Q_ASSERT(item != nullptr);
-    std::memset(&m_baseUniforms, 0, sizeof(m_baseUniforms));
-    QMatrix4x4 identity;
-    std::memcpy(m_baseUniforms.qt_Matrix, identity.constData(), 16 * sizeof(float));
-    m_baseUniforms.qt_Opacity = 1.0f;
+    // The UBO profile's ctor seeds an identity qt_Matrix + qt_Opacity=1.0 (the
+    // init that used to live here, moved into BaseUniformProfile so the
+    // surface profile gets the same lead-in for free).
     // Initialize all customParams to -1.0 (the "unset" sentinel).
     // Shaders use `>= 0.0` checks to distinguish set values from defaults.
     for (int i = 0; i < kMaxCustomParams; ++i) {
@@ -317,8 +318,7 @@ void ShaderNodeRhi::prepare()
         return;
     }
 
-    const int uboSize = static_cast<int>(sizeof(PhosphorShaders::BaseUniforms))
-        + (m_uniformExtension ? m_uniformExtension->extensionSize() : 0);
+    const int uboSize = m_uboProfile->baseSize() + (m_uniformExtension ? m_uniformExtension->extensionSize() : 0);
 
     if (!m_initialized) {
         // Do NOT set m_initialized = true until every resource below has been
@@ -593,9 +593,14 @@ void ShaderNodeRhi::prepare()
                 cb->endPass();
 
                 if (i + 1 < n && m_ubo) {
+                    // Inter-pass write→read barrier only: re-uploading 4 bytes at
+                    // offset 0 (the first float of qt_Matrix) forces the backend to
+                    // serialize pass i's writes before pass i+1 samples its output.
+                    // The value is immediately re-pinned by the next pass / final
+                    // restore, so this is a sync hint, not a meaningful data update.
                     QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
                     if (barrier) {
-                        barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, &m_baseUniforms);
+                        barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, m_uboProfile->mutableData());
                         cb->resourceUpdate(barrier);
                     }
                 }
@@ -646,7 +651,9 @@ void ShaderNodeRhi::prepare()
         if (m_ubo) {
             QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
             if (barrier) {
-                barrier->updateDynamicBuffer(m_ubo.get(), 0, 16 * sizeof(float), m_baseUniforms.qt_Matrix);
+                // qt_Matrix is the leading mat4 of every UBO profile (offset 0),
+                // so mutableData() points directly at it.
+                barrier->updateDynamicBuffer(m_ubo.get(), 0, 16 * sizeof(float), m_uboProfile->mutableData());
                 cb->resourceUpdate(barrier);
             }
         }

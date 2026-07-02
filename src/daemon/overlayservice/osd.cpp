@@ -24,7 +24,14 @@
 
 #include <PhosphorAnimation/SurfaceAnimator.h>
 
+#include <PhosphorSurface/DecorationProfile.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/SurfaceShaderEffect.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
+
 #include "../../core/isettings.h"
+
+#include <QUrl>
 
 namespace PlasmaZones {
 
@@ -289,6 +296,93 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     writeAutotileMetadata(osdSlot, p.showMasterDot, p.producesOverlappingZones, p.zoneNumberDisplay, p.masterCount);
     writeQmlProperty(osdSlot, QStringLiteral("zones"), p.zones);
     writeFontProperties(osdSlot, m_settings);
+    // Stage d: resolve + push the OSD's surface-shader decoration (rounded
+    // corners + border) onto the slot. Done here so every layout-OSD show path
+    // (showLayoutOsdImpl / showLayoutOsd(string…) / showDisabledOsd) decorates
+    // consistently; showNavigationOsd calls applyDecoration directly since it
+    // does not route through pushLayoutOsdContent.
+    applyDecoration(osdSlot, QStringLiteral("osd"));
+}
+
+void OverlayService::setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry)
+{
+    m_surfaceShaderRegistry = registry;
+}
+
+void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
+{
+    if (!slot) {
+        return;
+    }
+
+    // Helper to leave the slot undecorated: clear the source so the QML
+    // SurfaceDecoration stays inert and the card draws its native chrome.
+    // Mirror applyShaderInfoToWindow's clear-first discipline (an empty URL
+    // tears down any prior decoration before new aux props would matter).
+    const auto clearDecoration = [slot]() {
+        writeQmlProperty(slot, QStringLiteral("decorationShaderSource"), QUrl());
+        writeQmlProperty(slot, QStringLiteral("decorationParamPreamble"), QString());
+        writeQmlProperty(slot, QStringLiteral("decorationShaderParams"), QVariant::fromValue(QVariantMap()));
+    };
+
+    if (!m_settings || !m_surfaceShaderRegistry) {
+        clearDecoration();
+        return;
+    }
+
+    // Resolve @p surfacePath through the decoration tree. resolve() walks
+    // baseline → category → leaf and returns a DecorationProfile carrying an
+    // effective CHAIN (ordered pack ids) plus a per-pack parameters map.
+    const PhosphorSurfaceShaders::DecorationProfileTree tree = m_settings->decorationProfileTree();
+    const PhosphorSurfaceShaders::DecorationProfile profile = tree.resolve(surfacePath);
+    const QStringList chain = profile.effectiveChain();
+    if (chain.isEmpty()) {
+        // No decoration packs configured for this surface — render it plainly.
+        clearDecoration();
+        return;
+    }
+
+    // The daemon overlay decoration path is single-pass by design: the QML
+    // SurfaceDecoration host runs ONE SurfaceShaderItem, so it renders the
+    // primary (first) pack of the resolved chain. Multi-pack buffer-chain
+    // composition is exclusive to the kwin-effect window path
+    // (renderSurfaceChainComposite), which has the FBO ping-pong machinery the
+    // QML overlay host does not.
+    const QString packId = chain.constFirst();
+    if (!m_surfaceShaderRegistry->hasEffect(packId)) {
+        qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
+                             << "is not present in the surface-shader registry — rendering without decoration";
+        clearDecoration();
+        return;
+    }
+
+    const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_surfaceShaderRegistry->effect(packId);
+    if (!effect.isValid() || effect.fragmentShaderPath.isEmpty()) {
+        qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): pack" << packId
+                             << "has no valid fragment shader — rendering without decoration";
+        clearDecoration();
+        return;
+    }
+
+    // The per-pack parameter overrides for THIS pack from the resolved profile.
+    // Shape is { packId -> { paramId -> value } }; pull this pack's inner map.
+    // p_useSystemAccent is a host-consumed flag; the overlay path passes the
+    // pack's declared colour params through translateSurfaceParams unchanged
+    // (system-accent colour resolution is performed by the daemon's colour
+    // pipeline, not synthesised here).
+    const QVariantMap allPackParams = profile.effectiveParameters();
+    const QVariantMap friendlyParams = allPackParams.value(packId).toMap();
+    const QVariantMap translatedParams = m_surfaceShaderRegistry->translateSurfaceParams(packId, friendlyParams);
+    const QString preamble = PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(effect);
+
+    // Write order mirrors applyShaderInfoToWindow: clear the source first, push
+    // aux props (preamble + params), then write the source LAST so the QML
+    // SurfaceShaderItem's load triggers with the preamble/params already in
+    // place on its first bake.
+    writeQmlProperty(slot, QStringLiteral("decorationShaderSource"), QUrl());
+    writeQmlProperty(slot, QStringLiteral("decorationParamPreamble"), preamble);
+    writeQmlProperty(slot, QStringLiteral("decorationShaderParams"), QVariant::fromValue(translatedParams));
+    writeQmlProperty(slot, QStringLiteral("decorationShaderSource"), QUrl::fromLocalFile(effect.fragmentShaderPath));
 }
 
 void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)
@@ -562,6 +656,11 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     QVariantList zonesList = PhosphorZones::LayoutUtils::zonesToVariantList(
         screenLayout, PhosphorZones::ZoneField::Minimal, QRectF(navScreenGeom));
     writeQmlProperty(osdSlot, QStringLiteral("zones"), zonesList);
+
+    // Stage d: resolve + push the OSD surface decoration. Navigation OSDs do
+    // not route through pushLayoutOsdContent, so apply it explicitly here (same
+    // decoration the layout-OSD paths get via pushLayoutOsdContent).
+    applyDecoration(osdSlot, QStringLiteral("osd"));
 
     // Write mode AFTER data properties so the Loader-instantiated
     // NavigationOsdContent picks up correct values on first binding pass.

@@ -6,7 +6,6 @@
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 
-#include <QColor>
 #include <QHash>
 #include <QObject>
 #include <QPointF>
@@ -57,7 +56,10 @@ struct CachedSnapRestore
  * Delegates window lookups back to the effect through the m_effect back-pointer.
  *
  * Built on the shared PhosphorCompositor BorderState + AutotileStateHelpers so
- * snap and autotile share one standardized tracking mechanism.
+ * snap and autotile share one standardized tracking mechanism. The effect's
+ * membership resolver (resolveSurfacePathFor) reads isTiledWindow() here
+ * alongside AutotileHandler's so each window resolves to the decoration surface
+ * path of the mode that manages it.
  */
 class SnapHandler : public QObject
 {

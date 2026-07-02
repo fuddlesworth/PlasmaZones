@@ -70,6 +70,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // rest of the border/decoration code in borders.cpp.
     setupDecorationManager();
 
+    // Seed the decoration profile tree with today's per-field defaults so
+    // borders render correctly before the async `decorationProfileTreeJson`
+    // fetch lands (mirrors how BorderState seeds DecorationDefaults pre-load).
+    seedDecorationTreeBaseline();
+
     // Sub-pixel vertex precision. KWin's default snapping rounds quad
     // vertex positions to integer pixels before rasterising, which is
     // fine for static / pixel-aligned windows but quantises smooth
@@ -188,6 +193,23 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 m_shaderManager.m_textureLoadsInFlight.clear();
                 m_shaderManager.m_textureCache.clear();
             });
+
+    // Surface shader pack hot-reload: when a data/surface pack changes on disk,
+    // drop EVERY compiled surface pack so the next paint recompiles each
+    // referenced pack against the new source, and repaint so decorated windows
+    // pick it up. Also drop the per-window multipass FBO state: a recompiled pack
+    // whose buffer-pass COUNT changed would otherwise under-render, because the
+    // composite path's chainBufferTex realloc keys on the chain pack-id list (and
+    // size), not on each pack's buffer-pass count — only clearing it here forces
+    // the next paint to reallocate against the new pass count. The next
+    // compiledPack() call recompiles lazily per pack id.
+    connect(&m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, [this]() {
+        m_compiledPacks.clear();
+        m_surfaceMultipass.clear();
+        if (KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
+    });
 
     // Frame-geometry shadow flush timer. Debounces per-window
     // windowFrameGeometryChanged signals and pushes the latest geometry to
@@ -541,6 +563,19 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         if (m_windowIdCache.contains(w)) {
             const QString cachedId = m_windowIdCache.take(w);
             m_windowIdReverse.remove(cachedId);
+            // Free the border entry AND its multipass FBO targets keyed by this
+            // window id. Normally removeWindowBorder (run from slotWindowClosed)
+            // already cleared both; the explicit call here is defence-in-depth
+            // for a window deleted without a preceding close. findWindowById
+            // returns null post-delete, so removeWindowBorder's setShader /
+            // unredirect safely no-op and only the map erases run — critically
+            // dropping the m_windowBorders entry too, so a delete-without-close
+            // can't strand it and keep isActive() pinned true for the session.
+            removeWindowBorder(cachedId);
+            // Belt-and-suspenders for the not-expected case of a multipass entry
+            // without a border entry (removeWindowBorder's no-border early-return
+            // would otherwise skip the FBO cleanup).
+            m_surfaceMultipass.erase(cachedId);
             // Mirror the m_pendingFrameGeometry cleanup that
             // slotWindowClosed runs (window_lifecycle.cpp). A
             // windowFrameGeometryChanged emission between
@@ -728,6 +763,21 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(serviceWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon service unregistered";
         m_daemonServiceRegistered = false;
+        // Drop the virtual-screen readiness immediately. The defs from the
+        // previous daemon cycle are now stale; without clearing the flag here,
+        // the windowFrameGeometryChanged VS-crossing detector would keep
+        // resolving against stale virtual-screen boundaries during the gap
+        // between unregistration and the next daemon's fetch. continueDaemonReady
+        // setup re-clears and refetches on bringup; this closes the gap before it.
+        m_virtualScreensReady = false;
+        // Drop the local floating-window set too: the daemon's float state is
+        // ephemeral and gone with it, so clear now rather than only at the next
+        // bringup — otherwise isWindowFloating() reads stale `true` in the gap
+        // between unregistration and re-sync. continueDaemonReadySetup re-fetches
+        // the authoritative set on bringup (mirrors the m_virtualScreensReady reset
+        // above; m_navigationHandler is a never-reset member, dereferenced
+        // unguarded like the other handlers in this slot).
+        m_navigationHandler->clearAllFloatingState();
         // Also clear the bridge-registration in-flight gate. Without
         // this, a daemon-restart racing the in-flight registerBridge
         // reply leaves the gate set: the new daemon's `daemonReady`
@@ -778,10 +828,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // windowDecorationRestored per window, and the rebuild-on-restore
         // handler would otherwise recreate a border item for every still-
         // tracked window only for clearAllBorders() to destroy it moments
-        // later. With tracking cleared, the IsSnapped / IsTiled / Zone rule
-        // fields flip off for those windows during the restore burst, so the
-        // handler resolves no placement-scoped border and drops their items.
-        // Windows matched by a still-live SetBorder rule
+        // later. With tracking cleared, resolveSurfacePathFor resolves
+        // mode-tracked windows to window.floating during the restore burst and
+        // the handler drops their items. Windows matched by a still-live SetBorder rule
         // (the rule sets deliberately survive daemon loss, see below) can
         // still get an item recreated and immediately torn down by
         // clearAllBorders() — bounded, invisible churn that is cheaper than
@@ -896,6 +945,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // cache members are gone — UAF. Disconnect now while everything is still
     // alive.
     disconnect(&m_shaderManager.m_animationShaderRegistry, nullptr, this, nullptr);
+    disconnect(&m_surfaceShaderRegistry, nullptr, this, nullptr);
 
     // Drain the texture loader pool before any other teardown. A
     // worker that's mid-rasterise would otherwise post a queued

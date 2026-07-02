@@ -21,6 +21,7 @@
 #include <QDate>
 #include <QDateTime>
 #include <QPointer>
+#include <QScopeGuard>
 #include <QTime>
 #include <QVector2D>
 #include <QVector4D>
@@ -232,6 +233,28 @@ void PlasmaZonesEffect::postPaintScreen()
             }
         }
     }
+    // Drive continuous repaints for windows whose surface decoration animates
+    // (a pack in the chain references iTime). Without content damage their
+    // paintWindow would not fire and iTime would stall, so damage each such
+    // window's full area every frame while the border owns the slot (idle — a
+    // live transition drives its own repaints in the loop above and the surface
+    // composite degrades to single-pass there anyway). A purely static
+    // decoration (border-only) is not matched, so this is a no-op in the common
+    // case. windowSurfaceAnimates is per-pack-cache hash lookups.
+    if (KWin::effects && !m_windowBorders.isEmpty()) {
+        for (auto it = m_windowBorders.cbegin(); it != m_windowBorders.cend(); ++it) {
+            if (!it->shaderApplied) {
+                continue;
+            }
+            KWin::EffectWindow* const sw = findWindowById(it.key());
+            if (!sw || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
+                continue;
+            }
+            if (windowSurfaceAnimates(it.key())) {
+                sw->addRepaintFull();
+            }
+        }
+    }
     KWin::effects->postPaintScreen();
     // Unpin the per-frame clock. Any paintWindow() invocation outside
     // the prePaintScreen→postPaintScreen bracket (defensive bootstrap,
@@ -307,6 +330,25 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
             if (!transformDriven && opacity && *opacity < 1.0) {
                 data.setTranslucent();
             }
+        }
+    }
+
+    // Keep a static bordered window in KWin's paint set so the drawWindow
+    // override keeps getting called for it on idle frames. KWin's simple-screen
+    // path culls a fully-opaque, undamaged window out of the paint cycle
+    // entirely (its opaque region is occluded / unchanged), which would drop
+    // drawWindow for it and the passive border blit would only run while the
+    // window happens to be animating or damaged. setTranslucent() clears the
+    // window's opaque region so KWin always recomposites it (and thus calls
+    // drawWindow), letting the border shader re-blit the redirected FBO every
+    // frame with no FBO re-render. Gated on the cheap isEmpty() hot-path check
+    // and shaderApplied so only windows we actually border pay the cost; the
+    // transform-driven branch above already set translucent for transitioning
+    // windows, so this only adds the idle bordered case.
+    if (w && !transformDriven && !m_windowBorders.isEmpty()) {
+        const auto bit = m_windowBorders.constFind(getWindowId(w));
+        if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
+            data.setTranslucent();
         }
     }
 
@@ -600,6 +642,16 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             const QVector4D anchorRectInTexture = transition.surfaceExtent
                 ? ShaderInternal::computeTextureSubRect(anchorGeo, expandedGeo)
                 : QVector4D(0.0f, 0.0f, 1.0f, 1.0f);
+            // Surface-layer stack (border / rounded corners, ...): render the
+            // window's active layers into an FBO so the animation composites
+            // OVER the layered surface and the border stays visible for the
+            // whole transition instead of vanishing when the animation shader
+            // takes the draw slot. Runs BEFORE the animation shader is bound —
+            // it briefly swaps the redirect's bound shader to the border and
+            // back, so it must not sit inside the ShaderBinder scope below.
+            // Null when the window has no surface layers (the common no-border
+            // case), in which case surfaceColor() samples the bare uTexture0.
+            KWin::GLTexture* const surfaceLayerTex = renderSurfaceChain(transition, w, viewport.scale());
             {
                 KWin::ShaderBinder binder(shader);
                 if (cached->iTimeLoc >= 0) {
@@ -883,6 +935,23 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnit);
                     transition.oldSnapshot->bind();
                 }
+                // Surface-layer stack (uSurfaceLayer). When renderSurfaceChain
+                // composited the window's layers (border / rounded corners, ...)
+                // into an FBO, bind it to a dedicated unit just past the
+                // old-snapshot slot and flag surfaceColor() to sample it in place
+                // of the bare uTexture0 — the animation then runs OVER the
+                // layered surface. Always push the flag (0 when no layer) so a
+                // window with no surface layers animates uTexture0 unchanged.
+                if (cached->iHasSurfaceLayerLoc >= 0) {
+                    shader->setUniform(cached->iHasSurfaceLayerLoc, surfaceLayerTex ? 1 : 0);
+                }
+                if (surfaceLayerTex && cached->uSurfaceLayerLoc >= 0) {
+                    constexpr int kSurfaceLayerUnit =
+                        2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                    shader->setUniform(cached->uSurfaceLayerLoc, kSurfaceLayerUnit);
+                    glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnit);
+                    surfaceLayerTex->bind();
+                }
                 // Restore TEXTURE0 as the active unit so KWin's
                 // OffscreenData::paint binds the redirected surface
                 // to the unit it expects (its `m_texture->bind()` runs
@@ -945,6 +1014,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 constexpr int kOldSnapshotUnit =
                     1 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
                 glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnit);
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
+            // Same hygiene for the surface-layer unit (uSurfaceLayer), bound one
+            // unit past the old-snapshot slot — don't leave the layered surface
+            // dangling on its unit for the next effect in the chain.
+            if (surfaceLayerTex && cached->uSurfaceLayerLoc >= 0) {
+                constexpr int kSurfaceLayerUnit =
+                    2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnit);
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
             glActiveTexture(GL_TEXTURE0);
@@ -1019,6 +1097,38 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         }
     }
 
+    // Border rendering is NOT handled here. A static bordered window is rendered
+    // through the offscreen border shader passively in the drawWindow override
+    // (the KDE-Rounded-Corners model), which applies the shader on every
+    // composite including idle frames. paintWindow only drives the animation
+    // transition path above; everything else falls through unchanged.
+    //
+    // EXCEPTION — multipass surface packs: render the buffer passes HERE, before
+    // the draw-chain walk below, when the (non-transition) window has a multipass
+    // border. renderSurfaceBufferPasses captures the raw surface via
+    // effects->drawWindow; that nested draw-chain walk MUST run from paintWindow
+    // (a fresh draw-window iterator) — doing it from inside the drawWindow
+    // override re-enters KWin's iterator mid-walk and corrupts it (crash in the
+    // following OffscreenEffect::drawWindow). The override then only BINDS the
+    // per-window buffer textures this prepared. Single-pass packs (border) have
+    // no compiled buffer passes → renderSurfaceBufferPasses cheap-early-outs (it
+    // resolves the window's base pack from the cache and returns when its
+    // bufferPasses are empty), no capture. The pre-gate here just skips windows
+    // with no applied border (no decoration at all) without a map+cache lookup.
+    if (!m_capturingSnapshot && !m_windowBorders.isEmpty() && !m_shaderManager.findTransition(w)) {
+        const auto bit = m_windowBorders.constFind(getWindowId(w));
+        if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
+            if (bit->chain.size() > 1) {
+                // MULTI-PACK: composite the whole chain into a per-window FBO here
+                // (each pack's main runs as an FBO pass); drawWindow then presents
+                // the final FBO through the passthrough present shader.
+                renderSurfaceChainComposite(w, viewport.scale());
+            } else {
+                renderSurfaceBufferPasses(w, viewport.scale());
+            }
+        }
+    }
+
     // Route through the draw chain (not a direct OffscreenEffect::drawWindow
     // call) so KWin's `m_currentDrawWindowIterator` is advanced past us
     // before any redirected window's `OffscreenData::maybeRender` re-enters
@@ -1075,6 +1185,12 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     setShader(window, nullptr);
 
     m_capturingSnapshot = true;
+    // Guard the re-entrancy flag against a throw from the draw chain — a leaked
+    // m_capturingSnapshot would corrupt every subsequent paint. Same pattern as
+    // the surface-layer capture sites in surfacelayers.cpp.
+    auto resetCapture = qScopeGuard([this] {
+        m_capturingSnapshot = false;
+    });
     {
         KWin::RenderTarget renderTarget(&fbo);
         KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
@@ -1093,6 +1209,7 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
         KWin::effects->drawWindow(renderTarget, viewport, window, captureMask, KWin::Region::infinite(), captureData);
         KWin::GLFramebuffer::popFramebuffer();
     }
+    resetCapture.dismiss();
     m_capturingSnapshot = false;
 
     setShader(window, morphShader);
