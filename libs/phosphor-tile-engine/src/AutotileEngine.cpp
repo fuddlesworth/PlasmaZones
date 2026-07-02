@@ -1860,7 +1860,7 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
         return;
     }
     // This is the path that broke for Emby (discussion #271): the incoming
-    // composite has a mutated appId, so a raw lookup in m_windowToStateKey
+    // composite has a mutated appId, so a raw lookup in m_states
     // missed. Canonicalize resolves it back to the first-seen form.
     const QString windowId = canonicalizeWindowId(rawWindowId);
 
@@ -2048,7 +2048,7 @@ void AutotileEngine::handoffRelease(const QString& windowId)
 void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, const QString& callerScreenId)
 {
     // Autotile resolves the retile screen from the window's own per-window
-    // tracking (m_windowToStateKey, read at the retile below), which is kept
+    // tracking (m_states, read at the retile below), which is kept
     // current across monitors by the focus-driven cross-screen migration in
     // windowFocused(). That migration is autotile's analogue of the snap
     // engine's stale-screen hazard guard: it re-homes the window's tiling-state
@@ -2140,7 +2140,7 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     // First observation of this window — canonicalize locks the canonical key
     // used by every internal map from here on. Subsequent arrivals with a
     // mutated appId (Electron/CEF apps) resolve back to the same string so
-    // m_windowToStateKey / PhosphorTiles::TilingState / m_windowMinSizes stay consistent.
+    // m_states / PhosphorTiles::TilingState / m_windowMinSizes stay consistent.
     const QString windowId = canonicalizeWindowId(rawWindowId);
 
     qCInfo(PhosphorTileEngine::lcTileEngine)
@@ -2152,7 +2152,7 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     // will restore it cross-screen to that monitor — it only landed on this autotile
     // screen because KWin's session restore placed it here. Autotile must NOT track or
     // tile it, or both engines would claim the same window (snap moves it to its snap
-    // monitor while autotile tiles it here). Bail BEFORE m_windowToStateKey is set so
+    // monitor while autotile tiles it here). Bail BEFORE m_states is set so
     // autotile leaves no trace. The peek does NOT consume the record — snap's restore
     // is the consumer. A snapped record whose recorded screen is THIS (autotile) screen
     // is not in snapping mode, so the check fails and autotile keeps the window — the
@@ -2356,12 +2356,12 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
     const QString windowId = canonicalizeWindowId(rawWindowId);
 
     // Detect cross-screen moves. When a window's focus moves to a different
-    // screen, migrate its PhosphorTiles::TilingState membership so m_windowToStateKey and the
+    // screen, migrate its PhosphorTiles::TilingState membership so m_states and the
     // PhosphorTiles::TilingState remain consistent. This handles both overflow-floated windows
     // and windows that were previously migrated (preventing the Screen1->2->1
     // rapid-migration desync where the second hop was silently skipped).
     //
-    // Only update m_windowToStateKey for windows already tracked via windowOpened().
+    // Only update m_states for windows already tracked via windowOpened().
     // The KWin effect sends focus events for ALL handleable windows (including
     // transients and non-tileable windows that pass shouldHandleWindow but fail
     // isTileableWindow). Creating entries for these phantom windows causes
@@ -2719,7 +2719,7 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
         return;
     }
 
-    // Resolve to the canonical instance id that keys m_windowToStateKey, the
+    // Resolve to the canonical instance id that keys m_states, the
     // TilingState, and the SplitTree. The daemon calls this public boundary with
     // the raw id (like every other IPlacementEngine override here); without this
     // a window whose app class was renamed mid-session would pass the adaptor's
@@ -3121,7 +3121,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // TilingState; onWindowAdded then emits windowFloatingStateSynced → daemon
     // passive float-sync, NO geometry teleport). inserted=true → the tile-insert
     // paths below are all skipped; the function tail still records
-    // m_windowToStateKey and returns true.
+    // m_states and returns true.
     // Close/reopen restore from the unified placement store: ONE record per window
     // holds both engines' slots + the shared per-screen free geometry. Take it once
     // and branch on the autotile slot — a FLOATING slot restores the window floating
@@ -3527,7 +3527,7 @@ bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QStri
 
     // Capture prior engine state (if any) for restoration on cancel.
     // Look up the prior PhosphorTiles::TilingState once and reuse below to avoid a redundant
-    // m_screenStates hash lookup in the cross-screen branch.
+    // m_states hash lookup in the cross-screen branch.
     PhosphorTiles::TilingState* priorState = nullptr;
     auto it = m_states.windowKeys().constFind(windowId);
     if (it != m_states.windowKeys().constEnd()) {
@@ -3555,8 +3555,8 @@ bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QStri
             priorState->removeWindow(windowId);
         }
         if (targetState->containsWindow(windowId)) {
-            // Defensive: stale m_screenStates entry left the window in the target
-            // state without a matching m_windowToStateKey mapping. Remove it first
+            // Defensive: stale m_states entry left the window in the target
+            // state without a matching m_states mapping. Remove it first
             // so addWindow() can place it cleanly at the end.
             targetState->removeWindow(windowId);
         }
@@ -3730,7 +3730,7 @@ void AutotileEngine::cancelDragInsertPreview()
         // orphaning it, and notify WTS so bookkeeping stays consistent.
         PhosphorTiles::TilingState* priorState = (p.hadPriorState) ? m_states.stateForKey(p.priorKey) : nullptr;
         if (p.hadPriorState && !priorState) {
-            // m_windowToStateKey already points at target from begin(); leave
+            // m_states already points at target from begin(); leave
             // it there and let the window live in target state.
             Q_EMIT windowFloatingStateSynced(p.windowId, false, p.targetScreenId);
         } else {
@@ -3962,12 +3962,12 @@ QString AutotileEngine::screenForWindow(const QString& rawWindowId) const
     }
 
     // R6 fix: Warn when falling back to primary screen — this may indicate a
-    // missing screen name in windowOpened() or a stale m_windowToStateKey entry.
+    // missing screen name in windowOpened() or a stale m_states entry.
     if (m_screenManager) {
         const PhosphorScreens::PhysicalScreen primary = m_screenManager->primaryScreen();
         if (primary.isValid()) {
             qCWarning(PhosphorTileEngine::lcTileEngine)
-                << "screenForWindow: window" << windowId << "not in m_windowToStateKey, falling back to primary screen";
+                << "screenForWindow: window" << windowId << "not in m_states, falling back to primary screen";
             // If the primary monitor is subdivided into virtual screens, return
             // the first virtual screen ID instead of the physical ID.
             const QString physId = primary.identifier;
@@ -4100,8 +4100,8 @@ void AutotileEngine::backfillWindows()
         if (state->tiledWindowCount() >= maxWin) {
             continue;
         }
-        // Collect candidates to avoid modifying m_windowToStateKey during iteration
-        // (insertWindow calls m_windowToStateKey.insert which is unsafe during const iteration)
+        // Collect candidates to avoid modifying m_states during iteration
+        // (insertWindow mutates m_states, which is unsafe during const iteration)
         QStringList candidates;
         for (auto it = m_states.windowKeys().constBegin(); it != m_states.windowKeys().constEnd(); ++it) {
             if (it.value().screenId == screenId

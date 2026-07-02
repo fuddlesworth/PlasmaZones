@@ -945,16 +945,6 @@ public:
     const QSet<QString>& userSnappedClasses() const;
 
     /**
-     * @brief Set active zone/screen/desktop assignments (loaded from KConfig by adaptor)
-     *
-     * Used to restore exact window-to-zone mappings after daemon-only restart
-     * (KWin still running, so internalId UUIDs are stable). Prevents wrong-instance
-     * restore for multi-instance apps (e.g. 2 Ghostty windows, only 1 was snapped).
-     */
-    void setActiveAssignments(const QHash<QString, QStringList>& zones, const QHash<QString, QString>& screens,
-                              const QHash<QString, int>& desktops);
-
-    /**
      * @brief Set pending restore queues (loaded from KConfig by adaptor)
      */
     void setPendingRestoreQueues(const QHash<QString, QList<PendingRestore>>& queues)

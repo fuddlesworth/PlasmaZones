@@ -399,9 +399,10 @@ QString NavigationController::crossDesktopFocusTarget(const QString& sourceScree
     }
     // Base the neighbour-desktop arithmetic on the source screen's EFFECTIVE
     // desktop, not the global current desktop: a screen sticky-pinned by the
-    // "virtualdesktopsonlyonprimary" model (m_screenDesktopOverride) shows — and
-    // its TilingState is keyed on — its pinned desktop, which currentKeyForScreen
-    // resolves. For unpinned screens this is identical to m_currentDesktop.
+    // "virtualdesktopsonlyonprimary" model (a per-output desktop pin in m_context)
+    // shows — and its TilingState is keyed on — its pinned desktop, which
+    // currentKeyForScreen resolves. For unpinned screens this is identical to
+    // m_context's global desktop.
     const int baseDesktop = m_engine->currentKeyForScreen(sourceScreenId).desktop;
     const int targetDesktop = m_engine->m_crossSurfaceResolver->neighborDesktopInDirection(baseDesktop, direction);
     if (targetDesktop <= 0) {
@@ -435,7 +436,7 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     }
     // Base on the source screen's effective desktop (sticky-pin aware), exactly
     // as crossDesktopFocusTarget does — for unpinned screens this equals
-    // m_currentDesktop.
+    // m_context's global desktop.
     const int baseDesktop = m_engine->currentKeyForScreen(sourceScreenId).desktop;
     const int targetDesktop = m_engine->m_crossSurfaceResolver->neighborDesktopInDirection(baseDesktop, direction);
     if (targetDesktop <= 0) {
@@ -464,7 +465,7 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     // windowOpened, which tiles it there.
     //
     // Do NOT touch the source/target TilingStates here. The previous version
-    // added the window to the target state and re-pointed m_windowToStateKey at
+    // added the window to the target state and re-pointed m_states at
     // it — but the effect's windowClosed then removed it from that very state,
     // leaving the window tracked NOWHERE: stuck decoration, broken tiling. The
     // compositor is the single source of truth for which desktop a window is on.
@@ -815,10 +816,11 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
         for (auto it = m_engine->m_states.states().constBegin(); it != m_engine->m_states.states().constEnd(); ++it) {
             // Match each screen's EFFECTIVE desktop, not the raw global one: a
             // screen sticky-pinned by the "virtualdesktopsonlyonprimary" model
-            // (m_screenDesktopOverride) keeps its TilingState on its pinned
-            // desktop, so a bare `!= m_currentDesktop` would skip the pinned
-            // screen and miss the explicit window living there. currentKeyForScreen
-            // resolves the override; for unpinned screens it is m_currentDesktop.
+            // (a per-output desktop pin in m_context) keeps its TilingState on its
+            // pinned desktop, so a bare `!= m_context's global desktop` would skip
+            // the pinned screen and miss the explicit window living there.
+            // currentKeyForScreen resolves the override; for unpinned screens it is
+            // m_context's global desktop.
             if (it.key().desktop != m_engine->currentKeyForScreen(it.key().screenId).desktop
                 || it.key().activity != m_engine->m_context.currentActivity()) {
                 continue;

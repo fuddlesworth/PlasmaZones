@@ -1003,33 +1003,6 @@ void WindowTrackingService::setPreFloatScreenAssignments(const QHash<QString, QS
     }
 }
 
-void WindowTrackingService::setActiveAssignments(const QHash<QString, QStringList>& zones,
-                                                 const QHash<QString, QString>& screens,
-                                                 const QHash<QString, int>& desktops)
-{
-    if (!hasSnapState()) {
-        qCWarning(lcPlacement) << "setActiveAssignments: no SnapState — dropping" << zones.size() << "assignments";
-        return;
-    }
-    // Rebuild the per-screen stores from a flat (window -> value) load. A window's
-    // owning key is derived from its screen VALUE, and the write path
-    // (snapForWindowOnScreen) both routes to and registers that store. Iterating the
-    // zone map restores every snapped window; the accompanying screen and desktop
-    // are read from their maps. (Screen-only, zone-less entries are not restorable
-    // through a per-window setter and are not carried by any live caller.)
-    for (auto it = zones.constBegin(); it != zones.constEnd(); ++it) {
-        if (it.value().isEmpty()) {
-            continue;
-        }
-        const QString screenId = screens.value(it.key());
-        PhosphorSnapEngine::SnapState* owner = snapForWindowOnScreen(it.key(), screenId);
-        if (!owner) {
-            continue;
-        }
-        owner->assignWindowToZones(it.key(), it.value(), screenId, desktops.value(it.key(), 0));
-    }
-}
-
 QRect WindowTrackingService::resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
 {
     if (zoneIds.isEmpty()) {

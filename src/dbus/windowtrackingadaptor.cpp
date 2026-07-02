@@ -1090,7 +1090,7 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
     int persistedPruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine) {
-        // The autotile engine keys every internal map (m_windowToStateKey,
+        // The autotile engine keys every internal map (m_states reverse map,
         // m_windowMinSizes, m_autotileFloatedWindows, TilingState membership)
         // on each window's CANONICAL id — its FIRST-seen composite, frozen by
         // the daemon-side WindowRegistry. The alive list, by contrast, carries

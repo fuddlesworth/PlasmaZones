@@ -129,7 +129,7 @@ public:
      *
      * Callers that need the raw state map should add a purpose-built
      * query method rather than iterating private state. The
-     * `m_screenStates` map itself stays private (no public map
+     * `m_states` map itself stays private (no public map
      * accessor exists); per-screen lookup is available through
      * `tilingStateForScreen(screenId)`
      * which returns a (non-const) `PhosphorTiles::TilingState*` for
@@ -287,7 +287,7 @@ public:
      * @brief Set a single screen's current virtual desktop (Plasma 6.7 per-output
      *        virtual desktops, #648)
      *
-     * Pure context swap: records the screen's desktop in m_screenCurrentDesktop so
+     * Pure context swap: records the screen's desktop in m_context's per-output map so
      * currentKeyForScreen() resolves that screen's per-(screen, desktop) state. Does
      * NOT migrate windows between states — the other desktop's state stays put so it
      * reappears when the screen returns. Like setCurrentDesktop(), call BEFORE
@@ -295,7 +295,7 @@ public:
      */
     void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
 
-    /// Drop a screen's per-output desktop, reverting it to the global m_currentDesktop.
+    /// Drop a screen's per-output desktop, reverting it to m_context's global desktop.
     void clearCurrentDesktopForScreen(const QString& screenId) override;
 
     /// Inject the cross-surface resolver (neighbouring output / desktop lookup)
@@ -323,7 +323,7 @@ public:
      * TilingStateKey desktop to the current effective desktop so that
      * currentKeyForScreen() continues to resolve the existing state after
      * a desktop switch. Screens where not all windows are sticky are unpinned,
-     * with state migrated to m_currentDesktop if necessary.
+     * with state migrated to m_context's global desktop if necessary.
      *
      * Must be called BEFORE setCurrentDesktop()/setCurrentActivity() so the
      * pins are evaluated against the pre-switch context.
@@ -1173,7 +1173,7 @@ private:
      * overflow set (AFTER capture — the discriminator needs it), appends the
      * released windows, clears the pending-order bookkeeping, and
      * deleteLater()s the state. Callers own the divergent parts: removing
-     * the state from m_screenStates (they iterate it) and the per-path
+     * the state from m_states (they iterate it) and the per-path
      * override policy — toggle-off drops only the resolver's in-memory
      * overrides, the orphaned-VS teardown purges persisted settings too.
      *
@@ -1193,7 +1193,7 @@ private:
      * algorithm lifecycle hook), migrates overflow tracking, retiles the
      * source screen, and re-adds via onWindowAdded() when @p newScreenId is
      * an autotile screen. The caller updates/removes the
-     * m_windowToStateKey entry FIRST. No-op when the old state doesn't
+     * m_states entry FIRST. No-op when the old state doesn't
      * contain the window.
      */
     void migrateWindowBetweenKeys(const QString& windowId, const PhosphorEngine::TilingStateKey& oldKey,
@@ -1232,7 +1232,7 @@ private:
      *
      * Creates the state if it doesn't exist. Used by loadState() to restore states
      * for arbitrary desktop/activity combinations without temporarily mutating
-     * m_currentDesktop/m_currentActivity.
+     * m_context's current desktop/activity.
      */
     PhosphorTiles::TilingState* stateForKey(const PhosphorEngine::TilingStateKey& key);
 
@@ -1253,7 +1253,7 @@ private:
      * gate check remain untiled. This method iterates autotile screens and inserts
      * tracked-but-untiled windows up to the per-screen effective limit.
      *
-     * Note: Iteration order over m_windowToStateKey (QHash) is non-deterministic.
+     * Note: Iteration order over m_states (QHash) is non-deterministic.
      * Backfill order may differ between runs; this is acceptable since all
      * candidates are equally valid.
      */
@@ -1315,7 +1315,7 @@ private:
 
     /**
      * @brief Normalize a window id received from D-Bus to the canonical key
-     *        used by internal storage (m_windowToStateKey, PhosphorTiles::TilingState::m_windowOrder, …).
+     *        used by internal storage (m_states, PhosphorTiles::TilingState::m_windowOrder, …).
      *
      * Why this exists: KWin apps like Emby (CEF/Electron) mutate their
      * resourceClass / desktopFileName after the surface is already mapped, so
@@ -1371,7 +1371,7 @@ private:
     /**
      * @brief Get PhosphorTiles::TilingState for a window by looking up its screen
      *
-     * Consolidates the common pattern of m_windowToStateKey lookup + state resolution.
+     * Consolidates the common pattern of m_states lookup + state resolution.
      *
      * @param windowId Window ID to look up
      * @param outScreenId If non-null, receives the screen ID
@@ -1528,7 +1528,7 @@ private:
         int lastInsertIndex = -1;
 
         // Prior-state restoration info (used on cancel)
-        bool hadPriorState = false; // True if m_windowToStateKey contained windowId at begin
+        bool hadPriorState = false; // True if m_states contained windowId at begin
         PhosphorEngine::TilingStateKey
             priorKey; // Key of the prior PhosphorTiles::TilingState (meaningful iff hadPriorState)
         int priorRawIndex = -1; // Raw index in priorState->windowOrder() at begin

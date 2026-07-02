@@ -52,7 +52,7 @@ private Q_SLOTS:
         const QString screen2 = QStringLiteral("Screen2");
         engine.setAutotileScreens({screen1, screen2});
 
-        // Use windowOpened to properly set up m_windowToStateKey mappings
+        // Use windowOpened to properly set up m_states mappings
         engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
         engine.windowOpened(QStringLiteral("win2"), screen2, 0, 0);
         QCoreApplication::processEvents(); // flush deferred retile
@@ -86,7 +86,7 @@ private Q_SLOTS:
         const QString screen2 = QStringLiteral("Screen2");
         engine.setAutotileScreens({screen1, screen2});
 
-        // Use windowOpened to properly set up m_windowToStateKey mappings
+        // Use windowOpened to properly set up m_states mappings
         engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
         engine.windowOpened(QStringLiteral("win2"), screen2, 0, 0);
         QCoreApplication::processEvents(); // flush deferred retile
