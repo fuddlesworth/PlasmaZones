@@ -619,6 +619,31 @@ private Q_SLOTS:
         QVERIFY(posSlot != colSlot);
     }
 
+    // The editor's `property` picker must offer only the int-shaped tokens: the
+    // action's single `value` param renders as a number field, so the
+    // bool-shaped PreviewLockAspect could never be authored through it (its
+    // payload would fail the isBool() validation above). It stays valid and
+    // slot-resolvable when authored programmatically (the Zone Selector page
+    // writes the bool JSON directly) — only the picker excludes it.
+    void testZoneSelectorProperty_pickerExcludesBoolShapedToken()
+    {
+        const auto desc = ActionRegistry::instance().descriptor(QString(ActionType::SetZoneSelectorProperty));
+        QVERIFY(desc.has_value());
+        QStringList pickerTokens;
+        for (const auto& param : desc->params) {
+            if (param.key == QLatin1String("property")) {
+                pickerTokens = param.enumWireValues;
+            }
+        }
+        QVERIFY2(!pickerTokens.isEmpty(), "the property param must carry picker enum values");
+        QVERIFY2(!pickerTokens.contains(QString(ZoneSelectorProperty::PreviewLockAspect)),
+                 "the bool-shaped PreviewLockAspect must not be offered by the number-valued picker");
+        // The eight int-shaped tokens are all offered.
+        QCOMPARE(pickerTokens.size(), 8);
+        QVERIFY(pickerTokens.contains(QString(ZoneSelectorProperty::Position)));
+        QVERIFY(pickerTokens.contains(QString(ZoneSelectorProperty::TriggerDistance)));
+    }
+
     void testGapPerSideToggle_requiresBool()
     {
         QJsonObject o;
