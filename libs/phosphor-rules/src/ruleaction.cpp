@@ -182,12 +182,22 @@ bool zoneSelectorPropertyValid(const QJsonObject& p)
     return static_cast<double>(static_cast<int>(d)) == d;
 }
 
-// Wire values the SetZoneSelectorProperty `property` enum param offers.
+// Wire values the SetZoneSelectorProperty `property` enum param offers to the
+// generic rule editor. PreviewLockAspect is EXCLUDED: it is the one
+// bool-shaped property, and the action's single `value` param renders as a
+// number field, so an editor-authored payload could never pass
+// zoneSelectorPropertyValid's isBool() check. It stays in kZoneSelectorProps
+// (validation / slot derivation / display of existing rules are unaffected)
+// and is authored through the Zone Selector settings page, which writes the
+// bool JSON directly.
 QStringList zoneSelectorPropertyWireValues()
 {
     QStringList out;
     out.reserve(static_cast<int>(std::size(kZoneSelectorProps)));
     for (const auto& s : kZoneSelectorProps) {
+        if (s.isBool) {
+            continue;
+        }
         out.append(QString(s.token));
     }
     return out;
@@ -1161,9 +1171,11 @@ void ActionRegistry::registerBuiltins()
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Property), QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
-        // `property` is an enum over the nine tokens; `value` is a plain number
-        // (int) for eight of them and a bool for PreviewLockAspect — the editor
-        // renders a number field, the validator enforces the per-property shape.
+        // `property` is an enum over the int-shaped tokens (the editor's number
+        // `value` field can author those); the bool-shaped PreviewLockAspect is
+        // deliberately absent from the picker — see
+        // zoneSelectorPropertyWireValues. The validator still enforces the full
+        // per-property shape for every token, however the payload was authored.
         .params = {P{.key = QString(ActionParam::Property),
                      .kind = QStringLiteral("enum"),
                      .enumWireValues = zoneSelectorPropertyWireValues()},

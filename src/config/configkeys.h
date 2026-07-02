@@ -82,8 +82,9 @@ public:
     P_CONFIG_GROUP(snappingBehaviorDisplayGroup, "Snapping.Behavior.Display")
     P_CONFIG_GROUP(snappingBehaviorWindowHandlingGroup, "Snapping.Behavior.WindowHandling")
     P_CONFIG_GROUP(snappingZonesColorsGroup, "Snapping.Zones.Colors")
-    P_CONFIG_GROUP(snappingZonesOpacityGroup, "Snapping.Zones.Opacity")
-    P_CONFIG_GROUP(snappingZonesBorderGroup, "Snapping.Zones.Border")
+    // Snapping.Zones.Opacity / Snapping.Zones.Border group accessors retired
+    // in v5 — the overlay opacity and border values live on the managed
+    // baseline overlay rule (the migration reads its frozen kV4Ov* literals).
     P_CONFIG_GROUP(snappingZonesLabelsGroup, "Snapping.Zones.Labels")
     P_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     P_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")

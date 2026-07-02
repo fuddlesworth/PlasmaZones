@@ -532,6 +532,9 @@ private:
     /// Replace the rule by id if present, else append it. Used by the baseline
     /// reset/discard so a (theoretically) unseeded baseline is still restored.
     void upsertRule(const PhosphorRules::Rule& rule);
+    /// Shared tail of every per-group baseline reset/discard: upsert @p rules,
+    /// recompute the dirty split, emit baselinesChanged.
+    void applyBaselineGroup(const QList<PhosphorRules::Rule>& rules);
 
     RuleModel m_model;
     /// The rule set as last synced with the daemon. Backs the value-based

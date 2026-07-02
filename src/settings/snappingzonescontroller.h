@@ -80,12 +80,9 @@ Q_SIGNALS:
     /// labelFontColor, and useSystemColors switches off so the imported
     /// colours are actually visible.
     void colorsImported(const QColor& highlight, const QColor& inactive, const QColor& border, const QColor& labelFont);
-
-    /// Generic "something changed" — SettingsController hooks this to
-    /// `onSettingsPropertyChanged()` so successful imports mark the page
-    /// dirty even if the underlying Settings property fan-out didn't
-    /// individually trip a NOTIFY.
-    void changed();
+    // The old generic `changed()` signal retired with the v5 import rework:
+    // every applied value now flows through a tracked path (rule-model writes
+    // or Q_PROPERTY NOTIFYs), so there is no batched write left for it to cover.
 };
 
 } // namespace PlasmaZones

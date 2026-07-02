@@ -15,6 +15,9 @@
 #include <QObject>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QVariantMap>
+
+#include <limits>
 
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/Rule.h>
@@ -300,6 +303,42 @@ private Q_SLOTS:
         QVERIFY(!controller.animationMinSizeBaselineDirty());
         QCOMPARE(controller.model()->ruleById(user.id).name, QStringLiteral("edited"));
         QVERIFY(controller.userRulesDirty());
+    }
+
+    // updateRuleFromJson on a MANAGED baseline must apply a match edit (the
+    // v5 min-size thresholds and the Apply-to scope selector both edit the
+    // match through this exact path) while still pinning the app-owned
+    // identity: the managed flag and the lowest priority survive even a
+    // payload that lies about them. Regression guard for the pre-v5
+    // force-preserve that silently dropped every managed match edit.
+    void updateRuleFromJsonAppliesManagedMatchEditKeepsIdentity()
+    {
+        RuleController controller;
+        const Rule user = makeUserRule(QStringLiteral("u"));
+        controller.model()->setRules(fullBaselineSet(user));
+        controller.captureSavedSnapshot();
+
+        // Edit the general min-width threshold the way GeneralPage.writeMinSize
+        // does, with a hostile payload that also tries to demote the rule.
+        QVariantMap payload = controller.ruleJson(ConfigDefaults::generalMinWidthRuleId().toString());
+        QVERIFY(!payload.isEmpty());
+        QVariantMap match;
+        match.insert(QStringLiteral("field"), QStringLiteral("width"));
+        match.insert(QStringLiteral("op"), QStringLiteral("lessThan"));
+        match.insert(QStringLiteral("value"), 500);
+        payload.insert(QStringLiteral("match"), match);
+        payload.insert(QStringLiteral("managed"), false);
+        payload.insert(QStringLiteral("priority"), 42);
+        QVERIFY(controller.updateRuleFromJson(payload));
+
+        const Rule updated = controller.model()->ruleById(ConfigDefaults::generalMinWidthRuleId());
+        // The match edit lands…
+        QCOMPARE(updated.match, withThreshold(makeBaselineGeneralMinWidthRule(), 500).match);
+        // …while the identity pins hold against the hostile payload.
+        QVERIFY(updated.managed);
+        QCOMPARE(updated.priority, std::numeric_limits<int>::min());
+        // And the group's dirty split sees the staged edit.
+        QVERIFY(controller.generalMinSizeBaselineDirty());
     }
 
     // Track B: the daemon-side reset (RuleAdaptor::resetManagedDefaults) restores

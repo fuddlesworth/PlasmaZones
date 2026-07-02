@@ -491,10 +491,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileMaxWindowsMin
                         to: root.settingsBridge.autotileMaxWindowsMax
                         stepSize: 1
-                        value: {
-                            root.tilingReloadTick;
-                            return root.tilingRuleValue("setMaxWindows", root.liveAlgoSettings.maxWindows !== undefined ? root.liveAlgoSettings.maxWindows : appSettings.autotileMaxWindows);
-                        }
+                        value: root.tilingRuleValue("setMaxWindows", root.liveAlgoSettings.maxWindows !== undefined ? root.liveAlgoSettings.maxWindows : appSettings.autotileMaxWindows)
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }
@@ -525,10 +522,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileSplitRatioMin
                         to: root.settingsBridge.autotileSplitRatioMax
                         stepSize: 0.05
-                        value: {
-                            root.tilingReloadTick;
-                            return root.tilingRuleValue("setSplitRatio", root.liveAlgoSettings.splitRatio !== undefined ? root.liveAlgoSettings.splitRatio : appSettings.autotileSplitRatio);
-                        }
+                        value: root.tilingRuleValue("setSplitRatio", root.liveAlgoSettings.splitRatio !== undefined ? root.liveAlgoSettings.splitRatio : appSettings.autotileSplitRatio)
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
@@ -581,10 +575,7 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileMasterCountMin
                         to: root.settingsBridge.autotileMasterCountMax
                         stepSize: 1
-                        value: {
-                            root.tilingReloadTick;
-                            return root.tilingRuleValue("setMasterCount", root.liveAlgoSettings.masterCount !== undefined ? root.liveAlgoSettings.masterCount : appSettings.autotileMasterCount);
-                        }
+                        value: root.tilingRuleValue("setMasterCount", root.liveAlgoSettings.masterCount !== undefined ? root.liveAlgoSettings.masterCount : appSettings.autotileMasterCount)
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }

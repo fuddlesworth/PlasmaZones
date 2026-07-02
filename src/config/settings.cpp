@@ -807,6 +807,16 @@ void Settings::setUseSystemColors(bool use)
     if (labelFontColor() != beforeLabelFont) {
         Q_EMIT labelFontColorChanged();
     }
+    // Reseed the overlay change-detection caches for the three GATED colours:
+    // the gate flip changed the effective values without a rulesChanged, so a
+    // stale cache would make the NEXT rulesChanged — including an unrelated
+    // mode/assignment toggle — read as an overlay diff and fire the spurious
+    // settingsChanged the gap-fingerprint gate in onRuleStoreChanged exists to
+    // suppress. Opacity / border width / radius are not gated, so their caches
+    // stay valid.
+    m_cachedHighlightColor = highlightColor();
+    m_cachedInactiveColor = inactiveColor();
+    m_cachedBorderColor = borderColor();
     Q_EMIT settingsChanged();
 }
 // Zone-overlay appearance getters read the managed baseline overlay rule (the v5

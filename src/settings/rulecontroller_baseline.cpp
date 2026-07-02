@@ -5,10 +5,11 @@
 // Split out of rulecontroller.cpp to keep that TU under the project's 800-line
 // cap (see CLAUDE.md); the controller's class definition spans both TUs.
 //
-// Covers: the value-based baseline/user dirty split (baselinesDirty /
-// userRulesDirty against the last daemon-synced snapshot), the staged per-page
-// reset/discard of the three managed appearance baselines (resetBaselines /
-// discardBaselineEdits), and the fire-and-forget global daemon reset
+// Covers: the value-based per-group dirty split against the last daemon-synced
+// snapshot (baselinesDirty / overlayBaselineDirty / generalMinSizeBaselineDirty
+// / animationMinSizeBaselineDirty / userRulesDirty), the staged per-page
+// reset/discard for each managed-baseline group (appearance, overlay, general
+// min-size, animation min-size), and the fire-and-forget global daemon reset
 // (resetManagedDefaults).
 
 #include "rulecontroller.h"
@@ -123,44 +124,47 @@ void RuleController::upsertRule(const PhosphorRules::Rule& rule)
         m_model.addRule(rule);
 }
 
-void RuleController::resetBaselines()
+// The shared tail of every per-group baseline reset/discard: upsert-all +
+// recompute + baselinesChanged. Only the rule list differs (factory
+// definitions for a reset, the saved-snapshot subset for a discard). The
+// public per-group methods below stay as the named API surface — each is one
+// call into this helper — so the page wiring reads by intent while the
+// mechanics live once.
+void RuleController::applyBaselineGroup(const QList<PhosphorRules::Rule>& rules)
 {
-    // Rewrite the three managed baselines to their factory definitions. Managed
-    // rules stay in the System section, so updateRule replaces them in place
-    // (no priority renormalize). Staged — the global Save flushes it.
-    upsertRule(makeBaselineBorderRule());
-    upsertRule(makeBaselineTitleBarRule());
-    upsertRule(makeBaselineGapRule());
+    for (const PhosphorRules::Rule& r : rules)
+        upsertRule(r);
     recomputeDirtyFromSnapshot();
     Q_EMIT baselinesChanged();
+}
+
+void RuleController::resetBaselines()
+{
+    // Rewrite the three managed appearance baselines to their factory
+    // definitions. Managed rules stay in the System section, so updateRule
+    // replaces them in place (no priority renormalize). Staged — the global
+    // Save flushes it.
+    applyBaselineGroup({makeBaselineBorderRule(), makeBaselineTitleBarRule(), makeBaselineGapRule()});
 }
 
 void RuleController::resetOverlayBaseline()
 {
     // Rewrite the managed overlay baseline to its factory definition (staged).
-    upsertRule(makeBaselineOverlayRule());
-    recomputeDirtyFromSnapshot();
-    Q_EMIT baselinesChanged();
+    applyBaselineGroup({makeBaselineOverlayRule()});
 }
 
 void RuleController::resetGeneralMinSizeBaseline()
 {
     // Rewrite both managed general min-size baselines to their factory definitions
     // (on-by-default Width/Height thresholds). Staged.
-    upsertRule(makeBaselineGeneralMinWidthRule());
-    upsertRule(makeBaselineGeneralMinHeightRule());
-    recomputeDirtyFromSnapshot();
-    Q_EMIT baselinesChanged();
+    applyBaselineGroup({makeBaselineGeneralMinWidthRule(), makeBaselineGeneralMinHeightRule()});
 }
 
 void RuleController::resetAnimationMinSizeBaseline()
 {
     // Rewrite both managed animation min-size baselines to their factory
     // definitions (off-by-default 0 thresholds). Staged.
-    upsertRule(makeBaselineAnimationMinWidthRule());
-    upsertRule(makeBaselineAnimationMinHeightRule());
-    recomputeDirtyFromSnapshot();
-    Q_EMIT baselinesChanged();
+    applyBaselineGroup({makeBaselineAnimationMinWidthRule(), makeBaselineAnimationMinHeightRule()});
 }
 
 void RuleController::resetManagedDefaults()
@@ -176,45 +180,29 @@ void RuleController::resetManagedDefaults()
 void RuleController::discardBaselineEdits()
 {
     // Restore the three APPEARANCE baselines from the last synced snapshot,
-    // leaving user rules and the overlay baseline untouched.
-    const QList<PhosphorRules::Rule> savedBaselines = subsetByIds(m_savedRules, appearanceBaselineIds());
-    for (const PhosphorRules::Rule& saved : savedBaselines)
-        upsertRule(saved);
-    recomputeDirtyFromSnapshot();
-    Q_EMIT baselinesChanged();
+    // leaving user rules and the other baseline groups untouched.
+    applyBaselineGroup(subsetByIds(m_savedRules, appearanceBaselineIds()));
 }
 
 void RuleController::discardOverlayBaseline()
 {
     // Restore the overlay baseline from the last synced snapshot, leaving the
-    // appearance baselines and user rules untouched.
-    const QList<PhosphorRules::Rule> saved = subsetByIds(m_savedRules, overlayBaselineIds());
-    for (const PhosphorRules::Rule& r : saved)
-        upsertRule(r);
-    recomputeDirtyFromSnapshot();
-    Q_EMIT baselinesChanged();
+    // other baseline groups and user rules untouched.
+    applyBaselineGroup(subsetByIds(m_savedRules, overlayBaselineIds()));
 }
 
 void RuleController::discardGeneralMinSizeBaseline()
 {
-    // Restore both general min-size baselines from the last synced snapshot, leaving
-    // the appearance / overlay baselines and user rules untouched.
-    const QList<PhosphorRules::Rule> saved = subsetByIds(m_savedRules, generalMinSizeBaselineIds());
-    for (const PhosphorRules::Rule& r : saved)
-        upsertRule(r);
-    recomputeDirtyFromSnapshot();
-    Q_EMIT baselinesChanged();
+    // Restore both general min-size baselines from the last synced snapshot,
+    // leaving the other baseline groups and user rules untouched.
+    applyBaselineGroup(subsetByIds(m_savedRules, generalMinSizeBaselineIds()));
 }
 
 void RuleController::discardAnimationMinSizeBaseline()
 {
     // Restore both animation min-size baselines from the last synced snapshot,
-    // leaving every other baseline group and user rules untouched.
-    const QList<PhosphorRules::Rule> saved = subsetByIds(m_savedRules, animationMinSizeBaselineIds());
-    for (const PhosphorRules::Rule& r : saved)
-        upsertRule(r);
-    recomputeDirtyFromSnapshot();
-    Q_EMIT baselinesChanged();
+    // leaving the other baseline groups and user rules untouched.
+    applyBaselineGroup(subsetByIds(m_savedRules, animationMinSizeBaselineIds()));
 }
 
 } // namespace PlasmaZones

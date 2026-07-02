@@ -111,9 +111,12 @@ void SnappingZonesController::loadColorsFromFile(const QString& filePath)
         return;
     }
 
+    // No dirty-marking here: the QML colorsImported handler applies every
+    // value through tracked paths (rule-model writes reconcile via
+    // reconcileRuleBackedDirty; labelFontColor / useSystemColors are
+    // Q_PROPERTY writes that trip their own NOTIFY → onSettingsPropertyChanged).
     Q_EMIT colorsImported(result.highlightColor, result.inactiveColor, result.borderColor, result.labelFontColor);
     Q_EMIT colorImportSuccess();
-    Q_EMIT changed();
 }
 
 } // namespace PlasmaZones

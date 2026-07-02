@@ -920,7 +920,7 @@ private:
     // bound RuleEvaluator drives shouldHandleWindow()'s exclusion gate,
     // which since v5 includes the min-size thresholds (the managed baseline
     // Exclude rules match Width / Height LessThan N). Seeded at construction
-    // with the default min-size baselines (see seedDefaultExclusionRules in
+    // with the default min-size baselines (see defaultMinSizeExcludeSeed in
     // lifecycle.cpp) so the min-size filter is active from effect load —
     // preventing small ephemeral windows (Steam splash, Electron
     // notification popups) from entering the autotile tree during the

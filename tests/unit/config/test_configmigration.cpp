@@ -556,10 +556,12 @@ private Q_SLOTS:
         QVERIFY(!migrated.contains(QStringLiteral("AutotileShortcuts")));
     }
 
-    void testV1JsonMigration_preservesPerScreenGroups()
+    void testV1JsonMigration_foldsPerScreenZoneSelectorOut()
     {
         IsolatedConfigGuard guard;
-        // Create a v1 JSON config with PerScreen data — migration must preserve it
+        // Create a v1 JSON config with PerScreen zone-selector data — since the
+        // v5 fold, the chain must carry it forward and fold it onto a per-monitor
+        // rule (removing the category from config) rather than preserving it.
         QJsonObject root;
         root[QStringLiteral("_version")] = 1;
 

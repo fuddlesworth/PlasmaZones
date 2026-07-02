@@ -460,11 +460,12 @@ private Q_SLOTS:
         // Snapping per-screen inner gap 16 (legacy on-disk key "ZonePadding");
         // autotile per-screen inner gap 24 (key "AutotileInnerGap") for the SAME
         // screen — a conflict on the same gap slot — plus a non-gap autotile key
-        // ("Algorithm").
+        // that genuinely survives in v5 ("AutotileInsertPosition", a behavioural
+        // key the loader still reads).
         setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Snapping"), QStringLiteral("DP-1")},
                   {{QStringLiteral("ZonePadding"), 16}});
         setNested(cfg, {QStringLiteral("PerScreen"), QStringLiteral("Autotile"), QStringLiteral("DP-1")},
-                  {{QStringLiteral("AutotileInnerGap"), 24}, {QStringLiteral("Algorithm"), QStringLiteral("bsp")}});
+                  {{QStringLiteral("AutotileInnerGap"), 24}, {QStringLiteral("AutotileInsertPosition"), 1}});
         writeJson(ConfigDefaults::configFilePath(), cfg);
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -496,7 +497,7 @@ private Q_SLOTS:
                                            .toObject()
                                            .value(QStringLiteral("DP-1"))
                                            .toObject();
-        QCOMPARE(autoScreen.value(QStringLiteral("Algorithm")).toString(), QStringLiteral("bsp"));
+        QCOMPARE(autoScreen.value(QStringLiteral("AutotileInsertPosition")).toInt(), 1);
         QVERIFY2(!autoScreen.contains(QStringLiteral("AutotileInnerGap")),
                  "the gap key must be stripped from the config");
     }
@@ -803,12 +804,6 @@ private Q_SLOTS:
         QCOMPARE(matchOf(widthRule).value(QStringLiteral("value")).toInt(), 0);
     }
 
-    // finalizeV5 defer path: if rules.json is unreadable/corrupt when the
-    // override rules are merged in, the conversion must DEFER — return false and
-    // leave `_v5AppearanceStash` in place so a later run (after rules.json is
-    // re-established) retries, rather than stripping the stash and permanently
-    // losing the user's appearance/gap overrides. This guards the data-loss
-    // failure mode of finalizeV5Conversion's load-failure branch.
     // The seven zone-overlay appearance values fold onto the MANAGED baseline
     // overlay rule: colours as #AARRGGBB hex, opacities clamped to [0,1],
     // border ints clamped to their validator bounds. The source config keys
@@ -825,11 +820,12 @@ private Q_SLOTS:
                    {QStringLiteral("Highlight"), QStringLiteral("#FF112233")},
                    {QStringLiteral("Inactive"), QStringLiteral("#80445566")},
                    {QStringLiteral("Border"), QStringLiteral("#FF778899")}});
-        // Out-of-range opacity (1.7) and border width (99) prove the clamps.
+        // Out-of-range opacity (1.7), border width (99), and border radius
+        // (999) prove all three distinct clamps ([0,1], max 10, max 50).
         setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Zones"), QStringLiteral("Opacity")},
                   {{QStringLiteral("Active"), 1.7}, {QStringLiteral("Inactive"), 0.25}});
         setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Zones"), QStringLiteral("Border")},
-                  {{QStringLiteral("Width"), 99}, {QStringLiteral("Radius"), 12}});
+                  {{QStringLiteral("Width"), 99}, {QStringLiteral("Radius"), 999}});
         writeJson(ConfigDefaults::configFilePath(), cfg);
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -855,7 +851,7 @@ private Q_SLOTS:
         QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayActiveOpacity")).toDouble(), 1.0);
         QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayInactiveOpacity")).toDouble(), 0.25);
         QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayBorderWidth")).toInt(), 10);
-        QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayBorderRadius")).toInt(), 12);
+        QCOMPARE(actionValue(overlayRule, QStringLiteral("setOverlayBorderRadius")).toInt(), 50);
 
         // The folded keys are stripped; the UseSystem toggle survives.
         const QJsonObject zones = readJson(ConfigDefaults::configFilePath())
@@ -876,6 +872,12 @@ private Q_SLOTS:
         QVERIFY2(!border.contains(QStringLiteral("Radius")), "border radius key must be stripped");
     }
 
+    // finalizeV5 defer path: if rules.json is unreadable/corrupt when the
+    // override rules are merged in, the conversion must DEFER — return false and
+    // leave `_v5AppearanceStash` in place so a later run (after rules.json is
+    // re-established) retries, rather than stripping the stash and permanently
+    // losing the user's appearance/gap overrides. This guards the data-loss
+    // failure mode of finalizeV5Conversion's load-failure branch.
     void testFinalizeV5_deferredWhenRulesFileCorrupt()
     {
         IsolatedConfigGuard guard;

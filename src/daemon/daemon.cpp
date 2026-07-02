@@ -237,13 +237,12 @@ Daemon::Daemon(QObject* parent)
 
     // Seed the managed baseline rules (borders, title bars, gaps, zone overlay,
     // general min-size, animation min-size) if the store doesn't already carry
-    // them. The store loaded in its
-    // constructor, so this runs every startup (not first-run only) — existing
-    // rules.json files predating these rules gain them too. addRule
-    // persists and emits rulesChanged, but the daemon's rulesChanged consumers
-    // are wired later (createAdaptors / setup), so the emit at construction is
-    // inert. The daemon is the sole writer, so seeding here is the single source
-    // for every consumer (effect, settings, editor).
+    // them. The store loaded in its constructor, so this runs every startup
+    // (not first-run only) — existing rules.json files predating these rules
+    // gain them too. addRule persists and emits rulesChanged, but the daemon's
+    // rulesChanged consumers are wired later (createAdaptors / setup), so the
+    // emit at construction is inert. The daemon is the sole writer, so seeding
+    // here is the single source for every consumer (effect, settings, editor).
     if (m_ruleStore) {
         using PhosphorRules::Rule;
         using PhosphorRules::RuleAction;
