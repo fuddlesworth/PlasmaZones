@@ -14,21 +14,39 @@
  *    clears pre-float -> unfloat on VS2 must not restore stale state
  * 3. normalSnapFloatUnfloatCyclePreservesState: normal (non-cross-mode) cycle
  *    still works correctly end-to-end
+ * 4. perEngineFloatIndependence: a window's float bit in one mode does not
+ *    leak into the other mode
+ *
+ * Cross-MONITOR variants (Discussion #724): a window floated on monitor A then
+ * moved to monitor B must not re-snap to A's stale zone when later unfloated
+ * (e.g. via the snap minimize->unminimize float driver):
+ * 5. crossMonitorFloatHandoffPreservesHomeZone: the cross-engine handoff re-homes
+ *    the floating window onto the destination monitor while PRESERVING the
+ *    source-monitor pre-float zone/screen (the home zone).
+ * 6. unfloatRestoresAcrossMonitorsToHomeZone: cross-monitor restore is allowed —
+ *    unfloat returns the window to its remembered home zone regardless of the
+ *    monitor it is currently on.
+ * 7. unfloatRestoresWithinSamePhysicalMonitorAcrossIdForms: an id-form difference
+ *    (virtual vs bare) of the same monitor still restores.
+ * 8. migrateWindowToScreen_movesSnapStateAndReverseMap: the per-monitor migration
+ *    mechanism moves a window's snap state and reverse-map entry to the destination
+ *    monitor's store.
+ *
+ * Phase 4 (per-(screen,desktop,activity) last-used):
+ * 9. lastUsedZoneIsPerScreen: last-used zone is tracked per store, so recording it
+ *    for a window on monitor A does not disturb monitor B's last-used.
  */
 
 #include <QTest>
 #include <QString>
 #include <QStringList>
-#include <QHash>
-#include <QRect>
 #include <QSet>
-#include <QUuid>
-#include <QRectF>
 #include <QGuiApplication>
 #include <memory>
 
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
@@ -84,6 +102,7 @@ private Q_SLOTS:
     void cleanup()
     {
         m_service->setSnapState(nullptr);
+        m_service->setSnapEngine(nullptr);
         delete m_engine;
         m_engine = nullptr;
         delete m_service;
@@ -295,6 +314,243 @@ private Q_SLOTS:
         // Clear injected hooks so cleanup() and other tests use the fallback.
         m_service->setEngineFloatResolver({});
         m_service->setEngineFloatWriter({});
+    }
+
+    // =====================================================================
+    // Test 5 (Discussion #724): cross-MONITOR float handoff PRESERVES the
+    // source-monitor pre-float zone/screen (behaviour A) and re-homes the window
+    // onto the destination monitor's store.
+    //
+    // A window snapped on monitor A, floated (drag-out), then moved to monitor
+    // B while floating must restore to its remembered home zone, not to a stale
+    // target, when unfloated ON B (the snap minimize->unminimize float driver
+    // unfloats on restore). Under the per-monitor model the handoff re-homes the
+    // window onto B's store and keeps the pre-float zone/screen that names A, so an
+    // unfloat on ANY monitor restores the home zone (cross-monitor restore is
+    // allowed; there is no refusal guard).
+    // =====================================================================
+    void testCrossMonitorFloatHandoffPreservesHomeZone()
+    {
+        const QString windowId = QStringLiteral("dolphin|eeeeeeee-0000-0000-0000-000000000005");
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        // Snap on monitor A, then float — saves the pre-float zone/screen for A.
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], monitorA, 1);
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        QCOMPARE(m_service->preFloatScreen(windowId), monitorA);
+        QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
+
+        // Move the floating window to monitor B via the cross-engine handoff.
+        // Empty sourceZoneIds + wasFloating enters the floating branch of
+        // SnapEngine::handoffReceive.
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = monitorB;
+        ctx.fromEngineId = QStringLiteral("snap");
+        ctx.wasFloating = true;
+        m_engine->handoffReceive(ctx);
+
+        // Behaviour A: the pre-float home zone/screen (monitor A) is PRESERVED so an
+        // unfloat back on A can restore it; the window now lives on monitor B.
+        QCOMPARE(m_service->preFloatScreen(windowId), monitorA);
+        QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
+        QCOMPARE(m_engine->screenForTrackedWindow(windowId), monitorB);
+
+        // Cross-monitor restore is allowed: unfloating on monitor B restores the
+        // preserved home zone (which names A), resolved on the home screen. Geometry
+        // resolution needs a real QScreen, so gate the positive assertion.
+        UnfloatResult onB = m_engine->resolveUnfloatGeometry(windowId, monitorB);
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(onB.found, "cross-monitor unfloat restores the preserved home zone");
+            QCOMPARE(onB.zoneIds, QStringList{m_zoneIds[0]});
+        }
+
+        // Unfloating back on monitor A restores the same preserved home zone.
+        UnfloatResult onA = m_engine->resolveUnfloatGeometry(windowId, monitorA);
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(onA.found, "unfloat back on the source monitor must restore the preserved home zone");
+            QCOMPARE(onA.zoneIds, QStringList{m_zoneIds[0]});
+        }
+    }
+
+    // =====================================================================
+    // Test 8 (Discussion #724): the per-monitor migration MECHANISM.
+    //
+    // Acceptance test for SnapEngine::migrateWindowToScreen: a window snapped on
+    // monitor A moves to monitor B's per-(screen,desktop,activity) store, the
+    // reverse map re-points at B, and its live screen (screenForTrackedWindow —
+    // the unfloat cross-monitor guard's input) reflects B. This is the mechanism
+    // that makes the #724 unfloat resolve deterministically.
+    // =====================================================================
+    void testMigrateWindowToScreen_movesSnapStateAndReverseMap()
+    {
+        const QString windowId = QStringLiteral("konsole|dddddddd-0000-0000-0000-000000000009");
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        // Place the window into monitor A's per-key store (registers the reverse map).
+        SnapState* stateA = m_engine->stateForWindowOnScreen(windowId, monitorA);
+        QVERIFY(stateA);
+        stateA->assignWindowToZone(windowId, m_zoneIds[0], monitorA, 1);
+        QVERIFY(stateA->isWindowSnapped(windowId));
+        QCOMPARE(stateA->screenId(), monitorA);
+        QCOMPARE(m_engine->stateForWindow(windowId), stateA);
+
+        // Migrate to monitor B.
+        QVERIFY(m_engine->migrateWindowToScreen(windowId, monitorB));
+
+        // The snap state moved to B's store and the reverse map now resolves to it.
+        SnapState* stateB = m_engine->stateForWindow(windowId);
+        QVERIFY(stateB);
+        QVERIFY(stateB != stateA);
+        QCOMPARE(stateB->screenId(), monitorB);
+        QVERIFY(stateB->isWindowSnapped(windowId));
+        QCOMPARE(stateB->zonesForWindow(windowId), QStringList{m_zoneIds[0]});
+        QCOMPARE(stateB->screenForWindow(windowId), monitorB);
+
+        // The source store no longer holds the window.
+        QVERIFY(!stateA->isWindowSnapped(windowId));
+        QVERIFY(stateA->screenForWindow(windowId).isEmpty());
+
+        // screenForTrackedWindow (the guard input) reflects the destination monitor.
+        QCOMPARE(m_engine->screenForTrackedWindow(windowId), monitorB);
+
+        // Re-migrating to the same monitor is a no-op.
+        QVERIFY(!m_engine->migrateWindowToScreen(windowId, monitorB));
+    }
+
+    // =====================================================================
+    // Test 6 (Discussion #724): resolveUnfloatGeometry restores to the HOME zone
+    // across monitors, resolving against the surviving pre-float zone/screen.
+    //
+    // Cross-monitor restore is now ALLOWED (Discussion #724 follow-up): unfloat
+    // returns the window to its remembered HOME zone regardless of the monitor it
+    // is currently on, resolving the zone on the pre-float (home) screen. The old
+    // cross-monitor refusal guard was removed because it depended on the daemon
+    // knowing the window's exact current monitor, which is unreliable for
+    // identical-model monitors.
+    // =====================================================================
+    void testUnfloatRestoresAcrossMonitorsToHomeZone()
+    {
+        const QString windowId = QStringLiteral("dolphin|ffffffff-0000-0000-0000-000000000006");
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], monitorA, 1);
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        QCOMPARE(m_service->preFloatScreen(windowId), monitorA);
+
+        // Unfloat requested on monitor B: the restore resolves against the pre-float
+        // (home) screen A, so the window returns to its home zone. Geometry needs a
+        // real QScreen, so gate the positive assertion on availability.
+        UnfloatResult crossMonitor = m_engine->resolveUnfloatGeometry(windowId, monitorB);
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(crossMonitor.found, "cross-monitor unfloat must restore the window to its home zone");
+            QCOMPARE(crossMonitor.zoneIds, QStringList{m_zoneIds[0]});
+        }
+
+        // A same-monitor unfloat resolves the same home zone.
+        UnfloatResult sameMonitor = m_engine->resolveUnfloatGeometry(windowId, monitorA);
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(sameMonitor.found, "same-monitor unfloat must restore the pre-float zone");
+            QCOMPARE(sameMonitor.zoneIds, QStringList{m_zoneIds[0]});
+        }
+    }
+
+    // =====================================================================
+    // Test 7 (Discussion #724): unfloat restores across virtual/bare id forms of
+    // the same physical monitor (the id-form difference must never block a restore).
+    // =====================================================================
+    void testUnfloatRestoresWithinSamePhysicalMonitorAcrossIdForms()
+    {
+        const QString windowId = QStringLiteral("dolphin|00000000-0000-0000-0000-000000000007");
+        const QString virtualId = QStringLiteral("DP-1/vs:0");
+        const QString physicalId = QStringLiteral("DP-1");
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], virtualId, 1);
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        QCOMPARE(m_service->preFloatScreen(windowId), virtualId);
+
+        // Unfloat on the bare physical id of the same monitor still restores the
+        // home zone. Geometry needs a real QScreen, so gate the positive assertion.
+        UnfloatResult samePhysMonitor = m_engine->resolveUnfloatGeometry(windowId, physicalId);
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(samePhysMonitor.found,
+                     "unfloat within the same physical monitor (virtual vs bare id) must restore");
+            // Pin the restored zone: the id-form difference must resolve the SAME home
+            // zone, not merely produce some result.
+            QCOMPARE(samePhysMonitor.zoneIds, QStringList{m_zoneIds[0]});
+        }
+    }
+
+    // =====================================================================
+    // Phase 4 (Discussion #724): last-used zone is PER-(screen,desktop,activity),
+    // not one global scalar. Recording a last-used zone for a window snapped on
+    // monitor A must not disturb monitor B's last-used, and vice versa. The
+    // facade's screen-agnostic getter returns the most-recently updated store as
+    // the single representative persisted to disk.
+    // =====================================================================
+    void testLastUsedZoneIsPerScreen()
+    {
+        // Wire the FULL per-key resolver (the single-store convenience used by the
+        // fixture routes everything to the global holder, which would hide the
+        // per-screen split this test exercises).
+        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
+        resolver.forWindow = [e = m_engine](const QString& id) {
+            return e->stateForWindow(id);
+        };
+        resolver.forWindowOnScreen = [e = m_engine](const QString& id, const QString& s) {
+            return e->stateForWindowOnScreen(id, s);
+        };
+        resolver.forScreen = [e = m_engine](const QString& s) {
+            return static_cast<SnapState*>(e->stateForScreen(s));
+        };
+        resolver.globals = [e = m_engine]() {
+            return e->globalState();
+        };
+        resolver.allStates = [e = m_engine]() {
+            return e->allSnapStates();
+        };
+        resolver.forgetWindow = [e = m_engine](const QString& id) {
+            e->forgetWindow(id);
+        };
+        m_service->setSnapStateResolver(resolver);
+
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        // Record a last-used zone on A, then a different one on B.
+        m_service->updateLastUsedZone(m_zoneIds[0], monitorA, QStringLiteral("app"), 0);
+        m_service->updateLastUsedZone(m_zoneIds[1], monitorB, QStringLiteral("app"), 0);
+
+        auto* stateA = static_cast<SnapState*>(m_engine->stateForScreen(monitorA));
+        auto* stateB = static_cast<SnapState*>(m_engine->stateForScreen(monitorB));
+        QVERIFY(stateA);
+        QVERIFY(stateB);
+        QVERIFY(stateA != stateB);
+
+        // Each screen keeps its OWN last-used; B's update did not overwrite A's.
+        QCOMPARE(stateA->lastUsedZoneId(), m_zoneIds[0]);
+        QCOMPARE(stateA->lastUsedScreenId(), monitorA);
+        QCOMPARE(stateB->lastUsedZoneId(), m_zoneIds[1]);
+        QCOMPARE(stateB->lastUsedScreenId(), monitorB);
+
+        // The facade representative is the most-recently updated store (B).
+        QCOMPARE(m_service->lastUsedZoneId(), m_zoneIds[1]);
+        QCOMPARE(m_service->lastUsedScreenName(), monitorB);
+
+        // Updating A again makes A the representative without touching B.
+        m_service->updateLastUsedZone(m_zoneIds[2], monitorA, QStringLiteral("app"), 0);
+        QCOMPARE(stateB->lastUsedZoneId(), m_zoneIds[1]);
+        QCOMPARE(m_service->lastUsedZoneId(), m_zoneIds[2]);
+        QCOMPARE(m_service->lastUsedScreenName(), monitorA);
+
+        // Restore the fixture's single-store wiring for the shared teardown.
+        m_service->setSnapState(m_engine->snapState());
     }
 
 private:

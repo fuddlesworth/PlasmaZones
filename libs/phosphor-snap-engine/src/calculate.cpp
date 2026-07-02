@@ -11,7 +11,6 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include "snapenginelogging.h"
@@ -176,31 +175,34 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
         }
     }
 
-    // Need a last used zone
-    const QString lastUsedZoneId = m_snapState->lastUsedZoneId();
+    // Need a last used zone. Resolve the last-used from the store that owns the
+    // OPENING screen's context (per-key), falling back to the global holder's
+    // representative for the restored-from-disk case. The per-key tier is scoped to
+    // windowScreenId, so monitor A's LIVE last-used is never read for a window
+    // opening on monitor B. The global fallback is neutral because the disk restore
+    // lands an EMPTY lastUsedScreenId on m_globals: effectiveScreenId below then
+    // resolves empty and zoneGeometry() returns invalid → noSnap. (If a future path
+    // ever wrote a non-empty FOREIGN lastUsedScreenId onto the global holder, this
+    // would need an explicit screensMatch(windowScreenId, effectiveScreenId) guard.)
+    const SnapState* lastUsedState = lastUsedStateForScreen(windowScreenId);
+    const QString lastUsedZoneId = lastUsedState->lastUsedZoneId();
     if (lastUsedZoneId.isEmpty()) {
         return SnapResult::noSnap();
     }
 
-    // Check if window class was ever user-snapped
+    // Check if window class was ever user-snapped (a per-app preference kept global)
     QString windowClass = m_windowTracker->currentAppIdFor(windowId);
-    if (!m_snapState->userSnappedClasses().contains(windowClass)) {
+    if (!m_globals->userSnappedClasses().contains(windowClass)) {
         return SnapResult::noSnap();
     }
 
     // Validate virtual screen still exists — configuration may have changed since last snap.
     // Fall back to physical screen ID if the virtual screen was removed.
-    const QString lastUsedScreenId = m_snapState->lastUsedScreenId();
+    const QString lastUsedScreenId = lastUsedState->lastUsedScreenId();
     QString effectiveScreenId = m_windowTracker->resolveEffectiveScreenId(lastUsedScreenId);
 
-    // Don't cross-screen snap
-    if (!windowScreenId.isEmpty() && !effectiveScreenId.isEmpty()
-        && !PhosphorScreens::ScreenIdentity::screensMatch(windowScreenId, effectiveScreenId)) {
-        return SnapResult::noSnap();
-    }
-
     // Check virtual desktop match (unless sticky or desktop 0 = all)
-    const int lastUsedDesktop = m_snapState->lastUsedDesktop();
+    const int lastUsedDesktop = lastUsedState->lastUsedDesktop();
     if (!isSticky && m_virtualDesktopManager && lastUsedDesktop > 0) {
         int currentDesktop = currentVirtualDesktopForScreen(windowScreenId);
         if (currentDesktop != lastUsedDesktop) {

@@ -204,7 +204,12 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     }
 
     if (dest) {
-        dest->setWindowFloat(windowId, floating);
+        // Thread the effect's authoritative live screen so the engine resolves
+        // this float/unfloat against the window's REAL current monitor, not its
+        // (possibly stale) tracked association. Without this, unfloating a window
+        // that drifted to another monitor while floating non-deterministically
+        // teleports it back to its source-monitor zone (Discussion #724).
+        dest->setWindowFloat(windowId, floating, screenId);
     }
 }
 

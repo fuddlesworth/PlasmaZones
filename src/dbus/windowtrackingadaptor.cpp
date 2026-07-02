@@ -1029,6 +1029,21 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
         m_lastActiveScreenId = resolvedScreen;
     }
 
+    // Cross-monitor re-home backstop (the analogue of autotile's windowFocused
+    // migration): if the snap engine tracks this window but its owning per-key
+    // store names a DIFFERENT monitor than the one it activated on, migrate its
+    // snap state onto the activation screen so screenForTrackedWindow and the
+    // unfloat fallback-screen resolution report the real monitor (#724). Guarded
+    // by screensMatch so a mere virtual/physical id-form difference on the same
+    // monitor never churns the stores. windowScreenChanged handles the primary
+    // drift path; this catches activations that arrive without a screen-change report.
+    if (PhosphorSnapEngine::SnapEngine* snap = snapEngine(); snap && !resolvedScreen.isEmpty()) {
+        const QString owning = snap->screenForTrackedWindow(windowId);
+        if (!owning.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(owning, resolvedScreen)) {
+            snap->migrateWindowToScreen(windowId, resolvedScreen);
+        }
+    }
+
     qCDebug(lcDbusWindow) << "Window activated:" << windowId << "on screen" << screenId;
 
     // Update last-used zone when focusing a snapped window
@@ -1075,7 +1090,7 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
     int persistedPruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine) {
-        // The autotile engine keys every internal map (m_windowToStateKey,
+        // The autotile engine keys every internal map (m_states reverse map,
         // m_windowMinSizes, m_autotileFloatedWindows, TilingState membership)
         // on each window's CANONICAL id — its FIRST-seen composite, frozen by
         // the daemon-side WindowRegistry. The alive list, by contrast, carries

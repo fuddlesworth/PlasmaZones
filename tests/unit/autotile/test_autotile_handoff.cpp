@@ -30,7 +30,7 @@ using namespace PhosphorTileEngine;
  * The handoff API replaces the opportunistic adopt branch in toggleWindowFloat
  * (PR #366) with an explicit two-step transaction the daemon orchestrates.
  * These tests pin the engine-local invariants the daemon depends on:
- *  - receive populates per-state tracking + m_windowToStateKey
+ *  - receive populates per-state tracking + m_states
  *  - release drops tracking without mutating geometry
  *  - cross-screen receive on the same engine releases prior tracking first
  *  - screenForTrackedWindow follows ownership transfers
@@ -236,7 +236,7 @@ private Q_SLOTS:
     {
         // The PR review identified an orphaned-state bug: receiving a
         // window that's already tracked on a DIFFERENT autotile screen
-        // would overwrite m_windowToStateKey to point at the new screen
+        // would overwrite m_states to point at the new screen
         // while leaving the old screen's PhosphorTiles::TilingState holding the
         // window. Fix: release the previous state first.
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());

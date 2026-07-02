@@ -118,9 +118,69 @@ public:
         m_windowRegistry = registry;
     }
 
+    /// Seam onto the snap engine's per-(screen,desktop,activity) SnapState stores.
+    /// The service no longer holds a single SnapState; instead the daemon injects
+    /// resolvers so each windowId-keyed call reaches the state that owns the window
+    /// (via the engine's reverse map) and each screen-carrying write reaches — and
+    /// registers — the state for that screen. `globals` is the single holder of the
+    /// still-global last-used-zone / user-snapped scalars, and `allStates`
+    /// enumerates every store (including the global holder) for whole-store views.
+    /// When unset (unit tests / early init) every resolver is empty and the facade
+    /// degrades to the historical "no SnapState wired" no-op behaviour.
+    struct SnapStateResolver
+    {
+        /// Owning state for a window (reverse-map lookup); nullptr when untracked.
+        std::function<PhosphorSnapEngine::SnapState*(const QString& windowId)> forWindow;
+        /// Owning state for a window placed/acting on a screen: resolves the state
+        /// (creating it on first placement) AND records the reverse-map entry.
+        std::function<PhosphorSnapEngine::SnapState*(const QString& windowId, const QString& screenId)>
+            forWindowOnScreen;
+        /// Owning state for a SCREEN's current (screen, desktop, activity) context,
+        /// independent of any window — resolves (creating on first use) the per-key
+        /// store a screen-scoped write (last-used-zone) targets. An empty screenId
+        /// resolves to the global holder.
+        std::function<PhosphorSnapEngine::SnapState*(const QString& screenId)> forScreen;
+        /// The global-scalar holder (never null once wired).
+        std::function<PhosphorSnapEngine::SnapState*()> globals;
+        /// Every store, including the global holder, for aggregate iteration.
+        std::function<QList<PhosphorSnapEngine::SnapState*>()> allStates;
+        /// Drop a window's reverse-map entry (window closed / fully removed).
+        std::function<void(const QString& windowId)> forgetWindow;
+    };
+
+    void setSnapStateResolver(SnapStateResolver resolver)
+    {
+        m_snapResolver = std::move(resolver);
+    }
+
+    /// Convenience wiring for a SINGLE snap store (unit tests / the collapsed
+    /// Phase-2 store). Builds a resolver whose every arm routes to @p state, so the
+    /// facade behaves exactly as the former single-SnapState pointer. Passing
+    /// nullptr clears the resolver (the "no SnapState wired" no-op path).
     void setSnapState(PhosphorSnapEngine::SnapState* state)
     {
-        m_snapState = state;
+        if (!state) {
+            m_snapResolver = SnapStateResolver{};
+            return;
+        }
+        SnapStateResolver resolver;
+        resolver.forWindow = [state](const QString&) {
+            return state;
+        };
+        resolver.forWindowOnScreen = [state](const QString&, const QString&) {
+            return state;
+        };
+        resolver.forScreen = [state](const QString&) {
+            return state;
+        };
+        resolver.globals = [state]() {
+            return state;
+        };
+        resolver.allStates = [state]() {
+            return QList<PhosphorSnapEngine::SnapState*>{state};
+        };
+        resolver.forgetWindow = [](const QString&) { };
+        m_snapResolver = std::move(resolver);
     }
 
     /// The unified, engine-agnostic placement store (one WindowPlacement record
@@ -492,7 +552,7 @@ public:
     /**
      * @brief Clear pre-float zone after restore (both windowId and appId keys)
      */
-    void clearPreFloatZone(const QString& windowId);
+    void clearPreFloatZone(const QString& windowId) override;
 
     /**
      * @brief Clear pre-float zone for a specific window only (not appId)
@@ -723,7 +783,7 @@ public:
      * @brief Migrate window screen assignments from physical to virtual screen IDs
      *
      * Windows snapped before virtual screens were configured have physical screen IDs
-     * in SnapState's screen assignments (m_snapState->screenAssignments()). When
+     * in the snap stores' screen assignments (screenAssignments()). When
      * virtual screens are active, all per-screen
      * lookups use virtual IDs, so these windows become invisible to zone occupancy
      * checks, snap assist, float/unfloat, etc.
@@ -885,16 +945,6 @@ public:
     const QSet<QString>& userSnappedClasses() const;
 
     /**
-     * @brief Set active zone/screen/desktop assignments (loaded from KConfig by adaptor)
-     *
-     * Used to restore exact window-to-zone mappings after daemon-only restart
-     * (KWin still running, so internalId UUIDs are stable). Prevents wrong-instance
-     * restore for multi-instance apps (e.g. 2 Ghostty windows, only 1 was snapped).
-     */
-    void setActiveAssignments(const QHash<QString, QStringList>& zones, const QHash<QString, QString>& screens,
-                              const QHash<QString, int>& desktops);
-
-    /**
      * @brief Set pending restore queues (loaded from KConfig by adaptor)
      */
     void setPendingRestoreQueues(const QHash<QString, QList<PendingRestore>>& queues)
@@ -1036,9 +1086,11 @@ private:
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     PhosphorZones::Zone* findZoneById(const QString& zoneId) const;
 
-    /// windowId-then-appId fallback lookup against SnapState.
+    /// windowId-then-appId fallback lookup across every snap store. The getter
+    /// takes (store, id) so the lookup can scan each per-screen store for both keys.
     template<typename Func>
-    auto preFloatLookup(const QString& windowId, Func&& getter) const -> decltype(getter(windowId));
+    auto preFloatLookup(const QString& windowId, Func&& getter) const
+        -> decltype(getter(std::declval<PhosphorSnapEngine::SnapState*>(), windowId));
 
     /// Clear m_lastUsedZoneId if it doesn't exist in the layout for targetScreen.
     void validateLastUsedZone(const QString& targetScreen);
@@ -1102,10 +1154,68 @@ public:
     QString canonicalizeForLookup(const QString& rawWindowId) const;
 
 private:
+    // ── Snap-state resolution helpers (wrap the injected resolver) ───────────
+    // Each returns nullptr / empty when the resolver is unwired, preserving the
+    // historical "no SnapState" no-op guards at the call sites.
+    PhosphorSnapEngine::SnapState* snapForWindow(const QString& windowId) const
+    {
+        return m_snapResolver.forWindow ? m_snapResolver.forWindow(windowId) : nullptr;
+    }
+    PhosphorSnapEngine::SnapState* snapForWindowOnScreen(const QString& windowId, const QString& screenId)
+    {
+        return m_snapResolver.forWindowOnScreen ? m_snapResolver.forWindowOnScreen(windowId, screenId) : nullptr;
+    }
+    PhosphorSnapEngine::SnapState* snapForScreen(const QString& screenId) const
+    {
+        return m_snapResolver.forScreen ? m_snapResolver.forScreen(screenId) : nullptr;
+    }
+    /// The store holding the single representative last-used zone: the one with the
+    /// highest lastUsedSeq() among all stores that have a non-empty last-used zone,
+    /// else the global holder. This is what the facade's screen-agnostic lastUsed*
+    /// getters and the persistence layer read. (Defined out-of-line: SnapState is
+    /// only forward-declared here.)
+    PhosphorSnapEngine::SnapState* snapRepresentativeLastUsed() const;
+    /// Clear the GLOBAL holder's last-used zone if it names a zone in @p removedZones
+    /// and the holder is not @p owningStore (whose own last-used the caller already
+    /// handled). Returns true if it cleared. Shared by the unassign / unsnap-for-float
+    /// paths, which both drop a store's zones and must scrub the disk-restored
+    /// representative that lives on the global holder.
+    bool clearGlobalLastUsedIfRemoved(const QStringList& removedZones,
+                                      const PhosphorSnapEngine::SnapState* owningStore);
+    PhosphorSnapEngine::SnapState* snapGlobals() const
+    {
+        return m_snapResolver.globals ? m_snapResolver.globals() : nullptr;
+    }
+    QList<PhosphorSnapEngine::SnapState*> snapAllStates() const
+    {
+        return m_snapResolver.allStates ? m_snapResolver.allStates() : QList<PhosphorSnapEngine::SnapState*>{};
+    }
+    /// True once the resolver is wired — the drop-in replacement for the former
+    /// `m_snapState != nullptr` guards.
+    bool hasSnapState() const
+    {
+        return static_cast<bool>(m_snapResolver.globals);
+    }
+
     // Dependencies
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorZones::IZoneDetector* m_zoneDetector;
-    PhosphorSnapEngine::SnapState* m_snapState = nullptr;
+    SnapStateResolver m_snapResolver;
+    // Rebuilt-on-read materialisations of the aggregate flat-map views so the
+    // const-ref facade getters keep their signatures while the underlying stores
+    // are per-screen. For the windowId-keyed maps (zone/screen/desktop) each window
+    // lives in exactly one store, so the union carries no key collisions and equals
+    // the former single store's flat map. The pre-float maps are ALSO keyed by appId
+    // aliases, and the same alias can live in two stores (two windows sharing an appId
+    // floated on different monitors); those unions collapse such collisions
+    // last-write-wins, which also matches the former single store. mutable: the const
+    // getters refresh them; the returned reference is valid until the SAME getter is
+    // called again (separate members so cross-field reads coexist).
+    mutable QHash<QString, QStringList> m_aggZoneAssignments;
+    mutable QHash<QString, QString> m_aggScreenAssignments;
+    mutable QHash<QString, int> m_aggDesktopAssignments;
+    mutable QHash<QString, QStringList> m_aggPreFloatZoneAssignments;
+    mutable QHash<QString, QString> m_aggPreFloatScreenAssignments;
     PhosphorEngine::WindowPlacementStore m_placementStore;
     IGeometryResolver* m_geometryResolver;
     PlacementConfig m_config;

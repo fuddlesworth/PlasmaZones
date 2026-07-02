@@ -41,9 +41,9 @@ namespace PhosphorPlacement {
 
 QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFilter, int desktopFilter) const
 {
-    const QHash<QString, QStringList>& zones = m_snapState->zoneAssignments();
-    const QHash<QString, QString>& screens = m_snapState->screenAssignments();
-    const QHash<QString, int>& desktops = m_snapState->desktopAssignments();
+    const QHash<QString, QStringList>& zones = zoneAssignments();
+    const QHash<QString, QString>& screens = screenAssignments();
+    const QHash<QString, int>& desktops = desktopAssignments();
 
     QSet<QUuid> occupiedZoneIds;
     for (auto it = zones.constBegin(); it != zones.constEnd(); ++it) {

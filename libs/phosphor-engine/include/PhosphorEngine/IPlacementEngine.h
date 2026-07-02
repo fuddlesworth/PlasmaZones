@@ -104,7 +104,15 @@ public:
     virtual void toggleWindowFloat(const QString& windowId, const QString& screenId) = 0;
 
     /// Set floating state explicitly (directional, not toggle).
-    virtual void setWindowFloat(const QString& windowId, bool shouldFloat) = 0;
+    ///
+    /// @param screenId The window's authoritative current screen, when the
+    /// caller knows it (the D-Bus setWindowFloatingForScreen threads the
+    /// effect's live output here). Engines that resolve a screen for the float
+    /// or unfloat MUST prefer this over their own tracked association, which can
+    /// be stale after a floating window drifts across monitors — using the stale
+    /// screen makes the unfloat's cross-monitor guard non-deterministic. Empty
+    /// (the default) means "resolve it yourself" for internal callers.
+    virtual void setWindowFloat(const QString& windowId, bool shouldFloat, const QString& screenId = QString()) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation (user intents)
@@ -538,6 +546,16 @@ public:
     virtual void pruneStatesForActivities(const QStringList& validActivities)
     {
         Q_UNUSED(validActivities)
+    }
+    /// Prune per-(screen, desktop, activity) state for a PHYSICALLY REMOVED output
+    /// (monitor hot-unplug), matching every virtual sub-screen of the removed
+    /// physical id. AutotileEngine self-prunes screens via its autotile-screens set,
+    /// so it leaves this a no-op; a per-screen engine WITHOUT such a set (SnapEngine,
+    /// whose stores are created lazily on placement) overrides it and is driven by
+    /// the daemon's screenRemoved signal, otherwise the removed monitor's stores leak.
+    virtual void pruneStatesForRemovedScreen(const QString& physicalScreenId)
+    {
+        Q_UNUSED(physicalScreenId)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

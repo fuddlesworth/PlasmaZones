@@ -803,8 +803,7 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         if (snapTarget) {
             if (targetDesktop > 0) {
                 if (auto* snapSource = qobject_cast<PhosphorSnapEngine::SnapEngine*>(sourceEngine)) {
-                    const QString srcZone =
-                        snapSource->snapState() ? snapSource->snapState()->zoneForWindow(windowId) : QString();
+                    const QString srcZone = snapSource->zoneForWindow(windowId);
                     if (!srcZone.isEmpty()) {
                         zoneId = snapTarget->resolveCrossDesktopZone(srcZone, targetScreenId, targetDesktop).first;
                     }
@@ -934,7 +933,7 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
             partnerLandingIndex = autotileSource->windowOrderIndexForWindow(sourceScreen, windowId);
         }
     } else if (auto* snapSource = qobject_cast<PhosphorSnapEngine::SnapEngine*>(sourceEngine)) {
-        const QString fZone = snapSource->snapState() ? snapSource->snapState()->zoneForWindow(windowId) : QString();
+        const QString fZone = snapSource->zoneForWindow(windowId);
         if (!fZone.isEmpty()) {
             partnerLandingZones = QStringList{fZone};
         }

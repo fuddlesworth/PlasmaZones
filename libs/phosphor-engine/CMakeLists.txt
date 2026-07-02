@@ -31,9 +31,12 @@ set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorEngine SHARED
     include/PhosphorEngine/PlacementEngineBase.h
+    include/PhosphorEngine/PerScreenStates.h
+    include/PhosphorEngine/ScreenContextTracker.h
     include/PhosphorEngine/WindowPlacement.h
     include/PhosphorEngine/WindowPlacementStore.h
     src/PlacementEngineBase.cpp
+    src/ScreenContextTracker.cpp
     src/WindowPlacementStore.cpp
     src/GeometryUtils.cpp
     src/WindowRegistry.cpp
@@ -124,3 +127,12 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorEngineConfigVersion.cmake"
     DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorEngine
 )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if(CMAKE_PROJECT_NAME STREQUAL "PhosphorEngine" OR BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

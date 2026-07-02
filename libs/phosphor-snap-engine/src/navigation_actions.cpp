@@ -261,7 +261,7 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
 
 bool SnapEngine::tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId)
 {
-    if (!m_crossSurfaceResolver || !m_snapState) {
+    if (!m_crossSurfaceResolver || !m_globals) {
         return false;
     }
     const int targetDesktop =
@@ -269,7 +269,11 @@ bool SnapEngine::tryCrossDesktopFocus(const QString& focusedWindowId, const QStr
     if (targetDesktop <= 0) {
         return false;
     }
-    QStringList candidates = m_snapState->windowsOnScreenAndDesktop(screenId, targetDesktop);
+    QStringList candidates;
+    for (const SnapState* state : allSnapStates()) {
+        candidates += state->windowsOnScreenAndDesktop(screenId, targetDesktop);
+    }
+    candidates.sort();
     // Exclude the source window so it can't be picked as its own cross-desktop
     // focus target (a no-op "success" that swallows the boundary). It only appears
     // here if it is itself assigned to the target desktop — windowsOnScreenAndDesktop
@@ -348,7 +352,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
 
 bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId)
 {
-    if (!m_crossSurfaceResolver || !m_snapState) {
+    if (!m_crossSurfaceResolver || !m_globals) {
         return false;
     }
     const int targetDesktop =
@@ -360,7 +364,7 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     // no_adjacent_zone boundary, which requires a current zone. An unsnapped
     // window has nothing to carry — report no crossing so the caller emits the
     // boundary feedback instead of a phantom "moved" signal.
-    const QString currentZoneId = m_snapState->zoneForWindow(windowId);
+    const QString currentZoneId = zoneForWindow(windowId);
     if (currentZoneId.isEmpty()) {
         return false;
     }
@@ -398,7 +402,8 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         // matching slot / invalid geometry): fall back to a bare desktop
         // re-stamp + move. The window relocates but keeps its slot memory for
         // when its own layout is restored — graceful degradation.
-        if (!m_snapState->reassignDesktop(windowId, targetDesktop)) {
+        SnapState* moveState = stateForWindow(windowId);
+        if (!moveState || !moveState->reassignDesktop(windowId, targetDesktop)) {
             return false;
         }
         Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
@@ -412,7 +417,7 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     // the compositor to relocate the real window, then apply the target zone's
     // geometry. The effect's geometry apply has no current-desktop guard, so it
     // lands correctly even though the target desktop isn't visible yet.
-    m_snapState->assignWindowToZone(windowId, targetZoneId, screenId, targetDesktop);
+    stateForWindowOnScreen(windowId, screenId)->assignWindowToZone(windowId, targetZoneId, screenId, targetDesktop);
     if (m_windowTracker) {
         if (auto placement = capturePlacement(windowId)) {
             placement->virtualDesktop = targetDesktop;
@@ -435,14 +440,11 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
 void SnapEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::swapFocusedInDirection:" << direction;
-    // m_snapState is set by SnapEngine's ctor as a Qt-child; the
-    // `m_snapState->screenAssignments()` dereference further down would
-    // otherwise be the first thing to crash if a future refactor moves
-    // m_snapState ownership to a delegated setter that can leave it
-    // null. Asserted unconditionally on entry (mirrors
-    // toggleFocusedFloat) so the invariant fires regardless of which
-    // early-return path runs below.
-    Q_ASSERT(m_snapState);
+    // The global-scalar holder is created by SnapEngine's ctor as a Qt-child, so
+    // it (and the per-screen store map) is always live for a constructed engine.
+    // Asserted unconditionally on entry (mirrors toggleFocusedFloat) so the
+    // invariant fires regardless of which early-return path runs below.
+    Q_ASSERT(m_globals);
     if (!m_windowTracker) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("engine_unavailable"), QString(),
                                   QString(), ctx.screenId);
@@ -496,7 +498,9 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
         // to its current assignment (then window1's screen) as before.
         QString screen2 = result.screenName2;
         if (screen2.isEmpty()) {
-            screen2 = m_snapState->screenForWindow(result.windowId2);
+            if (const SnapState* s2 = stateForWindow(result.windowId2)) {
+                screen2 = s2->screenForWindow(result.windowId2);
+            }
         }
         if (screen2.isEmpty()) {
             screen2 = result.screenName;
@@ -626,7 +630,7 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
 
 void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
 {
-    Q_ASSERT(m_snapState);
+    Q_ASSERT(m_globals);
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::toggleFocusedFloat";
     if (!m_windowTracker) {
         Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("engine_unavailable"), QString(),
@@ -649,7 +653,7 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
     // window is snapped/tiled, the live shadow holds the zone rect — storing
     // it would poison the pre-tile entry with tile coordinates, so we leave
     // whatever's already stored untouched.
-    if (m_navState && m_snapState->isFloating(windowId)) {
+    if (m_navState && isFloating(windowId)) {
         QRect geo = m_navState->frameGeometry(windowId);
         if (geo.isValid() && m_windowTracker) {
             // Single float-back store: the unified record's shared free geometry.

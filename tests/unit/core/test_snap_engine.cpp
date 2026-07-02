@@ -1174,7 +1174,10 @@ private Q_SLOTS:
         const QStringList lines = captureResolveLogs(engine, windowId, QStringLiteral("DP-1"), &result);
 
         QVERIFY2(!result.shouldSnap, "a rule-floated window must not auto-snap");
-        QVERIFY2(engine.snapState()->isFloating(windowId), "the matched window must be marked floating");
+        // The window is floated on DP-1 via the open path, so it lands in that
+        // screen's per-key store, not the global-scalar holder — check the engine's
+        // store-agnostic float view rather than snapState() (globals).
+        QVERIFY2(engine.isFloating(windowId), "the matched window must be marked floating");
         QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("floated by rule")),
                  "the open-floating gate must be the branch that floated the window");
         QCOMPARE(floatSpy.count(), 1);

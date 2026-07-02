@@ -476,7 +476,7 @@ private Q_SLOTS:
     // =========================================================================
     // isWindowTiled: helper used by WindowDragAdaptor to decide whether to
     // enter drag-insert preview on a reorder drag. A window is "tiled" iff it
-    // is tracked (m_windowToStateKey maps it to a state) AND not floating in
+    // is tracked (m_states maps it to a state) AND not floating in
     // that state.
     // =========================================================================
 

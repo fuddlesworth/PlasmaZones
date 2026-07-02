@@ -67,6 +67,39 @@ KWin::EffectWindow* PlasmaZonesEffect::getValidActiveWindowOrFail(const QString&
     return activeWindow;
 }
 
+QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback)
+{
+    // A maximized or fullscreen window's frameGeometry() is the full-monitor rect.
+    // Capturing THAT as a window's pre-tile / pre-snap / float-back geometry makes it
+    // float back at a maximized size. Substitute the pre-maximize / pre-fullscreen
+    // RESTORE rect (a genuine free size). EffectWindow exposes neither; go through the
+    // underlying KWin::Window (mirrors window_query.cpp's maximizeMode read).
+    if (!w) {
+        return fallback;
+    }
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        return fallback;
+    }
+    if (kw->isFullScreen()) {
+        // A window maximized and THEN made fullscreen has a fullscreenGeometryRestore()
+        // equal to the maximized (full work-area) rect, so it would still float back
+        // maximized-sized. When the pre-fullscreen state was itself maximized, prefer
+        // the un-maximized geometryRestore() (the true free size).
+        const QRectF restore(kw->maximizeMode() != KWin::MaximizeRestore ? QRectF(kw->geometryRestore())
+                                                                         : QRectF(kw->fullscreenGeometryRestore()));
+        if (restore.width() > 0 && restore.height() > 0) {
+            return restore;
+        }
+    } else if (kw->maximizeMode() != KWin::MaximizeRestore) {
+        const QRectF restore(kw->geometryRestore());
+        if (restore.width() > 0 && restore.height() > 0) {
+            return restore;
+        }
+    }
+    return fallback;
+}
+
 bool PlasmaZonesEffect::isWindowFloating(const QString& windowId) const
 {
     return m_navigationHandler->isWindowFloating(windowId);

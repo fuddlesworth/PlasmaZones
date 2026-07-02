@@ -463,6 +463,19 @@ private:
     KWin::EffectWindow* getValidActiveWindowOrFail(const QString& action);
 
     /**
+     * @brief Free-float geometry to CAPTURE for @p w, correcting for maximize/fullscreen.
+     *
+     * A maximized or fullscreen window's frameGeometry() is the full-monitor rect.
+     * Capturing THAT as a window's pre-tile / pre-snap / float-back geometry makes it
+     * restore to a maximized size when it later floats. Returns @p fallback unless @p w
+     * is maximized/fullscreen, in which case it returns the pre-maximize / pre-fullscreen
+     * RESTORE rect (a sane free size), falling back to @p fallback again if that restore
+     * rect is empty. Shared by the snap and autotile capture paths, which write the SAME
+     * daemon free-geometry store.
+     */
+    static QRectF freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback);
+
+    /**
      * @brief Check if a window is floating (full windowId with appId fallback)
      * @param windowId The window identifier (full or appId-only)
      * @return true if window is floating
@@ -1339,6 +1352,14 @@ private:
      * @return Effective screen ID (virtual or physical)
      */
     QString resolveEffectiveScreenId(const QPoint& pos, const KWin::LogicalOutput* output) const;
+
+    /// Apply virtual-screen subdivisions for an already-resolved PHYSICAL screen id.
+    /// This is the shared implementation; the output-taking overload above wraps it
+    /// via outputScreenId(). getWindowScreenId resolves the output by POSITION
+    /// (KWin::effects->screenAt) rather than trusting the window's own KWin output,
+    /// then calls the output overload — so position-based resolution comes from the
+    /// caller's screenAt, not from this overload.
+    QString resolveEffectiveScreenId(const QPoint& pos, const QString& physId) const;
 
     /// Fetch virtual screen config from daemon for a single physical screen
     void fetchVirtualScreenConfig(const QString& physicalScreenId, uint64_t generation = 0);

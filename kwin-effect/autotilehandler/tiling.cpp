@@ -453,7 +453,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             const auto guard = qScopeGuard([this] {
                 m_effect->m_inDaemonGeometryApply = false;
             });
-            saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenId, snap.window->frameGeometry());
+            saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
             KWin::Window* kwForLog = snap.window->window();
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry
                              << "monocle=" << snap.isMonocle << "maximizeMode="

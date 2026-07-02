@@ -721,8 +721,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (!windowId.isEmpty() && isWindowFloating(windowId)) {
                 // toRect() (rounding) rather than truncation: fractional-scale
                 // outputs leave sub-pixel residue in frameGeometry(), and the
-                // other geometry-capture paths round too.
-                const QRect geom = window->frameGeometry().toRect();
+                // other geometry-capture paths round too. Correct for
+                // maximize/fullscreen (freeGeometryForCapture) so maximizing a
+                // floating window does not clobber its free-float size with the
+                // full-monitor rect (this store uses overwrite=true).
+                const QRect geom = freeGeometryForCapture(window, QRectF(window->frameGeometry())).toRect();
                 if (geom.width() > 0 && geom.height() > 0) {
                     PhosphorProtocol::ClientHelpers::fireAndForget(
                         this, PhosphorProtocol::Service::Interface::WindowTracking,

@@ -106,6 +106,11 @@ public:
 
     virtual QStringList preFloatZones(const QString& windowId) const = 0;
     virtual QString preFloatScreen(const QString& windowId) const = 0;
+    /// Clear the saved pre-float zone/screen for @p windowId (both the windowId
+    /// key and its appId alias). Used to drop stale pre-float state when a
+    /// floating window crosses monitors, so a later unfloat does not restore it
+    /// to a zone on the monitor it left.
+    virtual void clearPreFloatZone(const QString& windowId) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Auto-snap / pending restore

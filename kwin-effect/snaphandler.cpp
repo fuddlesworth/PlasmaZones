@@ -179,8 +179,13 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
         return;
     }
 
-    // Use pre-captured geometry if provided, otherwise read from window.
+    // Use pre-captured geometry if provided, otherwise read from window. Correct for
+    // maximize/fullscreen: the callers' pre-captured frame is the live frameGeometry(),
+    // which is the full-monitor rect while maximized — capturing that as the float-back
+    // size floats the window back full-screen. freeGeometryForCapture substitutes the
+    // pre-maximize restore rect (shared with the autotile capture path).
     QRectF geom = preCapturedGeometry.isValid() ? preCapturedGeometry : QRectF(w->frameGeometry());
+    geom = PlasmaZonesEffect::freeGeometryForCapture(w, geom);
     if (geom.width() <= 0 || geom.height() <= 0) {
         return;
     }
