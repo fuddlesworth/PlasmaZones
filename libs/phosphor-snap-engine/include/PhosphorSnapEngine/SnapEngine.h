@@ -500,9 +500,9 @@ public:
 
     // Reclaim per-(screen,desktop,activity) stores whose context no longer exists.
     // Without these the per-monitor stores accumulate across desktop/activity/output
-    // removal (the global holder, empty screenId + desktop 0 + empty activity, is
-    // never a prune target). The daemon drives them from its desktop-count /
-    // activities-changed / screenRemoved signals, mirroring AutotileEngine.
+    // removal (the global holder has an empty screenId, so it is never a prune
+    // target). The daemon drives them from its desktop-count / activities-changed /
+    // screenRemoved signals, mirroring AutotileEngine.
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
     void pruneStatesForActivities(const QStringList& validActivities) override;

@@ -264,16 +264,21 @@ QSet<int> SnapEngine::desktopsWithActiveState() const
     QSet<int> out;
     const auto& states = m_states.states();
     for (auto it = states.constBegin(); it != states.constEnd(); ++it) {
-        out.insert(it.key().desktop);
+        // Skip the global holder (empty screenId): it is not a real per-screen store
+        // and would otherwise always report its key's default desktop. Mirrors
+        // AutotileEngine, which has no such holder.
+        if (!it.key().screenId.isEmpty()) {
+            out.insert(it.key().desktop);
+        }
     }
     return out;
 }
 
 void SnapEngine::pruneStatesForDesktop(int removedDesktop)
 {
-    // removedDesktop is a real (>= 1) destroyed desktop, so the global holder
-    // (empty screenId, desktop 0) never matches; the !screenId.isEmpty() guard makes
-    // that explicit. Drop every per-key store on the desktop, its reverse-map
+    // removedDesktop is a real (>= 1) destroyed desktop; the global holder has an
+    // empty screenId, so the !screenId.isEmpty() guard excludes it regardless of its
+    // key's desktop. Drop every per-key store on the desktop, its reverse-map
     // entries, and the per-output desktop-map entries naming it.
     const auto matches = [removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
         return !key.screenId.isEmpty() && key.desktop == removedDesktop;
