@@ -104,13 +104,56 @@ void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop
     }
 }
 
+namespace {
+// Physical screen id for a QScreen, byte-identical to the daemon's
+// PhosphorScreens::ScreenIdentity::identifierFor(): derive the base id from the
+// QScreen's OWN EDID fields (manufacturer/model/serial keyed by the QScreen
+// connector name), then disambiguate identical monitors with a "/CONNECTOR"
+// suffix. Deriving from the QScreen — not the window's KWin LogicalOutput — is
+// what makes the effect agree with the daemon for identical-model monitors,
+// whose per-window output the compositor and daemon can otherwise resolve to
+// different serials (Discussion #724 follow-up).
+QString screenIdForQScreen(const QScreen* screen)
+{
+    if (!screen) {
+        return QString();
+    }
+    const QString baseId = PhosphorIdentity::ScreenId::buildScreenBaseId(screen->manufacturer(), screen->model(),
+                                                                         screen->serialNumber(), screen->name());
+    for (const QScreen* other : QGuiApplication::screens()) {
+        if (other != screen
+            && PhosphorIdentity::ScreenId::buildScreenBaseId(other->manufacturer(), other->model(),
+                                                             other->serialNumber(), other->name())
+                == baseId) {
+            return baseId + QLatin1Char('/') + screen->name();
+        }
+    }
+    return baseId;
+}
+} // namespace
+
 QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
 {
     if (!w) {
         return QString();
     }
-    const QPointF c = w->frameGeometry().center();
-    return resolveEffectiveScreenId(QPoint(qRound(c.x()), qRound(c.y())), w->screen());
+    const QPointF cf = w->frameGeometry().center();
+    const QPoint c(qRound(cf.x()), qRound(cf.y()));
+
+    // Resolve the PHYSICAL monitor by the window's POSITION and derive its id from
+    // the QScreen exactly as the daemon does — NOT from the window's KWin output
+    // (w->screen()), whose EDID-serial derivation names the wrong panel for
+    // identical-model monitors, so the effect and daemon disagreed on which serial
+    // a window sits on (Discussion #724 follow-up). Fall back to the output-based
+    // id only when no QScreen contains the point.
+    QString physId;
+    if (const QScreen* screen = QGuiApplication::screenAt(c)) {
+        physId = screenIdForQScreen(screen);
+    }
+    if (physId.isEmpty()) {
+        physId = outputScreenId(w->screen());
+    }
+    return resolveEffectiveScreenId(c, physId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -119,7 +162,11 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
 
 QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const KWin::LogicalOutput* output) const
 {
-    const QString physId = outputScreenId(output);
+    return resolveEffectiveScreenId(pos, outputScreenId(output));
+}
+
+QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const QString& physId) const
+{
     if (physId.isEmpty()) {
         return physId;
     }
@@ -322,9 +369,10 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                         continue;
                     }
                     {
-                        const QPointF cf = window->frameGeometry().center();
-                        const QPoint center(qRound(cf.x()), qRound(cf.y()));
-                        const QString newScreenId = self->resolveEffectiveScreenId(center, window->screen());
+                        // Position-based resolution (getWindowScreenId), consistent
+                        // with the daemon — do not trust window->screen() for
+                        // identical-model monitors.
+                        const QString newScreenId = self->getWindowScreenId(window);
                         if (!newScreenId.isEmpty()) {
                             it.value() = newScreenId;
                             // Also update the autotile handler's notified screen map
