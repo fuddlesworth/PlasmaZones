@@ -20,14 +20,14 @@
  * Cross-MONITOR variants (Discussion #724): a window floated on monitor A then
  * moved to monitor B must not re-snap to A's stale zone when later unfloated
  * (e.g. via the snap minimize->unminimize float driver):
- * 5. crossMonitorFloatHandoffClearsStalePreFloat: the cross-engine handoff that
- *    carries a floating window to another monitor clears the source-monitor
- *    pre-float zone/screen.
- * 6. unfloatDoesNotRestoreAcrossMonitors: resolveUnfloatGeometry refuses to
- *    restore to a pre-float zone whose screen differs from the unfloat screen.
- * 7. unfloatRestoresWithinSamePhysicalMonitorAcrossIdForms: the guard compares
- *    by physical monitor (samePhysical), so a virtual-vs-bare id form of the
- *    same monitor still restores rather than being refused.
+ * 5. crossMonitorFloatHandoffPreservesHomeZone: the cross-engine handoff re-homes
+ *    the floating window onto the destination monitor while PRESERVING the
+ *    source-monitor pre-float zone/screen (the home zone).
+ * 6. unfloatRestoresAcrossMonitorsToHomeZone: cross-monitor restore is allowed —
+ *    unfloat returns the window to its remembered home zone regardless of the
+ *    monitor it is currently on.
+ * 7. unfloatRestoresWithinSamePhysicalMonitorAcrossIdForms: an id-form difference
+ *    (virtual vs bare) of the same monitor still restores.
  */
 
 #include <QTest>
@@ -318,11 +318,10 @@ private Q_SLOTS:
     // B while floating must not re-snap to A's old zone when unfloated ON B (the
     // snap minimize->unminimize float driver unfloats on restore). Under the
     // per-monitor model the handoff re-homes the window onto B's store and keeps
-    // the pre-float zone/screen that names A — so an unfloat back on A can still
-    // restore the home zone — while resolveUnfloatGeometry's guard (pre-float
-    // screen A != unfloat screen B) refuses the cross-monitor restore.
+    // the pre-float zone/screen that names A — so an unfloat on ANY monitor restores the home zone (cross-monitor
+    // restore is allowed).
     // =====================================================================
-    void testCrossMonitorFloatHandoffPreservesHomeZoneAndGuards()
+    void testCrossMonitorFloatHandoffPreservesHomeZone()
     {
         const QString windowId = QStringLiteral("dolphin|eeeeeeee-0000-0000-0000-000000000005");
         const QString monitorA = QStringLiteral("DP-1");
@@ -351,15 +350,16 @@ private Q_SLOTS:
         QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
         QCOMPARE(m_engine->screenForTrackedWindow(windowId), monitorB);
 
-        // Unfloating on monitor B must NOT restore A's zone — the guard refuses the
-        // cross-monitor restore (no teleport).
+        // Cross-monitor restore is allowed: unfloating on monitor B restores the
+        // preserved home zone (which names A), resolved on the home screen. Geometry
+        // resolution needs a real QScreen, so gate the positive assertion.
         UnfloatResult onB = m_engine->resolveUnfloatGeometry(windowId, monitorB);
-        QCOMPARE(onB.found, false);
-        QVERIFY(onB.zoneIds.isEmpty());
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(onB.found, "cross-monitor unfloat restores the preserved home zone");
+            QCOMPARE(onB.zoneIds, QStringList{m_zoneIds[0]});
+        }
 
-        // Unfloating back on monitor A restores the preserved home zone (the guard
-        // passes — same monitor). Geometry resolution needs a real QScreen, so gate
-        // the positive assertion like the sibling same-monitor restore case.
+        // Unfloating back on monitor A restores the same preserved home zone.
         UnfloatResult onA = m_engine->resolveUnfloatGeometry(windowId, monitorA);
         if (QGuiApplication::screens().size() > 0) {
             QVERIFY2(onA.found, "unfloat back on the source monitor must restore the preserved home zone");
@@ -417,12 +417,14 @@ private Q_SLOTS:
     // Test 6 (Discussion #724): resolveUnfloatGeometry refuses a cross-monitor
     // restore even if a stale pre-float zone/screen survives.
     //
-    // Backstop for move routes that never reach the handoff clear above: with
-    // the pre-float state left intact (pointing at monitor A), an unfloat asked
-    // for on monitor B must return not-found — no cross-monitor teleport —
-    // while a same-monitor unfloat still restores normally.
+    // Cross-monitor restore is now ALLOWED (Discussion #724 follow-up): unfloat
+    // returns the window to its remembered HOME zone regardless of the monitor it
+    // is currently on, resolving the zone on the pre-float (home) screen. The old
+    // cross-monitor refusal guard was removed because it depended on the daemon
+    // knowing the window's exact current monitor, which is unreliable for
+    // identical-model monitors.
     // =====================================================================
-    void testUnfloatDoesNotRestoreAcrossMonitors()
+    void testUnfloatRestoresAcrossMonitorsToHomeZone()
     {
         const QString windowId = QStringLiteral("dolphin|ffffffff-0000-0000-0000-000000000006");
         const QString monitorA = QStringLiteral("DP-1");
@@ -433,31 +435,26 @@ private Q_SLOTS:
         m_service->setWindowFloating(windowId, true);
         QCOMPARE(m_service->preFloatScreen(windowId), monitorA);
 
-        // Pre-float state intact (monitor A) — an unfloat requested on monitor B
-        // must be refused by the cross-monitor guard.
+        // Unfloat requested on monitor B: the restore resolves against the pre-float
+        // (home) screen A, so the window returns to its home zone. Geometry needs a
+        // real QScreen, so gate the positive assertion on availability.
         UnfloatResult crossMonitor = m_engine->resolveUnfloatGeometry(windowId, monitorB);
-        QCOMPARE(crossMonitor.found, false);
-        QVERIFY(crossMonitor.zoneIds.isEmpty());
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(crossMonitor.found, "cross-monitor unfloat must restore the window to its home zone");
+            QCOMPARE(crossMonitor.zoneIds, QStringList{m_zoneIds[0]});
+        }
 
-        // The guard only blocks a monitor change: a same-monitor unfloat still
-        // resolves the pre-float zone. Geometry needs a real QScreen, so gate the
-        // positive assertion on availability like the normal-cycle test above.
+        // A same-monitor unfloat resolves the same home zone.
         UnfloatResult sameMonitor = m_engine->resolveUnfloatGeometry(windowId, monitorA);
         if (QGuiApplication::screens().size() > 0) {
-            QVERIFY2(sameMonitor.found, "same-monitor unfloat must still restore the pre-float zone");
+            QVERIFY2(sameMonitor.found, "same-monitor unfloat must restore the pre-float zone");
             QCOMPARE(sameMonitor.zoneIds, QStringList{m_zoneIds[0]});
         }
     }
 
     // =====================================================================
-    // Test 7 (Discussion #724): the cross-monitor guard compares by PHYSICAL
-    // monitor (VirtualScreenId::samePhysical), NOT screensMatch.
-    //
-    // A window floated on a virtual-screen id ("DP-1/vs:0") and unfloated on the
-    // bare physical id ("DP-1") of the SAME monitor must NOT be refused. This
-    // pins the samePhysical choice: screensMatch would treat the virtual-vs-bare
-    // pair as a monitor change and wrongly refuse the restore, so swapping the
-    // guard back to screensMatch would make this test's positive restore fail.
+    // Test 7 (Discussion #724): unfloat restores across virtual/bare id forms of
+    // the same physical monitor (the id-form difference must never block a restore).
     // =====================================================================
     void testUnfloatRestoresWithinSamePhysicalMonitorAcrossIdForms()
     {
@@ -470,14 +467,12 @@ private Q_SLOTS:
         m_service->setWindowFloating(windowId, true);
         QCOMPARE(m_service->preFloatScreen(windowId), virtualId);
 
-        // Unfloat on the bare physical id of the same monitor: samePhysical is true,
-        // so the guard must NOT refuse. Geometry needs a real QScreen, so gate the
-        // positive assertion like the sibling same-monitor case. Under screensMatch
-        // this would be refused (found == false) and the assertion would fail.
+        // Unfloat on the bare physical id of the same monitor still restores the
+        // home zone. Geometry needs a real QScreen, so gate the positive assertion.
         UnfloatResult samePhysMonitor = m_engine->resolveUnfloatGeometry(windowId, physicalId);
         if (QGuiApplication::screens().size() > 0) {
             QVERIFY2(samePhysMonitor.found,
-                     "unfloat within the same physical monitor (virtual vs bare id) must not be refused");
+                     "unfloat within the same physical monitor (virtual vs bare id) must restore");
         }
     }
 

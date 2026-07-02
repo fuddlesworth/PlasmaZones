@@ -13,11 +13,11 @@
  *
  * 1. e2eDeterministicUnfloatAcrossMonitors: the acceptance scenario for the entire
  *    effort. Snap on B, float, migrate to A → the window reports A, the pre-float still
- *    names B (behaviour A), an unfloat asked on A is refused (no teleport back to B), and
- *    migrating back to B restores the original B zone.
- * 2. threadedUnfloatScreenNeverTeleports: SnapEngine::setWindowFloat(id, false, A) with
- *    a stale tracked screen (B) resolves against the PASSED screen A deterministically —
- *    it never re-snaps the window to B's zone.
+ *    names B (preserved), and an unfloat (on A or back on B) restores the window to its
+ *    remembered home zone on B (cross-monitor restore is allowed).
+ * 2. unfloatRestoresToHomeZoneRegardlessOfDriverScreen: SnapEngine::setWindowFloat(
+ *    id, false, A) restores the window to its home zone on B — the restore resolves
+ *    against the pre-float home screen regardless of the driver screen.
  * 3. perMonitorSnapIndependence: two windows snapped on two monitors keep independent
  *    per-screen state; floating one does not disturb the other, and same-index zones on
  *    different monitors do not collide.
@@ -136,12 +136,16 @@ private Q_SLOTS:
         QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
         QCOMPARE(m_service->preFloatScreen(windowId), monitorB);
 
-        // (c) Unfloating on A is refused by the cross-monitor guard — no teleport to B.
+        // (c) Cross-monitor restore is ALLOWED: unfloating while on A returns the
+        // window to its remembered home zone on B (resolved against the pre-float
+        // home screen), regardless of the current monitor.
         UnfloatResult onA = m_engine->resolveUnfloatGeometry(windowId, monitorA);
-        QCOMPARE(onA.found, false);
-        QVERIFY(onA.zoneIds.isEmpty());
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(onA.found, "cross-monitor unfloat restores the window to its home zone");
+            QCOMPARE(onA.zoneIds, QStringList{m_zoneIds[0]});
+        }
 
-        // (d) Migrating back to B and unfloating there restores the original B zone.
+        // (d) Migrating back to B and unfloating there also restores the original B zone.
         QVERIFY(m_engine->migrateWindowToScreen(windowId, monitorB));
         QCOMPARE(m_service->screenForWindow(windowId), monitorB);
         UnfloatResult onB = m_engine->resolveUnfloatGeometry(windowId, monitorB);
@@ -156,14 +160,14 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // Test 2 (Discussion #724): the threaded unfloat screen is authoritative.
+    // Test 2 (Discussion #724 follow-up): unfloat restores to the HOME zone.
     //
-    // Regardless of a window's (possibly stale) tracked screen, an unfloat driven
-    // with an explicit screen must resolve against THAT screen. Here the tracked
-    // screen still says B (no windowScreenChanged was ever seen for the drift), yet
-    // setWindowFloat(id, false, A) must not re-snap the window to B's zone.
+    // Cross-monitor restore is allowed, so an unfloat returns the window to its
+    // remembered home zone (zone0 on B) regardless of the screen the unfloat is
+    // driven with — driving setWindowFloat(id, false, A) restores it to B's zone
+    // rather than leaving it floating in limbo.
     // =====================================================================
-    void threadedUnfloatScreenNeverTeleports()
+    void unfloatRestoresToHomeZoneRegardlessOfDriverScreen()
     {
         installFullResolver();
 
@@ -171,27 +175,23 @@ private Q_SLOTS:
         const QString monitorA = QStringLiteral("DP-1");
         const QString monitorB = QStringLiteral("HDMI-1");
 
-        // Snap on B and float: pre-float (zone0, B); the tracked screen stays B
-        // (unsnapForFloat preserves it) — this is the stale value a drifted window
-        // carries because the daemon never observed the monitor change.
+        // Snap on B and float: pre-float (zone0, B).
         m_service->assignWindowToZone(windowId, m_zoneIds[0], monitorB, 1);
         m_service->unsnapForFloat(windowId);
         m_service->setWindowFloating(windowId, true);
-        QCOMPARE(m_engine->screenForTrackedWindow(windowId), monitorB);
         QCOMPARE(m_service->preFloatScreen(windowId), monitorB);
 
-        // Drive the unfloat with the effect's authoritative live screen (A). The
-        // threaded screen is preferred over the stale tracked screen, so the
-        // cross-monitor guard refuses B's zone: no applyGeometryRequested at all.
+        // Drive the unfloat with a different screen (A). The restore resolves against
+        // the pre-float home screen B, so the window returns to its home zone. The
+        // snap commit needs a real QScreen for the zone geometry, so gate on it.
         QSignalSpy applySpy(m_engine, &SnapEngine::applyGeometryRequested);
         m_engine->setWindowFloat(windowId, false, monitorA);
 
-        QCOMPARE(applySpy.count(), 0); // no snap commit → no teleport to B
-        QVERIFY(m_service->isWindowFloating(windowId)); // kept floating, not limbo
-        QVERIFY(!m_service->isWindowSnapped(windowId));
-        // The pre-float state is untouched (resolve is read-only under refusal).
-        QCOMPARE(m_service->preFloatScreen(windowId), monitorB);
-        QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(applySpy.count() >= 1, "unfloat must restore the window to its home zone");
+            QVERIFY(m_service->isWindowSnapped(windowId));
+            QVERIFY(!m_service->isWindowFloating(windowId));
+        }
 
         restoreFixtureWiring();
     }

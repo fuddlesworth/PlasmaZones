@@ -4,7 +4,6 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
-#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/Layout.h>
@@ -270,23 +269,14 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
 
     const QString preFloatScreenId = m_windowTracker->preFloatScreen(windowId);
 
-    // Cross-monitor guard: a pre-float zone id belongs to the layout of the monitor
-    // the window was floated from. If the window is being unfloated on a DIFFERENT
-    // physical monitor (it crossed monitors while floating), that zone is stale and
-    // restoring to it would teleport the window back to the source monitor. Refuse —
-    // the caller keeps it floating / falls back to a current-screen zone. Compare by
-    // PHYSICAL monitor (not screensMatch, which treats any virtual-vs-physical or
-    // differing-virtual pair as a mismatch) so a same-monitor id-form difference is
-    // never misread as a monitor change. Backstops the pre-float clear on the
-    // cross-monitor handoff (handoffReceive) for move routes that skip that branch.
-    if (!preFloatScreenId.isEmpty() && !fallbackScreen.isEmpty()
-        && !PhosphorIdentity::VirtualScreenId::samePhysical(preFloatScreenId, fallbackScreen)) {
-        qCInfo(PhosphorSnapEngine::lcSnapEngine)
-            << "resolveUnfloatGeometry:" << windowId << "pre-float screen" << preFloatScreenId
-            << "is a different monitor than unfloat screen" << fallbackScreen << "- not restoring across monitors";
-        return result;
-    }
-
+    // Cross-monitor restore is ALLOWED (Discussion #724 follow-up): unfloat returns
+    // the window to its remembered home zone regardless of which monitor it is
+    // currently on. resolveUnfloatScreen prefers the pre-float (home) screen, so the
+    // zone resolves on the monitor the window was snapped on and the window goes
+    // home. This is deterministic and, unlike a cross-monitor refusal guard, does
+    // not depend on the daemon knowing the window's exact current monitor — which is
+    // unreliable for identical-model monitors whose per-window screen the compositor
+    // and daemon can resolve differently.
     const QString restoreScreen = resolveUnfloatScreen(preFloatScreenId, fallbackScreen);
 
     QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
