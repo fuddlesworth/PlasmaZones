@@ -178,16 +178,17 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
     PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId);
     if (!snapState)
         return;
-    // Capture the removed zones BEFORE the unassign so the global last-used-zone
-    // coupling can fire (last-used is now held on the global holder, not this store).
+    // Capture the removed zones BEFORE the unassign. The window's own store clears
+    // its per-key last-used inside unassignWindow; the global holder still carries
+    // the representative restored from disk, so clear it too if it named a removed zone.
     const QStringList removedZones = snapState->zonesForWindow(windowId);
     auto result = snapState->unassignWindow(windowId);
     if (!result.wasAssigned) {
         return;
     }
     bool lastUsedCleared = result.lastUsedZoneCleared;
-    if (PhosphorSnapEngine::SnapState* globals = snapGlobals();
-        globals && !globals->lastUsedZoneId().isEmpty() && removedZones.contains(globals->lastUsedZoneId())) {
+    if (PhosphorSnapEngine::SnapState* globals = snapGlobals(); globals && globals != snapState
+        && !globals->lastUsedZoneId().isEmpty() && removedZones.contains(globals->lastUsedZoneId())) {
         globals->restoreLastUsedZone({}, {}, {}, 0);
         lastUsedCleared = true;
     }
@@ -652,12 +653,12 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
 
     markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
 
-    // Global last-used-zone coupling: unsnapForFloat cleared the zone assignment;
-    // if that zone was the global tracker's, clear it (the store's own last-used is
-    // always empty — the scalar lives on the global holder now).
+    // Last-used-zone coupling: unsnapForFloat already cleared this store's own
+    // per-key last-used if it named the floated zone. The global holder still carries
+    // the representative restored from disk, so clear it too if it named the zone.
     bool lastUsedCleared = unassignResult.lastUsedZoneCleared;
-    if (PhosphorSnapEngine::SnapState* globals = snapGlobals();
-        globals && !globals->lastUsedZoneId().isEmpty() && zoneIds.contains(globals->lastUsedZoneId())) {
+    if (PhosphorSnapEngine::SnapState* globals = snapGlobals(); globals && globals != snapState
+        && !globals->lastUsedZoneId().isEmpty() && zoneIds.contains(globals->lastUsedZoneId())) {
         globals->restoreLastUsedZone({}, {}, {}, 0);
         lastUsedCleared = true;
     }
@@ -857,35 +858,60 @@ const QHash<QString, int>& WindowTrackingService::desktopAssignments() const
 // state is loaded later from KConfig through its persistence delegate
 // once SnapState is wired, so the early-init read here can only ever
 // produce a "no last zone yet" result anyway.
+PhosphorSnapEngine::SnapState* WindowTrackingService::snapRepresentativeLastUsed() const
+{
+    PhosphorSnapEngine::SnapState* best = nullptr;
+    quint64 bestSeq = 0;
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        if (!state || state->lastUsedZoneId().isEmpty()) {
+            continue;
+        }
+        if (!best || state->lastUsedSeq() >= bestSeq) {
+            best = state;
+            bestSeq = state->lastUsedSeq();
+        }
+    }
+    return best ? best : snapGlobals();
+}
+
 QString WindowTrackingService::lastUsedZoneId() const
 {
-    const PhosphorSnapEngine::SnapState* globals = snapGlobals();
-    return globals ? globals->lastUsedZoneId() : QString();
+    const PhosphorSnapEngine::SnapState* rep = snapRepresentativeLastUsed();
+    return rep ? rep->lastUsedZoneId() : QString();
 }
 
 QString WindowTrackingService::lastUsedZoneClass() const
 {
-    const PhosphorSnapEngine::SnapState* globals = snapGlobals();
-    return globals ? globals->lastUsedZoneClass() : QString();
+    const PhosphorSnapEngine::SnapState* rep = snapRepresentativeLastUsed();
+    return rep ? rep->lastUsedZoneClass() : QString();
 }
 
 QString WindowTrackingService::lastUsedScreenName() const
 {
-    const PhosphorSnapEngine::SnapState* globals = snapGlobals();
-    return globals ? globals->lastUsedScreenId() : QString();
+    const PhosphorSnapEngine::SnapState* rep = snapRepresentativeLastUsed();
+    return rep ? rep->lastUsedScreenId() : QString();
 }
 
 int WindowTrackingService::lastUsedDesktop() const
 {
-    const PhosphorSnapEngine::SnapState* globals = snapGlobals();
-    return globals ? globals->lastUsedDesktop() : 0;
+    const PhosphorSnapEngine::SnapState* rep = snapRepresentativeLastUsed();
+    return rep ? rep->lastUsedDesktop() : 0;
 }
 
 void WindowTrackingService::retagLastUsedZoneClass(const QString& newClass)
 {
     Q_ASSERT(hasSnapState());
-    if (PhosphorSnapEngine::SnapState* globals = snapGlobals()) {
-        globals->retagLastUsedZoneClass(newClass);
+    // Last-used is per-key: retag every store whose last-used class matches the one
+    // the representative currently reports (the class of the window that was
+    // renamed). Stores tracking a different app's last-used are left untouched.
+    const QString oldClass = lastUsedZoneClass();
+    if (oldClass.isEmpty() || oldClass == newClass) {
+        return;
+    }
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        if (state && state->lastUsedZoneClass() == oldClass) {
+            state->retagLastUsedZoneClass(newClass);
+        }
     }
 }
 

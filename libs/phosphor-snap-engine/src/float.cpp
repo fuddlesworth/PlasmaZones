@@ -332,12 +332,13 @@ UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId
     // → first empty zone → first zone in the layout. The last two reuse the same
     // accessors as the auto-snap chain (findEmptyZoneInLayout / zoneGeometry).
     QString zoneId;
-    const QString lastUsed = m_globals->lastUsedZoneId();
-    // lastUsedZoneId() is GLOBAL (last zone used on any screen). zoneGeometry()
-    // resolves a zone from any layout against this screen, so the geometry check
-    // alone would let a zone from another monitor's layout win here. Scope it to
-    // THIS screen's resolved layout via zoneById so "exists in this screen's
-    // layout" (above) actually holds.
+    // Last-used is per-key: read THIS screen's store (falling back to the global
+    // holder's representative for the restored-from-disk case). That already keeps a
+    // different monitor's last-used out. The layout-membership guard below still
+    // matters: a screen can have its assigned layout swapped, and zoneGeometry()
+    // resolves a zone from any registered layout against this screen — so scope the
+    // last-used tier to THIS screen's resolved layout via zoneById.
+    const QString lastUsed = lastUsedStateForScreen(screen)->lastUsedZoneId();
     if (!lastUsed.isEmpty()) {
         const QUuid lastUsedUuid(lastUsed);
         if (!lastUsedUuid.isNull() && layout->zoneById(lastUsedUuid)

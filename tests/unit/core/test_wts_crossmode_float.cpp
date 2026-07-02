@@ -481,6 +481,72 @@ private Q_SLOTS:
         }
     }
 
+    // =====================================================================
+    // Phase 4 (Discussion #724): last-used zone is PER-(screen,desktop,activity),
+    // not one global scalar. Recording a last-used zone for a window snapped on
+    // monitor A must not disturb monitor B's last-used, and vice versa. The
+    // facade's screen-agnostic getter returns the most-recently updated store as
+    // the single representative persisted to disk.
+    // =====================================================================
+    void testLastUsedZoneIsPerScreen()
+    {
+        // Wire the FULL per-key resolver (the single-store convenience used by the
+        // fixture routes everything to the global holder, which would hide the
+        // per-screen split this test exercises).
+        PhosphorPlacement::WindowTrackingService::SnapStateResolver resolver;
+        resolver.forWindow = [e = m_engine](const QString& id) {
+            return e->stateForWindow(id);
+        };
+        resolver.forWindowOnScreen = [e = m_engine](const QString& id, const QString& s) {
+            return e->stateForWindowOnScreen(id, s);
+        };
+        resolver.forScreen = [e = m_engine](const QString& s) {
+            return static_cast<SnapState*>(e->stateForScreen(s));
+        };
+        resolver.globals = [e = m_engine]() {
+            return e->globalState();
+        };
+        resolver.allStates = [e = m_engine]() {
+            return e->allSnapStates();
+        };
+        resolver.forgetWindow = [e = m_engine](const QString& id) {
+            e->forgetWindow(id);
+        };
+        m_service->setSnapStateResolver(resolver);
+
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        // Record a last-used zone on A, then a different one on B.
+        m_service->updateLastUsedZone(m_zoneIds[0], monitorA, QStringLiteral("app"), 0);
+        m_service->updateLastUsedZone(m_zoneIds[1], monitorB, QStringLiteral("app"), 0);
+
+        auto* stateA = static_cast<SnapState*>(m_engine->stateForScreen(monitorA));
+        auto* stateB = static_cast<SnapState*>(m_engine->stateForScreen(monitorB));
+        QVERIFY(stateA);
+        QVERIFY(stateB);
+        QVERIFY(stateA != stateB);
+
+        // Each screen keeps its OWN last-used; B's update did not overwrite A's.
+        QCOMPARE(stateA->lastUsedZoneId(), m_zoneIds[0]);
+        QCOMPARE(stateA->lastUsedScreenId(), monitorA);
+        QCOMPARE(stateB->lastUsedZoneId(), m_zoneIds[1]);
+        QCOMPARE(stateB->lastUsedScreenId(), monitorB);
+
+        // The facade representative is the most-recently updated store (B).
+        QCOMPARE(m_service->lastUsedZoneId(), m_zoneIds[1]);
+        QCOMPARE(m_service->lastUsedScreenName(), monitorB);
+
+        // Updating A again makes A the representative without touching B.
+        m_service->updateLastUsedZone(m_zoneIds[2], monitorA, QStringLiteral("app"), 0);
+        QCOMPARE(stateB->lastUsedZoneId(), m_zoneIds[1]);
+        QCOMPARE(m_service->lastUsedZoneId(), m_zoneIds[2]);
+        QCOMPARE(m_service->lastUsedScreenName(), monitorA);
+
+        // Restore the fixture's single-store wiring for the shared teardown.
+        m_service->setSnapState(m_engine->snapState());
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;

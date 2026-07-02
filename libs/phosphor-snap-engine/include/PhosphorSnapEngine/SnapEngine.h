@@ -446,8 +446,10 @@ public:
     //
     // The engine owns one SnapState per (screen, desktop, activity)
     // PlacementStateKey (via PerScreenStates) plus a single global-scalar holder
-    // (m_globals, keyed under the empty-screen sentinel) for last-used-zone and
-    // user-snapped classes, which stay global in this phase. A window is placed
+    // (m_globals, keyed under the empty-screen sentinel). Each per-key store now
+    // tracks its OWN last-used zone; m_globals keeps the user-snapped classes (a
+    // per-app preference, not a placement) and the single representative last-used
+    // restored from disk. A window is placed
     // under the key derived from its screen on first snap/float and stays there
     // for its lifetime (the reverse map is authoritative); its screen is recorded
     // as a per-window value, updated in place, exactly as the former single store.
@@ -876,11 +878,18 @@ private:
     /// first use, seeding it with the shared window registry.
     SnapState* ensureStateForKey(const PhosphorEngine::PlacementStateKey& key);
 
-    /// Replicate the former single store's coupling: last-used-zone is now held
-    /// GLOBALLY on m_globals, but a per-screen unassign that removes the zone the
-    /// global tracker points at must still clear it. Call with the window's zones
-    /// captured BEFORE the unassign.
+    /// Clear the last-used zone on every store (per-screen + the global holder)
+    /// that currently points at one of @p removedZones. Last-used is per-key now, so
+    /// a per-screen unassign has to sweep all stores in case another context pointed
+    /// at the same zone. Call with the window's zones captured BEFORE the unassign.
     void syncGlobalLastUsedForRemovedZones(const QStringList& removedZones);
+
+    /// The store whose last-used zone should drive a placement on @p screenId: the
+    /// screen's own per-key store when it has a recorded last-used, else the global
+    /// holder (which carries the single representative restored from disk, screen
+    /// context dropped). Keeps single-monitor auto-snap-to-last-zone behaviour while
+    /// scoping the live last-used to the acting screen on multi-monitor. Never null.
+    const SnapState* lastUsedStateForScreen(const QString& screenId) const;
 
     struct GapParams
     {
@@ -910,9 +919,10 @@ private:
     // resolves a screen to its owning key. The daemon feeds the tracker the current
     // desktop / per-output desktop (#648) / activity, so each screen resolves to a
     // real {screenId, desktop, activity} key and gets its own SnapState (created
-    // lazily on first placement). m_globals holds the still-global last-used-zone /
-    // user-snapped scalars (and any screenless float) under the empty-screen key so
-    // whole-store iterations pick it up transparently.
+    // lazily on first placement). m_globals holds the global user-snapped classes
+    // (and the representative last-used restored from disk, plus any screenless
+    // float) under the empty-screen key so whole-store iterations pick it up
+    // transparently; live last-used now lives in each per-screen store.
     PhosphorEngine::PerScreenStates<SnapState> m_states;
     PhosphorEngine::ScreenContextTracker m_context;
     SnapState* m_globals = nullptr;

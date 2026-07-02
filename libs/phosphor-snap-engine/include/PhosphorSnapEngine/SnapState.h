@@ -191,15 +191,12 @@ public:
     void migrateWindowTo(SnapState* target, const QString& windowId, const QString& newScreenId);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Rotation
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// Rotate zone assignments: each window moves to the next/previous zone
-    /// in zone-number order. Returns the list of window IDs affected.
-    QStringList rotateAssignments(bool clockwise);
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // Last-Used Zone Tracking
+    //
+    // Each per-(screen,desktop,activity) store tracks its OWN last-used zone, so a
+    // window opening on monitor A only ever restores to a zone A was last snapped to
+    // (never monitor B's). The on-disk `LastUsedZoneId` persists a single id; the
+    // facade picks the representative store by lastUsedSeq() (most-recently updated).
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Update last-used zone and emit stateChanged.
@@ -224,6 +221,14 @@ public:
     int lastUsedDesktop() const
     {
         return m_lastUsedDesktop;
+    }
+    /// Monotonic stamp bumped every time this store's last-used zone is set to a
+    /// non-empty value (via updateLastUsedZone / restoreLastUsedZone). 0 means
+    /// "never set". The facade compares stamps across stores to pick the single
+    /// representative last-used zone it persists to disk.
+    quint64 lastUsedSeq() const
+    {
+        return m_lastUsedSeq;
     }
     void retagLastUsedZoneClass(const QString& newClass)
     {
@@ -363,6 +368,8 @@ private:
     QString m_lastUsedScreenId;
     QString m_lastUsedZoneClass;
     int m_lastUsedDesktop = 0;
+    /// Per-store recency stamp for the last-used zone (see lastUsedSeq()).
+    quint64 m_lastUsedSeq = 0;
 
     QSet<QString> m_userSnappedClasses;
     QSet<QString> m_autoSnappedWindows;

@@ -1342,6 +1342,9 @@ bool Daemon::init()
             [e = QPointer(snapEngine)](const QString& id, const QString& screenId) -> PhosphorSnapEngine::SnapState* {
             return e ? e->stateForWindowOnScreen(id, screenId) : nullptr;
         };
+        snapResolver.forScreen = [e = QPointer(snapEngine)](const QString& screenId) -> PhosphorSnapEngine::SnapState* {
+            return e ? static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(screenId)) : nullptr;
+        };
         snapResolver.globals = [e = QPointer(snapEngine)]() -> PhosphorSnapEngine::SnapState* {
             return e ? e->globalState() : nullptr;
         };

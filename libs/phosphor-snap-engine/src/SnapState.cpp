@@ -561,72 +561,18 @@ void SnapState::clear()
     Q_EMIT stateChanged();
 }
 
-// ── Rotation ────────────────────────────────────────────────────────────────
-
-QStringList SnapState::rotateAssignments(bool clockwise)
-{
-    if (m_windowZoneAssignments.size() < 2) {
-        return {};
-    }
-
-    // Collect the full zone list for each window, keyed by primary (first) zone
-    // for sort order. Multi-zone assignments are preserved through rotation.
-    QMap<QString, QPair<QString, QStringList>> zoneToWindowAndZones;
-    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-        if (!it->isEmpty()) {
-            zoneToWindowAndZones[it->first()] = {it.key(), it.value()};
-        }
-    }
-
-    if (zoneToWindowAndZones.size() < 2) {
-        return {};
-    }
-
-    QList<QString> sortedPrimaryZones = zoneToWindowAndZones.keys();
-    QList<QPair<QString, QStringList>> windowsWithZones;
-    for (const auto& z : sortedPrimaryZones) {
-        windowsWithZones.append(zoneToWindowAndZones[z]);
-    }
-
-    if (clockwise) {
-        windowsWithZones.prepend(windowsWithZones.takeLast());
-    } else {
-        windowsWithZones.append(windowsWithZones.takeFirst());
-    }
-
-    QStringList affected;
-    for (int i = 0; i < sortedPrimaryZones.size(); ++i) {
-        const QString& windowId = windowsWithZones[i].first;
-        const QStringList& originalZones = windowsWithZones[i].second;
-        if (originalZones.size() == 1) {
-            m_windowZoneAssignments[windowId] = {sortedPrimaryZones[i]};
-        } else {
-            // Multi-zone: shift by the same offset as the primary zone moved.
-            // Zones not in sortedPrimaryZones (i.e., spanned zones that no other
-            // window uses as a primary) pass through unchanged — partial rotation
-            // is acceptable since such zones have no rotation target.
-            int srcIdx = sortedPrimaryZones.indexOf(originalZones.first());
-            int delta = i - srcIdx;
-            QStringList rotated;
-            for (const QString& z : originalZones) {
-                int zIdx = sortedPrimaryZones.indexOf(z);
-                if (zIdx >= 0) {
-                    int newIdx = (zIdx + delta + sortedPrimaryZones.size()) % sortedPrimaryZones.size();
-                    rotated.append(sortedPrimaryZones[newIdx]);
-                } else {
-                    rotated.append(z);
-                }
-            }
-            m_windowZoneAssignments[windowId] = rotated;
-        }
-        affected.append(windowId);
-    }
-
-    Q_EMIT stateChanged();
-    return affected;
-}
-
 // ── Last-Used Zone Tracking ─────────────────────────────────────────────────
+
+namespace {
+// Process-wide monotonic source for the per-store last-used recency stamp. Each
+// non-empty last-used write pulls the next value, so the facade can order stores
+// by "most recently updated" to pick the single representative it persists.
+quint64 nextLastUsedSeq()
+{
+    static quint64 counter = 0;
+    return ++counter;
+}
+} // namespace
 
 void SnapState::updateLastUsedZone(const QString& zoneId, const QString& screenId, const QString& windowClass,
                                    int virtualDesktop)
@@ -639,6 +585,9 @@ void SnapState::updateLastUsedZone(const QString& zoneId, const QString& screenI
     m_lastUsedScreenId = screenId;
     m_lastUsedZoneClass = windowClass;
     m_lastUsedDesktop = virtualDesktop;
+    if (!zoneId.isEmpty()) {
+        m_lastUsedSeq = nextLastUsedSeq();
+    }
     Q_EMIT stateChanged();
 }
 
@@ -649,6 +598,9 @@ void SnapState::restoreLastUsedZone(const QString& zoneId, const QString& screen
     m_lastUsedScreenId = screenId;
     m_lastUsedZoneClass = zoneClass;
     m_lastUsedDesktop = desktop;
+    if (!zoneId.isEmpty()) {
+        m_lastUsedSeq = nextLastUsedSeq();
+    }
 }
 
 // ── Auto-Snap Bookkeeping ──────────────────────────────────────────────────

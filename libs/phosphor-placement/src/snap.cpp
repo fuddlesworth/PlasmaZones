@@ -48,11 +48,18 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
                                                const QString& windowClass, int virtualDesktop)
 {
     Q_ASSERT(hasSnapState());
-    PhosphorSnapEngine::SnapState* globals = snapGlobals();
-    if (!globals) {
+    // Last-used is per-key: record it on the store that owns @p screenId's current
+    // (screen, desktop, activity) context so a window opening on this screen later
+    // restores to a zone THIS screen was snapped to. An empty screenId resolves to
+    // the global holder.
+    PhosphorSnapEngine::SnapState* store = snapForScreen(screenId);
+    if (!store) {
+        store = snapGlobals();
+    }
+    if (!store) {
         return;
     }
-    globals->updateLastUsedZone(zoneId, screenId, windowClass, virtualDesktop);
+    store->updateLastUsedZone(zoneId, screenId, windowClass, virtualDesktop);
     markDirty(DirtyLastUsedZone);
 }
 

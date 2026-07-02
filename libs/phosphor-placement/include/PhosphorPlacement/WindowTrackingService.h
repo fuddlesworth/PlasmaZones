@@ -135,6 +135,11 @@ public:
         /// (creating it on first placement) AND records the reverse-map entry.
         std::function<PhosphorSnapEngine::SnapState*(const QString& windowId, const QString& screenId)>
             forWindowOnScreen;
+        /// Owning state for a SCREEN's current (screen, desktop, activity) context,
+        /// independent of any window — resolves (creating on first use) the per-key
+        /// store a screen-scoped write (last-used-zone) targets. An empty screenId
+        /// resolves to the global holder.
+        std::function<PhosphorSnapEngine::SnapState*(const QString& screenId)> forScreen;
         /// The global-scalar holder (never null once wired).
         std::function<PhosphorSnapEngine::SnapState*()> globals;
         /// Every store, including the global holder, for aggregate iteration.
@@ -163,6 +168,9 @@ public:
             return state;
         };
         resolver.forWindowOnScreen = [state](const QString&, const QString&) {
+            return state;
+        };
+        resolver.forScreen = [state](const QString&) {
             return state;
         };
         resolver.globals = [state]() {
@@ -1167,6 +1175,16 @@ private:
     {
         return m_snapResolver.forWindowOnScreen ? m_snapResolver.forWindowOnScreen(windowId, screenId) : nullptr;
     }
+    PhosphorSnapEngine::SnapState* snapForScreen(const QString& screenId) const
+    {
+        return m_snapResolver.forScreen ? m_snapResolver.forScreen(screenId) : nullptr;
+    }
+    /// The store holding the single representative last-used zone: the one with the
+    /// highest lastUsedSeq() among all stores that have a non-empty last-used zone,
+    /// else the global holder. This is what the facade's screen-agnostic lastUsed*
+    /// getters and the persistence layer read. (Defined out-of-line: SnapState is
+    /// only forward-declared here.)
+    PhosphorSnapEngine::SnapState* snapRepresentativeLastUsed() const;
     PhosphorSnapEngine::SnapState* snapGlobals() const
     {
         return m_snapResolver.globals ? m_snapResolver.globals() : nullptr;

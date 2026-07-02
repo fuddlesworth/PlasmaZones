@@ -227,13 +227,31 @@ QString SnapEngine::zoneForWindow(const QString& windowId) const
 
 void SnapEngine::syncGlobalLastUsedForRemovedZones(const QStringList& removedZones)
 {
-    if (!m_globals) {
+    if (removedZones.isEmpty()) {
         return;
     }
-    const QString lastUsed = m_globals->lastUsedZoneId();
-    if (!lastUsed.isEmpty() && removedZones.contains(lastUsed)) {
-        m_globals->restoreLastUsedZone({}, {}, {}, 0);
+    // Last-used is per-key: sweep every store (per-screen + the global holder) so a
+    // removed zone clears whichever context recorded it as last-used.
+    for (SnapState* state : m_states.states()) {
+        if (!state) {
+            continue;
+        }
+        const QString lastUsed = state->lastUsedZoneId();
+        if (!lastUsed.isEmpty() && removedZones.contains(lastUsed)) {
+            state->restoreLastUsedZone({}, {}, {}, 0);
+        }
     }
+}
+
+const SnapState* SnapEngine::lastUsedStateForScreen(const QString& screenId) const
+{
+    const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
+    if (!key.screenId.isEmpty()) {
+        if (const SnapState* state = m_states.stateForKey(key); state && !state->lastUsedZoneId().isEmpty()) {
+            return state;
+        }
+    }
+    return m_globals;
 }
 
 PhosphorEngine::ISnapSettings* SnapEngine::snapSettings() const
