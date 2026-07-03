@@ -2459,14 +2459,19 @@ void Settings::setZoneSpanTriggers(const QVariantList& triggers)
                    triggers.mid(0, MaxTriggersPerAction));
 
     // Sync legacy modifier member from first trigger with a non-zero modifier.
-    // Derive from the validator-coerced post-write list so a
-    // {modifier: 99} entry in the input doesn't leak past the clamp.
+    // Derive from the validator-coerced post-write list. An out-of-enum
+    // modifier (a corrupt / hand-edited trigger carrying e.g. 99) snaps to
+    // Disabled rather than qBound-ing to the nearest neighbour — the same
+    // snap-to-default the schema's modifierKey validator applies, so the
+    // setter and read paths agree on what a bogus value means (off, not the
+    // strictest combo).
     const QVariantList afterTriggers = zoneSpanTriggers();
     DragModifier synced = DragModifier::Disabled;
     for (const auto& t : afterTriggers) {
         const int mod = t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt();
         if (mod != 0) {
-            synced = static_cast<DragModifier>(qBound(0, mod, static_cast<int>(DragModifier::CtrlAltMeta)));
+            synced = (mod > 0 && mod <= static_cast<int>(DragModifier::CtrlAltMeta)) ? static_cast<DragModifier>(mod)
+                                                                                     : DragModifier::Disabled;
             break;
         }
     }

@@ -3,6 +3,7 @@
 
 #include "settingsadaptor.h"
 #include "../core/interfaces.h"
+#include "../config/configdefaults.h"
 #include "../config/settings.h" // For concrete Settings type
 #include "../core/dbusvariantutils.h"
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -472,7 +473,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("snappingStickyWindowHandling")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= 0 && val <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
             m_settings->setSnappingStickyWindowHandling(static_cast<StickyWindowHandling>(val));
             return true;
         }
@@ -536,7 +537,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("zoneSelectorPosition")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 8) {
+        if (val >= 0 && val <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
             m_settings->setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(val));
             return true;
         }
@@ -549,7 +550,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("zoneSelectorLayoutMode")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= 0 && val <= static_cast<int>(ZoneSelectorLayoutMode::Vertical)) {
             m_settings->setZoneSelectorLayoutMode(static_cast<ZoneSelectorLayoutMode>(val));
             return true;
         }
@@ -562,7 +563,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("zoneSelectorSizeMode")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 1) {
+        if (val >= 0 && val <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
             m_settings->setZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(val));
             return true;
         }
@@ -721,7 +722,7 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_setters[QStringLiteral("autotileInsertPosition")] = [concrete](const QVariant& v) {
             int val = v.toInt();
-            if (val >= 0 && val <= 2) {
+            if (val >= 0 && val <= ConfigDefaults::autotileInsertPositionMax()) {
                 concrete->setAutotileInsertPosition(static_cast<Settings::AutotileInsertPosition>(val));
                 return true;
             }
@@ -736,7 +737,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("autotileStickyWindowHandling")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= 0 && val <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
             m_settings->setAutotileStickyWindowHandling(static_cast<StickyWindowHandling>(val));
             return true;
         }

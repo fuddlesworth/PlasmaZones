@@ -146,7 +146,7 @@ public:
     }
     static constexpr int osdStyleMax()
     {
-        return 2;
+        return static_cast<int>(OsdStyle::Preview);
     }
     static int osdStyle()
     {
@@ -158,7 +158,7 @@ public:
     }
     static constexpr int overlayDisplayModeMax()
     {
-        return 1;
+        return static_cast<int>(OverlayDisplayMode::LayoutPreview);
     }
     static int overlayDisplayMode()
     {

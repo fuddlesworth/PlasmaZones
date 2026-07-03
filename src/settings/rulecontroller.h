@@ -358,9 +358,10 @@ public:
 
     /// Match fields suitable for the leaf-editor field dropdown. Each entry:
     /// `{ value: int (Field enum), wire: QString (JSON wire string), label,
-    ///    valueKind: "string"|"number"|"bool"|"windowType"|"screen"|"activity" }`
-    /// (the latter three drive dedicated pickers; "windowType" also carries an
-    /// `options` list). QML keys off `wire` so it never has to reconstruct the
+    ///    valueKind: "string"|"number"|"bool"|"windowType"|"screen"|"activity"
+    ///    |"virtualDesktop"|"mode" }` — every kind past the first three drives
+    /// a dedicated picker; "windowType" and "mode" also carry an `options`
+    /// list. QML keys off `wire` so it never has to reconstruct the
     /// enum↔wire-string table.
     Q_INVOKABLE QVariantList matchFields() const;
 
@@ -384,9 +385,11 @@ public:
     /// Registered action types for the action-editor dropdown. Each entry:
     /// `{ value: QString (action type id), label, params: [ ... ],
     ///   domain: "context"|"window" }` where each param descriptor is
-    /// `{ key, kind: "string"|"number"|"enum"|"percent", label }` plus, for
-    /// `kind == "enum"`, an `options` string list, and for `kind == "number"`
-    /// /`"percent"`, `min`/`max`/`scale` (the value stored is `display * scale`).
+    /// `{ key, kind, label }` with kind one of "string"|"number"|"enum"|
+    /// "percent"|"bool"|"color"|"zoneOrdinals"|"virtualDesktop", plus, for
+    /// `kind == "enum"`, an `options` string list; for `kind == "number"`
+    /// /`"percent"`, `min`/`max`/`scale` (the value stored is `display *
+    /// scale`); and for `kind == "bool"`, optional `onLabel`/`offLabel`.
     /// QML drives the per-type editor entirely from this descriptor; the
     /// `domain` field lets the picker disable types incompatible with the
     /// current match expression (a context-domain action against a
