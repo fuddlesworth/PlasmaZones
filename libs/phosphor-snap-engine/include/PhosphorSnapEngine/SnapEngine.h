@@ -440,7 +440,10 @@ public:
     /// (the per-screen stores, the global-scalar holder, and any created later)
     /// plus the engine's own canonicalization so the reverse map keys on the same
     /// stable first-seen composite the stores do (issue #628). Not owned.
-    void setWindowRegistry(PhosphorEngine::IWindowRegistry* registry);
+    ///
+    /// Overrides IPlacementEngine::setWindowRegistry(QObject*): the interface hands
+    /// engines a QObject carrying the registry and each casts to its concrete type.
+    void setWindowRegistry(QObject* registry) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-screen state resolution

@@ -34,30 +34,30 @@ struct WindowMetadata
     // compositor could not report it — e.g. no underlying KWin::Window) leaves the
     // corresponding WindowQuery field disengaged, keeping a predicate over it inert,
     // mirroring window_query.cpp's engage-only-when-known contract. ──
-    std::optional<bool> isMinimized;
-    std::optional<bool> isFullscreen;
-    std::optional<bool> isSticky; ///< on all virtual desktops
-    std::optional<bool> isMaximized; ///< MaximizeFull (both axes)
-    std::optional<bool> isFocused; ///< focused at metadata-push time (point-in-time, NOT
-                                   ///< refreshed on focus change) — the open-path Float /
-                                   ///< RestorePosition resolvers read it at window-open, where
-                                   ///< it is fresh; the effect path reads live isFocused for
-                                   ///< continuously-evaluated border / opacity rules.
-    std::optional<bool> isTransient; ///< dialog/utility/popup/menu/tooltip/splash family or has a transient parent
-    std::optional<bool> isNotification; ///< notification / critical-notification / on-screen-display
-    std::optional<bool> keepAbove;
-    std::optional<bool> keepBelow;
-    std::optional<bool> skipTaskbar;
-    std::optional<bool> skipPager;
-    std::optional<bool> skipSwitcher;
-    std::optional<bool> isModal;
-    std::optional<bool> hasDecoration; ///< server-side title-bar / border
-    std::optional<bool> isResizable;
-    std::optional<int> width; ///< frame width in px
-    std::optional<int> height; ///< frame height in px
-    std::optional<int> positionX; ///< frame left edge X in px
-    std::optional<int> positionY; ///< frame top edge Y in px
-    std::optional<QString> captionNormal; ///< title without the WM-added app-name suffix
+    std::optional<bool> isMinimized{};
+    std::optional<bool> isFullscreen{};
+    std::optional<bool> isSticky{}; ///< on all virtual desktops
+    std::optional<bool> isMaximized{}; ///< MaximizeFull (both axes)
+    std::optional<bool> isFocused{}; ///< focused at metadata-push time (point-in-time, NOT
+                                     ///< refreshed on focus change) — the open-path Float /
+                                     ///< RestorePosition resolvers read it at window-open, where
+                                     ///< it is fresh; the effect path reads live isFocused for
+                                     ///< continuously-evaluated border / opacity rules.
+    std::optional<bool> isTransient{}; ///< dialog/utility/popup/menu/tooltip/splash family or has a transient parent
+    std::optional<bool> isNotification{}; ///< notification / critical-notification / on-screen-display
+    std::optional<bool> keepAbove{};
+    std::optional<bool> keepBelow{};
+    std::optional<bool> skipTaskbar{};
+    std::optional<bool> skipPager{};
+    std::optional<bool> skipSwitcher{};
+    std::optional<bool> isModal{};
+    std::optional<bool> hasDecoration{}; ///< server-side title-bar / border
+    std::optional<bool> isResizable{};
+    std::optional<int> width{}; ///< frame width in px
+    std::optional<int> height{}; ///< frame height in px
+    std::optional<int> positionX{}; ///< frame left edge X in px
+    std::optional<int> positionY{}; ///< frame top edge Y in px
+    std::optional<QString> captionNormal{}; ///< title without the WM-added app-name suffix
 
     bool operator==(const WindowMetadata& other) const
     {

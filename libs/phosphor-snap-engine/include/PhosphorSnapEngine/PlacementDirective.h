@@ -32,8 +32,8 @@ namespace PhosphorSnapEngine {
  */
 struct PlacementDirective
 {
-    QList<int> zoneOrdinals;
-    QString targetScreenId;
+    QList<int> zoneOrdinals{};
+    QString targetScreenId{};
     int targetDesktop = 0;
 };
 
