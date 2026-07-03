@@ -22,7 +22,6 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
-#include <QVariantMap>
 #include <functional>
 #include <optional>
 #include <memory>

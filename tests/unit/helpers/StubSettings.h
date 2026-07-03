@@ -794,7 +794,9 @@ public:
     }
     QString decorationProfileTreeJson() const override
     {
-        return {};
+        // Serialize the SAME tree the typed accessor returns, so the two
+        // accessors stay coherent for any test that reads the JSON facade.
+        return QString::fromUtf8(QJsonDocument(decorationProfileTree().toJson()).toJson(QJsonDocument::Compact));
     }
     void setDecorationProfileTreeJson(const QString&) override
     {

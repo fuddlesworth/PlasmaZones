@@ -184,6 +184,32 @@ private Q_SLOTS:
         // Positional alignment preserved: only the invalid slot cleared.
         QCOMPARE(e.bufferWraps, (QStringList{QStringLiteral("mirror"), QString(), QStringLiteral("clamp")}));
         QCOMPARE(e.bufferFilters, (QStringList{QStringLiteral("linear"), QString()}));
+
+        // Alignment must also survive a full toJson→fromJson round trip: the
+        // cleared middle slot serializes as "" and MUST be kept in place on
+        // the next load (dropping it would shift "clamp" from buffer[2] to
+        // buffer[1] the first time a saved pack is re-read).
+        const SurfaceShaderEffect r = SurfaceShaderEffect::fromJson(e.toJson());
+        QCOMPARE(r.bufferWraps, e.bufferWraps);
+        QCOMPARE(r.bufferFilters, e.bufferFilters);
+    }
+
+    void fromJson_keeps_explicit_empty_buffer_override_slots_in_place()
+    {
+        // An author writing ["clamp", "", "repeat"] means "buffer 1 uses the
+        // default". The empty middle entry is a positional placeholder and
+        // must not be dropped.
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("buf2"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray wraps;
+        wraps.append(QStringLiteral("clamp"));
+        wraps.append(QString());
+        wraps.append(QStringLiteral("repeat"));
+        obj.insert(QLatin1String("bufferWraps"), wraps);
+
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(obj);
+        QCOMPARE(e.bufferWraps, (QStringList{QStringLiteral("clamp"), QString(), QStringLiteral("repeat")}));
     }
 
     void fromJson_clamps_buffer_scale_to_contract_range()

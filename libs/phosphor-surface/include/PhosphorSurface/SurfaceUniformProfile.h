@@ -44,8 +44,7 @@ public:
 
     void fill(const PhosphorShaders::UboFrameState& state) override;
 
-    std::vector<PhosphorShaders::UboUploadRegion>
-    dirtyRegions(const PhosphorShaders::UboDirtyFlags& flags) const override;
+    PhosphorShaders::UboUploadRegionList dirtyRegions(const PhosphorShaders::UboDirtyFlags& flags) const override;
 
     // Surface UBO has no consumer escape-hatch int slots.
     bool hasAppFields() const override

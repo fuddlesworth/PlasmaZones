@@ -218,6 +218,43 @@ private Q_SLOTS:
         QVERIFY2(params.contains(QStringLiteral("border")), "retained pack's parameters must survive");
     }
 
+    /// setChain with the EMPTY path edits the baseline chain itself (the
+    /// "All Windows"-style root card's edit path) — the empty path skips the
+    /// supported-path guard by design and lands on the tree's baseline.
+    void setChain_emptyPathEditsBaseline()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        QSignalSpy spy(&c, &DecorationPageController::profilesChanged);
+        c.setChain(QString(), QStringList{QStringLiteral("glow")});
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(c.chainAt(QString()), (QStringList{QStringLiteral("glow")}));
+        // Every path with no own override now inherits the new baseline chain.
+        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("glow")}));
+    }
+
+    /// setChain with an EMPTY chain engages an explicit "no decoration"
+    /// override — the engaged-empty chain wins over the inherited baseline
+    /// rather than falling through to it.
+    void setChain_emptyChainEngagesNoDecorationOverride()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(QString(), QStringList{QStringLiteral("border")});
+        QCOMPARE(c.chainAt(path), (QStringList{QStringLiteral("border")})); // inherited
+
+        c.setChain(path, QStringList{});
+        QVERIFY2(c.hasOverride(path), "an engaged empty chain is still a direct override");
+        QVERIFY2(c.chainAt(path).isEmpty(), "engaged empty chain must win over the inherited baseline");
+
+        // Clearing the override restores inheritance.
+        QVERIFY(c.clearOverride(path));
+        QCOMPARE(c.chainAt(path), (QStringList{QStringLiteral("border")}));
+    }
+
     /// setChainParams merges its keys into the pack's existing parameter
     /// map — a prior single-key setChainParam value is preserved.
     void setChainParams_mergesIntoExistingPackParams()

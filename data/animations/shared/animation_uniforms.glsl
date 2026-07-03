@@ -226,11 +226,13 @@ uniform int iHasSurfaceLayer;
 // occupying [580, 584)), the next `vec4 iTextureResolution[4]` is
 // auto-aligned to offset 592 by std140 (rule 4 → 16-byte boundary),
 // implicitly filling the same 8 bytes the C struct's
-// `_pad_after_audioSpectrum[2]` covers. Likewise the struct itself is
-// auto-aligned to a 16-byte multiple at the end, picking up the
-// trailing 12 bytes that C's `_pad_after_iTimeHi[3]` owns and landing
-// the pre-anchor block at 672 bytes. The iSurfaceScreenPos / iAnchor*
-// fields below then extend the full `BaseUniforms` struct to 720 bytes.
+// `_pad_after_audioSpectrum[2]` covers. Likewise `iSurfaceScreenPos`
+// below is auto-aligned to a 16-byte boundary (rule 2: vec2 at 672),
+// bridging the 8 bytes C's `_pad_after_iIsReversed[2]` owns after
+// `iIsReversed` at 660 and landing the base block at 672 bytes. The
+// iSurfaceScreenPos / iAnchor* fields then extend the AnimationUniforms
+// UBO block to 720 bytes (they are supplied by AnimationUniformExtension,
+// not BaseUniforms, which stays pinned at 672).
 layout(std140, binding = 0) uniform AnimationUniforms {
     mat4 qt_Matrix;              // offset 0   (64 bytes) — Qt scene-graph transform; daemon-only
     float qt_Opacity;            // offset 64  (4 bytes)  — Qt scene-graph opacity; daemon-only

@@ -177,22 +177,20 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     };
     e.bufferWrap = validatedWrap(obj.value(QLatin1String("bufferWrap")).toString(), "bufferWrap");
     // The per-buffer override lists are positionally aligned with
-    // bufferShaderPaths, so an invalid token is replaced IN PLACE with empty
-    // (that slot falls back to the default) rather than dropped — dropping
-    // would shift every later buffer's override. Originally-empty entries are
-    // still skipped, matching the pre-validation behaviour.
+    // bufferShaderPaths, so EVERY entry is kept in place: an invalid token is
+    // replaced with empty (that slot falls back to the default) and an
+    // originally-empty entry stays as the explicit "default for this slot"
+    // marker. Dropping either kind would shift every later buffer's override —
+    // and since toJson re-emits empties, a dropped empty would break alignment
+    // on the very next load of a saved pack.
     const QJsonArray wrapsArr = obj.value(QLatin1String("bufferWraps")).toArray();
     for (const QJsonValue& v : wrapsArr) {
-        const QString w = v.toString();
-        if (!w.isEmpty())
-            e.bufferWraps.append(validatedWrap(w, "bufferWraps"));
+        e.bufferWraps.append(validatedWrap(v.toString(), "bufferWraps"));
     }
     e.bufferFilter = validatedFilter(obj.value(QLatin1String("bufferFilter")).toString(), "bufferFilter");
     const QJsonArray filtersArr = obj.value(QLatin1String("bufferFilters")).toArray();
     for (const QJsonValue& v : filtersArr) {
-        const QString f = v.toString();
-        if (!f.isEmpty())
-            e.bufferFilters.append(validatedFilter(f, "bufferFilters"));
+        e.bufferFilters.append(validatedFilter(v.toString(), "bufferFilters"));
     }
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
 

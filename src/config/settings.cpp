@@ -18,6 +18,7 @@
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
 
 #include <QGuiApplication>
 #include <QMetaMethod>
@@ -1324,14 +1325,22 @@ PhosphorSurfaceShaders::DecorationProfileTree Settings::decorationProfileTree() 
 
 void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
 {
+    // Prune the incoming tree at the persistence boundary — same
+    // belt-and-braces rationale as setShaderProfileTree. fromJson is the
+    // tree's canonical unsupported-path filter (setOverride itself does not
+    // validate), so a toJson→fromJson round trip IS the prune: a Q_INVOKABLE
+    // write from scripting/tests cannot stamp unsupported-path entries onto
+    // disk. The read side (decorationProfileTree) passes through the same
+    // filter, so the comparison below is pruned-vs-pruned.
+    const auto pruned = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(tree.toJson());
     // Value-equality compare so a same-tree write doesn't fire a spurious
     // changed signal. Compare against the effective current tree (the
-    // ConfigDefaults baseline when the store is empty) so writing the
-    // baseline back over an empty store is correctly a no-op.
-    if (tree == decorationProfileTree())
+    // ConfigDefaults default when the store is empty) so writing the default
+    // back over an empty store is correctly a no-op.
+    if (pruned == decorationProfileTree())
         return;
     m_store->write(ConfigDefaults::surfaceGroup(), ConfigDefaults::surfaceDecorationTreeKey(),
-                   tree.toJson().toVariantMap());
+                   pruned.toJson().toVariantMap());
     Q_EMIT decorationProfileTreeChanged();
     Q_EMIT settingsChanged();
 }

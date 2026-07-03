@@ -5,8 +5,10 @@
 
 #include <PhosphorShaders/phosphorshaders_export.h>
 
+#include <QtGlobal>
+
 #include <array>
-#include <vector>
+#include <cstddef>
 
 namespace PhosphorShaders {
 
@@ -17,6 +19,52 @@ struct UboUploadRegion
 {
     int offset = 0;
     int size = 0;
+};
+
+/// Fixed-capacity list of upload regions. dirtyRegions() runs on the render
+/// hot path every dirty (animating) frame, so the dispatch must stay
+/// allocation-free — a profile never emits more than a few disjoint regions,
+/// and kCapacity bounds that by contract.
+class UboUploadRegionList
+{
+public:
+    static constexpr int kCapacity = 4;
+
+    void push(const UboUploadRegion& region)
+    {
+        // Debug-assert AND release-guard the same bound: a profile emitting
+        // more than kCapacity regions is a programming error, and silently
+        // dropping the overflow (worst case: one region skipped this frame)
+        // beats writing out of bounds.
+        Q_ASSERT(m_count < kCapacity);
+        if (m_count < kCapacity) {
+            m_regions[static_cast<size_t>(m_count++)] = region;
+        }
+    }
+    int size() const
+    {
+        return m_count;
+    }
+    bool empty() const
+    {
+        return m_count == 0;
+    }
+    const UboUploadRegion& operator[](int i) const
+    {
+        return m_regions[static_cast<size_t>(i)];
+    }
+    const UboUploadRegion* begin() const
+    {
+        return m_regions.data();
+    }
+    const UboUploadRegion* end() const
+    {
+        return m_regions.data() + m_count;
+    }
+
+private:
+    std::array<UboUploadRegion, kCapacity> m_regions{};
+    int m_count = 0;
 };
 
 /// Which conceptual blocks of the UBO changed since the last upload. The
@@ -138,14 +186,17 @@ public:
     virtual void fill(const UboFrameState& state) = 0;
 
     /// Region(s) covering the whole base struct, for the first (full) upload.
-    virtual std::vector<UboUploadRegion> fullUploadRegions() const
+    virtual UboUploadRegionList fullUploadRegions() const
     {
-        return {UboUploadRegion{0, baseSize()}};
+        UboUploadRegionList regions;
+        regions.push(UboUploadRegion{0, baseSize()});
+        return regions;
     }
 
     /// Region(s) to upload for the given dirty flags, reproducing the legacy
-    /// broader-subsumes-narrower dispatch.
-    virtual std::vector<UboUploadRegion> dirtyRegions(const UboDirtyFlags& flags) const = 0;
+    /// broader-subsumes-narrower dispatch. Returns a fixed-capacity list —
+    /// this runs per dirty frame and must not allocate.
+    virtual UboUploadRegionList dirtyRegions(const UboDirtyFlags& flags) const = 0;
 
     /// Whether this profile exposes the two consumer escape-hatch int slots.
     virtual bool hasAppFields() const

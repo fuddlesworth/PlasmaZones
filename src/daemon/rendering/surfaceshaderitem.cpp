@@ -56,9 +56,11 @@ SurfaceShaderItem::SurfaceShaderItem(QQuickItem* parent)
 
 SurfaceShaderItem::~SurfaceShaderItem()
 {
-    // Nothing to do: the scene graph owns the render node and the zero-size
-    // branch in updatePaintNode severs its back-pointer (invalidateItem) before
-    // deleting it. SurfaceShaderItem holds no owning node pointer of its own.
+    // Nothing to do: SurfaceShaderItem holds no owning node pointer of its
+    // own — the scene graph owns the render node and tears it down through
+    // the base ShaderEffect's release path on item destruction. (The
+    // zero-size branch in updatePaintNode handles only the live
+    // resize-to-zero case.)
 }
 
 // ============================================================================

@@ -44,7 +44,10 @@ namespace {
 /// Draw a fullscreen unit quad (NDC -1..1, texcoord 0..1) through the
 /// already-bound shader as a triangle strip. texcoord [0,1] maps to the bound
 /// FBO directly (bottom-origin), so a passthrough buffer reproduces uTexture0's
-/// layout. Mirrors the helper in shader_transitions.cpp; both are file-local.
+/// layout. This is the SOLE buffer-pass draw site; the matching vertex SOURCE
+/// (kFullscreenQuadVertexSource) lives in surface_compile.cpp, which only
+/// compiles the buffer-pass shaders. Kept file-local — under the Unity build a
+/// duplicate anonymous-namespace definition elsewhere would collide.
 /// The caller owns the ShaderBinder.
 void drawFullscreenQuad()
 {
@@ -263,24 +266,26 @@ bool PlasmaZonesEffect::renderSurfaceBufferPasses(KWin::EffectWindow* w, qreal s
         return false;
     }
 
-    // The pack's bufferScale downscales the buffer FBOs (the surface capture is
-    // always full-resolution). Clamp matches SurfaceShaderEffect::fromJson.
-    // Resolve the pack metadata by the window's base pack id (the registry effect
-    // backing this window's compiled pack), not a single global selection. The
-    // border entry exists — compiledPackForWindow above returned non-null — so
-    // reuse an iterator instead of copying the whole WindowBorder for one field.
-    const auto borderIt = m_windowBorders.constFind(windowId);
-    const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(borderIt->basePackId);
-    const qreal bufferScale = qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale, eff.bufferScale,
-                                     PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
-    QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
-                     qMax(1, qRound(textureSize.height() * bufferScale)));
-
     // Get / (re)allocate the per-window targets. Reallocate the whole chain when
     // the full size changes — the buffer size is a fixed multiple of it.
     SurfaceMultipassState& state = m_surfaceMultipass[windowId];
     const size_t passCount = pack->bufferPasses.size();
     if (state.size != textureSize || !state.surfaceTex || state.bufferTex.size() != passCount) {
+        // The pack's bufferScale downscales the buffer FBOs (the surface capture
+        // is always full-resolution). Clamp matches SurfaceShaderEffect::fromJson.
+        // Resolve the pack metadata by the window's base pack id (the registry
+        // effect backing this window's compiled pack), not a single global
+        // selection. The border entry exists — compiledPackForWindow above
+        // returned non-null — so reuse an iterator instead of copying the whole
+        // WindowBorder for one field. Scoped to this realloc branch (mirroring
+        // renderSurfaceChainComposite): the effect() by-value copy is pure waste
+        // on the steady-state per-frame path.
+        const auto borderIt = m_windowBorders.constFind(windowId);
+        const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(borderIt->basePackId);
+        const qreal bufferScale = qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale, eff.bufferScale,
+                                         PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
+        const QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
+                               qMax(1, qRound(textureSize.height() * bufferScale)));
         state.surfaceTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
         if (!state.surfaceTex) {
             m_surfaceMultipass.erase(windowId);

@@ -87,6 +87,31 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+// Materialise + register the XDG search dirs for a settings-side shader-pack
+// registry (animation / surface): system dirs reversed to lowest-priority-first
+// (the loaders apply first-registration-wins, yielding user > sys-high > ... >
+// sys-low once the user dir is appended last), user dir created up-front so
+// the watcher attaches a direct watch instead of a parent-watch proxy.
+// @p subdir is the ConfigDefaults::user*Subdir() constant (leading '/'):
+// stripped for locateAll's relative-path arg, kept for the writable-base join.
+template<typename Registry>
+void registerXdgPackDirs(Registry* registry, const QString& subdir)
+{
+    QStringList dirs =
+        QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, subdir.mid(1), QStandardPaths::LocateDirectory);
+    std::reverse(dirs.begin(), dirs.end());
+    const QString userDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + subdir;
+    if (!dirs.contains(userDir))
+        dirs.append(userDir);
+    QDir().mkpath(userDir);
+    registry->setUserPath(userDir);
+    registry->addSearchPaths(dirs);
+}
+
+} // namespace
+
 // Member-function definition for the static sort helper declared in the
 // header. Both settingscontroller.cpp and settingscontroller_layouts.cpp
 // call it via the qualified `SettingsController::sortMergedLayoutList(...)`
@@ -417,22 +442,10 @@ SettingsController::SettingsController(QObject* parent)
     // ShaderEffects (XDG search paths + user dir, materialised before
     // registration so the watcher attaches a direct watch).
     m_animationShaderRegistry = new PhosphorAnimationShaders::AnimationShaderRegistry(this);
-    {
-        // Centralised subdir constant (with leading "/") — strip the slash for
-        // locateAll's relative-path arg, keep it as-is for the writable-base
-        // join. This matches AnimationsPageController::userShaderDirectoryPath
-        // so the two settings-side consumers can never drift apart.
-        const QString subdir = ConfigDefaults::userAnimationsSubdir();
-        QStringList animDirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, subdir.mid(1),
-                                                         QStandardPaths::LocateDirectory);
-        std::reverse(animDirs.begin(), animDirs.end());
-        const QString userAnimDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + subdir;
-        if (!animDirs.contains(userAnimDir))
-            animDirs.append(userAnimDir);
-        QDir().mkpath(userAnimDir);
-        m_animationShaderRegistry->setUserPath(userAnimDir);
-        m_animationShaderRegistry->addSearchPaths(animDirs);
-    }
+    // The centralised subdir constant matches
+    // AnimationsPageController::userShaderDirectoryPath so the two
+    // settings-side consumers can never drift apart.
+    registerXdgPackDirs(m_animationShaderRegistry, ConfigDefaults::userAnimationsSubdir());
 
     // Animations page sub-controller — Q_PROPERTY surface for the new
     // animation-event drilldown. Per-event motion overrides persist as
@@ -475,18 +488,7 @@ SettingsController::SettingsController(QObject* parent)
     // dir, materialised before registration so the watcher attaches a
     // direct watch).
     m_surfaceShaderRegistry = new PhosphorSurfaceShaders::SurfaceShaderRegistry(this);
-    {
-        const QString subdir = ConfigDefaults::userSurfaceSubdir();
-        QStringList surfaceDirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, subdir.mid(1),
-                                                            QStandardPaths::LocateDirectory);
-        std::reverse(surfaceDirs.begin(), surfaceDirs.end());
-        const QString userSurfaceDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + subdir;
-        if (!surfaceDirs.contains(userSurfaceDir))
-            surfaceDirs.append(userSurfaceDir);
-        QDir().mkpath(userSurfaceDir);
-        m_surfaceShaderRegistry->setUserPath(userSurfaceDir);
-        m_surfaceShaderRegistry->addSearchPaths(surfaceDirs);
-    }
+    registerXdgPackDirs(m_surfaceShaderRegistry, ConfigDefaults::userSurfaceSubdir());
 
     // Decoration drill-down sub-controller. PER-SURFACE scope: edits a
     // DecorationProfileTree (per-surface chains of decoration packs) with a

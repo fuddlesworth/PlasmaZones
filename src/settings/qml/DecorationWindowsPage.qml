@@ -9,8 +9,7 @@ import QtQuick
 // "All Windows" (path "window") is the alwaysEnabled root that carries the
 // window decoration default; an override on a child placement-state card
 // (window.tiled / window.snapped / window.floating) diverges from it via the
-// DecorationProfileTree walk-up. Title bars are a window concept, so every
-// window card exposes the hide-title-bar toggle.
+// DecorationProfileTree walk-up.
 DecorationSurfaceCardList {
     Accessible.name: i18n("Window decoration surfaces")
     headerText: i18n("Decoration for windows. \"All Windows\" is the default. Each placement state can override it.")

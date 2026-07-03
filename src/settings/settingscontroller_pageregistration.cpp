@@ -556,7 +556,8 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // a shared key here) are deliberately absent because they revert through
     // their own machinery (the special-case branches in reset/discardPage), not
     // because Reset/Discard is unsupported — pageSupportsReset returns true for
-    // all but the pure separate-store pages (layouts, rules).
+    // everything except the read/browse pages with no revertible config state
+    // (overview, about, layouts, rules, snapping-shaders).
     using CD = ConfigDefaults;
     static const QHash<QString, Settings::ConfigKeyList> manifest{
         {QStringLiteral("general"),

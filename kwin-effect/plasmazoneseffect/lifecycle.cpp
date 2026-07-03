@@ -70,9 +70,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // rest of the border/decoration code in borders.cpp.
     setupDecorationManager();
 
-    // Seed the decoration profile tree with today's per-field defaults so
-    // borders render correctly before the async `decorationProfileTreeJson`
-    // fetch lands (mirrors how BorderState seeds DecorationDefaults pre-load).
+    // Seed the decoration profile tree with the empty/neutral default so the
+    // pre-fetch state is well-defined; the async `decorationProfileTreeJson`
+    // fetch overwrites the whole tree on arrival. Borders are rule-owned and
+    // render correctly before the fetch, so no placeholder tree is needed.
     seedDecorationTreeBaseline();
 
     // Sub-pixel vertex precision. KWin's default snapping rounds quad

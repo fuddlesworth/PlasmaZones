@@ -10,6 +10,7 @@
 #include <QQuickWindow>
 #include <cmath>
 #include <cstring>
+#include <type_traits>
 
 #include <rhi/qshaderbaker.h>
 
@@ -26,6 +27,20 @@ namespace PhosphorRendering {
 void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
 {
     PhosphorShaders::UboFrameState state;
+
+    // UboFrameState's array extents are declared independently of the contract
+    // constants that bound the write loops below (phosphor-shaders cannot see
+    // the animation contract — dependency direction). Pin them here, the one
+    // TU that sees both, so a future kMax* bump cannot silently overrun the
+    // state arrays.
+    static_assert(std::extent_v<decltype(state.customParams)> == kMaxCustomParams,
+                  "UboFrameState::customParams must match the contract's kMaxCustomParams");
+    static_assert(std::extent_v<decltype(state.customColors)> == kMaxCustomColors,
+                  "UboFrameState::customColors must match the contract's kMaxCustomColors");
+    static_assert(std::extent_v<decltype(state.channelResolution)> == kMaxBufferPasses,
+                  "UboFrameState::channelResolution must match the contract's kMaxBufferPasses");
+    static_assert(std::extent_v<decltype(state.textureResolution)> == kMaxUserTextures,
+                  "UboFrameState::textureResolution must match the contract's kMaxUserTextures");
 
     // Split full-precision m_time (double) into iTime (wrapped lo) + iTimeHi (wrap offset)
     state.time = static_cast<float>(m_time - static_cast<double>(m_timeHi));

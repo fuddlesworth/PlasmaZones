@@ -323,9 +323,9 @@ void PlasmaZonesEffect::restoreAllRuleHiddenTitleBars()
 // ─────────────────────────────────────────────────────────────────────────────
 // Surface shader (the window border / rounded-corner pack and any future surface
 // pack) — per-pack compile + registry search-path setup live in
-// shader_transitions.cpp (compiledPack() / compiledPackForWindow() /
+// surface_compile.cpp (compiledPack() / compiledPackForWindow() /
 // ensureSurfaceRegistryPaths()), reusing the shared GLSL include / param-preamble
-// / #define-PLASMAZONES_KWIN pipeline there. The border is the first surface
+// / #define-PLASMAZONES_KWIN pipeline. The border is the first surface
 // shader pack: data/surface/border, loaded via SurfaceShaderRegistry.
 // ─────────────────────────────────────────────────────────────────────────────
 

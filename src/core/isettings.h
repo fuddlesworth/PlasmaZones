@@ -178,10 +178,9 @@ public:
     virtual void setAutotilePerAlgorithmSettings(const QVariantMap& settings) = 0;
 
     // Hierarchical per-surface decoration tree — a DecorationProfile (surface
-    // shader-pack chain + border/titlebar appearance) keyed on a dot-path
-    // surface namespace. Mirrors the animation shaderProfileTree pair (which
-    // lives on IAnimationSettings): the typed getter returns the parsed tree,
-    // the
+    // shader-pack chain + its per-pack parameters) keyed on a dot-path surface
+    // namespace. Mirrors the animation shaderProfileTree pair (which lives on
+    // IAnimationSettings): the typed getter returns the parsed tree, and the
     // JSON-string facade routes through it for the Q_PROPERTY meta-object
     // dirty-tracking loop. Lives on the interface so page controllers and the
     // settings adaptor depend on ISettings, not the concrete Settings.

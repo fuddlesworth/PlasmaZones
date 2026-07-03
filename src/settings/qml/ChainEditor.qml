@@ -12,7 +12,7 @@ import org.plasmazones.common as PZCommon
  *
  * Renders the chain as an ordered list of pack rows. Each row shows the
  * pack's display name, reorder up/down arrows, and a remove (x) button.
- * Directly beneath each row, a ShaderParameterEditor is shown inline
+ * Directly beneath each row, a ShaderParamsEditor is shown inline
  * (whenever the pack declares parameters) bound to that pack's parameter
  * schema + the surface's per-pack parameter overrides — mirroring the
  * always-visible shader editor in AnimationProfileEditor, so the per-pack
@@ -26,8 +26,9 @@ import org.plasmazones.common as PZCommon
  *   - chain:            QStringList of pack ids in order
  *   - packParameters:   { packId -> { paramId -> value } } override map
  * and listens for:
- *   - chainChangeRequested(newChain)         — add / remove / reorder
+ *   - chainChangeRequested(newChain)          — add / remove / reorder
  *   - paramChangeRequested(packId, id, value) — a per-pack parameter edit
+ *   - paramsRandomizeRequested(packId, rolled) — a whole-pack randomize roll
  *
  * The host routes those signals into the DecorationPageController's
  * setChain / setChainParam mutators (with its own surface path), then
@@ -40,9 +41,6 @@ ColumnLayout {
     required property var availableShaders
     required property var chain
     property var packParameters: ({})
-    /// Read-only mode renders the chain as a static summary (used by the
-    /// per-surface card's inherited preview).
-    property bool readOnly: false
 
     signal chainChangeRequested(var newChain)
     signal paramChangeRequested(string packId, string paramId, var value)
@@ -110,7 +108,7 @@ ColumnLayout {
     Label {
         Layout.fillWidth: true
         visible: !root.chain || root.chain.length === 0
-        text: root.readOnly ? i18n("No decoration packs.") : i18n("No decoration packs. Add one below.")
+        text: i18n("No decoration packs. Add one below.")
         wrapMode: Text.WordWrap
         opacity: 0.7
     }
@@ -143,7 +141,6 @@ ColumnLayout {
                 }
 
                 ToolButton {
-                    visible: !root.readOnly
                     enabled: packDelegate.index > 0
                     icon.name: "arrow-up"
                     display: ToolButton.IconOnly
@@ -152,7 +149,6 @@ ColumnLayout {
                 }
 
                 ToolButton {
-                    visible: !root.readOnly
                     enabled: packDelegate.index < (root.chain ? root.chain.length - 1 : 0)
                     icon.name: "arrow-down"
                     display: ToolButton.IconOnly
@@ -161,7 +157,6 @@ ColumnLayout {
                 }
 
                 ToolButton {
-                    visible: !root.readOnly
                     icon.name: "edit-delete-remove"
                     display: ToolButton.IconOnly
                     Accessible.name: i18n("Remove %1", root._displayName(packDelegate.modelData))
@@ -170,8 +165,8 @@ ColumnLayout {
             }
 
             // ── Per-pack parameters ──────────────────────────────────────
-            // Shown inline whenever the pack declares parameters (and we're
-            // editable). Reuses the shared ShaderParamsEditor — the same
+            // Shown inline whenever the pack declares parameters.
+            // Reuses the shared ShaderParamsEditor — the same
             // editor + colour dialog + lock / randomize host the animation
             // profile editor and App-Rules action row use — so the Border
             // pack's colour swatches open the picker and lock / randomize
@@ -179,7 +174,7 @@ ColumnLayout {
             PZCommon.ShaderParamsEditor {
                 Layout.fillWidth: true
                 Layout.leftMargin: Kirigami.Units.largeSpacing
-                visible: !root.readOnly && packDelegate._schema.length > 0
+                visible: packDelegate._schema.length > 0
 
                 compact: true
                 enableGroups: true
@@ -202,7 +197,6 @@ ColumnLayout {
     // ── Add row ──────────────────────────────────────────────────────────
     RowLayout {
         Layout.fillWidth: true
-        visible: !root.readOnly
         spacing: Kirigami.Units.smallSpacing
 
         ComboBox {

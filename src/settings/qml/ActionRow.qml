@@ -19,7 +19,7 @@ import org.plasmazones.common as PZCommon
  * `actionEdited(updatedAction)`; the parent owns the list.
  *
  * For `overrideAnimationShader` and `overrideOverlayShader`, a
- * `ShaderParameterEditor` surfaces below the row when an effect is selected so
+ * `ShaderParamsEditor` surfaces below the row when an effect is selected so
  * shader uniforms can be edited in place — matching the animation-settings
  * page's per-event editor. Each shader-override type sources its uniform schema
  * from its own registry (animation vs overlay/snapping).
@@ -608,7 +608,10 @@ ColumnLayout {
     _colorParamEditor: Component {
         RowLayout {
             readonly property var _param: parent.modelData
-            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : (_param.default !== undefined ? String(_param.default) : "#FF3DAEE9")
+            // Final fallback (colour param with no stored value AND no metadata
+            // default) derives from the theme's accent rather than a hardcoded
+            // hex (CLAUDE.md: never hardcode colors).
+            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : (_param.default !== undefined ? String(_param.default) : String(Kirigami.Theme.highlightColor))
             // A border-colour action's single `value` param may carry the "accent"
             // sentinel ("follow the system accent") instead of a hex string. It is
             // not a QColor, so render the live system colour for the swatch and a

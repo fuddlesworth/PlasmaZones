@@ -24,7 +24,9 @@
 namespace PlasmaZones {
 
 namespace {
-constexpr qsizetype kMaxShaderProfileTreeBytes = 64 * 1024;
+// Shared wire-size cap for the JSON profile-tree blobs (animation shader tree
+// AND surface decoration tree) accepted over D-Bus.
+constexpr qsizetype kMaxProfileTreeBytes = 64 * 1024;
 }
 
 SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry,
@@ -571,7 +573,7 @@ void SettingsAdaptor::initializeRegistry()
             // wire frame can encode to substantially more bytes
             // on disk / on the bus.
             const QByteArray raw = v.toString().toUtf8();
-            if (raw.size() > kMaxShaderProfileTreeBytes)
+            if (raw.size() > kMaxProfileTreeBytes)
                 return false;
             const QJsonDocument doc = QJsonDocument::fromJson(raw);
             if (!doc.isObject())
@@ -717,7 +719,7 @@ void SettingsAdaptor::initializeRegistry()
         // the shaderProfileTree setter: a multi-byte payload encodes to more
         // bytes on the wire than QString::size() reports.
         const QByteArray raw = v.toString().toUtf8();
-        if (raw.size() > kMaxShaderProfileTreeBytes)
+        if (raw.size() > kMaxProfileTreeBytes)
             return false;
         const QJsonDocument doc = QJsonDocument::fromJson(raw);
         if (!doc.isObject())

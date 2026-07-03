@@ -17,7 +17,6 @@
 #include "../core/logging.h"
 
 #include <QDebug>
-#include <QScopeGuard>
 
 namespace PlasmaZones {
 
@@ -101,6 +100,30 @@ const Settings::ConfigKeyList& decorationConfigKeys()
     };
     return keys;
 }
+
+// RAII suppression of onSettingsPropertyChanged around bulk resetKeys /
+// discardKeys NOTIFY storms: raises the loading flag for the enclosing scope
+// and restores the previous value on exit. Every reset/discard branch shares
+// this instead of hand-rolling the save/set/qScopeGuard triple.
+class LoadingScope
+{
+public:
+    explicit LoadingScope(bool& flag)
+        : m_flag(flag)
+        , m_previous(flag)
+    {
+        flag = true;
+    }
+    ~LoadingScope()
+    {
+        m_flag = m_previous;
+    }
+    Q_DISABLE_COPY_MOVE(LoadingScope)
+
+private:
+    bool& m_flag;
+    bool m_previous;
+};
 
 } // namespace
 
@@ -379,18 +402,19 @@ void SettingsController::resetPage(const QString& page)
     // the config reset; mark the active page dirty explicitly below.
     if (isAnimationPage(page)) {
         if (m_animationsPage != nullptr) {
-            const bool wasLoading = m_loading;
-            m_loading = true;
-            const auto restoreLoading = qScopeGuard([this, wasLoading] {
-                m_loading = wasLoading;
-            });
+            const LoadingScope loadingScope(m_loading);
             m_animationsPage->clearAllOverrides();
             m_settings.resetKeys(animationConfigKeys());
         }
         // isPageDirty(animation) is value-based (hasPendingChanges || any
-        // animation key modified), so reconcilePageDirty syncs the active page's
-        // m_dirtyPages entry against the post-reset truth.
-        reconcilePageDirty(page);
+        // animation key modified). Reconcile EVERY animation leaf, not just the
+        // active page: the shared domain means an edit made while a sibling
+        // subpage was active left ITS m_dirtyPages entry behind, and a reset
+        // that lands back on the committed baseline must clear those too or
+        // needsSave() sticks true with no badge to explain it.
+        for (const QString& leaf : pageGroupChildren().value(QStringLiteral("animations"))) {
+            reconcilePageDirty(leaf);
+        }
         return;
     }
 
@@ -401,17 +425,18 @@ void SettingsController::resetPage(const QString& page)
     // the baseline. Same NOTIFY-storm suppression as the manifest path.
     if (isDecorationPage(page)) {
         {
-            const bool wasLoading = m_loading;
-            m_loading = true;
-            const auto restoreLoading = qScopeGuard([this, wasLoading] {
-                m_loading = wasLoading;
-            });
+            const LoadingScope loadingScope(m_loading);
             m_settings.resetKeys(decorationConfigKeys());
         }
-        // isPageDirty(decoration) is value-based, so reconcile syncs this
-        // page's m_dirtyPages entry against the post-reset truth (siblings
-        // report the same shared-key state directly through isPageDirty).
-        reconcilePageDirty(page);
+        // isPageDirty(decoration) is value-based. Reconcile EVERY decoration
+        // leaf, not just the active page: the shared key means an edit made
+        // while a sibling leaf was active left ITS m_dirtyPages entry behind,
+        // and a reset that lands back on the committed baseline must clear
+        // those too or needsSave() sticks true with no badge to explain it
+        // (mirrors the discardPage decoration branch).
+        for (const QString& leaf : pageGroupChildren().value(QStringLiteral("decoration"))) {
+            reconcilePageDirty(leaf);
+        }
         return;
     }
 
@@ -484,11 +509,7 @@ void SettingsController::resetPage(const QString& page)
     // would otherwise mark the ACTIVE page dirty (which may differ from the
     // page being reset). We reconcile `page`'s dirty state explicitly below.
     {
-        const bool wasLoading = m_loading;
-        m_loading = true;
-        const auto restoreLoading = qScopeGuard([this, wasLoading] {
-            m_loading = wasLoading;
-        });
+        const LoadingScope loadingScope(m_loading);
         m_settings.resetKeys(*it);
     }
     // Resetting to defaults usually diverges from the saved baseline, so the
@@ -513,11 +534,7 @@ void SettingsController::discardPage(const QString& page)
     const auto it = manifest.constFind(page);
     if (it != manifest.constEnd()) {
         {
-            const bool wasLoading = m_loading;
-            m_loading = true;
-            const auto restoreLoading = qScopeGuard([this, wasLoading] {
-                m_loading = wasLoading;
-            });
+            const LoadingScope loadingScope(m_loading);
             m_settings.discardKeys(*it);
         }
         // Every owned key is back at the committed baseline, so the page is clean.
@@ -581,11 +598,7 @@ void SettingsController::discardPage(const QString& page)
             m_animationsPage->revertPending();
         }
         {
-            const bool wasLoading = m_loading;
-            m_loading = true;
-            const auto restoreLoading = qScopeGuard([this, wasLoading] {
-                m_loading = wasLoading;
-            });
+            const LoadingScope loadingScope(m_loading);
             m_settings.discardKeys(animationConfigKeys());
         }
         // revertPending() left hasPendingChanges() false; clear every animation
@@ -610,11 +623,7 @@ void SettingsController::discardPage(const QString& page)
     // badged the others.
     if (isDecorationPage(page)) {
         {
-            const bool wasLoading = m_loading;
-            m_loading = true;
-            const auto restoreLoading = qScopeGuard([this, wasLoading] {
-                m_loading = wasLoading;
-            });
+            const LoadingScope loadingScope(m_loading);
             m_settings.discardKeys(decorationConfigKeys());
         }
         bool changed = false;

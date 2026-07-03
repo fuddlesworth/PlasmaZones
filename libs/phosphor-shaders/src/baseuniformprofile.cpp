@@ -130,23 +130,22 @@ void BaseUniformProfile::fill(const UboFrameState& state)
 // !didFullUploadOnce path is handled by the caller via fullUploadRegions().
 // ============================================================================
 
-std::vector<UboUploadRegion> BaseUniformProfile::dirtyRegions(const UboDirtyFlags& flags) const
+UboUploadRegionList BaseUniformProfile::dirtyRegions(const UboDirtyFlags& flags) const
 {
     using namespace UboRegions;
 
-    std::vector<UboUploadRegion> regions;
+    UboUploadRegionList regions;
 
     if (flags.time) {
-        regions.push_back(UboUploadRegion{static_cast<int>(K_TIME_BLOCK_OFFSET), static_cast<int>(K_TIME_BLOCK_SIZE)});
+        regions.push(UboUploadRegion{static_cast<int>(K_TIME_BLOCK_OFFSET), static_cast<int>(K_TIME_BLOCK_SIZE)});
     }
     if (flags.timeHi && !flags.sceneData) {
-        regions.push_back(UboUploadRegion{static_cast<int>(K_TIME_HI_OFFSET), static_cast<int>(K_TIME_HI_SIZE)});
+        regions.push(UboUploadRegion{static_cast<int>(K_TIME_HI_OFFSET), static_cast<int>(K_TIME_HI_SIZE)});
     }
     if (flags.sceneData) {
-        regions.push_back(
-            UboUploadRegion{static_cast<int>(K_SCENE_HEADER_OFFSET), static_cast<int>(K_SCENE_HEADER_SIZE)});
+        regions.push(UboUploadRegion{static_cast<int>(K_SCENE_HEADER_OFFSET), static_cast<int>(K_SCENE_HEADER_SIZE)});
     } else if (flags.appFields) {
-        regions.push_back(UboUploadRegion{static_cast<int>(K_APP_FIELDS_OFFSET), static_cast<int>(K_APP_FIELDS_SIZE)});
+        regions.push(UboUploadRegion{static_cast<int>(K_APP_FIELDS_OFFSET), static_cast<int>(K_APP_FIELDS_SIZE)});
     }
 
     return regions;

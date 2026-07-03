@@ -3864,7 +3864,7 @@ void AutotileEngine::applyTiling(const QString& screenId)
         // exactly and the border never pushes past the slot into the neighbour
         // (mirrors the snap side, DaemonGeometryResolver::snapBorderInset == 0).
         // Tile spacing comes from the zone gap/padding settings, not the border.
-        const QRect geo = zones[i];
+        const QRect& geo = zones[i];
         QJsonObject obj;
         obj[QLatin1String("windowId")] = windows[i];
         obj[QLatin1String("screenId")] = screenId;

@@ -858,16 +858,23 @@ bool Daemon::init()
                 if (!reg) {
                     return;
                 }
-                // Mirror SurfaceShaderItem exactly so the bake-cache key the
-                // warm compile writes is the one the first live paint looks up:
-                // include paths iterate the registered search dirs
+                // Mirror the live loader (SurfaceShaderItem) so the bake-cache
+                // key the warm compile writes is the one the first live paint
+                // looks up: include paths iterate the registered search dirs
                 // highest-priority first (user, then system descending —
                 // searchPaths() registers lowest-priority first, so reverse),
                 // each contributing its `shared` subdir then itself. The vert
-                // resolves like the live loader: the pack's own metadata vert,
-                // else `surface.vert` beside the frag, else the first
+                // resolves as the live loader does: the pack's metadata vert
+                // first, else `surface.vert` beside the frag, else the first
                 // `surface.vert` in the include dirs (the `shared` subdir
-                // carries the shipped one — packs themselves ship no vert).
+                // carries the shipped one — packs themselves ship no vert, so
+                // both sides land on the shared vert today). HOST-WIRING
+                // PRECONDITION: the item reads its per-item vertexShaderUrl /
+                // paramPreamble properties, so any host that mounts a pack
+                // declaring its own vert MUST set vertexShaderUrl from
+                // info.vertexShaderPath (the overlay host already sets
+                // paramPreamble from the same registry preamble used here) or
+                // this warm bake keys a different vert than the live load.
                 QStringList searchDirs = reg->searchPaths();
                 std::reverse(searchDirs.begin(), searchDirs.end());
                 QStringList includePaths;

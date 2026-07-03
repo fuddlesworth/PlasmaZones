@@ -880,9 +880,9 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 
 # CI gate: every bundled pack must parse + bake clean. Headless glslang, so this
 # runs in CI with no GPU/Wayland — exactly like luau-analyze for algorithms. Zone
-# packs (data/shaders) and animation packs (--animation, data/animations) are
-# distinct authoring models with different entry conventions, so each gets its own
-# invocation.
+# packs (data/shaders), animation packs (--animation, data/animations), and
+# surface packs (--surface, data/surface) are distinct authoring models with
+# different entry conventions, so each gets its own invocation.
 if(BUILD_TESTING)
     add_test(NAME shader_validate_bundled
              COMMAND plasmazones-shader-validate --overlay ${PROJECT_SOURCE_DIR}/data/shaders)

@@ -42,7 +42,7 @@ public:
 
     void fill(const UboFrameState& state) override;
 
-    std::vector<UboUploadRegion> dirtyRegions(const UboDirtyFlags& flags) const override;
+    UboUploadRegionList dirtyRegions(const UboDirtyFlags& flags) const override;
 
     bool hasAppFields() const override
     {

@@ -81,10 +81,10 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
     }
 }
 
-std::vector<PhosphorShaders::UboUploadRegion>
+PhosphorShaders::UboUploadRegionList
 SurfaceUniformProfile::dirtyRegions(const PhosphorShaders::UboDirtyFlags& flags) const
 {
-    std::vector<PhosphorShaders::UboUploadRegion> regions;
+    PhosphorShaders::UboUploadRegionList regions;
 
     // The surface UBO has no app-fields region (hasAppFields() is false), so
     // flags.appFields is deliberately NOT consulted — an appFields-only dirty
@@ -95,8 +95,8 @@ SurfaceUniformProfile::dirtyRegions(const PhosphorShaders::UboDirtyFlags& flags)
     // that the overlay's finer-grained time/timeHi split buys nothing here.
     const bool anyDirty = flags.time || flags.timeHi || flags.sceneData;
     if (anyDirty) {
-        regions.push_back(PhosphorShaders::UboUploadRegion{kMatrixOffset, kMatrixSize});
-        regions.push_back(PhosphorShaders::UboUploadRegion{kSceneOffset, kSceneSize});
+        regions.push(PhosphorShaders::UboUploadRegion{kMatrixOffset, kMatrixSize});
+        regions.push(PhosphorShaders::UboUploadRegion{kSceneOffset, kSceneSize});
     }
 
     return regions;

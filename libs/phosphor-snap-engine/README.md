@@ -106,6 +106,7 @@ placementEngineRouter.bind("snap", snap);
 - [`phosphor-engine`](../phosphor-engine/README.md) — `IPlacementEngine`, `IPlacementState`, `PlacementEngineBase`, `IWindowTrackingService`, `IVirtualDesktopManager`
 - [`phosphor-zones`](../phosphor-zones/README.md) — `LayoutRegistry`, `IZoneDetector`
 - [`phosphor-protocol`](../phosphor-protocol/README.md) — navigation result types (`MoveTargetResult`, `FocusTargetResult`, …) via the QtCore-only `PhosphorProtocol::Types` target, and this library never links QtDBus
+- [`phosphor-rules`](../phosphor-rules/README.md) — `RuleEvaluator`, `RuleSet` (Exclude-rule evaluation)
 - [`phosphor-screens`](../phosphor-screens/README.md) — screen topology (private link)
 - [`phosphor-identity`](../phosphor-identity/README.md) — window IDs (private link)
 

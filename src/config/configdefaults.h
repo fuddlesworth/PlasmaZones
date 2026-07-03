@@ -23,9 +23,10 @@
 #include <PhosphorTiles/AutotileConstants.h>
 // Animation duration / stagger UI bounds — generic policy, not autotile-specific.
 #include <PhosphorAnimation/AnimationLimits.h>
-// Surface-shader decoration tree — the user-applied pack stack (border is NOT a
-// pack here; window border/title-bar appearance is owned by v3.2's window rules).
-#include <PhosphorSurface/DecorationProfile.h>
+// Surface-shader decoration tree — the user-applied pack stack. The `border`
+// PACK (data/surface/border) lives in that stack like any other pack; the
+// window-manager border/title-bar APPEARANCE defaults are owned by v3.2's
+// window rules, not by this tree's default.
 #include <PhosphorSurface/DecorationProfileTree.h>
 
 namespace PhosphorAnimation {

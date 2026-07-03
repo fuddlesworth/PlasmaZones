@@ -922,17 +922,13 @@ private:
     /// updateWindowBorder); there is no separate show-border gate.
     QString resolveSurfacePathFor(const QString& windowId) const;
 
-    /// Seed m_decorationTree's baseline so decoration renders sensibly before the
-    /// async `decorationProfileTreeJson` fetch lands (mirrors how BorderState
-    /// seeds DecorationDefaults pre-load). Called once from the constructor. The
-    /// effect cannot reach the GPL daemon ConfigDefaults, so it builds a TRANSIENT
-    /// placeholder from the shared DecorationDefaults constants (ShowBorder gate,
-    /// width, radius) plus the default "border" pack's OWN metadata-default
-    /// colours. The daemon's fetch overwrites the whole tree on arrival with its
-    /// authoritative colours (ZoneDefaults / system-accent-resolved), so the
-    /// placeholder's colours may differ from the daemon's for the brief pre-fetch
-    /// window; that is the same transient as BorderState's pre-load colours and is
-    /// corrected the instant the fetch lands.
+    /// Seed m_decorationTree with the empty/neutral default (mirroring the
+    /// daemon's ConfigDefaults::decorationProfileTree()) so the pre-fetch state
+    /// is well-defined. Called once from the constructor. The tree carries only
+    /// the user-applied surface-shader pack stack; border and title-bar
+    /// appearance are rule-owned and render correctly before the fetch, so no
+    /// placeholder is built. The daemon's async `decorationProfileTreeJson`
+    /// fetch overwrites the whole tree on arrival.
     void seedDecorationTreeBaseline();
 
     /// Drop the per-rule match cache and refresh @p windowId's border /
