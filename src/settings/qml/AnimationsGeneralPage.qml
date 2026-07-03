@@ -407,8 +407,6 @@ SettingsFlickable {
                         unitText: ""
                         Accessible.name: i18n("Minimum window width for animations")
                         onValueModified: value => {
-                            // Not translated — Rule::name is the persisted identity
-                            // surface and must match the v4→v5 migration's spelling.
                             page.writeMinSize(settingsController.animationMinWidthRuleId(), "width", value);
                         }
                         textFromValue: function (value) {

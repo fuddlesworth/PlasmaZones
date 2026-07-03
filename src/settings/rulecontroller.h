@@ -385,11 +385,14 @@ public:
     /// Registered action types for the action-editor dropdown. Each entry:
     /// `{ value: QString (action type id), label, params: [ ... ],
     ///   domain: "context"|"window" }` where each param descriptor is
-    /// `{ key, kind, label }` with kind one of "string"|"number"|"enum"|
-    /// "percent"|"bool"|"color"|"zoneOrdinals"|"virtualDesktop", plus, for
-    /// `kind == "enum"`, an `options` string list; for `kind == "number"`
-    /// /`"percent"`, `min`/`max`/`scale` (the value stored is `display *
-    /// scale`); and for `kind == "bool"`, optional `onLabel`/`offLabel`.
+    /// `{ key, kind, label }`. The kind is the descriptor's wire token,
+    /// forwarded verbatim — the plain input kinds ("string"|"number"|"enum"|
+    /// "percent"|"bool"|"color"|"zoneOrdinals"|"virtualDesktop") plus the
+    /// dedicated picker kinds ("snappingLayout"|"tilingAlgorithm"|
+    /// "animationEvent"|"shaderEffect"|"curveEditor"|"screenId"). For
+    /// `kind == "enum"` the entry adds an `options` string list; for
+    /// `"number"`/`"percent"`, `min`/`max`/`scale` (the value stored is
+    /// `display * scale`); for `"bool"`, optional `onLabel`/`offLabel`.
     /// QML drives the per-type editor entirely from this descriptor; the
     /// `domain` field lets the picker disable types incompatible with the
     /// current match expression (a context-domain action against a
