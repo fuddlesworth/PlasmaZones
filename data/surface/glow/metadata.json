@@ -1,7 +1,7 @@
 {
     "id": "glow",
     "name": "Glow",
-    "description": "A soft edge bloom. A two-pass blur softens the surface, and the result is blended back in as an inner glow plus an outer halo that follows the surface's own shape. Stack it after Border in a surface's chain to glow the rounded bordered window. Strength and tint are its parameters.",
+    "description": "An outer glow in the style of the Oxygen decoration. A soft coloured halo radiates outward from the surface's edge and follows its exact shape, so it hugs the rounded corners when stacked after Border in a chain. The content itself is untouched, and the halo dims when the surface loses focus. Strength and tint are its parameters.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Decoration",
@@ -17,14 +17,14 @@
             "default": 0.85,
             "min": 0.0,
             "max": 2.0,
-            "description": "Intensity of the edge bloom"
+            "description": "Intensity of the outer halo"
         },
         {
             "id": "glowColor",
             "name": "Glow tint",
             "type": "color",
             "default": "#ff3daee9",
-            "description": "Colour the bloom is tinted toward"
+            "description": "Colour of the halo"
         }
     ]
 }

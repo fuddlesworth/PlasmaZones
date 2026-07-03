@@ -324,6 +324,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         writeQmlProperty(slot, QStringLiteral("decorationVertexShaderSource"), QUrl());
         writeQmlProperty(slot, QStringLiteral("decorationParamPreamble"), QString());
         writeQmlProperty(slot, QStringLiteral("decorationShaderParams"), QVariant::fromValue(QVariantMap()));
+        writeQmlProperty(slot, QStringLiteral("decorationAnimated"), false);
     };
 
     if (!m_settings || !m_surfaceShaderRegistry) {
@@ -389,6 +390,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
                      effect.vertexShaderPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(effect.vertexShaderPath));
     writeQmlProperty(slot, QStringLiteral("decorationParamPreamble"), preamble);
     writeQmlProperty(slot, QStringLiteral("decorationShaderParams"), QVariant::fromValue(translatedParams));
+    // Animated packs declare it in metadata; the QML host gates the item's
+    // per-frame iTime tick (playing) on this so static packs pay nothing.
+    writeQmlProperty(slot, QStringLiteral("decorationAnimated"), effect.animated);
     writeQmlProperty(slot, QStringLiteral("decorationShaderSource"), QUrl::fromLocalFile(effect.fragmentShaderPath));
 }
 

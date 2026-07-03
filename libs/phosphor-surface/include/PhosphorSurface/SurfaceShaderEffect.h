@@ -108,6 +108,13 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// diagnostic log (see `SurfaceShaderContract.h`).
     bool isMultipass = false;
 
+    /// Declares that the pack references `iTime` and needs a per-frame
+    /// driver. The compositor detects this itself (a linked iTime uniform
+    /// gates the repaint), but the daemon UBO always carries iTime, so its
+    /// hosts read this flag to decide whether to tick the item
+    /// (SurfaceShaderItem `playing`). Static packs omit it and pay nothing.
+    bool animated = false;
+
     /// Buffer-pass shader paths (relative to effect dir). When non-empty
     /// and `isMultipass` is true, the daemon's surface-layer runtime runs
     /// these as intermediate passes before the main fragment shader.

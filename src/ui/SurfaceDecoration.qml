@@ -79,10 +79,13 @@ Item {
     ///   • decorationParamPreamble — generated `#define p_<id> …` preamble.
     ///   • decorationShaderParams  — translated `customParamsN_*` / `customColorN`
     ///                               slot map (SurfaceShaderRegistry output).
+    ///   • decorationAnimated      — the pack references iTime (metadata
+    ///                               "animated"); gates the item's per-frame tick.
     property url decorationShaderSource
     property url decorationVertexShaderSource
     property string decorationParamPreamble: ""
     property var decorationShaderParams: ({})
+    property bool decorationAnimated: false
 
     /// Logical→device scale for the decorated surface. The OSD shell tracks the
     /// active output's devicePixelRatio; Screen.devicePixelRatio is the live
@@ -253,7 +256,10 @@ Item {
         shaderParams: root.decorationShaderParams
         vertexShaderUrl: root.decorationVertexShaderSource
         shaderSource: root.decorationShaderSource
-        // iTime is left at its default: the border pack is static (no iTime
-        // reference survives the linker), so no per-frame driver is wired.
+        // iTime driver: only an animated pack (metadata "animated", relayed by
+        // applyDecoration) subscribes to the per-frame tick — static packs
+        // (the border) leave iTime at its default and pay nothing. Gated on
+        // decorationActive so a cleared decoration stops ticking.
+        playing: root.decorationAnimated && root.decorationActive
     }
 }

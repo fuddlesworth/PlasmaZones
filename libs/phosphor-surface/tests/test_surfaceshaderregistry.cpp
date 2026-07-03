@@ -176,6 +176,28 @@ private Q_SLOTS:
         QCOMPARE(e.bufferFilters, QStringList{QStringLiteral("nearest")});
     }
 
+    void animated_flag_parses_and_roundtrips()
+    {
+        // The "animated" metadata flag drives the daemon hosts' per-frame
+        // tick gate (SurfaceShaderItem playing). Pin the parse, the false
+        // default, and the toJson round-trip.
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("pulse"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("animated"), true);
+
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(meta);
+        QVERIFY(e.animated);
+        QVERIFY(SurfaceShaderEffect::fromJson(e.toJson()).animated);
+
+        QJsonObject metaStatic;
+        metaStatic.insert(QLatin1String("id"), QStringLiteral("still"));
+        metaStatic.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        const SurfaceShaderEffect s = SurfaceShaderEffect::fromJson(metaStatic);
+        QVERIFY(!s.animated);
+        QVERIFY(!s.toJson().contains(QLatin1String("animated")));
+    }
+
     // ── SurfaceShaderEffect::fromJson validation ─────────────────────────
 
     void fromJson_resets_unknown_texture_wrap_to_empty()
