@@ -109,7 +109,7 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManag
  *        per-screen Settings tier.
  *
  * Resolution cascade: context-rule override → per-layout override → global
- * default (settings->innerGap(), which reads the baseline rule) → compile default
+ * default (settings->innerGap(), which reads the Gaps config group) → compile default
  */
 PLASMAZONES_EXPORT int getEffectiveInnerGap(PhosphorZones::Layout* layout, ISettings* settings,
                                             const QVariantMap& ruleGapOverride = {});

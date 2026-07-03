@@ -238,11 +238,7 @@ Daemon::Daemon(QObject* parent)
     // wired later (createAdaptors / setup), so any emit here is inert at
     // construction time.
     if (m_ruleStore) {
-        const QSet<QUuid> staleBaselineIds = {
-            ConfigDefaults::baselineBorderRuleId(),
-            ConfigDefaults::baselineTitleBarRuleId(),
-            ConfigDefaults::baselineGapRuleId(),
-        };
+        const QSet<QUuid> staleBaselineIds = ConfigDefaults::managedAppearanceBaselineIds();
 
         const QList<PhosphorRules::Rule>& currentRules = m_ruleStore->ruleSet().rules();
         QList<PhosphorRules::Rule> keptRules;

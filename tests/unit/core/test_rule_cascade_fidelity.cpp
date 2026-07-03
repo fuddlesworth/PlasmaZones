@@ -907,9 +907,10 @@ private Q_SLOTS:
         baseline.match = PWR::MatchExpression{}; // catch-all All{}
         baseline.actions = {intGapAction(PWR::ActionType::SetInnerGap, 4)};
 
-        // A non-managed per-monitor gap override for DP-1 (inner = 20), the shape
-        // the Appearance page's monitor scope authors. Its deterministic id is
-        // namespaced under the baseline gap rule (mirrors perScreenGapRuleId).
+        // A non-managed per-monitor gap override RULE for DP-1 (inner = 20). The
+        // settings page authors per-monitor gaps as config now, but the rule
+        // cascade still resolves a hand-authored gap rule keyed on a v5 id
+        // namespaced under the baseline gap id — this pins that cascade behavior.
         PWR::Rule perScreen;
         perScreen.id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), QByteArrayLiteral("DP-1"));
         perScreen.name = QStringLiteral("Gaps (DP-1)");

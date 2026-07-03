@@ -795,9 +795,10 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedZoneSelectorEnabled = v.toBool();
     });
 
-    // Window border / title-bar appearance is no longer pushed as per-mode
-    // settings — it is resolved from rules (the managed baseline rule
-    // plus per-window overrides) inside updateWindowBorder / reconcileRuleHiddenTitleBar.
+    // Window border / title-bar appearance is pushed as unified config defaults
+    // (the window-appearance loaders above). Each slot is resolved as that config
+    // default, scope-gated, with per-window rule overrides layered on top inside
+    // updateWindowBorder / reconcileRuleHiddenTitleBar (resolveEffectiveWindowAppearance).
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
         m_autotileHandler->setFocusFollowsMouse(v.toBool());

@@ -157,8 +157,9 @@ private Q_SLOTS:
         Settings settings;
 
         // Set non-default values across different groups. Inner/outer gaps are
-        // no longer stored config keys (the global default is rule-backed), so
-        // they are not part of this config-persistence round-trip.
+        // config-backed (the Gaps group); their save/reload round-trip is covered
+        // by testConfigBackedGap_roundTripsAndEmits, so they're omitted here to
+        // avoid duplicating that coverage.
         settings.setBorderWidth(5);
         settings.setBorderRadius(25);
         settings.setActiveOpacity(0.8);

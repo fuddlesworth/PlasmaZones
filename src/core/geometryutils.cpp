@@ -160,7 +160,7 @@ int getEffectiveInnerGap(PhosphorZones::Layout* layout, ISettings* settings, con
     if (layout && layout->hasZonePaddingOverride()) {
         return layout->zonePadding();
     }
-    // Tier 3 — global default (settings->innerGap() reads the baseline rule).
+    // Tier 3 — global default (settings->innerGap() reads the Gaps config group).
     if (settings) {
         return settings->innerGap();
     }

@@ -440,10 +440,9 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("enableAudioVisualizer", enableAudioVisualizer, setEnableAudioVisualizer)
     REGISTER_INT_SETTING("audioSpectrumBarCount", audioSpectrumBarCount, setAudioSpectrumBarCount)
 
-    // Zone settings. The shared inner/outer gaps are no longer exposed here:
-    // their global default is rule-backed (the managed baseline appearance
-    // Rule), edited over the org.plasmazones.Rules surface, not the
-    // generic settings get/set map.
+    // Zone settings. The shared inner/outer gaps are not exposed here: they are
+    // config-backed (the Gaps group) and consumed daemon-side by the geometry
+    // cascade, so the effect never reads them over this generic get/set map.
     REGISTER_INT_SETTING("adjacentThreshold", adjacentThreshold, setAdjacentThreshold)
     REGISTER_INT_SETTING("pollIntervalMs", pollIntervalMs, setPollIntervalMs)
     REGISTER_INT_SETTING("minimumZoneSizePx", minimumZoneSizePx, setMinimumZoneSizePx)
@@ -665,12 +664,11 @@ void SettingsAdaptor::initializeRegistry()
             return true;
         };
         m_schemas[QStringLiteral("autotilePerAlgorithmSettings")] = QStringLiteral("map");
-        // Gaps are unified with snapping and rule-backed — their global default
-        // lives on the managed Default gaps Rule, edited over the
-        // org.plasmazones.Rules surface, so they are NOT writable on this generic
-        // settings map. But the editor (a separate process) reads the resolved
-        // global gap values over D-Bus, so register READ-ONLY getters (no setter)
-        // for them; a write attempt still fails because no setter is registered.
+        // The shared inner/outer gaps are config-backed (the Gaps group), written
+        // by the settings app's Window Appearance page — not over this generic
+        // map. But the editor (a separate process) reads the resolved global gap
+        // values over D-Bus, so register READ-ONLY getters (no setter) for them; a
+        // write attempt still fails because no setter is registered.
         m_getters[QStringLiteral("innerGap")] = [concrete]() {
             return concrete->innerGap();
         };
@@ -1116,10 +1114,11 @@ struct PerScreenDispatch
     std::function<QVariantMap(const QString&)> get;
     std::function<void(const QString&, const QString&, const QVariant&)> set;
     std::function<void(const QString&)> clear;
-    /// False for read-only categories (per-screen snapping, whose gaps are
-    /// rule-backed): the getter resolves the live values, but set/clear have no
-    /// backing surface. Writers reject the call instead of reporting a phantom
-    /// success and triggering a pointless save.
+    /// False for read-only categories (per-screen snapping, which is a read-only
+    /// projection of the config per-monitor gaps): the getter resolves the live
+    /// values, but set/clear have no backing surface of their own. Writers reject
+    /// the call instead of reporting a phantom success and triggering a pointless
+    /// save.
     bool writable = true;
 };
 
@@ -1139,11 +1138,11 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
         };
     }
     if (category == QLatin1String("snapping")) {
-        // Per-screen snapping gaps are rule-backed: the getter reads the
-        // resolved gap rules, but there is no per-screen snapping writer
-        // surface. Mark the category read-only so writers reject set/clear
-        // (write per-monitor snapping gaps over org.plasmazones.Rules instead)
-        // rather than silently succeeding.
+        // Per-screen snapping gaps are a read-only projection of the config
+        // per-monitor gap overrides; there is no separate snapping writer surface.
+        // Mark the category read-only so writers reject set/clear (write per-monitor
+        // gaps via the "autotile" category, setPerScreenAutotileSetting, which the
+        // unified per-monitor gap store lives under) rather than silently succeeding.
         return PerScreenDispatch{
             [settings](const QString& id) {
                 return settings->getPerScreenSnappingSettings(id);
@@ -1182,8 +1181,9 @@ void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString
         return;
     }
     if (!dispatch->writable) {
-        qCWarning(lcDbusSettings) << "setPerScreenSetting: category" << category
-                                  << "is read-only (rule-backed) — write via org.plasmazones.Rules";
+        qCWarning(lcDbusSettings)
+            << "setPerScreenSetting: category" << category
+            << "is read-only (a projection of config per-monitor gaps) — write via the autotile per-screen category";
         return;
     }
     dispatch->set(screenId, key, value.variant());
@@ -1201,8 +1201,9 @@ void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QStr
         return;
     }
     if (!dispatch->writable) {
-        qCWarning(lcDbusSettings) << "clearPerScreenSettings: category" << category
-                                  << "is read-only (rule-backed) — clear via org.plasmazones.Rules";
+        qCWarning(lcDbusSettings)
+            << "clearPerScreenSettings: category" << category
+            << "is read-only (a projection of config per-monitor gaps) — clear via the autotile per-screen category";
         return;
     }
     dispatch->clear(screenId);
@@ -1238,8 +1239,9 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
         return false;
     }
     if (!dispatch->writable) {
-        qCWarning(lcDbusSettings) << "setPerScreenSettings: category" << category
-                                  << "is read-only (rule-backed) — write via org.plasmazones.Rules";
+        qCWarning(lcDbusSettings)
+            << "setPerScreenSettings: category" << category
+            << "is read-only (a projection of config per-monitor gaps) — write via the autotile per-screen category";
         return false;
     }
 

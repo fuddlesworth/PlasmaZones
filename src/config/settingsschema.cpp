@@ -84,6 +84,23 @@ auto validIntOr(std::initializer_list<int> valid, int fallback)
     };
 }
 
+/// Snap-to-default string-enum validator: the closed-set string analogue of
+/// validIntOr. Accept the value only if it is one of @p valid, otherwise return
+/// @p fallback. Used for closed-set tokens (e.g. the appearance "Apply to" scope)
+/// so a hand-edited garbage token in the on-disk file can't flow to the effect.
+auto validStringOr(std::initializer_list<QLatin1String> valid, QString fallback)
+{
+    return [valid = QVector<QLatin1String>(valid), fallback = std::move(fallback)](const QVariant& v) -> QVariant {
+        const QString raw = v.toString();
+        for (const QLatin1String& tok : valid) {
+            if (raw == tok) {
+                return raw;
+            }
+        }
+        return fallback;
+    };
+}
+
 /// Normalize a comma-joined list: split, trim each entry, drop empties,
 /// drop duplicates, rejoin. Shared by every setting whose wire format is a
 /// comma-separated list (layout order, algorithm order, exclusion lists).
@@ -335,10 +352,8 @@ void appendPerformanceSchema(PhosphorConfig::Schema& schema)
 void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
-    // The shared inner/outer gaps are no longer stored config keys: the global
-    // default is rule-backed (the managed baseline appearance Rule), so
-    // there is no "Gaps" group in the schema. Settings reads the values from the
-    // rule and the Window Appearance page edits the rule directly.
+    // The shared inner/outer gaps live in the top-level Gaps group
+    // (appendGapsSchema); the Window Appearance page edits them as plain config.
     // Snapping.Gaps keeps only the snapping-specific adjacency threshold.
     schema.groups[CD::snappingGapsGroup()] = {
         {CD::adjacentThresholdKey(),
@@ -776,28 +791,34 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
     };
 
-    // Tiling.Gaps keeps only the tiling-specific SmartGaps toggle. Inner/outer
-    // gaps are no longer schema-backed at all — they live on the managed
-    // baseline gap rule, edited over the org.plasmazones.Rules surface.
+    // Tiling.Gaps keeps only the tiling-specific SmartGaps toggle. The shared
+    // inner/outer gaps live in the top-level Gaps group (appendGapsSchema).
     schema.groups[CD::tilingGapsGroup()] = {
         {CD::smartGapsKey(), CD::autotileSmartGaps(), QMetaType::Bool},
     };
 }
 
 // ─── Windows (window decoration appearance) ─────────────────────────────────
-// Mode-neutral tiled/snapped window border + title bar. Border colours are the
-// "accent" sentinel (or a hex string) so no colour validator applies; the
-// border/title-bar scope is a free-form token ("tiled" / "normal") the
-// Appearance page and the effect agree on. Width/radius are clamped ints reusing
-// the generic Width/Radius keys (the Windows group disambiguates them from the
-// Snapping.Zones.Border keys of the same spelling).
+// Mode-neutral window border + title bar. Border colours are the "accent"
+// sentinel (or a hex string) so no colour validator applies. The border/title-bar
+// scope is a closed-set token ("tiled" / "normal" / "all") the Appearance page and
+// the effect agree on, snapped to the default on an unknown on-disk value.
+// Width/radius are clamped ints reusing the generic Width/Radius keys (the Windows
+// group disambiguates them from the Snapping.Zones.Border keys of the same spelling).
 
 void appendWindowsSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
+    // The "Apply to" scope is a closed set of tokens the Appearance page and the
+    // effect agree on ("tiled" / "normal" / "all"); snap an unknown on-disk token
+    // to the default so garbage can't reach the effect.
+    const auto scopeValidator = [] {
+        return validStringOr({QLatin1String("tiled"), QLatin1String("normal"), QLatin1String("all")},
+                             CD::windowBorderScope());
+    };
     schema.groups[CD::windowsAppearanceGroup()] = {
         {CD::showBorderKey(), CD::windowShowBorder(), QMetaType::Bool},
-        {CD::borderScopeKey(), CD::windowBorderScope(), QMetaType::QString},
+        {CD::borderScopeKey(), CD::windowBorderScope(), QMetaType::QString, {}, scopeValidator()},
         {CD::widthKey(),
          CD::windowBorderWidth(),
          QMetaType::Int,
@@ -811,7 +832,7 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
         {CD::borderColorActiveKey(), CD::windowBorderColorActive(), QMetaType::QString},
         {CD::borderColorInactiveKey(), CD::windowBorderColorInactive(), QMetaType::QString},
         {CD::hideTitleBarsKey(), CD::windowHideTitleBars(), QMetaType::Bool},
-        {CD::titleBarScopeKey(), CD::windowTitleBarScope(), QMetaType::QString},
+        {CD::titleBarScopeKey(), CD::windowTitleBarScope(), QMetaType::QString, {}, scopeValidator()},
     };
 }
 

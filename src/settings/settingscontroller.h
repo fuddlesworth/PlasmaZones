@@ -187,10 +187,11 @@ public:
 
     // ── Per-page Reset / Discard (kebab menu in the breadcrumb row) ──────────
     /// True when @p page can be reset to defaults: config-manifest pages (schema
-    /// defaults), the ordering pages (drop the custom order), the shortcuts pages
-    /// (unassign every quick slot), the virtual screens page (unsplit every
-    /// monitor), the Windows appearance page (reset the 3 managed baseline
-    /// rules), and the animation pages (clear overrides + reset animation keys).
+    /// defaults — this includes the Windows appearance page, whose Windows.* /
+    /// Gaps.* keys are plain config), the ordering pages (drop the custom order),
+    /// the shortcuts pages (unassign every quick slot), the virtual screens page
+    /// (unsplit every monitor), and the animation pages (clear overrides + reset
+    /// animation keys).
     Q_INVOKABLE bool pageSupportsReset(const QString& page) const;
 
     /// True when @p page can discard its own unsaved edits. Currently every page
@@ -201,8 +202,8 @@ public:
 
     /// Reset every config key owned by @p page to its schema default, staged
     /// for the user to Save or Discard (never persisted here). Manifest pages
-    /// reset their keys; the ordering / shortcuts / virtual-screens / window-
-    /// appearance / animation pages reset through their own staged machinery.
+    /// (including Windows appearance) reset their keys; the ordering / shortcuts /
+    /// virtual-screens / animation pages reset through their own staged machinery.
     /// No-op only for a page with none of those.
     Q_INVOKABLE void resetPage(const QString& page);
 
@@ -654,11 +655,10 @@ private:
     // any page whose isPageDirty is value-based — manifest, ordering, shortcuts,
     // and animation pages.
     void reconcilePageDirty(const QString& page);
-    // Value-based attribution for the two rule-backed pages sharing one
-    // RuleController model: set m_dirtyPages membership for "window-appearance"
-    // (= baselinesDirty) and "rules" (= userRulesDirty), emitting
-    // dirtyPagesChanged on a change. Called on every rule-model mutation and on
-    // revert/apply completion so the badges follow which subset actually changed.
+    // Value-based dirty attribution for the Rules page (the only page backed by
+    // the RuleController model now that appearance is config): set m_dirtyPages
+    // membership for "rules" (= userRulesDirty), emitting dirtyPagesChanged on a
+    // change. Called on every rule-model mutation and on revert/apply completion.
     void reconcileRuleBackedDirty();
     void refreshVirtualDesktops();
     void refreshActivities();

@@ -476,16 +476,10 @@ SettingsController::SettingsController(QObject* parent)
     // from this controller's save()/load() so they don't race the
     // setNeedsSave(false) those methods emit.
     m_rulesPage = new RuleController(this);
-    // A per-monitor gap override is a screen-scoped gap Rule. Adding or
-    // removing one changes the rule model's count, so refresh the Gaps card's
-    // scope chip (its override dot polls hasPerScreenGapRule on
-    // perScreenOverridesChanged) when rules are added/removed.
-    if (m_rulesPage->model() != nullptr) {
-        connect(m_rulesPage->model(), &RuleModel::countChanged, this, &SettingsController::perScreenOverridesChanged);
-    }
-    // Attribute rule-model dirtiness to the two rule-backed pages that share
-    // this one controller: appearance (managed baseline) edits mark
-    // "window-appearance", user-rule edits mark "rules".
+    // Attribute rule-model dirtiness to the Rules page. Window appearance and
+    // per-monitor gaps are config-backed now (refreshed via
+    // perScreenAutotileSettingsChanged, wired above), so the Rules page is the
+    // only page riding this shared controller's dirty state.
     // reconcileRuleBackedDirty() is value-based — it compares the staged model
     // to the last daemon-synced snapshot — so it stays correct even when the
     // shared dirty bit does not transition (e.g. editing a baseline while user

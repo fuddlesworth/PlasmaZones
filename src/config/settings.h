@@ -792,11 +792,11 @@ public:
     void clearPerScreenAutotileGapsSettings(const QString& screenIdOrName);
     void clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName);
 
-    // Per-screen snapping gaps are rule-backed (per-monitor gap Rules), so
-    // the only accessor is the reader. There is no per-screen snapping storage
-    // and no setter/clear/has: the set/clear/has triplet stays as ISettings
-    // no-op defaults (the geometry path only ever reads). Writes go through the
-    // window-rule store via the Appearance page.
+    // Per-screen snapping gaps project the config-backed per-monitor gap
+    // overrides (perScreenGapOverrides) — the geometry path only reads them, so
+    // this is the sole accessor; writes go through setPerScreenAutotileSetting /
+    // the perScreenGap* helpers, and the ISettings set/clear/has snapping triplet
+    // stays as no-op defaults.
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
 
     // Per-monitor gap overrides (config-backed, unified — one value per monitor
@@ -810,6 +810,13 @@ public:
     QVariantMap perScreenGapOverrides(const QString& screenIdOrName) const override;
     bool hasPerScreenGapOverride(const QString& screenIdOrName) const;
     void clearPerScreenGapOverride(const QString& screenIdOrName);
+
+    /// True iff the gap-dimension subset of the per-screen store differs between
+    /// @p before and @p after. load() uses it to fire perScreenSnappingSettingsChanged
+    /// (the daemon's gap-resnap trigger for already-snapped windows) on a per-monitor
+    /// gap change, without over-firing on an algorithm/split-only per-screen change.
+    static bool perScreenGapDimensionsDiffer(const QHash<QString, QVariantMap>& before,
+                                             const QHash<QString, QVariantMap>& after);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (ISettings interface)
@@ -1269,7 +1276,9 @@ private:
 
     // Groups that save() writes exhaustively (excludes unmanaged groups).
     static QStringList managedGroupNames();
-    // Delete all per-screen override groups (ZoneSelector:*, AutotileScreen:*, SnappingScreen:*).
+    // Delete all per-screen override groups by prefix (ZoneSelector:*,
+    // AutotileScreen:*, and the legacy SnappingScreen:* which is no longer written
+    // but is still swept to scrub any file an older build left behind).
     static void deletePerScreenGroups(PhosphorConfig::IBackend* backend);
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
@@ -1355,13 +1364,13 @@ private:
     // the reactive wiring.
     void connectRuleStoreGapReactivity();
 
-    // React to a rule-store change. The GLOBAL inner/outer gaps are config-backed
-    // (the "Gaps" group) so their NOTIFY is owned by the setters, not this
-    // handler. Per-SCREEN gaps are still rule-backed (per-monitor gap Rules), so
-    // this re-syncs the per-screen consumers — but only when a gap action
-    // somewhere in the rule set actually changed, so a non-gap rule write
-    // (mode/assignment toggle) doesn't spuriously fire settingsChanged. Bound to
-    // the store's rulesChanged signal.
+    // React to a rule-store change. The GLOBAL inner/outer gaps and the
+    // per-monitor gap overrides are config-backed, so their NOTIFY is owned by the
+    // setters / load(), not this handler. What remains rule-backed is the CONTEXT
+    // gap cascade (per-mode / desktop / activity gap Rules), so this re-syncs the
+    // per-screen consumers — but only when a gap action somewhere in the rule set
+    // actually changed, so a non-gap rule write (mode/assignment toggle) doesn't
+    // spuriously fire settingsChanged. Bound to the store's rulesChanged signal.
     void onRuleStoreChanged();
 
     // Fingerprint of every gap action across the rule set, used to gate the
@@ -1417,9 +1426,10 @@ private:
     // Per-screen autotile overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;
 
-    // Per-screen snapping gaps are no longer stored here: they are rule-backed
-    // (per-monitor gap Rules), read by getPerScreenSnappingSettings via
-    // perScreenGapRuleOverrides. There are no other per-screen snapping keys.
+    // Per-monitor gaps are unified (one value per monitor drives both snap and
+    // tile) and live in the map above; the gap-dimension sub-domain is projected
+    // by perScreenGapOverrides and surfaced as getPerScreenSnappingSettings. There
+    // is no separate per-screen snapping store.
 
     // Autotiling Settings
     // Autotiling stored in m_store.

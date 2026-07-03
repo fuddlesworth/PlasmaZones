@@ -98,9 +98,9 @@ void SettingsController::buildApplicationController()
     // Display / Placement). No QML of its own; redirects to its first leaf.
     regVirtual(QStringLiteral("appearance"), QString(), PhosphorI18n::tr("Appearance"), QString(),
                QStringLiteral("preferences-desktop-theme"), /*collapsible=*/true);
-    // Shared, mode-neutral page under Appearance. Edits the single managed
-    // baseline appearance Rule — the window border / title bar AND the
-    // unified inner/outer gap model (both global, not per-mode).
+    // Shared, mode-neutral page under Appearance. Edits config: the window border
+    // / title bar (Windows.*) AND the unified inner/outer gap model (Gaps.*), both
+    // global (not per-mode).
     regPage(m_windowAppearancePage, QStringLiteral("appearance"), PhosphorI18n::tr("Windows"),
             QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
     // "animations" is a no-QML drill-down parent under Appearance — register it as
@@ -175,7 +175,7 @@ void SettingsController::buildApplicationController()
 
     // Snapping → Window holds just the per-mode Behavior page now. The window
     // border / title-bar appearance moved to the shared, top-level Window
-    // Appearance page (one baseline rule, mode-neutral).
+    // Appearance page (config-backed, shared, mode-neutral).
     regVirtual(QStringLiteral("snapping-window-behavior"), QStringLiteral("snapping"), PhosphorI18n::tr("Window"),
                QStringLiteral("SnappingWindowBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
                /*collapsible=*/false, /*divider=*/true);
@@ -199,7 +199,7 @@ void SettingsController::buildApplicationController()
     // only the parents changed, keeping the per-page controller ids stable.
     // Tiling → Window holds just the per-mode Behavior page now. The window
     // border / title-bar appearance moved to the shared, top-level Window
-    // Appearance page (one baseline rule, mode-neutral).
+    // Appearance page (config-backed, shared, mode-neutral).
     regPage(m_tilingBehaviorPage, QStringLiteral("tiling"), PhosphorI18n::tr("Window"),
             QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
             /*collapsible=*/false, /*divider=*/true);

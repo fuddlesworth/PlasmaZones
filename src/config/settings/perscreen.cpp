@@ -767,6 +767,27 @@ bool Settings::hasPerScreenGapOverride(const QString& screenIdOrName) const
                                  /*wantGaps=*/true);
 }
 
+bool Settings::perScreenGapDimensionsDiffer(const QHash<QString, QVariantMap>& before,
+                                            const QHash<QString, QVariantMap>& after)
+{
+    const auto project = [](const QHash<QString, QVariantMap>& src) {
+        QHash<QString, QVariantMap> out;
+        for (auto s = src.constBegin(); s != src.constEnd(); ++s) {
+            QVariantMap gaps;
+            for (auto e = s.value().constBegin(); e != s.value().constEnd(); ++e) {
+                if (isPerScreenGapDimensionKey(e.key())) {
+                    gaps.insert(e.key(), e.value());
+                }
+            }
+            if (!gaps.isEmpty()) {
+                out.insert(s.key(), gaps);
+            }
+        }
+        return out;
+    };
+    return project(before) != project(after);
+}
+
 void Settings::clearPerScreenGapOverride(const QString& screenIdOrName)
 {
     if (clearPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenGapDimensionKey,

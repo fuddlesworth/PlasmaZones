@@ -69,11 +69,6 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
     Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
-    // Seed defaults for the dependent border details, sourced from the same
-    // DecorationDefaults the schema default uses so an on-enable value matches
-    // the historical baseline default.
-    Q_PROPERTY(int borderWidthDefault READ borderWidthDefault CONSTANT)
-    Q_PROPERTY(int borderRadiusDefault READ borderRadiusDefault CONSTANT)
     Q_PROPERTY(int innerGapMin READ innerGapMin CONSTANT)
     Q_PROPERTY(int innerGapMax READ innerGapMax CONSTANT)
     Q_PROPERTY(int outerGapMin READ outerGapMin CONSTANT)
@@ -156,14 +151,6 @@ public:
     int borderRadiusMax() const
     {
         return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
-    }
-    int borderWidthDefault() const
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
-    }
-    int borderRadiusDefault() const
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
     }
     int innerGapMin() const
     {

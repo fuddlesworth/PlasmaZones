@@ -221,11 +221,7 @@ void RuleAdaptor::resetManagedDefaults()
     // wrote) survive in rules.json. Strip the three fixed baseline ids when
     // managed — a user's own rule is never touched — and persist once, gated on a
     // real removal so a clean set neither rewrites nor re-broadcasts.
-    const QSet<QUuid> staleBaselineIds = {
-        ConfigDefaults::baselineBorderRuleId(),
-        ConfigDefaults::baselineTitleBarRuleId(),
-        ConfigDefaults::baselineGapRuleId(),
-    };
+    const QSet<QUuid> staleBaselineIds = ConfigDefaults::managedAppearanceBaselineIds();
     const QList<PhosphorRules::Rule>& currentRules = m_store->ruleSet().rules();
     QList<PhosphorRules::Rule> keptRules;
     keptRules.reserve(currentRules.size());

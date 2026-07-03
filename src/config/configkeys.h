@@ -97,9 +97,8 @@ public:
     P_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     P_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
     // Snapping.Gaps holds only the snapping-specific adjacency threshold. The
-    // inner/outer gap values are no longer stored in config at all: they live on
-    // the managed baseline appearance rule and are read back through Settings'
-    // gap getters.
+    // shared inner/outer gap values live in the top-level Gaps group (gapsGroup)
+    // and are read through Settings' gap getters.
     P_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
 
     // Display (mode-neutral) — per-mode disable lists. Lives outside Snapping.*

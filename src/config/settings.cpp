@@ -230,9 +230,14 @@ void Settings::load()
 
     const bool perScreenZoneSelectorChanged = perScreenZoneSelectorBefore != m_perScreenZoneSelectorSettings;
     const bool perScreenAutotileChanged = perScreenAutotileBefore != m_perScreenAutotileSettings;
-    // Per-screen snapping gaps are rule-backed now (no Settings storage); their
-    // change signal is driven by the rule store via onRuleStoreChanged, not by
-    // this config reload.
+    // Per-monitor gaps are config-backed and live in the per-screen autotile store.
+    // A gap change must resnap already-snapped windows, the same way a global gap
+    // change or a context gap rule does; the daemon binds that resnap to
+    // perScreenSnappingSettingsChanged. Fire it only when the gap-dimension subset
+    // changed, so an algorithm/split-only per-screen edit doesn't trigger a spurious
+    // gap resnap.
+    const bool perScreenGapChanged =
+        Settings::perScreenGapDimensionsDiffer(perScreenAutotileBefore, m_perScreenAutotileSettings);
     const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged;
 
     if (useSystemColors()) {
@@ -282,6 +287,8 @@ void Settings::load()
         Q_EMIT perScreenZoneSelectorSettingsChanged();
     if (perScreenAutotileChanged)
         Q_EMIT perScreenAutotileSettingsChanged();
+    if (perScreenGapChanged)
+        Q_EMIT perScreenSnappingSettingsChanged();
 
     if (anyChanged || anyDisableChanged || perScreenChanged)
         Q_EMIT settingsChanged();
