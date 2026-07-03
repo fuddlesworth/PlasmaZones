@@ -813,14 +813,17 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
     using CD = ConfigDefaults;
     // The "Apply to" scope is a closed set of tokens the Appearance page and the
     // effect agree on ("tiled" / "normal" / "all"); snap an unknown on-disk token
-    // to the default so garbage can't reach the effect.
-    const auto scopeValidator = [] {
-        return validStringOr({QLatin1String("tiled"), QLatin1String("normal"), QLatin1String("all")},
-                             CD::windowBorderScope());
+    // to the key's own default so garbage can't reach the effect.
+    const auto scopeValidator = [](const QString& fallback) {
+        return validStringOr({QLatin1String("tiled"), QLatin1String("normal"), QLatin1String("all")}, fallback);
     };
     schema.groups[CD::windowsAppearanceGroup()] = {
         {CD::showBorderKey(), CD::windowShowBorder(), QMetaType::Bool},
-        {CD::borderScopeKey(), CD::windowBorderScope(), QMetaType::QString, {}, scopeValidator()},
+        {CD::borderScopeKey(),
+         CD::windowBorderScope(),
+         QMetaType::QString,
+         {},
+         scopeValidator(CD::windowBorderScope())},
         {CD::widthKey(),
          CD::windowBorderWidth(),
          QMetaType::Int,
@@ -834,7 +837,11 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
         {CD::borderColorActiveKey(), CD::windowBorderColorActive(), QMetaType::QString},
         {CD::borderColorInactiveKey(), CD::windowBorderColorInactive(), QMetaType::QString},
         {CD::hideTitleBarsKey(), CD::windowHideTitleBars(), QMetaType::Bool},
-        {CD::titleBarScopeKey(), CD::windowTitleBarScope(), QMetaType::QString, {}, scopeValidator()},
+        {CD::titleBarScopeKey(),
+         CD::windowTitleBarScope(),
+         QMetaType::QString,
+         {},
+         scopeValidator(CD::windowTitleBarScope())},
     };
 }
 
