@@ -153,7 +153,11 @@ public:
     /// single `void(QJsonObject&)` migration step, so this runs after the
     /// chain, from @ref ensureJsonConfigImpl.
     ///
-    /// It reads assignments.json + the four `_v4*` stashes left in
+    /// First, on every path, it adopts a legacy `windowrules.json` as `rules.json`
+    /// when the new file is absent (the rule store was renamed in v5), so an
+    /// already-converted store is not rebuilt from the retired assignments.json.
+    ///
+    /// It then reads assignments.json + the four `_v4*` stashes left in
     /// config.json (`_v4DisableStash`, `_v4AnimationRulesStash`,
     /// `_v4ExclusionStash`, `_v4AnimationExclusionStash`), builds the
     /// RuleSet (assignment rules + disable-list rules + per-window

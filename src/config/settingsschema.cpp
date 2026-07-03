@@ -656,7 +656,11 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::gridColumnsMin(), CD::gridColumnsMax())},
-        {CD::sizeModeKey(), CD::sizeMode(), QMetaType::Int, {}, clampInt(0, 2)},
+        {CD::sizeModeKey(),
+         CD::sizeMode(),
+         QMetaType::Int,
+         {},
+         clampInt(0, static_cast<int>(ZoneSelectorSizeMode::Manual))},
         {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, {}, clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
     };
 }
@@ -838,7 +842,7 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
         return validStringOr({WAS::Tiled, WAS::Normal, WAS::All}, fallback);
     };
     schema.groups[CD::windowsAppearanceGroup()] = {
-        {CD::showBorderKey(), CD::windowShowBorder(), QMetaType::Bool},
+        {CD::showBorderKey(), CD::showWindowBorder(), QMetaType::Bool},
         {CD::borderScopeKey(),
          CD::windowBorderScope(),
          QMetaType::QString,
@@ -864,7 +868,7 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          QMetaType::QString,
          {},
          validBorderColorOr(CD::windowBorderColorInactive())},
-        {CD::hideTitleBarsKey(), CD::windowHideTitleBars(), QMetaType::Bool},
+        {CD::hideTitleBarsKey(), CD::hideWindowTitleBars(), QMetaType::Bool},
         {CD::titleBarScopeKey(),
          CD::windowTitleBarScope(),
          QMetaType::QString,

@@ -356,10 +356,11 @@ private Q_SLOTS:
     }
 
     /**
-     * The per-screen autotile map hosts three disjoint sub-domains — SmartGaps
-     * (Tiling smart-gaps card), the inner/outer gap DIMENSIONS (Windows gaps
-     * card, config-backed), and everything else (Algorithm card). Each card
-     * reports and clears only its own keys, so resetting one never wipes another.
+     * The per-screen autotile map hosts three disjoint sub-domains — the
+     * inner/outer gap DIMENSIONS (Windows gaps card, config-backed), SmartGaps
+     * (which rides the map but has no per-screen card of its own now), and
+     * everything else (the Algorithm card). Clearing one card's keys never wipes
+     * another's.
      */
     void testPerScreenAutotile_subdomainsAreIndependent()
     {
@@ -374,9 +375,9 @@ private Q_SLOTS:
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 15);
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 2);
 
-        QVERIFY(settings.hasPerScreenAutotileGapsSettings(screen));
         QVERIFY(settings.hasPerScreenGapOverride(screen));
         QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
+        QVERIFY(settings.getPerScreenAutotileSettings(screen).contains(QStringLiteral("SmartGaps")));
 
         // Spy from here so the three setter emits above don't count.
         QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
@@ -385,30 +386,22 @@ private Q_SLOTS:
         settings.clearPerScreenGapOverride(screen);
         QCOMPARE(spy.count(), 1);
         QVERIFY(!settings.hasPerScreenGapOverride(screen));
-        QVERIFY(settings.hasPerScreenAutotileGapsSettings(screen));
         QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
         QVariantMap afterGapDimClear = settings.getPerScreenAutotileSettings(screen);
         QVERIFY2(!afterGapDimClear.contains(QStringLiteral("InnerGap")), "gap dimension must be cleared");
         QCOMPARE(afterGapDimClear.value(QStringLiteral("SmartGaps")).toBool(), true);
         QCOMPARE(afterGapDimClear.value(QStringLiteral("MasterCount")).toInt(), 2);
 
-        // Clearing the SmartGaps sub-domain leaves the algorithm override intact.
-        settings.clearPerScreenAutotileGapsSettings(screen);
-        QCOMPARE(spy.count(), 2);
-        QVERIFY(!settings.hasPerScreenAutotileGapsSettings(screen));
-        QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
-        QVERIFY2(!settings.getPerScreenAutotileSettings(screen).contains(QStringLiteral("SmartGaps")),
-                 "SmartGaps must be cleared");
-
         // A no-op gap-dimension clear (none remain) changes nothing and does not emit.
         settings.clearPerScreenGapOverride(screen);
-        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.count(), 1);
 
-        // Clearing the algorithm sub-domain removes the last key, dropping the entry.
+        // Clearing the algorithm sub-domain leaves the SmartGaps override intact.
         settings.clearPerScreenAutotileAlgorithmSettings(screen);
-        QCOMPARE(spy.count(), 3);
+        QCOMPARE(spy.count(), 2);
         QVERIFY(!settings.hasPerScreenAutotileAlgorithmSettings(screen));
-        QVERIFY(!settings.hasPerScreenAutotileSettings(screen));
+        QVERIFY2(settings.getPerScreenAutotileSettings(screen).contains(QStringLiteral("SmartGaps")),
+                 "SmartGaps must survive the algorithm-domain clear");
     }
 
     /**

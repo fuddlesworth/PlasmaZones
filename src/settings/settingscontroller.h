@@ -506,10 +506,8 @@ public:
     Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value);
     Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenName) const;
-    // Per-card sub-domains (Gaps vs Algorithm) of the shared autotile map, so
-    // each card's scope chip dot/reset only touches its own keys.
-    Q_INVOKABLE bool hasPerScreenAutotileGapsSettings(const QString& screenName) const;
-    Q_INVOKABLE void clearPerScreenAutotileGapsSettings(const QString& screenName);
+    // The Algorithm sub-domain of the shared autotile map, so the Tiling Algorithm
+    // card's scope chip dot/reset only touches its own keys.
     Q_INVOKABLE bool hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenAutotileAlgorithmSettings(const QString& screenName);
 

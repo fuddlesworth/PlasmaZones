@@ -223,7 +223,9 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // parent WindowItem clips children to the window frame.  Inset the innerRect
     // by borderWidth so the border draws fully inside the frame (no clipping).
     const QRectF frame = w->frameGeometry();
-    const KWin::RectF innerRect(bw, bw, frame.width() - 2.0 * bw, frame.height() - 2.0 * bw);
+    // Floor at 0 so a window narrower/shorter than 2*borderWidth can't produce a
+    // negative-size inner rect.
+    const KWin::RectF innerRect(bw, bw, qMax(0.0, frame.width() - 2.0 * bw), qMax(0.0, frame.height() - 2.0 * bw));
     const int br = ovr.borderRadius.value_or(0);
     // BorderOutline / OutlinedBorderItem paint the outline colour OPAQUE — the
     // scene ignores the QColor alpha channel (verified: a #80…/#40… border drew
@@ -298,15 +300,15 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
 
     // Keep the border in sync when the window resizes or moves.
     const QString wid = windowId; // capture by value
-    wb.geometryConnection =
-        connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
-                [this, wid, bw](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
-                    auto it = m_windowBorders.find(wid);
-                    if (it != m_windowBorders.end() && it->item) {
-                        const QRectF f = ew->frameGeometry();
-                        it->item->setInnerRect(KWin::RectF(bw, bw, f.width() - 2.0 * bw, f.height() - 2.0 * bw));
-                    }
-                });
+    wb.geometryConnection = connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
+                                    [this, wid, bw](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
+                                        auto it = m_windowBorders.find(wid);
+                                        if (it != m_windowBorders.end() && it->item) {
+                                            const QRectF f = ew->frameGeometry();
+                                            it->item->setInnerRect(KWin::RectF(bw, bw, qMax(0.0, f.width() - 2.0 * bw),
+                                                                               qMax(0.0, f.height() - 2.0 * bw)));
+                                        }
+                                    });
 
     m_windowBorders.insert(windowId, wb);
 }

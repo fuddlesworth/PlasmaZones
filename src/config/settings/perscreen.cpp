@@ -863,31 +863,16 @@ bool Settings::hasPerScreenAutotileSettings(const QString& screenIdOrName) const
     return findPerScreenEntry(m_perScreenAutotileSettings, screenIdOrName) != m_perScreenAutotileSettings.constEnd();
 }
 
-// Sub-domain accessors: the SmartGaps card and the Algorithm card share one
-// per-screen autotile map with the gap-dimension sub-domain, but each must
-// report/reset only its own keys. SmartGaps is isPerScreenAutotileGapsKey; the
-// gap dimensions are isPerScreenGapDimensionKey (handled by the perScreenGap*
-// accessors above); Algorithm is the complement of both.
-
-bool Settings::hasPerScreenAutotileGapsSettings(const QString& screenIdOrName) const
-{
-    return hasPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenAutotileGapsKey,
-                                 /*wantGaps=*/true);
-}
+// Algorithm sub-domain accessor. The per-screen autotile map holds three disjoint
+// key groups: the gap dimensions (isPerScreenGapDimensionKey, handled by the
+// perScreenGap* accessors above), SmartGaps (isPerScreenAutotileGapsKey, which
+// rides the map but has no per-screen card of its own), and the Algorithm card's
+// keys (the complement of both). The Algorithm card reports/resets only its subset.
 
 bool Settings::hasPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName) const
 {
     return hasPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenAutotileAlgorithmKey,
                                  /*wantGaps=*/true);
-}
-
-void Settings::clearPerScreenAutotileGapsSettings(const QString& screenIdOrName)
-{
-    if (clearPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenAutotileGapsKey,
-                                /*clearGaps=*/true)) {
-        Q_EMIT perScreenAutotileSettingsChanged();
-        Q_EMIT settingsChanged();
-    }
 }
 
 void Settings::clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName)

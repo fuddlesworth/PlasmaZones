@@ -61,16 +61,6 @@ bool SettingsController::hasPerScreenAutotileSettings(const QString& screenName)
     return m_settings.hasPerScreenAutotileSettings(screenName);
 }
 
-bool SettingsController::hasPerScreenAutotileGapsSettings(const QString& screenName) const
-{
-    return m_settings.hasPerScreenAutotileGapsSettings(screenName);
-}
-
-void SettingsController::clearPerScreenAutotileGapsSettings(const QString& screenName)
-{
-    m_settings.clearPerScreenAutotileGapsSettings(screenName);
-}
-
 bool SettingsController::hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const
 {
     return m_settings.hasPerScreenAutotileAlgorithmSettings(screenName);

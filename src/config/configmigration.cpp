@@ -442,8 +442,9 @@ bool ConfigMigration::ensureJsonConfigImpl()
     // The in-memory chain above ran through migrateV4ToV5, a pure config→config
     // transform (it folds the per-mode appearance/gap values into the unified
     // "Windows" / "Gaps" groups in-place and creates no rules), so only the v4
-    // finalizer runs here. finalizeV4Conversion's cleanup also renames the v4
-    // windowrules.json to rules.json and prunes the retired provider-default rule.
+    // finalizer runs here. finalizeV4Conversion also adopts a legacy
+    // windowrules.json as rules.json (a first-step, all-paths action) and prunes
+    // the retired provider-default rule.
     return finalizeV4Conversion(jsonPath);
 }
 
@@ -3289,6 +3290,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 // constants (DecorationDefaults, core gap constants) could in principle drift;
 // pinning the literals decouples this migration's stable wire-format contract
 // from the live code.
+//
+// The v5 DESTINATION keys (the unified "Windows" / "Gaps" groups this step writes
+// into) are deliberately NOT frozen here — they are written through the live
+// ConfigKeys accessors because v5 is the current schema. A future v5→v6 step that
+// renames those accessors MUST freeze them as constants first, or this historical
+// step will silently retarget to the renamed groups.
 namespace {
 
 // ── Frozen v4 on-disk group paths (dot-paths) and leaf-key spellings ───────
@@ -3406,10 +3413,13 @@ void stashColor(const QJsonObject& colors, QLatin1String key, QJsonObject& out, 
 QJsonObject buildModeStash(const QJsonObject& root, QLatin1String mode)
 {
     const QString modeStr = QString(mode);
-    const QJsonObject colors = groupObjectAtPath(root, modeStr + QStringLiteral(".Appearance.Colors"));
-    const QJsonObject deco = groupObjectAtPath(root, modeStr + QStringLiteral(".Appearance.Decorations"));
-    const QJsonObject borders = groupObjectAtPath(root, modeStr + QStringLiteral(".Appearance.Borders"));
-    const QJsonObject gaps = groupObjectAtPath(root, modeStr + QStringLiteral(".Gaps"));
+    // Build the v4 group paths from the frozen segment constants (same spellings
+    // the strip side uses) so a rename can't desync the two sides.
+    const QString appearance = modeStr + QLatin1Char('.') + kV4SegAppearance + QLatin1Char('.');
+    const QJsonObject colors = groupObjectAtPath(root, appearance + kV4SegColors);
+    const QJsonObject deco = groupObjectAtPath(root, appearance + kV4SegDecorations);
+    const QJsonObject borders = groupObjectAtPath(root, appearance + kV4SegBorders);
+    const QJsonObject gaps = groupObjectAtPath(root, modeStr + QLatin1Char('.') + kV4SegGaps);
 
     QJsonObject out;
     stashBoolIfDiffers(borders, kV4KeyShowBorder, kV4DefShowBorder, out, kFieldShowBorder);

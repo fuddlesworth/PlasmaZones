@@ -123,12 +123,15 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         return;
     }
 
-    auto* window = m_screenStates.value(screenId).zoneSelectorSlot();
+    const auto it = m_screenStates.constFind(screenId);
+    if (it == m_screenStates.constEnd()) {
+        return;
+    }
+    auto* window = it->zoneSelectorSlot();
     if (!window) {
         return;
     }
-
-    QScreen* screen = m_screenStates.value(screenId).zoneSelectorPhysScreen;
+    QScreen* screen = it->zoneSelectorPhysScreen;
     if (!screen) {
         return;
     }

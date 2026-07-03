@@ -294,7 +294,7 @@ public:
     // scope defaults to "tiled" (apply only to tiled/snapped windows).
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static bool windowShowBorder()
+    static bool showWindowBorder()
     {
         return ::PhosphorCompositor::DecorationDefaults::ShowBorder;
     }
@@ -322,7 +322,7 @@ public:
     {
         return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
     }
-    static bool windowHideTitleBars()
+    static bool hideWindowTitleBars()
     {
         return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
     }

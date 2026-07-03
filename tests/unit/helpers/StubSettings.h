@@ -1235,13 +1235,13 @@ private:
     int m_outerGapLeft = ConfigDefaults::outerGapLeft();
     int m_outerGapRight = ConfigDefaults::outerGapRight();
     // Window appearance — config-backed defaults routed through ConfigDefaults.
-    bool m_showWindowBorder = ConfigDefaults::windowShowBorder();
+    bool m_showWindowBorder = ConfigDefaults::showWindowBorder();
     QString m_windowBorderScope = ConfigDefaults::windowBorderScope();
     int m_windowBorderWidth = ConfigDefaults::windowBorderWidth();
     int m_windowBorderRadius = ConfigDefaults::windowBorderRadius();
     QString m_windowBorderColorActive = ConfigDefaults::windowBorderColorActive();
     QString m_windowBorderColorInactive = ConfigDefaults::windowBorderColorInactive();
-    bool m_hideWindowTitleBars = ConfigDefaults::windowHideTitleBars();
+    bool m_hideWindowTitleBars = ConfigDefaults::hideWindowTitleBars();
     QString m_windowTitleBarScope = ConfigDefaults::windowTitleBarScope();
 };
 
