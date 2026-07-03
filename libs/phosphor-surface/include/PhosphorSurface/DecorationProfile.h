@@ -15,7 +15,7 @@
 namespace PhosphorSurfaceShaders {
 
 /**
- * @brief Per-surface decoration shader-pack chain, pack parameters and titlebar.
+ * @brief Per-surface decoration shader-pack chain and its per-pack parameters.
  *
  * Parallel to `PhosphorAnimationShaders::ShaderProfile` which configures a
  * single transition *effect* per event, `DecorationProfile` configures the

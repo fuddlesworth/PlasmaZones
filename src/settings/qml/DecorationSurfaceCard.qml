@@ -84,16 +84,23 @@ Item {
         root._shadowingChildrenCount = root.bridge.overrideDescendantCount(root.surfacePath);
     }
 
-    // Engage a per-surface override (leaf toggle ON): seed the chain with the
-    // currently resolved chain so the override starts visibly equal to what was
-    // inherited, then the user diverges from there.
+    // Engage a per-surface override (leaf toggle ON): seed the chain AND the
+    // per-pack parameter values from the currently resolved profile, so the
+    // override starts visibly identical to what was inherited and the user
+    // diverges from there. Seeding only the chain would flip every pack back
+    // to its schema defaults the moment the toggle engages, discarding the
+    // inherited values the user was just previewing.
     function _engageOverride() {
         // Engaging is idempotent: if a direct override already exists, re-seeding
-        // from the resolved chain would discard the user's diverged edits. Only
+        // from the resolved profile would discard the user's diverged edits. Only
         // seed when there is no override yet (a stray re-fire of onToggleClicked
         // with checked === true must not clobber the current chain).
-        if (root.bridge && !root._hasOverride)
-            root.bridge.setChain(root.surfacePath, root.bridge.chainAt(root.surfacePath));
+        if (!root.bridge || root._hasOverride)
+            return;
+        root.bridge.setChain(root.surfacePath, root.bridge.chainAt(root.surfacePath));
+        var inheritedParams = (root._resolved && root._resolved.parameters) ? root._resolved.parameters : ({});
+        for (var packId in inheritedParams)
+            root.bridge.setChainParams(root.surfacePath, packId, inheritedParams[packId]);
     }
 
     function _resolvedSummary() {

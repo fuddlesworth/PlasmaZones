@@ -158,7 +158,10 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 //   m_timeHiDirty     ← setTime (wrap-offset crossing)
 //   m_sceneDataDirty  ← setResolution, setMousePosition, setCustomParams,
 //                        setCustomColor, setAudioSpectrum, setUserTexture,
-//                        setIsReversed
+//                        setIsReversed, and the surface-contract setters
+//                        (setSurfaceOpacity, setSurfaceScale, setSurfaceFocused,
+//                        setSurfaceSize, setSurfaceFrameTopLeft,
+//                        setSurfaceFrameSize)
 //   m_appFieldsDirty  ← setAppField0, setAppField1
 //   extension dirty   ← tracked via m_uniformExtension->isDirty() (set by the
 //                        extension's own updateFromX() methods)

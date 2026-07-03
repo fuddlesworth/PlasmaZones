@@ -194,8 +194,9 @@ struct WindowBorder
 
     /// The resolved decoration shader-pack chain for this window
     /// (DecorationProfile::effectiveChain()), e.g. {"border"} or {"border",
-    /// "glow"}. Stored whole this stage so the next stage can composite
-    /// chain[1..] over the base; for now ONLY chain[0] (basePackId) renders.
+    /// "glow"}. The idle present path composites the FULL chain
+    /// (renderSurfaceChainComposite folds chain[1..] over the base); only the
+    /// animation surface-layer path renders chain[0] (basePackId) alone.
     QStringList chain;
 
     /// The base pack id to render — chain.value(0), defaulting to "border".

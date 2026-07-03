@@ -18,6 +18,7 @@
 #include <QDBusError>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QPluginLoader>
 #include <QRegularExpression>
 #include <QSet>
@@ -857,18 +858,40 @@ bool Daemon::init()
                 if (!reg) {
                     return;
                 }
-                QString vertPath = info.vertexShaderPath;
+                // Mirror SurfaceShaderItem exactly so the bake-cache key the
+                // warm compile writes is the one the first live paint looks up:
+                // include paths iterate the registered search dirs
+                // highest-priority first (user, then system descending —
+                // searchPaths() registers lowest-priority first, so reverse),
+                // each contributing its `shared` subdir then itself. The vert
+                // resolves like the live loader: the pack's own metadata vert,
+                // else `surface.vert` beside the frag, else the first
+                // `surface.vert` in the include dirs (the `shared` subdir
+                // carries the shipped one — packs themselves ship no vert).
+                QStringList searchDirs = reg->searchPaths();
+                std::reverse(searchDirs.begin(), searchDirs.end());
                 QStringList includePaths;
-                for (const QString& sp : reg->searchPaths()) {
+                for (const QString& sp : std::as_const(searchDirs)) {
                     const QString sharedDir = sp + QStringLiteral("/shared");
                     if (QDir(sharedDir).exists()) {
                         includePaths.append(sharedDir);
                     }
                     includePaths.append(sp);
-                    if (vertPath.isEmpty()) {
-                        const QString candidate = sp + QStringLiteral("/surface.vert");
+                }
+                QString vertPath = info.vertexShaderPath;
+                if (vertPath.isEmpty()) {
+                    const QString besideFrag =
+                        QFileInfo(info.fragmentShaderPath).absolutePath() + QStringLiteral("/surface.vert");
+                    if (QFile::exists(besideFrag)) {
+                        vertPath = besideFrag;
+                    }
+                }
+                if (vertPath.isEmpty()) {
+                    for (const QString& incDir : std::as_const(includePaths)) {
+                        const QString candidate = incDir + QStringLiteral("/surface.vert");
                         if (QFile::exists(candidate)) {
                             vertPath = candidate;
+                            break;
                         }
                     }
                 }

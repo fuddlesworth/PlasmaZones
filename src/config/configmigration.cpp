@@ -10,8 +10,6 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorSurface/DecorationProfile.h>
-#include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorConfig/MigrationRunner.h>
 #include <PhosphorConfig/Schema.h>
 #include <PhosphorIdentity/WindowId.h>

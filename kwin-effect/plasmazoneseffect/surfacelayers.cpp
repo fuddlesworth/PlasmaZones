@@ -32,6 +32,7 @@
 #include <QVector4D>
 
 #include <array>
+#include <optional>
 #include <epoxy/gl.h>
 
 namespace PlasmaZones {
@@ -190,7 +191,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
         // uniforms persist into the draw — identical to the passive drawWindow
         // path. The binder is held across effects->drawWindow.
         KWin::ShaderBinder binder(border);
-        pushBorderUniforms(w, *pack, captureScale);
+        pushBorderUniforms(w, *bit, *pack, captureScale);
         // Route through effects->drawWindow (not OffscreenEffect::drawWindow) so
         // KWin's draw-chain iterator is advanced past us before OffscreenData's
         // internal capture re-enters the chain — same rationale as the on-screen
@@ -265,9 +266,11 @@ bool PlasmaZonesEffect::renderSurfaceBufferPasses(KWin::EffectWindow* w, qreal s
     // The pack's bufferScale downscales the buffer FBOs (the surface capture is
     // always full-resolution). Clamp matches SurfaceShaderEffect::fromJson.
     // Resolve the pack metadata by the window's base pack id (the registry effect
-    // backing this window's compiled pack), not a single global selection.
-    const PhosphorSurfaceShaders::SurfaceShaderEffect eff =
-        m_surfaceShaderRegistry.effect(m_windowBorders.value(windowId).basePackId);
+    // backing this window's compiled pack), not a single global selection. The
+    // border entry exists — compiledPackForWindow above returned non-null — so
+    // reuse an iterator instead of copying the whole WindowBorder for one field.
+    const auto borderIt = m_windowBorders.constFind(windowId);
+    const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(borderIt->basePackId);
     const qreal bufferScale = qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale, eff.bufferScale,
                                      PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
     QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
@@ -700,7 +703,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 }
             }
             // Contract uniforms + pack params (shared with the OffscreenData path).
-            pushBorderUniforms(w, *pk, captureScale);
+            pushBorderUniforms(w, *bit, *pk, captureScale);
             drawFullscreenQuad();
         }
         for (int i = 0; i < qMin(static_cast<int>(passCount), 4); ++i) {
@@ -740,9 +743,22 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
     if (it == m_windowBorders.constEnd()) {
         return false;
     }
-    const PhosphorSurfaceShaders::DecorationProfile profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId));
+    // Resolve the decoration profile LAZILY: compiledPack only reads it on a
+    // compile-cache miss, and this runs in the per-frame idle-repaint loop for
+    // every shader-applied window — in the common case (all packs compiled,
+    // e.g. a static border-only window) the tree walk would be pure per-frame
+    // waste. Resolved at most once even when several packs miss.
+    std::optional<PhosphorSurfaceShaders::DecorationProfile> profile;
     for (const QString& packId : it->chain) {
-        CompiledSurfacePack* const pack = compiledPack(packId, profile);
+        CompiledSurfacePack* pack = nullptr;
+        if (const auto cacheIt = m_compiledPacks.find(packId); cacheIt != m_compiledPacks.end()) {
+            pack = &cacheIt->second;
+        } else {
+            if (!profile) {
+                profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId));
+            }
+            pack = compiledPack(packId, *profile);
+        }
         if (!pack || !pack->shader) {
             continue;
         }

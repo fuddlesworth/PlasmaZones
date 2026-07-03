@@ -75,6 +75,33 @@ const Settings::ConfigKeyList& animationConfigKeys()
     return keys;
 }
 
+// Every decoration leaf edits the single shared DecorationProfileTree settings
+// key (one JSON blob covering windows + OSDs + popups), so
+// pageGroupChildren("decoration") — the canonical leaf set — identifies them
+// all and Reset/Discard act on the whole tree, mirroring the animation shared
+// domain above.
+bool isDecorationPage(const QString& page)
+{
+    return SettingsController::pageGroupChildren().value(QStringLiteral("decoration")).contains(page);
+}
+
+// The decoration "value" surface: one Store-backed key. It cannot ride the
+// pageOwnedConfigKeys manifest — all three decoration leaves would own the
+// same key, violating the manifest's one-owner invariant — so the decoration
+// branches in isPageDirty/resetPage/discardPage dispatch through this list
+// instead. Unlike the animation domain there are no side files: reset/discard
+// is entirely resetKeys/discardKeys, and the decorationProfileTreeChanged
+// re-emit drives DecorationPageController::profilesChanged so open cards
+// refresh.
+const Settings::ConfigKeyList& decorationConfigKeys()
+{
+    using CD = ConfigDefaults;
+    static const Settings::ConfigKeyList keys{
+        {CD::surfaceGroup(), CD::surfaceDecorationTreeKey()},
+    };
+    return keys;
+}
+
 } // namespace
 
 void SettingsController::navigateTo(const QString& address)
@@ -233,6 +260,19 @@ bool SettingsController::isPageDirty(const QString& page) const
         return false;
     }
 
+    // Decoration pages share the single DecorationProfileTree key — value-based
+    // like the manifest pages (see decorationConfigKeys for why the key can't
+    // live in the manifest itself). All three leaves report the same state,
+    // matching the shared-domain semantics: an edit on any decoration page is
+    // an edit of the one tree.
+    if (isDecorationPage(page)) {
+        for (const auto& gk : decorationConfigKeys()) {
+            if (m_settings.isKeyModified(gk.first, gk.second))
+                return true;
+        }
+        return false;
+    }
+
     if (m_dirtyPages.contains(page))
         return true;
     // Parent / virtual-parent category: dirty if any child leaf in
@@ -260,10 +300,11 @@ bool SettingsController::pageSupportsReset(const QString& page) const
     // custom order; shortcuts pages unassign every quick slot; the virtual
     // screens page unsplits every monitor; the Windows appearance page resets
     // its 3 managed baseline rules; animation pages clear every per-event
-    // override and reset the animation config keys.
+    // override and reset the animation config keys; decoration pages reset the
+    // shared DecorationProfileTree key.
     return pageOwnedConfigKeys().contains(page) || isOrderingPage(page) || isShortcutsPage(page)
         || page == QLatin1String("virtualscreens") || page == QLatin1String("window-appearance")
-        || isAnimationPage(page);
+        || isAnimationPage(page) || isDecorationPage(page);
 }
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
@@ -349,6 +390,27 @@ void SettingsController::resetPage(const QString& page)
         // isPageDirty(animation) is value-based (hasPendingChanges || any
         // animation key modified), so reconcilePageDirty syncs the active page's
         // m_dirtyPages entry against the post-reset truth.
+        reconcilePageDirty(page);
+        return;
+    }
+
+    // Decoration pages (whole tree, shared domain): reset the single
+    // DecorationProfileTree key to its schema default — the empty/neutral tree
+    // (borders are rule-owned; the tree carries only opt-in shader-pack
+    // decoration). Staged like ordinary edits: Save commits, Discard restores
+    // the baseline. Same NOTIFY-storm suppression as the manifest path.
+    if (isDecorationPage(page)) {
+        {
+            const bool wasLoading = m_loading;
+            m_loading = true;
+            const auto restoreLoading = qScopeGuard([this, wasLoading] {
+                m_loading = wasLoading;
+            });
+            m_settings.resetKeys(decorationConfigKeys());
+        }
+        // isPageDirty(decoration) is value-based, so reconcile syncs this
+        // page's m_dirtyPages entry against the post-reset truth (siblings
+        // report the same shared-key state directly through isPageDirty).
         reconcilePageDirty(page);
         return;
     }
@@ -531,6 +593,32 @@ void SettingsController::discardPage(const QString& page)
         // the pendingChangesChanged handler had attributed to the tree.
         bool changed = false;
         for (const QString& leaf : pageGroupChildren().value(QStringLiteral("animations"))) {
+            if (m_dirtyPages.remove(leaf))
+                changed = true;
+        }
+        if (changed) {
+            Q_EMIT dirtyPagesChanged();
+        }
+        return;
+    }
+
+    // Decoration pages share the single DecorationProfileTree key — discard
+    // reverts it to the committed baseline. discardKeys re-emits
+    // decorationProfileTreeChanged, which DecorationPageController forwards as
+    // profilesChanged so the open cards refresh. Clear every decoration leaf's
+    // stale m_dirtyPages marker: the shared key means one leaf's edit may have
+    // badged the others.
+    if (isDecorationPage(page)) {
+        {
+            const bool wasLoading = m_loading;
+            m_loading = true;
+            const auto restoreLoading = qScopeGuard([this, wasLoading] {
+                m_loading = wasLoading;
+            });
+            m_settings.discardKeys(decorationConfigKeys());
+        }
+        bool changed = false;
+        for (const QString& leaf : pageGroupChildren().value(QStringLiteral("decoration"))) {
             if (m_dirtyPages.remove(leaf))
                 changed = true;
         }

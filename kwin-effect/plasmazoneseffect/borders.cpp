@@ -84,6 +84,11 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
             if (!m_shaderManager.findTransition(w)) {
                 setShader(w, nullptr);
                 unredirect(w);
+                // Dropping the redirect/shader on a STATIC window generates no
+                // damage of its own (mirror of the addRepaintFull on the apply
+                // path in updateWindowBorder) — without this the stale bordered
+                // frame lingers until unrelated damage arrives.
+                w->addRepaintFull();
             }
         }
     }
@@ -384,13 +389,16 @@ void PlasmaZonesEffect::reconcileBorderShader(const QString& windowId, KWin::Eff
     // through removeWindowBorder, which clears the shader and unredirects.
 }
 
-void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const CompiledSurfacePack& pack, qreal scale)
+void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& wb,
+                                           const CompiledSurfacePack& pack, qreal scale)
 {
-    // drawWindow (the sole caller) has already resolved @p pack, confirmed the
-    // border is applied, ruled out a transition owning the slot, and bound
-    // pack.shader, so this just computes and writes the uniforms onto the bound
-    // program. The border APPEARANCE is no longer a parameter here — it rides the
-    // pack's baked customParams/customColors, pushed below.
+    // Every caller (drawWindow's idle blit, renderSurfaceChain's transition
+    // capture, renderSurfaceChainComposite's per-pack fold) has already resolved
+    // @p pack and @p wb, confirmed the border is applied, ruled out a transition
+    // owning the slot, and bound pack.shader, so this just computes and writes
+    // the uniforms onto the bound program. The border APPEARANCE is not a
+    // parameter here — it rides the pack's baked customParams/customColors,
+    // pushed below (with @p wb's per-window rule override when set).
     KWin::GLShader* shader = pack.shader.get();
 
     // The shader evaluates a rounded-rect SDF over the window FRAME to round the
@@ -462,12 +470,11 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const Compiled
     // live accent before it lands here).
     auto paramsValues = pack.customParamsValues;
     auto colorsValues = pack.customColorsValues;
-    const auto bit = m_windowBorders.constFind(getWindowId(w));
-    if (bit != m_windowBorders.constEnd() && bit->ruleBorder) {
+    if (wb.ruleBorder) {
         paramsValues[0] =
-            QVector4D(static_cast<float>(bit->ruleBorderWidth), static_cast<float>(bit->ruleBorderRadius), 0.0f, 0.0f);
-        const QColor& a = bit->ruleBorderActiveColor;
-        const QColor& i = bit->ruleBorderInactiveColor;
+            QVector4D(static_cast<float>(wb.ruleBorderWidth), static_cast<float>(wb.ruleBorderRadius), 0.0f, 0.0f);
+        const QColor& a = wb.ruleBorderActiveColor;
+        const QColor& i = wb.ruleBorderInactiveColor;
         colorsValues[0] = QVector4D(static_cast<float>(a.redF()), static_cast<float>(a.greenF()),
                                     static_cast<float>(a.blueF()), static_cast<float>(a.alphaF()));
         colorsValues[1] = QVector4D(static_cast<float>(i.redF()), static_cast<float>(i.greenF()),
@@ -557,7 +564,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                     && !stateIt->second.bufferTex.empty();
 
                 KWin::ShaderBinder binder(pack->shader.get());
-                pushBorderUniforms(w, *pack, viewport.scale());
+                pushBorderUniforms(w, *bit, *pack, viewport.scale());
 
                 if (channelsReady) {
                     const SurfaceMultipassState& state = stateIt->second;

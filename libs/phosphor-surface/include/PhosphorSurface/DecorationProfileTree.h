@@ -18,7 +18,7 @@ namespace PhosphorSurfaceShaders {
  *
  * Same inheritance semantics as `PhosphorAnimationShaders::ShaderProfileTree`
  * but carrying `DecorationProfile` payloads (a decoration shader-pack chain
- * plus border/titlebar appearance) instead of `ShaderProfile`. Keyed on a
+ * plus its per-pack parameters) instead of `ShaderProfile`. Keyed on a
  * dot-path surface namespace (DecorationSupportedPaths) so a consumer can
  * resolve the decoration config for any surface.
  *

@@ -550,11 +550,13 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     //
     // Phase-1 scope: KConfig-backed settings pages only. Rule-backed pages
     // (window-appearance, rules), separate-store pages (layouts), the
-    // controller-mediated ordering/shortcuts pages, and the Animations tree are
-    // deliberately absent because they revert through their own machinery
-    // (the special-case branches in reset/discardPage), not because Reset/Discard
-    // is unsupported — pageSupportsReset returns true for all but the pure
-    // separate-store pages (layouts, rules).
+    // controller-mediated ordering/shortcuts pages, the Animations tree, and
+    // the Decoration pages (whose three leaves SHARE the one
+    // DecorationProfileTree key — the one-owner invariant above forbids listing
+    // a shared key here) are deliberately absent because they revert through
+    // their own machinery (the special-case branches in reset/discardPage), not
+    // because Reset/Discard is unsupported — pageSupportsReset returns true for
+    // all but the pure separate-store pages (layouts, rules).
     using CD = ConfigDefaults;
     static const QHash<QString, Settings::ConfigKeyList> manifest{
         {QStringLiteral("general"),

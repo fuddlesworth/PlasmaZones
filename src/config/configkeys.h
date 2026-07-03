@@ -108,11 +108,11 @@ public:
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
 
     // Surface — per-surface decoration tree (DecorationProfileTree: shader-pack
-    // chain + border/titlebar appearance, keyed on a dot-path surface
-    // namespace). A flat top-level group rather than a per-mode sub-group of
-    // Tiling/Snapping because decoration is product-wide, not bound to a
-    // tiling/snapping appearance axis. (ShaderEffectId survives only as a
-    // migration-read legacy source key, not a live setting.)
+    // chain + per-pack parameters, keyed on a dot-path surface namespace; any
+    // border appearance rides as the border pack's parameters). A flat
+    // top-level group rather than a per-mode sub-group of Tiling/Snapping
+    // because decoration is product-wide, not bound to a tiling/snapping
+    // appearance axis.
     P_CONFIG_GROUP(surfaceGroup, "Surface")
 
     // Parent groups (for purge enumeration — covers all sub-groups)
@@ -338,7 +338,6 @@ public:
     P_CONFIG_KEY(overflowBehaviorKey, "OverflowBehavior")
     P_CONFIG_KEY(lockedScreensKey, "LockedScreens")
 
-    // ═══════════════════════════════════════════════════════════════════════════
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Surface
     // ═══════════════════════════════════════════════════════════════════════════

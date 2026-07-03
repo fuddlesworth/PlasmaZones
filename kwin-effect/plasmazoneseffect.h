@@ -800,14 +800,16 @@ private:
     /// logical-to-device @p scale itself (uSurfaceScale), the focus flag
     /// (uSurfaceFocused), plus @p pack's resolved customParams/customColors — which
     /// now carry the border APPEARANCE (width / radius / colours) baked at compile
-    /// time from the pack's parameters. Writes onto the ALREADY-BOUND pack shader:
-    /// the caller owns the KWin::ShaderBinder (bound to @p pack.shader) and routes
-    /// the actual draw through OffscreenEffect::drawWindow, whose OffscreenData::paint
-    /// re-binds the same program and runs the shader. Does NOT bind/unbind or
-    /// re-validate the window: drawWindow is the sole caller and has already resolved
-    /// @p pack, confirmed the border is applied, and ruled out a transition owning
-    /// the slot.
-    void pushBorderUniforms(KWin::EffectWindow* w, const CompiledSurfacePack& pack, qreal scale);
+    /// time from the pack's parameters. @p wb is the window's border entry: when
+    /// its ruleBorder flag is set, THIS window's rule-resolved width / radius /
+    /// colours override the pack's baked slot-0 params. Writes onto the
+    /// ALREADY-BOUND pack shader: every caller (drawWindow's idle blit,
+    /// renderSurfaceChain's transition capture, renderSurfaceChainComposite's
+    /// per-pack fold) owns the KWin::ShaderBinder, has already resolved @p pack
+    /// and the border entry, and has ruled out a transition owning the slot, so
+    /// this neither binds/unbinds nor re-validates the window.
+    void pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& wb, const CompiledSurfacePack& pack,
+                            qreal scale);
 
     /// Render the window's active surface-layer stack into @p transition's
     /// ping-pong FBO chain and return the texture holding the final composited
@@ -827,11 +829,12 @@ private:
 
     /// Render the MULTIPASS surface pack's buffer passes for @p w into its
     /// per-window FBO chain (m_surfaceMultipass), so the IDLE drawWindow path can
-    /// bind the buffer outputs as iChannel0..3 for the main pass. Returns true
-    /// when the buffer textures are ready (the caller then binds them + sets the
-    /// main shader's m_surfaceIChannel*Loc), false otherwise (single-pass pack,
-    /// allocation failure, or collapsed surface — the caller renders single-pass,
-    /// iChannels unbound → sampled as 0). Implemented in surfacelayers.cpp.
+    /// bind the buffer outputs as iChannel0..3 for the main pass. The results are
+    /// consumed via m_surfaceMultipass (drawWindow re-checks readiness itself);
+    /// the bool return (true = buffer textures ready, false = single-pass pack /
+    /// allocation failure / collapsed surface) is a convenience for logging or
+    /// future callers and is ignored by the current paintWindow driver.
+    /// Implemented in surfacelayers.cpp.
     ///
     /// IDLE-path only. During a window-animation transition a multipass pack
     /// degrades to single-pass (renderSurfaceChain runs the border via the main
@@ -840,9 +843,11 @@ private:
     bool renderSurfaceBufferPasses(KWin::EffectWindow* w, qreal scale);
 
     /// Composite a MULTI-PACK decoration chain (chain.size() > 1) for @p w into a
-    /// per-window ping-pong FBO and return the texture holding the final fold (or
-    /// nullptr — single-pack / no border / allocation failure — the caller then
-    /// takes the single-pack path). Captures the raw surface, then folds each pack
+    /// per-window ping-pong FBO. The final fold is consumed via
+    /// m_surfaceMultipass's finalSlot (drawWindow reads it there); the returned
+    /// texture (nullptr on single-pack / no border / allocation failure) is a
+    /// convenience mirror of that state, ignored by the current paintWindow
+    /// driver. Captures the raw surface, then folds each pack
     /// over the running composite: the pack's buffer passes run sampling the
     /// composite, then its main runs as a fullscreen FBO pass (composite on unit
     /// 0, its buffers as iChannels) into the other slot. drawWindow presents the

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Test)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Test)
 
 function(phosphorshaders_add_test name)
     add_executable(${name} ${name}.cpp)

@@ -19,3 +19,5 @@ function(phosphorsurface_add_test name)
 endfunction()
 
 phosphorsurface_add_test(test_surfaceuniformprofile)
+phosphorsurface_add_test(test_decorationprofiletree)
+phosphorsurface_add_test(test_surfaceshaderregistry)

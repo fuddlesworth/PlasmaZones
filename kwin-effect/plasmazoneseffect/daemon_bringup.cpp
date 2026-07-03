@@ -25,6 +25,7 @@
 #include <window.h>
 #include <workspace.h>
 
+#include <QColor>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
@@ -751,8 +752,8 @@ void PlasmaZonesEffect::loadCachedSettings()
     // chain = no border, replacing the legacy showBorder toggle) — plus the
     // border pack's appearance params (width / radius / colours carried AS that
     // pack's parameters, not separate decoration fields), keyed by surface path
-    // (window.tiled / window.snapped / window.floating). Supersedes the old
-    // global `surfaceShaderEffectId` selection AND the autotile/snapping
+    // (window.tiled / window.snapped / window.floating). Supersedes both the
+    // old single-global surface-pack selection AND the autotile/snapping
     // border-APPEARANCE feed — updateWindowBorder now resolves appearance from
     // this tree. The autotile/snap BorderState is still maintained (it drives
     // MEMBERSHIP — which windows are tiled/snapped — and the daemon's retile
@@ -761,27 +762,28 @@ void PlasmaZonesEffect::loadCachedSettings()
     // On change: drop every compiled pack (a chain edit may reference a new pack,
     // and per-pack param VALUES are baked at compile time so they must recompile)
     // and rebuild all borders against the new tree, then repaint.
-    loadSettingAsync(QStringLiteral("decorationProfileTreeJson"), [this](const QVariant& v) {
-        const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
-        if (!doc.isObject()) {
-            qCWarning(lcEffect) << "decorationProfileTreeJson is not a JSON object — keeping current tree";
-            return;
-        }
-        PhosphorSurfaceShaders::DecorationProfileTree tree =
-            PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object());
-        if (tree == m_decorationTree) {
-            return;
-        }
-        m_decorationTree = std::move(tree);
-        // Per-pack param values are baked at first compile, so a tree change that
-        // alters parameters[packId] requires a recompile of that pack — clear the
-        // whole compiled-pack cache (it lazily recompiles on the next paint).
-        m_compiledPacks.clear();
-        updateAllBorders();
-        if (KWin::effects) {
-            KWin::effects->addRepaintFull();
-        }
-    });
+    loadSettingAsync(
+        QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree), [this](const QVariant& v) {
+            const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+            if (!doc.isObject()) {
+                qCWarning(lcEffect) << "decorationProfileTreeJson is not a JSON object — keeping current tree";
+                return;
+            }
+            PhosphorSurfaceShaders::DecorationProfileTree tree =
+                PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object());
+            if (tree == m_decorationTree) {
+                return;
+            }
+            m_decorationTree = std::move(tree);
+            // Per-pack param values are baked at first compile, so a tree change that
+            // alters parameters[packId] requires a recompile of that pack — clear the
+            // whole compiled-pack cache (it lazily recompiles on the next paint).
+            m_compiledPacks.clear();
+            updateAllBorders();
+            if (KWin::effects) {
+                KWin::effects->addRepaintFull();
+            }
+        });
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
         m_autotileHandler->setFocusFollowsMouse(v.toBool());

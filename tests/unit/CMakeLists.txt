@@ -276,6 +276,12 @@ p_add_test(test_settings_animation_profile config/test_settings_animation_profil
 # keep each test file under the project's <800-line guideline.
 p_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
 
+# Companion test executable: DecorationProfileTree persistence + JSON facade
+# (the decoration analogue of test_settings_shader_tree). PhosphorSurface
+# symbols resolve transitively via plasmazones_core (which links
+# PhosphorSurface PUBLIC for Settings::decorationProfileTree()).
+p_add_test(test_settings_decoration_tree config/test_settings_decoration_tree.cpp)
+
 # Companion test executable: per-page Discard/Reset primitives — committed
 # baseline capture, isKeyModified, discardKeys (revert-to-baseline) and
 # resetKeys (revert-to-default) with NOTIFY re-emission. Split from
@@ -797,6 +803,27 @@ target_link_libraries(test_animations_shader_overrides
         plasmazones_core
 )
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
+
+# Decoration page (per-surface DecorationProfileTree editor): reader /
+# mutator coverage for DecorationPageController — chain resolution,
+# override engage/clear, per-pack parameter merge/prune, subtree ops and
+# profilesChanged reload propagation. Compiles the controller sources
+# directly (they live in the plasmazones-settings executable, not
+# plasmazones_core); the split _paths TU carries parentChain().
+add_executable(test_decorationpagecontroller
+    settings/test_decorationpagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_paths.cpp
+)
+target_link_libraries(test_decorationpagecontroller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        PhosphorSurface::PhosphorSurface
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
 
 # Rules page (Phase 4 of the window-rule refactor): RuleModel
 # derives SectionRole / summaries from a rule's shape; RuleController

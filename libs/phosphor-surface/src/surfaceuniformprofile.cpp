@@ -86,12 +86,14 @@ SurfaceUniformProfile::dirtyRegions(const PhosphorShaders::UboDirtyFlags& flags)
 {
     std::vector<PhosphorShaders::UboUploadRegion> regions;
 
-    // The surface UBO has no app-fields region. The matrix (transform / Y-flip)
-    // is its own granular region; everything else (opacity, geometry, time,
-    // params, colours, channel sizes) lives in the scene region. Any dirty
-    // signal refreshes both — the surface UBO is small enough that the
-    // overlay's finer-grained time/timeHi split buys nothing here.
-    const bool anyDirty = flags.time || flags.timeHi || flags.sceneData || flags.appFields;
+    // The surface UBO has no app-fields region (hasAppFields() is false), so
+    // flags.appFields is deliberately NOT consulted — an appFields-only dirty
+    // signal carries no state this profile uploads. The matrix (transform /
+    // Y-flip) is its own granular region; everything else (opacity, geometry,
+    // time, params, colours, channel sizes) lives in the scene region. Any
+    // relevant dirty signal refreshes both — the surface UBO is small enough
+    // that the overlay's finer-grained time/timeHi split buys nothing here.
+    const bool anyDirty = flags.time || flags.timeHi || flags.sceneData;
     if (anyDirty) {
         regions.push_back(PhosphorShaders::UboUploadRegion{kMatrixOffset, kMatrixSize});
         regions.push_back(PhosphorShaders::UboUploadRegion{kSceneOffset, kSceneSize});

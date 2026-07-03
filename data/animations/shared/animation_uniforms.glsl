@@ -51,10 +51,14 @@
 // Layout-drift guard: the offsets in the UBO branch MUST stay aligned
 // with `PhosphorShaders::BaseUniforms`. The C++ side enforces that via
 // `static_assert(offsetof(...))` in `<PhosphorShaders/BaseUniforms.h>`
-// for every field declared below — if any assert fails after a
-// `BaseUniforms` change, this header has to move in lockstep. The bake
-// test in `tests/unit/ui/test_animation_shader_bake.cpp` surfaces
-// GLSL-side drift by running `qsb` over every built-in shader.
+// for every BASE field declared below (through iIsReversed at 660); the
+// anchor-extension tail (iSurfaceScreenPos .. iAnchorRectInTexture,
+// bytes 672-720) is supplied by AnimationUniformExtension and pinned by
+// the size static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
+// If any assert fails after a C++-side change, this header has to move
+// in lockstep. The bake test in
+// `tests/unit/ui/test_animation_shader_bake.cpp` surfaces GLSL-side
+// drift by running `qsb` over every built-in shader.
 
 #ifndef PLASMAZONES_ANIMATION_UNIFORMS_GLSL
 #define PLASMAZONES_ANIMATION_UNIFORMS_GLSL

@@ -184,8 +184,10 @@ public:
     void setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry);
     /// Borrowed Daemon-owned surface-shader registry, used to resolve the OSD's
     /// decoration pack (Stage d). Same lifetime contract as the animation
-    /// registry: declared before m_overlayService in daemon.h so reverse
-    /// destruction guarantees it outlives this service.
+    /// registry: the registry is declared AFTER m_overlayService in daemon.h, so
+    /// Daemon::stop() nulls this borrow (setSurfaceShaderRegistry(nullptr))
+    /// BEFORE resetting the registry — the explicit teardown, not declaration
+    /// order, is what prevents a dangling pointer during shutdown.
     void setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry);
     void updateGeometries() override;
 
@@ -612,15 +614,17 @@ private:
     // raw pointers to the other two).
     std::unique_ptr<PhosphorLayer::IScreenProvider> m_screenProvider;
     std::unique_ptr<PhosphorLayer::ILayerShellTransport> m_transport;
-    /// Raw pointer to Daemon-owned registry. Valid for the lifetime of
-    /// this OverlayService because m_animationShaderRegistry is declared
-    /// before m_overlayService in daemon.h - reverse destruction order
-    /// guarantees the registry outlives this service.
+    /// Raw pointer to Daemon-owned registry. m_animationShaderRegistry is
+    /// declared AFTER m_overlayService in daemon.h; the pointer stays valid
+    /// because Daemon::stop() nulls this borrow (setAnimationShaderRegistry
+    /// (nullptr)) before resetting the registry — explicit teardown, not
+    /// declaration order, prevents dangling access during shutdown.
     PhosphorAnimationShaders::AnimationShaderRegistry* m_animShaderRegistry = nullptr;
 
     /// Borrowed Daemon-owned surface-shader registry (Stage d). Resolves the
     /// "osd" decoration pack's fragment shader + translated params for the OSD
-    /// slot. Same outlives-this-service contract as m_animShaderRegistry.
+    /// slot. Same teardown contract as m_animShaderRegistry: Daemon::stop()
+    /// nulls this borrow before the registry is reset.
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
 
     /// Phase-5 SurfaceAnimator. Drives show/hide visual transitions for

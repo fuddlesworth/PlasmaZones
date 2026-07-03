@@ -500,7 +500,6 @@ Q_SIGNALS:
     void autotilePerAlgorithmSettingsChanged();
     // Autotile inner/outer gap change signals are unified with snapping —
     // listeners use innerGapChanged / outerGap*Changed above.
-    void decorationProfileTreeChanged();
     void autotileSmartGapsChanged();
     void autotileMaxWindowsChanged();
     void autotileFocusNewWindowsChanged();
@@ -525,6 +524,9 @@ Q_SIGNALS:
     void animationSequenceModeChanged();
     void animationStaggerIntervalChanged();
     void shaderProfileTreeChanged();
+
+    // Surface decoration settings
+    void decorationProfileTreeChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

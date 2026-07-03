@@ -5,7 +5,9 @@
 
 #include <PhosphorAnimation/AnimationShaderContract.h>
 
+#include <QByteArray>
 #include <QRectF>
+#include <QString>
 #include <QVector2D>
 #include <QVector4D>
 #include <QtGlobal>
@@ -14,6 +16,18 @@
 #include <chrono>
 
 namespace PlasmaZones::ShaderInternal {
+
+/// Splice `#define PLASMAZONES_KWIN` (plus the ARB explicit-location
+/// extension enables) after the shader's `#version` directive, selecting the
+/// classic-GL default-block branch of the shared uniform headers that
+/// KWin::GLShader requires. Shared by the animation compile path
+/// (shader_transitions.cpp, where it is defined) and the surface-pack compile
+/// path (surface_compile.cpp); it has external linkage here rather than an
+/// anonymous-namespace copy per TU because the kwin-effect builds as a Unity
+/// (jumbo) target, where duplicate anonymous-namespace definitions collide.
+/// Full behavioural notes (BOM strip, comment-aware #version scan, missing
+/// #version synthesis) live at the definition.
+QByteArray injectKwinDefineAfterVersion(const QString& source);
 
 /// Monotonic milliseconds since steady_clock epoch. Used by time-based shader
 /// transitions for elapsed-progress math. We deliberately avoid

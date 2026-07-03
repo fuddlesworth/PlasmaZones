@@ -23,6 +23,16 @@ layout(location = 0) out vec4 fragColor;
 
 void main() {
     vec4 base = surfaceTexel(vTexCoord);          // the input surface (prior pack's output)
+
+    // Degenerate frame (a host that has not wired geometry yet): the SDF below
+    // would collapse to the top-left point and bleed halo over the whole
+    // surface for that transient, so pass the content through untouched until
+    // a real frame arrives. Mirrors border/effect.frag's guard.
+    if (uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0) {
+        fragColor = base;
+        return;
+    }
+
     vec3 blur = texture(iChannel1, vTexCoord).rgb; // separable-Gaussian blurred surface
     vec3 glowTint = mix(blur, p_glowColor.rgb, 0.5);
 

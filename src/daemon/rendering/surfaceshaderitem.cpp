@@ -148,9 +148,7 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             // node's back-pointer to this item via invalidateItem() before
             // deleting it, so any in-flight render-thread access fails safe
             // instead of walking a freed item.
-            if (auto* rhiNode = static_cast<PhosphorRendering::ShaderNodeRhi*>(oldNode)) {
-                rhiNode->invalidateItem();
-            }
+            static_cast<PhosphorRendering::ShaderNodeRhi*>(oldNode)->invalidateItem();
             delete oldNode;
         }
         return nullptr;

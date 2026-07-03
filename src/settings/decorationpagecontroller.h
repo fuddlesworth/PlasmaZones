@@ -89,9 +89,6 @@ public:
     /// ParameterInfo maps).
     Q_INVOKABLE QVariantList availableShaderEffects() const;
 
-    /// Single-effect lookup. Empty map when @p effectId is unknown.
-    Q_INVOKABLE QVariantMap shaderEffectInfo(const QString& effectId) const;
-
     /// Just the parameters list for @p effectId — convenience for the
     /// per-pack parameter editor.
     Q_INVOKABLE QVariantList shaderParameters(const QString& effectId) const;

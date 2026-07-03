@@ -151,19 +151,48 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     }
     e.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
     e.bufferScale = qBound(kMinBufferScale, obj.value(QLatin1String("bufferScale")).toDouble(1.0), kMaxBufferScale);
-    e.bufferWrap = obj.value(QLatin1String("bufferWrap")).toString();
+    // Buffer wrap/filter share the texture-slot `wrap` guard's rationale:
+    // an unknown token is a typo or foreign vocabulary that the runtime
+    // would silently coerce to its default anyway, and keeping it in the
+    // struct re-persists the typo through toJson on the next save. Warn and
+    // reset to empty ("runtime default") instead. Vocabularies match the
+    // runtime normalisers (ShaderNodeRhi::normalizeWrapMode/FilterMode).
+    const auto validatedWrap = [](QString wrap, const char* field) -> QString {
+        if (!wrap.isEmpty() && wrap != QLatin1String("clamp") && wrap != QLatin1String("repeat")
+            && wrap != QLatin1String("mirror")) {
+            qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: unknown" << field << "value" << wrap
+                                       << ", reset to runtime default";
+            wrap.clear();
+        }
+        return wrap;
+    };
+    const auto validatedFilter = [](QString filter, const char* field) -> QString {
+        if (!filter.isEmpty() && filter != QLatin1String("linear") && filter != QLatin1String("nearest")
+            && filter != QLatin1String("mipmap")) {
+            qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: unknown" << field << "value" << filter
+                                       << ", reset to runtime default";
+            filter.clear();
+        }
+        return filter;
+    };
+    e.bufferWrap = validatedWrap(obj.value(QLatin1String("bufferWrap")).toString(), "bufferWrap");
+    // The per-buffer override lists are positionally aligned with
+    // bufferShaderPaths, so an invalid token is replaced IN PLACE with empty
+    // (that slot falls back to the default) rather than dropped — dropping
+    // would shift every later buffer's override. Originally-empty entries are
+    // still skipped, matching the pre-validation behaviour.
     const QJsonArray wrapsArr = obj.value(QLatin1String("bufferWraps")).toArray();
     for (const QJsonValue& v : wrapsArr) {
         const QString w = v.toString();
         if (!w.isEmpty())
-            e.bufferWraps.append(w);
+            e.bufferWraps.append(validatedWrap(w, "bufferWraps"));
     }
-    e.bufferFilter = obj.value(QLatin1String("bufferFilter")).toString();
+    e.bufferFilter = validatedFilter(obj.value(QLatin1String("bufferFilter")).toString(), "bufferFilter");
     const QJsonArray filtersArr = obj.value(QLatin1String("bufferFilters")).toArray();
     for (const QJsonValue& v : filtersArr) {
         const QString f = v.toString();
         if (!f.isEmpty())
-            e.bufferFilters.append(f);
+            e.bufferFilters.append(validatedFilter(f, "bufferFilters"));
     }
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
 

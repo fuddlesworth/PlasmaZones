@@ -890,16 +890,10 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // Surface shader Settings
     //
-    // The canonical "border" surface-shader pack id. The group/key accessors
-    // (surfaceGroup / surfaceDecorationTreeKey) are inherited from ConfigKeys —
-    // no forwarding accessors needed here (same as every other group:
-    // ConfigDefaults derives from ConfigKeys).
+    // The group/key accessors (surfaceGroup / surfaceDecorationTreeKey) are
+    // inherited from ConfigKeys — no forwarding accessors needed here (same as
+    // every other group: ConfigDefaults derives from ConfigKeys).
     // ═══════════════════════════════════════════════════════════════════════════
-
-    static QString surfaceShaderEffectId()
-    {
-        return QStringLiteral("border");
-    }
 
     /// Default DecorationProfileTree — the fallback the typed
     /// `Settings::decorationProfileTree()` returns when the Surface group holds

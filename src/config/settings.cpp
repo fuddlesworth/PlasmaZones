@@ -1303,9 +1303,10 @@ void Settings::setShaderProfileTreeJson(const QString& json)
 // Persisted as one nested JSON entry under Surface/DecorationProfileTree,
 // mirroring how the animation shaderProfileTree persists under
 // Animations/ShaderProfileTree. The read-side falls back to the
-// ConfigDefaults baseline (a `border`-chain profile carrying today's border /
-// titlebar defaults) when the store holds no entry, so a fresh config renders
-// identically to the pre-tree border settings.
+// ConfigDefaults tree (EMPTY / neutral: no baseline chain, no overrides —
+// border and titlebar visuals are owned by the window rules, see
+// ConfigDefaults::decorationProfileTree) when the store holds no entry, so a
+// fresh config starts with no shader-pack decoration.
 
 PhosphorSurfaceShaders::DecorationProfileTree Settings::decorationProfileTree() const
 {
@@ -1343,11 +1344,11 @@ QString Settings::decorationProfileTreeJson() const
 void Settings::setDecorationProfileTreeJson(const QString& json)
 {
     if (json.isEmpty()) {
-        // Empty string = reset to the canonical default. Unlike the animation
-        // shaderProfileTree facade (which resets to an EMPTY tree, because an
-        // absent animation override means "no override"), the decoration tree
-        // has a meaningful non-empty default — the border baseline every window
-        // needs — so clearing it restores that default rather than an empty tree.
+        // Empty string = reset to the canonical default, exactly like the
+        // animation shaderProfileTree facade. That default is the EMPTY /
+        // neutral tree (ConfigDefaults::decorationProfileTree — border and
+        // titlebar visuals are rule-owned, the tree carries only opt-in
+        // shader-pack decoration), so clearing restores "no decoration".
         setDecorationProfileTree(ConfigDefaults::decorationProfileTree());
         return;
     }

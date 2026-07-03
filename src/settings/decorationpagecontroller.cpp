@@ -108,13 +108,6 @@ QVariantList DecorationPageController::availableShaderEffects() const
     return result;
 }
 
-QVariantMap DecorationPageController::shaderEffectInfo(const QString& effectId) const
-{
-    if (!m_registry || effectId.isEmpty() || !m_registry->hasEffect(effectId))
-        return {};
-    return effectToMap(m_registry->effect(effectId));
-}
-
 QVariantList DecorationPageController::shaderParameters(const QString& effectId) const
 {
     if (!m_registry || effectId.isEmpty() || !m_registry->hasEffect(effectId))

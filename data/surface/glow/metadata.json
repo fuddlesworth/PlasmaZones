@@ -1,7 +1,7 @@
 {
     "id": "glow",
     "name": "Glow",
-    "description": "A soft edge bloom. A multipass compositing layer: buffer0.frag and buffer1.frag apply a separable Gaussian blur (horizontal then vertical) to the input surface, and effect.frag screen-blends it as an inner glow plus an outer halo, following the input's own shape. Stack it after Border in a surface's chain to glow the rounded bordered window. Strength and tint are its parameters.",
+    "description": "A soft edge bloom. A two-pass blur softens the surface, and the result is blended back in as an inner glow plus an outer halo that follows the surface's own shape. Stack it after Border in a surface's chain to glow the rounded bordered window. Strength and tint are its parameters.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Decoration",

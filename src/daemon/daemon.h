@@ -815,9 +815,11 @@ private:
     /// transitions). Scans `plasmazones/surface` from XDG data dirs and monitors
     /// for user-dropped packs via QFileSystemWatcher, mirroring
     /// m_animationShaderRegistry. The daemon warm-bakes discovered packs so the
-    /// first surface paint never blocks on glslang. The on-screen surface host
-    /// that consumes this registry's effects via SurfaceShaderItem lands in a
-    /// follow-up stage; for now it owns discovery + bake-warming.
+    /// first surface paint never blocks on glslang, and lends the registry to
+    /// the overlay service (setSurfaceShaderRegistry, Stage d) whose
+    /// SurfaceShaderItem hosts render decoration packs on OSD / popup surfaces.
+    /// Declared AFTER m_overlayService: stop() nulls the overlay's borrow
+    /// before resetting this registry.
     std::unique_ptr<PhosphorSurfaceShaders::SurfaceShaderRegistry> m_surfaceShaderRegistry;
 
     /// Phase 4 sub-commit 7: user-authored curve / profile scanners.

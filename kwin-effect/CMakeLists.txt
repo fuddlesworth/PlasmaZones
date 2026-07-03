@@ -62,6 +62,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/drag_end.cpp
     plasmazoneseffect/paint_pipeline.cpp
     plasmazoneseffect/shader_transitions.cpp
+    plasmazoneseffect/surface_compile.cpp
     plasmazoneseffect/shader_resolve.cpp
     plasmazoneseffect/shader_resolve.h
     plasmazoneseffect/shader_internal.h
