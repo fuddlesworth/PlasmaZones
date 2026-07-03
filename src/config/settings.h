@@ -151,20 +151,36 @@ public:
         bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
 
     // Zone settings — inner/outer gaps are the single shared model used by BOTH
-    // snapping and tiling. The global default is now rule-backed: these are
-    // computed READ-ONLY getters reading the managed "Default gaps" rule's
-    // (baselineGapRuleId) gap actions. Editing happens through the rule (the
-    // Window Appearance page writes via RuleController), so there are no setters.
-    // NOTIFY fires when the baseline gap rule's values change (see
-    // onRuleStoreChanged).
-    Q_PROPERTY(int innerGap READ innerGap NOTIFY innerGapChanged)
-    Q_PROPERTY(int outerGap READ outerGap NOTIFY outerGapChanged)
-    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
-    Q_PROPERTY(int outerGapTop READ outerGapTop NOTIFY outerGapTopChanged)
-    Q_PROPERTY(int outerGapBottom READ outerGapBottom NOTIFY outerGapBottomChanged)
-    Q_PROPERTY(int outerGapLeft READ outerGapLeft NOTIFY outerGapLeftChanged)
-    Q_PROPERTY(int outerGapRight READ outerGapRight NOTIFY outerGapRightChanged)
+    // snapping and tiling. Config-backed (the "Gaps" group in config.json),
+    // like every other settings page. The autotile* gap forwarders below route
+    // through these same getters, so the tile engine stays untouched.
+    Q_PROPERTY(int innerGap READ innerGap WRITE setInnerGap NOTIFY innerGapChanged)
+    Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(
+        bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapTopChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapBottomChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
     Q_PROPERTY(int adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
+
+    // Window decoration appearance (tiled/snapped window border + title bar) —
+    // config-backed (the "Windows" group). Distinct from the zone-overlay border
+    // Q_PROPERTYs above (borderWidth/borderRadius/borderColor).
+    Q_PROPERTY(bool showWindowBorder READ showWindowBorder WRITE setShowWindowBorder NOTIFY showWindowBorderChanged)
+    Q_PROPERTY(
+        QString windowBorderScope READ windowBorderScope WRITE setWindowBorderScope NOTIFY windowBorderScopeChanged)
+    Q_PROPERTY(int windowBorderWidth READ windowBorderWidth WRITE setWindowBorderWidth NOTIFY windowBorderWidthChanged)
+    Q_PROPERTY(
+        int windowBorderRadius READ windowBorderRadius WRITE setWindowBorderRadius NOTIFY windowBorderRadiusChanged)
+    Q_PROPERTY(QString windowBorderColorActive READ windowBorderColorActive WRITE setWindowBorderColorActive NOTIFY
+                   windowBorderColorActiveChanged)
+    Q_PROPERTY(QString windowBorderColorInactive READ windowBorderColorInactive WRITE setWindowBorderColorInactive
+                   NOTIFY windowBorderColorInactiveChanged)
+    Q_PROPERTY(bool hideWindowTitleBars READ hideWindowTitleBars WRITE setHideWindowTitleBars NOTIFY
+                   hideWindowTitleBarsChanged)
+    Q_PROPERTY(QString windowTitleBarScope READ windowTitleBarScope WRITE setWindowTitleBarScope NOTIFY
+                   windowTitleBarScopeChanged)
 
     // Performance and behavior (configurable constants)
     Q_PROPERTY(int pollIntervalMs READ pollIntervalMs WRITE setPollIntervalMs NOTIFY pollIntervalMsChanged)
@@ -603,22 +619,44 @@ public:
     bool labelFontStrikeout() const override;
     void setLabelFontStrikeout(bool strikeout) override;
 
-    // Zone geometry (shared inner/outer gaps) — the global default is now
-    // rule-backed. These getters read the managed "Default gaps" rule's
-    // (baselineGapRuleId) gap actions, falling back to the compile-time defaults
-    // when no store / rule / action is present. There are no setters: the gap
-    // values are edited on the baseline gap rule directly (Window Appearance
-    // page → RuleController). The autotile* gap forwarders above route through
-    // these same getters, so the tile engine stays untouched.
+    // Zone geometry (shared inner/outer gaps) — PhosphorConfig::Store-backed
+    // (the "Gaps" group). The autotile* gap forwarders above route through these
+    // same getters, so the tile engine resolves the same values as snapping.
     int innerGap() const override;
+    void setInnerGap(int gap) override;
     int outerGap() const override;
+    void setOuterGap(int gap) override;
     bool usePerSideOuterGap() const override;
+    void setUsePerSideOuterGap(bool usePerSide) override;
     int outerGapTop() const override;
+    void setOuterGapTop(int gap) override;
     int outerGapBottom() const override;
+    void setOuterGapBottom(int gap) override;
     int outerGapLeft() const override;
+    void setOuterGapLeft(int gap) override;
     int outerGapRight() const override;
+    void setOuterGapRight(int gap) override;
     int adjacentThreshold() const override;
     void setAdjacentThreshold(int threshold) override;
+
+    // Window decoration appearance (tiled/snapped window border + title bar) —
+    // PhosphorConfig::Store-backed (the "Windows" group).
+    bool showWindowBorder() const override;
+    void setShowWindowBorder(bool show) override;
+    QString windowBorderScope() const override;
+    void setWindowBorderScope(const QString& scope) override;
+    int windowBorderWidth() const override;
+    void setWindowBorderWidth(int width) override;
+    int windowBorderRadius() const override;
+    void setWindowBorderRadius(int radius) override;
+    QString windowBorderColorActive() const override;
+    void setWindowBorderColorActive(const QString& color) override;
+    QString windowBorderColorInactive() const override;
+    void setWindowBorderColorInactive(const QString& color) override;
+    bool hideWindowTitleBars() const override;
+    void setHideWindowTitleBars(bool hide) override;
+    QString windowTitleBarScope() const override;
+    void setWindowTitleBarScope(const QString& scope) override;
 
     // Performance — PhosphorConfig::Store-backed (see settingsschema.cpp).
     int pollIntervalMs() const override;
@@ -746,20 +784,37 @@ public:
                                                  const QVariant& value) override;
     Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenIdOrName) const override;
-    // Sub-domains of the shared per-screen autotile map: the Gaps card and the
-    // Algorithm card each report/clear only their own keys so one card's reset
-    // never wipes the other card's per-monitor overrides.
-    bool hasPerScreenAutotileGapsSettings(const QString& screenIdOrName) const;
+    // Algorithm sub-domain of the shared per-screen autotile map: the Algorithm
+    // card reports/clears only its own keys (the complement of the gap dimensions
+    // and SmartGaps) so its reset never wipes another card's per-monitor overrides.
     bool hasPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName) const;
-    void clearPerScreenAutotileGapsSettings(const QString& screenIdOrName);
     void clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName);
 
-    // Per-screen snapping gaps are rule-backed (per-monitor gap Rules), so
-    // the only accessor is the reader. There is no per-screen snapping storage
-    // and no setter/clear/has: the set/clear/has triplet stays as ISettings
-    // no-op defaults (the geometry path only ever reads). Writes go through the
-    // window-rule store via the Appearance page.
+    // Per-screen snapping gaps project the config-backed per-monitor gap
+    // overrides (perScreenGapOverrides) — the geometry path only reads them, so
+    // this is the sole accessor; writes go through setPerScreenAutotileSetting /
+    // the perScreenGap* helpers, and the ISettings set/clear/has snapping triplet
+    // stays as no-op defaults.
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
+
+    // Per-monitor gap overrides (config-backed, unified — one value per monitor
+    // drives both snap and tile). Stored in the per-screen autotile store; these
+    // accessors expose just the gap-dimension sub-domain. perScreenGapOverrides
+    // returns the override keyed in the short engine form (InnerGap / OuterGap /
+    // UsePerSideOuterGap / OuterGap{Top,Bottom,Left,Right}) — the SAME key strings
+    // contextGapOverrideMap produces, so the geometry cascade merge is a plain
+    // QVariantMap union. Empty map when the screen has no gap override. Writes go
+    // through setPerScreenAutotileSetting.
+    QVariantMap perScreenGapOverrides(const QString& screenIdOrName) const override;
+    bool hasPerScreenGapOverride(const QString& screenIdOrName) const;
+    void clearPerScreenGapOverride(const QString& screenIdOrName);
+
+    /// True iff the gap-dimension subset of the per-screen store differs between
+    /// @p before and @p after. load() uses it to fire perScreenSnappingSettingsChanged
+    /// (the daemon's gap-resnap trigger for already-snapped windows) on a per-monitor
+    /// gap change, without over-firing on an algorithm/split-only per-screen change.
+    static bool perScreenGapDimensionsDiffer(const QHash<QString, QVariantMap>& before,
+                                             const QHash<QString, QVariantMap>& after);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (ISettings interface)
@@ -1217,9 +1272,13 @@ private:
     // the baseline anywhere but a load/save commit point desyncs dirty tracking.
     void captureBaseline();
 
-    // Groups that save() writes exhaustively (excludes unmanaged groups).
+    // Groups that reset() deletes exhaustively (excludes unmanaged groups like
+    // Updates). NOT used by save() — save() iterates the schema and lets
+    // purgeStaleKeys() handle cleanup.
     static QStringList managedGroupNames();
-    // Delete all per-screen override groups (ZoneSelector:*, AutotileScreen:*, SnappingScreen:*).
+    // Delete all per-screen override groups by prefix (ZoneSelector:*,
+    // AutotileScreen:*, and the legacy SnappingScreen:* which is no longer written
+    // but is still swept to scrub any file an older build left behind).
     static void deletePerScreenGroups(PhosphorConfig::IBackend* backend);
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
@@ -1300,54 +1359,27 @@ private:
     PhosphorRules::RuleStore* m_ruleStore = nullptr;
 
     // Connect the active rule store's rulesChanged to onRuleStoreChanged and
-    // seed the gap cache from the current baseline rule. Called once at the end
-    // of every constructor (after load()), so both the owned and borrowed store
-    // paths get the reactive wiring.
+    // seed the per-screen gap fingerprint. Called once at the end of every
+    // constructor (after load()), so both the owned and borrowed store paths get
+    // the reactive wiring.
     void connectRuleStoreGapReactivity();
 
-    // Recompute the rule-backed global gap values; emit the per-property NOTIFY
-    // signals for those that changed and a single settingsChanged if any did.
-    // Driven by the baseline rule's gap actions, so a gap edit on the Window
-    // Appearance page retiles autotiled windows and re-spaces snapped zones
-    // exactly as the old stored-setting setters did. Bound to the store's
-    // rulesChanged signal.
+    // React to a rule-store change. The GLOBAL inner/outer gaps and the
+    // per-monitor gap overrides are config-backed, so their NOTIFY is owned by the
+    // setters / load(), not this handler. What remains rule-backed is the CONTEXT
+    // gap cascade (per-mode / desktop / activity gap Rules), so this re-syncs the
+    // per-screen consumers — but only when a gap action somewhere in the rule set
+    // actually changed, so a non-gap rule write (mode/assignment toggle) doesn't
+    // spuriously fire settingsChanged. Bound to the store's rulesChanged signal.
     void onRuleStoreChanged();
 
     // Fingerprint of every gap action across the rule set, used to gate the
     // per-screen gap re-sync in onRuleStoreChanged so only real gap edits fire it.
     QString gapRulesFingerprint() const;
 
-    // Read one gap action's Value param from the rule @p ruleId in @p store, or
-    // std::nullopt when the store / rule / action is absent. Backs both the
-    // global gap getters (the managed baseline rule id) and the per-screen gap
-    // accessors (the per-monitor gap rule id).
-    static std::optional<QJsonValue> gapValueFromRule(const PhosphorRules::RuleStore* store, const QUuid& ruleId,
-                                                      QLatin1StringView actionType);
-
-    // Gap overrides authored on the per-monitor gap Rule for
-    // @p screenIdOrName, keyed in the short engine form the autotile / snapping
-    // consumers expect (InnerGap / OuterGap / UsePerSideOuterGap / OuterGap
-    // {Top,Bottom,Left,Right}), or an empty map when no such rule exists. The
-    // rule is keyed by the screen's STABLE EDID id (the form the v4→v5 migration
-    // writes and the Appearance page derives) under the deterministic id
-    // createUuidV5(baselineGapRuleId, <stable id>); the incoming identifier is
-    // resolved to that canonical form first, with the raw and physical-parent
-    // forms tried as fallbacks for rules written under an alternate form.
-    static QVariantMap perScreenGapRuleOverrides(const PhosphorRules::RuleStore* store, const QString& screenIdOrName);
-
-    // Cached snapshot of the baseline rule's gap values, used by
-    // onRuleStoreChanged for change detection (the getters read live, so a
-    // pre-change snapshot must be retained here). Seeded in
-    // connectRuleStoreGapReactivity.
-    int m_cachedInnerGap = 0;
-    int m_cachedOuterGap = 0;
-    bool m_cachedUsePerSideOuterGap = false;
-    int m_cachedOuterGapTop = 0;
-    int m_cachedOuterGapBottom = 0;
-    int m_cachedOuterGapLeft = 0;
-    int m_cachedOuterGapRight = 0;
     // Snapshot of all gap actions across the rule set; gates the per-screen gap
-    // re-sync so non-gap rule writes (mode/assignment toggles) don't fire it.
+    // re-sync in onRuleStoreChanged so non-gap rule writes (mode/assignment
+    // toggles) don't fire it. Seeded in connectRuleStoreGapReactivity.
     QString m_cachedGapFingerprint;
 
     // Activation
@@ -1394,9 +1426,10 @@ private:
     // Per-screen autotile overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;
 
-    // Per-screen snapping gaps are no longer stored here: they are rule-backed
-    // (per-monitor gap Rules), read by getPerScreenSnappingSettings via
-    // perScreenGapRuleOverrides. There are no other per-screen snapping keys.
+    // Per-monitor gaps are unified (one value per monitor drives both snap and
+    // tile) and live in the map above; the gap-dimension sub-domain is projected
+    // by perScreenGapOverrides and surfaced as getPerScreenSnappingSettings. There
+    // is no separate per-screen snapping store.
 
     // Autotiling Settings
     // Autotiling stored in m_store.

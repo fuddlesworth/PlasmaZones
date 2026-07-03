@@ -14,6 +14,15 @@
 
 namespace PlasmaZones {
 
+bool windowIsTransient(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return false;
+    }
+    return w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
+        || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor() != nullptr;
+}
+
 PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
 {
     using PhosphorProtocol::WindowType;
@@ -187,8 +196,7 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     //   width/height → frame extent; a `Width LessThan N` leaf reproduces the
     //                  `frame.width() < N` strict-less-than gate (integer
     //                  truncation is safe at integer thresholds).
-    query.isTransient = w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
-        || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor() != nullptr;
+    query.isTransient = windowIsTransient(w);
     query.isNotification = w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay();
     // Stacking / accessory flags read straight off EffectWindow. Always engaged
     // when the window exists, like the other bool flags above.

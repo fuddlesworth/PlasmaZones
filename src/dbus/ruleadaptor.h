@@ -73,14 +73,14 @@ public Q_SLOTS:
     /// rule exists.
     bool setRulePriority(const QString& ruleId, int priority);
 
-    /// Reset the three managed baseline appearance/gap rules to their factory
-    /// definitions (core/baselinerules.h), preserving every user-authored rule
-    /// (Policy A). Reloads the store first (to pick up an out-of-process write
-    /// such as Settings::reset()'s disable-rule drop), then persists the merged
-    /// set. May emit rulesChanged up to twice — once from the reload if the
-    /// on-disk set changed, once from the write. Drives the settings app's global
-    /// Restore Defaults for the rule-backed appearance/gap surface, which
-    /// Settings::reset() (the KConfig path) cannot reach.
+    /// Global Restore Defaults hook for the rule store. Window appearance / gap
+    /// defaults live in the config store now, so this only strips any stale
+    /// managed appearance baseline rules an older build may have left in
+    /// rules.json, preserving every user-authored rule. Reloads the store first
+    /// (to pick up an out-of-process write such as Settings::reset()'s
+    /// disable-rule drop), then persists once if anything was removed. May emit
+    /// rulesChanged up to twice — once from the reload if the on-disk set changed,
+    /// once from the strip.
     void resetManagedDefaults();
 
 Q_SIGNALS:

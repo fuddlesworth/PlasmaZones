@@ -16,10 +16,32 @@
 #include "window_query.h"
 
 #include <PhosphorCompositor/AutotileState.h>
+#include <PhosphorProtocol/WindowTypeEnum.h>
+#include <PhosphorRules/RuleAction.h>
 
 #include <optional>
 
 namespace PlasmaZones {
+
+namespace {
+
+// Resolve a config-default border-colour string against the live system colour
+// its `accent` sentinel maps to. Mirrors resolveWindowAppearance's rule colour
+// path: the sentinel yields @p systemColor (nullopt when that colour is not yet
+// known), an empty string contributes nothing, anything else parses as hex.
+std::optional<QColor> resolveDefaultBorderColor(const QString& value, const QColor& systemColor)
+{
+    if (value.isEmpty()) {
+        return std::nullopt;
+    }
+    if (value == PhosphorRules::BorderColorToken::Accent) {
+        return systemColor.isValid() ? std::optional<QColor>(systemColor) : std::nullopt;
+    }
+    const QColor color(value);
+    return color.isValid() ? std::optional<QColor>(color) : std::nullopt;
+}
+
+} // namespace
 
 void PlasmaZonesEffect::setupDecorationManager()
 {
@@ -84,26 +106,100 @@ void PlasmaZonesEffect::clearAllBorders()
     }
 }
 
+bool PlasmaZonesEffect::windowMatchesAppearanceScope(const QString& scope, KWin::EffectWindow* w,
+                                                     const QString& windowId) const
+{
+    if (!w) {
+        return false;
+    }
+    namespace WAS = PhosphorCompositor::WindowAppearanceScope;
+    if (scope == WAS::All) {
+        return true;
+    }
+    if (scope == WAS::Tiled) {
+        // A window occupying a snap zone OR managed by the autotile engine. Use
+        // each engine's render-marked set (populated synchronously on commit),
+        // NOT the NavigationHandler zone cache: markWindowSnapped builds the border
+        // synchronously before the async windowStateChanged that fills that cache
+        // lands, so reading it here would miss a just-snapped window's default
+        // border until the next full sweep. The autotile half is already symmetric.
+        return isWindowMarkedSnapped(windowId) || m_autotileHandler->isTiledWindow(windowId);
+    }
+    if (scope == WAS::Normal) {
+        return windowTypeFor(w) == PhosphorProtocol::WindowType::Normal && !windowIsTransient(w);
+    }
+    // Unknown / empty token: contribute no default (the settings side validates
+    // the token to one of the three above).
+    return false;
+}
+
+ResolvedWindowAppearance PlasmaZonesEffect::resolveEffectiveWindowAppearance(KWin::EffectWindow* w,
+                                                                             const QString& windowId) const
+{
+    // Start from the user rule appearance (per-slot optionals). resolveWindowAppearance
+    // returns nullopt when no rule fills any slot, including the empty-rule-set case;
+    // an empty struct then carries only the config-default fills below.
+    std::optional<ResolvedWindowAppearance> ruleOvr;
+    if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
+        ruleOvr = resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor, m_borderInactiveColor);
+    }
+    ResolvedWindowAppearance out = ruleOvr.value_or(ResolvedWindowAppearance{});
+
+    const WindowAppearanceDefault& def = m_windowAppearanceDefault;
+
+    // Border slots: fill each slot the rules left unset from the config default,
+    // but only when the window matches the border scope. An engaged rule slot
+    // (even a rule value of false / 0) is left untouched — rules win per slot.
+    if (windowMatchesAppearanceScope(def.borderScope, w, windowId)) {
+        if (!out.showBorder) {
+            out.showBorder = def.showBorder;
+        }
+        if (!out.borderWidth) {
+            out.borderWidth = def.borderWidth;
+        }
+        if (!out.borderRadius) {
+            out.borderRadius = def.borderRadius;
+        }
+        if (!out.activeColor) {
+            out.activeColor = resolveDefaultBorderColor(def.activeColor, m_borderAccentColor);
+        }
+        if (!out.inactiveColor) {
+            out.inactiveColor = resolveDefaultBorderColor(def.inactiveColor, m_borderInactiveColor);
+        }
+    }
+    // Mirror the rule path: an unset inactive colour falls back to the active one
+    // so an active-only default keeps its border colour when the window unfocuses.
+    if (!out.inactiveColor) {
+        out.inactiveColor = out.activeColor;
+    }
+
+    // Title-bar slot: the config default only ever contributes a HIDE (true).
+    // A config value of false means "no opinion" (show the native title bar),
+    // NOT a force-show veto — that veto semantic (engaged false) is reserved for
+    // an explicit SetHideTitleBar=false rule, so leave the slot unset when the
+    // default is off. Fill only when the default hides AND the window is in scope.
+    if (!out.hideTitleBar && def.hideTitleBar && windowMatchesAppearanceScope(def.titleBarScope, w, windowId)) {
+        out.hideTitleBar = true;
+    }
+    return out;
+}
+
 void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::EffectWindow* w)
 {
     // Remove existing border for this window first
     removeWindowBorder(windowId);
 
-    // Border appearance is resolved entirely from rules. The managed baseline
-    // border rule (lowest priority, scoped to tiled / snapped windows by default)
-    // supplies the default for the windows it matches, and higher-priority rules
-    // override per slot. A window whose resolved appearance does not show a border
-    // draws nothing — borders are opt-in, the baseline defaults them off.
-    std::optional<ResolvedWindowAppearance> ovr;
-    if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
-        ovr = resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor, m_borderInactiveColor);
-    }
+    // Window appearance resolves as the config-backed default (gated by the
+    // border scope) with user rules overriding per slot. A window whose resolved
+    // appearance does not show a border draws nothing — borders are opt-in, the
+    // config default them off unless the user enabled them.
+    const ResolvedWindowAppearance ovr = resolveEffectiveWindowAppearance(w, windowId);
 
-    if (!ovr || !ovr->showBorder || !*ovr->showBorder) {
+    if (!ovr.showBorder || !*ovr.showBorder) {
         return;
     }
 
-    const int bw = ovr->borderWidth.value_or(0);
+    const int bw = ovr.borderWidth.value_or(0);
     if (bw <= 0) {
         return;
     }
@@ -112,14 +208,13 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         return;
     }
 
-    // Colour comes from the rules: the SetBorderColorActive colour when the
-    // window is focused, the SetBorderColorInactive colour otherwise. The
-    // resolver already defaulted inactive to active when that action was omitted
-    // and resolved the accent sentinel to the
-    // live accent, so this is a straight focus-state pick. A rule can also scope
-    // a single colour by matching IsFocused.
+    // Colour comes from the resolved appearance: the active colour when the
+    // window is focused, the inactive colour otherwise. The resolver already
+    // defaulted inactive to active when that slot was unset and resolved the
+    // accent sentinel to the live accent, so this is a straight focus-state pick.
+    // A rule can also scope a single colour by matching IsFocused.
     const bool isFocused = (w == KWin::effects->activeWindow());
-    const QColor bc = (isFocused ? ovr->activeColor : ovr->inactiveColor).value_or(QColor());
+    const QColor bc = (isFocused ? ovr.activeColor : ovr.inactiveColor).value_or(QColor());
     if (!bc.isValid() || bc.alpha() == 0) {
         return;
     }
@@ -128,8 +223,10 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // parent WindowItem clips children to the window frame.  Inset the innerRect
     // by borderWidth so the border draws fully inside the frame (no clipping).
     const QRectF frame = w->frameGeometry();
-    const KWin::RectF innerRect(bw, bw, frame.width() - 2.0 * bw, frame.height() - 2.0 * bw);
-    const int br = ovr->borderRadius.value_or(0);
+    // Floor at 0 so a window narrower/shorter than 2*borderWidth can't produce a
+    // negative-size inner rect.
+    const KWin::RectF innerRect(bw, bw, qMax(0.0, frame.width() - 2.0 * bw), qMax(0.0, frame.height() - 2.0 * bw));
+    const int br = ovr.borderRadius.value_or(0);
     // BorderOutline / OutlinedBorderItem paint the outline colour OPAQUE — the
     // scene ignores the QColor alpha channel (verified: a #80…/#40… border drew
     // fully solid). The scene DOES honour a per-item opacity, so split the colour:
@@ -203,15 +300,15 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
 
     // Keep the border in sync when the window resizes or moves.
     const QString wid = windowId; // capture by value
-    wb.geometryConnection =
-        connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
-                [this, wid, bw](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
-                    auto it = m_windowBorders.find(wid);
-                    if (it != m_windowBorders.end() && it->item) {
-                        const QRectF f = ew->frameGeometry();
-                        it->item->setInnerRect(KWin::RectF(bw, bw, f.width() - 2.0 * bw, f.height() - 2.0 * bw));
-                    }
-                });
+    wb.geometryConnection = connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
+                                    [this, wid, bw](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
+                                        auto it = m_windowBorders.find(wid);
+                                        if (it != m_windowBorders.end() && it->item) {
+                                            const QRectF f = ew->frameGeometry();
+                                            it->item->setInnerRect(KWin::RectF(bw, bw, qMax(0.0, f.width() - 2.0 * bw),
+                                                                               qMax(0.0, f.height() - 2.0 * bw)));
+                                        }
+                                    });
 
     m_windowBorders.insert(windowId, wb);
 }
@@ -220,13 +317,13 @@ void PlasmaZonesEffect::updateAllBorders()
 {
     clearAllBorders();
 
-    // Iterate all effect windows and create borders for any window managed by
-    // a mode (autotile or snap) that currently shows borders, OR matched by a
-    // per-window border rule (which can draw on an otherwise-borderless /
-    // floating window). updateWindowBorder self-gates on the merged effective
-    // appearance, so calling it when rules exist is safe; reconcile the rule
-    // title-bar override in the same pass so it tracks context changes.
-    const bool haveRules = !m_shaderManager.animationRuleSet().isEmpty();
+    // Iterate all effect windows and reconcile each window's border + title-bar
+    // from its effective appearance (config-backed default gated by scope, with
+    // user rules overriding per slot). updateWindowBorder / reconcileRuleHiddenTitleBar
+    // self-gate on that merged appearance, so this runs UNCONDITIONALLY — a
+    // config default border / hidden title bar must apply even with an empty rule
+    // set, and a per-window reconcile to the unset state clears a now-stale
+    // override left by a removed rule (so no bulk restore pass is needed here).
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
         if (!w || w->isDeleted()) {
@@ -244,23 +341,13 @@ void PlasmaZonesEffect::updateAllBorders()
         // Border overlays are visual, so only build them for windows on the
         // current desktop. Title-bar hiding (setNoBorder) is a persistent
         // decoration-state change that survives desktop switches, so reconcile
-        // it for ALL windows the rule may match — otherwise a SetHideTitleBar
-        // rule added while the matched window sits on another virtual desktop
-        // would not take effect until that window is next activated.
-        if (w->isOnCurrentDesktop() && haveRules) {
+        // it for ALL windows the appearance may hide — otherwise a hide (rule or
+        // config default) applying to a window on another virtual desktop would
+        // not take effect until that window is next activated.
+        if (w->isOnCurrentDesktop()) {
             updateWindowBorder(wid, w);
         }
-        if (haveRules) {
-            reconcileRuleHiddenTitleBar(wid, w);
-        }
-    }
-    // When no rules remain, the per-window reconcile above is skipped (haveRules
-    // is false), so a Rule owner or force-show veto from a now-removed
-    // SetHideTitleBar rule would linger until effect teardown. Clear all rule
-    // overrides in that case — a no-op when the manager tracks none (the
-    // common no-rules path), so this costs nothing when nothing is overridden.
-    if (!haveRules) {
-        restoreAllRuleHiddenTitleBars();
+        reconcileRuleHiddenTitleBar(wid, w);
     }
 }
 
@@ -269,29 +356,22 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     if (!w || windowId.isEmpty()) {
         return;
     }
-    // Tri-state rule override, forwarded to the DecorationManager (Rule is the
-    // only owner kind now — there are no mode owners to defer to):
+    // Tri-state override, forwarded to the DecorationManager (Rule is the only
+    // owner kind now — there are no mode owners to defer to):
     //   unset → no owner, the title bar shows
-    //   true  → the rule hides the title bar
-    //   false → the rule FORCE-SHOWS (a veto pinning the decoration visible)
+    //   true  → hide the title bar (a rule, or the config default in scope)
+    //   false → FORCE-SHOW (a veto pinning the decoration visible — only an
+    //           explicit SetHideTitleBar=false rule; the config default never
+    //           contributes a force-show, see resolveEffectiveWindowAppearance)
     // The manager owns the capability gate and the geometry re-assert across
     // veto-driven decoration flips.
-    const std::optional<ResolvedWindowAppearance> ovr =
-        resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor, m_borderInactiveColor);
-    m_decorationManager->setRuleOverride(windowId, ovr ? ovr->hideTitleBar : std::nullopt);
+    const ResolvedWindowAppearance ovr = resolveEffectiveWindowAppearance(w, windowId);
+    m_decorationManager->setRuleOverride(windowId, ovr.hideTitleBar);
 }
 
 bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
 {
     return m_snapHandler->isTiledWindow(windowId);
-}
-
-void PlasmaZonesEffect::restoreAllRuleHiddenTitleBars()
-{
-    // The authoritative window-rule state is gone (rule set emptied, daemon
-    // loss, effect teardown): clear every Rule owner and force-show veto so the
-    // manager restores each title bar to its native state.
-    m_decorationManager->clearAllRuleOverrides();
 }
 
 } // namespace PlasmaZones

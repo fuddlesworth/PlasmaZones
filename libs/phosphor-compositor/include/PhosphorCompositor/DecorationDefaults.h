@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <QLatin1StringView>
+
 namespace PhosphorCompositor {
 
 /**
@@ -38,4 +40,24 @@ static_assert(BorderRadius >= BorderRadiusMin && BorderRadius <= BorderRadiusMax
               "BorderRadius default must lie within its declared bounds");
 
 } // namespace DecorationDefaults
+
+/**
+ * @brief The window-appearance "Apply to" scope tokens — the single source of
+ * truth shared by the config store (ConfigDefaults / the schema validator), the
+ * settings page (WindowAppearanceController → QML), and the effect's scope
+ * predicate. A config-default border / hidden title bar applies to a window only
+ * when it matches the chosen scope:
+ *   - Tiled:  the window is snapped into a zone OR autotile-managed.
+ *   - Normal: its window type is Normal AND it is not transient.
+ *   - All:    every window.
+ * These are on-disk / wire tokens, so they must never be localized or renamed
+ * without a migration.
+ */
+namespace WindowAppearanceScope {
+
+inline constexpr QLatin1StringView Tiled{"tiled"};
+inline constexpr QLatin1StringView Normal{"normal"};
+inline constexpr QLatin1StringView All{"all"};
+
+} // namespace WindowAppearanceScope
 } // namespace PhosphorCompositor

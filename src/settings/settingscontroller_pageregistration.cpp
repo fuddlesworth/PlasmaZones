@@ -98,9 +98,9 @@ void SettingsController::buildApplicationController()
     // Display / Placement). No QML of its own; redirects to its first leaf.
     regVirtual(QStringLiteral("appearance"), QString(), PhosphorI18n::tr("Appearance"), QString(),
                QStringLiteral("preferences-desktop-theme"), /*collapsible=*/true);
-    // Shared, mode-neutral page under Appearance. Edits the single managed
-    // baseline appearance Rule — the window border / title bar AND the
-    // unified inner/outer gap model (both global, not per-mode).
+    // Shared, mode-neutral page under Appearance. Edits config: the window border
+    // / title bar (Windows.*) AND the unified inner/outer gap model (Gaps.*), both
+    // global (not per-mode).
     regPage(m_windowAppearancePage, QStringLiteral("appearance"), PhosphorI18n::tr("Windows"),
             QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
     // "animations" is a no-QML drill-down parent under Appearance — register it as
@@ -175,7 +175,7 @@ void SettingsController::buildApplicationController()
 
     // Snapping → Window holds just the per-mode Behavior page now. The window
     // border / title-bar appearance moved to the shared, top-level Window
-    // Appearance page (one baseline rule, mode-neutral).
+    // Appearance page (config-backed, shared, mode-neutral).
     regVirtual(QStringLiteral("snapping-window-behavior"), QStringLiteral("snapping"), PhosphorI18n::tr("Window"),
                QStringLiteral("SnappingWindowBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
                /*collapsible=*/false, /*divider=*/true);
@@ -199,7 +199,7 @@ void SettingsController::buildApplicationController()
     // only the parents changed, keeping the per-page controller ids stable.
     // Tiling → Window holds just the per-mode Behavior page now. The window
     // border / title-bar appearance moved to the shared, top-level Window
-    // Appearance page (one baseline rule, mode-neutral).
+    // Appearance page (config-backed, shared, mode-neutral).
     regPage(m_tilingBehaviorPage, QStringLiteral("tiling"), PhosphorI18n::tr("Window"),
             QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
             /*collapsible=*/false, /*divider=*/true);
@@ -510,13 +510,13 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // revert another page's edit). When adding a page, copy the (group, key)
     // accessors verbatim from that page's getter in settings.cpp.
     //
-    // Phase-1 scope: KConfig-backed settings pages only. Rule-backed pages
-    // (window-appearance, rules), separate-store pages (layouts), the
-    // controller-mediated ordering/shortcuts pages, and the Animations tree are
-    // deliberately absent because they revert through their own machinery
-    // (the special-case branches in reset/discardPage), not because Reset/Discard
-    // is unsupported — pageSupportsReset returns true for all but the pure
-    // separate-store pages (layouts, rules).
+    // Scope: KConfig-backed settings pages. The Rules page (separate rule store),
+    // the layouts page (separate-store), the controller-mediated ordering/shortcuts
+    // pages, and the Animations tree are deliberately absent because they revert
+    // through their own machinery (the special-case branches in reset/discardPage),
+    // not because Reset/Discard is unsupported — pageSupportsReset returns true for
+    // all but the pure separate-store pages (layouts, rules). The Windows appearance
+    // page IS config-backed (Windows.* + Gaps.*), so it lists its owned keys here.
     using CD = ConfigDefaults;
     static const QHash<QString, Settings::ConfigKeyList> manifest{
         {QStringLiteral("general"),
@@ -609,6 +609,32 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::tilingAlgorithmGroup(), CD::masterCountKey()},
              {CD::tilingAlgorithmGroup(), CD::maxWindowsKey()},
              {CD::tilingAlgorithmGroup(), CD::perAlgorithmSettingsKey()},
+         }},
+        // Only the GLOBAL Windows.* / Gaps.* keys are listed. Per-monitor gap
+        // overrides live in the per-screen autotile store (AutotileScreen:*), not
+        // in flat config keys, so — like the Tiling Algorithm page's per-monitor
+        // split/master/max overrides — they are NOT part of this page's per-page
+        // dirty/Reset/Discard. Per-monitor gaps are reset through the Gaps card's
+        // scope chip (its override dot + clearPerScreenGapOverride), matching the
+        // established per-monitor-override UX; the global footer Save/Discard
+        // handles them via the per-screen save path.
+        {QStringLiteral("window-appearance"),
+         {
+             {CD::windowsAppearanceGroup(), CD::showBorderKey()},
+             {CD::windowsAppearanceGroup(), CD::borderScopeKey()},
+             {CD::windowsAppearanceGroup(), CD::widthKey()},
+             {CD::windowsAppearanceGroup(), CD::radiusKey()},
+             {CD::windowsAppearanceGroup(), CD::borderColorActiveKey()},
+             {CD::windowsAppearanceGroup(), CD::borderColorInactiveKey()},
+             {CD::windowsAppearanceGroup(), CD::hideTitleBarsKey()},
+             {CD::windowsAppearanceGroup(), CD::titleBarScopeKey()},
+             {CD::gapsGroup(), CD::innerGapKey()},
+             {CD::gapsGroup(), CD::outerGapKey()},
+             {CD::gapsGroup(), CD::usePerSideOuterGapKey()},
+             {CD::gapsGroup(), CD::outerGapTopKey()},
+             {CD::gapsGroup(), CD::outerGapBottomKey()},
+             {CD::gapsGroup(), CD::outerGapLeftKey()},
+             {CD::gapsGroup(), CD::outerGapRightKey()},
          }},
         {QStringLiteral("editor"),
          {

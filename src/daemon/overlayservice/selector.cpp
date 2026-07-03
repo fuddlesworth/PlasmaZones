@@ -478,9 +478,10 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
         // global → default) via the layout registry's current context. The
         // selector preview passes no layout, so the per-layout tier does not
         // apply here; border width/radius are global-only (no per-screen key).
-        writeQmlProperty(slot, QStringLiteral("zonePadding"),
-                         GeometryUtils::getEffectiveInnerGap(
-                             nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, screenId)));
+        writeQmlProperty(
+            slot, QStringLiteral("zonePadding"),
+            GeometryUtils::getEffectiveInnerGap(
+                nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, m_settings, screenId)));
         writeQmlProperty(slot, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
         writeQmlProperty(slot, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
     }

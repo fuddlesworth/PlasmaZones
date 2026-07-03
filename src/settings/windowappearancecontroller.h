@@ -7,60 +7,89 @@
 
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorControl/PageController.h>
-#include <QJsonObject>
 #include <QObject>
 #include <QString>
-#include <QUuid>
+#include <QVariant>
 
 namespace PlasmaZones {
 
-/// Q_PROPERTY surface for the slim "Window Appearance" settings page.
+class ISettings;
+
+/// Q_PROPERTY surface for the "Appearance → Windows" settings page.
 ///
-/// The page is a friendly editor for the three managed baseline appearance
-/// Rules (borders, title bars, gaps — the lowest-priority rules the daemon
-/// seeds, one per concern; borders and title bars are scoped to tiled/snapped
-/// windows by default while gaps stays the catch-all). It reads and writes those rules'
-/// actions through `settingsController.rulesPage` (RuleController),
-/// so this controller only carries the CONSTANT slider bounds and the three
-/// baseline rule ids. It holds no editable state of its own, so it is never
-/// dirty and its apply/discard are no-ops; the dirty/save path runs through the
-/// Rules page controller.
+/// Exposed as a child Q_PROPERTY on SettingsController; QML reads
+/// `settingsController.windowAppearancePage.showWindowBorder` etc. The page's
+/// window border / title bar values and the shared inner/outer gap model are
+/// plain config settings on ISettings (Windows.* and Gaps.*), so this controller
+/// forwards each value's READ/WRITE to the matching ISettings getter/setter and
+/// re-emits the ISettings::*Changed NOTIFY to QML. It also carries the CONSTANT
+/// slider bounds (border width/radius + the shared gap range) sourced from the
+/// same defaults the schema clamps against so the UI range can never drift.
+///
+/// Dirty tracking: the underlying values ARE Q_PROPERTY on Settings, so
+/// SettingsController's meta-object loop already wires their NOTIFY to
+/// `onSettingsPropertyChanged()`; this class holds no editable state of its own,
+/// so it is never dirty and its apply/discard are no-ops. The page's per-page
+/// Reset / Discard runs through the config manifest (pageOwnedConfigKeys), not
+/// through this controller.
 class WindowAppearanceController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
+    // ── Window border / title bar (Windows.*) ─────────────────────────────────
+    Q_PROPERTY(bool showWindowBorder READ showWindowBorder WRITE setShowWindowBorder NOTIFY showWindowBorderChanged)
+    // Scope tokens the "Apply to" pickers speak: "tiled", "normal", "all".
+    Q_PROPERTY(QString borderScope READ windowBorderScope WRITE setWindowBorderScope NOTIFY windowBorderScopeChanged)
+    Q_PROPERTY(int windowBorderWidth READ windowBorderWidth WRITE setWindowBorderWidth NOTIFY windowBorderWidthChanged)
+    Q_PROPERTY(
+        int windowBorderRadius READ windowBorderRadius WRITE setWindowBorderRadius NOTIFY windowBorderRadiusChanged)
+    // Border colours: a concrete "#AARRGGBB" hex, or the sentinel "accent" that
+    // the effect resolves to the live system accent at paint time.
+    Q_PROPERTY(QString windowBorderColorActive READ windowBorderColorActive WRITE setWindowBorderColorActive NOTIFY
+                   windowBorderColorActiveChanged)
+    Q_PROPERTY(QString windowBorderColorInactive READ windowBorderColorInactive WRITE setWindowBorderColorInactive
+                   NOTIFY windowBorderColorInactiveChanged)
+    Q_PROPERTY(bool hideWindowTitleBars READ hideWindowTitleBars WRITE setHideWindowTitleBars NOTIFY
+                   hideWindowTitleBarsChanged)
+    Q_PROPERTY(
+        QString titleBarScope READ windowTitleBarScope WRITE setWindowTitleBarScope NOTIFY windowTitleBarScopeChanged)
+
+    // ── Shared inner/outer gap model (Gaps.*) ─────────────────────────────────
+    Q_PROPERTY(int innerGap READ innerGap WRITE setInnerGap NOTIFY innerGapChanged)
+    Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(
+        bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapTopChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapBottomChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
+
+    // ── "Apply to" scope tokens (single source: PhosphorCompositor::WindowAppearanceScope) ──
+    // The QML "Apply to" pickers pair each token with an i18n label; exposing the
+    // tokens here keeps them in lockstep with the schema validator and the effect.
+    Q_PROPERTY(QString scopeTokenTiled READ scopeTokenTiled CONSTANT)
+    Q_PROPERTY(QString scopeTokenNormal READ scopeTokenNormal CONSTANT)
+    Q_PROPERTY(QString scopeTokenAll READ scopeTokenAll CONSTANT)
+
+    // ── Border colour sentinel + fallback (single source: ConfigDefaults) ──
+    // The "follow the system accent" sentinel and the concrete colour the page
+    // seeds when the user leaves accent mode. Exposed here so QML never hardcodes
+    // either literal, mirroring the scope-token treatment above.
+    Q_PROPERTY(QString accentColorToken READ accentColorToken CONSTANT)
+    Q_PROPERTY(QString defaultBorderColorHex READ defaultBorderColorHex CONSTANT)
+
+    // ── CONSTANT slider bounds ────────────────────────────────────────────────
     Q_PROPERTY(int borderWidthMin READ borderWidthMin CONSTANT)
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
     Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
-    // Seed defaults for the dependent border details. The baseline border rule
-    // carries only the "show border" parent action; the Appearance page seeds
-    // these width/radius defaults into the rule when the user first turns the
-    // border on. Sourced from the same DecorationDefaults the daemon's seeder
-    // used so the on-enable value matches the historical baseline default.
-    Q_PROPERTY(int borderWidthDefault READ borderWidthDefault CONSTANT)
-    Q_PROPERTY(int borderRadiusDefault READ borderRadiusDefault CONSTANT)
-    // Gap slider bounds — the unified inner/outer gap controls moved onto this
-    // page (they edit the same baseline rule). Sourced from the ConfigDefaults
-    // accessors the gap action validators clamp against so the UI range and the
-    // clamp range can never drift apart.
     Q_PROPERTY(int innerGapMin READ innerGapMin CONSTANT)
     Q_PROPERTY(int innerGapMax READ innerGapMax CONSTANT)
     Q_PROPERTY(int outerGapMin READ outerGapMin CONSTANT)
     Q_PROPERTY(int outerGapMax READ outerGapMax CONSTANT)
-    /// Stable ids (UUID strings, braces) of the three managed baseline rules the
-    /// page edits, one per concern. QML routes each action's read/write to the
-    /// matching rule and passes the id to the RuleController's
-    /// ruleJson() / updateRuleFromJson() calls.
-    Q_PROPERTY(QString borderBaselineRuleId READ borderBaselineRuleId CONSTANT)
-    Q_PROPERTY(QString titleBarBaselineRuleId READ titleBarBaselineRuleId CONSTANT)
-    Q_PROPERTY(QString gapBaselineRuleId READ gapBaselineRuleId CONSTANT)
 
 public:
-    explicit WindowAppearanceController(QObject* parent = nullptr)
-        : PhosphorControl::PageController(QStringLiteral("window-appearance"), parent)
-    {
-    }
+    explicit WindowAppearanceController(ISettings& settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {
@@ -73,6 +102,76 @@ public:
     {
     }
 
+    // Window border / title bar — forward to ISettings.
+    bool showWindowBorder() const;
+    QString windowBorderScope() const;
+    int windowBorderWidth() const;
+    int windowBorderRadius() const;
+    QString windowBorderColorActive() const;
+    QString windowBorderColorInactive() const;
+    bool hideWindowTitleBars() const;
+    QString windowTitleBarScope() const;
+
+    void setShowWindowBorder(bool show);
+    void setWindowBorderScope(const QString& scope);
+    void setWindowBorderWidth(int width);
+    void setWindowBorderRadius(int radius);
+    void setWindowBorderColorActive(const QString& color);
+    void setWindowBorderColorInactive(const QString& color);
+    void setHideWindowTitleBars(bool hide);
+    void setWindowTitleBarScope(const QString& scope);
+
+    // Shared inner/outer gaps — forward to ISettings.
+    int innerGap() const;
+    int outerGap() const;
+    bool usePerSideOuterGap() const;
+    int outerGapTop() const;
+    int outerGapBottom() const;
+    int outerGapLeft() const;
+    int outerGapRight() const;
+
+    void setInnerGap(int gap);
+    void setOuterGap(int gap);
+    void setUsePerSideOuterGap(bool enabled);
+    void setOuterGapTop(int gap);
+    void setOuterGapBottom(int gap);
+    void setOuterGapLeft(int gap);
+    void setOuterGapRight(int gap);
+
+    // Scope-aware gap read/write for the Gaps card's monitor scope chip. @p key is
+    // one of the PerScreenSnappingKey gap names (InnerGap / OuterGap /
+    // UsePerSideOuterGap / OuterGap{Top,Bottom,Left,Right}). When @p screenName is
+    // empty the GLOBAL config value is read/written; otherwise the per-monitor
+    // config override is read (falling back to the global value when the monitor
+    // has no override) and written to the per-screen autotile store. The Q_PROPERTY
+    // getters/setters above stay as the global-scope surface the page's dirty
+    // tracking rides; these invokables are the per-monitor-aware path.
+    Q_INVOKABLE QVariant gapValue(const QString& screenName, const QString& key) const;
+    Q_INVOKABLE void writeGap(const QString& screenName, const QString& key, const QVariant& value);
+
+    QString scopeTokenTiled() const
+    {
+        return QString(::PhosphorCompositor::WindowAppearanceScope::Tiled);
+    }
+    QString scopeTokenNormal() const
+    {
+        return QString(::PhosphorCompositor::WindowAppearanceScope::Normal);
+    }
+    QString scopeTokenAll() const
+    {
+        return QString(::PhosphorCompositor::WindowAppearanceScope::All);
+    }
+
+    QString accentColorToken() const
+    {
+        return ConfigDefaults::windowBorderColorActive();
+    }
+    QString defaultBorderColorHex() const
+    {
+        return ConfigDefaults::windowBorderColorAccentFallbackHex();
+    }
+
+    // CONSTANT slider bounds.
     int borderWidthMin() const
     {
         return ::PhosphorCompositor::DecorationDefaults::BorderWidthMin;
@@ -89,70 +188,6 @@ public:
     {
         return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
     }
-    int borderWidthDefault() const
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
-    }
-    int borderRadiusDefault() const
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
-    }
-    QString borderBaselineRuleId() const
-    {
-        return ConfigDefaults::baselineBorderRuleId().toString();
-    }
-    QString titleBarBaselineRuleId() const
-    {
-        return ConfigDefaults::baselineTitleBarRuleId().toString();
-    }
-    QString gapBaselineRuleId() const
-    {
-        return ConfigDefaults::baselineGapRuleId().toString();
-    }
-
-    /// Deterministic, reproducible id (UUID string, braces) of the per-monitor
-    /// gap-override Rule for @p screenId. A per-monitor gap override is an
-    /// ordinary (non-managed) screen-scoped rule whose match is
-    /// `ScreenId Equals screenId` and whose actions carry the gap values; it
-    /// rides the context-gap cascade so it overrides the global baseline for
-    /// that monitor only. The incoming identifier is resolved to its stable EDID
-    /// form (Settings::canonicalPerScreenKey) before hashing, so the id agrees
-    /// with the v4→v5 migration and the gap reader regardless of whether the
-    /// scope chooser passed a connector name or a stable id. The id is a v5 UUID
-    /// namespaced under the baseline gap rule so it is stable across restarts and
-    /// reproducible from the screen id alone — QML cannot compute v5, so the page
-    /// resolves it here and then drives find-or-create through the Rules
-    /// controller's ruleJson() / addRuleFromJson() / updateRuleFromJson() /
-    /// removeRule(). Returns an empty string for an empty screen id (the "all
-    /// monitors" / global scope, which edits the gap baseline rule directly).
-    Q_INVOKABLE QString perScreenGapRuleId(const QString& screenId) const;
-
-    /// Stable EDID form of @p screenId (Settings::canonicalPerScreenKey), or the
-    /// input unchanged when it is already a stable id or cannot be resolved.
-    /// QML uses this to author a per-monitor gap rule's `ScreenId Equals` match
-    /// in the same canonical form the rule id is keyed by.
-    Q_INVOKABLE QString canonicalScreenId(const QString& screenId) const;
-
-    // ── "Apply to" scope selector for the border / title-bar baselines ────────
-    //
-    // The baseline border and title-bar rules carry a window-property match that
-    // scopes which windows their appearance applies to. The Appearance page
-    // exposes this as an "Apply to" picker; these two helpers translate between
-    // the picker's scope token and the rule's `match` JSON so the QML never has
-    // to author the wire shape (and so the WindowType-as-int encoding stays in
-    // C++). Scope tokens: "tiled" (snapped or autotile-managed), "normal" (all
-    // ordinary application windows), "all" (every window — the catch-all).
-
-    /// The `match` JSON for @p scope, ready to drop onto a rule. An unrecognized
-    /// token returns the catch-all (the "all" scope), so a bad value never
-    /// narrows the baseline unexpectedly.
-    Q_INVOKABLE QJsonObject matchJsonForScope(const QString& scope) const;
-
-    /// Classify a rule's @p match JSON back to its scope token: "tiled",
-    /// "normal", "all" (catch-all or unparseable), or "custom" (a recognized but
-    /// non-preset expression, e.g. one hand-authored on the Rules page).
-    Q_INVOKABLE QString scopeOfMatch(const QJsonObject& match) const;
-
     int innerGapMin() const
     {
         return ConfigDefaults::innerGapMin();
@@ -169,6 +204,26 @@ public:
     {
         return ConfigDefaults::outerGapMax();
     }
+
+Q_SIGNALS:
+    void showWindowBorderChanged();
+    void windowBorderScopeChanged();
+    void windowBorderWidthChanged();
+    void windowBorderRadiusChanged();
+    void windowBorderColorActiveChanged();
+    void windowBorderColorInactiveChanged();
+    void hideWindowTitleBarsChanged();
+    void windowTitleBarScopeChanged();
+    void innerGapChanged();
+    void outerGapChanged();
+    void usePerSideOuterGapChanged();
+    void outerGapTopChanged();
+    void outerGapBottomChanged();
+    void outerGapLeftChanged();
+    void outerGapRightChanged();
+
+private:
+    ISettings* m_settings = nullptr;
 };
 
 } // namespace PlasmaZones

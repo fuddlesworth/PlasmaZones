@@ -20,12 +20,11 @@ namespace PhosphorRules {
  *
  * Serializes to `rules.json` with `"_version": 4`. This rules-file version is
  * INDEPENDENT of the application config schema version (which is at 5): the
- * v4→v5 config migration renamed `windowrules.json` to `rules.json` and folded
- * appearance/gaps in without changing the `{type, params}` action wire shape, so
- * the rules-file version stayed 4. Do NOT bump SchemaVersion to track the config
- * version. The set also carries a **monotonic revision counter** bumped on every
- * mutation; the RuleEvaluator keys its match cache on `(windowId, revision)` so
- * an edit transparently invalidates stale resolutions.
+ * v4→v5 config migration renamed `windowrules.json` to `rules.json` without
+ * changing the `{type, params}` action wire shape, so the rules-file version
+ * stayed 4. Do NOT bump SchemaVersion to track the config version. The set also carries a **monotonic revision
+ * counter** bumped on every mutation; the RuleEvaluator keys its match cache on `(windowId, revision)` so an edit
+ * transparently invalidates stale resolutions.
  *
  * `fromJson` **refuses** a non-4 `_version` — schema migration is the config
  * layer's job, never the library's.

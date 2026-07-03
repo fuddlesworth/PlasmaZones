@@ -360,14 +360,14 @@ bool ConfigMigration::ensureJsonConfigImpl()
                         // rules.json + quicklayouts.json, stripping the
                         // stash keys, retiring assignments.json) happens
                         // here, after the chain. Idempotent — safe to always run.
-                        return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
+                        return finalizeV4Conversion(jsonPath);
                     }
                     // Already at OR above current version — finalizeV4Conversion's
                     // cleanup-only branch runs idempotently: it strips any leftover
                     // assignments.json artifacts or `_v4*Stash` keys that a prior
                     // crash may have left behind (and prunes the retired
                     // provider-default rule from rules.json), a no-op once clean.
-                    return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
+                    return finalizeV4Conversion(jsonPath);
                 }
                 corrupt = true;
             }
@@ -401,7 +401,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
                     "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
                     "using defaults",
                     qPrintable(corruptBak));
-                return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
+                return finalizeV4Conversion(jsonPath);
             }
             qWarning("ConfigMigration: corrupt JSON config moved to %s — re-migrating from INI",
                      qPrintable(corruptBak));
@@ -420,7 +420,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
         // Fresh install — no old config. Still run the v4 finalizer so a
         // stray assignments.json from a partial earlier conversion is folded
         // into rules.json rather than left orphaned.
-        return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
+        return finalizeV4Conversion(jsonPath);
     }
 
     qInfo("ConfigMigration: migrating %s → %s", qPrintable(iniPath), qPrintable(jsonPath));
@@ -439,12 +439,13 @@ bool ConfigMigration::ensureJsonConfigImpl()
     }
 
     qInfo("ConfigMigration: migration complete");
-    // The in-memory chain above ran through migrateV4ToV5, which stashes the v5
-    // appearance/gap payload — run BOTH finalizers (matching the version-path
-    // return sites) so the v5 override rules are built on this launch, not the
-    // next. finalizeV4Conversion's cleanup also prunes the retired
-    // provider-default rule.
-    return finalizeV4Conversion(jsonPath) && finalizeV5Conversion(jsonPath);
+    // The in-memory chain above ran through migrateV4ToV5, a pure config→config
+    // transform (it folds the per-mode appearance/gap values into the unified
+    // "Windows" / "Gaps" groups in-place and creates no rules), so only the v4
+    // finalizer runs here. finalizeV4Conversion also adopts a legacy
+    // windowrules.json as rules.json (a first-step, all-paths action) and prunes
+    // the retired provider-default rule.
+    return finalizeV4Conversion(jsonPath);
 }
 
 void ConfigMigration::resetMigrationGuardForTesting()
@@ -821,13 +822,12 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     QJsonObject zoneSelector = v1ZoneSelector;
 
     // ── Snapping.Gaps ─────────────────────────────────────────────────────────
-    // The shared inner/outer gaps are NOT migrated: the global default is now
-    // rule-backed (the managed baseline appearance Rule, seeded by the
-    // daemon), so there is no stored "Gaps" group destination. Per the
-    // no-ad-hoc-backwards-compat policy the v1 zone-padding / outer-gap values
-    // are silently dropped (left in v1Zones, never written out); users fall back
-    // to the baseline rule's defaults. The snapping-specific AdjacentThreshold
-    // stays in Snapping.Gaps.
+    // The shared inner/outer gaps are NOT migrated from v1. Per the
+    // no-ad-hoc-backwards-compat policy the ancient v1 zone-padding / outer-gap
+    // values are silently dropped (left in v1Zones, never written out); a v1 user
+    // falls back to the config gap defaults (the top-level "Gaps" group, populated
+    // by the v4→v5 step). The snapping-specific AdjacentThreshold stays in
+    // Snapping.Gaps.
     QJsonObject snappingGaps;
     moveKey(v1Zones, QLatin1String("AdjacentThreshold"), snappingGaps, QLatin1String("AdjacentThreshold"));
 
@@ -880,16 +880,14 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 
     // The v1 autotile border / title-bar appearance keys
     // (AutotileShowBorder / Width / Radius / BorderColor / InactiveBorderColor /
-    // UseSystemBorderColors / HideTitleBars) are intentionally dropped: window
-    // appearance is resolved from the managed baseline appearance Rule
-    // now, so there is no Tiling.Appearance destination group. Per the
-    // no-ad-hoc-backwards-compat policy the stale v1 values are silently
-    // discarded; users fall back to the baseline rule's defaults.
+    // UseSystemBorderColors / HideTitleBars) are intentionally dropped. Per the
+    // no-ad-hoc-backwards-compat policy the ancient v1 values are silently
+    // discarded; a v1 user falls back to the config appearance defaults (the
+    // top-level "Windows" group, populated by the v4→v5 step).
 
     // The v1 autotile inner/outer gap keys are dropped for the same reason as the
-    // snapping ones above: the shared global gap default is rule-backed now, so
-    // there is no stored "Gaps" group destination. SmartGaps is tiling-specific
-    // and is NOT part of the rule-backed model, so it stays in Tiling.Gaps.
+    // snapping ones above (no-ad-hoc-backwards-compat; users fall back to the
+    // config "Gaps" defaults). SmartGaps is tiling-specific and stays in Tiling.Gaps.
     QJsonObject tilingGaps;
     moveKey(v1Autotiling, QLatin1String("AutotileSmartGaps"), tilingGaps, QLatin1String("SmartGaps"));
 
@@ -2080,8 +2078,8 @@ void assignBandPrioritiesToZeroRules(QList<PhosphorRules::Rule>& rules)
     using PhosphorRules::MatchExpression;
     using PhosphorRules::Rule;
     // Bands mirror RuleTemplates (src/settings/ruletemplates.h) — duplicated as
-    // literals because that header lives in the settings tree (see the
-    // kAdvancedBandBase note at finalizeV5Conversion).
+    // literals because that header lives in the settings tree and the core
+    // library cannot link it.
     constexpr int kApplicationBandBase = 200;
     constexpr int kAdvancedBandBase = 500;
     constexpr int kBandWidth = 100;
@@ -3274,14 +3272,16 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     return true;
 }
 
-// ── v4 → v5: per-mode appearance + gaps → window-rule overrides ─────────────
+// ── v4 → v5: per-mode appearance + gaps → unified config groups ─────────────
 //
 // The v4 schema stored per-mode (separate Snapping vs Tiling) window
 // appearance (borders, title bars, colours) and gap settings in config.json
-// PLUS per-screen gap subsets. This branch deleted those settings and routes
-// the same concerns through rules. migrateV4ToV5 stashes the values
-// that DIFFER from the v4 compile defaults; finalizeV5Conversion turns the
-// stash into override rules in rules.json.
+// PLUS per-screen gap subsets. v5 unifies the per-mode global values into two
+// config groups that apply to both modes: "Windows" (appearance) and "Gaps".
+// migrateV4ToV5 collapses the two per-mode value sets into one and writes the
+// values that DIFFER from the v4 compile defaults into those groups; it creates
+// NO rules. The per-screen gap subsets are likewise collapsed per monitor and
+// folded into the per-screen autotile gap keys (consumeV4PerScreenGaps).
 //
 // Schema-migration freeze policy (mirrors migrateV3ToV4): every v4 group/key
 // spelling and every v4 compile-default value the migration depends on is
@@ -3290,6 +3290,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 // constants (DecorationDefaults, core gap constants) could in principle drift;
 // pinning the literals decouples this migration's stable wire-format contract
 // from the live code.
+//
+// The v5 DESTINATION keys (the unified "Windows" / "Gaps" groups this step writes
+// into) are deliberately NOT frozen here — they are written through the live
+// ConfigKeys accessors because v5 is the current schema. A future v5→v6 step that
+// renames those accessors MUST freeze them as constants first, or this historical
+// step will silently retarget to the renamed groups.
 namespace {
 
 // ── Frozen v4 on-disk group paths (dot-paths) and leaf-key spellings ───────
@@ -3321,31 +3327,21 @@ constexpr QLatin1String kV4KeyBottom{"Bottom"};
 constexpr QLatin1String kV4KeyLeft{"Left"};
 constexpr QLatin1String kV4KeyRight{"Right"};
 
-// Per-screen container path "PerScreen.{Snapping,Autotile}.<screenId>" and the
-// per-screen gap leaf-key spellings (the snapping side uses bare names, the
-// autotile side prefixes each with "Autotile").
-constexpr QLatin1String kV4PerScreen{"PerScreen"};
-constexpr QLatin1String kV4PerScreenSnapping{"Snapping"};
-constexpr QLatin1String kV4PerScreenAutotile{"Autotile"};
-// v4 persisted the per-screen SNAPPING inner gap under the legacy on-disk key
-// "ZonePadding" (PerScreenSnappingKey::ZonePadding in v3.2). The rename to
-// "InnerGap" happened in v5, so the migration must READ the historical spelling
-// or the per-monitor snapping inner gap is silently lost on upgrade. (Outer/
-// per-side snapping keys kept their names; only the inner gap was "ZonePadding".)
-constexpr QLatin1String kV4SnapInnerGap{"ZonePadding"};
-constexpr QLatin1String kV4SnapOuterGap{"OuterGap"};
-constexpr QLatin1String kV4SnapUsePerSide{"UsePerSideOuterGap"};
-constexpr QLatin1String kV4SnapOuterGapTop{"OuterGapTop"};
-constexpr QLatin1String kV4SnapOuterGapBottom{"OuterGapBottom"};
-constexpr QLatin1String kV4SnapOuterGapLeft{"OuterGapLeft"};
-constexpr QLatin1String kV4SnapOuterGapRight{"OuterGapRight"};
-constexpr QLatin1String kV4AutoInnerGap{"AutotileInnerGap"};
-constexpr QLatin1String kV4AutoOuterGap{"AutotileOuterGap"};
-constexpr QLatin1String kV4AutoUsePerSide{"AutotileUsePerSideOuterGap"};
-constexpr QLatin1String kV4AutoOuterGapTop{"AutotileOuterGapTop"};
-constexpr QLatin1String kV4AutoOuterGapBottom{"AutotileOuterGapBottom"};
-constexpr QLatin1String kV4AutoOuterGapLeft{"AutotileOuterGapLeft"};
-constexpr QLatin1String kV4AutoOuterGapRight{"AutotileOuterGapRight"};
+// v4 persisted per-screen gaps under "PerScreen/{Snapping,Autotile}/<screenId>"
+// (the nested container PerScreenPathResolver maps the "SnappingScreen:" /
+// "AutotileScreen:" store groups to). v5 unifies the two per-mode gap sets into
+// ONE value per monitor, stored in the per-screen autotile group (which the
+// config store still reads via "AutotileScreen:<id>" → PerScreen/Autotile/<id>).
+// These frozen literals mirror the v4 container/category spellings and the v4
+// gap-key spellings (snapping used the bare PerScreenSnappingKey names, autotile
+// the "Autotile"-prefixed PerScreenAutotileKey names) so the consume step is
+// decoupled from the live accessors. v4 and v5 share the same PerScreen/Autotile
+// mapping, so the unified values written here are read back by the current store.
+constexpr QLatin1String kV4PerScreenContainer{"PerScreen"};
+constexpr QLatin1String kV4PerScreenSnappingCat{"Snapping"};
+constexpr QLatin1String kV4PerScreenAutotileCat{"Autotile"};
+// The struct + collapse/consume helpers depend on the frozen kV4Def* gap
+// defaults declared below, so they live just after those (before stripKeysAtPath).
 
 // ── Frozen v4 compile defaults ─────────────────────────────────────────────
 // Sourced from the (now-deleted) ConfigDefaults accessors:
@@ -3360,10 +3356,7 @@ constexpr int kV4DefInnerGap = 8;
 constexpr int kV4DefOuterGap = 8;
 constexpr bool kV4DefUsePerSideOuterGap = false;
 
-// ── Stash shape: normalized field + section names ──────────────────────────
-constexpr QLatin1String kStashSnapping{"snapping"};
-constexpr QLatin1String kStashTiling{"tiling"};
-constexpr QLatin1String kStashPerScreen{"perScreen"};
+// ── Normalized field names for the collapsed per-mode value set ────────────
 constexpr QLatin1String kFieldShowBorder{"showBorder"};
 constexpr QLatin1String kFieldBorderWidth{"borderWidth"};
 constexpr QLatin1String kFieldBorderRadius{"borderRadius"};
@@ -3411,17 +3404,22 @@ void stashColor(const QJsonObject& colors, QLatin1String key, QJsonObject& out, 
     }
 }
 
-// Build the differing-from-default appearance + gap stash for one global mode
-// ("Snapping" or "Tiling"). Colour actions are emitted only when the user
-// turned the system-accent colours OFF (the v4 default is accent-on, which is
-// the rule default, so it contributes nothing).
+// Read one global mode's ("Snapping" or "Tiling") appearance + gap values into
+// a field-keyed object, keeping ONLY the fields that DIFFER from the v4 compile
+// default (an absent field means "still at default"). Colours are read only
+// when the user turned the system-accent colours OFF (the v4 default is
+// accent-on, which equals the v5 "accent" config default, so it contributes
+// nothing).
 QJsonObject buildModeStash(const QJsonObject& root, QLatin1String mode)
 {
     const QString modeStr = QString(mode);
-    const QJsonObject colors = groupObjectAtPath(root, modeStr + QStringLiteral(".Appearance.Colors"));
-    const QJsonObject deco = groupObjectAtPath(root, modeStr + QStringLiteral(".Appearance.Decorations"));
-    const QJsonObject borders = groupObjectAtPath(root, modeStr + QStringLiteral(".Appearance.Borders"));
-    const QJsonObject gaps = groupObjectAtPath(root, modeStr + QStringLiteral(".Gaps"));
+    // Build the v4 group paths from the frozen segment constants (same spellings
+    // the strip side uses) so a rename can't desync the two sides.
+    const QString appearance = modeStr + QLatin1Char('.') + kV4SegAppearance + QLatin1Char('.');
+    const QJsonObject colors = groupObjectAtPath(root, appearance + kV4SegColors);
+    const QJsonObject deco = groupObjectAtPath(root, appearance + kV4SegDecorations);
+    const QJsonObject borders = groupObjectAtPath(root, appearance + kV4SegBorders);
+    const QJsonObject gaps = groupObjectAtPath(root, modeStr + QLatin1Char('.') + kV4SegGaps);
 
     QJsonObject out;
     stashBoolIfDiffers(borders, kV4KeyShowBorder, kV4DefShowBorder, out, kFieldShowBorder);
@@ -3446,23 +3444,6 @@ QJsonObject buildModeStash(const QJsonObject& root, QLatin1String mode)
     return out;
 }
 
-// Extract the differing-from-default per-screen gaps for one category's screen
-// entry, mapping the on-disk gap-key spellings to the normalized field names.
-QJsonObject extractPerScreenGaps(const QJsonObject& scr, QLatin1String innerKey, QLatin1String outerKey,
-                                 QLatin1String usePerSideKey, QLatin1String topKey, QLatin1String bottomKey,
-                                 QLatin1String leftKey, QLatin1String rightKey)
-{
-    QJsonObject out;
-    stashIntIfDiffers(scr, innerKey, kV4DefInnerGap, out, kFieldInnerGap);
-    stashIntIfDiffers(scr, outerKey, kV4DefOuterGap, out, kFieldOuterGap);
-    stashBoolIfDiffers(scr, usePerSideKey, kV4DefUsePerSideOuterGap, out, kFieldUsePerSideOuterGap);
-    stashIntIfDiffers(scr, topKey, kV4DefOuterGap, out, kFieldOuterGapTop);
-    stashIntIfDiffers(scr, bottomKey, kV4DefOuterGap, out, kFieldOuterGapBottom);
-    stashIntIfDiffers(scr, leftKey, kV4DefOuterGap, out, kFieldOuterGapLeft);
-    stashIntIfDiffers(scr, rightKey, kV4DefOuterGap, out, kFieldOuterGapRight);
-    return out;
-}
-
 // Strip the named keys from the group at @p segments, pruning the group (and
 // now-empty ancestors) if nothing else remains. Keys not consumed here (e.g.
 // Snapping.Gaps.AdjacentThreshold, Tiling.Gaps.SmartGaps) survive.
@@ -3482,77 +3463,125 @@ void stripKeysAtPath(QJsonObject& root, const QStringList& segments, const QList
     }
 }
 
-// ── finalize-side action builders ──────────────────────────────────────────
-PhosphorRules::RuleAction makeValueAction(QLatin1StringView type, const QJsonValue& value)
+// One gap dimension's v4 per-screen key spellings + compile default. `snapKey`
+// is the bare snapping form, `autotileKey` the "Autotile"-prefixed form (also the
+// v5 destination key), `isBool` selects bool vs int, `def` is the v4 compile
+// default a value must differ from to be carried.
+struct V4PerScreenGapDim
 {
-    PhosphorRules::RuleAction a;
-    a.type = QString(type);
-    a.params.insert(QString(PhosphorRules::ActionParam::Value), value);
-    return a;
+    QLatin1String snapKey;
+    QLatin1String autotileKey;
+    bool isBool;
+    int def; // int default; for bool dims 0/1 mirrors kV4DefUsePerSideOuterGap
+};
+
+constexpr V4PerScreenGapDim kV4PerScreenGapDims[] = {
+    // The v4 per-screen SNAPPING inner-gap key is the legacy "ZonePadding"
+    // spelling (renamed to "InnerGap" in this refactor); the autotile side always
+    // used the "Autotile"-prefixed name, which is also the v5 destination key.
+    {QLatin1String{"ZonePadding"}, QLatin1String{"AutotileInnerGap"}, false, kV4DefInnerGap},
+    {QLatin1String{"OuterGap"}, QLatin1String{"AutotileOuterGap"}, false, kV4DefOuterGap},
+    {QLatin1String{"UsePerSideOuterGap"}, QLatin1String{"AutotileUsePerSideOuterGap"}, true,
+     kV4DefUsePerSideOuterGap ? 1 : 0},
+    {QLatin1String{"OuterGapTop"}, QLatin1String{"AutotileOuterGapTop"}, false, kV4DefOuterGap},
+    {QLatin1String{"OuterGapBottom"}, QLatin1String{"AutotileOuterGapBottom"}, false, kV4DefOuterGap},
+    {QLatin1String{"OuterGapLeft"}, QLatin1String{"AutotileOuterGapLeft"}, false, kV4DefOuterGap},
+    {QLatin1String{"OuterGapRight"}, QLatin1String{"AutotileOuterGapRight"}, false, kV4DefOuterGap},
+};
+
+// Collapse a single gap dimension's per-mode (snapping + autotile) v4 values into
+// one, keeping ONLY a value that DIFFERS from the compile default. Prefer the
+// value that differs; on a tie (both differ, both default, or both absent) prefer
+// SNAPPING. Returns nullopt when neither mode carries a differing value, so the
+// caller drops the key and the monitor falls back to the global gap on read.
+std::optional<QJsonValue> collapseV4PerScreenGap(const QJsonValue& snap, const QJsonValue& autotile,
+                                                 const V4PerScreenGapDim& dim)
+{
+    const auto present = [&](const QJsonValue& v) {
+        return dim.isBool ? v.isBool() : v.isDouble();
+    };
+    const auto differs = [&](const QJsonValue& v) {
+        return dim.isBool ? (v.toBool() != (dim.def != 0)) : (v.toInt() != dim.def);
+    };
+    if (present(snap) && differs(snap)) {
+        return snap;
+    }
+    if (present(autotile) && differs(autotile)) {
+        return autotile;
+    }
+    return std::nullopt;
 }
 
-// Convert a normalized stash field object into the matching window-rule
-// actions. Handles both the per-mode (appearance + gaps) and per-screen
-// (gaps-only) cases — absent fields simply contribute no action.
-QList<PhosphorRules::RuleAction> actionsFromFields(const QJsonObject& fields)
+// Fold the v4 per-screen gap subsets (PerScreen/Snapping + PerScreen/Autotile)
+// into the unified per-screen autotile gap keys, stripping the consumed gap keys
+// from each side. The Autotile category keeps its non-gap keys (algorithm/
+// behaviour) and gains the collapsed gap dimensions; the Snapping category keeps
+// any non-gap per-screen keys (only its gap keys are removed). A collapsed value
+// equal to the default is not written (and any pre-existing default-valued gap
+// key is removed) so the store's differ-from-default contract holds. Categories /
+// screens that become empty are pruned.
+void consumeV4PerScreenGaps(QJsonObject& root)
 {
-    namespace AT = PhosphorRules::ActionType;
-    // Upper bounds the rule-action validators enforce (ruleaction.cpp:
-    // kMaxBorderWidth / kMaxBorderRadius / kMaxGap). An out-of-range value from
-    // a hand-edited or older v4 config must be CLAMPED here, not emitted
-    // verbatim: Rule::isValid() fails the whole rule if any one action is out of
-    // range, addRule then silently drops it, and the stash is stripped
-    // unconditionally — so a single bad value would permanently lose every
-    // appearance/gap override for that mode/screen. Clamping preserves the
-    // override at the boundary, mirroring migrateV1ToV2's qBound of animation
-    // fields.
-    constexpr int kMaxBorderWidth = 10;
-    constexpr int kMaxBorderRadius = 20;
-    constexpr int kMaxGap = 500;
-    QList<PhosphorRules::RuleAction> actions;
-    const auto addBool = [&](QLatin1String field, QLatin1StringView type) {
-        if (fields.value(field).isBool()) {
-            actions.append(makeValueAction(type, fields.value(field).toBool()));
-        }
-    };
-    const auto addInt = [&](QLatin1String field, QLatin1StringView type, int max) {
-        if (fields.value(field).isDouble()) {
-            actions.append(makeValueAction(type, qBound(0, fields.value(field).toInt(), max)));
-        }
-    };
-    const auto addString = [&](QLatin1String field, QLatin1StringView type) {
-        if (fields.value(field).isString()) {
-            actions.append(makeValueAction(type, fields.value(field).toString()));
-        }
-    };
-    addBool(kFieldShowBorder, AT::SetBorderVisible);
-    addInt(kFieldBorderWidth, AT::SetBorderWidth, kMaxBorderWidth);
-    addInt(kFieldBorderRadius, AT::SetBorderRadius, kMaxBorderRadius);
-    addBool(kFieldHideTitleBars, AT::SetHideTitleBar);
-    addString(kFieldActiveColor, AT::SetBorderColorActive);
-    addString(kFieldInactiveColor, AT::SetBorderColorInactive);
-    addInt(kFieldInnerGap, AT::SetInnerGap, kMaxGap);
-    addInt(kFieldOuterGap, AT::SetOuterGap, kMaxGap);
-    addBool(kFieldUsePerSideOuterGap, AT::SetUsePerSideOuterGap);
-    addInt(kFieldOuterGapTop, AT::SetOuterGapTop, kMaxGap);
-    addInt(kFieldOuterGapBottom, AT::SetOuterGapBottom, kMaxGap);
-    addInt(kFieldOuterGapLeft, AT::SetOuterGapLeft, kMaxGap);
-    addInt(kFieldOuterGapRight, AT::SetOuterGapRight, kMaxGap);
-    return actions;
-}
+    QJsonObject perScreen = root.value(kV4PerScreenContainer).toObject();
+    if (perScreen.isEmpty()) {
+        return;
+    }
+    QJsonObject snappingCat = perScreen.value(kV4PerScreenSnappingCat).toObject();
+    QJsonObject autotileCat = perScreen.value(kV4PerScreenAutotileCat).toObject();
 
-// Non-managed override rule seed priorities. These mirror
-// RuleTemplates::kAdvancedBandBase / kContextBandBase
-// (src/settings/ruletemplates.h) — duplicated because that header lives
-// in the settings target and the core library cannot link it. The exact seed
-// only needs to place each rule in its band ABOVE the INT_MIN managed
-// baselines; the settings controller re-stamps band priorities on the next
-// save. The per-mode appearance rules match the context `Mode` field and the
-// per-screen gap rules match `ScreenId`, so both read as Context rules; the
-// exact seed only matters for sitting above the managed baselines until that
-// re-stamp.
-constexpr int kAppearanceOverridePriority = 500;
-constexpr int kPerScreenGapPriority = 300;
+    QSet<QString> screenIds;
+    for (const QString& id : snappingCat.keys()) {
+        screenIds.insert(id);
+    }
+    for (const QString& id : autotileCat.keys()) {
+        screenIds.insert(id);
+    }
+
+    for (const QString& id : screenIds) {
+        QJsonObject snapScreen = snappingCat.value(id).toObject();
+        QJsonObject autotileScreen = autotileCat.value(id).toObject();
+        for (const V4PerScreenGapDim& dim : kV4PerScreenGapDims) {
+            const std::optional<QJsonValue> collapsed =
+                collapseV4PerScreenGap(snapScreen.value(dim.snapKey), autotileScreen.value(dim.autotileKey), dim);
+            if (collapsed) {
+                autotileScreen[dim.autotileKey] = *collapsed;
+            } else {
+                autotileScreen.remove(dim.autotileKey);
+            }
+            // Strip only the consumed snapping-side gap key; any non-gap
+            // per-screen snapping key (e.g. a per-screen snap-assist toggle) stays.
+            snapScreen.remove(dim.snapKey);
+        }
+        if (autotileScreen.isEmpty()) {
+            autotileCat.remove(id);
+        } else {
+            autotileCat[id] = autotileScreen;
+        }
+        if (snapScreen.isEmpty()) {
+            snappingCat.remove(id);
+        } else {
+            snappingCat[id] = snapScreen;
+        }
+    }
+
+    // Write back the categories, pruning any that became empty once their gap
+    // keys were consumed.
+    if (snappingCat.isEmpty()) {
+        perScreen.remove(kV4PerScreenSnappingCat);
+    } else {
+        perScreen[kV4PerScreenSnappingCat] = snappingCat;
+    }
+    if (autotileCat.isEmpty()) {
+        perScreen.remove(kV4PerScreenAutotileCat);
+    } else {
+        perScreen[kV4PerScreenAutotileCat] = autotileCat;
+    }
+    if (perScreen.isEmpty()) {
+        root.remove(kV4PerScreenContainer);
+    } else {
+        root[kV4PerScreenContainer] = perScreen;
+    }
+}
 
 } // namespace
 
@@ -3563,103 +3592,72 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
         return;
     }
 
-    QJsonObject stash;
-
-    // ── Global per-mode appearance + gaps ──────────────────────────────────
-    const QJsonObject snappingStash = buildModeStash(root, kV4ModeSnapping);
-    const QJsonObject tilingStash = buildModeStash(root, kV4ModeTiling);
-    if (!snappingStash.isEmpty()) {
-        stash.insert(kStashSnapping, snappingStash);
+    // ── Collapse the two per-mode value sets into one ──────────────────────
+    // v4 stored appearance (borders / title bars / colours) and gaps
+    // SEPARATELY for Snapping and Tiling. v5 unifies them into the "Windows"
+    // and "Gaps" config groups that apply to BOTH modes. buildModeStash returns
+    // only the fields that DIFFER from the v4 compile default, so a present
+    // field is a genuine user override.
+    //
+    // Collapse rule, per field: prefer the value that DIFFERS from the compile
+    // default; when both modes differ (or both are at default) prefer the
+    // SNAPPING value. Because buildModeStash omits default fields, this reduces
+    // to "tiling as the base, snapping overriding on top": a snapping override
+    // wins whenever present, else a tiling override is taken, else the field
+    // stays at its default (unwritten).
+    const QJsonObject snappingValues = buildModeStash(root, kV4ModeSnapping);
+    const QJsonObject tilingValues = buildModeStash(root, kV4ModeTiling);
+    QJsonObject unified = tilingValues;
+    for (auto it = snappingValues.constBegin(); it != snappingValues.constEnd(); ++it) {
+        unified.insert(it.key(), it.value());
     }
-    if (!tilingStash.isEmpty()) {
-        stash.insert(kStashTiling, tilingStash);
+
+    // ── Write the collapsed values into the unified config groups ──────────
+    // Only differing-from-default fields are present in `unified`, so every
+    // field it carries is written verbatim; absent fields fall back to the
+    // config default on read (same differ-from-default contract the v4 read
+    // side applies). borderScope / titleBarScope had no per-scope data in v4,
+    // so they are left unwritten and take their "tiled" config default.
+    const auto carry = [&unified](QJsonObject& grp, QLatin1String field, const QString& key) {
+        const QJsonValue v = unified.value(field);
+        if (!v.isUndefined()) {
+            grp.insert(key, v);
+        }
+    };
+
+    QJsonObject windows = groupObjectAtPath(root, ConfigKeys::windowsAppearanceGroup());
+    carry(windows, kFieldShowBorder, ConfigKeys::showBorderKey());
+    carry(windows, kFieldBorderWidth, ConfigKeys::widthKey());
+    carry(windows, kFieldBorderRadius, ConfigKeys::radiusKey());
+    carry(windows, kFieldHideTitleBars, ConfigKeys::hideTitleBarsKey());
+    carry(windows, kFieldActiveColor, ConfigKeys::borderColorActiveKey());
+    carry(windows, kFieldInactiveColor, ConfigKeys::borderColorInactiveKey());
+    if (!windows.isEmpty()) {
+        setGroupAtSegments(root, {ConfigKeys::windowsAppearanceGroup()}, windows);
     }
 
-    // ── Per-screen gaps (PerScreen.{Snapping,Autotile}.<screenId>) ─────────
-    // The snapping and autotile per-screen gap sets collapse onto ONE
-    // ScreenId-scoped gap rule per monitor (the established per-monitor gap
-    // rule shape on this branch — see WindowAppearanceController::
-    // perScreenGapRuleId). When both modes carry a differing value for the
-    // same screen the autotile value wins (processed second).
-    QJsonObject perScreenStash;
-    QJsonObject perScreen = root.value(kV4PerScreen).toObject();
-    if (!perScreen.isEmpty()) {
-        const auto mergeInto = [&perScreenStash](const QString& screenId, const QJsonObject& gaps) {
-            if (gaps.isEmpty()) {
-                return;
-            }
-            QJsonObject merged = perScreenStash.value(screenId).toObject();
-            for (auto it = gaps.constBegin(); it != gaps.constEnd(); ++it) {
-                merged.insert(it.key(), it.value());
-            }
-            perScreenStash.insert(screenId, merged);
-        };
-
-        // Snapping per-screen gaps (bare key spellings). The snapping
-        // per-screen category holds only gap keys, so a stripped entry empties.
-        QJsonObject snapCat = perScreen.value(kV4PerScreenSnapping).toObject();
-        for (const QString& screenId : snapCat.keys()) {
-            QJsonObject scr = snapCat.value(screenId).toObject();
-            mergeInto(screenId,
-                      extractPerScreenGaps(scr, kV4SnapInnerGap, kV4SnapOuterGap, kV4SnapUsePerSide, kV4SnapOuterGapTop,
-                                           kV4SnapOuterGapBottom, kV4SnapOuterGapLeft, kV4SnapOuterGapRight));
-            for (QLatin1String key : {kV4SnapInnerGap, kV4SnapOuterGap, kV4SnapUsePerSide, kV4SnapOuterGapTop,
-                                      kV4SnapOuterGapBottom, kV4SnapOuterGapLeft, kV4SnapOuterGapRight}) {
-                scr.remove(key);
-            }
-            if (scr.isEmpty()) {
-                snapCat.remove(screenId);
-            } else {
-                snapCat.insert(screenId, scr);
-            }
-        }
-
-        // Autotile per-screen gaps (Autotile-prefixed). The autotile
-        // per-screen category ALSO holds non-gap keys (algorithm, master
-        // count, behaviour) that stay live in v5 — strip only the gap keys.
-        QJsonObject autoCat = perScreen.value(kV4PerScreenAutotile).toObject();
-        for (const QString& screenId : autoCat.keys()) {
-            QJsonObject scr = autoCat.value(screenId).toObject();
-            mergeInto(screenId,
-                      extractPerScreenGaps(scr, kV4AutoInnerGap, kV4AutoOuterGap, kV4AutoUsePerSide, kV4AutoOuterGapTop,
-                                           kV4AutoOuterGapBottom, kV4AutoOuterGapLeft, kV4AutoOuterGapRight));
-            for (QLatin1String key : {kV4AutoInnerGap, kV4AutoOuterGap, kV4AutoUsePerSide, kV4AutoOuterGapTop,
-                                      kV4AutoOuterGapBottom, kV4AutoOuterGapLeft, kV4AutoOuterGapRight}) {
-                scr.remove(key);
-            }
-            if (scr.isEmpty()) {
-                autoCat.remove(screenId);
-            } else {
-                autoCat.insert(screenId, scr);
-            }
-        }
-
-        // Write back the pruned per-screen categories.
-        if (snapCat.isEmpty()) {
-            perScreen.remove(kV4PerScreenSnapping);
-        } else {
-            perScreen.insert(kV4PerScreenSnapping, snapCat);
-        }
-        if (autoCat.isEmpty()) {
-            perScreen.remove(kV4PerScreenAutotile);
-        } else {
-            perScreen.insert(kV4PerScreenAutotile, autoCat);
-        }
-        if (perScreen.isEmpty()) {
-            root.remove(kV4PerScreen);
-        } else {
-            root.insert(kV4PerScreen, perScreen);
-        }
+    QJsonObject gaps = groupObjectAtPath(root, ConfigKeys::gapsGroup());
+    carry(gaps, kFieldInnerGap, ConfigKeys::innerGapKey());
+    carry(gaps, kFieldOuterGap, ConfigKeys::outerGapKey());
+    carry(gaps, kFieldUsePerSideOuterGap, ConfigKeys::usePerSideOuterGapKey());
+    carry(gaps, kFieldOuterGapTop, ConfigKeys::outerGapTopKey());
+    carry(gaps, kFieldOuterGapBottom, ConfigKeys::outerGapBottomKey());
+    carry(gaps, kFieldOuterGapLeft, ConfigKeys::outerGapLeftKey());
+    carry(gaps, kFieldOuterGapRight, ConfigKeys::outerGapRightKey());
+    if (!gaps.isEmpty()) {
+        setGroupAtSegments(root, {ConfigKeys::gapsGroup()}, gaps);
     }
-    if (!perScreenStash.isEmpty()) {
-        stash.insert(kStashPerScreen, perScreenStash);
-    }
+
+    // Fold the v4 per-screen gap subsets (PerScreen/{Snapping,Autotile}/<screen>)
+    // into the unified per-screen autotile gap keys and drop the consumed
+    // PerScreen/Snapping subtree.
+    consumeV4PerScreenGaps(root);
 
     // ── Remove the consumed v4 global appearance / gap keys ────────────────
-    // Appearance is fully dead in v5 — drop the three leaf sub-groups and let
-    // removeGroupAtSegments prune the now-empty Appearance parent. Gaps keep
-    // their surviving non-gap keys (AdjacentThreshold / SmartGaps), so strip
-    // only the deleted gap keys.
+    // The per-mode appearance sub-groups are fully consumed — drop the three
+    // leaf sub-groups and let removeGroupAtSegments prune the now-empty
+    // Appearance parent. Gaps keep their surviving non-gap keys (AdjacentThreshold
+    // / SmartGaps), so strip only the consumed gap keys.
     for (QLatin1String mode : {kV4ModeSnapping, kV4ModeTiling}) {
         removeGroupAtSegments(root, {QString(mode), QString(kV4SegAppearance), QString(kV4SegColors)});
         removeGroupAtSegments(root, {QString(mode), QString(kV4SegAppearance), QString(kV4SegDecorations)});
@@ -3668,162 +3666,8 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
                         {kV4KeyInner, kV4KeyOuter, kV4KeyUsePerSide, kV4KeyTop, kV4KeyBottom, kV4KeyLeft, kV4KeyRight});
     }
 
-    // Stash only when there is something to carry forward — a clean v4 config
-    // leaves no inert stash for the finalizer to strip.
-    if (!stash.isEmpty()) {
-        root[ConfigKeys::Legacy::v5AppearanceStashKey()] = stash;
-    }
-
     // Stamp literal 5 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
     root[ConfigKeys::versionKey()] = 5;
-}
-
-bool ConfigMigration::finalizeV5Conversion(const QString& jsonPath)
-{
-    // Idempotency: only run while the stash is present. Once stripped (below)
-    // this is a clean no-op, so a re-run never recreates or duplicates rules.
-    if (!QFile::exists(jsonPath)) {
-        return true;
-    }
-    QJsonObject configRoot;
-    {
-        QFile cf(jsonPath);
-        if (!cf.open(QIODevice::ReadOnly)) {
-            qWarning("ConfigMigration::finalizeV5Conversion: could not open %s for reading: %s", qPrintable(jsonPath),
-                     qPrintable(cf.errorString()));
-            return false;
-        }
-        QJsonParseError err;
-        const QJsonDocument doc = QJsonDocument::fromJson(cf.readAll(), &err);
-        if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-            // A corrupt config has no recoverable stash; nothing to do here.
-            return true;
-        }
-        configRoot = doc.object();
-    }
-    if (!configRoot.contains(ConfigKeys::Legacy::v5AppearanceStashKey())) {
-        return true;
-    }
-    const QJsonObject stash = configRoot.value(ConfigKeys::Legacy::v5AppearanceStashKey()).toObject();
-
-    // ── Build the override rules from the stash ────────────────────────────
-    using PhosphorRules::Field;
-    using PhosphorRules::MatchExpression;
-    using PhosphorRules::Operator;
-    using PhosphorRules::Rule;
-
-    QList<Rule> newRules;
-
-    const auto appendModeRule = [&newRules](const QJsonObject& fields, const QString& modeToken,
-                                            const QByteArray& idSeed, const QString& modeDisplayName) {
-        const QList<PhosphorRules::RuleAction> actions = actionsFromFields(fields);
-        if (actions.isEmpty()) {
-            return;
-        }
-        // Name the rule from the action kinds present: a stash carrying any
-        // appearance field (border show/width/radius/colour or hide-title-bar)
-        // is an appearance rule; a stash that carries only gap fields is a gaps
-        // rule. A mixed stash keeps the appearance name.
-        const bool hasAppearance = fields.contains(kFieldShowBorder) || fields.contains(kFieldBorderWidth)
-            || fields.contains(kFieldBorderRadius) || fields.contains(kFieldHideTitleBars)
-            || fields.contains(kFieldActiveColor) || fields.contains(kFieldInactiveColor);
-        Rule rule;
-        rule.id = QUuid::createUuidV5(ConfigDefaults::baselineBorderRuleId(), idSeed);
-        // Rule::name is the persisted identity surface in rules.json and must NOT
-        // be translated (same convention as the disable-rule prefixes and the
-        // per-screen gap rule name below): running under a different locale must
-        // not fork the on-disk text. See configkeys.h.
-        rule.name = hasAppearance ? QStringLiteral("%1 appearance").arg(modeDisplayName)
-                                  : QStringLiteral("%1 gaps").arg(modeDisplayName);
-        rule.enabled = true;
-        rule.managed = false;
-        rule.priority = kAppearanceOverridePriority;
-        // Match the CONTEXT `Mode` field, not the window-property `IsTiled`. Mode
-        // is resolved during context resolution, so a gap action on this rule
-        // participates in the gap cascade (which IsTiled, a window-property field,
-        // could not), while the appearance actions still resolve per-window by
-        // priority. Both kinds of action therefore take effect.
-        rule.match = MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QVariant(modeToken));
-        rule.actions = actions;
-        newRules.append(rule);
-    };
-
-    appendModeRule(stash.value(kStashSnapping).toObject(), QStringLiteral("snapping"),
-                   QByteArrayLiteral("v5-snapping-appearance"), QStringLiteral("Snapping"));
-    appendModeRule(stash.value(kStashTiling).toObject(), QStringLiteral("tiling"),
-                   QByteArrayLiteral("v5-tiling-appearance"), QStringLiteral("Tiling"));
-
-    // Per-screen gap overrides: one ScreenId-scoped rule per monitor, keyed by
-    // the same deterministic id WindowAppearanceController::perScreenGapRuleId
-    // derives so the settings UI find-or-creates the very same rule.
-    const QJsonObject perScreen = stash.value(kStashPerScreen).toObject();
-    for (auto it = perScreen.constBegin(); it != perScreen.constEnd(); ++it) {
-        const QString screenId = it.key();
-        if (screenId.isEmpty()) {
-            continue;
-        }
-        const QList<PhosphorRules::RuleAction> actions = actionsFromFields(it.value().toObject());
-        if (actions.isEmpty()) {
-            continue;
-        }
-        // Key the rule (id + ScreenId match) by the canonical stable form, the
-        // SAME derivation WindowAppearanceController::perScreenGapRuleId and the
-        // per-screen gap reader use, so the settings UI find-or-creates this very
-        // rule and the runtime ScreenId match resolves against the live EDID id.
-        // canonicalPerScreenKey is idempotent on an already-canonical key, so a v4
-        // key written in canonical form passes through unchanged.
-        const QString canonicalScreenId = Settings::canonicalPerScreenKey(screenId);
-        Rule rule;
-        rule.id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), canonicalScreenId.toUtf8());
-        rule.name = QStringLiteral("Gaps (%1)").arg(canonicalScreenId);
-        rule.enabled = true;
-        rule.managed = false;
-        rule.priority = kPerScreenGapPriority;
-        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QVariant(canonicalScreenId));
-        rule.actions = actions;
-        newRules.append(rule);
-    }
-
-    // ── Merge into the existing rule store ─────────────────────────────────
-    if (!newRules.isEmpty()) {
-        const QString rulesPath = ConfigDefaults::rulesFilePath();
-        auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-        if (!setOpt.has_value()) {
-            // finalizeV4Conversion runs first and guarantees a valid
-            // rules.json; a failure to load here means the file is
-            // missing/corrupt. Leave the stash in place so the next run
-            // (after finalizeV4Conversion re-establishes the file) retries.
-            qWarning(
-                "ConfigMigration::finalizeV5Conversion: %s is missing or invalid — deferring the appearance "
-                "override rules to the next run",
-                qPrintable(rulesPath));
-            return false;
-        }
-        PhosphorRules::RuleSet ruleSet = *setOpt;
-        int added = 0;
-        for (const Rule& rule : std::as_const(newRules)) {
-            // addRule rejects colliding ids, so a re-run before the stash strip
-            // succeeds cannot duplicate a rule.
-            if (ruleSet.addRule(rule)) {
-                ++added;
-            }
-        }
-        if (added > 0 && !ruleSet.saveToFile(rulesPath)) {
-            qWarning("ConfigMigration::finalizeV5Conversion: failed to write %s — deferring stash strip",
-                     qPrintable(rulesPath));
-            return false;
-        }
-        qInfo("ConfigMigration::finalizeV5Conversion: added %d appearance override rule(s) to %s", added,
-              qPrintable(rulesPath));
-    }
-
-    // ── Strip the scratch stash key ────────────────────────────────────────
-    configRoot.remove(ConfigKeys::Legacy::v5AppearanceStashKey());
-    if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
-        qWarning("ConfigMigration::finalizeV5Conversion: failed to strip the v5 stash from %s", qPrintable(jsonPath));
-        return false;
-    }
-    return true;
 }
 
 bool ConfigMigration::pruneRetiredProviderDefaultRule(const QString& jsonPath)

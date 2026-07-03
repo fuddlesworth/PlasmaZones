@@ -609,14 +609,76 @@ void PlasmaZonesEffect::loadCachedSettings()
         const QColor c(v.toString());
         if (m_borderAccentColor != c) {
             m_borderAccentColor = c;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("inactiveColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
         if (m_borderInactiveColor != c) {
             m_borderInactiveColor = c;
-            updateAllBorders();
+            scheduleBorderSweep();
+        }
+    });
+    // Config-backed window-decoration appearance default. Each key updates one
+    // slot of m_windowAppearanceDefault; a change re-sweeps every window so the
+    // default border / hidden title bar reapplies live (mirroring the accent /
+    // inactive colour loaders above). Re-fetched on every settingsChanged, so a
+    // Window Appearance page edit takes effect without a relog. Guarded on an
+    // actual value change to avoid a redundant full border rebuild per fetch.
+    loadSettingAsync(QStringLiteral("showWindowBorder"), [this](const QVariant& v) {
+        const bool b = v.toBool();
+        if (m_windowAppearanceDefault.showBorder != b) {
+            m_windowAppearanceDefault.showBorder = b;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowBorderScope"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.borderScope != s) {
+            m_windowAppearanceDefault.borderScope = s;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowBorderWidth"), [this](const QVariant& v) {
+        const int i = v.toInt();
+        if (m_windowAppearanceDefault.borderWidth != i) {
+            m_windowAppearanceDefault.borderWidth = i;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowBorderRadius"), [this](const QVariant& v) {
+        const int i = v.toInt();
+        if (m_windowAppearanceDefault.borderRadius != i) {
+            m_windowAppearanceDefault.borderRadius = i;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowBorderColorActive"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.activeColor != s) {
+            m_windowAppearanceDefault.activeColor = s;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowBorderColorInactive"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.inactiveColor != s) {
+            m_windowAppearanceDefault.inactiveColor = s;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("hideWindowTitleBars"), [this](const QVariant& v) {
+        const bool b = v.toBool();
+        if (m_windowAppearanceDefault.hideTitleBar != b) {
+            m_windowAppearanceDefault.hideTitleBar = b;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowTitleBarScope"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.titleBarScope != s) {
+            m_windowAppearanceDefault.titleBarScope = s;
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
@@ -733,9 +795,10 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedZoneSelectorEnabled = v.toBool();
     });
 
-    // Window border / title-bar appearance is no longer pushed as per-mode
-    // settings — it is resolved from rules (the managed baseline rule
-    // plus per-window overrides) inside updateWindowBorder / reconcileRuleHiddenTitleBar.
+    // Window border / title-bar appearance is pushed as unified config defaults
+    // (the window-appearance loaders above). Each slot is resolved as that config
+    // default, scope-gated, with per-window rule overrides layered on top inside
+    // updateWindowBorder / reconcileRuleHiddenTitleBar (resolveEffectiveWindowAppearance).
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
         m_autotileHandler->setFocusFollowsMouse(v.toBool());

@@ -6,7 +6,6 @@
 #include "ruleauthoring.h"
 #include "ruletemplates.h"
 
-#include "../core/baselinerules.h"
 #include "../core/logging.h"
 #include "../phosphor_i18n.h"
 
@@ -422,9 +421,8 @@ void RuleController::revert()
     fetchAndLoad(/*fromRevert=*/true);
 }
 
-// NOTE: the per-page dirty split + managed-baseline reset/discard methods
-// (captureSavedSnapshot, baselinesDirty, userRulesDirty, recomputeDirtyFromSnapshot,
-// upsertRule, resetBaselines, resetManagedDefaults, discardBaselineEdits) live in
+// NOTE: the user-rule dirty check + global managed reset methods
+// (captureSavedSnapshot, userRulesDirty, resetManagedDefaults) live in
 // rulecontroller_baseline.cpp — split out to keep this TU under the 800-line cap.
 
 int RuleController::bandBaseForSection(RuleModel::Section section)
@@ -482,9 +480,10 @@ void RuleController::renormalizePriorities()
     }
     int rank = userCount;
     for (int i = 0; i < n; ++i) {
-        // Managed rules (the baseline appearance rule) carry a pinned priority
-        // (INT_MIN) that fixes them below every user rule regardless of list
-        // position — never re-stamp them, or they'd jump above user rules.
+        // A managed rule (now only a stale appearance baseline from an older build,
+        // before appearance moved to config) carries a pinned priority (INT_MIN)
+        // that fixes it below every user rule regardless of list position — never
+        // re-stamp it, or it'd jump above user rules.
         if (rules.at(i).managed) {
             priorities[i] = rules.at(i).priority;
             continue;
@@ -572,9 +571,9 @@ bool RuleController::updateRuleFromJson(const QVariantMap& ruleJson)
         qCWarning(lcConfig) << "RuleController::updateRuleFromJson: rejecting malformed rule payload";
         return false;
     }
-    // The baseline appearance rule is editable (the Appearance page rewrites
-    // its actions) but its identity is app-owned: a save must never demote it
-    // to a user rule, retarget its catch-all match, or unpin its priority.
+    // A managed rule (now only a stale appearance baseline left by an older build
+    // until the daemon strips it) is app-owned: a save must never demote it to a
+    // user rule, retarget its catch-all match, or unpin its priority.
     // Force-preserve those from the stored rule regardless of the payload.
     const Rule existing = m_model.ruleById(rule.id);
     if (existing.managed) {
@@ -637,8 +636,8 @@ QString RuleController::duplicateRule(const QString& ruleId)
     }
     Rule clone = source;
     clone.id = QUuid::createUuid();
-    // A duplicate of the baseline appearance rule is an ordinary user rule —
-    // the managed flag (non-deletable, pinned priority) does not carry over.
+    // A duplicate of a managed rule is an ordinary user rule — the managed flag
+    // (non-deletable, pinned priority) does not carry over.
     clone.managed = false;
     // Auto-suffix the name when the source has one so the two rules don't
     // share an identical label in the list. An empty source name stays empty

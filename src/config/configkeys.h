@@ -74,6 +74,15 @@ public:
     P_CONFIG_GROUP(orderingGroup, "Ordering")
     P_CONFIG_GROUP(updatesGroup, "Updates")
 
+    // Window decoration appearance (tiled/snapped window border + title bar).
+    // Mode-neutral top-level group — the values apply to both the snapping and
+    // tiling engines, so it sits outside Snapping.* / Tiling.*.
+    P_CONFIG_GROUP(windowsAppearanceGroup, "Windows")
+
+    // Shared inner/outer gap model used by BOTH snapping and tiling. Mode-neutral
+    // top-level group; the gap values are read by both engines.
+    P_CONFIG_GROUP(gapsGroup, "Gaps")
+
     // Snapping sub-groups
     P_CONFIG_GROUP(snappingZonesGroup, "Snapping.Zones")
     P_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
@@ -88,9 +97,8 @@ public:
     P_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     P_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
     // Snapping.Gaps holds only the snapping-specific adjacency threshold. The
-    // inner/outer gap values are no longer stored in config at all: they live on
-    // the managed baseline appearance rule and are read back through Settings'
-    // gap getters.
+    // shared inner/outer gap values live in the top-level Gaps group (gapsGroup)
+    // and are read through Settings' gap getters.
     P_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
 
     // Display (mode-neutral) — per-mode disable lists. Lives outside Snapping.*
@@ -299,6 +307,33 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     P_CONFIG_KEY(adjacentThresholdKey, "AdjacentThreshold")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Windows (window decoration appearance)
+    //
+    // Border width / radius REUSE the generic widthKey() / radiusKey() accessors
+    // above (the windowsAppearanceGroup context disambiguates them from the
+    // Snapping.Zones.Border keys of the same spelling).
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(showBorderKey, "ShowBorder")
+    P_CONFIG_KEY(borderScopeKey, "BorderScope")
+    P_CONFIG_KEY(hideTitleBarsKey, "HideTitleBars")
+    P_CONFIG_KEY(titleBarScopeKey, "TitleBarScope")
+    P_CONFIG_KEY(borderColorActiveKey, "BorderColorActive")
+    P_CONFIG_KEY(borderColorInactiveKey, "BorderColorInactive")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Gaps (shared inner/outer gap model)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(innerGapKey, "Inner")
+    P_CONFIG_KEY(outerGapKey, "Outer")
+    P_CONFIG_KEY(usePerSideOuterGapKey, "UsePerSide")
+    P_CONFIG_KEY(outerGapTopKey, "Top")
+    P_CONFIG_KEY(outerGapBottomKey, "Bottom")
+    P_CONFIG_KEY(outerGapLeftKey, "Left")
+    P_CONFIG_KEY(outerGapRightKey, "Right")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling (top-level)
@@ -750,15 +785,6 @@ public:
         // legacy effect-bridge match-field split). Same purge-protection
         // semantics as the three sibling stash keys above.
         P_CONFIG_KEY(v4AnimationExclusionStashKey, "_v4AnimationExclusionStash")
-
-        // v5 migration scratch-root key — set on the root by `migrateV4ToV5`
-        // from the deleted per-mode appearance / gap groups (and per-screen
-        // gap subsets) and consumed by `finalizeV5Conversion`, which converts
-        // each differing value into a non-managed override Rule. Same
-        // purge-protection semantics as the v4 sibling stash keys above: it is
-        // listed in `Settings::purgeStaleKeys`' preserved set so a save() cycle
-        // can't drop it while the conversion is still pending.
-        P_CONFIG_KEY(v5AppearanceStashKey, "_v5AppearanceStash")
 
         // v3 frozen group accessor — used ONLY by migrateV3ToV4. Mirrors the
         // live `displayGroup` accessor but is frozen at its v3 literal so a
