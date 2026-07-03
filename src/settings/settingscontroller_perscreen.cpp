@@ -86,17 +86,16 @@ void SettingsController::clearPerScreenAutotileAlgorithmSettings(const QString& 
 // autotile config store (unified — one value per monitor drives both snap and
 // tile). The Gaps card's monitor scope chip drives has/clear through these; the
 // gap controls themselves read/write via the WindowAppearanceController's
-// gapValue/writeGap invokables. The Q_INVOKABLE names keep the "…GapRule"
-// spelling the QML scope chip already binds — they are config-backed now.
+// gapValue/writeGap invokables.
 
-bool SettingsController::hasPerScreenGapRule(const QString& screenName) const
+bool SettingsController::hasPerScreenGapOverride(const QString& screenName) const
 {
     return m_settings.hasPerScreenGapOverride(screenName);
 }
 
-void SettingsController::clearPerScreenGapRule(const QString& screenName)
+void SettingsController::clearPerScreenGapOverride(const QString& screenName)
 {
-    // clearPerScreenGapOverride emits perScreenAutotileSettingsChanged →
+    // Settings::clearPerScreenGapOverride emits perScreenAutotileSettingsChanged →
     // perScreenOverridesChanged (wired in settingscontroller.cpp), so no manual
     // emit is needed here.
     m_settings.clearPerScreenGapOverride(screenName);

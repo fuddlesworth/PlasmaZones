@@ -1255,13 +1255,13 @@ private Q_SLOTS:
 
         RegistryFixture f = makeRegistryFixture();
 
-        // Global per-mode gap (the migrated snapping/tiling gap): higher raw
-        // priority, carries both inner and outer gap.
+        // Global per-mode gap rule: higher raw priority, carries both inner and
+        // outer gap.
         PWR::Rule perMode;
         perMode.id = QUuid::createUuid();
         perMode.name = QStringLiteral("Tiling gaps");
         perMode.enabled = true;
-        perMode.priority = 500; // migration's per-mode seed — deliberately higher
+        perMode.priority = 500; // the per-mode rule's priority — deliberately higher
         perMode.match =
             PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("tiling"));
         perMode.actions = {intGapAction(PWR::ActionType::SetInnerGap, 14),
@@ -1272,7 +1272,7 @@ private Q_SLOTS:
         perScreen.id = QUuid::createUuid();
         perScreen.name = QStringLiteral("Gaps (DP-1)");
         perScreen.enabled = true;
-        perScreen.priority = 300; // migration's per-screen seed — deliberately lower
+        perScreen.priority = 300; // the per-monitor rule's priority — deliberately lower
         perScreen.match =
             PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
         perScreen.actions = {intGapAction(PWR::ActionType::SetInnerGap, 20)};

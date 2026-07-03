@@ -389,12 +389,12 @@ SettingsFlickable {
             showSmartGaps: false
             // Per-monitor scope chip, config-backed. "All Monitors" ("" scope)
             // edits the global gap config; a specific monitor edits its per-screen
-            // override. The chip's override dot / reset poll hasPerScreenGapRule /
-            // clearPerScreenGapRule on the controller.
+            // override. The chip's override dot / reset poll hasPerScreenGapOverride /
+            // clearPerScreenGapOverride on the controller.
             scopeEnabled: true
             scopeAppSettings: settingsController
-            scopeHasOverridesMethod: "hasPerScreenGapRule"
-            scopeClearerMethod: "clearPerScreenGapRule"
+            scopeHasOverridesMethod: "hasPerScreenGapOverride"
+            scopeClearerMethod: "clearPerScreenGapOverride"
             primaryGapValue: root.gapInnerValue
             outerGapValue: root.gapOuterValue
             usePerSideOuterGap: root.gapUsePerSideValue

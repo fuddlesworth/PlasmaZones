@@ -844,8 +844,16 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
 
 void Settings::clearPerScreenAutotileSettings(const QString& screenIdOrName)
 {
+    // Removing the whole entry also drops any gap dimensions it held, so note that
+    // before the erase to fire the gap-resnap trigger in parity with
+    // clearPerScreenGapOverride / the gap-dimension write path.
+    const bool hadGaps = hasPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenGapDimensionKey,
+                                               /*wantGaps=*/true);
     if (removePerScreenEntry(m_perScreenAutotileSettings, screenIdOrName)) {
         Q_EMIT perScreenAutotileSettingsChanged();
+        if (hadGaps) {
+            Q_EMIT perScreenSnappingSettingsChanged();
+        }
         Q_EMIT settingsChanged();
     }
 }

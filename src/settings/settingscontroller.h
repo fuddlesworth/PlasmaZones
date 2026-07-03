@@ -516,10 +516,9 @@ public:
     // Per-screen gaps are config-backed: a per-monitor override is the gap-
     // dimension sub-domain of the per-screen autotile store (unified snap+tile).
     // The Gaps card's monitor scope chip drives these; the gap controls
-    // read/write via WindowAppearanceController's gapValue/writeGap. The
-    // "…GapRule" names are kept so the QML scope chip binding is unchanged.
-    Q_INVOKABLE bool hasPerScreenGapRule(const QString& screenName) const;
-    Q_INVOKABLE void clearPerScreenGapRule(const QString& screenName);
+    // read/write via WindowAppearanceController's gapValue/writeGap.
+    Q_INVOKABLE bool hasPerScreenGapOverride(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenGapOverride(const QString& screenName);
 
     // ── Virtual screen configuration ──────────────────────────────────────────
     Q_INVOKABLE QStringList getPhysicalScreens() const;

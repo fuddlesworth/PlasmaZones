@@ -615,7 +615,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         // in flat config keys, so — like the Tiling Algorithm page's per-monitor
         // split/master/max overrides — they are NOT part of this page's per-page
         // dirty/Reset/Discard. Per-monitor gaps are reset through the Gaps card's
-        // scope chip (its override dot + clearPerScreenGapRule), matching the
+        // scope chip (its override dot + clearPerScreenGapOverride), matching the
         // established per-monitor-override UX; the global footer Save/Discard
         // handles them via the per-screen save path.
         {QStringLiteral("window-appearance"),

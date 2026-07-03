@@ -102,8 +102,9 @@ auto validStringOr(std::initializer_list<QLatin1String> valid, QString fallback)
 }
 
 /// Window-border colour validator. The value is a string that is EITHER the
-/// "accent" sentinel (which the effect resolves to the live system colour) OR a
-/// QColor hex; snap anything else to @p fallback. Kept as a string round-trip
+/// "accent" sentinel (which the effect resolves to the live system colour) OR any
+/// string QColor accepts (a #hex or a named colour, matching what the effect
+/// parses); snap anything else to @p fallback. Kept as a string round-trip
 /// (not validColorOr, which coerces to QColor and would drop the sentinel) so a
 /// hand-edited garbage colour in the on-disk file can't flow to the effect. The
 /// bare "accent" literal mirrors ConfigDefaults::windowBorderColorActive (the
