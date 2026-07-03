@@ -145,7 +145,8 @@ public:
     ///     `_v4AnimationExclusionStash` root key.
     /// All four stashes feed @ref finalizeV4Conversion. Empty inputs produce
     /// no stash entries (the finalizer treats an absent key as a no-op for
-    /// that input) before it stamps `_version = 4`.
+    /// that input). migrateV3ToV4 itself stamps `_version = 4` as its last
+    /// action, during the chain — the finalizer runs after the whole chain.
     static void migrateV3ToV4(QJsonObject& root);
 
     /// Post-chain finalizer for the v4 conversion. The cross-file migration

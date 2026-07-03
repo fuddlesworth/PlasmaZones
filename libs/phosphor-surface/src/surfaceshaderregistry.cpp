@@ -247,6 +247,16 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
             }
         }
     }
+    // A single-pass pack (multipass never declared, declared-but-empty, or
+    // fail-closed above) must not carry orphan per-buffer override arrays:
+    // they claim positional alignment with a bufferShaderPaths that is empty,
+    // survive toJson, and participate in operator==. Clear them so the parsed
+    // struct is internally coherent regardless of which branch produced the
+    // single-pass state.
+    if (!e.isMultipass) {
+        e.bufferWraps.clear();
+        e.bufferFilters.clear();
+    }
 
     return e;
 }

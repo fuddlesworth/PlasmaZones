@@ -43,6 +43,7 @@
 #include "modetracker.h"
 #include "unifiedlayoutcontroller.h"
 #include "shortcutmanager.h"
+#include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneentryscaffold.h"
 #include "rendering/zoneshadernoderhi.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -858,12 +859,12 @@ bool Daemon::init()
                 if (!reg) {
                     return;
                 }
-                // Mirror the live loader (SurfaceShaderItem) so the bake-cache
-                // key the warm compile writes is the one the first live paint
-                // looks up: include paths iterate the registered search dirs
-                // highest-priority first (user, then system descending —
-                // searchPaths() registers lowest-priority first, so reverse),
-                // each contributing its `shared` subdir then itself. The vert
+                // Include paths come from the SAME function the live loader's
+                // constructor uses (SurfaceShaderItem::surfaceIncludePaths — XDG
+                // dirs user-first, each contributing its `shared` subdir then
+                // itself), so the bake-cache key the warm compile writes is
+                // structurally guaranteed to be the one the first live paint
+                // looks up; the two can no longer silently diverge. The vert
                 // resolves as the live loader does: the pack's metadata vert
                 // first, else `surface.vert` beside the frag, else the first
                 // `surface.vert` in the include dirs (the `shared` subdir
@@ -875,16 +876,7 @@ bool Daemon::init()
                 // info.vertexShaderPath (the overlay host already sets
                 // paramPreamble from the same registry preamble used here) or
                 // this warm bake keys a different vert than the live load.
-                QStringList searchDirs = reg->searchPaths();
-                std::reverse(searchDirs.begin(), searchDirs.end());
-                QStringList includePaths;
-                for (const QString& sp : std::as_const(searchDirs)) {
-                    const QString sharedDir = sp + QStringLiteral("/shared");
-                    if (QDir(sharedDir).exists()) {
-                        includePaths.append(sharedDir);
-                    }
-                    includePaths.append(sp);
-                }
+                const QStringList includePaths = SurfaceShaderItem::surfaceIncludePaths();
                 QString vertPath = info.vertexShaderPath;
                 if (vertPath.isEmpty()) {
                     const QString besideFrag =

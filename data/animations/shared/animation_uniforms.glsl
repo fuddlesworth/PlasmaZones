@@ -270,7 +270,9 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              direction + windowAlpha reveal).
     // implicit 8-byte std140 pad here — `vec4 iSurfaceScreenPos` below
     // has 16-byte alignment, so std140 forces the next field to offset
-    // 672. The C struct mirrors this with `_pad_before_iSurfaceScreenPos[2]`.
+    // 672. The C struct mirrors this with `_pad_after_iIsReversed[2]`
+    // (BaseUniforms' trailing pad; the anchor fields themselves live in
+    // AnimationUniformExtension).
     vec4 iSurfaceScreenPos;      // offset 672 (16 bytes) — .xy = surface origin
                                  //              in logical-screen pixels;
                                  //              .zw = (screenWidth, screenHeight).

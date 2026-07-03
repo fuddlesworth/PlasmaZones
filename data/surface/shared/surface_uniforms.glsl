@@ -18,9 +18,9 @@
 //
 //   • The daemon (PhosphorRendering Qt-RHI): uTexture0 is the daemon surface's
 //     own texture. Qt-RHI's SPIR-V pipeline mandates UBO-bound uniforms, so the
-//     #else branch binds a std140 UBO at binding=0. (Daemon C++ consumption is
-//     wired in a follow-up pass; the branch is authored here so packs compile
-//     for both runtimes from day one and need no edits when the daemon lands.)
+//     #else branch binds a std140 UBO at binding=0, mirrored byte-for-byte by
+//     SurfaceShaderUniforms.h and filled by SurfaceUniformProfile — the daemon
+//     consumes it through SurfaceShaderItem on the OSD/popup decoration hosts.
 //
 // The host (compositor or daemon) provides only the surface GEOMETRY (the
 // content rect within the texture, in device px), a logical-to-device SCALE, and
@@ -72,7 +72,7 @@ uniform vec4 customParams[8];
 uniform vec4 customColors[16];
 
 // Multipass buffer-pass outputs. A multipass surface pack (one that declares
-// `bufferShaderPaths` in metadata.json) runs each buffer pass into an FBO; the
+// `bufferShaders` in metadata.json) runs each buffer pass into an FBO; the
 // pass output is bound here as iChannelN for downstream passes and for the main
 // effect, exactly like the overlay/animation categories. Single-pass packs (the
 // border) never reference these — the linker drops them. iChannelResolution[N].xy

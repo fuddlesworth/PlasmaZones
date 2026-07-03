@@ -105,7 +105,11 @@ struct CompiledSurfacePack
 
     /// Pack-declared parameter uniform locations + resolved-default values.
     /// float/int/bool params pack into customParams[N], colours into
-    /// customColors[N]. The border pack declares none, so every slot is -1.
+    /// customColors[N]. The border pack declares borderWidth / cornerRadius /
+    /// useSystemAccent (customParams[0]) and active/inactive colours
+    /// (customColors[0..1]) — pushBorderUniforms overrides those slots with
+    /// the per-window rule appearance. Slots a pack does not reference
+    /// resolve to -1 and push nothing.
     std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsLoc = []() {
         std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> a;
         a.fill(-1);

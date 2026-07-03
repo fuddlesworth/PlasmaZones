@@ -771,14 +771,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // between unregistration and the next daemon's fetch. continueDaemonReady
         // setup re-clears and refetches on bringup; this closes the gap before it.
         m_virtualScreensReady = false;
-        // Drop the local floating-window set too: the daemon's float state is
-        // ephemeral and gone with it, so clear now rather than only at the next
-        // bringup — otherwise isWindowFloating() reads stale `true` in the gap
-        // between unregistration and re-sync. continueDaemonReadySetup re-fetches
-        // the authoritative set on bringup (mirrors the m_virtualScreensReady reset
-        // above; m_navigationHandler is a never-reset member, dereferenced
-        // unguarded like the other handlers in this slot).
-        m_navigationHandler->clearAllFloatingState();
+        // The stale floating-window set is dropped further down in this same
+        // handler (clearAllFloatingState beside clearAllZoneState, paired with
+        // the rule-cache invalidation) — no separate clear here.
         // Also clear the bridge-registration in-flight gate. Without
         // this, a daemon-restart racing the in-flight registerBridge
         // reply leaves the gate set: the new daemon's `daemonReady`

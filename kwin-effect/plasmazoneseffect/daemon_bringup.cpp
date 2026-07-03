@@ -269,15 +269,18 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
             m_navigationHandler->clearAllFloatingState();
             if (reply.isValid()) {
                 // Bulk re-seed via the direct-write path (no per-window rule
-                // invalidation), then drop every placement-scoped verdict once
-                // below — mirrors syncZonesFromDaemon.
+                // invalidation) — the shared invalidation below drops every
+                // placement-scoped verdict once, mirroring syncZonesFromDaemon.
                 m_navigationHandler->seedFloatingWindows(reply.value());
-                // Re-seeding the float cache changes the IsFloating match input for
-                // these windows; drop the stale placement-scoped opacity verdicts so
-                // a `WHEN isFloating` SetOpacity rule re-resolves against the fresh
-                // state on the next frame (mirrors the daemon-loss invalidation).
-                invalidateAllRuleCaches();
             }
+            // The clear (and any re-seed) changed the IsFloating match input;
+            // drop the stale placement-scoped verdicts so a `WHEN isFloating`
+            // rule re-resolves against the fresh state on the next frame
+            // (mirrors the daemon-loss invalidation). Runs on the invalid-reply
+            // path too — the unconditional clear above changed state there as
+            // well, and skipping it would leave a cached "floating" verdict
+            // pinned to a window that is no longer floating.
+            invalidateAllRuleCaches();
         });
     }
 

@@ -23,17 +23,16 @@ namespace PlasmaZones {
 // Construction / Destruction
 // ============================================================================
 
-SurfaceShaderItem::SurfaceShaderItem(QQuickItem* parent)
-    : PhosphorRendering::ShaderEffect(parent)
+QStringList SurfaceShaderItem::surfaceIncludePaths()
 {
-    // Set PlasmaZones surface shader include paths so `#include
-    // <surface_uniforms.glsl>` in a pack's effect.frag resolves to the shared
-    // surface shaders directory. Mirror ZoneShaderItem: locateAll() (not
-    // locate()) so the system dir is included alongside ~/.local/share — the
-    // user dir holds user packs but not the shared include. Surface packs
-    // install to `plasmazones/surface` (singular; see the install() rule in the
-    // top-level CMakeLists), the third pack category beside `plasmazones/shaders`
-    // and `plasmazones/animations`.
+    // `#include <surface_uniforms.glsl>` in a pack's effect.frag resolves
+    // through these dirs. Mirror ZoneShaderItem: locateAll() (not locate()) so
+    // the system dir is included alongside ~/.local/share — the user dir holds
+    // user packs but not the shared include. Surface packs install to
+    // `plasmazones/surface` (singular; see the install() rule in the top-level
+    // CMakeLists), the third pack category beside `plasmazones/shaders` and
+    // `plasmazones/animations`. The daemon warm-bake (daemon.cpp) calls this
+    // same function — see the header doc for why the two must not diverge.
     const QStringList allSurfaceDirs = QStandardPaths::locateAll(
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/surface"), QStandardPaths::LocateDirectory);
     QStringList includePaths;
@@ -44,7 +43,13 @@ SurfaceShaderItem::SurfaceShaderItem(QQuickItem* parent)
         }
         includePaths.append(dir);
     }
-    setShaderIncludePaths(includePaths);
+    return includePaths;
+}
+
+SurfaceShaderItem::SurfaceShaderItem(QQuickItem* parent)
+    : PhosphorRendering::ShaderEffect(parent)
+{
+    setShaderIncludePaths(surfaceIncludePaths());
 
     // The surface UBO carries qt_Opacity (pushed from opacity() each
     // updatePaintNode), but the base ShaderEffect does not repaint on an opacity

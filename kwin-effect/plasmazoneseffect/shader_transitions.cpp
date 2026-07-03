@@ -218,9 +218,9 @@ QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
         // matching the rest of the animation suite, prepend the define,
         // and warn so the author sees the contract violation in the
         // journal.
-        qCWarning(lcEffect) << "Animation shader source has no #version directive — synthesizing `#version 450`. "
-                               "Animation shaders MUST declare `#version 450` (the canonical contract); the bake "
-                               "test on the daemon side enforces this.";
+        qCWarning(lcEffect) << "Shader source has no #version directive — synthesizing `#version 450`. "
+                               "Animation and surface packs MUST declare `#version 450` (the canonical contract); "
+                               "the shader-validate CI gate enforces this for the bundled packs.";
         const QString header = QStringLiteral("#version 450") + eol + defineLine;
         return (header + working).toUtf8();
     }

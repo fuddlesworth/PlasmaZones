@@ -226,6 +226,39 @@ private Q_SLOTS:
         QCOMPARE(scaleFor(0.5), 0.5);
     }
 
+    void parseEffect_clears_orphan_buffer_overrides_on_single_pass_pack()
+    {
+        // A pack that declares per-buffer wrap/filter overrides WITHOUT
+        // declaring multipass/bufferShaders must not carry the orphan arrays
+        // out of the registry scan: they claim positional alignment with an
+        // empty bufferShaderPaths, survive toJson, and skew operator==.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("orphan"));
+        meta.insert(QLatin1String("name"), QStringLiteral("Orphan"));
+        meta.insert(QLatin1String("description"), QStringLiteral("A pack with stray buffer overrides."));
+        meta.insert(QLatin1String("category"), QStringLiteral("Decoration"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray wraps;
+        wraps.append(QStringLiteral("clamp"));
+        meta.insert(QLatin1String("bufferWraps"), wraps);
+        QJsonArray filters;
+        filters.append(QStringLiteral("nearest"));
+        meta.insert(QLatin1String("bufferFilters"), filters);
+        QVERIFY(writePack(tmp.path(), QStringLiteral("orphan"), meta, {QStringLiteral("effect.frag")}));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const SurfaceShaderEffect e = registry.effect(QStringLiteral("orphan"));
+        QVERIFY(e.isValid());
+        QVERIFY(!e.isMultipass);
+        QVERIFY2(e.bufferWraps.isEmpty(), "single-pass pack must not carry orphan bufferWraps");
+        QVERIFY2(e.bufferFilters.isEmpty(), "single-pass pack must not carry orphan bufferFilters");
+    }
+
     void fromJson_leaves_multipass_flag_raw_without_normalizing()
     {
         // fromJson itself does NOT fail closed on multipass-with-no-buffers —

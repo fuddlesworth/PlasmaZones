@@ -72,6 +72,14 @@ public:
     explicit SurfaceShaderItem(QQuickItem* parent = nullptr);
     ~SurfaceShaderItem() override;
 
+    /// The canonical surface-shader include-path list, highest priority first:
+    /// every XDG `plasmazones/surface` dir (user first, system descending, via
+    /// locateAll), each contributing its `shared` subdir then itself. Shared
+    /// by this item's constructor AND the daemon's warm-bake (daemon.cpp) so
+    /// the bake-cache key the warm compile writes is guaranteed to be the one
+    /// the first live paint looks up — the two paths cannot silently diverge.
+    static QStringList surfaceIncludePaths();
+
     // Note: shaderSource, paramPreamble, shaderParams, iTime, and the
     // customParams / customColors slots are inherited Q_PROPERTYs from
     // PhosphorRendering::ShaderEffect — the QML host binds them directly. The

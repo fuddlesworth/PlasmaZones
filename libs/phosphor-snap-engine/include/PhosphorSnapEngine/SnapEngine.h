@@ -29,7 +29,6 @@
 namespace PhosphorZones {
 class IZoneDetector;
 class LayoutRegistry;
-class Layout;
 }
 
 namespace PhosphorEngine {

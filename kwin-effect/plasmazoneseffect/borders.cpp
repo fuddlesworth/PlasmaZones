@@ -422,10 +422,13 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowBo
                                  static_cast<float>((frame.top() - expanded.top()) * scale));
     const QVector2D frameSize(static_cast<float>(frame.width() * scale), static_cast<float>(frame.height() * scale));
 
-    // The caller binds the border shader (a KWin::ShaderBinder kept in scope
-    // through the subsequent effects->drawWindow) — setUniform writes to the
-    // currently bound program, so we must NOT bind/unbind here or the uniforms
-    // would be set on the wrong (or no) program.
+    // The caller has the border shader bound (a KWin::ShaderBinder). What
+    // carries the values into the eventual draw is PROGRAM-OBJECT persistence
+    // (uniform values survive the binder pop; OffscreenData::paint re-binds the
+    // same program) — the idle drawWindow caller's binder actually pops before
+    // its draw. Either way, setUniform writes to the currently bound program,
+    // so we must NOT bind/unbind here or the uniforms would land on the wrong
+    // (or no) program.
     if (pack.uSurfaceSizeLoc >= 0) {
         shader->setUniform(pack.uSurfaceSizeLoc, windowExpandedSize);
     }

@@ -41,6 +41,11 @@ ColumnLayout {
     required property var availableShaders
     required property var chain
     property var packParameters: ({})
+    // Stable empty-map identity for param-less packs: a per-evaluation `({})`
+    // literal would hand the inner ShaderParamsEditor a new object identity on
+    // every host refresh and churn its currentValues rebind (same hoist as
+    // ActionRow's _emptyShaderParams).
+    readonly property var _emptyParams: ({})
 
     signal chainChangeRequested(var newChain)
     signal paramChangeRequested(string packId, string paramId, var value)
@@ -125,7 +130,7 @@ ColumnLayout {
 
             readonly property var _effect: root._effectFor(packDelegate.modelData)
             readonly property var _schema: (packDelegate._effect && packDelegate._effect.parameters) ? packDelegate._effect.parameters : []
-            readonly property var _values: (root.packParameters && root.packParameters[packDelegate.modelData]) ? root.packParameters[packDelegate.modelData] : ({})
+            readonly property var _values: (root.packParameters && root.packParameters[packDelegate.modelData]) ? root.packParameters[packDelegate.modelData] : root._emptyParams
 
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing

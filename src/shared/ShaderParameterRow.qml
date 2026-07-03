@@ -383,8 +383,10 @@ Item {
                         return 1024;
 
                     var v = paramDelegate.currentValues[paramDelegate.paramData.id + "_svgSize"];
-                    // _numberOr preserves a legitimate stored 0 (a `Number(v) ||
-                    // 1024` coercion would wrongly turn 0 into 1024).
+                    // _numberOr for pattern-consistency with the float/int rows
+                    // (a `Number(v) || 1024` coercion misreads falsy values).
+                    // The spinbox's own `from: 64` floor means a stored 0 would
+                    // display as 64 regardless.
                     return paramDelegate._numberOr(v, 1024);
                 }
                 when: !svgSizeSpinBox.activeFocus

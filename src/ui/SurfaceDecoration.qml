@@ -100,7 +100,10 @@ Item {
         // otherwise be stranded with the property cleared. Masked today because
         // the Loader re-instantiates content per show, but correct regardless of
         // whether the anchor item is destroyed or merely swapped.
-        if (shaderAnchorItem)
+        // Guard the property write: _findShaderAnchor may match by objectName
+        // alone (mirroring SurfaceAnimator), and assigning a nonexistent
+        // property on such an anchor would throw in QML JS.
+        if (shaderAnchorItem && shaderAnchorItem.shaderAnchor !== undefined)
             shaderAnchorItem.shaderAnchor = true;
         shaderAnchorItem = contentItem ? _findShaderAnchor(contentItem) : null;
         _applyAnchorRouting();
@@ -119,7 +122,9 @@ Item {
     // compositor's uSurfaceLayer compose). When INACTIVE we restore the raw
     // card's property so the animator animates the bare card exactly as before.
     function _applyAnchorRouting() {
-        if (root.shaderAnchorItem)
+        // Same objectName-matched-anchor guard as _resolveAnchor: only demote /
+        // restore via the property when the anchor actually declares it.
+        if (root.shaderAnchorItem && root.shaderAnchorItem.shaderAnchor !== undefined)
             root.shaderAnchorItem.shaderAnchor = !root.decorationActive;
     }
 
