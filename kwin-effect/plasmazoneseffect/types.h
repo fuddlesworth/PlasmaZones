@@ -58,6 +58,19 @@ struct CompiledSurfaceBufferPass
     }();
 };
 
+/// Resolved customParams / customColors uniform VALUES for one surface pack —
+/// the pack's declared parameter defaults merged with a DecorationProfile's
+/// per-pack overrides, translated to contract slots. Stored per (window, pack)
+/// on WindowBorder::packParamValues so windows on different surface paths
+/// (window.tiled vs window.snapped vs window.floating) can carry different
+/// override values for the SAME pack; the pack's compiled program is
+/// value-independent, so only these arrays vary per window.
+struct SurfaceParamValues
+{
+    std::array<QVector4D, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> params{};
+    std::array<QVector4D, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomColors> colors{};
+};
+
 /// Compiled state for ONE surface shader pack (e.g. "border", "glow"), keyed by
 /// pack id in PlasmaZonesEffect::m_compiledPacks. Holds everything the old single
 /// borderShader() global produced for the one selected pack — the main MapTexture
@@ -72,13 +85,12 @@ struct CompiledSurfaceBufferPass
 /// compile every frame. The whole map is cleared on a SurfaceShaderRegistry
 /// hot-reload (effectsChanged) so the next paint recompiles against fresh source.
 ///
-/// The param VALUES are baked at first-compile time from the DecorationProfile
-/// that triggered the compile (parameters[packId] merged over the pack's declared
-/// defaults). The cache is keyed by pack id alone, so two windows resolving the
-/// SAME pack with DIFFERENT param overrides share the first-resolved values;
-/// per-window param variance is a follow-up (the cache key would grow to
-/// pack-id + params hash). For this stage every window resolves the same baseline
-/// profile, so the shared values are correct.
+/// The param VALUES baked here at first-compile time are the BASELINE fallback
+/// only (the profile that triggered the compile). The render paths prefer the
+/// per-window values updateWindowBorder resolves into
+/// WindowBorder::packParamValues, so windows on different surface paths can
+/// carry different overrides for the same pack; these baked arrays are used
+/// only when a window has no per-window entry for the pack.
 struct CompiledSurfacePack
 {
     std::unique_ptr<KWin::GLShader> shader;
@@ -222,6 +234,15 @@ struct WindowBorder
     int ruleBorderRadius = 0;
     QColor ruleBorderActiveColor;
     QColor ruleBorderInactiveColor;
+
+    /// Per-window resolved param values for each pack in `chain`, keyed by
+    /// pack id — the window's DecorationProfile overrides translated to
+    /// contract slots (ShaderInternal::resolveSurfaceParamValues). Filled by
+    /// updateWindowBorder alongside the chain itself, so it refreshes on
+    /// exactly the same triggers (tree change, tile/snap membership change).
+    /// The render paths prefer these over the CompiledSurfacePack's baked
+    /// baseline values; a missing key falls back to the baked ones.
+    QHash<QString, SurfaceParamValues> packParamValues;
 };
 
 /// User-texture cache entry. Owns the uploaded `GLTexture` and tracks the wrap

@@ -16,6 +16,7 @@
 
 #include "../autotilehandler.h"
 #include "../snaphandler.h"
+#include "shader_internal.h"
 #include "shader_resolve.h"
 #include "window_query.h"
 
@@ -143,7 +144,8 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // explicit user "border" entry is dropped here (the rule path owns it).
     QStringList userPacks;
     const QString surfacePath = resolveSurfacePathFor(windowId);
-    const QStringList treeChain = m_decorationTree.resolve(surfacePath).effectiveChain();
+    const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = m_decorationTree.resolve(surfacePath);
+    const QStringList treeChain = resolvedProfile.effectiveChain();
     for (const QString& pack : treeChain) {
         if (pack != QStringLiteral("border")) {
             userPacks.append(pack);
@@ -170,6 +172,27 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     WindowBorder wb;
     wb.chain = chain;
     wb.basePackId = basePackId;
+
+    // Resolve THIS window's param values for every pack in the chain. Windows
+    // on different surface paths (window.tiled / window.snapped /
+    // window.floating) can carry different per-pack overrides for the same
+    // pack id, while the shared CompiledSurfacePack bakes only the FIRST
+    // resolver's values — the render paths prefer these per-window arrays.
+    // They refresh on exactly the chain's triggers (tree change, tile/snap
+    // membership change) because they ride the same updateWindowBorder call.
+    // A pack the registry cannot resolve gets no entry; consumers fall back
+    // to the compiled pack's baked baseline.
+    ensureSurfaceRegistryPaths();
+    const QVariantMap allPackParams = resolvedProfile.effectiveParameters();
+    for (const QString& packId : std::as_const(chain)) {
+        const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
+        if (!eff.isValid()) {
+            continue;
+        }
+        wb.packParamValues.insert(packId,
+                                  ShaderInternal::resolveSurfaceParamValues(eff, allPackParams.value(packId).toMap()));
+    }
+
     if (showBorder) {
         // Per-window border appearance from the rule. width / radius fall back to
         // the shared DecorationDefaults when the rule sets only "show border"; an
@@ -389,7 +412,7 @@ void PlasmaZonesEffect::reconcileBorderShader(const QString& windowId, KWin::Eff
     // through removeWindowBorder, which clears the shader and unredirects.
 }
 
-void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& wb,
+void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& wb, const QString& packId,
                                            const CompiledSurfacePack& pack, qreal scale)
 {
     // Every caller (drawWindow's idle blit, renderSurfaceChain's transition
@@ -455,25 +478,30 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowBo
         shader->setUniform(pack.uTimeLoc, surfaceShaderTimeSeconds());
     }
 
-    // Pack-declared parameters (customParams / customColors). Values are resolved
-    // at compile time from the pack's DecorationProfile overrides merged over its
-    // declared defaults (compiledPack). Only slots the shader actually references
-    // resolve to a valid location.
+    // Pack-declared parameters (customParams / customColors). Seed from THIS
+    // window's resolved values (updateWindowBorder fills packParamValues from
+    // the window's own DecorationProfile), falling back to the compiled pack's
+    // baked baseline when the registry couldn't resolve the pack at update
+    // time. Only slots the shader actually references resolve to a valid
+    // location.
     //
     // Per-window border override: when the base "border" pack is driven by a
-    // window rule, push THIS window's rule-resolved width / radius / colours in
-    // place of the pack's shared metadata defaults (the per-pack-id cache bakes a
-    // single default set, but the rule values vary per window). The border pack
-    // lays its params out as customParams[0] = (borderWidth, cornerRadius,
-    // useSystemAccent, _) and colours as customColors[0]=active /
-    // customColors[1]=inactive, matching data/surface/border/metadata.json; the
-    // shader selects active vs inactive by uSurfaceFocused (pushed above).
-    // useSystemAccent is forced false because the rule colour is already
-    // accent-resolved (resolveWindowAppearance maps the accent sentinel to the
-    // live accent before it lands here).
-    auto paramsValues = pack.customParamsValues;
-    auto colorsValues = pack.customColorsValues;
-    if (wb.ruleBorder) {
+    // window rule, push THIS window's rule-resolved width / radius / colours
+    // over even the per-window seed. The border pack lays its params out as
+    // customParams[0] = (borderWidth, cornerRadius, useSystemAccent, _) and
+    // colours as customColors[0]=active / customColors[1]=inactive, matching
+    // data/surface/border/metadata.json; the shader selects active vs inactive
+    // by uSurfaceFocused (pushed above). useSystemAccent is forced false
+    // because the rule colour is already accent-resolved
+    // (resolveWindowAppearance maps the accent sentinel to the live accent
+    // before it lands here).
+    const auto windowVals = wb.packParamValues.constFind(packId);
+    auto paramsValues = (windowVals != wb.packParamValues.constEnd()) ? windowVals->params : pack.customParamsValues;
+    auto colorsValues = (windowVals != wb.packParamValues.constEnd()) ? windowVals->colors : pack.customColorsValues;
+    // Rule override applies ONLY to the rule-owned "border" base pack — the
+    // composite fold routes every chain pack through here, and a user pack
+    // (e.g. glow) must keep its own slot-0 params.
+    if (wb.ruleBorder && packId == wb.basePackId) {
         paramsValues[0] =
             QVector4D(static_cast<float>(wb.ruleBorderWidth), static_cast<float>(wb.ruleBorderRadius), 0.0f, 0.0f);
         const QColor& a = wb.ruleBorderActiveColor;
@@ -567,7 +595,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                     && !stateIt->second.bufferTex.empty();
 
                 KWin::ShaderBinder binder(pack->shader.get());
-                pushBorderUniforms(w, *bit, *pack, viewport.scale());
+                pushBorderUniforms(w, *bit, bit->basePackId, *pack, viewport.scale());
 
                 if (channelsReady) {
                     const SurfaceMultipassState& state = stateIt->second;

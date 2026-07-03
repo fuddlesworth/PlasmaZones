@@ -321,6 +321,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // tears down any prior decoration before new aux props would matter).
     const auto clearDecoration = [slot]() {
         writeQmlProperty(slot, QStringLiteral("decorationShaderSource"), QUrl());
+        writeQmlProperty(slot, QStringLiteral("decorationVertexShaderSource"), QUrl());
         writeQmlProperty(slot, QStringLiteral("decorationParamPreamble"), QString());
         writeQmlProperty(slot, QStringLiteral("decorationShaderParams"), QVariant::fromValue(QVariantMap()));
     };
@@ -377,10 +378,15 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     const QString preamble = PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(effect);
 
     // Write order mirrors applyShaderInfoToWindow: clear the source first, push
-    // aux props (preamble + params), then write the source LAST so the QML
-    // SurfaceShaderItem's load triggers with the preamble/params already in
-    // place on its first bake.
+    // aux props (vertex + preamble + params), then write the source LAST so the
+    // QML SurfaceShaderItem's load triggers with everything already in place on
+    // its first bake. The vertex write satisfies the warm-bake HOST-WIRING
+    // PRECONDITION (daemon.cpp): a pack declaring its own vertex stage keys the
+    // same vert here as the warm bake; the empty-URL case (every current pack)
+    // falls through to the item's shared-surface.vert resolution.
     writeQmlProperty(slot, QStringLiteral("decorationShaderSource"), QUrl());
+    writeQmlProperty(slot, QStringLiteral("decorationVertexShaderSource"),
+                     effect.vertexShaderPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(effect.vertexShaderPath));
     writeQmlProperty(slot, QStringLiteral("decorationParamPreamble"), preamble);
     writeQmlProperty(slot, QStringLiteral("decorationShaderParams"), QVariant::fromValue(translatedParams));
     writeQmlProperty(slot, QStringLiteral("decorationShaderSource"), QUrl::fromLocalFile(effect.fragmentShaderPath));

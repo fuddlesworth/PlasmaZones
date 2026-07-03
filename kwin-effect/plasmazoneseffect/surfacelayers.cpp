@@ -194,7 +194,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
         // uniforms persist into the draw — identical to the passive drawWindow
         // path. The binder is held across effects->drawWindow.
         KWin::ShaderBinder binder(border);
-        pushBorderUniforms(w, *bit, *pack, captureScale);
+        pushBorderUniforms(w, *bit, bit->basePackId, *pack, captureScale);
         // Route through effects->drawWindow (not OffscreenEffect::drawWindow) so
         // KWin's draw-chain iterator is advanced past us before OffscreenData's
         // internal capture re-enters the chain — same rationale as the on-screen
@@ -358,6 +358,17 @@ bool PlasmaZonesEffect::renderSurfaceBufferPasses(KWin::EffectWindow* w, qreal s
     // (GL_TEXTURE1+j as iChannelN) and writes bufferTex[i]. We draw a fullscreen
     // quad with NO MVP (the quad is already NDC), restoring glActiveTexture to
     // GL_TEXTURE0 after each pass for hygiene.
+    //
+    // Param values: prefer THIS window's resolved set for the base pack
+    // (WindowBorder::packParamValues); fall back to the compiled pack's baked
+    // baseline when absent. Mirrors pushBorderUniforms' seeding on the main pass.
+    const SurfaceParamValues* windowVals = nullptr;
+    if (const auto wbIt = m_windowBorders.constFind(windowId); wbIt != m_windowBorders.constEnd()) {
+        if (const auto pvIt = wbIt->packParamValues.constFind(wbIt->basePackId);
+            pvIt != wbIt->packParamValues.constEnd()) {
+            windowVals = &*pvIt;
+        }
+    }
     for (size_t i = 0; i < passCount; ++i) {
         const CompiledSurfaceBufferPass& pass = pack->bufferPasses[i];
         KWin::GLTexture* const target = state.bufferTex[i].get();
@@ -396,15 +407,20 @@ bool PlasmaZonesEffect::renderSurfaceBufferPasses(KWin::EffectWindow* w, qreal s
                 }
             }
 
-            // Pack-declared parameter values (reuse the main pass's resolved set).
+            // Pack-declared parameter values (same per-window seeding as the
+            // main pass — see windowVals above).
             for (int slot = 0; slot < SC::kMaxCustomParams; ++slot) {
                 if (pass.customParamsLoc[slot] >= 0) {
-                    pass.shader->setUniform(pass.customParamsLoc[slot], pack->customParamsValues[slot]);
+                    pass.shader->setUniform(pass.customParamsLoc[slot],
+                                            windowVals ? windowVals->params[static_cast<size_t>(slot)]
+                                                       : pack->customParamsValues[slot]);
                 }
             }
             for (int slot = 0; slot < SC::kMaxCustomColors; ++slot) {
                 if (pass.customColorsLoc[slot] >= 0) {
-                    pass.shader->setUniform(pass.customColorsLoc[slot], pack->customColorsValues[slot]);
+                    pass.shader->setUniform(pass.customColorsLoc[slot],
+                                            windowVals ? windowVals->colors[static_cast<size_t>(slot)]
+                                                       : pack->customColorsValues[slot]);
                 }
             }
 
@@ -658,14 +674,26 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                         pass.shader->setUniform(pass.iChannelResolutionLoc[j], res);
                     }
                 }
+                // Per-window param values for THIS chain pack; the compiled
+                // pack's baked baseline is the fallback (same seeding as the
+                // main-pass pushBorderUniforms below).
+                const SurfaceParamValues* packVals = nullptr;
+                if (const auto pvIt = bit->packParamValues.constFind(chain.at(k));
+                    pvIt != bit->packParamValues.constEnd()) {
+                    packVals = &*pvIt;
+                }
                 for (int slot = 0; slot < SC::kMaxCustomParams; ++slot) {
                     if (pass.customParamsLoc[slot] >= 0) {
-                        pass.shader->setUniform(pass.customParamsLoc[slot], pk->customParamsValues[slot]);
+                        pass.shader->setUniform(pass.customParamsLoc[slot],
+                                                packVals ? packVals->params[static_cast<size_t>(slot)]
+                                                         : pk->customParamsValues[slot]);
                     }
                 }
                 for (int slot = 0; slot < SC::kMaxCustomColors; ++slot) {
                     if (pass.customColorsLoc[slot] >= 0) {
-                        pass.shader->setUniform(pass.customColorsLoc[slot], pk->customColorsValues[slot]);
+                        pass.shader->setUniform(pass.customColorsLoc[slot],
+                                                packVals ? packVals->colors[static_cast<size_t>(slot)]
+                                                         : pk->customColorsValues[slot]);
                     }
                 }
                 drawFullscreenQuad();
@@ -716,7 +744,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 }
             }
             // Contract uniforms + pack params (shared with the OffscreenData path).
-            pushBorderUniforms(w, *bit, *pk, captureScale);
+            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale);
             drawFullscreenQuad();
         }
         for (int i = 0; i < qMin(static_cast<int>(passCount), 4); ++i) {

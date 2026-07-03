@@ -798,18 +798,19 @@ private:
     /// surface shader. Sets the geometry uniforms (uSurfaceSize, uSurfaceFrameTopLeft,
     /// uSurfaceFrameSize) from the window's frame/expanded geometry × @p scale, the
     /// logical-to-device @p scale itself (uSurfaceScale), the focus flag
-    /// (uSurfaceFocused), plus @p pack's resolved customParams/customColors — which
-    /// now carry the border APPEARANCE (width / radius / colours) baked at compile
-    /// time from the pack's parameters. @p wb is the window's border entry: when
-    /// its ruleBorder flag is set, THIS window's rule-resolved width / radius /
-    /// colours override the pack's baked slot-0 params. Writes onto the
-    /// ALREADY-BOUND pack shader: every caller (drawWindow's idle blit,
-    /// renderSurfaceChain's transition capture, renderSurfaceChainComposite's
+    /// (uSurfaceFocused), plus @p packId's customParams/customColors — seeded from
+    /// THIS window's resolved values (WindowBorder::packParamValues) with the
+    /// compiled pack's baked baseline as fallback. @p wb is the window's border
+    /// entry: when its ruleBorder flag is set AND @p packId is the rule-owned
+    /// border base, THIS window's rule-resolved width / radius / colours override
+    /// the seeded slot-0 params (user packs in the chain keep their own values).
+    /// Writes onto the ALREADY-BOUND pack shader: every caller (drawWindow's idle
+    /// blit, renderSurfaceChain's transition capture, renderSurfaceChainComposite's
     /// per-pack fold) owns the KWin::ShaderBinder, has already resolved @p pack
     /// and the border entry, and has ruled out a transition owning the slot, so
     /// this neither binds/unbinds nor re-validates the window.
-    void pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& wb, const CompiledSurfacePack& pack,
-                            qreal scale);
+    void pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& wb, const QString& packId,
+                            const CompiledSurfacePack& pack, qreal scale);
 
     /// Render the window's active surface-layer stack into @p transition's
     /// ping-pong FBO chain and return the texture holding the final composited

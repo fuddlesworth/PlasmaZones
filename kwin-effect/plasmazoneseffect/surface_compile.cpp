@@ -81,6 +81,38 @@ constexpr const char* kFullscreenQuadVertexSource =
 
 } // namespace
 
+SurfaceParamValues ShaderInternal::resolveSurfaceParamValues(const PhosphorSurfaceShaders::SurfaceShaderEffect& eff,
+                                                             const QVariantMap& friendlyOverrides)
+{
+    namespace SC = PhosphorSurfaceShaders::SurfaceShaderContract;
+    const QVariantMap surfaceParams =
+        PhosphorSurfaceShaders::SurfaceShaderRegistry::translateSurfaceParams(eff, friendlyOverrides);
+    SurfaceParamValues values;
+    for (int slot = 0; slot < SC::kMaxCustomParams; ++slot) {
+        auto pull = [&](char component) -> float {
+            const auto it = surfaceParams.constFind(SC::slotKey(slot, component));
+            if (it == surfaceParams.constEnd()) {
+                return 0.0f;
+            }
+            bool ok = false;
+            const float v = it->toFloat(&ok);
+            return ok ? v : 0.0f;
+        };
+        values.params[static_cast<size_t>(slot)] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
+    }
+    for (int slot = 0; slot < SC::kMaxCustomColors; ++slot) {
+        const auto it = surfaceParams.constFind(SC::colorKey(slot));
+        if (it == surfaceParams.constEnd()) {
+            continue;
+        }
+        const QColor c = it->value<QColor>();
+        if (c.isValid()) {
+            values.colors[static_cast<size_t>(slot)] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());
+        }
+    }
+    return values;
+}
+
 void PlasmaZonesEffect::ensureSurfaceRegistryPaths()
 {
     if (m_surfaceRegistryPathsAdded) {
@@ -299,31 +331,9 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
         packState.customColorsLoc[slot] = shader->uniformLocation(kCustomColorsElementNames[slot]);
     }
     const QVariantMap packParamOverrides = profile.effectiveParameters().value(packId).toMap();
-    const QVariantMap surfaceParams =
-        PhosphorSurfaceShaders::SurfaceShaderRegistry::translateSurfaceParams(eff, packParamOverrides);
-    for (int slot = 0; slot < SC::kMaxCustomParams; ++slot) {
-        auto pull = [&](char component) -> float {
-            const auto it = surfaceParams.constFind(SC::slotKey(slot, component));
-            if (it == surfaceParams.constEnd()) {
-                return 0.0f;
-            }
-            bool ok = false;
-            const float v = it->toFloat(&ok);
-            return ok ? v : 0.0f;
-        };
-        packState.customParamsValues[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
-    }
-    for (int slot = 0; slot < SC::kMaxCustomColors; ++slot) {
-        packState.customColorsValues[slot] = QVector4D();
-        const auto it = surfaceParams.constFind(SC::colorKey(slot));
-        if (it == surfaceParams.constEnd()) {
-            continue;
-        }
-        const QColor c = it->value<QColor>();
-        if (c.isValid()) {
-            packState.customColorsValues[slot] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());
-        }
-    }
+    const SurfaceParamValues baked = ShaderInternal::resolveSurfaceParamValues(eff, packParamOverrides);
+    packState.customParamsValues = baked.params;
+    packState.customColorsValues = baked.colors;
 
     // ── Multipass buffer passes (idle drawWindow path) ──────────────────────
     //

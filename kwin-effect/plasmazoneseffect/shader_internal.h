@@ -8,6 +8,7 @@
 #include <QByteArray>
 #include <QRectF>
 #include <QString>
+#include <QVariant>
 #include <QVector2D>
 #include <QVector4D>
 #include <QtGlobal>
@@ -28,6 +29,31 @@ namespace PlasmaZones::ShaderInternal {
 /// Full behavioural notes (BOM strip, comment-aware #version scan, missing
 /// #version synthesis) live at the definition.
 QByteArray injectKwinDefineAfterVersion(const QString& source);
+
+} // namespace PlasmaZones::ShaderInternal
+
+namespace PhosphorSurfaceShaders {
+struct SurfaceShaderEffect;
+}
+
+namespace PlasmaZones {
+struct SurfaceParamValues; // types.h
+
+namespace ShaderInternal {
+
+/// Translate a surface pack's declared parameter defaults merged with a
+/// DecorationProfile's per-pack friendly overrides into contract-slot uniform
+/// values (SurfaceParamValues, types.h). Defined in surface_compile.cpp;
+/// external linkage for the same Unity-build reason as
+/// injectKwinDefineAfterVersion. Used by compiledPack() for the baseline bake
+/// and by updateWindowBorder() for the per-window values.
+SurfaceParamValues resolveSurfaceParamValues(const PhosphorSurfaceShaders::SurfaceShaderEffect& eff,
+                                             const QVariantMap& friendlyOverrides);
+
+} // namespace ShaderInternal
+} // namespace PlasmaZones
+
+namespace PlasmaZones::ShaderInternal {
 
 /// Monotonic milliseconds since steady_clock epoch. Used by time-based shader
 /// transitions for elapsed-progress math. We deliberately avoid

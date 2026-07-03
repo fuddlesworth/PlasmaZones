@@ -870,13 +870,12 @@ bool Daemon::init()
                 // first, else `surface.vert` beside the frag, else the first
                 // `surface.vert` in the include dirs (the `shared` subdir
                 // carries the shipped one — packs themselves ship no vert, so
-                // both sides land on the shared vert today). HOST-WIRING
-                // PRECONDITION: the item reads its per-item vertexShaderUrl /
-                // paramPreamble properties, so any host that mounts a pack
-                // declaring its own vert MUST set vertexShaderUrl from
-                // info.vertexShaderPath (the overlay host already sets
-                // paramPreamble from the same registry preamble used here) or
-                // this warm bake keys a different vert than the live load.
+                // both sides land on the shared vert today). The overlay host
+                // satisfies the matching side of this contract: applyDecoration
+                // writes decorationVertexShaderSource from the pack's declared
+                // vertexShaderPath (and the registry preamble), so a pack that
+                // ships its own vert keys the same vert on both the warm bake
+                // and the live load.
                 const QStringList includePaths = SurfaceShaderItem::surfaceIncludePaths();
                 QString vertPath = info.vertexShaderPath;
                 if (vertPath.isEmpty()) {

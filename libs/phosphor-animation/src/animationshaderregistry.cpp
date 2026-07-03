@@ -303,15 +303,21 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
                     << missing.join(QLatin1String(", "));
                 e.isMultipass = false;
                 e.bufferShaderPaths.clear();
-                // Per-buffer overrides are positionally aligned with
-                // bufferShaderPaths; with paths cleared, the overrides are
-                // orphaned data that would still survive toJson round-trip
-                // and operator== comparison. Clear them in lockstep so the
-                // disabled-multipass struct is internally coherent.
-                e.bufferWraps.clear();
-                e.bufferFilters.clear();
+                // The per-buffer wrap/filter overrides are cleared by the
+                // single-pass coherence block below (isMultipass is now
+                // false), which is the single owner of that cleanup.
             }
         }
+    }
+    // A single-pass effect (multipass never declared, declared-but-empty, or
+    // fail-closed above) must not carry orphan per-buffer override arrays:
+    // they claim positional alignment with a bufferShaderPaths that is empty,
+    // survive toJson, and participate in operator==. Clear them so the parsed
+    // struct is internally coherent regardless of which branch produced the
+    // single-pass state. (Mirrors SurfaceShaderRegistry::parseEffect.)
+    if (!e.isMultipass) {
+        e.bufferWraps.clear();
+        e.bufferFilters.clear();
     }
 
     return e;

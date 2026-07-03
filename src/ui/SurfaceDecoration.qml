@@ -72,10 +72,15 @@ Item {
     /// C++-resolved surface pack, written by OverlayService::applyDecoration:
     ///   • decorationShaderSource  — file:// url of the pack's effect.frag (""
     ///                               = no decoration; component stays inert).
+    ///   • decorationVertexShaderSource — file:// url of the pack's declared
+    ///                               vertex stage; empty for the (current) packs
+    ///                               that ship none, letting the item fall
+    ///                               through to the shared surface.vert.
     ///   • decorationParamPreamble — generated `#define p_<id> …` preamble.
     ///   • decorationShaderParams  — translated `customParamsN_*` / `customColorN`
     ///                               slot map (SurfaceShaderRegistry output).
     property url decorationShaderSource
+    property url decorationVertexShaderSource
     property string decorationParamPreamble: ""
     property var decorationShaderParams: ({})
 
@@ -246,6 +251,7 @@ Item {
         // applyShaderInfoToWindow order keeps the intent explicit.
         paramPreamble: root.decorationParamPreamble
         shaderParams: root.decorationShaderParams
+        vertexShaderUrl: root.decorationVertexShaderSource
         shaderSource: root.decorationShaderSource
         // iTime is left at its default: the border pack is static (no iTime
         // reference survives the linker), so no per-frame driver is wired.
