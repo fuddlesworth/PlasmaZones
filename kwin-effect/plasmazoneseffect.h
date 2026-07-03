@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <PhosphorCompositor/AutotileState.h>
+#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorCompositor/DecorationManager.h>
 #include <PhosphorCompositor/ICompositorBridge.h>
 #include <PhosphorEngine/EngineTypes.h>
@@ -677,18 +678,19 @@ private:
     // re-fetched on every settingsChanged. The two colour strings carry a hex
     // "#AARRGGBB" OR the "accent" sentinel (resolved to m_borderAccentColor /
     // m_borderInactiveColor at merge time, mirroring the rule colour path).
-    // Scope tokens: "tiled" (snapped OR tiled), "normal" (Normal type AND not
-    // transient), "all" (every window).
+    // Scope tokens live in PhosphorCompositor::WindowAppearanceScope: "tiled"
+    // (snapped OR autotile-managed), "normal" (Normal type AND not transient),
+    // "all" (every window). Defaults match ConfigDefaults::windowBorderScope().
     struct WindowAppearanceDefault
     {
         bool showBorder = false;
-        QString borderScope = QStringLiteral("tiled");
+        QString borderScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
         int borderWidth = 0;
         int borderRadius = 0;
         QString activeColor;
         QString inactiveColor;
         bool hideTitleBar = false;
-        QString titleBarScope = QStringLiteral("tiled");
+        QString titleBarScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
     };
     WindowAppearanceDefault m_windowAppearanceDefault;
 
@@ -775,6 +777,14 @@ private:
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
     void clearAllBorders();
+
+    /// Coalesce a full border sweep to the end of the event-loop turn. The
+    /// config-default appearance loaders (and the accent / inactive colour
+    /// loaders) each land as a separate async settings reply; several arriving in
+    /// one turn would otherwise each run a full updateAllBorders(). Collapsing them
+    /// to a single deferred sweep keeps the last-value result while doing the work
+    /// once. The sweep still lands before the next paint.
+    void scheduleBorderSweep();
 
     /// Drop the per-rule match cache and refresh @p windowId's border /
     /// opacity after its placement state (snapped / floating / zone) changed.
@@ -1081,6 +1091,11 @@ private:
     // flushed once by flushPendingRuleInvalidations(). Coalesces the double
     // invalidation a float toggle triggers (windowFloatingChanged + windowStateChanged).
     QSet<QString> m_pendingRuleInvalidations;
+
+    // Set while a coalesced border sweep is queued for the end of the turn (see
+    // scheduleBorderSweep); collapses a burst of appearance-setting replies into
+    // one updateAllBorders().
+    bool m_borderSweepPending = false;
 
     // Cached daemon D-Bus service registration state.
     // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid

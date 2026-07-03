@@ -606,6 +606,20 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
     }
 }
 
+void PlasmaZonesEffect::scheduleBorderSweep()
+{
+    if (m_borderSweepPending) {
+        return;
+    }
+    m_borderSweepPending = true;
+    // `this` as the context object cancels the callback if the effect is torn down
+    // before the turn ends.
+    QTimer::singleShot(0, this, [this] {
+        m_borderSweepPending = false;
+        updateAllBorders();
+    });
+}
+
 void PlasmaZonesEffect::invalidateAllRuleCaches()
 {
     if (m_shaderManager.animationRuleSet().isEmpty()) {

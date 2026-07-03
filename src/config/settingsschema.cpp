@@ -814,8 +814,9 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
     // The "Apply to" scope is a closed set of tokens the Appearance page and the
     // effect agree on ("tiled" / "normal" / "all"); snap an unknown on-disk token
     // to the key's own default so garbage can't reach the effect.
+    namespace WAS = ::PhosphorCompositor::WindowAppearanceScope;
     const auto scopeValidator = [](const QString& fallback) {
-        return validStringOr({QLatin1String("tiled"), QLatin1String("normal"), QLatin1String("all")}, fallback);
+        return validStringOr({WAS::Tiled, WAS::Normal, WAS::All}, fallback);
     };
     schema.groups[CD::windowsAppearanceGroup()] = {
         {CD::showBorderKey(), CD::windowShowBorder(), QMetaType::Bool},

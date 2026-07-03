@@ -34,18 +34,20 @@ SettingsFlickable {
     readonly property bool hideTitleBarsOn: root.ctl.hideWindowTitleBars
 
     // "Apply to" scope options for the border / title-bar values, in display
-    // order. `scope` is the token stored in config; `label` is user-facing text.
+    // order. `scope` is the token stored in config (sourced from the controller so
+    // it stays in lockstep with the schema validator and the effect); `label` is
+    // user-facing text.
     readonly property var scopeOptions: [
         {
-            "scope": "tiled",
+            "scope": root.ctl.scopeTokenTiled,
             "label": i18n("Tiled and snapped windows")
         },
         {
-            "scope": "normal",
+            "scope": root.ctl.scopeTokenNormal,
             "label": i18n("All normal windows")
         },
         {
-            "scope": "all",
+            "scope": root.ctl.scopeTokenAll,
             "label": i18n("All windows")
         }
     ]

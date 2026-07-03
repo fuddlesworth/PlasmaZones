@@ -64,6 +64,13 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
     Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
 
+    // ── "Apply to" scope tokens (single source: PhosphorCompositor::WindowAppearanceScope) ──
+    // The QML "Apply to" pickers pair each token with an i18n label; exposing the
+    // tokens here keeps them in lockstep with the schema validator and the effect.
+    Q_PROPERTY(QString scopeTokenTiled READ scopeTokenTiled CONSTANT)
+    Q_PROPERTY(QString scopeTokenNormal READ scopeTokenNormal CONSTANT)
+    Q_PROPERTY(QString scopeTokenAll READ scopeTokenAll CONSTANT)
+
     // ── CONSTANT slider bounds ────────────────────────────────────────────────
     Q_PROPERTY(int borderWidthMin READ borderWidthMin CONSTANT)
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
@@ -134,6 +141,19 @@ public:
     // tracking rides; these invokables are the per-monitor-aware path.
     Q_INVOKABLE QVariant gapValue(const QString& screenName, const QString& key) const;
     Q_INVOKABLE void writeGap(const QString& screenName, const QString& key, const QVariant& value);
+
+    QString scopeTokenTiled() const
+    {
+        return QString(::PhosphorCompositor::WindowAppearanceScope::Tiled);
+    }
+    QString scopeTokenNormal() const
+    {
+        return QString(::PhosphorCompositor::WindowAppearanceScope::Normal);
+    }
+    QString scopeTokenAll() const
+    {
+        return QString(::PhosphorCompositor::WindowAppearanceScope::All);
+    }
 
     // CONSTANT slider bounds.
     int borderWidthMin() const

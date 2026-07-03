@@ -609,14 +609,14 @@ void PlasmaZonesEffect::loadCachedSettings()
         const QColor c(v.toString());
         if (m_borderAccentColor != c) {
             m_borderAccentColor = c;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("inactiveColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
         if (m_borderInactiveColor != c) {
             m_borderInactiveColor = c;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     // Config-backed window-decoration appearance default. Each key updates one
@@ -629,56 +629,56 @@ void PlasmaZonesEffect::loadCachedSettings()
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.showBorder != b) {
             m_windowAppearanceDefault.showBorder = b;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderScope"), [this](const QVariant& v) {
         const QString s = v.toString();
         if (m_windowAppearanceDefault.borderScope != s) {
             m_windowAppearanceDefault.borderScope = s;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderWidth"), [this](const QVariant& v) {
         const int i = v.toInt();
         if (m_windowAppearanceDefault.borderWidth != i) {
             m_windowAppearanceDefault.borderWidth = i;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderRadius"), [this](const QVariant& v) {
         const int i = v.toInt();
         if (m_windowAppearanceDefault.borderRadius != i) {
             m_windowAppearanceDefault.borderRadius = i;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderColorActive"), [this](const QVariant& v) {
         const QString s = v.toString();
         if (m_windowAppearanceDefault.activeColor != s) {
             m_windowAppearanceDefault.activeColor = s;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderColorInactive"), [this](const QVariant& v) {
         const QString s = v.toString();
         if (m_windowAppearanceDefault.inactiveColor != s) {
             m_windowAppearanceDefault.inactiveColor = s;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("hideWindowTitleBars"), [this](const QVariant& v) {
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.hideTitleBar != b) {
             m_windowAppearanceDefault.hideTitleBar = b;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowTitleBarScope"), [this](const QVariant& v) {
         const QString s = v.toString();
         if (m_windowAppearanceDefault.titleBarScope != s) {
             m_windowAppearanceDefault.titleBarScope = s;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {

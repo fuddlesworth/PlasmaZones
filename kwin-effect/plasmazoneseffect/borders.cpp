@@ -112,10 +112,11 @@ bool PlasmaZonesEffect::windowMatchesAppearanceScope(const QString& scope, KWin:
     if (!w) {
         return false;
     }
-    if (scope == QLatin1String("all")) {
+    namespace WAS = PhosphorCompositor::WindowAppearanceScope;
+    if (scope == WAS::All) {
         return true;
     }
-    if (scope == QLatin1String("tiled")) {
+    if (scope == WAS::Tiled) {
         // A window occupying a snap zone OR managed by the autotile engine. Use
         // each engine's render-marked set (populated synchronously on commit),
         // NOT the NavigationHandler zone cache: markWindowSnapped builds the border
@@ -124,7 +125,7 @@ bool PlasmaZonesEffect::windowMatchesAppearanceScope(const QString& scope, KWin:
         // border until the next full sweep. The autotile half is already symmetric.
         return isWindowMarkedSnapped(windowId) || m_autotileHandler->isTiledWindow(windowId);
     }
-    if (scope == QLatin1String("normal")) {
+    if (scope == WAS::Normal) {
         return windowTypeFor(w) == PhosphorProtocol::WindowType::Normal && !windowIsTransient(w);
     }
     // Unknown / empty token: contribute no default (the settings side validates

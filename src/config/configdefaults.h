@@ -338,10 +338,12 @@ public:
     {
         return windowBorderColorActive();
     }
-    // Fresh-install "Apply to" scope for both the border and the title bar.
+    // Fresh-install "Apply to" scope for both the border and the title bar. The
+    // token set lives in PhosphorCompositor::WindowAppearanceScope (shared with the
+    // schema validator and the effect).
     static QString windowBorderScope()
     {
-        return QStringLiteral("tiled");
+        return QString(::PhosphorCompositor::WindowAppearanceScope::Tiled);
     }
     static QString windowTitleBarScope()
     {
