@@ -438,6 +438,16 @@ private Q_SLOTS:
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileOuterGap"), QStringLiteral("garbage"));
         QCOMPARE(spy.count(), before);
         QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("OuterGap")).toInt(), 13);
+
+        // A negative inner gap clamps UP to the shared minimum (not rejected).
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), -5);
+        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("InnerGap")).toInt(),
+                 ConfigDefaults::innerGapMin());
+
+        // Zero is a valid in-range gap (the minimum is 0): it stores as 0 rather
+        // than being clamped away or rejected.
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileOuterGap"), 0);
+        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("OuterGap")).toInt(), 0);
     }
 
     // =========================================================================

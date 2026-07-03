@@ -21,11 +21,13 @@ SettingsFlickable {
 
     // "Follow the system accent" sentinel. The effect resolves it to the live
     // system accent colour at paint time, so a border colour stored as this token
-    // tracks Plasma accent changes without an edit.
-    readonly property string accentToken: "accent"
+    // tracks Plasma accent changes without an edit. Sourced from the controller so
+    // it stays in lockstep with the config layer, the schema validator, and the
+    // effect.
+    readonly property string accentToken: root.ctl.accentColorToken
     // Concrete fallback colour written when the user turns the accent toggle off
-    // (KDE accent blue, opaque).
-    readonly property string defaultBorderHex: "#FF3DAEE9"
+    // (KDE accent blue, opaque). Also controller-sourced for the same reason.
+    readonly property string defaultBorderHex: root.ctl.defaultBorderColorHex
 
     // The border detail controls (width, radius, colours) are hidden while the
     // border is off so the user cannot edit values that would not apply.

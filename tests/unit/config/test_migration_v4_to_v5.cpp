@@ -206,6 +206,27 @@ private Q_SLOTS:
         QCOMPARE(windowsGroup().value(ConfigKeys::widthKey()).toInt(), 5);
     }
 
+    // The int tie-break above has an int-specific value; verify the same
+    // snapping-wins rule for the HideTitleBars BOOL in a mixed state (snapping
+    // hides, tiling does not) so the collapse doesn't silently favour the tiling
+    // side or drop the flag for a non-int field.
+    void testCollapse_hideTitleBars_snappingWins()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {QStringLiteral("Snapping"), QStringLiteral("Appearance"), QStringLiteral("Decorations")},
+                  {{QStringLiteral("HideTitleBars"), true}});
+        setNested(cfg, {QStringLiteral("Tiling"), QStringLiteral("Appearance"), QStringLiteral("Decorations")},
+                  {{QStringLiteral("HideTitleBars"), false}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QCOMPARE(windowsGroup().value(ConfigKeys::hideTitleBarsKey()).toBool(), true);
+    }
+
     // ─── Colours ──────────────────────────────────────────────────────────
 
     void testColors_useSystemFalse_carriesHex()
@@ -435,6 +456,11 @@ private Q_SLOTS:
         const int firstRuleCount = rules().size();
 
         // Re-run against the now-v5 tree: no chain step runs, values unchanged.
+        // Drop the process-level "already migrated" guard first so the second call
+        // genuinely re-reads the on-disk v5 file and re-enters the chain (which then
+        // no-ops on the >= 5 version check) rather than short-circuiting on the
+        // atomic — without this reset the QCOMPAREs below would pass trivially.
+        ConfigMigration::resetMigrationGuardForTesting();
         QVERIFY(ConfigMigration::ensureJsonConfig());
         QCOMPARE(windowsGroup(), firstWindows);
         QCOMPARE(gapsGroup(), firstGaps);

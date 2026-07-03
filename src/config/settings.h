@@ -1272,7 +1272,9 @@ private:
     // the baseline anywhere but a load/save commit point desyncs dirty tracking.
     void captureBaseline();
 
-    // Groups that save() writes exhaustively (excludes unmanaged groups).
+    // Groups that reset() deletes exhaustively (excludes unmanaged groups like
+    // Updates). NOT used by save() — save() iterates the schema and lets
+    // purgeStaleKeys() handle cleanup.
     static QStringList managedGroupNames();
     // Delete all per-screen override groups by prefix (ZoneSelector:*,
     // AutotileScreen:*, and the legacy SnappingScreen:* which is no longer written

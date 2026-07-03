@@ -71,6 +71,13 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(QString scopeTokenNormal READ scopeTokenNormal CONSTANT)
     Q_PROPERTY(QString scopeTokenAll READ scopeTokenAll CONSTANT)
 
+    // ── Border colour sentinel + fallback (single source: ConfigDefaults) ──
+    // The "follow the system accent" sentinel and the concrete colour the page
+    // seeds when the user leaves accent mode. Exposed here so QML never hardcodes
+    // either literal, mirroring the scope-token treatment above.
+    Q_PROPERTY(QString accentColorToken READ accentColorToken CONSTANT)
+    Q_PROPERTY(QString defaultBorderColorHex READ defaultBorderColorHex CONSTANT)
+
     // ── CONSTANT slider bounds ────────────────────────────────────────────────
     Q_PROPERTY(int borderWidthMin READ borderWidthMin CONSTANT)
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
@@ -153,6 +160,15 @@ public:
     QString scopeTokenAll() const
     {
         return QString(::PhosphorCompositor::WindowAppearanceScope::All);
+    }
+
+    QString accentColorToken() const
+    {
+        return ConfigDefaults::windowBorderColorActive();
+    }
+    QString defaultBorderColorHex() const
+    {
+        return ConfigDefaults::windowBorderColorAccentFallbackHex();
     }
 
     // CONSTANT slider bounds.

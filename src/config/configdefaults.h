@@ -338,6 +338,14 @@ public:
     {
         return windowBorderColorActive();
     }
+    // Concrete opaque colour the settings app seeds into config when the user
+    // leaves "follow the system accent" mode (KDE accent blue, #AARRGGBB). Lives
+    // here so the settings page's fallback stays single-sourced with the config
+    // layer rather than hardcoded in QML.
+    static QString windowBorderColorAccentFallbackHex()
+    {
+        return QStringLiteral("#FF3DAEE9");
+    }
     // Fresh-install "Apply to" scope for both the border and the title bar. The
     // token set lives in PhosphorCompositor::WindowAppearanceScope (shared with the
     // schema validator and the effect).
