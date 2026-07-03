@@ -6,7 +6,6 @@
 #include "ruleauthoring.h"
 #include "ruletemplates.h"
 
-#include "../core/baselinerules.h"
 #include "../core/logging.h"
 #include "../phosphor_i18n.h"
 
@@ -422,10 +421,10 @@ void RuleController::revert()
     fetchAndLoad(/*fromRevert=*/true);
 }
 
-// NOTE: the per-page dirty split + managed-baseline reset/discard methods
+// NOTE: the per-page dirty split + global managed reset methods
 // (captureSavedSnapshot, baselinesDirty, userRulesDirty, recomputeDirtyFromSnapshot,
-// upsertRule, resetBaselines, resetManagedDefaults, discardBaselineEdits) live in
-// rulecontroller_baseline.cpp — split out to keep this TU under the 800-line cap.
+// resetManagedDefaults) live in rulecontroller_baseline.cpp — split out to keep
+// this TU under the 800-line cap.
 
 int RuleController::bandBaseForSection(RuleModel::Section section)
 {

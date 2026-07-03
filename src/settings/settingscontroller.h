@@ -512,10 +512,11 @@ public:
     Q_INVOKABLE bool hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenAutotileAlgorithmSettings(const QString& screenName);
 
-    // Per-screen gaps are rule-backed: a per-monitor override is a screen-scoped
-    // gap Rule (deterministic id from the baseline rule + screen name).
+    // Per-screen gaps are config-backed: a per-monitor override is the gap-
+    // dimension sub-domain of the per-screen autotile store (unified snap+tile).
     // The Gaps card's monitor scope chip drives these; the gap controls
-    // read/write the rule's actions via rulesPage.
+    // read/write via WindowAppearanceController's gapValue/writeGap. The
+    // "…GapRule" names are kept so the QML scope chip binding is unchanged.
     Q_INVOKABLE bool hasPerScreenGapRule(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenGapRule(const QString& screenName);
 

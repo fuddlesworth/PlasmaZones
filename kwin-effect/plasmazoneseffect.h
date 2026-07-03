@@ -44,6 +44,7 @@
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
+#include "plasmazoneseffect/shader_resolve.h"
 #include "plasmazoneseffect/types.h"
 
 namespace KWin {
@@ -669,6 +670,42 @@ private:
     QColor m_borderAccentColor;
     QColor m_borderInactiveColor;
 
+    // Config-backed window-decoration appearance default. Window appearance
+    // resolves as: this default (each slot gated by its scope token) filling the
+    // slots the user's per-window rules left unset — rules still win per slot.
+    // Pushed from the daemon over the settings D-Bus wire in loadCachedSettings,
+    // re-fetched on every settingsChanged. The two colour strings carry a hex
+    // "#AARRGGBB" OR the "accent" sentinel (resolved to m_borderAccentColor /
+    // m_borderInactiveColor at merge time, mirroring the rule colour path).
+    // Scope tokens: "tiled" (snapped OR tiled), "normal" (Normal type AND not
+    // transient), "all" (every window).
+    struct WindowAppearanceDefault
+    {
+        bool showBorder = false;
+        QString borderScope = QStringLiteral("tiled");
+        int borderWidth = 0;
+        int borderRadius = 0;
+        QString activeColor;
+        QString inactiveColor;
+        bool hideTitleBar = false;
+        QString titleBarScope = QStringLiteral("tiled");
+    };
+    WindowAppearanceDefault m_windowAppearanceDefault;
+
+    /// Evaluate a config-default appearance scope token against a live window.
+    /// "tiled" → the window is snapped or autotile-managed; "normal" → its
+    /// window type is Normal and it is not transient; "all" → always true;
+    /// any other token → false (the default contributes nothing).
+    bool windowMatchesAppearanceScope(const QString& scope, KWin::EffectWindow* w, const QString& windowId) const;
+
+    /// Resolve @p windowId's effective window-decoration appearance: the user's
+    /// per-window rule appearance (when any rules exist) with every slot it left
+    /// unset filled from the config default in m_windowAppearanceDefault, each
+    /// default slot gated by its scope token. Rules win per slot. Used by both
+    /// the border draw path and the title-bar reconcile so config-backed
+    /// defaults apply even with an empty rule set.
+    ResolvedWindowAppearance resolveEffectiveWindowAppearance(KWin::EffectWindow* w, const QString& windowId) const;
+
     // The window most recently passed to slotWindowActivated — i.e. the
     // "previously active" window on the next focus change. Used to repaint the
     // window that just lost focus so a focus-scoped (IsFocused) SetOpacity rule
@@ -761,14 +798,6 @@ private:
     /// and forward it to the DecorationManager as a tri-state rule override
     /// (unset = mode decides, true = rule hides, false = force-show veto).
     void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
-
-    /// Clear every DecorationManager rule override (Rule owners + force-show
-    /// vetoes). Called when the rule set empties (updateAllBorders) so a
-    /// rule-hidden title bar is never left hidden after the authoritative
-    /// rule state is gone. Daemon loss / effect teardown do NOT route here —
-    /// they call DecorationManager::restoreAll(), which clears rule
-    /// overrides along with all other tracking.
-    void restoreAllRuleHiddenTitleBars();
 
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;

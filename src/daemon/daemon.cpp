@@ -70,7 +70,6 @@
 #include "../core/utils.h"
 #include "../phosphor_i18n.h"
 #include "../config/configdefaults.h"
-#include "../core/baselinerules.h"
 #include "../config/settingsconfigstore.h"
 #include <PhosphorScreens/DBusScreenAdaptor.h>
 #include <PhosphorScreens/Swapper.h>
@@ -117,12 +116,6 @@ static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
               "Snapping and autotile gap clamp ceilings must match — they are the same gap quantity");
 
 namespace {
-
-// The three managed baseline rule makers (makeBaselineSkeleton /
-// makeBaseline{Border,TitleBar,Gap}Rule) moved to src/core/baselinerules.{h,cpp}
-// so the settings app's per-page appearance reset shares one source of truth
-// with the seeding below. They are PlasmaZones-namespace free functions, so the
-// unqualified calls in ensureManagedRule resolve to them unchanged.
 
 // Debounce interval (ms): coalesce rapid geometry changes (multi-screen, panel editor) into one update.
 // Conceptually distinct from DELAYED_PANEL_REQUERY_MS in autotile.cpp (which schedules a
@@ -233,55 +226,39 @@ Daemon::Daemon(QObject* parent)
     // because that idiom reads as an accidental typo.
     ensureScreenIdResolver();
 
-    // Seed the three managed baseline appearance rules (borders, title bars,
-    // gaps) if the store doesn't already carry them. The store loaded in its
-    // constructor, so this runs every startup (not first-run only) — existing
-    // rules.json files predating these rules gain them too. addRule
-    // persists and emits rulesChanged, but the daemon's rulesChanged consumers
-    // are wired later (createAdaptors / setup), so the emit at construction is
-    // inert. The daemon is the sole writer, so seeding here is the single source
-    // for every consumer (effect, settings, editor).
+    // The daemon no longer seeds the managed baseline appearance rules (borders,
+    // title bars, gaps): those defaults now live in the config store. Strip any
+    // stale copies a previous branch build wrote to rules.json so a carried-over
+    // file does not keep three orphaned managed rules alive. Match only the fixed
+    // baseline ids AND managed==true — a user's own rule is never touched. Rebuild
+    // the list once via setAllRules (a single persist + rulesChanged) instead of
+    // per-rule removeRule, and gate it on removedAny so a clean store (second
+    // startup, or a fresh install) neither persists nor emits. The store loaded in
+    // its constructor, so this runs on every startup; rulesChanged consumers are
+    // wired later (createAdaptors / setup), so any emit here is inert at
+    // construction time.
     if (m_ruleStore) {
-        using PhosphorRules::Rule;
-        using PhosphorRules::RuleAction;
-
-        // Ensure a managed baseline rule exists and carries every action its
-        // canonical maker defines: create it from @p desired when absent,
-        // otherwise append any action type missing from the canonical template
-        // (preserving the user's Appearance-page-edited values for actions
-        // already present). This reconciles the ACTION SET only — it deliberately
-        // does NOT re-pin an existing rule's values, managed flag, priority, or
-        // match. Those are intentionally left as-is so an Appearance-page edit
-        // survives a daemon restart; a future change to a baseline's intended
-        // priority/match would need an explicit migration, not this seeder.
-        const auto ensureManagedRule = [this](const Rule& desired) {
-            const auto existing = m_ruleStore->ruleSet().ruleById(desired.id);
-            if (!existing) {
-                if (!m_ruleStore->addRule(desired)) {
-                    qCWarning(lcDaemon) << "Failed to seed managed baseline rule" << desired.id;
-                }
-                return;
-            }
-            QSet<QString> present;
-            for (const RuleAction& a : existing->actions) {
-                present.insert(a.type);
-            }
-            Rule merged = *existing;
-            bool changed = false;
-            for (const RuleAction& a : desired.actions) {
-                if (!present.contains(a.type)) {
-                    merged.actions.append(a);
-                    changed = true;
-                }
-            }
-            if (changed && !m_ruleStore->updateRule(merged)) {
-                qCWarning(lcDaemon) << "Failed to reconcile managed baseline rule" << desired.id;
-            }
+        const QSet<QUuid> staleBaselineIds = {
+            ConfigDefaults::baselineBorderRuleId(),
+            ConfigDefaults::baselineTitleBarRuleId(),
+            ConfigDefaults::baselineGapRuleId(),
         };
 
-        ensureManagedRule(makeBaselineBorderRule());
-        ensureManagedRule(makeBaselineTitleBarRule());
-        ensureManagedRule(makeBaselineGapRule());
+        const QList<PhosphorRules::Rule>& currentRules = m_ruleStore->ruleSet().rules();
+        QList<PhosphorRules::Rule> keptRules;
+        keptRules.reserve(currentRules.size());
+        bool removedAny = false;
+        for (const PhosphorRules::Rule& rule : currentRules) {
+            if (rule.managed && staleBaselineIds.contains(rule.id)) {
+                removedAny = true;
+                continue;
+            }
+            keptRules.append(rule);
+        }
+
+        if (removedAny && !m_ruleStore->setAllRules(keptRules)) {
+            qCWarning(lcDaemon) << "Failed to persist rules.json after stripping stale baseline appearance rules";
+        }
     }
 
     // Configure geometry update debounce timer
@@ -1261,9 +1238,13 @@ bool Daemon::init()
             // applies here and a "snapping" one stays inert. The same
             // GeometryUtils::contextGapOverrideMap shaping the snap provider uses
             // below keeps the two paths byte-identical (PerScreenKeys form, with
-            // the per-side toggle gating the per-side entries).
-            return GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
-                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling")));
+            // the per-side toggle gating the per-side entries). The config per-
+            // monitor gap is merged UNDER the rule override so a user gap rule
+            // still wins per slot.
+            return GeometryUtils::mergeConfigPerScreenGaps(
+                GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                    screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling"))),
+                m_settings.get(), screenId);
         });
     }
 
@@ -1282,9 +1263,13 @@ bool Daemon::init()
             }
             // This is the snap gap path, so resolve against the "snapping"
             // placement mode — a per-mode `Mode Equals "snapping"` gap rule then
-            // applies here and a "tiling" one stays inert.
-            return GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
-                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("snapping")));
+            // applies here and a "tiling" one stays inert. The config per-monitor
+            // gap is merged UNDER the rule override so a user gap rule still wins
+            // per slot.
+            return GeometryUtils::mergeConfigPerScreenGaps(
+                GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                    screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("snapping"))),
+                m_settings.get(), screenId);
         });
     }
 

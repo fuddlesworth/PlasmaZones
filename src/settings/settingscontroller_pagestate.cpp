@@ -256,14 +256,13 @@ bool SettingsController::isPageDirty(const QString& page) const
 
 bool SettingsController::pageSupportsReset(const QString& page) const
 {
-    // Config-manifest pages write schema defaults; ordering pages drop the
-    // custom order; shortcuts pages unassign every quick slot; the virtual
-    // screens page unsplits every monitor; the Windows appearance page resets
-    // its 3 managed baseline rules; animation pages clear every per-event
-    // override and reset the animation config keys.
+    // Config-manifest pages write schema defaults (this includes the Windows
+    // appearance page, whose Windows.* + Gaps.* keys are in the manifest); ordering
+    // pages drop the custom order; shortcuts pages unassign every quick slot; the
+    // virtual screens page unsplits every monitor; animation pages clear every
+    // per-event override and reset the animation config keys.
     return pageOwnedConfigKeys().contains(page) || isOrderingPage(page) || isShortcutsPage(page)
-        || page == QLatin1String("virtualscreens") || page == QLatin1String("window-appearance")
-        || isAnimationPage(page);
+        || page == QLatin1String("virtualscreens") || isAnimationPage(page);
 }
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
@@ -292,10 +291,11 @@ void SettingsController::reconcileRuleBackedDirty()
 {
     if (m_rulesPage == nullptr)
         return;
-    // The Windows appearance page and the Rules page stage into one shared
-    // RuleController model; attribute the two independently from the value-based
-    // subset-dirty queries so an appearance edit badges Windows and a user-rule
-    // edit badges Rules — even when the shared dirty bit does not transition.
+    // The Rules page stages user rules into the shared RuleController model;
+    // attribute its dirty state from the value-based user-rules query so a user-rule
+    // edit badges Rules even when the shared dirty bit does not transition. (The
+    // Windows appearance page is a plain config page now — its dirtiness comes from
+    // the config manifest via isPageDirty, not from the rule model.)
     bool changed = false;
     const auto sync = [this, &changed](const QString& page, bool dirty) {
         if (dirty) {
@@ -307,7 +307,6 @@ void SettingsController::reconcileRuleBackedDirty()
             changed = true;
         }
     };
-    sync(QStringLiteral("window-appearance"), m_rulesPage->baselinesDirty());
     sync(QStringLiteral("rules"), m_rulesPage->userRulesDirty());
     if (changed) {
         Q_EMIT dirtyPagesChanged();
@@ -316,18 +315,6 @@ void SettingsController::reconcileRuleBackedDirty()
 
 void SettingsController::resetPage(const QString& page)
 {
-    // Windows appearance: reset the 3 managed baseline rules to factory (staged),
-    // then re-attribute. reconcileRuleBackedDirty is explicit because the reset
-    // may leave the shared dirty bit unchanged (user rules already dirty), so it
-    // can't rely on a dirtyChanged transition.
-    if (page == QLatin1String("window-appearance")) {
-        if (m_rulesPage != nullptr) {
-            m_rulesPage->resetBaselines();
-        }
-        reconcileRuleBackedDirty();
-        return;
-    }
-
     // Animation pages (whole tree, shared domain): reset to defaults =
     // clear every per-event override file AND reset the animation config keys
     // (Profile, ShaderProfileTree, WindowFiltering, Enabled, Backend) to their
@@ -437,16 +424,6 @@ void SettingsController::resetPage(const QString& page)
 
 void SettingsController::discardPage(const QString& page)
 {
-    // Windows appearance: restore the 3 managed baseline rules from the last
-    // saved snapshot (leaving user rules untouched), then re-attribute.
-    if (page == QLatin1String("window-appearance")) {
-        if (m_rulesPage != nullptr) {
-            m_rulesPage->discardBaselineEdits();
-        }
-        reconcileRuleBackedDirty();
-        return;
-    }
-
     const auto& manifest = pageOwnedConfigKeys();
     const auto it = manifest.constFind(page);
     if (it != manifest.constEnd()) {

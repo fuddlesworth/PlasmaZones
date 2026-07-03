@@ -380,12 +380,14 @@ SettingsController::SettingsController(QObject* parent)
     connect(m_snappingZonesPage, &SnappingZonesController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
 
-    // Snapping→Effects + the Window Appearance page — CONSTANT-only bounds
-    // facades. Window Appearance edits the managed baseline appearance Rule
-    // through m_rulesPage; this controller only carries the slider bounds
-    // (border + the unified gap bounds) and the baseline rule id.
+    // Snapping→Effects page — CONSTANT-only bounds facade. The Window Appearance
+    // page is ISettings-backed: it forwards its window border / title bar and the
+    // shared inner/outer gap values straight to config (Windows.* / Gaps.*). Those
+    // values ARE Q_PROPERTY on Settings, so the meta-object loop above already
+    // wires their NOTIFY to onSettingsPropertyChanged(); the controller only
+    // provides the QML-facing forwarders + the slider bounds.
     m_snappingEffectsPage = new SnappingEffectsController(this);
-    m_windowAppearancePage = new WindowAppearanceController(this);
+    m_windowAppearancePage = new WindowAppearanceController(m_settings, this);
 
     // Tiling→Algorithm page sub-controller. Owns the algorithm slider bounds +
     // the custom-parameter CRUD surface. Borrows the algorithm registry this

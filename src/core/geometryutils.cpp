@@ -80,17 +80,32 @@ std::optional<::PhosphorLayout::EdgeGaps> resolveOuterGapsFromMap(const QVariant
 
 } // anonymous namespace
 
-QVariantMap currentContextGapOverride(PhosphorZones::IZoneLayoutRegistry* reg, const QString& screenId)
+QVariantMap mergeConfigPerScreenGaps(QVariantMap ruleOverride, const ISettings* settings, const QString& screenId)
 {
-    if (!reg || screenId.isEmpty()) {
+    QVariantMap merged = settings ? settings->perScreenGapOverrides(screenId) : QVariantMap{};
+    // Rule wins per key: insert the rule override on top of the config base.
+    for (auto it = ruleOverride.constBegin(); it != ruleOverride.constEnd(); ++it) {
+        merged.insert(it.key(), it.value());
+    }
+    return merged;
+}
+
+QVariantMap currentContextGapOverride(PhosphorZones::IZoneLayoutRegistry* reg, const ISettings* settings,
+                                      const QString& screenId)
+{
+    if (screenId.isEmpty()) {
         return {};
     }
     // The preview / query / empty-zone geometry helpers that call this are all
     // snapping-side, so resolve against the "snapping" placement mode — the
     // preview geometry then matches the snap-commit path (DaemonGeometryResolver
-    // passes the same token).
-    return contextGapOverrideMap(reg->resolveContextGaps(screenId, reg->currentVirtualDesktopForScreen(screenId),
-                                                         reg->currentActivity(), QStringLiteral("snapping")));
+    // passes the same token). The config per-monitor gap is merged UNDER the rule
+    // override so a user gap rule still wins per slot.
+    QVariantMap ruleGaps = reg
+        ? contextGapOverrideMap(reg->resolveContextGaps(screenId, reg->currentVirtualDesktopForScreen(screenId),
+                                                        reg->currentActivity(), QStringLiteral("snapping")))
+        : QVariantMap{};
+    return mergeConfigPerScreenGaps(std::move(ruleGaps), settings, screenId);
 }
 
 QVariantMap contextGapOverrideMap(const PhosphorZones::ContextGapOverride& gaps)
@@ -203,7 +218,7 @@ QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManager* mgr, PhosphorZo
                                  const QString& screenId, PhosphorZones::Layout* layout, ISettings* settings,
                                  PhosphorZones::IZoneLayoutRegistry* layoutRegistry)
 {
-    const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, screenId);
+    const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, settings, screenId);
     int zp = getEffectiveInnerGap(layout, settings, ruleGaps);
     ::PhosphorLayout::EdgeGaps og = getEffectiveOuterGaps(layout, settings, ruleGaps);
     return ::PhosphorZones::GeometryUtils::getZoneGeometryForScreenF(mgr, zone, screen, screenId, layout, zp, og);
@@ -213,7 +228,7 @@ QRect getZoneGeometryForScreen(PhosphorScreens::ScreenManager* mgr, PhosphorZone
                                const QString& screenId, PhosphorZones::Layout* layout, ISettings* settings,
                                PhosphorZones::IZoneLayoutRegistry* layoutRegistry)
 {
-    const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, screenId);
+    const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, settings, screenId);
     int zp = getEffectiveInnerGap(layout, settings, ruleGaps);
     ::PhosphorLayout::EdgeGaps og = getEffectiveOuterGaps(layout, settings, ruleGaps);
     return ::PhosphorZones::GeometryUtils::getZoneGeometryForScreen(mgr, zone, screen, screenId, layout, zp, og);
@@ -296,7 +311,7 @@ PhosphorProtocol::EmptyZoneList buildEmptyZoneList(PhosphorScreens::ScreenManage
     PhosphorZones::LayoutComputeService::recalculateSync(layout, effectiveScreenGeometry(mgr, layout, screen));
 
     QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-    const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, screenId);
+    const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, settings, screenId);
     int zonePadding = getEffectiveInnerGap(layout, settings, ruleGaps);
     ::PhosphorLayout::EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, ruleGaps);
 
@@ -320,7 +335,7 @@ PhosphorProtocol::EmptyZoneList buildEmptyZoneList(PhosphorScreens::ScreenManage
         QRectF effectiveGeom = useAvail && vsAvailGeom.isValid() ? QRectF(vsAvailGeom) : QRectF(vsGeom);
         PhosphorZones::LayoutComputeService::recalculateSync(layout, effectiveGeom);
 
-        const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, screenId);
+        const QVariantMap ruleGaps = currentContextGapOverride(layoutRegistry, settings, screenId);
         int zonePadding = getEffectiveInnerGap(layout, settings, ruleGaps);
         ::PhosphorLayout::EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, ruleGaps);
 

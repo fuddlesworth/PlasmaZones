@@ -182,14 +182,16 @@ public:
 
     // ── Per-page dirty split + baseline ops (rule-backed settings pages) ──────
     //
-    // The Windows appearance page and the Rules page stage into this ONE model,
-    // so the single dirty bit can't tell them apart. These value-based queries
-    // compare the current model to the last daemon-synced snapshot
-    // (`m_savedRules`) so `SettingsController` can badge each page independently:
-    // the managed baseline rules are "appearance", everything else is "rules".
+    // The Rules page stages into this model. These value-based queries compare
+    // the current model to the last daemon-synced snapshot (`m_savedRules`) so
+    // `SettingsController` can tell whether the staged rules differ. Managed
+    // rules (there are none seeded now that window appearance is config-backed)
+    // are partitioned out separately so a future managed rule would not badge the
+    // user Rules page.
 
-    /// True iff any managed baseline rule differs from the last synced snapshot
-    /// (drives the Windows appearance page's dirty state).
+    /// True iff any managed rule differs from the last synced snapshot. No
+    /// managed rules are seeded today (window appearance moved to config), so this
+    /// is currently always false; kept as the managed half of the dirty split.
     bool baselinesDirty() const;
 
     /// True iff the non-managed (user) rules differ from the last synced
@@ -197,30 +199,18 @@ public:
     bool userRulesDirty() const;
 
     /// Snapshot the current staged model as the committed baseline that
-    /// baselinesDirty/userRulesDirty compare against and discardBaselineEdits
-    /// restores to. Called internally wherever the model becomes equal to the
-    /// daemon's persisted set (the fetchAndLoad reply and a successful commit).
-    /// Public so headless tests can establish a baseline without a live daemon.
+    /// baselinesDirty/userRulesDirty compare against. Called internally wherever
+    /// the model becomes equal to the daemon's persisted set (the fetchAndLoad
+    /// reply and a successful commit). Public so headless tests can establish a
+    /// baseline without a live daemon.
     void captureSavedSnapshot();
 
-    /// Per-page "Reset to defaults" for the Windows appearance page: rewrite the
-    /// three managed baseline rules to their factory definitions
-    /// (core/baselinerules.h) — restoring the fresh-install match + actions and
-    /// dropping any per-side gap actions the page added. Staged; the global Save
-    /// flushes it. Leaves user rules untouched.
-    void resetBaselines();
-
-    /// Per-page "Discard changes" for the Windows appearance page: restore the
-    /// three managed baseline rules from the last synced snapshot, leaving every
-    /// user rule untouched.
-    void discardBaselineEdits();
-
-    /// Fire-and-forget D-Bus call asking the daemon to reset the three managed
-    /// baseline rules to factory (org.plasmazones.Rules.resetManagedDefaults),
-    /// preserving user rules. The daemon persists + broadcasts rulesChanged;
-    /// SettingsController::defaults() pairs this with revert() to reload the
-    /// model from the reset set. This is the GLOBAL Restore Defaults path (live,
-    /// daemon-persisted) — distinct from the staged per-page resetBaselines().
+    /// Fire-and-forget D-Bus call for the GLOBAL Restore Defaults path
+    /// (org.plasmazones.Rules.resetManagedDefaults): asks the daemon to strip any
+    /// stale managed appearance baseline rules left in rules.json by an older
+    /// build, preserving user rules. The daemon persists + broadcasts
+    /// rulesChanged; SettingsController::defaults() pairs this with revert() to
+    /// reload the model.
     void resetManagedDefaults();
 
     // ── Rule CRUD — keyed by UUID, never by index ─────────────────────────
@@ -402,11 +392,6 @@ Q_SIGNALS:
     /// "rules" entry to its dirty-pages set when revert failed during
     /// the `setNeedsSave(false)` blanket-clear it does for every other page.
     void revertFinished(bool success);
-    /// Emitted when the managed appearance baselines are programmatically
-    /// rewritten by `resetBaselines()` / `discardBaselineEdits()` (in-place
-    /// `updateRule`s that don't fire `rulesLoaded`). The Windows appearance page
-    /// listens so it re-reads its controls; not emitted on ordinary user edits.
-    void baselinesChanged();
 
 private:
     void setDirty(bool dirty);
@@ -483,17 +468,13 @@ private:
     /// user can then freely drag it anywhere; this only seeds the default.
     int bandSeededInsertIndex(const PhosphorRules::Rule& rule) const;
 
-    /// Recompute the global dirty bit from the snapshot after a scoped baseline
-    /// reset/discard, which mutate the model directly and so bypass the
-    /// setDirty(true) the CRUD paths call.
+    /// Recompute the global dirty bit from the snapshot after a model mutation
+    /// that bypasses the setDirty(true) the CRUD paths call.
     void recomputeDirtyFromSnapshot();
-    /// Replace the rule by id if present, else append it. Used by the baseline
-    /// reset/discard so a (theoretically) unseeded baseline is still restored.
-    void upsertRule(const PhosphorRules::Rule& rule);
 
     RuleModel m_model;
     /// The rule set as last synced with the daemon. Backs the value-based
-    /// baselinesDirty/userRulesDirty split and discardBaselineEdits' restore.
+    /// baselinesDirty/userRulesDirty split.
     QList<PhosphorRules::Rule> m_savedRules;
     bool m_dirty = false;
     bool m_daemonReachable = false;

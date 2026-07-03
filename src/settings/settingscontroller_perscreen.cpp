@@ -17,12 +17,9 @@
 
 #include "settingscontroller.h"
 
-#include "../config/configdefaults.h"
-#include "rulecontroller.h"
+#include "../config/settings.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
-
-#include <QUuid>
 
 namespace PlasmaZones {
 
@@ -84,39 +81,25 @@ void SettingsController::clearPerScreenAutotileAlgorithmSettings(const QString& 
     m_settings.clearPerScreenAutotileAlgorithmSettings(screenName);
 }
 
-// ── Per-screen gap overrides (rule-backed) ───────────────────────────────
-// A per-monitor gap override is a screen-scoped gap Rule whose id is
-// derived deterministically from the baseline gap rule + the screen's STABLE
-// EDID id (matching WindowAppearanceController::perScreenGapRuleId, the v4→v5
-// migration, and Settings::perScreenGapRuleOverrides, all of which key by the
-// canonical stable form). The Gaps card's monitor scope chip drives has/clear
-// through these; the gap controls themselves read/write the rule's actions via
-// rulesPage. Mirrors the autotile per-screen has/clear shape so the shared
-// MonitorScopeChip can drive it uniformly.
+// ── Per-screen gap overrides (config-backed) ─────────────────────────────
+// A per-monitor gap override is the gap-dimension sub-domain of the per-screen
+// autotile config store (unified — one value per monitor drives both snap and
+// tile). The Gaps card's monitor scope chip drives has/clear through these; the
+// gap controls themselves read/write via the WindowAppearanceController's
+// gapValue/writeGap invokables. The Q_INVOKABLE names keep the "…GapRule"
+// spelling the QML scope chip already binds — they are config-backed now.
 
 bool SettingsController::hasPerScreenGapRule(const QString& screenName) const
 {
-    if (screenName.isEmpty() || m_rulesPage == nullptr || m_windowAppearancePage == nullptr) {
-        return false;
-    }
-    // Single source of truth for the per-monitor gap rule id — delegate to the
-    // controller that authors it rather than re-deriving the UUID here.
-    const QString id = m_windowAppearancePage->perScreenGapRuleId(screenName);
-    return !id.isEmpty() && !m_rulesPage->ruleJson(id).isEmpty();
+    return m_settings.hasPerScreenGapOverride(screenName);
 }
 
 void SettingsController::clearPerScreenGapRule(const QString& screenName)
 {
-    if (screenName.isEmpty() || m_rulesPage == nullptr || m_windowAppearancePage == nullptr) {
-        return;
-    }
-    const QString id = m_windowAppearancePage->perScreenGapRuleId(screenName);
-    if (id.isEmpty()) {
-        return;
-    }
-    // removeRule drives RuleModel::countChanged → perScreenOverridesChanged
-    // (wired in settingscontroller.cpp), so no manual emit is needed here.
-    m_rulesPage->removeRule(id);
+    // clearPerScreenGapOverride emits perScreenAutotileSettingsChanged →
+    // perScreenOverridesChanged (wired in settingscontroller.cpp), so no manual
+    // emit is needed here.
+    m_settings.clearPerScreenGapOverride(screenName);
 }
 
 // ── Per-screen zone selector overrides ───────────────────────────────────

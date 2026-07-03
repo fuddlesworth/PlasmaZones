@@ -23,13 +23,13 @@
 #include <PhosphorTiles/AutotileConstants.h>
 // Animation duration / stagger UI bounds — generic policy, not autotile-specific.
 #include <PhosphorAnimation/AnimationLimits.h>
+// Window decoration (border + title bar) defaults — shared across the D-Bus
+// boundary with the compositor plugin so the daemon persists the same values
+// the effect renders with before the async settings load lands.
+#include <PhosphorCompositor/DecorationDefaults.h>
 
 namespace PhosphorAnimation {
 class CurveRegistry;
-}
-
-namespace PhosphorRules {
-class MatchExpression;
 }
 
 namespace PlasmaZones {
@@ -280,6 +280,66 @@ public:
     static bool labelFontStrikeout()
     {
         return false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Window Decoration Appearance (Windows.*) Settings
+    //
+    // Tiled/snapped window border + title bar defaults. Distinct from the
+    // zone-overlay border constants above: these come from the shared
+    // PhosphorCompositor::DecorationDefaults so the daemon and the compositor
+    // plugin never drift. Border colours default to the "accent" sentinel
+    // (resolved to the system accent colour at render time); the border/title-bar
+    // scope defaults to "tiled" (apply only to tiled/snapped windows).
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool windowShowBorder()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::ShowBorder;
+    }
+    static int windowBorderWidth()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
+    }
+    static constexpr int windowBorderWidthMin()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMin;
+    }
+    static constexpr int windowBorderWidthMax()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMax;
+    }
+    static int windowBorderRadius()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
+    }
+    static constexpr int windowBorderRadiusMin()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin;
+    }
+    static constexpr int windowBorderRadiusMax()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
+    }
+    static bool windowHideTitleBars()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
+    }
+    static QString windowBorderColorActive()
+    {
+        return QStringLiteral("accent");
+    }
+    static QString windowBorderColorInactive()
+    {
+        return QStringLiteral("accent");
+    }
+    static QString windowBorderScope()
+    {
+        return QStringLiteral("tiled");
+    }
+    static QString windowTitleBarScope()
+    {
+        return QStringLiteral("tiled");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -722,23 +782,6 @@ public:
     {
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000004}"));
     }
-
-    // Window-property match expressions that scope which windows the managed
-    // baseline BORDER and TITLE BAR rules apply to. These are the canonical wire
-    // shapes shared by the daemon's seeder (the fresh-install default) and the
-    // Appearance page's "Apply to" selector, so the two never drift.
-    //
-    // "Tiled and snapped" — `Any{ IsSnapped == true, IsTiled == true }` — the
-    // fresh-install default: borders and hidden title bars apply only to a window
-    // actually placed in a snap zone or managed by the autotile engine, matching
-    // the behaviour before appearance moved onto rules.
-    PLASMAZONES_EXPORT static PhosphorRules::MatchExpression tiledAndSnappedScopeMatch();
-
-    // "All normal windows" — `All{ WindowType == Normal, IsTransient == false }`
-    // — every ordinary application toplevel, excluding desktop / docks /
-    // notifications / OSDs (non-Normal types) and dialog / utility / popup / menu
-    // / tooltip / transient-child surfaces. The wider scope a user can opt into.
-    PLASMAZONES_EXPORT static PhosphorRules::MatchExpression normalWindowsScopeMatch();
 
     // Returns the absolute path to quicklayouts.json (the numbered quick-layout
     // shortcut slots 1..9). Quick-layout slots are NOT rules, so they

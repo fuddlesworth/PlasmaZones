@@ -22,9 +22,9 @@ namespace PhosphorRules {
  * contention-free.
  *
  * The store is the runtime counterpart of the config migration: @c migrateV3ToV4
- * writes the initial store as @c windowrules.json, then @c migrateV4ToV5 renames
- * it to @c rules.json and folds the per-mode appearance / gap overrides in. The
- * store reads that file on daemon start and owns every subsequent mutation.
+ * writes the initial store as @c windowrules.json, then the v4→v5 conversion
+ * renames it to @c rules.json. The store reads that file on daemon start and
+ * owns every subsequent mutation.
  *
  * Loader robustness follows the @ref RuleSet contract: a missing file
  * yields an empty set (a fresh install or a config that never had any rules),

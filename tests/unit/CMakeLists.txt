@@ -839,30 +839,6 @@ target_link_libraries(test_rule_controller
 )
 add_test(NAME test_rule_controller COMMAND test_rule_controller)
 
-# Per-page appearance Reset/Discard: shared baseline makers (in plasmazones_core)
-# + RuleController's baseline/user dirty split and resetBaselines/discardBaselineEdits.
-# Same RuleController TU set as test_rule_controller (the class spans several TUs).
-add_executable(test_baseline_reset
-    settings/test_baseline_reset.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rulemodel.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_views.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_lookups.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_baseline.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/ruletemplates.cpp
-)
-target_link_libraries(test_baseline_reset
-    PRIVATE
-        Qt6::Test
-        Qt6::Core
-        Qt6::DBus
-        PhosphorRules::PhosphorRules
-        PhosphorControl::PhosphorControl
-        plasmazones_core
-)
-add_test(NAME test_baseline_reset COMMAND test_baseline_reset)
-
 # Validation methods on D-Bus struct types - pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,
 # ApplySnap zoneId, TileRequestEntry tiled/floating size semantics, etc.)

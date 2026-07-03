@@ -145,20 +145,39 @@ PLASMAZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZone
 PLASMAZONES_EXPORT QVariantMap contextGapOverrideMap(const PhosphorZones::ContextGapOverride& gaps);
 
 /**
- * @brief Resolve the context-rule gap override for @p screenId in @p reg's
- *        CURRENT desktop/activity, as the PerScreenSnappingKey-shaped map that
- *        getEffectiveInnerGap / getEffectiveOuterGaps consume as `ruleGapOverride`.
+ * @brief Merge the config per-monitor gap override for @p screenId UNDER a
+ *        context-rule gap override, so a user gap RULE wins over the config
+ *        per-monitor default.
  *
- * Returns an empty map when there is no registry or no matching context rule, so
- * the caller falls through to the per-layout/global cascade. The registry's
- * current context is kept in sync with the compositor by the daemon, so the
- * override matches the one DaemonGeometryResolver computes on the commit path.
- * This is the preview/query-path counterpart to DaemonGeometryResolver's
- * contextGapOverrideFor — both translate the resolved context rules into the
- * same map so preview/selector geometry matches commit-time geometry.
+ * Starts from @p settings->perScreenGapOverrides(screenId) (empty when @p settings
+ * is null or the monitor has no config gap override), then inserts every entry of
+ * @p ruleOverride on top. Both maps are keyed in the same short engine form
+ * (InnerGap / OuterGap / …), so the result is a plain per-key union: config fills
+ * the tier-1 override for a monitor with a config gap, a rule overrides it per
+ * key, and a monitor with neither yields an empty map that falls through to the
+ * global config gap.
+ */
+PLASMAZONES_EXPORT QVariantMap mergeConfigPerScreenGaps(QVariantMap ruleOverride, const ISettings* settings,
+                                                        const QString& screenId);
+
+/**
+ * @brief Resolve the context-rule gap override for @p screenId in @p reg's
+ *        CURRENT desktop/activity, merged with the config per-monitor gap
+ *        override, as the PerScreenSnappingKey-shaped map that getEffectiveInnerGap
+ *        / getEffectiveOuterGaps consume as `ruleGapOverride`.
+ *
+ * Returns the config per-monitor gap (from @p settings) when there is no matching
+ * context rule, an empty map when neither is present (so the caller falls through
+ * to the per-layout/global cascade), or the per-key union with the rule winning
+ * when both exist. The registry's current context is kept in sync with the
+ * compositor by the daemon, so the override matches the one DaemonGeometryResolver
+ * computes on the commit path. This is the preview/query-path counterpart to
+ * DaemonGeometryResolver's contextGapOverrideFor — both translate the resolved
+ * context rules (merged with config per-monitor gaps) into the same map so
+ * preview/selector geometry matches commit-time geometry.
  */
 PLASMAZONES_EXPORT QVariantMap currentContextGapOverride(PhosphorZones::IZoneLayoutRegistry* reg,
-                                                         const QString& screenId);
+                                                         const ISettings* settings, const QString& screenId);
 
 using ::PhosphorZones::GeometryUtils::effectiveScreenGeometry;
 

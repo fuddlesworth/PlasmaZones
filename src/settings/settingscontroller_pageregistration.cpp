@@ -510,13 +510,13 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // revert another page's edit). When adding a page, copy the (group, key)
     // accessors verbatim from that page's getter in settings.cpp.
     //
-    // Phase-1 scope: KConfig-backed settings pages only. Rule-backed pages
-    // (window-appearance, rules), separate-store pages (layouts), the
-    // controller-mediated ordering/shortcuts pages, and the Animations tree are
-    // deliberately absent because they revert through their own machinery
-    // (the special-case branches in reset/discardPage), not because Reset/Discard
-    // is unsupported — pageSupportsReset returns true for all but the pure
-    // separate-store pages (layouts, rules).
+    // Scope: KConfig-backed settings pages. The Rules page (separate rule store),
+    // the layouts page (separate-store), the controller-mediated ordering/shortcuts
+    // pages, and the Animations tree are deliberately absent because they revert
+    // through their own machinery (the special-case branches in reset/discardPage),
+    // not because Reset/Discard is unsupported — pageSupportsReset returns true for
+    // all but the pure separate-store pages (layouts, rules). The Windows appearance
+    // page IS config-backed (Windows.* + Gaps.*), so it lists its owned keys here.
     using CD = ConfigDefaults;
     static const QHash<QString, Settings::ConfigKeyList> manifest{
         {QStringLiteral("general"),
@@ -609,6 +609,24 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::tilingAlgorithmGroup(), CD::masterCountKey()},
              {CD::tilingAlgorithmGroup(), CD::maxWindowsKey()},
              {CD::tilingAlgorithmGroup(), CD::perAlgorithmSettingsKey()},
+         }},
+        {QStringLiteral("window-appearance"),
+         {
+             {CD::windowsAppearanceGroup(), CD::showBorderKey()},
+             {CD::windowsAppearanceGroup(), CD::borderScopeKey()},
+             {CD::windowsAppearanceGroup(), CD::widthKey()},
+             {CD::windowsAppearanceGroup(), CD::radiusKey()},
+             {CD::windowsAppearanceGroup(), CD::borderColorActiveKey()},
+             {CD::windowsAppearanceGroup(), CD::borderColorInactiveKey()},
+             {CD::windowsAppearanceGroup(), CD::hideTitleBarsKey()},
+             {CD::windowsAppearanceGroup(), CD::titleBarScopeKey()},
+             {CD::gapsGroup(), CD::innerGapKey()},
+             {CD::gapsGroup(), CD::outerGapKey()},
+             {CD::gapsGroup(), CD::usePerSideOuterGapKey()},
+             {CD::gapsGroup(), CD::outerGapTopKey()},
+             {CD::gapsGroup(), CD::outerGapBottomKey()},
+             {CD::gapsGroup(), CD::outerGapLeftKey()},
+             {CD::gapsGroup(), CD::outerGapRightKey()},
          }},
         {QStringLiteral("editor"),
          {

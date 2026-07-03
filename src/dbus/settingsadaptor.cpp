@@ -401,6 +401,20 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("borderWidth", borderWidth, setBorderWidth)
     REGISTER_INT_SETTING("borderRadius", borderRadius, setBorderRadius)
     REGISTER_BOOL_SETTING("enableBlur", enableBlur, setEnableBlur)
+
+    // Window decoration appearance (config-backed default the KWin effect resolves
+    // against, with user rules overriding per slot). The two colour keys carry a
+    // hex string OR the "accent" sentinel, so they marshal as plain strings (not
+    // REGISTER_COLOR_SETTING, which would round-trip through QColor and drop the
+    // sentinel).
+    REGISTER_BOOL_SETTING("showWindowBorder", showWindowBorder, setShowWindowBorder)
+    REGISTER_STRING_SETTING("windowBorderScope", windowBorderScope, setWindowBorderScope)
+    REGISTER_INT_SETTING("windowBorderWidth", windowBorderWidth, setWindowBorderWidth)
+    REGISTER_INT_SETTING("windowBorderRadius", windowBorderRadius, setWindowBorderRadius)
+    REGISTER_STRING_SETTING("windowBorderColorActive", windowBorderColorActive, setWindowBorderColorActive)
+    REGISTER_STRING_SETTING("windowBorderColorInactive", windowBorderColorInactive, setWindowBorderColorInactive)
+    REGISTER_BOOL_SETTING("hideWindowTitleBars", hideWindowTitleBars, setHideWindowTitleBars)
+    REGISTER_STRING_SETTING("windowTitleBarScope", windowTitleBarScope, setWindowTitleBarScope)
     REGISTER_STRING_SETTING("labelFontFamily", labelFontFamily, setLabelFontFamily)
     // Custom setter with range validation (0.25-3.0) instead of REGISTER_DOUBLE_SETTING
     m_getters[QStringLiteral("labelFontSizeScale")] = [this]() {

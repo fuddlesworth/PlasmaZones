@@ -8,6 +8,9 @@
 
 #include <PhosphorSnapEngine/ISnapSettings.h>
 
+#include <QHash>
+#include <QSet>
+
 namespace PlasmaZones {
 
 /**
@@ -356,35 +359,129 @@ public:
     {
     }
 
-    // IZoneGeometrySettings — gaps are read-only getters now (the global
-    // default is rule-backed; no setters on the interface).
+    // IZoneGeometrySettings — gaps are config-backed again, so the interface
+    // carries setters. Member-backed here so tests can round-trip.
     int innerGap() const override
     {
-        return 8;
+        return m_innerGap;
+    }
+    void setInnerGap(int v) override
+    {
+        m_innerGap = v;
     }
     int outerGap() const override
     {
-        return 8;
+        return m_outerGap;
+    }
+    void setOuterGap(int v) override
+    {
+        m_outerGap = v;
     }
     bool usePerSideOuterGap() const override
     {
-        return false;
+        return m_usePerSideOuterGap;
+    }
+    void setUsePerSideOuterGap(bool v) override
+    {
+        m_usePerSideOuterGap = v;
     }
     int outerGapTop() const override
     {
-        return 8;
+        return m_outerGapTop;
+    }
+    void setOuterGapTop(int v) override
+    {
+        m_outerGapTop = v;
     }
     int outerGapBottom() const override
     {
-        return 8;
+        return m_outerGapBottom;
+    }
+    void setOuterGapBottom(int v) override
+    {
+        m_outerGapBottom = v;
     }
     int outerGapLeft() const override
     {
-        return 8;
+        return m_outerGapLeft;
+    }
+    void setOuterGapLeft(int v) override
+    {
+        m_outerGapLeft = v;
     }
     int outerGapRight() const override
     {
-        return 8;
+        return m_outerGapRight;
+    }
+    void setOuterGapRight(int v) override
+    {
+        m_outerGapRight = v;
+    }
+
+    // Window appearance (config-backed border + title-bar defaults)
+    bool showWindowBorder() const override
+    {
+        return m_showWindowBorder;
+    }
+    void setShowWindowBorder(bool v) override
+    {
+        m_showWindowBorder = v;
+    }
+    QString windowBorderScope() const override
+    {
+        return m_windowBorderScope;
+    }
+    void setWindowBorderScope(const QString& v) override
+    {
+        m_windowBorderScope = v;
+    }
+    int windowBorderWidth() const override
+    {
+        return m_windowBorderWidth;
+    }
+    void setWindowBorderWidth(int v) override
+    {
+        m_windowBorderWidth = v;
+    }
+    int windowBorderRadius() const override
+    {
+        return m_windowBorderRadius;
+    }
+    void setWindowBorderRadius(int v) override
+    {
+        m_windowBorderRadius = v;
+    }
+    QString windowBorderColorActive() const override
+    {
+        return m_windowBorderColorActive;
+    }
+    void setWindowBorderColorActive(const QString& v) override
+    {
+        m_windowBorderColorActive = v;
+    }
+    QString windowBorderColorInactive() const override
+    {
+        return m_windowBorderColorInactive;
+    }
+    void setWindowBorderColorInactive(const QString& v) override
+    {
+        m_windowBorderColorInactive = v;
+    }
+    bool hideWindowTitleBars() const override
+    {
+        return m_hideWindowTitleBars;
+    }
+    void setHideWindowTitleBars(bool v) override
+    {
+        m_hideWindowTitleBars = v;
+    }
+    QString windowTitleBarScope() const override
+    {
+        return m_windowTitleBarScope;
+    }
+    void setWindowTitleBarScope(const QString& v) override
+    {
+        m_windowTitleBarScope = v;
     }
     int adjacentThreshold() const override
     {
@@ -1043,6 +1140,39 @@ public:
         }
     }
 
+    // Per-screen autotile config (used by WindowAppearanceController's
+    // per-monitor gapValue/writeGap and the per-screen gap accessors). Stored in
+    // short-key form, mirroring the real Settings normalization so a test can
+    // write "AutotileInnerGap" and read back "InnerGap".
+    QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const override
+    {
+        return m_perScreenAutotile.value(screenIdOrName);
+    }
+    void setPerScreenAutotileSetting(const QString& screenIdOrName, const QString& key, const QVariant& value) override
+    {
+        const QString shortKey =
+            key.startsWith(QLatin1String("Autotile")) ? key.mid(QLatin1String("Autotile").size()) : key;
+        m_perScreenAutotile[screenIdOrName][shortKey] = value;
+        Q_EMIT perScreenAutotileSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+    QVariantMap perScreenGapOverrides(const QString& screenIdOrName) const override
+    {
+        static const QSet<QString> gapKeys = {
+            QStringLiteral("InnerGap"),      QStringLiteral("OuterGap"),       QStringLiteral("UsePerSideOuterGap"),
+            QStringLiteral("OuterGapTop"),   QStringLiteral("OuterGapBottom"), QStringLiteral("OuterGapLeft"),
+            QStringLiteral("OuterGapRight"),
+        };
+        QVariantMap gaps;
+        const QVariantMap all = m_perScreenAutotile.value(screenIdOrName);
+        for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
+            if (gapKeys.contains(it.key())) {
+                gaps.insert(it.key(), it.value());
+            }
+        }
+        return gaps;
+    }
+
     // Persistence (ISettings)
     void load() override
     {
@@ -1055,6 +1185,7 @@ public:
     }
 
 private:
+    QHash<QString, QVariantMap> m_perScreenAutotile;
     QString m_defaultLayoutId;
     bool m_suppressDefaultLayoutAssignment = false;
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
@@ -1090,6 +1221,23 @@ private:
     int m_editorSnapOverrideModifier = ConfigDefaults::editorSnapOverrideModifier();
     bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
     int m_fillOnDropModifier = ConfigDefaults::fillOnDropModifier();
+    // Gaps — config-backed defaults routed through ConfigDefaults.
+    int m_innerGap = ConfigDefaults::innerGap();
+    int m_outerGap = ConfigDefaults::outerGap();
+    bool m_usePerSideOuterGap = ConfigDefaults::usePerSideOuterGap();
+    int m_outerGapTop = ConfigDefaults::outerGapTop();
+    int m_outerGapBottom = ConfigDefaults::outerGapBottom();
+    int m_outerGapLeft = ConfigDefaults::outerGapLeft();
+    int m_outerGapRight = ConfigDefaults::outerGapRight();
+    // Window appearance — config-backed defaults routed through ConfigDefaults.
+    bool m_showWindowBorder = ConfigDefaults::windowShowBorder();
+    QString m_windowBorderScope = ConfigDefaults::windowBorderScope();
+    int m_windowBorderWidth = ConfigDefaults::windowBorderWidth();
+    int m_windowBorderRadius = ConfigDefaults::windowBorderRadius();
+    QString m_windowBorderColorActive = ConfigDefaults::windowBorderColorActive();
+    QString m_windowBorderColorInactive = ConfigDefaults::windowBorderColorInactive();
+    bool m_hideWindowTitleBars = ConfigDefaults::windowHideTitleBars();
+    QString m_windowTitleBarScope = ConfigDefaults::windowTitleBarScope();
 };
 
 } // namespace PlasmaZones

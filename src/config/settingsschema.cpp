@@ -35,6 +35,8 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendActivationSchema(s);
     appendBehaviorSchema(s);
     appendAutotilingSchema(s);
+    appendWindowsSchema(s);
+    appendGapsSchema(s);
 
     return s;
 }
@@ -779,6 +781,72 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
     // baseline gap rule, edited over the org.plasmazones.Rules surface.
     schema.groups[CD::tilingGapsGroup()] = {
         {CD::smartGapsKey(), CD::autotileSmartGaps(), QMetaType::Bool},
+    };
+}
+
+// ─── Windows (window decoration appearance) ─────────────────────────────────
+// Mode-neutral tiled/snapped window border + title bar. Border colours are the
+// "accent" sentinel (or a hex string) so no colour validator applies; the
+// border/title-bar scope is a free-form token ("tiled" / "normal") the
+// Appearance page and the effect agree on. Width/radius are clamped ints reusing
+// the generic Width/Radius keys (the Windows group disambiguates them from the
+// Snapping.Zones.Border keys of the same spelling).
+
+void appendWindowsSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::windowsAppearanceGroup()] = {
+        {CD::showBorderKey(), CD::windowShowBorder(), QMetaType::Bool},
+        {CD::borderScopeKey(), CD::windowBorderScope(), QMetaType::QString},
+        {CD::widthKey(),
+         CD::windowBorderWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::windowBorderWidthMin(), CD::windowBorderWidthMax())},
+        {CD::radiusKey(),
+         CD::windowBorderRadius(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::windowBorderRadiusMin(), CD::windowBorderRadiusMax())},
+        {CD::borderColorActiveKey(), CD::windowBorderColorActive(), QMetaType::QString},
+        {CD::borderColorInactiveKey(), CD::windowBorderColorInactive(), QMetaType::QString},
+        {CD::hideTitleBarsKey(), CD::windowHideTitleBars(), QMetaType::Bool},
+        {CD::titleBarScopeKey(), CD::windowTitleBarScope(), QMetaType::QString},
+    };
+}
+
+// ─── Gaps (shared inner/outer gap model) ────────────────────────────────────
+// The single inter-window gap model used by BOTH snapping and tiling. Uniform
+// inner/outer plus the per-side outer overrides (gated by UsePerSide). All ints
+// clamped to the shared gap range.
+
+void appendGapsSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::gapsGroup()] = {
+        {CD::innerGapKey(), CD::innerGap(), QMetaType::Int, {}, clampInt(CD::innerGapMin(), CD::innerGapMax())},
+        {CD::outerGapKey(), CD::outerGap(), QMetaType::Int, {}, clampInt(CD::outerGapMin(), CD::outerGapMax())},
+        {CD::usePerSideOuterGapKey(), CD::usePerSideOuterGap(), QMetaType::Bool},
+        {CD::outerGapTopKey(),
+         CD::outerGapTop(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::outerGapTopMin(), CD::outerGapTopMax())},
+        {CD::outerGapBottomKey(),
+         CD::outerGapBottom(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::outerGapBottomMin(), CD::outerGapBottomMax())},
+        {CD::outerGapLeftKey(),
+         CD::outerGapLeft(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::outerGapLeftMin(), CD::outerGapLeftMax())},
+        {CD::outerGapRightKey(),
+         CD::outerGapRight(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::outerGapRightMin(), CD::outerGapRightMax())},
     };
 }
 
