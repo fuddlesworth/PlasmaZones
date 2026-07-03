@@ -26,6 +26,7 @@ add_subdirectory(shared)
 set(plasmazones_core_SRCS
     phosphor_qml_i18n.h
     core/constants.h
+    core/baselinecleanup.h
     core/logging.h
     core/logging.cpp
     core/translationloader.h

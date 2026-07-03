@@ -1158,6 +1158,11 @@ public:
     }
     QVariantMap perScreenGapOverrides(const QString& screenIdOrName) const override
     {
+        // This set must mirror the 7 PerScreenSnappingKey gap dimensions and
+        // stay in sync with the production predicate isPerScreenGapDimensionKey
+        // (file-local in settings/perscreen.cpp, so not shareable here). A key
+        // added on one side but not the other silently drops (or leaks) a gap
+        // dimension from the stub's gap subset.
         static const QSet<QString> gapKeys = {
             QStringLiteral("InnerGap"),      QStringLiteral("OuterGap"),       QStringLiteral("UsePerSideOuterGap"),
             QStringLiteral("OuterGapTop"),   QStringLiteral("OuterGapBottom"), QStringLiteral("OuterGapLeft"),

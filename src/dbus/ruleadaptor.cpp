@@ -3,7 +3,7 @@
 
 #include "ruleadaptor.h"
 
-#include "config/configdefaults.h"
+#include "core/baselinecleanup.h"
 #include "core/logging.h"
 
 #include <PhosphorRules/Rule.h>
@@ -13,7 +13,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QSet>
 #include <QUuid>
 
 namespace PlasmaZones {
@@ -214,29 +213,12 @@ void RuleAdaptor::resetManagedDefaults()
     // on a real change).
     m_store->load();
 
-    // Window appearance (border / title bar / gap) defaults now live in the
-    // config store, not in managed baseline rules. "Restore Defaults" resets
-    // those config values on the settings side; here we only have to make sure no
-    // stale managed appearance baselines (from a config an older branch build
-    // wrote) survive in rules.json. Strip the three fixed baseline ids when
-    // managed — a user's own rule is never touched — and persist once, gated on a
-    // real removal so a clean set neither rewrites nor re-broadcasts.
-    const QSet<QUuid> staleBaselineIds = ConfigDefaults::managedAppearanceBaselineIds();
-    const QList<PhosphorRules::Rule>& currentRules = m_store->ruleSet().rules();
-    QList<PhosphorRules::Rule> keptRules;
-    keptRules.reserve(currentRules.size());
-    bool removedAny = false;
-    for (const PhosphorRules::Rule& rule : currentRules) {
-        if (rule.managed && staleBaselineIds.contains(rule.id)) {
-            removedAny = true;
-            continue;
-        }
-        keptRules.append(rule);
-    }
-    // setAllRules returns false when the set could not be persisted to disk; every
-    // other mutator slot here propagates that bool, so surface it in the log
-    // rather than silently claiming a successful Restore Defaults.
-    if (removedAny && !m_store->setAllRules(keptRules)) {
+    // Window appearance (border / title bar / gap) defaults now live in the config
+    // store, not in managed baseline rules. "Restore Defaults" resets those config
+    // values on the settings side; here we only have to strip any stale managed
+    // appearance baselines an older build left in rules.json, preserving every user
+    // rule. Shared with the daemon's startup cleanup so the two can't drift.
+    if (!stripStaleManagedAppearanceBaselines(*m_store)) {
         qCWarning(lcDbus) << "RuleAdaptor::resetManagedDefaults: failed to persist rules.json after stripping "
                              "stale baseline appearance rules";
     }

@@ -189,8 +189,9 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 // underline/strikeout toggles), Opacity (active + inactive), Border (width +
 // radius). (Effects.Blur is a zone-overlay setting too but shares the Effects
 // container declared in appendDisplaySchema.) The per-mode snapped-window
-// decoration groups that used to live here are gone — snapped-window appearance
-// is now rule-backed (the v4→v5 appearance-to-rules move).
+// decoration groups that used to live here are gone — window border and title-bar
+// appearance moved to the top-level mode-neutral Windows config group (see
+// appendWindowsSchema).
 
 void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 {
@@ -720,8 +721,9 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
 // ─── Autotiling ─────────────────────────────────────────────────────────────
 // Tiling.* has three sub-groups: Algorithm, Behavior, Gaps. Plus the top-level
 // Tiling.Enabled toggle. (The Appearance.{Colors,Decorations,Borders} groups
-// that used to live here are gone — tiled-window appearance is now rule-backed,
-// the v4→v5 appearance-to-rules move.) PerAlgorithmSettings is a JSON-encoded QVariantMap;
+// that used to live here are gone — window border and title-bar appearance moved
+// to the top-level mode-neutral Windows config group, see appendWindowsSchema.)
+// PerAlgorithmSettings is a JSON-encoded QVariantMap;
 // LockedScreens is a comma list; DragInsert triggers are a JSON list.
 
 void appendAutotilingSchema(PhosphorConfig::Schema& schema)

@@ -463,7 +463,8 @@ void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
     // Normalize autotile keys from disk format ("AutotileAlgorithm") to short format
     // ("Algorithm") that QML uses for lookup via PerScreenOverrideHelper.settingValue().
     normalizeAutotileKeys(m_perScreenAutotileSettings);
-    // No per-screen snapping group to load: snapping gaps are rule-backed.
+    // No separate per-screen snapping group to load: per-monitor gaps are unified
+    // and live in the per-screen autotile store loaded above.
     // Per-screen change signals are emitted by the caller (Settings::load()),
     // gated on a before/after comparison of each map — so they fire only when a
     // reload actually changed something, which the daemon relies on to avoid
@@ -514,7 +515,8 @@ void Settings::saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend)
     // Expand short keys back to disk format before saving
     savePerScreenOverrides(backend, ConfigDefaults::autotileScreenGroupPrefix(),
                            expandAutotileKeys(m_perScreenAutotileSettings));
-    // No per-screen snapping group to save: snapping gaps are rule-backed.
+    // No separate per-screen snapping group to save: per-monitor gaps are unified
+    // and persisted in the per-screen autotile store above.
 }
 
 // Canonical storage-key form of a screen identifier: resolve a connector name

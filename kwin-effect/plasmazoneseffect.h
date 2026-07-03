@@ -692,6 +692,16 @@ private:
     };
     WindowAppearanceDefault m_windowAppearanceDefault;
 
+    /// True when a config-default border or hidden title bar could apply to some
+    /// window. Placement-change reconciliation (invalidateRuleCacheForStateChange /
+    /// flushPendingRuleInvalidations) must run whenever this is true even with an
+    /// empty rule set, because a config default is scope-gated on placement state
+    /// (isSnapped / isTiled / normal), so a snap/unsnap changes whether it applies.
+    bool hasWindowAppearanceDefault() const
+    {
+        return m_windowAppearanceDefault.showBorder || m_windowAppearanceDefault.hideTitleBar;
+    }
+
     /// Evaluate a config-default appearance scope token against a live window.
     /// "tiled" → the window is snapped or autotile-managed; "normal" → its
     /// window type is Normal and it is not transient; "all" → always true;

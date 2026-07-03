@@ -538,7 +538,11 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
 
 void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowId)
 {
-    if (m_shaderManager.animationRuleSet().isEmpty()) {
+    // Run when there are rules OR a config-default border / hidden title bar could
+    // apply: both are scope-gated on placement state (isSnapped / isTiled / normal),
+    // so a snap / unsnap / zone change must re-resolve the window's appearance. With
+    // neither, a placement change can't change any window's appearance — skip.
+    if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault()) {
         return;
     }
     // Coalesce: a single float toggle emits BOTH windowFloatingChanged and
@@ -566,7 +570,7 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
 void PlasmaZonesEffect::flushPendingRuleInvalidations()
 {
     const QSet<QString> windowIds = std::exchange(m_pendingRuleInvalidations, {});
-    if (windowIds.isEmpty() || m_shaderManager.animationRuleSet().isEmpty()) {
+    if (windowIds.isEmpty() || (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault())) {
         return;
     }
     // The match cache is keyed on (windowId, ruleSet revision); neither moves on a

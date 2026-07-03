@@ -180,26 +180,18 @@ public:
         return m_dirty;
     }
 
-    // ── Per-page dirty split + baseline ops (rule-backed settings pages) ──────
+    // ── User-rule dirty check (the Rules page) ───────────────────────────────
     //
-    // The Rules page stages into this model. These value-based queries compare
-    // the current model to the last daemon-synced snapshot (`m_savedRules`) so
-    // `SettingsController` can tell whether the staged rules differ. Managed
-    // rules (there are none seeded now that window appearance is config-backed)
-    // are partitioned out separately so a future managed rule would not badge the
-    // user Rules page.
+    // The Rules page stages into this model. This value-based query compares the
+    // current model to the last daemon-synced snapshot (`m_savedRules`) so
+    // `SettingsController` can tell whether the staged rules differ.
 
-    /// True iff any managed rule differs from the last synced snapshot. No
-    /// managed rules are seeded today (window appearance moved to config), so this
-    /// is currently always false; kept as the managed half of the dirty split.
-    bool baselinesDirty() const;
-
-    /// True iff the non-managed (user) rules differ from the last synced
+    /// True iff the (non-managed) user rules differ from the last synced
     /// snapshot, including order (drives the Rules page's dirty state).
     bool userRulesDirty() const;
 
     /// Snapshot the current staged model as the committed baseline that
-    /// baselinesDirty/userRulesDirty compare against. Called internally wherever
+    /// userRulesDirty compares against. Called internally wherever
     /// the model becomes equal to the daemon's persisted set (the fetchAndLoad
     /// reply and a successful commit). Public so headless tests can establish a
     /// baseline without a live daemon.
@@ -468,13 +460,9 @@ private:
     /// user can then freely drag it anywhere; this only seeds the default.
     int bandSeededInsertIndex(const PhosphorRules::Rule& rule) const;
 
-    /// Recompute the global dirty bit from the snapshot after a model mutation
-    /// that bypasses the setDirty(true) the CRUD paths call.
-    void recomputeDirtyFromSnapshot();
-
     RuleModel m_model;
     /// The rule set as last synced with the daemon. Backs the value-based
-    /// baselinesDirty/userRulesDirty split.
+    /// userRulesDirty check.
     QList<PhosphorRules::Rule> m_savedRules;
     bool m_dirty = false;
     bool m_daemonReachable = false;

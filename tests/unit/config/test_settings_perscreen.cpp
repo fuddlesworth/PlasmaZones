@@ -555,6 +555,55 @@ private Q_SLOTS:
         QVERIFY(snappingSpy.count() >= 1);
     }
 
+    /**
+     * Regression: Settings::load() must fire perScreenSnappingSettingsChanged
+     * (the daemon's gap-resnap trigger) ONLY when the gap-dimension subset of
+     * the per-screen autotile store changed on a reload — never on an
+     * algorithm/split-only per-screen change. A per-monitor gap edit lands in
+     * a different Settings (the settings app), so the daemon only sees it via a
+     * reload; if that reload didn't resnap, per-monitor gaps never took effect
+     * (discussion #661). Emitting on every per-screen reload would instead make
+     * an unrelated algorithm edit resnap spuriously.
+     */
+    void testLoad_gapResnapSignalOnlyOnGapDimensionChange()
+    {
+        IsolatedConfigGuard guard;
+
+        const QString screen = QStringLiteral("DP-resnap-1");
+
+        // Seed a per-screen gap dimension plus a non-gap key on disk.
+        {
+            Settings seed;
+            seed.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 8);
+            seed.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 2);
+            seed.save();
+        }
+
+        // The spied Settings loads that seeded state on construction.
+        Settings spied;
+        QSignalSpy gapSpy(&spied, &Settings::perScreenSnappingSettingsChanged);
+
+        // Change the gap DIMENSION on disk (via a second Settings), then reload
+        // the spied instance — the gap-resnap signal must fire exactly once.
+        {
+            Settings writer;
+            writer.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 16);
+            writer.save();
+        }
+        spied.load();
+        QCOMPARE(gapSpy.count(), 1);
+
+        // Change ONLY a non-gap per-screen key on disk (the gap dimension is
+        // untouched), then reload again — the gap-resnap signal must NOT fire.
+        {
+            Settings writer;
+            writer.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 4);
+            writer.save();
+        }
+        spied.load();
+        QCOMPARE(gapSpy.count(), 1);
+    }
+
     // =========================================================================
     // P2: edge cases -- fresh config defaults
     // =========================================================================

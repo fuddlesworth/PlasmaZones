@@ -421,10 +421,9 @@ void RuleController::revert()
     fetchAndLoad(/*fromRevert=*/true);
 }
 
-// NOTE: the per-page dirty split + global managed reset methods
-// (captureSavedSnapshot, baselinesDirty, userRulesDirty, recomputeDirtyFromSnapshot,
-// resetManagedDefaults) live in rulecontroller_baseline.cpp — split out to keep
-// this TU under the 800-line cap.
+// NOTE: the user-rule dirty check + global managed reset methods
+// (captureSavedSnapshot, userRulesDirty, resetManagedDefaults) live in
+// rulecontroller_baseline.cpp — split out to keep this TU under the 800-line cap.
 
 int RuleController::bandBaseForSection(RuleModel::Section section)
 {

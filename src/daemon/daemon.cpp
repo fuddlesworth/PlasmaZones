@@ -57,6 +57,7 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
+#include "../core/baselinecleanup.h"
 #include "../core/constants.h"
 #include "../core/crosssurfaceresolver.h"
 #include "../core/geometryutils.h"
@@ -237,24 +238,8 @@ Daemon::Daemon(QObject* parent)
     // its constructor, so this runs on every startup; rulesChanged consumers are
     // wired later (createAdaptors / setup), so any emit here is inert at
     // construction time.
-    if (m_ruleStore) {
-        const QSet<QUuid> staleBaselineIds = ConfigDefaults::managedAppearanceBaselineIds();
-
-        const QList<PhosphorRules::Rule>& currentRules = m_ruleStore->ruleSet().rules();
-        QList<PhosphorRules::Rule> keptRules;
-        keptRules.reserve(currentRules.size());
-        bool removedAny = false;
-        for (const PhosphorRules::Rule& rule : currentRules) {
-            if (rule.managed && staleBaselineIds.contains(rule.id)) {
-                removedAny = true;
-                continue;
-            }
-            keptRules.append(rule);
-        }
-
-        if (removedAny && !m_ruleStore->setAllRules(keptRules)) {
-            qCWarning(lcDaemon) << "Failed to persist rules.json after stripping stale baseline appearance rules";
-        }
+    if (m_ruleStore && !stripStaleManagedAppearanceBaselines(*m_ruleStore)) {
+        qCWarning(lcDaemon) << "Failed to persist rules.json after stripping stale baseline appearance rules";
     }
 
     // Configure geometry update debounce timer
