@@ -94,8 +94,9 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("placement"), QString(), PhosphorI18n::tr("Placement"), QString(),
                QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
     // Appearance groups the visual surfaces — the window border / title-bar / gap
-    // page and the Animations tree — as an inline-collapsible category (matching
-    // Display / Placement). No QML of its own; redirects to its first leaf.
+    // page, the Animations tree, and the Decoration tree — as an
+    // inline-collapsible category (matching Display / Placement). No QML of its
+    // own; redirects to its first leaf.
     regVirtual(QStringLiteral("appearance"), QString(), PhosphorI18n::tr("Appearance"), QString(),
                QStringLiteral("preferences-desktop-theme"), /*collapsible=*/true);
     // Shared, mode-neutral page under Appearance. Edits config: the window border
@@ -117,7 +118,8 @@ void SettingsController::buildApplicationController()
     // to m_domains so applyAllAsync walks it, exactly as registerPage would
     // have, but without claiming a sidebar/registry id of its own.
     m_app->registerDomain(m_animationsPage);
-    // Decoration — a no-QML drill-down parent in the per-feature block.
+    // Decoration — a no-QML drill-down parent UNDER Appearance, alongside
+    // Windows and Animations (all visual-surface pages live in that group).
     // PER-SURFACE scope: per-surface CHAINS of decoration shader packs,
     // resolved through a DecorationProfileTree (walk-up inheritance). Each
     // surface family (window / popup) is its own alwaysEnabled root — there is
@@ -126,7 +128,7 @@ void SettingsController::buildApplicationController()
     // out to Windows / OSDs / Popups. The DecorationPageController is wired in
     // as a headless staging domain below; it has no per-page staged state —
     // dirty tracking rides the global decorationProfileTreeChanged NOTIFY loop.
-    regVirtual(QStringLiteral("decoration"), QString(), PhosphorI18n::tr("Decoration"), QString(),
+    regVirtual(QStringLiteral("decoration"), QStringLiteral("appearance"), PhosphorI18n::tr("Decoration"), QString(),
                QStringLiteral("preferences-desktop-theme"));
     // Headless staging domain — trackDomain() connects dirtyChanged + appends
     // to m_domains so applyAllAsync walks it, exactly as registerPage would,
@@ -516,9 +518,10 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
-        // "appearance" wraps the Windows page + the whole Animations tree; its
-        // collapsed badge lights if either is dirty.
-        {QStringLiteral("appearance"), QSet<QString>{QStringLiteral("window-appearance")} + kAnimationsAllLeaves},
+        // "appearance" wraps the Windows page + the whole Animations tree + the
+        // Decoration tree; its collapsed badge lights if any of them is dirty.
+        {QStringLiteral("appearance"),
+         QSet<QString>{QStringLiteral("window-appearance")} + kAnimationsAllLeaves + kDecorationAllLeaves},
         {QStringLiteral("decoration"), kDecorationAllLeaves},
         // Top-level inline-collapsible parents must also propagate
         // dirty state from their leaves — without these entries the

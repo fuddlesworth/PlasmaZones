@@ -163,6 +163,8 @@ Item {
             // AnimationEventCard.
             Kirigami.InlineMessage {
                 Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Information
                 visible: root.isParentNode ? root._editing : !root._editing
                 text: {
@@ -180,6 +182,8 @@ Item {
             // one-click remediation (mirrors AnimationEventCard).
             Kirigami.InlineMessage {
                 Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Warning
                 visible: root.isParentNode && root._shadowingChildrenCount > 0
                 text: i18np("%n descendant surface has its own override that shadows this parent.", "%n descendant surfaces have overrides that shadow this parent.", root._shadowingChildrenCount)
@@ -197,6 +201,10 @@ Item {
 
             Label {
                 Layout.fillWidth: true
+                // Inset to match the rows / banners in this card instead of
+                // hugging the left edge.
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
                 visible: !root._editing
                 text: i18n("Current: %1", root._resolvedSummary())
                 font.italic: true
@@ -207,6 +215,8 @@ Item {
             // ── Override editor ───────────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
                 visible: root._editing
                 spacing: Kirigami.Units.largeSpacing
 

@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.plasmazones.common as PZCommon
 
 /**
@@ -96,17 +97,6 @@ ColumnLayout {
         return next;
     }
 
-    function _withMoved(index, delta) {
-        var next = (root.chain || []).slice();
-        var target = index + delta;
-        if (index < 0 || index >= next.length || target < 0 || target >= next.length)
-            return next;
-        var tmp = next[index];
-        next[index] = next[target];
-        next[target] = tmp;
-        return next;
-    }
-
     spacing: Kirigami.Units.smallSpacing
 
     // ── Empty state ──────────────────────────────────────────────────────
@@ -119,109 +109,205 @@ ColumnLayout {
     }
 
     // ── Pack rows ────────────────────────────────────────────────────────
-    Repeater {
-        model: root.chain
+    // The chain is a reorderable stack of expandable rows — the SAME UX model
+    // as the rules priority list — so it reuses the shared ReorderableColumn:
+    // drag the grip handle to reorder, expand a row to edit that pack's params.
+    // The chain is an array of pack-id strings, so the item id IS the string.
+    ReorderableColumn {
+        id: packList
 
-        delegate: ColumnLayout {
+        Layout.fillWidth: true
+        visible: root.chain && root.chain.length > 0
+        items: root.chain || []
+        // Collapsed pack row (bold name + one-line description + margins) is
+        // shorter than a rule row, so pin the grip band to fit it.
+        headerRowHeight: Kirigami.Units.gridUnit * 3
+        idOf: function (item) {
+            return item;
+        }
+        onMoveRequested: function (fromIndex, toIndex) {
+            var next = (root.chain || []).slice();
+            if (fromIndex < 0 || fromIndex >= next.length || toIndex < 0 || toIndex >= next.length)
+                return;
+            var moved = next.splice(fromIndex, 1)[0];
+            next.splice(toIndex, 0, moved);
+            root.chainChangeRequested(next);
+        }
+
+        // Each pack is an expandable row modelled on RuleRow: a compact header
+        // (name + one-line description · remove · expand chevron) that drills
+        // open to the pack's inline parameter editor. Collapsed by default so a
+        // multi-pack chain reads as a tidy list. An ItemDelegate (not a custom
+        // Rectangle) so the row's hover/press highlight is byte-identical to a
+        // RuleRow — same control background, no bespoke frame.
+        rowDelegate: ItemDelegate {
             id: packDelegate
 
-            required property string modelData
-            required property int index
-
-            readonly property var _effect: root._effectFor(packDelegate.modelData)
+            readonly property string packId: parent.rowModelData
+            readonly property var _effect: root._effectFor(packDelegate.packId)
             readonly property var _schema: (packDelegate._effect && packDelegate._effect.parameters) ? packDelegate._effect.parameters : []
-            readonly property var _values: (root.packParameters && root.packParameters[packDelegate.modelData]) ? root.packParameters[packDelegate.modelData] : root._emptyParams
+            readonly property var _values: (root.packParameters && root.packParameters[packDelegate.packId]) ? root.packParameters[packDelegate.packId] : root._emptyParams
+            readonly property string _description: (packDelegate._effect && packDelegate._effect.description) ? packDelegate._effect.description : ""
+            readonly property bool _hasParams: packDelegate._schema.length > 0
+            property bool expanded: false
 
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-
-                Label {
-                    Layout.fillWidth: true
-                    text: root._displayName(packDelegate.modelData)
-                    elide: Text.ElideRight
-                }
-
-                ToolButton {
-                    enabled: packDelegate.index > 0
-                    icon.name: "arrow-up"
-                    display: ToolButton.IconOnly
-                    Accessible.name: i18n("Move %1 up", root._displayName(packDelegate.modelData))
-                    onClicked: root.chainChangeRequested(root._withMoved(packDelegate.index, -1))
-                }
-
-                ToolButton {
-                    enabled: packDelegate.index < (root.chain ? root.chain.length - 1 : 0)
-                    icon.name: "arrow-down"
-                    display: ToolButton.IconOnly
-                    Accessible.name: i18n("Move %1 down", root._displayName(packDelegate.modelData))
-                    onClicked: root.chainChangeRequested(root._withMoved(packDelegate.index, 1))
-                }
-
-                ToolButton {
-                    icon.name: "edit-delete-remove"
-                    display: ToolButton.IconOnly
-                    Accessible.name: i18n("Remove %1", root._displayName(packDelegate.modelData))
-                    onClicked: root.chainChangeRequested(root._withRemoved(packDelegate.index))
-                }
+            hoverEnabled: true
+            padding: Kirigami.Units.smallSpacing
+            // Whole-row click toggles expansion, exactly like RuleRow. The
+            // trailing button, chevron, and the param controls in the expanded
+            // body consume their own clicks, so they never reach this handler.
+            onClicked: {
+                if (packDelegate._hasParams)
+                    packDelegate.expanded = !packDelegate.expanded;
             }
 
-            // ── Per-pack parameters ──────────────────────────────────────
-            // Shown inline whenever the pack declares parameters.
-            // Reuses the shared ShaderParamsEditor — the same
-            // editor + colour dialog + lock / randomize host the animation
-            // profile editor and App-Rules action row use — so the Border
-            // pack's colour swatches open the picker and lock / randomize
-            // behave identically to the animation pages.
-            PZCommon.ShaderParamsEditor {
-                Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                visible: packDelegate._schema.length > 0
+            contentItem: ColumnLayout {
+                id: packCol
 
-                compact: true
-                enableGroups: true
-                enableLocking: true
-                enableRandomize: true
-                enableImage: false
-                parameters: packDelegate._schema
-                currentValues: packDelegate._values
-                effectId: packDelegate.modelData
-                onValueChanged: function (effectId, paramId, value) {
-                    root.paramChangeRequested(effectId, paramId, value);
+                spacing: Kirigami.Units.smallSpacing
+
+                // ── Header row: name + description · remove · chevron ────────
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: root._displayName(packDelegate.packId)
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            visible: packDelegate._description.length > 0
+                            text: packDelegate._description
+                            opacity: 0.7
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    ToolButton {
+                        icon.name: "edit-delete-remove"
+                        display: ToolButton.IconOnly
+                        Accessible.name: i18n("Remove %1", root._displayName(packDelegate.packId))
+                        onClicked: {
+                            var idx = (root.chain || []).indexOf(packDelegate.packId);
+                            if (idx >= 0)
+                                root.chainChangeRequested(root._withRemoved(idx));
+                        }
+                    }
+
+                    // Expand chevron — a passive disclosure indicator that
+                    // rotates 90° when open (RuleRow pattern). The whole-row
+                    // click owns the toggle; this carries no handler so it
+                    // doesn't double-fire against it.
+                    Kirigami.Icon {
+                        visible: packDelegate._hasParams
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.leftMargin: Kirigami.Units.smallSpacing
+                        Layout.rightMargin: Kirigami.Units.smallSpacing
+                        source: "arrow-right"
+                        opacity: 0.6
+                        rotation: packDelegate.expanded ? 90 : 0
+
+                        Behavior on rotation {
+                            PhosphorMotionAnimation {
+                                profile: "widget.hover"
+                                durationOverride: Kirigami.Units.shortDuration
+                            }
+                        }
+                    }
                 }
-                onRandomizeRequested: function (rolled) {
-                    root.paramsRandomizeRequested(packDelegate.modelData, rolled);
+
+                // ── Expansion area: the pack's inline parameter editor ───────
+                // Animated open/collapse mirroring RuleRow's expansion. Reuses
+                // the shared ShaderParamsEditor — the same editor + colour
+                // dialog + lock / randomize the animation pages and App-Rules
+                // action row use — so behaviour is identical everywhere.
+                Item {
+                    id: paramsClip
+
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.smallSpacing
+                    clip: true
+                    Layout.preferredHeight: packDelegate.expanded ? paramsEditor.implicitHeight + Kirigami.Units.smallSpacing : 0
+                    opacity: packDelegate.expanded ? 1 : 0
+                    visible: Layout.preferredHeight > 0 || opacity > 0
+
+                    Behavior on Layout.preferredHeight {
+                        PhosphorMotionAnimation {
+                            profile: packDelegate.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
+                            durationOverride: Kirigami.Units.shortDuration
+                        }
+                    }
+
+                    Behavior on opacity {
+                        PhosphorMotionAnimation {
+                            profile: packDelegate.expanded ? "widget.fadeIn" : "widget.fadeOut"
+                            durationOverride: Kirigami.Units.shortDuration
+                        }
+                    }
+
+                    PZCommon.ShaderParamsEditor {
+                        id: paramsEditor
+
+                        width: paramsClip.width
+                        compact: true
+                        enableGroups: true
+                        enableLocking: true
+                        enableRandomize: true
+                        enableImage: false
+                        parameters: packDelegate._schema
+                        currentValues: packDelegate._values
+                        effectId: packDelegate.packId
+                        onValueChanged: function (effectId, paramId, value) {
+                            root.paramChangeRequested(effectId, paramId, value);
+                        }
+                        onRandomizeRequested: function (rolled) {
+                            root.paramsRandomizeRequested(packDelegate.packId, rolled);
+                        }
+                    }
                 }
             }
         }
     }
 
+    // Divider between the pack stack and the add action, so the "Add
+    // decoration pack" row reads as a separate affordance rather than running
+    // into the last pack's card.
+    SettingsSeparator {
+        Layout.topMargin: Kirigami.Units.smallSpacing
+        visible: root.chain && root.chain.length > 0
+    }
+
     // ── Add row ──────────────────────────────────────────────────────────
-    RowLayout {
+    // Compact right-aligned pack picker in a labelled SettingsRow, matching the
+    // animation "Shader effect" selector (PZCommon.CategoryMenuButton) rather
+    // than a full-width dropdown bar. It is an ACTION, not a persistent
+    // selection: selecting a pack appends it to the chain, so currentId stays
+    // empty and the button always shows its placeholder.
+    SettingsRow {
         Layout.fillWidth: true
-        spacing: Kirigami.Units.smallSpacing
+        title: i18n("Add decoration pack")
+        description: root._addableEffects().length > 0 ? i18n("Stack another pack onto this surface's chain") : i18n("All installed packs are already in the chain")
 
-        ComboBox {
-            id: addCombo
-
+        PZCommon.CategoryMenuButton {
             Layout.fillWidth: true
-            Accessible.name: i18n("Add decoration pack")
-            model: root._addableEffects()
-            textRole: "name"
-            valueRole: "id"
-            enabled: count > 0
-            displayText: count > 0 ? i18n("Add a decoration pack…") : i18n("All installed packs are in the chain")
-            // Keep the placeholder visible rather than latching a selection.
-            currentIndex: -1
-            onActivated: function (index) {
-                var items = root._addableEffects();
-                if (index >= 0 && index < items.length) {
-                    root.chainChangeRequested(root._withAppended(items[index].id));
-                    addCombo.currentIndex = -1;
-                }
+            enabled: root._addableEffects().length > 0
+            items: root._addableEffects()
+            currentId: ""
+            includeNoneEntry: false
+            placeholderText: i18nc("@action:button", "Add a pack…")
+            onSelected: function (id) {
+                if (id && id.length > 0)
+                    root.chainChangeRequested(root._withAppended(id));
             }
         }
     }

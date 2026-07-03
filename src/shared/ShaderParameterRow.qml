@@ -57,7 +57,8 @@ Item {
     /// `compact` is false — non-compact rows let the slider fill width.
     property int sliderControlWidth: Kirigami.Units.gridUnit * 16
     property int colorButtonSize: compact ? Kirigami.Units.gridUnit * 2 : Kirigami.Units.gridUnit * 3
-    property int colorLabelWidth: compact ? Kirigami.Units.gridUnit * 5 : Kirigami.Units.gridUnit * 7
+    // Sized for the 9-char #AARRGGBB hex the swatch label shows (alpha-first).
+    property int colorLabelWidth: compact ? Kirigami.Units.gridUnit * 6 : Kirigami.Units.gridUnit * 8
     readonly property string paramType: paramData ? (paramData.type || "") : ""
     readonly property bool isSvgImage: paramType === "image" && imagePickerButton.currentPath.length > 0 && (imagePickerButton.currentPath.toLowerCase().endsWith(".svg") || imagePickerButton.currentPath.toLowerCase().endsWith(".svgz"))
 
@@ -300,7 +301,16 @@ Item {
 
         Label {
             visible: paramDelegate.paramType === "color"
-            text: colorSwatch.currentColor.toString().toUpperCase()
+            // #AARRGGBB (alpha-first), not currentColor.toString() — the latter
+            // emits #RRGGBB and hides the alpha channel this param carries.
+            // Mirrors ColorSwatchRow's display and the stored wire form.
+            text: {
+                function pad(v) {
+                    return Math.round(v * 255).toString(16).padStart(2, '0');
+                }
+                var c = colorSwatch.currentColor;
+                return ("#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b)).toUpperCase();
+            }
             Layout.preferredWidth: paramDelegate.colorLabelWidth
             font: Kirigami.Theme.fixedWidthFont
             opacity: 0.7

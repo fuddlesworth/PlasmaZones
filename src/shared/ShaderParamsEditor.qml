@@ -119,11 +119,21 @@ ColumnLayout {
         property string paramName: ""
 
         title: paramName.length > 0 ? i18nc("@title:window", "Choose %1", paramName) : i18nc("@title:window", "Pick color")
+        // Encode as `#AARRGGBB` (alpha-first) rather than selectedColor.toString():
+        // Qt's color.toString() emits `#RRGGBB` and DROPS the alpha channel, so a
+        // translucent pick would silently become opaque. Mirrors ActionRow /
+        // ColorSwatchRow and the QColor::HexArgb form the C++ consumer parses.
+        function _toHexArgb(c) {
+            function pad(v) {
+                return Math.round(v * 255).toString(16).padStart(2, '0');
+            }
+            return "#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b);
+        }
         onAccepted: {
             if (paramId === "" || effectId === "")
                 return;
 
-            root.valueChanged(effectId, paramId, selectedColor.toString());
+            root.valueChanged(effectId, paramId, colorDialog._toHexArgb(selectedColor));
         }
     }
 }
