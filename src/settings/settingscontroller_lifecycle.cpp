@@ -269,13 +269,13 @@ void SettingsController::defaults()
     // Notify daemon to reload — reset() wrote defaults to disk
     DaemonDBus::notifyReload();
 
-    // Reset the rule-backed appearance/gap baselines to factory. The KConfig
-    // reset() above cannot reach them — window border / title bar / gaps live on
-    // the daemon's managed baseline rules in rules.json. resetManagedDefaults()
-    // asks the daemon to overwrite just those three (preserving user rules) and
-    // broadcast rulesChanged; the paired revert() reloads the model from the
-    // reset set (ordered after the reset on the same D-Bus connection) and drops
-    // any staged rule edits, so the Windows appearance page shows factory values.
+    // Reset the daemon's managed baseline rules to factory and drop any staged
+    // rule edits. resetManagedDefaults() asks the daemon to overwrite just the
+    // managed baselines (preserving user rules) and broadcast rulesChanged; the
+    // paired revert() reloads the model from the reset set (ordered after the
+    // reset on the same D-Bus connection). The window border / title bar / gap
+    // values are plain config now (reset by m_settings.reset() above), so this is
+    // purely about the daemon-side managed rules, not the Windows appearance page.
     if (m_rulesPage) {
         m_rulesPage->resetManagedDefaults();
         m_rulesPage->revert();
@@ -288,16 +288,17 @@ void SettingsController::defaults()
     // a spurious `dirtyPagesChanged`, matching the emit-on-change
     // discipline used by `setNeedsSave` everywhere else in this file.
     //
-    // "rules" and "window-appearance" are INTENTIONALLY excluded from the
-    // blanket-mark: both are rule-backed (their source of truth is the daemon's
-    // `rules.json`, not the KConfig store reset() clears). The appearance/gap
-    // baselines ARE reset above (resetManagedDefaults + revert), but that path is
-    // LIVE (daemon-persisted, model reloaded) rather than staged — so the pages
-    // land clean, not dirty. Marking them here would surface a stale "unsaved
-    // changes" indicator a subsequent Save could never clear.
+    // "rules" is INTENTIONALLY excluded from the blanket-mark: it is rule-backed
+    // (its source of truth is the daemon's `rules.json`, not the KConfig store
+    // reset() clears). The managed baselines ARE reset above (resetManagedDefaults
+    // + revert), but that path is LIVE (daemon-persisted, model reloaded) rather
+    // than staged — so the Rules page lands clean, not dirty. Marking it here would
+    // surface a stale "unsaved changes" indicator a subsequent Save could never
+    // clear. The Windows appearance page is a plain config page now (its Windows.*
+    // / Gaps.* keys were reset by m_settings.reset()), so it stays in the blanket
+    // mark like every other config page.
     QSet<QString> fullSet = validPageNames();
     fullSet.remove(QStringLiteral("rules"));
-    fullSet.remove(QStringLiteral("window-appearance"));
     m_loading = false;
     if (m_dirtyPages != fullSet) {
         m_dirtyPages = fullSet;

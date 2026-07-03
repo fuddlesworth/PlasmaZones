@@ -907,9 +907,10 @@ private Q_SLOTS:
         baseline.match = PWR::MatchExpression{}; // catch-all All{}
         baseline.actions = {intGapAction(PWR::ActionType::SetInnerGap, 4)};
 
-        // A non-managed per-monitor gap override for DP-1 (inner = 20), the shape
-        // the Appearance page's monitor scope authors. Its deterministic id is
-        // namespaced under the baseline gap rule (mirrors perScreenGapRuleId).
+        // A non-managed per-monitor gap override RULE for DP-1 (inner = 20). The
+        // settings page authors per-monitor gaps as config now, but the rule
+        // cascade still resolves a hand-authored gap rule keyed on a v5 id
+        // namespaced under the baseline gap id — this pins that cascade behavior.
         PWR::Rule perScreen;
         perScreen.id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), QByteArrayLiteral("DP-1"));
         perScreen.name = QStringLiteral("Gaps (DP-1)");
@@ -1235,13 +1236,14 @@ private Q_SLOTS:
 
     // ─── Per-monitor gap beats a global per-mode gap (specificity, not priority) ─
     // A per-monitor (ScreenId-pinned) gap override and a global per-mode
-    // (Mode-pinned) gap rule can both match the same window/slot. The v4 cascade
-    // had the monitor-specific value win; the v4→v5 migration even seeds the
-    // per-mode rule at a HIGHER raw priority (500) than the per-screen rule (300).
-    // resolveContextGaps must therefore order the slot by MATCH SPECIFICITY
-    // (ScreenId-pinned > Mode-pinned), so the per-monitor override wins despite its
-    // lower priority — while a slot the per-monitor rule does NOT carry still falls
-    // through to the per-mode rule.
+    // (Mode-pinned) gap rule can both match the same window/slot. A hand-authored
+    // per-mode gap rule can even carry a HIGHER raw priority (500) than a
+    // per-screen rule (300). resolveContextGaps must therefore order the slot by
+    // MATCH SPECIFICITY (ScreenId-pinned > Mode-pinned), so the per-monitor
+    // override wins despite its lower priority, while a slot the per-monitor rule
+    // does NOT carry still falls through to the per-mode rule. (Appearance/gaps are
+    // config-backed now, so migration creates no gap rules; these are authored
+    // directly to pin the cascade contract.)
     void testPerScreenGapBeatsPerModeGap()
     {
         const auto intGapAction = [](QLatin1StringView type, int value) {
@@ -1253,13 +1255,13 @@ private Q_SLOTS:
 
         RegistryFixture f = makeRegistryFixture();
 
-        // Global per-mode gap (the migrated snapping/tiling gap): higher raw
-        // priority, carries both inner and outer gap.
+        // Global per-mode gap rule: higher raw priority, carries both inner and
+        // outer gap.
         PWR::Rule perMode;
         perMode.id = QUuid::createUuid();
         perMode.name = QStringLiteral("Tiling gaps");
         perMode.enabled = true;
-        perMode.priority = 500; // migration's per-mode seed — deliberately higher
+        perMode.priority = 500; // the per-mode rule's priority — deliberately higher
         perMode.match =
             PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("tiling"));
         perMode.actions = {intGapAction(PWR::ActionType::SetInnerGap, 14),
@@ -1270,7 +1272,7 @@ private Q_SLOTS:
         perScreen.id = QUuid::createUuid();
         perScreen.name = QStringLiteral("Gaps (DP-1)");
         perScreen.enabled = true;
-        perScreen.priority = 300; // migration's per-screen seed — deliberately lower
+        perScreen.priority = 300; // the per-monitor rule's priority — deliberately lower
         perScreen.match =
             PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
         perScreen.actions = {intGapAction(PWR::ActionType::SetInnerGap, 20)};

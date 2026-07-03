@@ -99,6 +99,102 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // Schema validStringOr validator (unknown closed-set scope token)
+    // =========================================================================
+
+    /**
+     * The validStringOr validator wired into the Windows group's BorderScope /
+     * TitleBarScope keys must snap an unknown on-disk token to the default
+     * ("tiled"). The scope is a closed set ("tiled" / "normal" / "all") the
+     * Appearance page and the effect agree on, so a hand-edited garbage token
+     * must never flow through to the effect.
+     */
+    void testReadValidatedScope_unknownToken_snapsToDefault()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::borderScopeKey(), QStringLiteral("garbage"));
+            windows->writeString(ConfigDefaults::titleBarScopeKey(), QStringLiteral("garbage"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        // Both scopes fall back to the schema default (=="tiled").
+        QCOMPARE(settings.windowBorderScope(), ConfigDefaults::windowBorderScope());
+        QCOMPARE(settings.windowTitleBarScope(), ConfigDefaults::windowTitleBarScope());
+    }
+
+    /**
+     * Sanity baseline: a valid closed-set token round-trips untouched, so the
+     * unknown-token test above isn't masking a validator that snaps everything
+     * to the default.
+     */
+    void testReadValidatedScope_validToken_preserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::borderScopeKey(), QStringLiteral("normal"));
+            windows->writeString(ConfigDefaults::titleBarScopeKey(), QStringLiteral("all"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowBorderScope(), QStringLiteral("normal"));
+        QCOMPARE(settings.windowTitleBarScope(), QStringLiteral("all"));
+    }
+
+    /**
+     * A hand-edited garbage border colour (neither the "accent" sentinel nor a
+     * valid QColor) snaps to the schema default so garbage can't flow to the
+     * effect; a valid hex round-trips untouched.
+     */
+    void testReadValidatedBorderColor_garbageSnaps_hexPreserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::borderColorActiveKey(), QStringLiteral("not-a-color"));
+            windows->writeString(ConfigDefaults::borderColorInactiveKey(), QStringLiteral("#FF3DAEE9"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowBorderColorActive(), ConfigDefaults::windowBorderColorActive());
+        QCOMPARE(settings.windowBorderColorInactive(), QStringLiteral("#FF3DAEE9"));
+    }
+
+    /**
+     * The "accent" sentinel is a valid border-colour value (the effect resolves it
+     * to the live system colour), so validation must leave it untouched.
+     */
+    void testReadValidatedBorderColor_accentPreserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::borderColorActiveKey(), QStringLiteral("accent"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowBorderColorActive(), QStringLiteral("accent"));
+    }
+
+    // =========================================================================
     // Trigger list JSON parse (invalid JSON + max-size cap)
     // =========================================================================
 

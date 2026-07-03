@@ -14,17 +14,23 @@ namespace PlasmaZones {
 
 QVariantMap DaemonGeometryResolver::contextGapOverrideFor(const QString& screenId) const
 {
-    if (!m_layoutRegistry || screenId.isEmpty()) {
+    if (screenId.isEmpty()) {
         return {};
     }
-    const int virtualDesktop = m_currentVirtualDesktop ? m_currentVirtualDesktop(screenId) : 0;
-    const QString activity = m_currentActivity ? m_currentActivity() : QString();
     // Translation to the PerScreenSnappingKey-shaped map is shared with the
     // preview/query geometry helpers via GeometryUtils::contextGapOverrideMap.
     // This is the snap-commit geometry path, so resolve against the "snapping"
     // placement mode — a per-mode `Mode Equals "snapping"` gap rule applies here.
-    return GeometryUtils::contextGapOverrideMap(
-        m_layoutRegistry->resolveContextGaps(screenId, virtualDesktop, activity, QStringLiteral("snapping")));
+    // The config per-monitor gap is merged UNDER the rule override so a user gap
+    // rule still wins per slot, while a monitor with only a config gap gets it.
+    QVariantMap ruleGaps;
+    if (m_layoutRegistry) {
+        const int virtualDesktop = m_currentVirtualDesktop ? m_currentVirtualDesktop(screenId) : 0;
+        const QString activity = m_currentActivity ? m_currentActivity() : QString();
+        ruleGaps = GeometryUtils::contextGapOverrideMap(
+            m_layoutRegistry->resolveContextGaps(screenId, virtualDesktop, activity, QStringLiteral("snapping")));
+    }
+    return GeometryUtils::mergeConfigPerScreenGaps(std::move(ruleGaps), m_settings, screenId);
 }
 
 int DaemonGeometryResolver::resolveInnerGap(PhosphorZones::Layout* layout, const QString& screenId) const

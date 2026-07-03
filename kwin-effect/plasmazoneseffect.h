@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <PhosphorCompositor/AutotileState.h>
+#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorCompositor/DecorationManager.h>
 #include <PhosphorCompositor/ICompositorBridge.h>
 #include <PhosphorEngine/EngineTypes.h>
@@ -49,6 +50,7 @@
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
+#include "plasmazoneseffect/shader_resolve.h"
 #include "plasmazoneseffect/types.h"
 
 namespace KWin {
@@ -683,6 +685,53 @@ private:
     QColor m_borderAccentColor;
     QColor m_borderInactiveColor;
 
+    // Config-backed window-decoration appearance default. Window appearance
+    // resolves as: this default (each slot gated by its scope token) filling the
+    // slots the user's per-window rules left unset — rules still win per slot.
+    // Pushed from the daemon over the settings D-Bus wire in loadCachedSettings,
+    // re-fetched on every settingsChanged. The two colour strings carry a hex
+    // "#AARRGGBB" OR the "accent" sentinel (resolved to m_borderAccentColor /
+    // m_borderInactiveColor at merge time, mirroring the rule colour path).
+    // Scope tokens live in PhosphorCompositor::WindowAppearanceScope: "tiled"
+    // (snapped OR autotile-managed), "normal" (Normal type AND not transient),
+    // "all" (every window). Defaults match ConfigDefaults::windowBorderScope().
+    struct WindowAppearanceDefault
+    {
+        bool showBorder = false;
+        QString borderScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
+        int borderWidth = 0;
+        int borderRadius = 0;
+        QString activeColor;
+        QString inactiveColor;
+        bool hideTitleBar = false;
+        QString titleBarScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
+    };
+    WindowAppearanceDefault m_windowAppearanceDefault;
+
+    /// True when a config-default border or hidden title bar could apply to some
+    /// window. Placement-change reconciliation (invalidateRuleCacheForStateChange /
+    /// flushPendingRuleInvalidations) must run whenever this is true even with an
+    /// empty rule set, because a config default is scope-gated on placement state
+    /// (isSnapped / isTiled / normal), so a snap/unsnap changes whether it applies.
+    bool hasWindowAppearanceDefault() const
+    {
+        return m_windowAppearanceDefault.showBorder || m_windowAppearanceDefault.hideTitleBar;
+    }
+
+    /// Evaluate a config-default appearance scope token against a live window.
+    /// "tiled" → the window is snapped or autotile-managed; "normal" → its
+    /// window type is Normal and it is not transient; "all" → always true;
+    /// any other token → false (the default contributes nothing).
+    bool windowMatchesAppearanceScope(const QString& scope, KWin::EffectWindow* w, const QString& windowId) const;
+
+    /// Resolve @p windowId's effective window-decoration appearance: the user's
+    /// per-window rule appearance (when any rules exist) with every slot it left
+    /// unset filled from the config default in m_windowAppearanceDefault, each
+    /// default slot gated by its scope token. Rules win per slot. Used by both
+    /// the border draw path and the title-bar reconcile so config-backed
+    /// defaults apply even with an empty rule set.
+    ResolvedWindowAppearance resolveEffectiveWindowAppearance(KWin::EffectWindow* w, const QString& windowId) const;
+
     // The window most recently passed to slotWindowActivated — i.e. the
     // "previously active" window on the next focus change. Used to repaint the
     // window that just lost focus so a focus-scoped (IsFocused) SetOpacity rule
@@ -927,10 +976,19 @@ private:
     /// daemon's ConfigDefaults::decorationProfileTree()) so the pre-fetch state
     /// is well-defined. Called once from the constructor. The tree carries only
     /// the user-applied surface-shader pack stack; border and title-bar
-    /// appearance are rule-owned and render correctly before the fetch, so no
-    /// placeholder is built. The daemon's async `decorationProfileTreeJson`
-    /// fetch overwrites the whole tree on arrival.
+    /// appearance are resolved host-side (config-default appearance + rules)
+    /// and render correctly before the fetch, so no placeholder is built. The
+    /// daemon's async `decorationProfileTreeJson` fetch overwrites the whole
+    /// tree on arrival.
     void seedDecorationTreeBaseline();
+
+    /// Coalesce a full border sweep to the end of the event-loop turn. The
+    /// config-default appearance loaders (and the accent / inactive colour
+    /// loaders) each land as a separate async settings reply; several arriving in
+    /// one turn would otherwise each run a full updateAllBorders(). Collapsing them
+    /// to a single deferred sweep keeps the last-value result while doing the work
+    /// once. The sweep still lands before the next paint.
+    void scheduleBorderSweep();
 
     /// Drop the per-rule match cache and refresh @p windowId's border /
     /// opacity after its placement state (snapped / floating / zone) changed.
@@ -964,14 +1022,6 @@ private:
     /// and forward it to the DecorationManager as a tri-state rule override
     /// (unset = mode decides, true = rule hides, false = force-show veto).
     void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
-
-    /// Clear every DecorationManager rule override (Rule owners + force-show
-    /// vetoes). Called when the rule set empties (updateAllBorders) so a
-    /// rule-hidden title bar is never left hidden after the authoritative
-    /// rule state is gone. Daemon loss / effect teardown do NOT route here —
-    /// they call DecorationManager::restoreAll(), which clears rule
-    /// overrides along with all other tracking.
-    void restoreAllRuleHiddenTitleBars();
 
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
@@ -1245,6 +1295,11 @@ private:
     // flushed once by flushPendingRuleInvalidations(). Coalesces the double
     // invalidation a float toggle triggers (windowFloatingChanged + windowStateChanged).
     QSet<QString> m_pendingRuleInvalidations;
+
+    // Set while a coalesced border sweep is queued for the end of the turn (see
+    // scheduleBorderSweep); collapses a burst of appearance-setting replies into
+    // one updateAllBorders().
+    bool m_borderSweepPending = false;
 
     // Cached daemon D-Bus service registration state.
     // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid

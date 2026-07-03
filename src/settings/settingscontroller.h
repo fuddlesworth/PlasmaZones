@@ -196,10 +196,11 @@ public:
 
     // ── Per-page Reset / Discard (kebab menu in the breadcrumb row) ──────────
     /// True when @p page can be reset to defaults: config-manifest pages (schema
-    /// defaults), the ordering pages (drop the custom order), the shortcuts pages
-    /// (unassign every quick slot), the virtual screens page (unsplit every
-    /// monitor), the Windows appearance page (reset the 3 managed baseline
-    /// rules), and the animation pages (clear overrides + reset animation keys).
+    /// defaults — this includes the Windows appearance page, whose Windows.* /
+    /// Gaps.* keys are plain config), the ordering pages (drop the custom order),
+    /// the shortcuts pages (unassign every quick slot), the virtual screens page
+    /// (unsplit every monitor), and the animation pages (clear overrides + reset
+    /// animation keys).
     Q_INVOKABLE bool pageSupportsReset(const QString& page) const;
 
     /// True when @p page can discard its own unsaved edits. Currently every page
@@ -210,8 +211,8 @@ public:
 
     /// Reset every config key owned by @p page to its schema default, staged
     /// for the user to Save or Discard (never persisted here). Manifest pages
-    /// reset their keys; the ordering / shortcuts / virtual-screens / window-
-    /// appearance / animation pages reset through their own staged machinery.
+    /// (including Windows appearance) reset their keys; the ordering / shortcuts /
+    /// virtual-screens / animation pages reset through their own staged machinery.
     /// No-op only for a page with none of those.
     Q_INVOKABLE void resetPage(const QString& page);
 
@@ -518,19 +519,17 @@ public:
     Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value);
     Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenName) const;
-    // Per-card sub-domains (Gaps vs Algorithm) of the shared autotile map, so
-    // each card's scope chip dot/reset only touches its own keys.
-    Q_INVOKABLE bool hasPerScreenAutotileGapsSettings(const QString& screenName) const;
-    Q_INVOKABLE void clearPerScreenAutotileGapsSettings(const QString& screenName);
+    // The Algorithm sub-domain of the shared autotile map, so the Tiling Algorithm
+    // card's scope chip dot/reset only touches its own keys.
     Q_INVOKABLE bool hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenAutotileAlgorithmSettings(const QString& screenName);
 
-    // Per-screen gaps are rule-backed: a per-monitor override is a screen-scoped
-    // gap Rule (deterministic id from the baseline rule + screen name).
+    // Per-screen gaps are config-backed: a per-monitor override is the gap-
+    // dimension sub-domain of the per-screen autotile store (unified snap+tile).
     // The Gaps card's monitor scope chip drives these; the gap controls
-    // read/write the rule's actions via rulesPage.
-    Q_INVOKABLE bool hasPerScreenGapRule(const QString& screenName) const;
-    Q_INVOKABLE void clearPerScreenGapRule(const QString& screenName);
+    // read/write via WindowAppearanceController's gapValue/writeGap.
+    Q_INVOKABLE bool hasPerScreenGapOverride(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenGapOverride(const QString& screenName);
 
     // ── Virtual screen configuration ──────────────────────────────────────────
     Q_INVOKABLE QStringList getPhysicalScreens() const;
@@ -670,11 +669,10 @@ private:
     // reconciles every listed page but emits dirtyPagesChanged at most once,
     // matching the discard paths' single-emit discipline.
     void reconcilePagesDirty(const QSet<QString>& pages);
-    // Value-based attribution for the two rule-backed pages sharing one
-    // RuleController model: set m_dirtyPages membership for "window-appearance"
-    // (= baselinesDirty) and "rules" (= userRulesDirty), emitting
-    // dirtyPagesChanged on a change. Called on every rule-model mutation and on
-    // revert/apply completion so the badges follow which subset actually changed.
+    // Value-based dirty attribution for the Rules page (the only page backed by
+    // the RuleController model now that appearance is config): set m_dirtyPages
+    // membership for "rules" (= userRulesDirty), emitting dirtyPagesChanged on a
+    // change. Called on every rule-model mutation and on revert/apply completion.
     void reconcileRuleBackedDirty();
     void refreshVirtualDesktops();
     void refreshActivities();

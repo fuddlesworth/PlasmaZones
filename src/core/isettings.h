@@ -204,6 +204,28 @@ public:
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
 
+    // Window decoration appearance (tiled/snapped window border + title bar).
+    // Mode-neutral, distinct from the ZONE OVERLAY border settings
+    // (borderWidth/borderRadius/borderColor on IZoneVisualizationSettings) —
+    // these describe the actual window decoration the compositor paints, edited
+    // on the Window Appearance settings page.
+    virtual bool showWindowBorder() const = 0;
+    virtual void setShowWindowBorder(bool show) = 0;
+    virtual QString windowBorderScope() const = 0;
+    virtual void setWindowBorderScope(const QString& scope) = 0;
+    virtual int windowBorderWidth() const = 0;
+    virtual void setWindowBorderWidth(int width) = 0;
+    virtual int windowBorderRadius() const = 0;
+    virtual void setWindowBorderRadius(int radius) = 0;
+    virtual QString windowBorderColorActive() const = 0;
+    virtual void setWindowBorderColorActive(const QString& color) = 0;
+    virtual QString windowBorderColorInactive() const = 0;
+    virtual void setWindowBorderColorInactive(const QString& color) = 0;
+    virtual bool hideWindowTitleBars() const = 0;
+    virtual void setHideWindowTitleBars(bool hide) = 0;
+    virtual QString windowTitleBarScope() const = 0;
+    virtual void setWindowTitleBarScope(const QString& scope) = 0;
+
     // Editor settings — used by EditorPageController. Editor-scope rather
     // than Snapping/Tiling-scope, so they don't fit any sub-interface.
     virtual QString editorDuplicateShortcut() const = 0;
@@ -281,6 +303,16 @@ public:
     // the autotile + zone-selector blocks above, which still carry
     // ISettings-only set/clear/has writers).
     QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const override
+    {
+        return {};
+    }
+
+    // Per-monitor gap overrides (config-backed, unified snap+tile), keyed in the
+    // short engine form (InnerGap / OuterGap / UsePerSideOuterGap / OuterGap
+    // {Top,Bottom,Left,Right}). Consumed by the geometry cascade merge
+    // (GeometryUtils::mergeConfigPerScreenGaps) as the config layer beneath any
+    // context gap rule. Default is a no-op empty map so test stubs inherit it.
+    virtual QVariantMap perScreenGapOverrides(const QString& /*screenIdOrName*/) const
     {
         return {};
     }
@@ -400,6 +432,15 @@ Q_SIGNALS:
     void perScreenSnappingSettingsChanged();
     // Rendering
     void renderingBackendChanged();
+    // Window decoration appearance (border + title bar)
+    void showWindowBorderChanged();
+    void windowBorderScopeChanged();
+    void windowBorderWidthChanged();
+    void windowBorderRadiusChanged();
+    void windowBorderColorActiveChanged();
+    void windowBorderColorInactiveChanged();
+    void hideWindowTitleBarsChanged();
+    void windowTitleBarScopeChanged();
     // Editor
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();

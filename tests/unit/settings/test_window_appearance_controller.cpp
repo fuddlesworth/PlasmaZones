@@ -3,107 +3,111 @@
 
 /**
  * @file test_window_appearance_controller.cpp
- * @brief Round-trip tests for the "Apply to" scope selector helpers on
- *        @c WindowAppearanceController (the border / title-bar baseline scope).
+ * @brief Tests for the config-backed @c WindowAppearanceController.
  *
- * The Appearance page's scope picker translates between a scope token and a
- * rule's `match` JSON via matchJsonForScope() / scopeOfMatch(). These pin:
- *   1. Each preset token round-trips (token -> match JSON -> token).
- *   2. The "tiled" preset matches the daemon's seeded default
- *      (ConfigDefaults::tiledAndSnappedScopeMatch) so the UI and the seeder
- *      never drift.
- *   3. An empty / catch-all match classifies as "all", and a recognized but
- *      non-preset expression classifies as "custom" rather than being coerced.
+ * The controller is a thin Q_PROPERTY surface over ISettings: border / title-bar
+ * and the shared inner/outer gap values forward to the matching ISettings
+ * getter/setter. On top of that it exposes the scope-aware gapValue()/writeGap()
+ * invokables the Gaps card's monitor scope chip drives. These tests pin:
+ *   1. Border / title-bar / gap properties round-trip through ISettings.
+ *   2. gapValue("", key) / writeGap("", key, v) read and write the GLOBAL config.
+ *   3. gapValue(monitor, key) / writeGap(monitor, key, v) read and write the
+ *      per-monitor override, falling back to the global value when absent.
  */
 
+#include <QSignalSpy>
 #include <QTest>
 
-#include <PhosphorProtocol/WindowTypeEnum.h>
-#include <PhosphorRules/MatchExpression.h>
-#include <PhosphorRules/MatchTypes.h>
-
-#include "config/configdefaults.h"
 #include "settings/windowappearancecontroller.h"
+#include "../helpers/StubSettings.h"
 
 using namespace PlasmaZones;
-using PhosphorRules::Field;
-using PhosphorRules::MatchExpression;
-using PhosphorRules::Operator;
 
 class TestWindowAppearanceController : public QObject
 {
     Q_OBJECT
 
 private Q_SLOTS:
-    void scopeTokensRoundTrip_data()
+    void borderAndTitleBarPropertiesForwardToSettings()
     {
-        QTest::addColumn<QString>("scope");
-        QTest::newRow("tiled") << QStringLiteral("tiled");
-        QTest::newRow("normal") << QStringLiteral("normal");
-        QTest::newRow("all") << QStringLiteral("all");
+        StubSettings settings;
+        WindowAppearanceController controller(settings);
+
+        controller.setShowWindowBorder(true);
+        QCOMPARE(settings.showWindowBorder(), true);
+        QCOMPARE(controller.showWindowBorder(), true);
+
+        controller.setWindowBorderWidth(5);
+        QCOMPARE(settings.windowBorderWidth(), 5);
+        QCOMPARE(controller.windowBorderWidth(), 5);
+
+        controller.setWindowBorderScope(QStringLiteral("normal"));
+        QCOMPARE(settings.windowBorderScope(), QStringLiteral("normal"));
+        QCOMPARE(controller.windowBorderScope(), QStringLiteral("normal"));
+
+        controller.setHideWindowTitleBars(true);
+        QCOMPARE(settings.hideWindowTitleBars(), true);
+        QCOMPARE(controller.hideWindowTitleBars(), true);
     }
 
-    void scopeTokensRoundTrip()
+    void gapPropertiesForwardToSettings()
     {
-        QFETCH(QString, scope);
-        WindowAppearanceController controller;
-        const QJsonObject match = controller.matchJsonForScope(scope);
-        QCOMPARE(controller.scopeOfMatch(match), scope);
+        StubSettings settings;
+        WindowAppearanceController controller(settings);
+
+        controller.setInnerGap(14);
+        QCOMPARE(settings.innerGap(), 14);
+        QCOMPARE(controller.innerGap(), 14);
+
+        controller.setUsePerSideOuterGap(true);
+        QCOMPARE(settings.usePerSideOuterGap(), true);
+        controller.setOuterGapTop(6);
+        QCOMPARE(settings.outerGapTop(), 6);
+        QCOMPARE(controller.outerGapTop(), 6);
     }
 
-    void tiledPresetMatchesSeededDefault()
+    // "" scope reads/writes the global gap config through the ISettings getters.
+    void gapValueAndWriteGap_globalScope()
     {
-        WindowAppearanceController controller;
-        // The UI preset and the daemon's fresh-install seed must be byte-identical
-        // so a freshly seeded baseline reads back as "tiled" in the picker.
-        QCOMPARE(controller.matchJsonForScope(QStringLiteral("tiled")),
-                 ConfigDefaults::tiledAndSnappedScopeMatch().toJson());
+        StubSettings settings;
+        WindowAppearanceController controller(settings);
+
+        settings.setInnerGap(9);
+        QCOMPARE(controller.gapValue(QString(), QStringLiteral("InnerGap")).toInt(), 9);
+
+        controller.writeGap(QString(), QStringLiteral("InnerGap"), 17);
+        QCOMPARE(settings.innerGap(), 17);
+        QCOMPARE(controller.gapValue(QString(), QStringLiteral("InnerGap")).toInt(), 17);
+
+        // UsePerSideOuterGap round-trips as a bool, not coerced to int.
+        controller.writeGap(QString(), QStringLiteral("UsePerSideOuterGap"), true);
+        QCOMPARE(settings.usePerSideOuterGap(), true);
+        const QVariant perSide = controller.gapValue(QString(), QStringLiteral("UsePerSideOuterGap"));
+        QCOMPARE(perSide.typeId(), static_cast<int>(QMetaType::Bool));
+        QCOMPARE(perSide.toBool(), true);
     }
 
-    void unknownTokenIsCatchAll()
+    // A non-empty scope reads/writes the per-monitor override; a monitor with no
+    // override for the key falls back to the global value.
+    void gapValueAndWriteGap_perMonitorScope()
     {
-        WindowAppearanceController controller;
-        // A bad token must never narrow the baseline — it falls back to the
-        // catch-all, which classifies as "all".
-        const QJsonObject match = controller.matchJsonForScope(QStringLiteral("bogus"));
-        QCOMPARE(controller.scopeOfMatch(match), QStringLiteral("all"));
-    }
+        StubSettings settings;
+        WindowAppearanceController controller(settings);
 
-    void emptyMatchIsAll()
-    {
-        WindowAppearanceController controller;
-        // An absent / empty match object (the QML fallback for a rule with no
-        // stored match) is the catch-all "all" scope.
-        QCOMPARE(controller.scopeOfMatch(QJsonObject{}), QStringLiteral("all"));
-        QCOMPARE(controller.scopeOfMatch(MatchExpression{}.toJson()), QStringLiteral("all"));
-    }
+        settings.setInnerGap(8); // global baseline
+        const QString monitor = QStringLiteral("DP-1");
 
-    void nonPresetExpressionIsCustom()
-    {
-        WindowAppearanceController controller;
-        // A valid match that is not one of the presets (e.g. a single AppId leaf
-        // authored on the Rules page) is reported as custom, not coerced.
-        const QJsonObject custom =
-            MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QVariant(QStringLiteral("org.kde.konsole")))
-                .toJson();
-        QCOMPARE(controller.scopeOfMatch(custom), QStringLiteral("custom"));
-    }
+        // No override yet: the scoped read falls back to the global value.
+        QCOMPARE(controller.gapValue(monitor, QStringLiteral("InnerGap")).toInt(), 8);
 
-    void normalPresetExcludesTransients()
-    {
-        WindowAppearanceController controller;
-        const QJsonObject match = controller.matchJsonForScope(QStringLiteral("normal"));
-        const auto parsed = MatchExpression::fromJson(match);
-        QVERIFY(parsed.has_value());
-        // WindowType is encoded as the underlying int, not the wire token — a
-        // leaf carrying "normal" as a string would compare as 0 (Unknown).
-        const QJsonObject expected =
-            MatchExpression::makeAll(
-                {MatchExpression::makeLeaf(Field::WindowType, Operator::Equals,
-                                           QVariant(static_cast<int>(PhosphorProtocol::WindowType::Normal))),
-                 MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, QVariant(false))})
-                .toJson();
-        QCOMPARE(match, expected);
+        // Writing a scoped value stores the per-monitor override, not the global.
+        controller.writeGap(monitor, QStringLiteral("InnerGap"), 22);
+        QCOMPARE(controller.gapValue(monitor, QStringLiteral("InnerGap")).toInt(), 22);
+        QCOMPARE(settings.innerGap(), 8); // global untouched
+        QCOMPARE(settings.getPerScreenAutotileSettings(monitor).value(QStringLiteral("InnerGap")).toInt(), 22);
+
+        // Another monitor with no override still falls back to the global value.
+        QCOMPARE(controller.gapValue(QStringLiteral("DP-2"), QStringLiteral("InnerGap")).toInt(), 8);
     }
 };
 

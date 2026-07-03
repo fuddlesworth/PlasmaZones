@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QRectF>
 #include <QJsonObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QUuid>
@@ -23,18 +24,18 @@
 #include <PhosphorTiles/AutotileConstants.h>
 // Animation duration / stagger UI bounds — generic policy, not autotile-specific.
 #include <PhosphorAnimation/AnimationLimits.h>
+// Window decoration (border + title bar) defaults — shared across the D-Bus
+// boundary with the compositor plugin so the daemon persists the same values
+// the effect renders with before the async settings load lands.
+#include <PhosphorCompositor/DecorationDefaults.h>
 // Surface-shader decoration tree — the user-applied pack stack. The `border`
 // PACK (data/surface/border) lives in that stack like any other pack; the
-// window-manager border/title-bar APPEARANCE defaults are owned by v3.2's
-// window rules, not by this tree's default.
+// window-manager border/title-bar APPEARANCE defaults live in the
+// config-backed window-appearance settings above, not in this tree's default.
 #include <PhosphorSurface/DecorationProfileTree.h>
 
 namespace PhosphorAnimation {
 class CurveRegistry;
-}
-
-namespace PhosphorRules {
-class MatchExpression;
 }
 
 namespace PlasmaZones {
@@ -285,6 +286,81 @@ public:
     static bool labelFontStrikeout()
     {
         return false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Window Decoration Appearance (Windows.*) Settings
+    //
+    // Tiled/snapped window border + title bar defaults. Distinct from the
+    // zone-overlay border constants above: these come from the shared
+    // PhosphorCompositor::DecorationDefaults so the daemon and the compositor
+    // plugin never drift. Border colours default to the "accent" sentinel
+    // (resolved to the system accent colour at render time); the border/title-bar
+    // scope defaults to "tiled" (apply only to tiled/snapped windows).
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool showWindowBorder()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::ShowBorder;
+    }
+    static int windowBorderWidth()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
+    }
+    static constexpr int windowBorderWidthMin()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMin;
+    }
+    static constexpr int windowBorderWidthMax()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMax;
+    }
+    static int windowBorderRadius()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
+    }
+    static constexpr int windowBorderRadiusMin()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin;
+    }
+    static constexpr int windowBorderRadiusMax()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
+    }
+    static bool hideWindowTitleBars()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
+    }
+    // The "accent" sentinel (PhosphorRules::BorderColorToken::Accent) — the effect
+    // resolves it to the live system accent / inactive colour at paint time. Kept
+    // as a bare literal here rather than pulling PhosphorRules into this
+    // widely-included header; the inactive default mirrors the active one.
+    static QString windowBorderColorActive()
+    {
+        return QStringLiteral("accent");
+    }
+    static QString windowBorderColorInactive()
+    {
+        return windowBorderColorActive();
+    }
+    // Concrete opaque colour the settings app seeds into config when the user
+    // leaves "follow the system accent" mode (KDE accent blue, #AARRGGBB). Lives
+    // here so the settings page's fallback stays single-sourced with the config
+    // layer rather than hardcoded in QML.
+    static QString windowBorderColorAccentFallbackHex()
+    {
+        return QStringLiteral("#FF3DAEE9");
+    }
+    // Fresh-install "Apply to" scope for both the border and the title bar. The
+    // token set lives in PhosphorCompositor::WindowAppearanceScope (shared with the
+    // schema validator and the effect).
+    static QString windowBorderScope()
+    {
+        return QString(::PhosphorCompositor::WindowAppearanceScope::Tiled);
+    }
+    static QString windowTitleBarScope()
+    {
+        return windowBorderScope();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -692,58 +768,44 @@ public:
     // sole writer.
     PLASMAZONES_EXPORT static QString rulesFilePath();
 
-    // UUID suffix `...001` is RETIRED — it was the never-shipped single combined
-    // "Default appearance" baseline rule, since split into the three focused
-    // baselines below (`...002`/`...003`/`...004`). Do not reuse it.
+    // Window appearance (border / title bar / gap) defaults live in the config
+    // store now (the Windows.* / Gaps.* groups), NOT in managed baseline rules.
+    // These three ids no longer identify seeded rules — they exist only so the
+    // daemon (and the D-Bus Restore Defaults path) can STRIP any stale managed
+    // baseline appearance rules an older build wrote to rules.json. See
+    // managedAppearanceBaselineIds() and the strips in daemon.cpp / ruleadaptor.cpp.
     //
-    // Stable id of the managed baseline BORDER rule: the lowest-priority Rule
-    // whose actions hold the default window border appearance (visible / width /
-    // radius / colour) the Appearance settings page edits. Its match is scoped to
-    // tiled / snapped windows on a fresh install and widened by the Appearance
-    // page's "Apply to" selector, so it is not a catch-all. Fixed so the daemon
-    // can re-find (and idempotently re-seed) it across restarts and the settings
-    // UI can bind to the same rule.
+    // UUID suffix `...001` is RETIRED — it was the never-shipped single combined
+    // "Default appearance" baseline rule, since split into the three ids below
+    // (`...002`/`...003`/`...004`). Do not reuse it.
+
+    /// Stable id of the (now-stripped) managed baseline BORDER rule.
     static QUuid baselineBorderRuleId()
     {
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000002}"));
     }
 
-    // Stable id of the managed baseline TITLE BAR rule: the lowest-priority Rule
-    // whose single action holds the default hide-title-bar value the Appearance
-    // settings page edits. Like the border baseline, its match is scoped to tiled
-    // / snapped windows on a fresh install (widened via "Apply to"), not a
-    // catch-all.
+    /// Stable id of the (now-stripped) managed baseline TITLE BAR rule.
     static QUuid baselineTitleBarRuleId()
     {
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000003}"));
     }
 
-    // Stable id of the managed baseline GAP rule: the catch-all,
-    // lowest-priority Rule whose actions hold the global default inner /
-    // outer gap model. Settings reads these actions back as its innerGap() /
-    // outerGap*() getters, and per-monitor gap overrides are v5 ids namespaced
-    // under this id.
+    /// Stable id of the (now-stripped) managed baseline GAP rule. Per-monitor gap
+    /// overrides are config-backed now, so this id is no longer used to namespace
+    /// them; it survives only as a strip target.
     static QUuid baselineGapRuleId()
     {
         return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000004}"));
     }
 
-    // Window-property match expressions that scope which windows the managed
-    // baseline BORDER and TITLE BAR rules apply to. These are the canonical wire
-    // shapes shared by the daemon's seeder (the fresh-install default) and the
-    // Appearance page's "Apply to" selector, so the two never drift.
-    //
-    // "Tiled and snapped" — `Any{ IsSnapped == true, IsTiled == true }` — the
-    // fresh-install default: borders and hidden title bars apply only to a window
-    // actually placed in a snap zone or managed by the autotile engine, matching
-    // the behaviour before appearance moved onto rules.
-    PLASMAZONES_EXPORT static PhosphorRules::MatchExpression tiledAndSnappedScopeMatch();
-
-    // "All normal windows" — `All{ WindowType == Normal, IsTransient == false }`
-    // — every ordinary application toplevel, excluding desktop / docks /
-    // notifications / OSDs (non-Normal types) and dialog / utility / popup / menu
-    // / tooltip / transient-child surfaces. The wider scope a user can opt into.
-    PLASMAZONES_EXPORT static PhosphorRules::MatchExpression normalWindowsScopeMatch();
+    /// The three fixed ids above as a set — the single source of truth for the
+    /// stale-managed-appearance-baseline strip, shared by the daemon's startup
+    /// cleanup and the D-Bus Restore Defaults path so the two can't drift.
+    static QSet<QUuid> managedAppearanceBaselineIds()
+    {
+        return {baselineBorderRuleId(), baselineTitleBarRuleId(), baselineGapRuleId()};
+    }
 
     // Returns the absolute path to quicklayouts.json (the numbered quick-layout
     // shortcut slots 1..9). Quick-layout slots are NOT rules, so they

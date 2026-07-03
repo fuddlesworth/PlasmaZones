@@ -252,10 +252,16 @@ class PLASMAZONES_EXPORT IZoneGeometrySettings : public PhosphorEngine::IGeometr
 public:
     ~IZoneGeometrySettings() override = default;
 
-    // No gap setters: the shared inner/outer gap model's global default is
-    // rule-backed (the managed baseline appearance Rule). The getters
-    // (inherited from PhosphorEngine::IGeometrySettings) read that rule; edits
-    // go through the rule, not through ISettings.
+    // Shared inner/outer gap model. The getters are inherited from
+    // PhosphorEngine::IGeometrySettings; the setters live here (PZ-owned) because
+    // the global default is config-backed (the Gaps group in config.json).
+    virtual void setInnerGap(int gap) = 0;
+    virtual void setOuterGap(int gap) = 0;
+    virtual void setUsePerSideOuterGap(bool usePerSide) = 0;
+    virtual void setOuterGapTop(int gap) = 0;
+    virtual void setOuterGapBottom(int gap) = 0;
+    virtual void setOuterGapLeft(int gap) = 0;
+    virtual void setOuterGapRight(int gap) = 0;
     virtual int adjacentThreshold() const = 0;
     virtual void setAdjacentThreshold(int threshold) = 0;
     virtual int pollIntervalMs() const = 0;

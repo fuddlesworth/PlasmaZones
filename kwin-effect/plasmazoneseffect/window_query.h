@@ -22,6 +22,12 @@ namespace PlasmaZones {
 /// WindowType).
 PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w);
 
+/// True if @p w belongs to the transient family (dialog/utility/popup/menu/
+/// tooltip/splash) or has a transient parent. Single source of truth for the
+/// rule query's `isTransient` field AND the config-default appearance "normal"
+/// scope gate (Normal type AND not transient) in the KWin effect.
+bool windowIsTransient(KWin::EffectWindow* w);
+
 /// Build a per-window PhosphorRules::WindowQuery from a live KWin window,
 /// populating every window-side field declared on `WindowQuery` so user-
 /// authored rules can match on any of them. The unified shape means a rule

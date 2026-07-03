@@ -154,7 +154,11 @@ public:
     /// single `void(QJsonObject&)` migration step, so this runs after the
     /// chain, from @ref ensureJsonConfigImpl.
     ///
-    /// It reads assignments.json + the four `_v4*` stashes left in
+    /// First, on every path, it adopts a legacy `windowrules.json` as `rules.json`
+    /// when the new file is absent (the rule store was renamed in v5), so an
+    /// already-converted store is not rebuilt from the retired assignments.json.
+    ///
+    /// It then reads assignments.json + the four `_v4*` stashes left in
     /// config.json (`_v4DisableStash`, `_v4AnimationRulesStash`,
     /// `_v4ExclusionStash`, `_v4AnimationExclusionStash`), builds the
     /// RuleSet (assignment rules + disable-list rules + per-window
@@ -169,7 +173,9 @@ public:
     /// Idempotent: the cleanup-only branch runs whenever rules.json
     /// already exists as a valid v4 `RuleSet` (probed via
     /// `RuleSet::loadFromFile`, which requires `_version ==
-    /// ConfigSchemaVersion` exactly). It is NOT a strict no-op — it
+    /// RuleSet::SchemaVersion`, pinned at 4 independently of the config
+    /// ConfigSchemaVersion — that pin is why an already-converted rules.json
+    /// survives a config schema bump without a rebuild). It is NOT a strict no-op — it
     /// retries the still-pending tail steps (strip surviving `_v4*Stash`
     /// keys, retire a still-present assignments.json) so a partial earlier
     /// run that crashed between rules.json commit and the tail
@@ -203,43 +209,24 @@ public:
     /// @return true on success or a clean no-op; false on an I/O failure.
     static bool finalizeV4Conversion(const QString& jsonPath);
 
-    /// v4 → v5 schema step. The v4 schema shipped per-mode (separate Snapping
-    /// vs Tiling) window appearance (borders, title bars, colours) and gap
-    /// settings in config.json; this branch deleted those settings and routes
-    /// the same concerns through rules instead. This step reads the
-    /// deleted v4 groups (`Snapping.Appearance.*`, `Snapping.Gaps`, the
-    /// `Tiling.*` equivalents, and the per-screen `PerScreen.Snapping` /
-    /// `PerScreen.Autotile` gap subsets), stashes the values that DIFFER from
-    /// the v4 compile defaults under the temporary `_v5AppearanceStash` root
-    /// key, REMOVES the consumed keys/groups from config.json (leaving the
-    /// surviving non-appearance keys such as `Snapping.Gaps.AdjacentThreshold`
-    /// and `Tiling.Gaps.SmartGaps` in place), and stamps `_version = 5`. A
-    /// clean v4 config (everything at its default) stashes nothing. The stash
-    /// feeds @ref finalizeV5Conversion.
+    /// v4 → v5 schema step. The v4 schema stored per-mode (separate Snapping vs
+    /// Tiling) window appearance (borders, title bars, colours) and gap settings
+    /// in config.json; v5 unifies the global per-mode values into two config
+    /// groups that apply to both modes: `Windows` (appearance) and `Gaps`. This
+    /// step reads the v4 groups (`Snapping.Appearance.*`, `Snapping.Gaps`, and
+    /// the `Tiling.*` equivalents), COLLAPSES the two per-mode value sets into
+    /// one (per field: prefer the value that differs from the v4 compile
+    /// default, else the Snapping value), writes the differing-from-default
+    /// values into the `Windows` / `Gaps` groups, REMOVES the consumed
+    /// keys/groups from config.json (leaving surviving non-appearance keys such
+    /// as `Snapping.Gaps.AdjacentThreshold` and `Tiling.Gaps.SmartGaps` in
+    /// place), and stamps `_version = 5`. It creates NO rules. The per-screen
+    /// `PerScreen.{Snapping,Autotile}` gap subsets are consumed IN-PLACE here too
+    /// (consumeV4PerScreenGaps): each screen's gap dimensions collapse into that
+    /// screen's per-screen autotile config group (`AutotileScreen:*`) and the
+    /// consumed v4 per-screen gap keys are stripped. Do NOT add a second
+    /// per-screen gap migration step — these are already folded.
     static void migrateV4ToV5(QJsonObject& root);
-
-    /// Post-chain finalizer for the v5 conversion. Mirrors
-    /// @ref finalizeV4Conversion: the override rules cannot be built inside a
-    /// `void(QJsonObject&)` migration step (they live in rules.json), so
-    /// this runs after the chain from @ref ensureJsonConfigImpl, right after
-    /// finalizeV4Conversion (which guarantees rules.json exists).
-    ///
-    /// It reads `_v5AppearanceStash` from config.json, converts each differing
-    /// value into a non-managed override Rule — two context `Mode`-matched rules
-    /// ("Snapping appearance" matching `Mode Equals "snapping"`, "Tiling
-    /// appearance" matching `Mode Equals "tiling"`) plus one `ScreenId`-matched
-    /// gap rule per per-screen entry — ADDS them to the existing rule set
-    /// (never clobbering user rules or the managed baselines), saves
-    /// rules.json, then strips `_v5AppearanceStash` from config.json.
-    ///
-    /// Idempotent: runs only while the stash is present. Once stripped it is a
-    /// no-op, and the override rule ids are deterministic so a re-run before the
-    /// strip succeeds cannot duplicate rules (addRule rejects colliding ids).
-    ///
-    /// @param jsonPath Path to config.json (rules.json is derived as a
-    ///                 sibling via ConfigDefaults).
-    /// @return true on success or a clean no-op; false on an I/O failure.
-    static bool finalizeV5Conversion(const QString& jsonPath);
 
     /// Prune the retired provider-default catch-all assignment rule from
     /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup

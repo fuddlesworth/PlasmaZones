@@ -39,8 +39,12 @@ SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager,
     m_states.insertState(PhosphorEngine::PlacementStateKey{}, m_globals);
 }
 
-void SnapEngine::setWindowRegistry(PhosphorEngine::IWindowRegistry* registry)
+void SnapEngine::setWindowRegistry(QObject* registryObject)
 {
+    // The interface passes a QObject carrying the registry; cast to the concrete
+    // interface (IWindowRegistry is not itself a QObject, so dynamic_cast, matching
+    // AutotileEngine). A null cast clears the registry, same as the old signature.
+    auto* registry = dynamic_cast<PhosphorEngine::IWindowRegistry*>(registryObject);
     m_windowRegistry = registry;
     for (SnapState* state : m_states.states()) {
         if (state) {

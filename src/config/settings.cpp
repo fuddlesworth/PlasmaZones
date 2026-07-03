@@ -231,9 +231,14 @@ void Settings::load()
 
     const bool perScreenZoneSelectorChanged = perScreenZoneSelectorBefore != m_perScreenZoneSelectorSettings;
     const bool perScreenAutotileChanged = perScreenAutotileBefore != m_perScreenAutotileSettings;
-    // Per-screen snapping gaps are rule-backed now (no Settings storage); their
-    // change signal is driven by the rule store via onRuleStoreChanged, not by
-    // this config reload.
+    // Per-monitor gaps are config-backed and live in the per-screen autotile store.
+    // A gap change must resnap already-snapped windows, the same way a global gap
+    // change or a context gap rule does; the daemon binds that resnap to
+    // perScreenSnappingSettingsChanged. Fire it only when the gap-dimension subset
+    // changed, so an algorithm/split-only per-screen edit doesn't trigger a spurious
+    // gap resnap.
+    const bool perScreenGapChanged =
+        Settings::perScreenGapDimensionsDiffer(perScreenAutotileBefore, m_perScreenAutotileSettings);
     const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged;
 
     if (useSystemColors()) {
@@ -283,6 +288,8 @@ void Settings::load()
         Q_EMIT perScreenZoneSelectorSettingsChanged();
     if (perScreenAutotileChanged)
         Q_EMIT perScreenAutotileSettingsChanged();
+    if (perScreenGapChanged)
+        Q_EMIT perScreenSnappingSettingsChanged();
 
     if (anyChanged || anyDisableChanged || perScreenChanged)
         Q_EMIT settingsChanged();
@@ -315,6 +322,8 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::animationsWindowFilteringGroup(), // "Animations.WindowFiltering"
         ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
         ConfigDefaults::orderingGroup(), // "Ordering"
+        ConfigDefaults::windowsAppearanceGroup(), // "Windows" — window border + title bar decoration
+        ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
         ConfigDefaults::surfaceGroup(), // "Surface" — per-surface decoration tree (DecorationProfileTree blob)
     };
 }
@@ -369,7 +378,6 @@ void Settings::purgeStaleKeys()
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
         ConfigKeys::Legacy::v4ExclusionStashKey(),
         ConfigKeys::Legacy::v4AnimationExclusionStashKey(),
-        ConfigKeys::Legacy::v5AppearanceStashKey(),
     };
 
     // Compute the set of paths the Store claims. These must not be
@@ -1391,108 +1399,55 @@ P_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDispla
 // Inner/outer gaps (uniform + per-side) plus adjacency threshold. Schema
 // clampInt validators enforce the same ranges readValidatedInt used to.
 
-// Shared inner/outer gaps — the GLOBAL default is rule-backed (the managed
-// "Default gaps" rule, baselineGapRuleId). These getters read that rule's gap
-// actions (SetInnerGap / SetOuterGap / …) through the active window-rule store
-// and fall back to the compile-time ConfigDefaults when no store / rule / action
-// is present (the standalone settings app or a test may construct Settings
-// without a daemon-seeded store). There are no setters — the values are edited on
-// the rule directly. KEEP these accessors in lockstep with makeBaselineGapRule
-// (daemon.cpp) and with the autotile* gap forwarders in settings.h.
-// Read one gap action's Value param from the rule @p ruleId in @p store, or
-// std::nullopt when the store / rule / action is absent. Backs both the global
-// gap getters (the managed baseline rule id) and the per-screen gap accessors
-// (the per-monitor gap rule id, resolved in perScreenGapRuleOverrides).
-std::optional<QJsonValue> Settings::gapValueFromRule(const PhosphorRules::RuleStore* store, const QUuid& ruleId,
-                                                     QLatin1StringView actionType)
-{
-    if (store == nullptr) {
-        return std::nullopt;
-    }
-    const auto rule = store->ruleSet().ruleById(ruleId);
-    if (!rule) {
-        return std::nullopt;
-    }
-    const QString type = QString(actionType);
-    for (const PhosphorRules::RuleAction& a : rule->actions) {
-        if (a.type == type) {
-            return a.params.value(QString(PhosphorRules::ActionParam::Value));
-        }
-    }
-    return std::nullopt;
-}
+// ── Shared inner/outer gaps (PhosphorConfig::Store-backed, "Gaps" group) ─────
+// Read on demand through m_store (validator clamps to the declared gap range);
+// setters route the write through the store and emit only on a real change.
+// The autotile* gap forwarders in settings.h delegate to these getters, so
+// tiling and snapping always resolve the same values.
+P_STORE_GET(int, innerGap, gapsGroup, innerGapKey, int)
+P_STORE_SET_INT(setInnerGap, gapsGroup, innerGapKey, innerGapChanged)
+P_STORE_GET(int, outerGap, gapsGroup, outerGapKey, int)
+P_STORE_SET_INT(setOuterGap, gapsGroup, outerGapKey, outerGapChanged)
+P_STORE_GET(bool, usePerSideOuterGap, gapsGroup, usePerSideOuterGapKey, bool)
+P_STORE_SET_BOOL(setUsePerSideOuterGap, gapsGroup, usePerSideOuterGapKey, usePerSideOuterGapChanged)
+P_STORE_GET(int, outerGapTop, gapsGroup, outerGapTopKey, int)
+P_STORE_SET_INT(setOuterGapTop, gapsGroup, outerGapTopKey, outerGapTopChanged)
+P_STORE_GET(int, outerGapBottom, gapsGroup, outerGapBottomKey, int)
+P_STORE_SET_INT(setOuterGapBottom, gapsGroup, outerGapBottomKey, outerGapBottomChanged)
+P_STORE_GET(int, outerGapLeft, gapsGroup, outerGapLeftKey, int)
+P_STORE_SET_INT(setOuterGapLeft, gapsGroup, outerGapLeftKey, outerGapLeftChanged)
+P_STORE_GET(int, outerGapRight, gapsGroup, outerGapRightKey, int)
+P_STORE_SET_INT(setOuterGapRight, gapsGroup, outerGapRightKey, outerGapRightChanged)
 
-int Settings::innerGap() const
-{
-    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorRules::ActionType::SetInnerGap)) {
-        return v->toInt(ConfigDefaults::innerGap());
-    }
-    return ConfigDefaults::innerGap();
-}
-int Settings::outerGap() const
-{
-    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorRules::ActionType::SetOuterGap)) {
-        return v->toInt(ConfigDefaults::outerGap());
-    }
-    return ConfigDefaults::outerGap();
-}
-bool Settings::usePerSideOuterGap() const
-{
-    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorRules::ActionType::SetUsePerSideOuterGap)) {
-        return v->toBool(ConfigDefaults::usePerSideOuterGap());
-    }
-    return ConfigDefaults::usePerSideOuterGap();
-}
-int Settings::outerGapTop() const
-{
-    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorRules::ActionType::SetOuterGapTop)) {
-        return v->toInt(ConfigDefaults::outerGapTop());
-    }
-    return ConfigDefaults::outerGapTop();
-}
-int Settings::outerGapBottom() const
-{
-    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorRules::ActionType::SetOuterGapBottom)) {
-        return v->toInt(ConfigDefaults::outerGapBottom());
-    }
-    return ConfigDefaults::outerGapBottom();
-}
-int Settings::outerGapLeft() const
-{
-    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorRules::ActionType::SetOuterGapLeft)) {
-        return v->toInt(ConfigDefaults::outerGapLeft());
-    }
-    return ConfigDefaults::outerGapLeft();
-}
-int Settings::outerGapRight() const
-{
-    if (const auto v = gapValueFromRule(m_ruleStore, ConfigDefaults::baselineGapRuleId(),
-                                        PhosphorRules::ActionType::SetOuterGapRight)) {
-        return v->toInt(ConfigDefaults::outerGapRight());
-    }
-    return ConfigDefaults::outerGapRight();
-}
+// ── Window decoration appearance (Store-backed, "Windows" group) ─────────────
+P_STORE_GET(bool, showWindowBorder, windowsAppearanceGroup, showBorderKey, bool)
+P_STORE_SET_BOOL(setShowWindowBorder, windowsAppearanceGroup, showBorderKey, showWindowBorderChanged)
+P_STORE_GET(QString, windowBorderScope, windowsAppearanceGroup, borderScopeKey, QString)
+P_STORE_SET_STRING(setWindowBorderScope, windowsAppearanceGroup, borderScopeKey, windowBorderScopeChanged)
+P_STORE_GET(int, windowBorderWidth, windowsAppearanceGroup, widthKey, int)
+P_STORE_SET_INT(setWindowBorderWidth, windowsAppearanceGroup, widthKey, windowBorderWidthChanged)
+P_STORE_GET(int, windowBorderRadius, windowsAppearanceGroup, radiusKey, int)
+P_STORE_SET_INT(setWindowBorderRadius, windowsAppearanceGroup, radiusKey, windowBorderRadiusChanged)
+P_STORE_GET(QString, windowBorderColorActive, windowsAppearanceGroup, borderColorActiveKey, QString)
+P_STORE_SET_STRING(setWindowBorderColorActive, windowsAppearanceGroup, borderColorActiveKey,
+                   windowBorderColorActiveChanged)
+P_STORE_GET(QString, windowBorderColorInactive, windowsAppearanceGroup, borderColorInactiveKey, QString)
+P_STORE_SET_STRING(setWindowBorderColorInactive, windowsAppearanceGroup, borderColorInactiveKey,
+                   windowBorderColorInactiveChanged)
+P_STORE_GET(bool, hideWindowTitleBars, windowsAppearanceGroup, hideTitleBarsKey, bool)
+P_STORE_SET_BOOL(setHideWindowTitleBars, windowsAppearanceGroup, hideTitleBarsKey, hideWindowTitleBarsChanged)
+P_STORE_GET(QString, windowTitleBarScope, windowsAppearanceGroup, titleBarScopeKey, QString)
+P_STORE_SET_STRING(setWindowTitleBarScope, windowsAppearanceGroup, titleBarScopeKey, windowTitleBarScopeChanged)
 
 void Settings::connectRuleStoreGapReactivity()
 {
     if (m_ruleStore == nullptr) {
         return;
     }
-    // Seed the change-detection cache from the current baseline rule so the
-    // first rulesChanged emit compares against a real snapshot.
-    m_cachedInnerGap = innerGap();
-    m_cachedOuterGap = outerGap();
-    m_cachedUsePerSideOuterGap = usePerSideOuterGap();
-    m_cachedOuterGapTop = outerGapTop();
-    m_cachedOuterGapBottom = outerGapBottom();
-    m_cachedOuterGapLeft = outerGapLeft();
-    m_cachedOuterGapRight = outerGapRight();
+    // The global and per-screen gaps are config-backed now, so nothing here
+    // seeds them. Only the context (per-mode / per-desktop / per-activity) gap
+    // rules remain rule-backed and feed the geometry cascade — seed their
+    // fingerprint so the first rulesChanged emit compares against a real snapshot.
     m_cachedGapFingerprint = gapRulesFingerprint();
     connect(m_ruleStore, &PhosphorRules::RuleStore::rulesChanged, this, [this](bool /*persisted*/) {
         onRuleStoreChanged();
@@ -1501,52 +1456,21 @@ void Settings::connectRuleStoreGapReactivity()
 
 void Settings::onRuleStoreChanged()
 {
-    // A baseline-rule gap edit changes the rule-backed global gaps. Mirror the
-    // old stored-setter emissions: one per-property NOTIFY per changed value,
-    // plus a single settingsChanged so the autotile engine re-syncs (daemon's
-    // settingsChanged handler → refreshConfigFromSettings) and snapped zones
-    // re-space (daemon's innerGap*Changed → scheduleGapResnap). Only emit on a
-    // real change so unrelated rule edits (a new border rule, a rename) don't
-    // trigger spurious retiles.
-    const auto detect = [](auto& cached, auto current, auto emitSignal) {
-        if (cached != current) {
-            cached = current;
-            emitSignal();
-        }
-    };
-    detect(m_cachedInnerGap, innerGap(), [this]() {
-        Q_EMIT innerGapChanged();
-    });
-    detect(m_cachedOuterGap, outerGap(), [this]() {
-        Q_EMIT outerGapChanged();
-    });
-    detect(m_cachedUsePerSideOuterGap, usePerSideOuterGap(), [this]() {
-        Q_EMIT usePerSideOuterGapChanged();
-    });
-    detect(m_cachedOuterGapTop, outerGapTop(), [this]() {
-        Q_EMIT outerGapTopChanged();
-    });
-    detect(m_cachedOuterGapBottom, outerGapBottom(), [this]() {
-        Q_EMIT outerGapBottomChanged();
-    });
-    detect(m_cachedOuterGapLeft, outerGapLeft(), [this]() {
-        Q_EMIT outerGapLeftChanged();
-    });
-    detect(m_cachedOuterGapRight, outerGapRight(), [this]() {
-        Q_EMIT outerGapRightChanged();
-    });
-
-    // A rule edit can also change a per-monitor (or per-mode) gap rule, which
-    // feeds the rule-backed getPerScreenAutotileSettings / getPerScreenSnapping-
-    // Settings. Re-sync those consumers — the daemon's perScreenSnappingSettings-
-    // Changed handler reschedules the gap resnap, and its settingsChanged handler
-    // re-runs the per-screen autotile config (updateAutotileScreens) plus
+    // Global inner/outer gaps are config-backed; their NOTIFY is owned by the
+    // gap setters, not this handler.
+    //
+    // A rule edit can also change a context (per-mode / per-desktop / per-
+    // activity) gap rule, which feeds the geometry cascade (mergeConfigPerScreen-
+    // Gaps folds config per-monitor gaps under these rule overrides). Re-sync the
+    // geometry consumers — the daemon's perScreenSnappingSettingsChanged handler
+    // reschedules the gap resnap, and its settingsChanged handler re-runs the
+    // per-screen autotile config (updateAutotileScreens) plus
     // refreshConfigFromSettings — but ONLY when a gap action somewhere in the rule
     // set actually changed. Emitting on every rulesChanged made a mode/assignment
     // toggle (also a rule write) fire settingsChanged, which drove the daemon to
     // re-resolve the default assignment and immediately revert the toggle. The
-    // fingerprint covers every gap action across all rules (baseline + per-screen
-    // + per-mode), so non-gap rule writes no longer trigger a gap re-sync.
+    // fingerprint covers every gap action across all rules, so non-gap rule writes
+    // no longer trigger a gap re-sync.
     const QString gapFingerprint = gapRulesFingerprint();
     if (gapFingerprint != m_cachedGapFingerprint) {
         m_cachedGapFingerprint = gapFingerprint;
@@ -1556,8 +1480,8 @@ void Settings::onRuleStoreChanged()
     }
 }
 
-// Fingerprint of every gap action across the whole rule set (baseline + per-
-// screen + per-mode gap rules), used to gate the per-screen gap re-sync in
+// Fingerprint of every gap action across the whole rule set (the context per-
+// mode / per-desktop / per-activity gap rules), used to gate the gap re-sync in
 // onRuleStoreChanged so only real gap edits fire it — never a mode/assignment/
 // border rule write.
 QString Settings::gapRulesFingerprint() const

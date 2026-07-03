@@ -52,7 +52,7 @@ void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, Q
     // settings (no per-screen key exists).
     if (settings) {
         const int zonePadding = GeometryUtils::getEffectiveInnerGap(
-            nullptr, settings, GeometryUtils::currentContextGapOverride(layoutRegistry, virtualScreenId));
+            nullptr, settings, GeometryUtils::currentContextGapOverride(layoutRegistry, settings, virtualScreenId));
         const int zoneBorderWidth = settings->borderWidth();
         const int zoneBorderRadius = settings->borderRadius();
 
@@ -123,12 +123,15 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         return;
     }
 
-    auto* window = m_screenStates.value(screenId).zoneSelectorSlot();
+    const auto it = m_screenStates.constFind(screenId);
+    if (it == m_screenStates.constEnd()) {
+        return;
+    }
+    auto* window = it->zoneSelectorSlot();
     if (!window) {
         return;
     }
-
-    QScreen* screen = m_screenStates.value(screenId).zoneSelectorPhysScreen;
+    QScreen* screen = it->zoneSelectorPhysScreen;
     if (!screen) {
         return;
     }
@@ -153,9 +156,10 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         // via the layout registry's current context. This preview passes no
         // layout, so the per-layout tier does not apply here; border width/radius
         // are global-only (no per-screen key exists).
-        writeQmlProperty(window, QStringLiteral("zonePadding"),
-                         GeometryUtils::getEffectiveInnerGap(
-                             nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, screenId)));
+        writeQmlProperty(
+            window, QStringLiteral("zonePadding"),
+            GeometryUtils::getEffectiveInnerGap(
+                nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, m_settings, screenId)));
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
         // Font settings for zone number labels

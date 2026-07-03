@@ -619,14 +619,76 @@ void PlasmaZonesEffect::loadCachedSettings()
         const QColor c(v.toString());
         if (m_borderAccentColor != c) {
             m_borderAccentColor = c;
-            updateAllBorders();
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("inactiveColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
         if (m_borderInactiveColor != c) {
             m_borderInactiveColor = c;
-            updateAllBorders();
+            scheduleBorderSweep();
+        }
+    });
+    // Config-backed window-decoration appearance default. Each key updates one
+    // slot of m_windowAppearanceDefault; a change re-sweeps every window so the
+    // default border / hidden title bar reapplies live (mirroring the accent /
+    // inactive colour loaders above). Re-fetched on every settingsChanged, so a
+    // Window Appearance page edit takes effect without a relog. Guarded on an
+    // actual value change to avoid a redundant full border rebuild per fetch.
+    loadSettingAsync(QStringLiteral("showWindowBorder"), [this](const QVariant& v) {
+        const bool b = v.toBool();
+        if (m_windowAppearanceDefault.showBorder != b) {
+            m_windowAppearanceDefault.showBorder = b;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowBorderScope"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.borderScope != s) {
+            m_windowAppearanceDefault.borderScope = s;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowBorderWidth"), [this](const QVariant& v) {
+        const int i = v.toInt();
+        if (m_windowAppearanceDefault.borderWidth != i) {
+            m_windowAppearanceDefault.borderWidth = i;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowBorderRadius"), [this](const QVariant& v) {
+        const int i = v.toInt();
+        if (m_windowAppearanceDefault.borderRadius != i) {
+            m_windowAppearanceDefault.borderRadius = i;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowBorderColorActive"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.activeColor != s) {
+            m_windowAppearanceDefault.activeColor = s;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowBorderColorInactive"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.inactiveColor != s) {
+            m_windowAppearanceDefault.inactiveColor = s;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("hideWindowTitleBars"), [this](const QVariant& v) {
+        const bool b = v.toBool();
+        if (m_windowAppearanceDefault.hideTitleBar != b) {
+            m_windowAppearanceDefault.hideTitleBar = b;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowTitleBarScope"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.titleBarScope != s) {
+            m_windowAppearanceDefault.titleBarScope = s;
+            scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
@@ -743,24 +805,19 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedZoneSelectorEnabled = v.toBool();
     });
 
-    // Border / title-bar appearance is no longer pushed as per-mode settings.
-    // Border APPEARANCE (width / radius / colours / show) is sourced entirely
-    // from the per-surface decoration tree below (the border pack's params); the
-    // legacy autotile*/snapping* border-appearance keys are no longer consumed
-    // here. Rule-driven title-bar hiding is reconciled separately in
-    // updateWindowBorder / reconcileRuleHiddenTitleBar.
+    // Window border / title-bar appearance is pushed as unified config defaults
+    // (the window-appearance loaders above). Each slot is resolved as that config
+    // default, scope-gated, with per-window rule overrides layered on top inside
+    // updateWindowBorder / reconcileRuleHiddenTitleBar (resolveEffectiveWindowAppearance).
 
     // Per-surface decoration profile tree (Stage 2a): the SSOT for each surface's
-    // shader-pack chain — whose emptiness is the border on/off gate (an empty
-    // chain = no border, replacing the legacy showBorder toggle) — plus the
-    // border pack's appearance params (width / radius / colours carried AS that
-    // pack's parameters, not separate decoration fields), keyed by surface path
-    // (window.tiled / window.snapped / window.floating). Supersedes both the
-    // old single-global surface-pack selection AND the autotile/snapping
-    // border-APPEARANCE feed — updateWindowBorder now resolves appearance from
-    // this tree. The autotile/snap BorderState is still maintained (it drives
-    // MEMBERSHIP — which windows are tiled/snapped — and the daemon's retile
-    // insets), but no longer feeds appearance.
+    // USER shader-pack chain (e.g. glow) plus each pack's parameter overrides,
+    // keyed by surface path (window.tiled / window.snapped / window.floating).
+    // The appearance-owned "border" base pack is prepended by updateWindowBorder
+    // from the config/rule resolution above; this tree contributes the packs the
+    // user chained on top. The autotile/snap BorderState is still maintained (it
+    // drives MEMBERSHIP — which windows are tiled/snapped — and the daemon's
+    // retile insets), but does not feed appearance.
     //
     // On change: drop every compiled pack (a chain edit may reference a new pack,
     // and per-pack param VALUES are baked at compile time so they must recompile)

@@ -406,12 +406,14 @@ SettingsController::SettingsController(QObject* parent)
     connect(m_snappingZonesPage, &SnappingZonesController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
 
-    // Snapping→Effects + the Window Appearance page — CONSTANT-only bounds
-    // facades. Window Appearance edits the managed baseline appearance Rule
-    // through m_rulesPage; this controller only carries the slider bounds
-    // (border + the unified gap bounds) and the baseline rule id.
+    // Snapping→Effects page — CONSTANT-only bounds facade. The Window Appearance
+    // page is ISettings-backed: it forwards its window border / title bar and the
+    // shared inner/outer gap values straight to config (Windows.* / Gaps.*). Those
+    // values ARE Q_PROPERTY on Settings, so the meta-object loop above already
+    // wires their NOTIFY to onSettingsPropertyChanged(); the controller only
+    // provides the QML-facing forwarders + the slider bounds.
     m_snappingEffectsPage = new SnappingEffectsController(this);
-    m_windowAppearancePage = new WindowAppearanceController(this);
+    m_windowAppearancePage = new WindowAppearanceController(m_settings, this);
 
     // Tiling→Algorithm page sub-controller. Owns the algorithm slider bounds +
     // the custom-parameter CRUD surface. Borrows the algorithm registry this
@@ -508,16 +510,10 @@ SettingsController::SettingsController(QObject* parent)
     // from this controller's save()/load() so they don't race the
     // setNeedsSave(false) those methods emit.
     m_rulesPage = new RuleController(this);
-    // A per-monitor gap override is a screen-scoped gap Rule. Adding or
-    // removing one changes the rule model's count, so refresh the Gaps card's
-    // scope chip (its override dot polls hasPerScreenGapRule on
-    // perScreenOverridesChanged) when rules are added/removed.
-    if (m_rulesPage->model() != nullptr) {
-        connect(m_rulesPage->model(), &RuleModel::countChanged, this, &SettingsController::perScreenOverridesChanged);
-    }
-    // Attribute rule-model dirtiness to the two rule-backed pages that share
-    // this one controller: appearance (managed baseline) edits mark
-    // "window-appearance", user-rule edits mark "rules".
+    // Attribute rule-model dirtiness to the Rules page. Window appearance and
+    // per-monitor gaps are config-backed now (refreshed via
+    // perScreenAutotileSettingsChanged, wired above), so the Rules page is the
+    // only page riding this shared controller's dirty state.
     // reconcileRuleBackedDirty() is value-based — it compares the staged model
     // to the last daemon-synced snapshot — so it stays correct even when the
     // shared dirty bit does not transition (e.g. editing a baseline while user

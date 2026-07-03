@@ -27,12 +27,7 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
-#include <PhosphorRules/RuleAction.h>
-#include <PhosphorRules/Rule.h>
-#include <PhosphorRules/RuleStore.h>
 #include "config/configbackends.h"
-
-#include <limits>
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
@@ -162,8 +157,9 @@ private Q_SLOTS:
         Settings settings;
 
         // Set non-default values across different groups. Inner/outer gaps are
-        // no longer stored config keys (the global default is rule-backed), so
-        // they are not part of this config-persistence round-trip.
+        // config-backed (the Gaps group); their save/reload round-trip is covered
+        // by testConfigBackedGap_roundTripsAndEmits, so they're omitted here to
+        // avoid duplicating that coverage.
         settings.setBorderWidth(5);
         settings.setBorderRadius(25);
         settings.setActiveOpacity(0.8);
@@ -708,48 +704,37 @@ private Q_SLOTS:
     }
 
     /**
-     * The shared inner/outer gap global default is rule-backed: the getters read
-     * the managed baseline gap Rule's gap actions, and a change to
-     * that rule re-emits the per-property NOTIFY + settingsChanged so the daemon
-     * retiles / re-spaces. This validates the read path and the reactivity wiring
-     * (onRuleStoreChanged) that replaces the old stored-setter signals.
+     * The shared inner/outer gap global default is config-backed: the getter reads
+     * the "Gaps" config group (compile default on a fresh config), the setter
+     * writes it and re-emits the per-property NOTIFY + settingsChanged exactly
+     * once per real change, and the value survives a save/reload.
      */
-    void testRuleBackedGap_readsBaselineRule_andReactsToChange()
+    void testConfigBackedGap_roundTripsAndEmits()
     {
         IsolatedConfigGuard guard;
 
-        namespace PWR = PhosphorRules;
-        PWR::RuleStore store(ConfigDefaults::rulesFilePath());
-
-        // Seed a minimal managed baseline gap rule carrying an inner-gap action.
-        PWR::Rule rule;
-        rule.id = ConfigDefaults::baselineGapRuleId();
-        rule.name = QStringLiteral("Default gaps");
-        rule.managed = true;
-        rule.priority = std::numeric_limits<int>::min();
-        PWR::RuleAction inner;
-        inner.type = QString(PWR::ActionType::SetInnerGap);
-        inner.params.insert(QString(PWR::ActionParam::Value), 8);
-        rule.actions = {inner};
-        QVERIFY(store.addRule(rule));
-
-        Settings settings(&store, nullptr);
-        // Getter reads the rule's action value.
-        QCOMPARE(settings.innerGap(), 8);
+        Settings settings;
+        // Fresh config → the compile default.
+        QCOMPARE(settings.innerGap(), ConfigDefaults::innerGap());
 
         QSignalSpy specificSpy(&settings, &Settings::innerGapChanged);
         QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
         QVERIFY(specificSpy.isValid());
         QVERIFY(generalSpy.isValid());
 
-        // Edit the baseline rule's inner gap → rulesChanged → Settings re-emits.
-        PWR::Rule updated = rule;
-        updated.actions[0].params.insert(QString(PWR::ActionParam::Value), 24);
-        QVERIFY(store.updateRule(updated));
-
+        settings.setInnerGap(24);
         QCOMPARE(settings.innerGap(), 24);
         QCOMPARE(specificSpy.count(), 1);
         QVERIFY(generalSpy.count() >= 1);
+
+        // A no-op write of the same value does not re-emit.
+        settings.setInnerGap(24);
+        QCOMPARE(specificSpy.count(), 1);
+
+        // The value persists across a save/reload.
+        settings.save();
+        Settings reloaded;
+        QCOMPARE(reloaded.innerGap(), 24);
     }
 };
 
