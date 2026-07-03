@@ -10,7 +10,8 @@
 // no compositor). It is the CI gate for the bundled sets and a pre-commit-
 // friendly tool for pack authors.
 //
-// Two authoring models, selected by --overlay (default) / --animation:
+// Three authoring models, selected by --overlay (default) / --animation /
+// --surface:
 //   • zone/overlay packs (--overlay, the default, data/shaders/*):
 //     ShaderRegistry::parsePackMetadata + the zone entry scaffold (pZone/pImage);
 //     validates the frag, multipass buffer passes, and the vertex stage on the
@@ -19,9 +20,13 @@
 //     AnimationShaderEffect + the animation entry scaffold (pTransition / pIn+pOut)
 //     + paramPreamble; validates effect.frag on the daemon Qt-RHI path. (The
 //     kwin-effect classic-GL branch is not baked — see validateAnimationPack.)
+//   • surface/decoration packs (--surface, data/surface/*):
+//     SurfaceShaderEffect + paramPreamble; validates effect.frag, buffer
+//     passes, and the shared vertex stage on the daemon Qt-RHI path — see
+//     validateSurfacePack.
 //
 // Usage:
-//   plasmazones-shader-validate [--quiet] [--overlay|--animation] <path> [<path> ...]
+//   plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface] <path> [<path> ...]
 // where each <path> is either a pack directory (contains metadata.json) or a
 // root that holds pack subdirectories. Exits non-zero if any pack has an error.
 

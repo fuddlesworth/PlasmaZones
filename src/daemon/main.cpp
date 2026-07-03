@@ -193,9 +193,11 @@ int main(int argc, char* argv[])
     // (the item's ctor registers the ZoneLabelTexture metatype + QImage converter).
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
-    // Register SurfaceShaderItem (per-window surface-decoration layer) for QML.
-    // Same module URI/version as ZoneShaderItem; the on-screen surface host that
-    // instantiates it lands in a follow-up stage.
+    // Register SurfaceShaderItem (per-surface decoration layer) for QML.
+    // Same module URI/version as ZoneShaderItem. The on-screen host is
+    // SurfaceDecoration.qml, driven by OverlayService::applyDecoration on the
+    // OSD / popup surfaces (Stage d); the per-application-window host lives in
+    // the kwin-effect (renderSurfaceChainComposite), not in this process.
     qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZones", 1, 0, "SurfaceShaderItem");
 
     // Set up application metadata

@@ -76,7 +76,11 @@ void writeDirectProfile(ISettings* settings, DecorationProfileTree& tree, const 
 
 DecorationPageController::DecorationPageController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry,
                                                    ISettings* settings, QObject* parent)
-    : PhosphorControl::PageController(QStringLiteral("decoration"), parent)
+    // "decoration-staging", not "decoration": the sidebar nav node owns the
+    // bare id (regVirtual in settingscontroller_pageregistration.cpp), and the
+    // staging controller stays independently addressable — same split as
+    // AnimationsPageController's "animations-staging".
+    : PhosphorControl::PageController(QStringLiteral("decoration-staging"), parent)
     , m_registry(registry)
     , m_settings(settings)
 {

@@ -61,11 +61,11 @@ SurfaceShaderItem::SurfaceShaderItem(QQuickItem* parent)
 
 SurfaceShaderItem::~SurfaceShaderItem()
 {
-    // Nothing to do: SurfaceShaderItem holds no owning node pointer of its
-    // own — the scene graph owns the render node and tears it down through
-    // the base ShaderEffect's release path on item destruction. (The
-    // zero-size branch in updatePaintNode handles only the live
-    // resize-to-zero case.)
+    // Nothing to do HERE: updatePaintNode registers its node with the base
+    // (registerRenderNode), so the base ~ShaderEffect severs the node's
+    // back-pointer (invalidateItem) and the sceneGraphAboutToStop handler
+    // releases its GPU resources — the same coverage the base gives its own
+    // node. The scene graph owns and deletes the node itself.
 }
 
 // ============================================================================
@@ -154,8 +154,10 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             // Mirror the parent ShaderEffect's zero-size branch: sever the
             // node's back-pointer to this item via invalidateItem() before
             // deleting it, so any in-flight render-thread access fails safe
-            // instead of walking a freed item.
+            // instead of walking a freed item. Deregister from the base so
+            // its destructor doesn't invalidate a dangling pointer.
             static_cast<PhosphorRendering::ShaderNodeRhi*>(oldNode)->invalidateItem();
+            registerRenderNode(nullptr);
             delete oldNode;
         }
         return nullptr;
@@ -168,8 +170,15 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     if (!node) {
         // Scene graph deleted the previous node, or first call. Route node
         // creation through createShaderNode() so the surface UBO profile is
-        // installed.
+        // installed, and REGISTER the node with the base: this override
+        // replaces the base updatePaintNode that normally does the tracking,
+        // and without it the base destructor / sceneGraphAboutToStop teardown
+        // (invalidateItem + resource release) silently no-ops for this item —
+        // a render-thread prepare() between item destruction and node deletion
+        // would then dereference the freed item.
+        registerRenderNode(nullptr);
         node = createShaderNode();
+        registerRenderNode(node);
         freshNode = true;
     }
 

@@ -338,6 +338,30 @@ bool SettingsController::pageSupportsDiscard(const QString& page) const
     return pageSupportsReset(page);
 }
 
+void SettingsController::reconcilePagesDirty(const QSet<QString>& pages)
+{
+    // Batched reconcilePageDirty: adjust every page's m_dirtyPages membership
+    // against its value-based truth, then emit dirtyPagesChanged AT MOST once —
+    // the shared-domain reset paths reconcile every leaf of a group and would
+    // otherwise fire one NOTIFY per flipped leaf (the discard paths already
+    // batch this way).
+    bool changed = false;
+    for (const QString& page : pages) {
+        const bool dirty = isPageDirty(page);
+        const bool had = m_dirtyPages.contains(page);
+        if (dirty && !had) {
+            m_dirtyPages.insert(page);
+            changed = true;
+        } else if (!dirty && had) {
+            m_dirtyPages.remove(page);
+            changed = true;
+        }
+    }
+    if (changed) {
+        Q_EMIT dirtyPagesChanged();
+    }
+}
+
 void SettingsController::reconcilePageDirty(const QString& page)
 {
     // Match m_dirtyPages to the value-based truth for this manifest page.
@@ -411,10 +435,9 @@ void SettingsController::resetPage(const QString& page)
         // active page: the shared domain means an edit made while a sibling
         // subpage was active left ITS m_dirtyPages entry behind, and a reset
         // that lands back on the committed baseline must clear those too or
-        // needsSave() sticks true with no badge to explain it.
-        for (const QString& leaf : pageGroupChildren().value(QStringLiteral("animations"))) {
-            reconcilePageDirty(leaf);
-        }
+        // needsSave() sticks true with no badge to explain it. Batched so
+        // dirtyPagesChanged fires at most once (like the discard path).
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
         return;
     }
 
@@ -433,10 +456,9 @@ void SettingsController::resetPage(const QString& page)
         // while a sibling leaf was active left ITS m_dirtyPages entry behind,
         // and a reset that lands back on the committed baseline must clear
         // those too or needsSave() sticks true with no badge to explain it
-        // (mirrors the discardPage decoration branch).
-        for (const QString& leaf : pageGroupChildren().value(QStringLiteral("decoration"))) {
-            reconcilePageDirty(leaf);
-        }
+        // (mirrors the discardPage decoration branch). Batched so
+        // dirtyPagesChanged fires at most once.
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decoration")));
         return;
     }
 

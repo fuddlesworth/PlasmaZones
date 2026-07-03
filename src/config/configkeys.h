@@ -344,7 +344,10 @@ public:
 
     // DecorationProfileTree JSON blob — the user-applied per-surface decoration
     // (shader-pack chain). Mirrors the animation ShaderProfileTree blob under
-    // Animations; persisted as a nested JSON object under the Surface group.
+    // Animations, persisted as a nested JSON object under the Surface group —
+    // with one materialization difference: the surface schema default is the
+    // serialized empty tree ({"baseline":…,"overrides":[]}, non-empty as a
+    // map), whereas the animation default is a bare {}.
     P_CONFIG_KEY(surfaceDecorationTreeKey, "DecorationProfileTree")
 
     // ═══════════════════════════════════════════════════════════════════════════

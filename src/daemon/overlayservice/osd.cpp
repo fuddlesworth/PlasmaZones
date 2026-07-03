@@ -357,7 +357,8 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     }
 
     const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_surfaceShaderRegistry->effect(packId);
-    if (!effect.isValid() || effect.fragmentShaderPath.isEmpty()) {
+    // isValid() already requires a non-empty fragmentShaderPath.
+    if (!effect.isValid()) {
         qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): pack" << packId
                              << "has no valid fragment shader — rendering without decoration";
         clearDecoration();

@@ -1094,7 +1094,7 @@ private Q_SLOTS:
         {
             QFile f(corruptPath);
             QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(corruptBytes);
+            QCOMPARE(f.write(corruptBytes), static_cast<qint64>(corruptBytes.size()));
         }
 
         QVERIFY2(!ConfigMigration::ensureJsonConfig(), "ensureJsonConfig must return false on a malformed rules.json");
@@ -1150,7 +1150,7 @@ private Q_SLOTS:
         {
             QFile f(corruptPath);
             QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(corruptBytes);
+            QCOMPARE(f.write(corruptBytes), static_cast<qint64>(corruptBytes.size()));
         }
 
         // Migration MUST abort.
@@ -1282,7 +1282,7 @@ private Q_SLOTS:
         {
             QFile pin(quickLayoutsPath + QStringLiteral("/.pin"));
             QVERIFY(pin.open(QIODevice::WriteOnly));
-            pin.write("x");
+            QCOMPARE(pin.write("x"), static_cast<qint64>(1));
         }
 
         // First attempt: the sidecar write fails, migration aborts BEFORE

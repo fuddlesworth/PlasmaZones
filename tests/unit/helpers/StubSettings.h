@@ -8,6 +8,8 @@
 
 #include <PhosphorSnapEngine/ISnapSettings.h>
 
+#include <QJsonDocument>
+
 namespace PlasmaZones {
 
 /**

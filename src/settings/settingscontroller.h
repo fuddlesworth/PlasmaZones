@@ -666,6 +666,10 @@ private:
     // any page whose isPageDirty is value-based — manifest, ordering, shortcuts,
     // and animation pages.
     void reconcilePageDirty(const QString& page);
+    // Batched variant for shared-domain groups (animation / decoration leaves):
+    // reconciles every listed page but emits dirtyPagesChanged at most once,
+    // matching the discard paths' single-emit discipline.
+    void reconcilePagesDirty(const QSet<QString>& pages);
     // Value-based attribution for the two rule-backed pages sharing one
     // RuleController model: set m_dirtyPages membership for "window-appearance"
     // (= baselinesDirty) and "rules" (= userRulesDirty), emitting
