@@ -1,23 +1,38 @@
 {
     "id": "glow",
     "name": "Glow",
-    "description": "An outer glow in the style of the Oxygen decoration. A soft coloured halo radiates outward from the surface's edge and follows its exact shape, so it hugs the rounded corners when stacked after Border in a chain. The content itself is untouched, and the halo dims when the surface loses focus. Strength and tint are its parameters.",
+    "description": "A soft coloured shadow that hugs the surface's edge, brightest against the window and fading out over the glow size. It follows the frame's rounded corners and dims when the surface loses focus. Needs a window shadow margin to draw into, so it has no effect on borderless windows without shadows.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Decoration",
-    "multipass": true,
-    "bufferShaders": ["buffer0.frag", "buffer1.frag"],
-    "bufferScale": 0.5,
     "fragmentShader": "effect.frag",
     "parameters": [
         {
             "id": "glowStrength",
             "name": "Glow strength",
             "type": "float",
-            "default": 0.85,
+            "default": 0.7,
             "min": 0.0,
             "max": 2.0,
-            "description": "Intensity of the outer halo"
+            "description": "Intensity of the halo at the window edge"
+        },
+        {
+            "id": "glowSize",
+            "name": "Glow size",
+            "type": "int",
+            "default": 24,
+            "min": 4,
+            "max": 64,
+            "description": "How far the halo reaches from the edge (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Corner rounding the halo follows (px, match the Border pack)"
         },
         {
             "id": "glowColor",
