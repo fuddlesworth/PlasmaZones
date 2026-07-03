@@ -1236,13 +1236,14 @@ private Q_SLOTS:
 
     // ─── Per-monitor gap beats a global per-mode gap (specificity, not priority) ─
     // A per-monitor (ScreenId-pinned) gap override and a global per-mode
-    // (Mode-pinned) gap rule can both match the same window/slot. The v4 cascade
-    // had the monitor-specific value win; the v4→v5 migration even seeds the
-    // per-mode rule at a HIGHER raw priority (500) than the per-screen rule (300).
-    // resolveContextGaps must therefore order the slot by MATCH SPECIFICITY
-    // (ScreenId-pinned > Mode-pinned), so the per-monitor override wins despite its
-    // lower priority — while a slot the per-monitor rule does NOT carry still falls
-    // through to the per-mode rule.
+    // (Mode-pinned) gap rule can both match the same window/slot. A hand-authored
+    // per-mode gap rule can even carry a HIGHER raw priority (500) than a
+    // per-screen rule (300). resolveContextGaps must therefore order the slot by
+    // MATCH SPECIFICITY (ScreenId-pinned > Mode-pinned), so the per-monitor
+    // override wins despite its lower priority, while a slot the per-monitor rule
+    // does NOT carry still falls through to the per-mode rule. (Appearance/gaps are
+    // config-backed now, so migration creates no gap rules; these are authored
+    // directly to pin the cascade contract.)
     void testPerScreenGapBeatsPerModeGap()
     {
         const auto intGapAction = [](QLatin1StringView type, int value) {

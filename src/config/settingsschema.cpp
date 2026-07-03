@@ -101,6 +101,24 @@ auto validStringOr(std::initializer_list<QLatin1String> valid, QString fallback)
     };
 }
 
+/// Window-border colour validator. The value is a string that is EITHER the
+/// "accent" sentinel (which the effect resolves to the live system colour) OR a
+/// QColor hex; snap anything else to @p fallback. Kept as a string round-trip
+/// (not validColorOr, which coerces to QColor and would drop the sentinel) so a
+/// hand-edited garbage colour in the on-disk file can't flow to the effect. The
+/// bare "accent" literal mirrors ConfigDefaults::windowBorderColorActive (the
+/// config layer deliberately avoids pulling PhosphorRules::BorderColorToken in).
+auto validBorderColorOr(QString fallback)
+{
+    return [fallback = std::move(fallback)](const QVariant& v) -> QVariant {
+        const QString raw = v.toString();
+        if (raw == QLatin1String("accent") || QColor(raw).isValid()) {
+            return raw;
+        }
+        return fallback;
+    };
+}
+
 /// Normalize a comma-joined list: split, trim each entry, drop empties,
 /// drop duplicates, rejoin. Shared by every setting whose wire format is a
 /// comma-separated list (layout order, algorithm order, exclusion lists).
@@ -835,8 +853,16 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::windowBorderRadiusMin(), CD::windowBorderRadiusMax())},
-        {CD::borderColorActiveKey(), CD::windowBorderColorActive(), QMetaType::QString},
-        {CD::borderColorInactiveKey(), CD::windowBorderColorInactive(), QMetaType::QString},
+        {CD::borderColorActiveKey(),
+         CD::windowBorderColorActive(),
+         QMetaType::QString,
+         {},
+         validBorderColorOr(CD::windowBorderColorActive())},
+        {CD::borderColorInactiveKey(),
+         CD::windowBorderColorInactive(),
+         QMetaType::QString,
+         {},
+         validBorderColorOr(CD::windowBorderColorInactive())},
         {CD::hideTitleBarsKey(), CD::windowHideTitleBars(), QMetaType::Bool},
         {CD::titleBarScopeKey(),
          CD::windowTitleBarScope(),

@@ -151,6 +151,49 @@ private Q_SLOTS:
         QCOMPARE(settings.windowTitleBarScope(), QStringLiteral("all"));
     }
 
+    /**
+     * A hand-edited garbage border colour (neither the "accent" sentinel nor a
+     * valid QColor) snaps to the schema default so garbage can't flow to the
+     * effect; a valid hex round-trips untouched.
+     */
+    void testReadValidatedBorderColor_garbageSnaps_hexPreserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::borderColorActiveKey(), QStringLiteral("not-a-color"));
+            windows->writeString(ConfigDefaults::borderColorInactiveKey(), QStringLiteral("#FF3DAEE9"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowBorderColorActive(), ConfigDefaults::windowBorderColorActive());
+        QCOMPARE(settings.windowBorderColorInactive(), QStringLiteral("#FF3DAEE9"));
+    }
+
+    /**
+     * The "accent" sentinel is a valid border-colour value (the effect resolves it
+     * to the live system colour), so validation must leave it untouched.
+     */
+    void testReadValidatedBorderColor_accentPreserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::borderColorActiveKey(), QStringLiteral("accent"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowBorderColorActive(), QStringLiteral("accent"));
+    }
+
     // =========================================================================
     // Trigger list JSON parse (invalid JSON + max-size cap)
     // =========================================================================

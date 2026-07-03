@@ -235,9 +235,12 @@ Daemon::Daemon(QObject* parent)
     // the list once via setAllRules (a single persist + rulesChanged) instead of
     // per-rule removeRule, and gate it on removedAny so a clean store (second
     // startup, or a fresh install) neither persists nor emits. The store loaded in
-    // its constructor, so this runs on every startup; rulesChanged consumers are
-    // wired later (createAdaptors / setup), so any emit here is inert at
-    // construction time.
+    // its constructor. Settings IS already a rulesChanged consumer (it subscribes
+    // in its own ctor, constructed above), so a strip here reaches
+    // Settings::onRuleStoreChanged; that only recomputes its gap fingerprint and
+    // its downstream settingsChanged / perScreen* signals have no connected
+    // listeners yet (the adaptors and geometry wiring land later in setup), so the
+    // second-order effect is inert.
     if (m_ruleStore && !stripStaleManagedAppearanceBaselines(*m_ruleStore)) {
         qCWarning(lcDaemon) << "Failed to persist rules.json after stripping stale baseline appearance rules";
     }

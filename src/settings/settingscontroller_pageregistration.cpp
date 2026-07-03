@@ -610,6 +610,14 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::tilingAlgorithmGroup(), CD::maxWindowsKey()},
              {CD::tilingAlgorithmGroup(), CD::perAlgorithmSettingsKey()},
          }},
+        // Only the GLOBAL Windows.* / Gaps.* keys are listed. Per-monitor gap
+        // overrides live in the per-screen autotile store (AutotileScreen:*), not
+        // in flat config keys, so — like the Tiling Algorithm page's per-monitor
+        // split/master/max overrides — they are NOT part of this page's per-page
+        // dirty/Reset/Discard. Per-monitor gaps are reset through the Gaps card's
+        // scope chip (its override dot + clearPerScreenGapRule), matching the
+        // established per-monitor-override UX; the global footer Save/Discard
+        // handles them via the per-screen save path.
         {QStringLiteral("window-appearance"),
          {
              {CD::windowsAppearanceGroup(), CD::showBorderKey()},

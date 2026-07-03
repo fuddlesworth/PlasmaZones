@@ -821,13 +821,12 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     QJsonObject zoneSelector = v1ZoneSelector;
 
     // ── Snapping.Gaps ─────────────────────────────────────────────────────────
-    // The shared inner/outer gaps are NOT migrated: the global default is now
-    // rule-backed (the managed baseline appearance Rule, seeded by the
-    // daemon), so there is no stored "Gaps" group destination. Per the
-    // no-ad-hoc-backwards-compat policy the v1 zone-padding / outer-gap values
-    // are silently dropped (left in v1Zones, never written out); users fall back
-    // to the baseline rule's defaults. The snapping-specific AdjacentThreshold
-    // stays in Snapping.Gaps.
+    // The shared inner/outer gaps are NOT migrated from v1. Per the
+    // no-ad-hoc-backwards-compat policy the ancient v1 zone-padding / outer-gap
+    // values are silently dropped (left in v1Zones, never written out); a v1 user
+    // falls back to the config gap defaults (the top-level "Gaps" group, populated
+    // by the v4→v5 step). The snapping-specific AdjacentThreshold stays in
+    // Snapping.Gaps.
     QJsonObject snappingGaps;
     moveKey(v1Zones, QLatin1String("AdjacentThreshold"), snappingGaps, QLatin1String("AdjacentThreshold"));
 
@@ -880,16 +879,14 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 
     // The v1 autotile border / title-bar appearance keys
     // (AutotileShowBorder / Width / Radius / BorderColor / InactiveBorderColor /
-    // UseSystemBorderColors / HideTitleBars) are intentionally dropped: window
-    // appearance is resolved from the managed baseline appearance Rule
-    // now, so there is no Tiling.Appearance destination group. Per the
-    // no-ad-hoc-backwards-compat policy the stale v1 values are silently
-    // discarded; users fall back to the baseline rule's defaults.
+    // UseSystemBorderColors / HideTitleBars) are intentionally dropped. Per the
+    // no-ad-hoc-backwards-compat policy the ancient v1 values are silently
+    // discarded; a v1 user falls back to the config appearance defaults (the
+    // top-level "Windows" group, populated by the v4→v5 step).
 
     // The v1 autotile inner/outer gap keys are dropped for the same reason as the
-    // snapping ones above: the shared global gap default is rule-backed now, so
-    // there is no stored "Gaps" group destination. SmartGaps is tiling-specific
-    // and is NOT part of the rule-backed model, so it stays in Tiling.Gaps.
+    // snapping ones above (no-ad-hoc-backwards-compat; users fall back to the
+    // config "Gaps" defaults). SmartGaps is tiling-specific and stays in Tiling.Gaps.
     QJsonObject tilingGaps;
     moveKey(v1Autotiling, QLatin1String("AutotileSmartGaps"), tilingGaps, QLatin1String("SmartGaps"));
 

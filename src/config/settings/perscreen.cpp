@@ -795,6 +795,9 @@ void Settings::clearPerScreenGapOverride(const QString& screenIdOrName)
     if (clearPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenGapDimensionKey,
                                 /*clearGaps=*/true)) {
         Q_EMIT perScreenAutotileSettingsChanged();
+        // Clearing a per-monitor gap override is a gap-dimension change, so fire
+        // the gap-resnap trigger too (see setPerScreenAutotileSetting).
+        Q_EMIT perScreenSnappingSettingsChanged();
         Q_EMIT settingsChanged();
     }
 }
@@ -828,6 +831,13 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
 
     if (applyPerScreenSetting(m_perScreenAutotileSettings, screenIdOrName, normalizedKey, validated)) {
         Q_EMIT perScreenAutotileSettingsChanged();
+        // A per-monitor gap-dimension change must fire the gap-resnap trigger the
+        // daemon binds (scheduleGapResnap), the same way the config-reload load()
+        // path and the context-gap-rule path do. Gate on the gap-dimension subset
+        // so an algorithm / split edit doesn't trigger a spurious gap resnap.
+        if (isPerScreenGapDimensionKey(normalizedKey)) {
+            Q_EMIT perScreenSnappingSettingsChanged();
+        }
         Q_EMIT settingsChanged();
     }
 }

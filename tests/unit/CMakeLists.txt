@@ -306,7 +306,7 @@ target_link_libraries(test_migration_v3_to_v4
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
 add_test(NAME test_migration_v3_to_v4 COMMAND test_migration_v3_to_v4)
 
-# v4 → v5 per-mode appearance + gaps → window-rule override migration.
+# v4 → v5 per-mode appearance + gaps → unified Windows/Gaps config-group migration.
 add_executable(test_migration_v4_to_v5 config/test_migration_v4_to_v5.cpp)
 target_link_libraries(test_migration_v4_to_v5
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)

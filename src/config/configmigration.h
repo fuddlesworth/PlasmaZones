@@ -168,7 +168,9 @@ public:
     /// Idempotent: the cleanup-only branch runs whenever rules.json
     /// already exists as a valid v4 `RuleSet` (probed via
     /// `RuleSet::loadFromFile`, which requires `_version ==
-    /// ConfigSchemaVersion` exactly). It is NOT a strict no-op — it
+    /// RuleSet::SchemaVersion`, pinned at 4 independently of the config
+    /// ConfigSchemaVersion — that pin is why an already-converted rules.json
+    /// survives a config schema bump without a rebuild). It is NOT a strict no-op — it
     /// retries the still-pending tail steps (strip surviving `_v4*Stash`
     /// keys, retire a still-present assignments.json) so a partial earlier
     /// run that crashed between rules.json commit and the tail
@@ -214,8 +216,11 @@ public:
     /// keys/groups from config.json (leaving surviving non-appearance keys such
     /// as `Snapping.Gaps.AdjacentThreshold` and `Tiling.Gaps.SmartGaps` in
     /// place), and stamps `_version = 5`. It creates NO rules. The per-screen
-    /// `PerScreen.{Snapping,Autotile}` gap subsets are LEFT untouched on the root
-    /// for a later per-screen gap config migration step to consume.
+    /// `PerScreen.{Snapping,Autotile}` gap subsets are consumed IN-PLACE here too
+    /// (consumeV4PerScreenGaps): each screen's gap dimensions collapse into that
+    /// screen's per-screen autotile config group (`AutotileScreen:*`) and the
+    /// consumed v4 per-screen gap keys are stripped. Do NOT add a second
+    /// per-screen gap migration step — these are already folded.
     static void migrateV4ToV5(QJsonObject& root);
 
     /// Prune the retired provider-default catch-all assignment rule from
