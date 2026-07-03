@@ -9,7 +9,6 @@
 #include <QList>
 #include <QString>
 #include <QStringList>
-#include <QUrl>
 #include <QVariantMap>
 
 namespace PhosphorSurfaceShaders {

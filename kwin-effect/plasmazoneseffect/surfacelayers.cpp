@@ -437,6 +437,14 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
     if (m_surfacePresentFailed) {
         return nullptr;
     }
+    // Same off-paint-caller guard as compiledPack(): reconcileBorderShader
+    // reaches here from D-Bus/settings/lifecycle contexts where the GL context
+    // is not guaranteed current. A no-context call must return without
+    // latching so the next use (at latest the paint cycle) retries.
+    if (!KWin::effects || !KWin::effects->makeOpenGLContextCurrent()) {
+        qCWarning(lcEffect) << "Surface present shader compile deferred: no current GL context";
+        return nullptr;
+    }
     m_surfacePresentFailed = true; // pessimistic until the compile succeeds
 
     static const QByteArray kPresentVertex = QByteArrayLiteral(

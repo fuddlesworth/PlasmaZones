@@ -143,9 +143,13 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
                 << SurfaceShaderContract::kMaxUserTextureSlots
                 << "(canonical texture budget) — surplus entries silently dropped at parse time";
         }
-        // Count only entries fromJson actually processes (up to the slot
-        // cap): an empty path beyond the cap was dropped as SURPLUS (warned
-        // above), and counting it here would misattribute the drop reason.
+        // Count empties within the first kMaxUserTextureSlots raw entries: an
+        // empty path beyond that range was (or would be) dropped as SURPLUS
+        // (warned above), and counting it here would misattribute the drop
+        // reason. This is an approximation of fromJson's exact walk — fromJson
+        // caps on ACCUMULATED non-empty entries, so with early empties it can
+        // consume raw entries past this range — accepted for a diagnostic:
+        // the loaded result is unaffected either way.
         int emptyPathDrops = 0;
         const int processed = qMin(static_cast<int>(declared.size()), SurfaceShaderContract::kMaxUserTextureSlots);
         for (int i = 0; i < processed; ++i) {

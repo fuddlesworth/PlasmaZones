@@ -123,6 +123,20 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
         return &cacheIt->second;
     }
 
+    // First compile for this pack id. Callers are not only paint-cycle code:
+    // reconcileBorderShader runs from D-Bus reply lambdas, settings handlers,
+    // and window-lifecycle slots, where KWin's GL context is not guaranteed
+    // current (the snap-assist thumbnail capture makes this same guard before
+    // its off-paint GL work). Make it current BEFORE inserting the cache slot:
+    // a no-context failure must NOT latch compileFailed for the session — the
+    // next caller (at latest the paint cycle itself) retries with a live
+    // context.
+    if (!KWin::effects->makeOpenGLContextCurrent()) {
+        qCWarning(lcEffect) << "Surface shader pack" << packId
+                            << "compile deferred: no current GL context; retrying on next use";
+        return nullptr;
+    }
+
     // Insert the cache slot up-front so every fail-closed early-return latches by
     // leaving compileFailed=true / shader=null on the cached entry. (The single
     // global path used member latch flags; the per-pack path latches on the slot.)

@@ -307,8 +307,6 @@ private Q_SLOTS:
         const QJsonObject wr = readJson(ConfigDefaults::rulesFilePath());
         QCOMPARE(wr.value(QStringLiteral("_version")).toInt(), 4);
 
-        // config.json stamped at the current schema version (migrateV3ToV4 also
-        // seeds the decoration tree before stamping ConfigSchemaVersion).
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
         // The migration chain now runs v3 → v4 → v5, so config.json lands at
         // the current schema version (the v3→v4 step still stamps 4 mid-chain).

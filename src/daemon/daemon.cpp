@@ -41,7 +41,6 @@
 #include "overlayservice.h"
 #include "unifiedlayoutcontroller.h"
 #include "modetracker.h"
-#include "unifiedlayoutcontroller.h"
 #include "shortcutmanager.h"
 #include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneentryscaffold.h"
@@ -855,8 +854,10 @@ bool Daemon::init()
                 if (!info.isValid() || info.fragmentShaderPath.isEmpty() || !QFile::exists(info.fragmentShaderPath)) {
                     return;
                 }
-                PhosphorSurfaceShaders::SurfaceShaderRegistry* reg = registryPtr.data();
-                if (!reg) {
+                // Pure liveness gate: the include paths come from the static
+                // helper below (not the registry), so the QPointer is checked
+                // only to skip bakes scheduled across registry teardown.
+                if (!registryPtr) {
                     return;
                 }
                 // Include paths come from the SAME function the live loader's
@@ -2463,7 +2464,7 @@ void Daemon::stop()
     // teardown contract grep-discoverable and survives that refactor.
     // `m_snapEngine` is base-typed `PlacementEngineBase*`; the setter
     // lives on the concrete `SnapEngine`. qobject_cast mirrors the
-    // narrowing in the autotile-toggle branch above (~ line 893).
+    // concreteAutotile narrowing a few lines below.
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         concreteSnap->setExcludeRuleSet(nullptr);
     }

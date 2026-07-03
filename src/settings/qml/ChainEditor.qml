@@ -216,7 +216,7 @@ ColumnLayout {
             displayText: count > 0 ? i18n("Add a decoration pack…") : i18n("All installed packs are in the chain")
             // Keep the placeholder visible rather than latching a selection.
             currentIndex: -1
-            onActivated: index => {
+            onActivated: function (index) {
                 var items = root._addableEffects();
                 if (index >= 0 && index < items.length) {
                     root.chainChangeRequested(root._withAppended(items[index].id));
