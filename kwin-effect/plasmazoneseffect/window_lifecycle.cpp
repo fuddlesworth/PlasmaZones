@@ -544,7 +544,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // this covers snapping-mode windows which autotile doesn't track.)
         //
         // VS crossing detection uses PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing()
-        // (shared/virtualscreenid.h) — the same predicate used by autotilehandler/tiling.cpp.
+        // (<PhosphorIdentity/VirtualScreenId.h>) — the same predicate used by
+        // autotilehandler/tiling.cpp.
         connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_virtualScreensReady) {
                 return;

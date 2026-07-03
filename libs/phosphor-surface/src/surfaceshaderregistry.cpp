@@ -143,9 +143,13 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
                 << SurfaceShaderContract::kMaxUserTextureSlots
                 << "(canonical texture budget) — surplus entries silently dropped at parse time";
         }
+        // Count only entries fromJson actually processes (up to the slot
+        // cap): an empty path beyond the cap was dropped as SURPLUS (warned
+        // above), and counting it here would misattribute the drop reason.
         int emptyPathDrops = 0;
-        for (const QJsonValue& v : declared) {
-            if (v.toObject().value(QLatin1String("path")).toString().isEmpty()) {
+        const int processed = qMin(static_cast<int>(declared.size()), SurfaceShaderContract::kMaxUserTextureSlots);
+        for (int i = 0; i < processed; ++i) {
+            if (declared.at(i).toObject().value(QLatin1String("path")).toString().isEmpty()) {
                 ++emptyPathDrops;
             }
         }
@@ -237,13 +241,9 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
                     << missing.join(QLatin1String(", "));
                 e.isMultipass = false;
                 e.bufferShaderPaths.clear();
-                // Per-buffer overrides are positionally aligned with
-                // bufferShaderPaths; with paths cleared, the overrides are
-                // orphaned data that would still survive toJson round-trip
-                // and operator== comparison. Clear them in lockstep so the
-                // disabled-multipass struct is internally coherent.
-                e.bufferWraps.clear();
-                e.bufferFilters.clear();
+                // The per-buffer wrap/filter overrides are cleared by the
+                // single-pass coherence block below (isMultipass is now
+                // false), which is the single owner of that cleanup.
             }
         }
     }

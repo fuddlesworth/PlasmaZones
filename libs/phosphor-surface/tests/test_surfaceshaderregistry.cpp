@@ -139,6 +139,43 @@ private Q_SLOTS:
         QVERIFY(e.bufferWraps.isEmpty());
     }
 
+    void multipass_with_present_buffer_files_preserves_buffer_overrides()
+    {
+        // Positive counterpart to the fail-closed and orphan-clear tests: a
+        // VALID multipass pack (every declared buffer shader on disk) must
+        // keep isMultipass AND its per-buffer wrap/filter overrides through
+        // the registry scan — pinning that the single-pass coherence clear is
+        // gated on !isMultipass, not unconditional.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("bloom"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("multipass"), true);
+        QJsonArray buffers;
+        buffers.append(QStringLiteral("buffer_a.frag"));
+        meta.insert(QLatin1String("bufferShaders"), buffers);
+        QJsonArray wraps;
+        wraps.append(QStringLiteral("repeat"));
+        meta.insert(QLatin1String("bufferWraps"), wraps);
+        QJsonArray filters;
+        filters.append(QStringLiteral("nearest"));
+        meta.insert(QLatin1String("bufferFilters"), filters);
+        QVERIFY(writePack(tmp.path(), QStringLiteral("bloom"), meta,
+                          {QStringLiteral("effect.frag"), QStringLiteral("buffer_a.frag")}));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const SurfaceShaderEffect e = registry.effect(QStringLiteral("bloom"));
+        QVERIFY(e.isValid());
+        QVERIFY(e.isMultipass);
+        QCOMPARE(e.bufferShaderPaths.size(), 1);
+        QCOMPARE(e.bufferWraps, QStringList{QStringLiteral("repeat")});
+        QCOMPARE(e.bufferFilters, QStringList{QStringLiteral("nearest")});
+    }
+
     // ── SurfaceShaderEffect::fromJson validation ─────────────────────────
 
     void fromJson_resets_unknown_texture_wrap_to_empty()

@@ -27,6 +27,22 @@ namespace {
 // Shared wire-size cap for the JSON profile-tree blobs (animation shader tree
 // AND surface decoration tree) accepted over D-Bus.
 constexpr qsizetype kMaxProfileTreeBytes = 64 * 1024;
+
+// Shared wire validation for the two profile-tree blob setters: gate on UTF-8
+// byte length — for multi-byte payloads QString::size() undercounts what a
+// 64 KiB wire frame encodes to — and require a top-level JSON object. Fills
+// @p outDoc with the parsed document on success.
+bool validProfileTreeBlob(const QVariant& v, QJsonDocument* outDoc)
+{
+    const QByteArray raw = v.toString().toUtf8();
+    if (raw.size() > kMaxProfileTreeBytes)
+        return false;
+    QJsonDocument doc = QJsonDocument::fromJson(raw);
+    if (!doc.isObject())
+        return false;
+    *outDoc = std::move(doc);
+    return true;
+}
 }
 
 SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry,
@@ -568,15 +584,8 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_setters[QString(PhosphorProtocol::Service::SettingProperty::ShaderProfileTree)] =
             [concrete](const QVariant& v) -> bool {
-            // Gate on UTF-8 byte length, not QString::size() — for
-            // multi-byte payloads the latter undercounts and a 64 KiB
-            // wire frame can encode to substantially more bytes
-            // on disk / on the bus.
-            const QByteArray raw = v.toString().toUtf8();
-            if (raw.size() > kMaxProfileTreeBytes)
-                return false;
-            const QJsonDocument doc = QJsonDocument::fromJson(raw);
-            if (!doc.isObject())
+            QJsonDocument doc;
+            if (!validProfileTreeBlob(v, &doc))
                 return false;
             concrete->setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
             return true;
@@ -715,14 +724,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] =
         [this](const QVariant& v) -> bool {
-        // Gate on UTF-8 byte length, not QString::size() — same rationale as
-        // the shaderProfileTree setter: a multi-byte payload encodes to more
-        // bytes on the wire than QString::size() reports.
-        const QByteArray raw = v.toString().toUtf8();
-        if (raw.size() > kMaxProfileTreeBytes)
-            return false;
-        const QJsonDocument doc = QJsonDocument::fromJson(raw);
-        if (!doc.isObject())
+        QJsonDocument doc;
+        if (!validProfileTreeBlob(v, &doc))
             return false;
         m_settings->setDecorationProfileTreeJson(v.toString());
         return true;

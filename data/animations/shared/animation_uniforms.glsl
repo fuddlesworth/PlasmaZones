@@ -8,8 +8,8 @@
 //     ShaderNodeRhi → BaseUniforms UBO at binding=0). Qt-RHI's SPIR-V
 //     pipeline mandates UBO-bound uniforms; default-block uniforms aren't
 //     supported. The UBO branch below is std140-aligned with
-//     `PhosphorShaders::BaseUniforms` and covers its full 720-byte
-//     footprint.
+//     `PhosphorShaders::BaseUniforms` for its 672-byte base, extended to
+//     720 bytes by `AnimationUniformExtension`.
 //
 //   • Compositor window-content execution (kwin-effect → KWin::GLShader,
 //     classic OpenGL). KWin's `GLShader::setUniform(loc, val)` API

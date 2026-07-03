@@ -623,17 +623,11 @@ void SettingsController::discardPage(const QString& page)
             const LoadingScope loadingScope(m_loading);
             m_settings.discardKeys(animationConfigKeys());
         }
-        // revertPending() left hasPendingChanges() false; clear every animation
-        // leaf's m_dirtyPages marker so the global needsSave drops the entries
-        // the pendingChangesChanged handler had attributed to the tree.
-        bool changed = false;
-        for (const QString& leaf : pageGroupChildren().value(QStringLiteral("animations"))) {
-            if (m_dirtyPages.remove(leaf))
-                changed = true;
-        }
-        if (changed) {
-            Q_EMIT dirtyPagesChanged();
-        }
+        // revertPending() left hasPendingChanges() false; reconcile every
+        // animation leaf against the value-based truth (all clean post-revert)
+        // so the global needsSave drops the entries the pendingChangesChanged
+        // handler had attributed to the tree. Batched: one emission at most.
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
         return;
     }
 
@@ -648,14 +642,9 @@ void SettingsController::discardPage(const QString& page)
             const LoadingScope loadingScope(m_loading);
             m_settings.discardKeys(decorationConfigKeys());
         }
-        bool changed = false;
-        for (const QString& leaf : pageGroupChildren().value(QStringLiteral("decoration"))) {
-            if (m_dirtyPages.remove(leaf))
-                changed = true;
-        }
-        if (changed) {
-            Q_EMIT dirtyPagesChanged();
-        }
+        // Reconcile every decoration leaf against the value-based truth (all
+        // clean post-discard). Batched: one emission at most.
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decoration")));
         return;
     }
 

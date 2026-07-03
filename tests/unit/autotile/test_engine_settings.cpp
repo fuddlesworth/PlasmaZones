@@ -341,7 +341,7 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Simultaneous desktop+activity switch (coalesced promotion)
+    // Shortcut ratio adjustment stays local (no settings write-back)
     // ═══════════════════════════════════════════════════════════════════════════
 
     void testShortcutAdjustment_doesNotWriteBackToSettings()

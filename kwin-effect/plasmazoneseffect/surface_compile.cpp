@@ -201,14 +201,30 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // NVIDIA (error C7548), latching the pack failed every frame.
     QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(QString::fromUtf8(kSurfaceDefaultVertexSource));
     if (!eff.vertexShaderPath.isEmpty()) {
+        // Every failure below (unreadable / empty file, include expansion
+        // error) warns and KEEPS the already-assigned default vertex stage,
+        // matching the animation path's graceful degradation — feeding the
+        // raw unexpanded source to the compiler would fail the whole pack
+        // ("decoration disabled this session") for a vertex-only defect.
         QFile vertFile(eff.vertexShaderPath);
-        if (vertFile.open(QIODevice::ReadOnly)) {
+        if (!vertFile.open(QIODevice::ReadOnly)) {
+            qCWarning(lcEffect) << "Failed to open surface vertex shader" << eff.vertexShaderPath << "for pack"
+                                << packId << "— falling back to the default surface vertex stage";
+        } else {
             const QString rawVert = QString::fromUtf8(vertFile.readAll());
-            if (!rawVert.isEmpty()) {
+            if (rawVert.isEmpty()) {
+                qCWarning(lcEffect) << "Surface vertex shader file is empty" << eff.vertexShaderPath << "for pack"
+                                    << packId << "— falling back to the default surface vertex stage";
+            } else {
                 QString vertIncErr;
                 const QString expandedVert = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
                     rawVert, QFileInfo(eff.vertexShaderPath).absolutePath(), includePaths, &vertIncErr);
-                vertWithKwinDefine = injectKwinDefineAfterVersion(expandedVert.isEmpty() ? rawVert : expandedVert);
+                if (expandedVert.isEmpty()) {
+                    qCWarning(lcEffect) << "Failed to expand surface vertex-shader includes for" << packId << ":"
+                                        << vertIncErr << "— falling back to the default surface vertex stage";
+                } else {
+                    vertWithKwinDefine = injectKwinDefineAfterVersion(expandedVert);
+                }
             }
         }
     }

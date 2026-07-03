@@ -19,8 +19,9 @@ namespace PlasmaZones {
 
 class ISettings;
 
-/// Q_PROPERTY / Q_INVOKABLE surface for the "Decoration" drill-down
-/// settings pages.
+/// Q_INVOKABLE surface for the "Decoration" drill-down settings pages
+/// (exposed to QML through SettingsController's `decorationPage` Q_PROPERTY;
+/// this class declares invokables + signals, no properties of its own).
 ///
 /// ## Scope: PER-SURFACE chains with walk-up inheritance
 ///

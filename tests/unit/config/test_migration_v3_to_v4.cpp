@@ -792,7 +792,7 @@ private Q_SLOTS:
         // v4 RuleSet; on the second run it succeeds, so finalize takes
         // the already-converted branch and only retries the idempotent
         // cleanup steps instead of rebuilding — rules.json is
-        // byte-identical, the rule count is unchanged.
+        // byte-identical.
         QCOMPARE(secondRun, firstRun);
     }
 
