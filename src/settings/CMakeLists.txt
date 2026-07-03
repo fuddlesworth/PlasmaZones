@@ -270,6 +270,8 @@ qt_add_qml_module(plasmazones-settings
         qml/RulesPage.qml
         qml/MonitorOverview.qml
         qml/MonitorOverviewTile.qml
+        qml/ExpandableRowDelegate.qml
+        qml/ExpandChevron.qml
         qml/ReorderableColumn.qml
         qml/RuleRow.qml
         qml/RuleSectionList.qml

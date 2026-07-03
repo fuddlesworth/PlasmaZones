@@ -220,19 +220,6 @@ Item {
                 visible: root._editing
                 spacing: Kirigami.Units.largeSpacing
 
-                Label {
-                    Layout.fillWidth: true
-                    text: i18n("Decoration chain")
-                    font.weight: Font.DemiBold
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: i18n("Each pack's settings (e.g. the Border pack's width, corner radius and colours) are shown beneath it. A surface shows a border only when the Border pack is in its chain.")
-                    wrapMode: Text.WordWrap
-                    opacity: 0.8
-                }
-
                 ChainEditor {
                     Layout.fillWidth: true
                     availableShaders: root._effects

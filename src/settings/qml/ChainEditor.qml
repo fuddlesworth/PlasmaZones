@@ -5,7 +5,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.phosphor.animation
 import org.plasmazones.common as PZCommon
 
 /**
@@ -134,13 +133,14 @@ ColumnLayout {
             root.chainChangeRequested(next);
         }
 
-        // Each pack is an expandable row modelled on RuleRow: a compact header
-        // (name + one-line description · remove · expand chevron) that drills
-        // open to the pack's inline parameter editor. Collapsed by default so a
-        // multi-pack chain reads as a tidy list. An ItemDelegate (not a custom
-        // Rectangle) so the row's hover/press highlight is byte-identical to a
-        // RuleRow — same control background, no bespoke frame.
-        rowDelegate: ItemDelegate {
+        // Each pack is an expandable row built from the SAME shell as a
+        // RuleRow (ExpandableRowDelegate + ExpandChevron): identical hover
+        // highlight, identical whole-row click-to-expand, identical accordion
+        // motion. The header carries the pack name + one-line description and
+        // a remove button; expanding reveals the pack's inline parameter
+        // editor. Collapsed by default so a multi-pack chain reads as a tidy
+        // list, exactly like the rules priority list.
+        rowDelegate: ExpandableRowDelegate {
             id: packDelegate
 
             readonly property string packId: parent.rowModelData
@@ -149,130 +149,68 @@ ColumnLayout {
             readonly property var _values: (root.packParameters && root.packParameters[packDelegate.packId]) ? root.packParameters[packDelegate.packId] : root._emptyParams
             readonly property string _description: (packDelegate._effect && packDelegate._effect.description) ? packDelegate._effect.description : ""
             readonly property bool _hasParams: packDelegate._schema.length > 0
-            property bool expanded: false
 
-            hoverEnabled: true
-            padding: Kirigami.Units.smallSpacing
-            // Whole-row click toggles expansion, exactly like RuleRow. The
-            // trailing button, chevron, and the param controls in the expanded
-            // body consume their own clicks, so they never reach this handler.
-            onClicked: {
-                if (packDelegate._hasParams)
-                    packDelegate.expanded = !packDelegate.expanded;
-            }
+            expandable: packDelegate._hasParams
+            expansionContent: packDelegate._hasParams ? paramsComponent : null
 
-            contentItem: ColumnLayout {
-                id: packCol
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
 
-                spacing: Kirigami.Units.smallSpacing
-
-                // ── Header row: name + description · remove · chevron ────────
-                RowLayout {
+                Label {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 0
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: root._displayName(packDelegate.packId)
-                            font.bold: true
-                            elide: Text.ElideRight
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            visible: packDelegate._description.length > 0
-                            text: packDelegate._description
-                            opacity: 0.7
-                            elide: Text.ElideRight
-                        }
-                    }
-
-                    ToolButton {
-                        icon.name: "edit-delete-remove"
-                        display: ToolButton.IconOnly
-                        Accessible.name: i18n("Remove %1", root._displayName(packDelegate.packId))
-                        onClicked: {
-                            var idx = (root.chain || []).indexOf(packDelegate.packId);
-                            if (idx >= 0)
-                                root.chainChangeRequested(root._withRemoved(idx));
-                        }
-                    }
-
-                    // Expand chevron — a passive disclosure indicator that
-                    // rotates 90° when open (RuleRow pattern). The whole-row
-                    // click owns the toggle; this carries no handler so it
-                    // doesn't double-fire against it.
-                    Kirigami.Icon {
-                        visible: packDelegate._hasParams
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.leftMargin: Kirigami.Units.smallSpacing
-                        Layout.rightMargin: Kirigami.Units.smallSpacing
-                        source: "arrow-right"
-                        opacity: 0.6
-                        rotation: packDelegate.expanded ? 90 : 0
-
-                        Behavior on rotation {
-                            PhosphorMotionAnimation {
-                                profile: "widget.hover"
-                                durationOverride: Kirigami.Units.shortDuration
-                            }
-                        }
-                    }
+                    text: root._displayName(packDelegate.packId)
+                    font.bold: true
+                    elide: Text.ElideRight
                 }
 
-                // ── Expansion area: the pack's inline parameter editor ───────
-                // Animated open/collapse mirroring RuleRow's expansion. Reuses
-                // the shared ShaderParamsEditor — the same editor + colour
-                // dialog + lock / randomize the animation pages and App-Rules
-                // action row use — so behaviour is identical everywhere.
-                Item {
-                    id: paramsClip
-
+                Label {
                     Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.smallSpacing
-                    clip: true
-                    Layout.preferredHeight: packDelegate.expanded ? paramsEditor.implicitHeight + Kirigami.Units.smallSpacing : 0
-                    opacity: packDelegate.expanded ? 1 : 0
-                    visible: Layout.preferredHeight > 0 || opacity > 0
+                    visible: packDelegate._description.length > 0
+                    text: packDelegate._description
+                    opacity: 0.7
+                    elide: Text.ElideRight
+                }
+            }
 
-                    Behavior on Layout.preferredHeight {
-                        PhosphorMotionAnimation {
-                            profile: packDelegate.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
-                            durationOverride: Kirigami.Units.shortDuration
-                        }
+            ToolButton {
+                icon.name: "edit-delete-remove"
+                display: ToolButton.IconOnly
+                Accessible.name: i18n("Remove %1", root._displayName(packDelegate.packId))
+                onClicked: {
+                    var idx = (root.chain || []).indexOf(packDelegate.packId);
+                    if (idx >= 0)
+                        root.chainChangeRequested(root._withRemoved(idx));
+                }
+            }
+
+            ExpandChevron {
+                visible: packDelegate._hasParams
+                expanded: packDelegate.expanded
+            }
+
+            // Lazily-loaded parameter editor, hosted by the shell's expansion
+            // Loader. Reuses the shared ShaderParamsEditor — the same editor +
+            // colour dialog + lock / randomize host the animation profile
+            // editor and App-Rules action row use — so behaviour is identical
+            // everywhere.
+            Component {
+                id: paramsComponent
+
+                PZCommon.ShaderParamsEditor {
+                    compact: true
+                    enableGroups: true
+                    enableLocking: true
+                    enableRandomize: true
+                    enableImage: false
+                    parameters: packDelegate._schema
+                    currentValues: packDelegate._values
+                    effectId: packDelegate.packId
+                    onValueChanged: function (effectId, paramId, value) {
+                        root.paramChangeRequested(effectId, paramId, value);
                     }
-
-                    Behavior on opacity {
-                        PhosphorMotionAnimation {
-                            profile: packDelegate.expanded ? "widget.fadeIn" : "widget.fadeOut"
-                            durationOverride: Kirigami.Units.shortDuration
-                        }
-                    }
-
-                    PZCommon.ShaderParamsEditor {
-                        id: paramsEditor
-
-                        width: paramsClip.width
-                        compact: true
-                        enableGroups: true
-                        enableLocking: true
-                        enableRandomize: true
-                        enableImage: false
-                        parameters: packDelegate._schema
-                        currentValues: packDelegate._values
-                        effectId: packDelegate.packId
-                        onValueChanged: function (effectId, paramId, value) {
-                            root.paramChangeRequested(effectId, paramId, value);
-                        }
-                        onRandomizeRequested: function (rolled) {
-                            root.paramsRandomizeRequested(packDelegate.packId, rolled);
-                        }
+                    onRandomizeRequested: function (rolled) {
+                        root.paramsRandomizeRequested(packDelegate.packId, rolled);
                     }
                 }
             }
