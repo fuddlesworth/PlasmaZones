@@ -115,6 +115,11 @@ QString PlasmaZonesEffect::zoneForWindow(const QString& windowId) const
     return m_navigationHandler->zoneForWindow(windowId);
 }
 
+void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
+{
+    m_navigationHandler->clearWindowZone(windowId);
+}
+
 PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);

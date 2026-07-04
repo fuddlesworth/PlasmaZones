@@ -481,15 +481,10 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // empty zoneId (e.g. a float toggle when no pre-tile geometry is
         // stored, so applyGeometryForFloat sends nothing). Idempotent — a
         // no-op if the window wasn't snap-tracked.
+        // clearWindowSnapped also drops the ZoneCache entry (the IsSnapped /
+        // Zone rule-fact source), covering float paths that don't emit
+        // windowStateChanged with an empty zone.
         m_snapHandler->clearWindowSnapped(windowId);
-        // Same backstop for the ZoneCache, the source of the IsSnapped / Zone
-        // rule-match fields (m_snapHandler's set is a separate border-tracking
-        // cache). Without this, a float path that doesn't emit windowStateChanged
-        // with an empty zone leaves the zone entry stale, so IsSnapped stays true
-        // and a baseline border / title-bar rule scoped to snapped windows keeps
-        // drawing / hiding on the now-floating window. clearWindowZone re-resolves
-        // the rules when it actually drops an entry.
-        m_navigationHandler->clearWindowZone(windowId);
 
         // Invalidate any stale instant-restore entry for this app. The snap
         // restore cache (SnapHandler) is a single-shot latency cache populated at

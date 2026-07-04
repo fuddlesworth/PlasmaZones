@@ -73,8 +73,10 @@ public:
     /// Record @p windowId as snap-committed on @p screenId (idempotent) and
     /// (re)draw its border. Title-bar hiding is driven by rules.
     void markWindowSnapped(const QString& windowId, const QString& screenId);
-    /// Drop @p windowId from the snap set on every screen and remove its
-    /// border. Title-bar restores flow through the rule path.
+    /// Drop @p windowId from the snap set on every screen, remove its border,
+    /// and clear its zone-cache entry (the IsSnapped / Zone rule-fact source)
+    /// so placement-scoped rules re-resolve immediately. Title-bar restores
+    /// flow through the rule path.
     void clearWindowSnapped(const QString& windowId);
     /// Drop all snap tiled-tracking bookkeeping. Physical title-bar restores
     /// are the DecorationManager's job — teardown callers pair this with

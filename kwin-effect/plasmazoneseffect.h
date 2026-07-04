@@ -489,6 +489,13 @@ private:
     bool isWindowSnapped(const QString& windowId) const;
     /// The snap-zone UUID @p windowId occupies, or empty when it occupies none.
     QString zoneForWindow(const QString& windowId) const;
+    /// Drop @p windowId's zone entry from the NavigationHandler zone cache —
+    /// the source of the IsSnapped / Zone rule-match fields — re-resolving the
+    /// window's rules when an entry was actually removed. Unsnap paths call
+    /// this (via SnapHandler::clearWindowSnapped) so placement-scoped rules
+    /// see the new state immediately instead of waiting for a daemon
+    /// broadcast that some paths (drag-out unsnap) never send.
+    void clearWindowZone(const QString& windowId);
     /// Build a window-rule match query for @p w with the effect's runtime
     /// placement state (floating / snapped / zone) threaded into the free
     /// `ruleQueryFor` builder. Use this at EVERY rule-evaluation site so

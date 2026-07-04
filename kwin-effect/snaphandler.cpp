@@ -84,6 +84,19 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
     }
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
     m_effect->removeWindowBorder(windowId);
+    // A window that is no longer snap-managed occupies no zone. The zone cache
+    // is the source of the IsSnapped / Zone rule-match fields, and several
+    // unsnap paths (drag-out unsnap in particular) get their answer in the
+    // endDrag reply with NO windowStateChanged broadcast to follow — leaving
+    // the entry stale means the coalesced rule re-resolve still sees
+    // "snapped", so a placement-scoped decoration never rebuilds and a
+    // hide-title-bar-when-snapped rule keeps the title bar hidden until some
+    // unrelated re-resolve (e.g. a focus swap). Clearing here, in the one
+    // place every unsnap funnels through, keeps the fact and the tracking in
+    // lockstep; clearWindowZone re-resolves the rules only when an entry was
+    // actually dropped, so this is free for callers whose broadcast already
+    // landed.
+    m_effect->clearWindowZone(windowId);
 }
 
 void SnapHandler::clearSnapTracking()
