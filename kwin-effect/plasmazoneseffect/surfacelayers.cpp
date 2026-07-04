@@ -84,6 +84,31 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
     if (!w || !transition.cached) {
         return nullptr;
     }
+    // CLOSING (deleted) windows: composite once, then reuse. The content is
+    // frozen for the whole close animation, the client buffer can be released
+    // mid-animation (a re-capture then renders empty/black and the whole
+    // expanded box flashes), and the capture's setShader swap on a deleted
+    // EffectWindow is the UB class endShaderTransition documents — so pay it
+    // exactly once, on the first close frame, where the frozen buffer is
+    // reliably paintable (KWin's own close effects depend on that).
+    if (w->isDeleted()) {
+        if (transition.surfaceLayerCaptured) {
+            const auto sIt = m_surfaceMultipass.find(getWindowId(w));
+            if (sIt != m_surfaceMultipass.end()) {
+                KWin::GLTexture* const frozen = sIt->second.compositeTex[sIt->second.finalSlot].get();
+                if (frozen) {
+                    return frozen;
+                }
+            }
+            return nullptr; // first capture failed — animate the bare surface
+        }
+        KWin::GLTexture* const tex =
+            renderSurfaceChainComposite(w, scale, transition.cached->shader.get(), /*force=*/true);
+        // Latch even on failure: retrying per frame on a deleted window is the
+        // exact hazard this branch exists to avoid.
+        transition.surfaceLayerCaptured = true;
+        return tex;
+    }
     return renderSurfaceChainComposite(w, scale, transition.cached->shader.get(), /*force=*/true);
 }
 

@@ -524,6 +524,15 @@ struct ShaderTransition
     /// window (transitions are torn down + reinstalled when the underlying
     /// shader changes), so a follow-up install starts with a fresh probe.
     bool handednessCached = false;
+
+    /// Set once the surface-decoration layer has been composited for a CLOSING
+    /// (deleted) window. A closing window's content is frozen, its client
+    /// buffer may be released mid-animation, and setShader on a deleted
+    /// EffectWindow is the UB class the teardown paths deliberately avoid — so
+    /// renderSurfaceChain composites the layer ONCE on the first close frame
+    /// and reuses it, instead of re-capturing (and re-swapping the redirect
+    /// shader) every frame. Live windows keep the per-frame re-render.
+    bool surfaceLayerCaptured = false;
     double uAtLeft = 0.0;
     double uAtRight = 1.0;
     double vAtTop = 0.0;
