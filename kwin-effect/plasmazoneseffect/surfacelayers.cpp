@@ -212,15 +212,13 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         return;
     }
     SurfaceMultipassState& state = m_surfaceMultipass[getWindowId(w)];
-    // ── Multi-output arbitration ────────────────────────────────────────
-    // paintWindow runs once per OUTPUT. A canvas overhanging onto a
-    // neighbouring output gets a second capture there covering only the
-    // overhang sliver; last-writer-wins let that sliver (or an empty
-    // intersection) CLOBBER the dominant output's capture, which killed
-    // the blur whenever animations kept both outputs repainting. Compute
-    // this output's canvas coverage up front and only proceed when it
-    // beats the capture already taken THIS frame; keep the previous
-    // frame's capture on the no-intersection path rather than zeroing
+    // ── Multi-output accumulation ───────────────────────────────────────
+    // paintWindow runs once per OUTPUT, and each output can only blit the
+    // slice of the canvas its viewport covers. Captures within one frame
+    // ACCUMULATE: the first clears the texture, subsequent ones add their
+    // (disjoint) slices, and backdropRect grows to the union — a window
+    // straddling a monitor boundary mid-move gets a complete backdrop.
+    // The no-intersection path keeps the previous frame's capture
     // (slightly stale beats none while the window is mid-animation).
     const qint64 pinned = m_shaderManager.currentFrameClockMs();
     const qint64 frameStamp = pinned >= 0 ? pinned : ShaderInternal::shaderClockNowMs();
@@ -235,7 +233,6 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropSize = textureSize;
         state.backdropRect = QVector4D();
         state.backdropFrameMs = -1;
-        state.backdropCoverage = 0.0f;
     }
     // Where to READ the scene from. At rest that is the canvas rect itself;
     // while an animation draws the window elsewhere (animatedFrame valid),
@@ -266,11 +263,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     if (sourceLogicalF.isEmpty()) {
         return; // keep whatever another output captured
     }
-    const qreal sourceArea = qMax(sourceRect.width() * sourceRect.height(), 1.0);
-    const float coverage = static_cast<float>(sourceLogicalF.width() * sourceLogicalF.height() / sourceArea);
-    if (state.backdropFrameMs == frameStamp && coverage <= state.backdropCoverage) {
-        return; // a same-frame capture from another output already covers more
-    }
+    const bool firstOfFrame = state.backdropFrameMs != frameStamp;
     // Restore scissor/blend/viewport state — the clear below and the blit
     // both honour scissor, and this runs mid scene-walk (see ScopedGlState).
     const ShaderInternal::ScopedGlState glStateGuard;
@@ -281,11 +274,16 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropSize = QSize();
         return;
     }
-    // Clear so the off-output margin (if any) reads transparent, not stale.
-    KWin::GLFramebuffer::pushFramebuffer(&fbo);
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    KWin::GLFramebuffer::popFramebuffer();
+    // First capture of the frame: clear so uncovered regions read
+    // transparent, not stale. Same-frame captures from other outputs
+    // ACCUMULATE into their own sub-rects — clearing again would erase the
+    // slice a previous output just blitted.
+    if (firstOfFrame) {
+        KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        KWin::GLFramebuffer::popFramebuffer();
+    }
     const KWin::Rect source(qRound(sourceLogicalF.x()), qRound(sourceLogicalF.y()), qRound(sourceLogicalF.width()),
                             qRound(sourceLogicalF.height()));
     // Destination: the source's PROPORTIONAL position within sourceRect,
@@ -300,17 +298,25 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     const KWin::Rect destination(qRound(destF.x()), qRound(destF.y()), qRound(destF.width()), qRound(destF.height()));
     if (!fbo.blitFromRenderTarget(renderTarget, viewport, source, destination)) {
         state.backdropRect = QVector4D();
-        state.backdropCoverage = 0.0f;
         return;
     }
     // Valid sub-rect in TOP-DOWN normalized coords — matches backdropTexel's
-    // clamp space.
-    state.backdropRect = QVector4D(static_cast<float>(destF.x() / textureSize.width()),
-                                   static_cast<float>(destF.y() / textureSize.height()),
-                                   static_cast<float>(destF.width() / textureSize.width()),
-                                   static_cast<float>(destF.height() / textureSize.height()));
+    // clamp space. Same-frame captures UNION with the slices other outputs
+    // already blitted (adjacent outputs tile the canvas, so the bounding box
+    // is exact for the straddling case).
+    QVector4D destNorm(static_cast<float>(destF.x() / textureSize.width()),
+                       static_cast<float>(destF.y() / textureSize.height()),
+                       static_cast<float>(destF.width() / textureSize.width()),
+                       static_cast<float>(destF.height() / textureSize.height()));
+    if (!firstOfFrame && state.backdropRect.z() > 0.0f && state.backdropRect.w() > 0.0f) {
+        const float x0 = qMin(state.backdropRect.x(), destNorm.x());
+        const float y0 = qMin(state.backdropRect.y(), destNorm.y());
+        const float x1 = qMax(state.backdropRect.x() + state.backdropRect.z(), destNorm.x() + destNorm.z());
+        const float y1 = qMax(state.backdropRect.y() + state.backdropRect.w(), destNorm.y() + destNorm.w());
+        destNorm = QVector4D(x0, y0, x1 - x0, y1 - y0);
+    }
+    state.backdropRect = destNorm;
     state.backdropFrameMs = frameStamp;
-    state.backdropCoverage = coverage;
 }
 
 KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,

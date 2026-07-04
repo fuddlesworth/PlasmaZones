@@ -203,16 +203,16 @@ struct SurfaceMultipassState
     /// means "no capture this frame" and pushes uHasBackdrop = 0.
     QVector4D backdropRect;
 
-    /// Multi-output capture arbitration: the frame stamp and canvas-coverage
-    /// fraction of the capture currently in backdropTex. paintWindow runs per
-    /// OUTPUT, so a canvas straddling two outputs is captured once per output
-    /// per frame — and the neighbour output, which sees only the overhanging
-    /// sliver, must not clobber the dominant output's capture (that clobber
-    /// broke blur exactly while animations kept both outputs repainting).
-    /// A capture only replaces the current one when it is from a NEWER frame
-    /// or covers MORE of the canvas within the same frame.
+    /// Multi-output capture accumulation: paintWindow runs per OUTPUT, so a
+    /// canvas straddling two outputs is captured once per output per frame,
+    /// EACH blitting only its own slice into the shared texture. The first
+    /// capture of a frame clears the texture; same-frame captures accumulate
+    /// (their dest sub-rects are disjoint) and backdropRect grows to the
+    /// UNION, so a window mid-move across a monitor boundary gets a complete
+    /// backdrop instead of whichever slice painted last (winner-takes-all
+    /// left most of the pane clamped and visibly killed the blur during
+    /// cross-monitor animations).
     qint64 backdropFrameMs = -1;
-    float backdropCoverage = 0.0f;
 
     /// When the composite last folded (shader clock, ms). Rate-limits the
     /// backdrop-driven forced repaints in postPaintScreen to ~30fps, the
