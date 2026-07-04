@@ -81,7 +81,7 @@ const Settings::ConfigKeyList& animationConfigKeys()
 // domain above.
 bool isDecorationPage(const QString& page)
 {
-    return SettingsController::pageGroupChildren().value(QStringLiteral("decoration")).contains(page);
+    return SettingsController::pageGroupChildren().value(QStringLiteral("decorations")).contains(page);
 }
 
 // The decoration "value" surface: one Store-backed key. It cannot ride the
@@ -445,7 +445,7 @@ void SettingsController::resetPage(const QString& page)
         // those too or needsSave() sticks true with no badge to explain it
         // (mirrors the discardPage decoration branch). Batched so
         // dirtyPagesChanged fires at most once.
-        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decoration")));
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decorations")));
         return;
     }
 
@@ -621,7 +621,7 @@ void SettingsController::discardPage(const QString& page)
         }
         // Reconcile every decoration leaf against the value-based truth (all
         // clean post-discard). Batched: one emission at most.
-        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decoration")));
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decorations")));
         return;
     }
 

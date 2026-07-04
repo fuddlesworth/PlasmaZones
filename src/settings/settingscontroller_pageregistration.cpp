@@ -123,7 +123,7 @@ void SettingsController::buildApplicationController()
     // The DecorationPageController is wired in
     // as a headless staging domain below; it has no per-page staged state —
     // dirty tracking rides the global decorationProfileTreeChanged NOTIFY loop.
-    regVirtual(QStringLiteral("decoration"), QStringLiteral("appearance"), PhosphorI18n::tr("Decorations"), QString(),
+    regVirtual(QStringLiteral("decorations"), QStringLiteral("appearance"), PhosphorI18n::tr("Decorations"), QString(),
                QStringLiteral("preferences-desktop-theme"));
     // Headless staging domain — trackDomain() connects dirtyChanged + appends
     // to m_domains so applyAllAsync walks it, exactly as registerPage would,
@@ -276,27 +276,28 @@ void SettingsController::buildApplicationController()
     // slot animations-general occupies — keeping its historical
     // "window-appearance" id so dirty tracking, the per-page reset manifest,
     // and deep links stay stable.
-    regPage(m_windowAppearancePage, QStringLiteral("decoration"), PhosphorI18n::tr("General"),
+    regPage(m_windowAppearancePage, QStringLiteral("decorations"), PhosphorI18n::tr("General"),
             QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("configure"), /*collapsible=*/false,
             /*divider=*/true);
 
-    regVirtual(QStringLiteral("decoration-surfaces"), QStringLiteral("decoration"), PhosphorI18n::tr("Surfaces"),
+    regVirtual(QStringLiteral("decorations-surfaces"), QStringLiteral("decorations"), PhosphorI18n::tr("Surfaces"),
                QString(), QStringLiteral("preferences-desktop-multimedia"), /*collapsible=*/true);
-    regVirtual(QStringLiteral("decoration-library"), QStringLiteral("decoration"), PhosphorI18n::tr("Library"),
+    regVirtual(QStringLiteral("decorations-library"), QStringLiteral("decorations"), PhosphorI18n::tr("Library"),
                QString(), QStringLiteral("folder-open"), /*collapsible=*/true);
 
-    regVirtual(QStringLiteral("decoration-windows"), QStringLiteral("decoration-surfaces"), PhosphorI18n::tr("Windows"),
-               QStringLiteral("DecorationWindowsPage.qml"), QStringLiteral("window-new"));
-    regVirtual(QStringLiteral("decoration-osds"), QStringLiteral("decoration-surfaces"), PhosphorI18n::tr("OSDs"),
+    regVirtual(QStringLiteral("decorations-windows"), QStringLiteral("decorations-surfaces"),
+               PhosphorI18n::tr("Windows"), QStringLiteral("DecorationWindowsPage.qml"), QStringLiteral("window-new"));
+    regVirtual(QStringLiteral("decorations-osds"), QStringLiteral("decorations-surfaces"), PhosphorI18n::tr("OSDs"),
                QStringLiteral("DecorationOsdsPage.qml"), QStringLiteral("dialog-information"));
-    regVirtual(QStringLiteral("decoration-popups"), QStringLiteral("decoration-surfaces"), PhosphorI18n::tr("Popups"),
+    regVirtual(QStringLiteral("decorations-popups"), QStringLiteral("decorations-surfaces"), PhosphorI18n::tr("Popups"),
                QStringLiteral("DecorationPopupsPage.qml"), QStringLiteral("view-presentation"));
 
-    regVirtual(QStringLiteral("decoration-sets"), QStringLiteral("decoration-library"),
+    regVirtual(QStringLiteral("decorations-sets"), QStringLiteral("decorations-library"),
                PhosphorI18n::tr("Decoration Sets"), QStringLiteral("DecorationSetsPage.qml"),
                QStringLiteral("color-palette"));
-    regVirtual(QStringLiteral("decoration-shaders"), QStringLiteral("decoration-library"), PhosphorI18n::tr("Shaders"),
-               QStringLiteral("DecorationShadersPage.qml"), QStringLiteral("preferences-desktop-display"));
+    regVirtual(QStringLiteral("decorations-shaders"), QStringLiteral("decorations-library"),
+               PhosphorI18n::tr("Shaders"), QStringLiteral("DecorationShadersPage.qml"),
+               QStringLiteral("preferences-desktop-display"));
 
     // Bridge SettingsController.save/load to the framework's Apply/Cancel
     // (and to the global dirty flag QML chrome binds to).
@@ -420,9 +421,9 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
         {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
         {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
-        {QStringLiteral("decoration"), QStringLiteral("window-appearance")},
-        {QStringLiteral("decoration-surfaces"), QStringLiteral("decoration-windows")},
-        {QStringLiteral("decoration-library"), QStringLiteral("decoration-sets")},
+        {QStringLiteral("decorations"), QStringLiteral("window-appearance")},
+        {QStringLiteral("decorations-surfaces"), QStringLiteral("decorations-windows")},
+        {QStringLiteral("decorations-library"), QStringLiteral("decorations-sets")},
         // The "rules" parent virtual retired when Rules promoted
         // to a top-level entry; no redirect needed because there is no
         // longer a parent id to land on.
@@ -481,12 +482,12 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // animations. decoration-shaders is a read-only browser (never dirty)
     // but rides the topology map for symmetry with animations-shaders.
     static const QSet<QString> kDecorationSurfacesChildren{
-        QStringLiteral("decoration-windows"),
-        QStringLiteral("decoration-osds"),
-        QStringLiteral("decoration-popups"),
+        QStringLiteral("decorations-windows"),
+        QStringLiteral("decorations-osds"),
+        QStringLiteral("decorations-popups"),
     };
-    static const QSet<QString> kDecorationLibraryChildren{QStringLiteral("decoration-sets"),
-                                                          QStringLiteral("decoration-shaders")};
+    static const QSet<QString> kDecorationLibraryChildren{QStringLiteral("decorations-sets"),
+                                                          QStringLiteral("decorations-shaders")};
     // Decoration → General is the window-appearance page (its historical id).
     static const QSet<QString> kDecorationDirectChildren{QStringLiteral("window-appearance")};
     static const QSet<QString> kDecorationAllLeaves =
@@ -541,14 +542,14 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("tiling-config-cat"), kTilingConfigChildren},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
-        {QStringLiteral("decoration-surfaces"), kDecorationSurfacesChildren},
-        {QStringLiteral("decoration-library"), kDecorationLibraryChildren},
+        {QStringLiteral("decorations-surfaces"), kDecorationSurfacesChildren},
+        {QStringLiteral("decorations-library"), kDecorationLibraryChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
         // "appearance" wraps the Animations and Decoration trees (the window-
         // appearance page rides kDecorationAllLeaves as Decoration → General);
         // its collapsed badge lights if any of them is dirty.
         {QStringLiteral("appearance"), kAnimationsAllLeaves + kDecorationAllLeaves},
-        {QStringLiteral("decoration"), kDecorationAllLeaves},
+        {QStringLiteral("decorations"), kDecorationAllLeaves},
         // Top-level inline-collapsible parents must also propagate
         // dirty state from their leaves — without these entries the
         // sidebar's collapsed dirty badge stays cold even when a
@@ -748,11 +749,11 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
         QStringLiteral("window-appearance"),
-        QStringLiteral("decoration-windows"),
-        QStringLiteral("decoration-osds"),
-        QStringLiteral("decoration-popups"),
-        QStringLiteral("decoration-sets"),
-        QStringLiteral("decoration-shaders"),
+        QStringLiteral("decorations-windows"),
+        QStringLiteral("decorations-osds"),
+        QStringLiteral("decorations-popups"),
+        QStringLiteral("decorations-sets"),
+        QStringLiteral("decorations-shaders"),
         QStringLiteral("rules"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
