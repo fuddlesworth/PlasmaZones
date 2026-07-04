@@ -84,30 +84,29 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
     if (!w || !transition.cached) {
         return nullptr;
     }
-    // CLOSING (deleted) windows: composite once, then reuse. The content is
-    // frozen for the whole close animation, the client buffer can be released
-    // mid-animation (a re-capture then renders empty/black and the whole
-    // expanded box flashes), and the capture's setShader swap on a deleted
-    // EffectWindow is the UB class endShaderTransition documents — so pay it
-    // exactly once, on the first close frame, where the frozen buffer is
-    // reliably paintable (KWin's own close effects depend on that).
+    // CLOSING (deleted) windows: NEVER capture — reuse the rest path's last
+    // composite. Re-drawing a deleted window (effects->drawWindow + the
+    // setShader redirect swap on a corpse) is the UB class the teardown paths
+    // avoid, and once the client buffer is released it composites an
+    // opaque/empty padded canvas that flashes the whole expanded box — even a
+    // single first-frame capture flashed (the buffer can be gone by then). A
+    // padded/multi-pack window doesn't need one: renderSurfaceChainComposite
+    // ran on every ALIVE paint frame and m_surfaceMultipass still holds the
+    // final pre-close decorated composite (the entry outlives close because
+    // slotWindowClosed defers removeWindowBorder), which is exactly the frozen
+    // frame the close animation should carry. A plain single-pack unpadded
+    // window has no rest composite and animates the bare frozen uTexture0
+    // (its border does not ride the close — strictly better than the flash;
+    // a future rest-path composite for that class would restore it).
     if (w->isDeleted()) {
-        if (transition.surfaceLayerCaptured) {
-            const auto sIt = m_surfaceMultipass.find(getWindowId(w));
-            if (sIt != m_surfaceMultipass.end()) {
-                KWin::GLTexture* const frozen = sIt->second.compositeTex[sIt->second.finalSlot].get();
-                if (frozen) {
-                    return frozen;
-                }
+        const auto sIt = m_surfaceMultipass.find(getWindowId(w));
+        if (sIt != m_surfaceMultipass.end()) {
+            KWin::GLTexture* const frozen = sIt->second.compositeTex[sIt->second.finalSlot].get();
+            if (frozen) {
+                return frozen;
             }
-            return nullptr; // first capture failed — animate the bare surface
         }
-        KWin::GLTexture* const tex =
-            renderSurfaceChainComposite(w, scale, transition.cached->shader.get(), /*force=*/true);
-        // Latch even on failure: retrying per frame on a deleted window is the
-        // exact hazard this branch exists to avoid.
-        transition.surfaceLayerCaptured = true;
-        return tex;
+        return nullptr;
     }
     return renderSurfaceChainComposite(w, scale, transition.cached->shader.get(), /*force=*/true);
 }
@@ -145,6 +144,9 @@ bool PlasmaZonesEffect::renderSurfaceBufferPasses(KWin::EffectWindow* w, qreal s
     if (!pack || pack->bufferPasses.empty()) {
         return false;
     }
+    // Same rationale as renderSurfaceChainComposite's guard: never leak the
+    // offscreen passes' GL state into the on-screen draw that follows.
+    const ShaderInternal::ScopedGlState glStateGuard;
     namespace SC = PhosphorSurfaceShaders::SurfaceShaderContract;
 
     // Size the targets to the window's expanded geometry × screen scale — the
@@ -425,6 +427,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     if (chain.isEmpty()) {
         return nullptr;
     }
+    // Restore blend/viewport/clear/active-texture on every exit path — the
+    // fold runs right before KWin's on-screen draw of this same frame, which
+    // must not inherit our offscreen state (see ScopedGlState).
+    const ShaderInternal::ScopedGlState glStateGuard;
     namespace SC = PhosphorSurfaceShaders::SurfaceShaderContract;
 
     // Size the targets to the window's expanded geometry × screen scale, with the

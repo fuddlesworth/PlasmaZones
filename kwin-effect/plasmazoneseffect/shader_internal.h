@@ -16,7 +16,62 @@
 #include <array>
 #include <chrono>
 
+#include <epoxy/gl.h>
+
 namespace PlasmaZones::ShaderInternal {
+
+/// Save/restore the global GL state the offscreen decoration folds perturb —
+/// blend enable + separate blend funcs, viewport, clear colour, active texture
+/// unit. The folds (renderSurfaceChainComposite / renderSurfaceBufferPasses /
+/// the snapshot captures) run offscreen passes plus a nested
+/// effects->drawWindow immediately BEFORE KWin's on-screen draw of the same
+/// frame, and KWin's convention is that an effect hands blend/viewport back
+/// the way it found them; without this guard the first frame after a fold
+/// inherits whatever state the fold's last inner draw left (a disabled
+/// GL_BLEND renders the animation shader's premultiplied output as OPAQUE
+/// BLACK across the whole quad — the close-animation black-flash class).
+/// Header-inline so both consuming TUs share one definition under the Unity
+/// build.
+class ScopedGlState
+{
+public:
+    ScopedGlState()
+    {
+        m_blendEnabled = glIsEnabled(GL_BLEND);
+        glGetIntegerv(GL_BLEND_SRC_RGB, &m_blendSrcRgb);
+        glGetIntegerv(GL_BLEND_DST_RGB, &m_blendDstRgb);
+        glGetIntegerv(GL_BLEND_SRC_ALPHA, &m_blendSrcAlpha);
+        glGetIntegerv(GL_BLEND_DST_ALPHA, &m_blendDstAlpha);
+        glGetIntegerv(GL_VIEWPORT, m_viewport);
+        glGetFloatv(GL_COLOR_CLEAR_VALUE, m_clearColor);
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &m_activeTexture);
+    }
+    ~ScopedGlState()
+    {
+        if (m_blendEnabled) {
+            glEnable(GL_BLEND);
+        } else {
+            glDisable(GL_BLEND);
+        }
+        glBlendFuncSeparate(static_cast<GLenum>(m_blendSrcRgb), static_cast<GLenum>(m_blendDstRgb),
+                            static_cast<GLenum>(m_blendSrcAlpha), static_cast<GLenum>(m_blendDstAlpha));
+        glViewport(m_viewport[0], m_viewport[1], m_viewport[2], m_viewport[3]);
+        glClearColor(m_clearColor[0], m_clearColor[1], m_clearColor[2], m_clearColor[3]);
+        glActiveTexture(static_cast<GLenum>(m_activeTexture));
+    }
+    ScopedGlState(const ScopedGlState&) = delete;
+    ScopedGlState& operator=(const ScopedGlState&) = delete;
+
+private:
+    GLboolean m_blendEnabled = GL_FALSE;
+    GLint m_blendSrcRgb = GL_ONE;
+    GLint m_blendDstRgb = GL_ONE_MINUS_SRC_ALPHA;
+    GLint m_blendSrcAlpha = GL_ONE;
+    GLint m_blendDstAlpha = GL_ONE_MINUS_SRC_ALPHA;
+    GLint m_viewport[4] = {0, 0, 0, 0};
+    GLfloat m_clearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    GLint m_activeTexture = GL_TEXTURE0;
+};
 
 /// Splice `#define PLASMAZONES_KWIN` (plus the ARB explicit-location
 /// extension enables) after the shader's `#version` directive, selecting the

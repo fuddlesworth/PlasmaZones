@@ -1207,6 +1207,11 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
         return;
     }
 
+    // Never leak the capture's GL state (blend/viewport/clear/active texture)
+    // into the on-screen draw that follows in this same frame — see
+    // ScopedGlState.
+    const ShaderInternal::ScopedGlState glStateGuard;
+
     std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
     if (!tex) {
         // Allocation failed — give up on the cross-fade; the morph shader reads
