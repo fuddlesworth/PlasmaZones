@@ -4,7 +4,7 @@
     "description": "A pane of glass over the scene behind the window. The backdrop is blurred and bends toward the edges like a bevelled lens, with slight colour fringing and a soft rim light. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Decoration",
+    "category": "Glass",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
     "handlesOpacity": true,
@@ -22,7 +22,8 @@
             "default": 16,
             "min": 2,
             "max": 64,
-            "description": "How strongly the scene behind the glass is blurred (px)"
+            "description": "How strongly the scene behind the glass is blurred (px)",
+            "group": "Blur"
         },
         {
             "id": "cornerRadius",
@@ -31,7 +32,8 @@
             "default": 8,
             "min": 0,
             "max": 32,
-            "description": "Corner rounding of the glass pane (px, match the Border pack)"
+            "description": "Corner rounding of the glass pane (px, match the Border pack)",
+            "group": "Shape"
         },
         {
             "id": "refractionStrength",
@@ -40,7 +42,8 @@
             "default": 0.5,
             "min": 0.0,
             "max": 2.0,
-            "description": "How far the backdrop bends at the pane's bevelled edge"
+            "description": "How far the backdrop bends at the pane's bevelled edge",
+            "group": "Refraction"
         },
         {
             "id": "edgeWidth",
@@ -49,7 +52,8 @@
             "default": 24,
             "min": 4,
             "max": 96,
-            "description": "How far the lens bevel reaches in from the edge (px)"
+            "description": "How far the lens bevel reaches in from the edge (px)",
+            "group": "Shape"
         },
         {
             "id": "fringing",
@@ -58,7 +62,8 @@
             "default": 0.35,
             "min": 0.0,
             "max": 1.0,
-            "description": "Chromatic split between the red and blue refraction"
+            "description": "Chromatic split between the red and blue refraction",
+            "group": "Refraction"
         },
         {
             "id": "rimStrength",
@@ -67,7 +72,8 @@
             "default": 0.35,
             "min": 0.0,
             "max": 1.0,
-            "description": "Strength of the rim light along the pane's edge"
+            "description": "Strength of the rim light along the pane's edge",
+            "group": "Lighting"
         },
         {
             "id": "tintStrength",
@@ -76,14 +82,16 @@
             "default": 0.1,
             "min": 0.0,
             "max": 1.0,
-            "description": "How much of the tint colour is mixed over the glass"
+            "description": "How much of the tint colour is mixed over the glass",
+            "group": "Tint"
         },
         {
             "id": "physicallyBased",
             "name": "Physically based refraction",
             "type": "bool",
             "default": false,
-            "description": "Bend the backdrop with Snell's law instead of the simple offset"
+            "description": "Bend the backdrop with Snell's law instead of the simple offset",
+            "group": "Refraction"
         },
         {
             "id": "bevelIntensity",
@@ -92,7 +100,8 @@
             "default": 1.0,
             "min": 0.0,
             "max": 3.0,
-            "description": "How steeply the physically based bevel tilts the glass surface"
+            "description": "How steeply the physically based bevel tilts the glass surface",
+            "group": "Refraction"
         },
         {
             "id": "cornerLens",
@@ -101,14 +110,16 @@
             "default": 0.5,
             "min": 0.0,
             "max": 2.0,
-            "description": "Extra outward lens pull toward the corners in the physically based mode"
+            "description": "Extra outward lens pull toward the corners in the physically based mode",
+            "group": "Refraction"
         },
         {
             "id": "edgeLighting",
             "name": "Edge lighting",
             "type": "bool",
             "default": false,
-            "description": "Add the backdrop's own light back along the bevel"
+            "description": "Add the backdrop's own light back along the bevel",
+            "group": "Lighting"
         },
         {
             "id": "saturation",
@@ -117,7 +128,8 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Saturation of the glass in the OKLab colour space, where 1.0 leaves it unchanged"
+            "description": "Saturation of the glass in the OKLab colour space, where 1.0 leaves it unchanged",
+            "group": "Tint"
         },
         {
             "id": "noiseStrength",
@@ -126,21 +138,24 @@
             "default": 0.03,
             "min": 0.0,
             "max": 0.2,
-            "description": "Fine grain that masks banding in the blurred glass"
+            "description": "Fine grain that masks banding in the blurred glass",
+            "group": "Tint"
         },
         {
             "id": "tintColor",
             "name": "Tint colour",
             "type": "color",
             "default": "#ffffff",
-            "description": "Colour mixed over the glass"
+            "description": "Colour mixed over the glass",
+            "group": "Tint"
         },
         {
             "id": "rimColor",
             "name": "Rim colour",
             "type": "color",
             "default": "#ffffff",
-            "description": "Colour of the rim light"
+            "description": "Colour of the rim light",
+            "group": "Lighting"
         }
     ]
 }

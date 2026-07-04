@@ -4,7 +4,7 @@
     "description": "Rounded corners and a window border with a moving colour sweep. Two colours circulate around the border band, and the sweep dims when the surface loses focus. Width, corner radius, sweep speed and the two colours are this pack's own parameters.",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Decoration",
+    "category": "Borders",
     "animated": true,
     "fragmentShader": "effect.frag",
     "parameters": [
