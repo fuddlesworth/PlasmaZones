@@ -814,6 +814,8 @@ add_executable(test_decorationpagecontroller
     settings/test_decorationpagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_paths.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_browser.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
 )
 target_link_libraries(test_decorationpagecontroller
     PRIVATE

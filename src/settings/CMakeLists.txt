@@ -117,6 +117,7 @@ set(plasmazones_settings_SRCS
     # Surface-taxonomy helper (parentChain) split into a sibling TU to keep
     # the main controller TU under the 800-line cap. Same class, separate TU.
     decorationpagecontroller_paths.cpp
+    decorationpagecontroller_browser.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
     # helpers shared between the two DecorationPageController TUs.
     decoration_controller_detail.h
@@ -345,6 +346,7 @@ qt_add_qml_module(plasmazones-settings
         # Popups), each driving a ChainEditor (ordered decoration-pack list with
         # per-pack params) and border/titlebar field overrides via
         # DecorationPageController.
+        qml/DecorationShadersPage.qml
         qml/DecorationWindowsPage.qml
         qml/DecorationOsdsPage.qml
         qml/DecorationPopupsPage.qml

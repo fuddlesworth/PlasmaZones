@@ -165,6 +165,22 @@ public:
     /// inherits this node again. @return the number of overrides cleared.
     Q_INVOKABLE int clearOverrideDescendants(const QString& path);
 
+    // ── Shader-browser bridge (ShaderBrowserPage contract) ──────────────
+    // Same trio the animations / snapping shader pages implement, over the
+    // surface-pack registry and the decoration profile tree.
+
+    /// Copy a shader-pack folder into the user surface-pack directory
+    /// (~/.local/share/plasmazones/surface) via the shared
+    /// ShaderPackInstaller. The registry's file watcher rescans on its own.
+    Q_INVOKABLE bool installShaderPack(const QString& sourceUrl);
+    /// Open (creating if needed) the user surface-pack directory in the
+    /// file manager.
+    Q_INVOKABLE void openUserShaderDirectory();
+    /// Every surface path whose DIRECT override's chain contains
+    /// @p effectId, as {path, label} entries sorted by label — the
+    /// browser's "Used in" chips.
+    Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
+
 Q_SIGNALS:
     /// Re-emit of `SurfaceShaderRegistry::effectsChanged` so QML can
     /// rebind without poking at the registry directly.
@@ -175,7 +191,13 @@ Q_SIGNALS:
     /// listen to this to imperatively refresh from the controller.
     void profilesChanged();
 
+    /// Chrome-toast requests from the browser bridge (install / directory
+    /// failures with the concrete reason). Routed by ShaderBrowserPage.
+    void toastRequested(const QString& text);
+
 private:
+    QString userShaderDirectoryPath() const;
+
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_registry = nullptr;
     ISettings* m_settings = nullptr;
 };
