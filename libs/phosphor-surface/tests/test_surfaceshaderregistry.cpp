@@ -198,6 +198,29 @@ private Q_SLOTS:
         QVERIFY(!s.toJson().contains(QLatin1String("animated")));
     }
 
+    void needsBackdrop_flag_parses_and_roundtrips()
+    {
+        // "needsBackdrop" marks a pack that samples the scene behind the
+        // window (frost / glass). Pin the parse, the false default, and the
+        // toJson round-trip; the compositor keys its backdrop capture and
+        // composite routing on this flag.
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("frost"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("needsBackdrop"), true);
+
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(meta);
+        QVERIFY(e.needsBackdrop);
+        QVERIFY(SurfaceShaderEffect::fromJson(e.toJson()).needsBackdrop);
+
+        QJsonObject metaPlain;
+        metaPlain.insert(QLatin1String("id"), QStringLiteral("border"));
+        metaPlain.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        const SurfaceShaderEffect s = SurfaceShaderEffect::fromJson(metaPlain);
+        QVERIFY(!s.needsBackdrop);
+        QVERIFY(!s.toJson().contains(QLatin1String("needsBackdrop")));
+    }
+
     void paddingParam_parses_and_roundtrips()
     {
         // "paddingParam" names the parameter whose resolved value is the

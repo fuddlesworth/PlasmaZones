@@ -167,6 +167,28 @@ inline constexpr const char* kUSurfaceFocused = "uSurfaceFocused";
 /// static decoration costs nothing.
 inline constexpr const char* kITime = "iTime";
 
+/// `sampler2D uBackdrop` — COMPOSITOR-ONLY. The scene BEHIND the window,
+/// captured over the same (padded) canvas as `uTexture0` each frame for
+/// packs that declare `"needsBackdrop": true` (frost / glass). Texel-aligned
+/// with the composite canvas, so a pack samples both with the same uv (via
+/// the `backdropTexel()` helper). The daemon branch declares no such
+/// sampler; packs MUST sample through `backdropTexel()`, which compiles to
+/// transparent there.
+inline constexpr const char* kUBackdrop = "uBackdrop";
+
+/// `vec4 uBackdropRect` — COMPOSITOR-ONLY. The VALID sub-rect of the
+/// backdrop capture in TOP-DOWN normalized coords (xy = min, zw = size).
+/// Canvas parts that hang off the output are never blitted (they stay
+/// cleared); `backdropTexel()` clamps samples into this rect so edge
+/// windows don't smear the cleared margin into their frost.
+inline constexpr const char* kUBackdropRect = "uBackdropRect";
+
+/// `float uHasBackdrop` — 1.0 when a backdrop capture exists this frame,
+/// else 0.0 (and ALWAYS 0.0 on the daemon, which has no scene behind its
+/// surfaces). A needsBackdrop pack styles an explicit fallback on this
+/// gate (e.g. a plain translucent tint) instead of assuming the sampler.
+inline constexpr const char* kUHasBackdrop = "uHasBackdrop";
+
 /// `vec4 customParams[N]` — per-effect declared parameter slots.
 /// Cross-runtime element-name lookup constant: used by the kwin-effect's
 /// `glGetUniformLocation("customParams[N]")` calls and as a

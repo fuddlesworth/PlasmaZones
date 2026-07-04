@@ -409,6 +409,86 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
 // it through surfacePresentShader). See the header for the full contract. Like
 // renderSurfaceBufferPasses this MUST run from paintWindow — it captures the raw
 // surface via effects->drawWindow, which re-enters KWin's draw-window iterator.
+void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTarget,
+                                              const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
+                                              const WindowBorder& wb)
+{
+    // Mirror renderSurfaceChainComposite's canvas math EXACTLY (padded
+    // logical rect, capped capture scale, derived texture size) so uBackdrop
+    // and the composite canvas are texel-aligned — a pack samples both with
+    // the same uv (backdropTexel / surfaceTexel).
+    const qreal pad = wb.outerPadding;
+    QRectF logicalGeometry = w->expandedGeometry();
+    if (logicalGeometry.isEmpty()) {
+        logicalGeometry = w->frameGeometry();
+    }
+    logicalGeometry.adjust(-pad, -pad, pad, pad);
+    qreal captureScale = viewport.scale();
+    constexpr qreal kMaxSurfaceDim = 8192.0;
+    const qreal longestPx = qMax(logicalGeometry.width(), logicalGeometry.height()) * captureScale;
+    if (longestPx > kMaxSurfaceDim) {
+        captureScale *= kMaxSurfaceDim / longestPx;
+    }
+    const QSize textureSize = (logicalGeometry.size() * captureScale).toSize();
+    if (textureSize.isEmpty()) {
+        return;
+    }
+    SurfaceMultipassState& state = m_surfaceMultipass[getWindowId(w)];
+    // Zero-size rect = "no capture this frame"; set on every early-out below
+    // so the fold pushes uHasBackdrop = 0 instead of sampling stale content.
+    state.backdropRect = QVector4D();
+    if (state.backdropSize != textureSize || !state.backdropTex) {
+        state.backdropTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+        if (!state.backdropTex) {
+            state.backdropSize = QSize();
+            return;
+        }
+        state.backdropTex->setFilter(GL_LINEAR);
+        state.backdropTex->setWrapMode(GL_CLAMP_TO_EDGE);
+        state.backdropSize = textureSize;
+    }
+    // The canvas can hang off the output (a padded canvas at a screen edge, a
+    // window half-dragged off): blit only the part the render target covers
+    // and record the valid sub-rect so packs clamp samples into it rather
+    // than reading the cleared margin. Integer-rounded ONCE, and the
+    // destination is derived from the SAME rounded source, so the copy stays
+    // strictly 1:1 with the composite's texel grid.
+    const QRectF sourceLogicalF = logicalGeometry & viewport.renderRect();
+    if (sourceLogicalF.isEmpty()) {
+        return;
+    }
+    // Restore scissor/blend/viewport state — the clear below and the blit
+    // both honour scissor, and this runs mid scene-walk (see ScopedGlState).
+    const ShaderInternal::ScopedGlState glStateGuard;
+    glDisable(GL_SCISSOR_TEST);
+    KWin::GLFramebuffer fbo(state.backdropTex.get());
+    if (!fbo.valid()) {
+        state.backdropTex.reset();
+        state.backdropSize = QSize();
+        return;
+    }
+    // Clear so the off-output margin (if any) reads transparent, not stale.
+    KWin::GLFramebuffer::pushFramebuffer(&fbo);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    KWin::GLFramebuffer::popFramebuffer();
+    const KWin::Rect source(qRound(sourceLogicalF.x()), qRound(sourceLogicalF.y()), qRound(sourceLogicalF.width()),
+                            qRound(sourceLogicalF.height()));
+    const QRectF destF((source.x() - logicalGeometry.x()) * captureScale,
+                       (source.y() - logicalGeometry.y()) * captureScale, source.width() * captureScale,
+                       source.height() * captureScale);
+    const KWin::Rect destination(qRound(destF.x()), qRound(destF.y()), qRound(destF.width()), qRound(destF.height()));
+    if (!fbo.blitFromRenderTarget(renderTarget, viewport, source, destination)) {
+        return;
+    }
+    // Valid sub-rect in TOP-DOWN normalized coords — matches backdropTexel's
+    // clamp space.
+    state.backdropRect = QVector4D(static_cast<float>(destF.x() / textureSize.width()),
+                                   static_cast<float>(destF.y() / textureSize.height()),
+                                   static_cast<float>(destF.width() / textureSize.width()),
+                                   static_cast<float>(destF.height() / textureSize.height()));
+}
+
 KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
                                                                 KWin::GLShader* captureRestoreShader, bool force)
 {
@@ -584,6 +664,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             glViewport(0, 0, target->width(), target->height());
             glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
             glClear(GL_COLOR_BUFFER_BIT);
+            const bool passHasBackdrop = pass.uBackdropLoc >= 0 && state.backdropTex && state.backdropRect.z() > 0.0f;
             {
                 KWin::ShaderBinder binder(pass.shader.get());
                 glActiveTexture(GL_TEXTURE0);
@@ -593,6 +674,32 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 }
                 if (pass.uTimeLoc >= 0) {
                     pass.shader->setUniform(pass.uTimeLoc, surfaceShaderTimeSeconds());
+                }
+                // Canvas geometry for passes that translate logical lengths
+                // (blur radii) into canvas UV steps. uSurfaceSize is the
+                // composite canvas extent — NOT this buffer's own size — so a
+                // radius maps identically at any bufferScale.
+                if (pass.uSurfaceSizeLoc >= 0) {
+                    pass.shader->setUniform(pass.uSurfaceSizeLoc,
+                                            QVector2D(static_cast<float>(state.compositeSize.width()),
+                                                      static_cast<float>(state.compositeSize.height())));
+                }
+                if (pass.uScaleLoc >= 0) {
+                    pass.shader->setUniform(pass.uScaleLoc, static_cast<float>(captureScale));
+                }
+                // Backdrop (needsBackdrop packs) on unit 5 — units 1..4
+                // belong to the pass's iChannel bindings below.
+                if (passHasBackdrop) {
+                    pass.shader->setUniform(pass.uBackdropLoc, 5);
+                    glActiveTexture(GL_TEXTURE5);
+                    state.backdropTex->bind();
+                    glActiveTexture(GL_TEXTURE0);
+                }
+                if (pass.uBackdropRectLoc >= 0) {
+                    pass.shader->setUniform(pass.uBackdropRectLoc, state.backdropRect);
+                }
+                if (pass.uHasBackdropLoc >= 0) {
+                    pass.shader->setUniform(pass.uHasBackdropLoc, passHasBackdrop ? 1.0f : 0.0f);
                 }
                 for (size_t j = 0; j < i && j < 4; ++j) {
                     glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
@@ -634,6 +741,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
+            if (passHasBackdrop) {
+                glActiveTexture(GL_TEXTURE5);
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
             glActiveTexture(GL_TEXTURE0);
             KWin::GLFramebuffer::popFramebuffer();
         }
@@ -649,6 +760,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         glViewport(0, 0, target->width(), target->height());
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
+        const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && state.backdropTex && state.backdropRect.z() > 0.0f;
         {
             KWin::ShaderBinder binder(pk->shader.get());
             // Identity MVP so the NDC fullscreen quad from drawFullscreenQuad maps
@@ -675,12 +787,30 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     pk->shader->setUniform(pk->iChannelResolutionLoc[i], res);
                 }
             }
+            // Backdrop (needsBackdrop packs) on unit 5 — units 1..n above
+            // hold this pack's buffer outputs.
+            if (mainHasBackdrop) {
+                pk->shader->setUniform(pk->uBackdropLoc, 5);
+                glActiveTexture(GL_TEXTURE5);
+                state.backdropTex->bind();
+                glActiveTexture(GL_TEXTURE0);
+            }
+            if (pk->uBackdropRectLoc >= 0) {
+                pk->shader->setUniform(pk->uBackdropRectLoc, state.backdropRect);
+            }
+            if (pk->uHasBackdropLoc >= 0) {
+                pk->shader->setUniform(pk->uHasBackdropLoc, mainHasBackdrop ? 1.0f : 0.0f);
+            }
             // Contract uniforms + pack params (shared with the OffscreenData path).
             pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, pad);
             drawFullscreenQuad();
         }
         for (int i = 0; i < qMin(static_cast<int>(passCount), 4); ++i) {
             glActiveTexture(GL_TEXTURE1 + i);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+        if (mainHasBackdrop) {
+            glActiveTexture(GL_TEXTURE5);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
         glActiveTexture(GL_TEXTURE0);

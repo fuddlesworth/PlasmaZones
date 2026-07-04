@@ -927,6 +927,14 @@ private:
     /// @p force: run even for a single-pack unpadded chain — the transition
     /// surface-layer path needs the composite regardless (there is no
     /// OffscreenData blit to fall back on mid-animation).
+    /// Blit the scene BEHIND @p w (everything painted below it this frame)
+    /// from the live render target into the window's backdropTex, over the
+    /// SAME padded canvas renderSurfaceChainComposite uses — texel-aligned
+    /// so packs sample composite and backdrop with one uv. Called from
+    /// paintWindow for needsBackdrop chains, live windows only (the close
+    /// path reuses the frozen composite and must never re-capture).
+    void captureWindowBackdrop(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                               KWin::EffectWindow* w, const WindowBorder& wb);
     KWin::GLTexture* renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
                                                  KWin::GLShader* captureRestoreShader = nullptr, bool force = false);
 

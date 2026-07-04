@@ -1,0 +1,49 @@
+{
+    "id": "blur",
+    "name": "Frost",
+    "description": "Frosted glass behind the window. The scene behind the surface is blurred and lightly tinted, and shows through wherever the window itself is translucent. Pair it with an opacity rule so the window has translucency for the frost to fill.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Decoration",
+    "fragmentShader": "effect.frag",
+    "needsBackdrop": true,
+    "multipass": true,
+    "bufferScale": 0.25,
+    "bufferShaders": ["buffer0.frag", "buffer1.frag"],
+    "parameters": [
+        {
+            "id": "blurRadius",
+            "name": "Blur radius",
+            "type": "int",
+            "default": 24,
+            "min": 2,
+            "max": 64,
+            "description": "How strongly the scene behind the window is blurred (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Corner rounding of the frost slab (px, match the Border pack)"
+        },
+        {
+            "id": "tintStrength",
+            "name": "Tint strength",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much of the tint colour is mixed over the blurred scene"
+        },
+        {
+            "id": "tintColor",
+            "name": "Tint colour",
+            "type": "color",
+            "default": "#ffffff",
+            "description": "Colour mixed over the blurred scene"
+        }
+    ]
+}

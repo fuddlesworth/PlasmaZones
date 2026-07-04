@@ -300,6 +300,11 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // to unit 0 itself. -1 on a single-pass border-only pack would be unusual
     // (it samples the surface), but harmless if so.
     packState.uTexture0Loc = shader->uniformLocation(SC::kUTexture0);
+    // Backdrop sampling (needsBackdrop packs) — -1 for the common pack that
+    // never references the scene behind the window.
+    packState.uBackdropLoc = shader->uniformLocation(SC::kUBackdrop);
+    packState.uBackdropRectLoc = shader->uniformLocation(SC::kUBackdropRect);
+    packState.uHasBackdropLoc = shader->uniformLocation(SC::kUHasBackdrop);
 
     // MAIN-pass multipass channel locations: the buffer-pass outputs are bound
     // here (idle drawWindow path) as iChannel0..3 so the main effect.frag can
@@ -393,6 +398,11 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
             CompiledSurfaceBufferPass pass;
             pass.uTexture0Loc = bufShader->uniformLocation(SC::kUTexture0);
             pass.uTimeLoc = bufShader->uniformLocation(SC::kITime);
+            pass.uSurfaceSizeLoc = bufShader->uniformLocation(SC::kUSurfaceSize);
+            pass.uScaleLoc = bufShader->uniformLocation(SC::kUSurfaceScale);
+            pass.uBackdropLoc = bufShader->uniformLocation(SC::kUBackdrop);
+            pass.uBackdropRectLoc = bufShader->uniformLocation(SC::kUBackdropRect);
+            pass.uHasBackdropLoc = bufShader->uniformLocation(SC::kUHasBackdrop);
             for (int i = 0; i < 4; ++i) {
                 pass.iChannelLoc[i] = bufShader->uniformLocation(kIChannelNames[i]);
                 pass.iChannelResolutionLoc[i] = bufShader->uniformLocation(kIChannelResNames[i]);

@@ -126,6 +126,15 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// (SurfaceShaderItem `playing`). Static packs omit it and pay nothing.
     bool animated = false;
 
+    /// Declares that the pack samples the scene BEHIND the window
+    /// (backdropTexel() / uBackdrop). Compositor-only: the kwin effect
+    /// captures the backdrop under the window's (padded) canvas each frame,
+    /// routes the pack through the composite fold, and drives the window to
+    /// repaint continuously. Daemon hosts have no scene behind their
+    /// surfaces: uHasBackdrop stays 0 there and backdropTexel() returns
+    /// transparent, so a pack must style a fallback on that gate.
+    bool needsBackdrop = false;
+
     /// Buffer-pass shader paths (relative to effect dir). When non-empty
     /// and `isMultipass` is true, the daemon's surface-layer runtime runs
     /// these as intermediate passes before the main fragment shader.

@@ -42,6 +42,14 @@ struct CompiledSurfaceBufferPass
     std::unique_ptr<KWin::GLShader> shader;
     int uTexture0Loc = -1; ///< the captured surface (bound to GL_TEXTURE0)
     int uTimeLoc = -1; ///< iTime — continuous seconds (-1 for a static buffer pass)
+    int uSurfaceSizeLoc = -1; ///< uSurfaceSize — the composite canvas extent, device px
+    int uScaleLoc = -1; ///< uSurfaceScale — logical-to-device scale (blur radii etc.)
+    /// Backdrop sampling (needsBackdrop packs): sampler + valid-rect + gate
+    /// locations; -1 for the common pass that never references the scene
+    /// behind the window.
+    int uBackdropLoc = -1;
+    int uBackdropRectLoc = -1;
+    int uHasBackdropLoc = -1;
     /// iChannel0..3 sampler locations — prior buffer outputs feeding this pass.
     std::array<int, 4> iChannelLoc{{-1, -1, -1, -1}};
     /// iChannelResolution[0..3] element locations (the .xy pixel size of each).
@@ -110,6 +118,12 @@ struct CompiledSurfacePack
     /// runs the main pass as a fullscreen FBO pass and binds the running composite
     /// to unit 0 itself, setting this explicitly.
     int uTexture0Loc = -1;
+    /// Backdrop sampling (needsBackdrop packs, main pass): sampler +
+    /// valid-rect + gate locations; -1 for packs that never reference the
+    /// scene behind the window.
+    int uBackdropLoc = -1;
+    int uBackdropRectLoc = -1;
+    int uHasBackdropLoc = -1;
 
     /// MAIN-pass iChannel0..3 sampler + iChannelResolution[0..3] element
     /// locations. -1 when the linker dropped the uniform (single-pass pack).
@@ -180,6 +194,20 @@ struct SurfaceMultipassState
     /// frozen composite is reused and whose live geometry may drift — keeps
     /// its decoration aligned to the texture that actually exists.
     QRectF canvasGeo;
+
+    /// Backdrop capture for needsBackdrop chains: the scene behind the
+    /// window blitted from the live render target over the SAME padded
+    /// canvas as the composite (texel-aligned — a pack samples both with one
+    /// uv). Reallocated on size change; freed with the rest of this state in
+    /// removeWindowBorder, and NEVER sampled on the deleted/close path (the
+    /// fold doesn't run there; the frozen composite carries the last-alive
+    /// frost baked in).
+    std::unique_ptr<KWin::GLTexture> backdropTex;
+    QSize backdropSize;
+    /// Valid sub-rect of backdropTex in TOP-DOWN normalized coords (xy=min,
+    /// zw=size) — the part actually blitted (canvas ∩ output). Zero-size
+    /// means "no capture this frame" and pushes uHasBackdrop = 0.
+    QVector4D backdropRect;
 };
 
 /// Per-window border + rounded corners, rendered by sampling the redirected
@@ -252,6 +280,13 @@ struct WindowBorder
     /// (prePaintWindow marks the window transformed so KWin doesn't clip).
     /// 0 = the classic path, byte-for-byte unchanged.
     int outerPadding = 0;
+
+    /// True when any pack in the chain declares `"needsBackdrop": true`
+    /// (frost / glass). Forces the composite-fold path, has paintWindow
+    /// capture the scene behind the window each frame (uBackdrop), and
+    /// drives continuous repaints (the backdrop changes without any damage
+    /// landing on this window).
+    bool needsBackdrop = false;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but

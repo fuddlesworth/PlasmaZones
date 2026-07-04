@@ -55,8 +55,11 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
     m_u.uSurfaceFrameSize[0] = state.surfaceFrameSize[0];
     m_u.uSurfaceFrameSize[1] = state.surfaceFrameSize[1];
 
-    m_u._pad0[0] = 0.0f;
-    m_u._pad0[1] = 0.0f;
+    // The daemon NEVER has a scene behind a surface, so uHasBackdrop is
+    // pinned 0 here; only the compositor branch (classic uniforms, not this
+    // UBO) can raise its counterpart.
+    m_u.uHasBackdrop = 0.0f;
+    m_u._pad0 = 0.0f;
 
     // Loop bounds derive from the destination array extents (pinned by the
     // SurfaceUniforms static_asserts) so they can't silently under-copy if the

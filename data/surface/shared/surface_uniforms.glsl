@@ -85,6 +85,19 @@ uniform sampler2D iChannel2;
 uniform sampler2D iChannel3;
 uniform vec4 iChannelResolution[4];
 
+// Backdrop capture — the scene BEHIND the window over the same (padded)
+// canvas as uTexture0, captured by the compositor each frame for packs that
+// declare `"needsBackdrop": true` (frost / glass). uBackdropRect is the
+// VALID sub-rect of the capture in TOP-DOWN normalized coords (xy = min,
+// zw = size): canvas parts that fall off the output are never blitted, so
+// backdropTexel() clamps samples into this rect. uHasBackdrop is 1.0 when
+// the capture exists this frame, else 0.0. Packs sample ONLY through
+// backdropTexel() — the daemon branch declares no uBackdrop sampler, so a
+// raw texture(uBackdrop, …) reference fails the daemon compile by design.
+uniform sampler2D uBackdrop;
+uniform vec4 uBackdropRect;
+uniform float uHasBackdrop;
+
 #else
 
 // ── Daemon branch — std140 UBO at binding 0 ─────────────────────────────────
@@ -101,7 +114,8 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
     vec2 uSurfaceSize;           // offset 80  (8)
     vec2 uSurfaceFrameTopLeft;   // offset 88  (8)
     vec2 uSurfaceFrameSize;      // offset 96  (8)
-    // implicit 8-byte std140 pad (104 → 112) before the next vec4
+    float uHasBackdrop;          // offset 104 (4) — always 0 (no scene behind daemon surfaces)
+    // implicit 4-byte std140 pad (108 → 112) before the next vec4
     vec4 customParams[8];        // offset 112 (128)
     vec4 customColors[16];       // offset 240 (256)
     vec4 iChannelResolution[4];  // offset 496 (64) — multipass buffer sizes (.xy)
@@ -143,6 +157,21 @@ vec2 surfacePixel(vec2 uv) {
 // surfaceColor daemon branch, rather than flipping here).
 vec4 surfaceTexel(vec2 uv) {
     return texture(uTexture0, uv);
+}
+
+// The scene texel BEHIND the surface at `uv` (the same uv space surfaceTexel
+// takes), clamped into the capture's valid sub-rect (uBackdropRect) so edge
+// windows never smear the cleared off-output margin. Compositor-only: the
+// daemon has no scene behind a surface, so this returns transparent there —
+// gate styling on uHasBackdrop for an explicit fallback.
+vec4 backdropTexel(vec2 uv) {
+#ifdef PLASMAZONES_KWIN
+    vec2 td = vec2(uv.x, 1.0 - uv.y); // top-down normalized, like surfacePixel
+    td = clamp(td, uBackdropRect.xy, uBackdropRect.xy + uBackdropRect.zw);
+    return texture(uBackdrop, vec2(td.x, 1.0 - td.y));
+#else
+    return vec4(0.0);
+#endif
 }
 
 #endif // PLASMAZONES_SURFACE_UNIFORMS_GLSL

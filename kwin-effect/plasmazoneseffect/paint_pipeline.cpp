@@ -250,7 +250,11 @@ void PlasmaZonesEffect::postPaintScreen()
             if (!sw || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
                 continue;
             }
-            if (windowSurfaceAnimates(it.key())) {
+            // needsBackdrop chains repaint every frame regardless of iTime:
+            // the frost tracks a backdrop that changes without any damage
+            // landing on this window (first-cut gate; a dirty-region-
+            // expansion scheme could narrow this later).
+            if (windowSurfaceAnimates(it.key()) || it->needsBackdrop) {
                 sw->addRepaintFull();
                 // A padded chain's margin band sits OUTSIDE the window item;
                 // per-window repaints clip to it, so damage the band at
@@ -396,6 +400,23 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // pinned. Anything strictly negative is the unpinned sentinel.
     const qint64 pinnedNow = m_shaderManager.currentFrameClockMs();
     const qint64 frameNowMs = pinnedNow >= 0 ? pinnedNow : ShaderInternal::shaderClockNowMs();
+
+    // Backdrop capture for needsBackdrop decoration chains (frost / glass):
+    // snapshot the scene UNDER this window's padded canvas from the live
+    // render target BEFORE any fold below runs — at this point in the scene
+    // walk the target holds exactly the content painted below this window.
+    // Live windows only: a closing window's decoration reuses its frozen
+    // composite (renderSurfaceChain) and must never re-capture. Covers both
+    // fold sites (the rest-path composite further down AND the transition
+    // branch's renderSurfaceChain), hence the shaderApplied-or-transition
+    // gate rather than shaderApplied alone.
+    if (w && !w->isDeleted() && !m_capturingSnapshot && !m_windowBorders.isEmpty()) {
+        const auto backIt = m_windowBorders.constFind(getWindowId(w));
+        if (backIt != m_windowBorders.constEnd() && backIt->needsBackdrop
+            && (backIt->shaderApplied || m_shaderManager.findTransition(w))) {
+            captureWindowBackdrop(renderTarget, viewport, w, *backIt);
+        }
+    }
 
     // First-frame open suppression: a window repositioned on open
     // (snap-restore / autotile) is withheld from compositing until its
@@ -1178,7 +1199,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     if (!m_capturingSnapshot && !m_windowBorders.isEmpty() && !m_shaderManager.findTransition(w)) {
         const auto bit = m_windowBorders.constFind(getWindowId(w));
         if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
-            if (bit->chain.size() > 1 || bit->outerPadding > 0) {
+            if (bit->chain.size() > 1 || bit->outerPadding > 0 || bit->needsBackdrop) {
                 // MULTI-PACK: composite the whole chain into a per-window FBO here
                 // (each pack's main runs as an FBO pass); drawWindow then presents
                 // the final FBO through the passthrough present shader.

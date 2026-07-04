@@ -47,8 +47,13 @@ struct alignas(16) SurfaceUniforms
     float uSurfaceFrameTopLeft[2]; // vec2: 8 bytes at offset 88
     float uSurfaceFrameSize[2]; // vec2: 8 bytes at offset 96
 
-    // Explicit std140 alignment hole (104 → 112) before the vec4 array below.
-    float _pad0[2]; // 8 bytes at offset 104
+    // 1.0 when the host provides a backdrop capture (compositor branch's
+    // uBackdrop sampler); ALWAYS 0.0 on the daemon, whose surfaces have no
+    // scene behind them. needsBackdrop packs gate their styling on this.
+    float uHasBackdrop; // float: 4 bytes at offset 104 (always 0 on the daemon)
+
+    // Explicit std140 alignment hole (108 → 112) before the vec4 array below.
+    float _pad0; // 4 bytes at offset 108
 
     // Pack-declared parameters (float/int/bool → customParams, colours →
     // customColors), addressed by the registry-generated `p_<id>` preambles.
@@ -75,6 +80,8 @@ static_assert(offsetof(SurfaceUniforms, uSurfaceFrameTopLeft) == 88,
               "SurfaceUniforms::uSurfaceFrameTopLeft must remain at std140 offset 88");
 static_assert(offsetof(SurfaceUniforms, uSurfaceFrameSize) == 96,
               "SurfaceUniforms::uSurfaceFrameSize must remain at std140 offset 96");
+static_assert(offsetof(SurfaceUniforms, uHasBackdrop) == 104,
+              "SurfaceUniforms::uHasBackdrop must remain at std140 offset 104");
 static_assert(offsetof(SurfaceUniforms, customParams) == 112,
               "SurfaceUniforms::customParams must remain at std140 offset 112");
 static_assert(offsetof(SurfaceUniforms, customColors) == 240,

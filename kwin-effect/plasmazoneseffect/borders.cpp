@@ -314,11 +314,15 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     ensureSurfaceRegistryPaths();
     const QVariantMap allPackParams = resolvedProfile.effectiveParameters();
     int outerPadding = 0;
+    bool needsBackdrop = false;
     for (const QString& packId : std::as_const(chain)) {
         const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
         if (!eff.isValid()) {
             continue;
         }
+        // Any needsBackdrop pack in the chain switches the window onto the
+        // composite path with a per-frame backdrop capture (see paintWindow).
+        needsBackdrop = needsBackdrop || eff.needsBackdrop;
         const QVariantMap packOverrides = allPackParams.value(packId).toMap();
         wb.packParamValues.insert(packId, ShaderInternal::resolveSurfaceParamValues(eff, packOverrides));
 
@@ -342,6 +346,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     }
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
     wb.outerPadding = qBound(0, outerPadding, 128);
+    wb.needsBackdrop = needsBackdrop;
 
     // Padded chains paint a margin band OUTSIDE the window rect; KWin's own
     // move/resize damage covers only the window's old/new rects, so track the
@@ -565,7 +570,7 @@ void PlasmaZonesEffect::reconcileBorderShader(const QString& windowId, KWin::Eff
         // than leave the window blitting a dead/stale shader forever (a just-ended
         // transition hands the slot back here still redirected).
         KWin::GLShader* redirectShader = nullptr;
-        if (it->chain.size() > 1 || it->outerPadding > 0) {
+        if (it->chain.size() > 1 || it->outerPadding > 0 || it->needsBackdrop) {
             redirectShader = surfacePresentShader();
         } else if (CompiledSurfacePack* const pack = compiledPackForWindow(windowId)) {
             redirectShader = pack->shader.get();
@@ -742,7 +747,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
         const QString wid = getWindowId(w);
         const auto bit = m_windowBorders.constFind(wid);
         if (bit != m_windowBorders.constEnd() && bit->shaderApplied
-            && (bit->chain.size() > 1 || bit->outerPadding > 0)) {
+            && (bit->chain.size() > 1 || bit->outerPadding > 0 || bit->needsBackdrop)) {
             // MULTI-PACK present: the whole chain was already composited into a
             // per-window FBO by paintWindow (renderSurfaceChainComposite). Bind the
             // final slot to a high unit and point the present passthrough's uFinal
