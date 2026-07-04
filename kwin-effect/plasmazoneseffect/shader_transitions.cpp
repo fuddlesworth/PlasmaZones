@@ -823,6 +823,8 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUSurfaceLayer);
         cached.iHasSurfaceLayerLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasSurfaceLayer);
+        cached.iLayerRectInTextureLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kILayerRectInTexture);
         // SetOpacity rule opacity — a separate concern from the morph uniforms
         // above: applies to ALL shaders (compositor path only), so surfaceColor
         // can dim the surface for a SetOpacity rule. See

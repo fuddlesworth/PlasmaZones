@@ -211,6 +211,12 @@ uniform sampler2D uTexture3;
 // the unlayered path untouched.
 uniform sampler2D uSurfaceLayer;
 uniform int iHasSurfaceLayer;
+// The animated surface's [0,1] sub-rect within uSurfaceLayer's canvas — the
+// layer analogue of iAnchorRectInTexture. The compositor pads the layer canvas
+// by the decoration chain's outer margin (glow reach), so the layer cannot be
+// sampled with uTexture0's mapping; surfaceColor() remaps through this
+// instead. An unpadded layer carries the same value as iAnchorRectInTexture.
+uniform vec4 iLayerRectInTexture;
 
 #else
 
@@ -374,7 +380,11 @@ vec4 surfaceColor(vec2 uv) {
     // are identical. Falls back to the live redirected surface when the window
     // has no layers (`iHasSurfaceLayer == 0`).
     if (iHasSurfaceLayer != 0) {
-        return texture(uSurfaceLayer, fc) * iWindowOpacity;
+        // The layer canvas may be PADDED past uTexture0's extent (the
+        // decoration chain's outer margin), so it has its own sub-rect
+        // remap; uv outside [0,1] reaches the halo in the margin band.
+        vec2 tl = iLayerRectInTexture.xy + uv * iLayerRectInTexture.zw;
+        return texture(uSurfaceLayer, vec2(tl.x, 1.0 - tl.y)) * iWindowOpacity;
     }
     return texture(uTexture0, fc) * iWindowOpacity;
 #else

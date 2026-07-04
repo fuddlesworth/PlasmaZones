@@ -908,7 +908,14 @@ private:
     /// window+chain (animation-ready). Implemented in surfacelayers.cpp; like
     /// renderSurfaceBufferPasses it MUST be driven from paintWindow (it captures
     /// via effects->drawWindow).
-    KWin::GLTexture* renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale);
+    /// @p captureRestoreShader: the shader to hand the OffscreenEffect slot
+    /// back to after the raw capture (null = surfacePresentShader(), the rest
+    /// path's redirect; transitions pass their animation shader).
+    /// @p force: run even for a single-pack unpadded chain — the transition
+    /// surface-layer path needs the composite regardless (there is no
+    /// OffscreenData blit to fall back on mid-animation).
+    KWin::GLTexture* renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
+                                                 KWin::GLShader* captureRestoreShader = nullptr, bool force = false);
 
     /// Lazily-compiled passthrough shader that samples a bound texture (uFinal)
     /// at vTexCoord and writes it verbatim. Used as the redirect shader for a

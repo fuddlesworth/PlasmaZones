@@ -663,6 +663,20 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             const QVector4D anchorRectInTexture = transition.surfaceExtent
                 ? ShaderInternal::computeTextureSubRect(anchorGeo, expandedGeo)
                 : QVector4D(0.0f, 0.0f, 1.0f, 1.0f);
+            // uSurfaceLayer's own remap: the layer canvas is the expanded rect
+            // inflated by the decoration chain's outer margin (the SAME canvas
+            // renderSurfaceChainComposite captures into), so the rect that
+            // surfaceColor's uv spans (the anchor for surface-extent, the
+            // expanded texture for anchor-extent — mirroring
+            // anchorRectInTexture's split) is located WITHIN that padded
+            // canvas. Unpadded windows reduce to the uTexture0 mapping.
+            qreal layerPad = 0.0;
+            if (const auto lbIt = m_windowBorders.constFind(getWindowId(w)); lbIt != m_windowBorders.constEnd()) {
+                layerPad = lbIt->outerPadding;
+            }
+            const QRectF layerCanvasGeo = expandedGeo.adjusted(-layerPad, -layerPad, layerPad, layerPad);
+            const QVector4D layerRectInTexture = ShaderInternal::computeTextureSubRect(
+                transition.surfaceExtent ? anchorGeo : expandedGeo, layerCanvasGeo);
             // Surface-layer stack (border / rounded corners, ...): render the
             // window's active layers into an FBO so the animation composites
             // OVER the layered surface and the border stays visible for the
@@ -966,6 +980,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (cached->iHasSurfaceLayerLoc >= 0) {
                     shader->setUniform(cached->iHasSurfaceLayerLoc, surfaceLayerTex ? 1 : 0);
                 }
+                if (cached->iLayerRectInTextureLoc >= 0) {
+                    shader->setUniform(cached->iLayerRectInTextureLoc, layerRectInTexture);
+                }
                 if (surfaceLayerTex && cached->uSurfaceLayerLoc >= 0) {
                     constexpr int kSurfaceLayerUnit =
                         2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
@@ -993,7 +1010,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // spanning quad is already bounded by the output's clip
             // space. Anchor-extent transitions keep KWin's natural
             // deviceRegion since their quad sits inside the window.
-            const KWin::Region drawRegion = transition.surfaceExtent ? KWin::Region::infinite() : deviceRegion;
+            // Padded decorated windows also bypass the scissor on the
+            // anchor-extent path: apply() grows their quad by the decoration's
+            // outer margin, and KWin's natural deviceRegion (the window's
+            // expanded bounds) would scissor the halo band right back off.
+            const KWin::Region drawRegion =
+                (transition.surfaceExtent || layerPad > 0.0) ? KWin::Region::infinite() : deviceRegion;
             // Enter the draw chain via `effects->drawWindow` rather than
             // calling `OffscreenEffect::drawWindow` directly. KWin's
             // `EffectsHandler::drawWindow` advances the shared
@@ -1340,6 +1362,81 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
             paddedQuad[1] = KWin::WindowVertex(ox + ow, oy, bit->uAtRight, bit->vAtTop);
             paddedQuad[2] = KWin::WindowVertex(ox + ow, oy + oh, bit->uAtRight, bit->vAtBottom);
             paddedQuad[3] = KWin::WindowVertex(ox, oy + oh, bit->uAtLeft, bit->vAtBottom);
+            quads.clear();
+            quads.append(paddedQuad);
+            return;
+        }
+    }
+
+    // ── Anchor-extent transition on a PADDED window ──────────────────────
+    // The animation draws on the window's natural quad, which would clip the
+    // decoration's outer margin (glow halo) for the whole animation. Grow the
+    // quad by the padding with texcoords EXTENDED past the natural range —
+    // NOT remapped to 0..1 — so uTexture0 keeps its 1:1 mapping and
+    // surfaceColor's iLayerRectInTexture remap addresses the halo band in the
+    // padded uSurfaceLayer. (Out-of-range uTexture0 samples only matter when
+    // the layer is absent, where CLAMP smears the feathered-transparent
+    // margin edge — invisible.)
+    if (st && !st->surfaceExtent && !quads.isEmpty() && !m_windowBorders.isEmpty()) {
+        const auto bit = m_windowBorders.find(getWindowId(window));
+        if (bit != m_windowBorders.end() && bit->outerPadding > 0) {
+            QRectF textureGeo = window->expandedGeometry();
+            if (textureGeo.isEmpty()) {
+                textureGeo = window->frameGeometry();
+            }
+            if (textureGeo.isEmpty() || textureGeo.width() <= 0 || textureGeo.height() <= 0) {
+                return;
+            }
+            const qreal pad = bit->outerPadding;
+
+            double qLeft = quads.first().left();
+            double qTop = quads.first().top();
+            for (qsizetype i = 1; i < quads.size(); ++i) {
+                qLeft = qMin(qLeft, quads[i].left());
+                qTop = qMin(qTop, quads[i].top());
+            }
+            const double ox = qLeft - pad;
+            const double oy = qTop - pad;
+            const double ow = textureGeo.width() + 2.0 * pad;
+            const double oh = textureGeo.height() + 2.0 * pad;
+
+            // Same replicated-handedness cache the padded present uses.
+            if (!bit->presentHandednessCached) {
+                const KWin::WindowQuad& srcQuad = quads.first();
+                int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
+                for (int i = 1; i < 4; ++i) {
+                    if (srcQuad[i].y() < srcQuad[topIdx].y())
+                        topIdx = i;
+                    if (srcQuad[i].y() > srcQuad[bottomIdx].y())
+                        bottomIdx = i;
+                    if (srcQuad[i].x() < srcQuad[leftIdx].x())
+                        leftIdx = i;
+                    if (srcQuad[i].x() > srcQuad[rightIdx].x())
+                        rightIdx = i;
+                }
+                bit->uAtLeft = (srcQuad[leftIdx].u() <= srcQuad[rightIdx].u()) ? 0.0 : 1.0;
+                bit->uAtRight = 1.0 - bit->uAtLeft;
+                bit->vAtTop = (srcQuad[topIdx].v() <= srcQuad[bottomIdx].v()) ? 0.0 : 1.0;
+                bit->vAtBottom = 1.0 - bit->vAtTop;
+                bit->presentHandednessCached = true;
+            }
+
+            // Extend the texcoord range by the padding fraction in each axis,
+            // direction-aware so either handedness extends outward.
+            const double padU = pad / textureGeo.width();
+            const double padV = pad / textureGeo.height();
+            const double uDir = bit->uAtRight - bit->uAtLeft; // ±1
+            const double vDir = bit->vAtBottom - bit->vAtTop; // ±1
+            const double uL = bit->uAtLeft - uDir * padU;
+            const double uR = bit->uAtRight + uDir * padU;
+            const double vT = bit->vAtTop - vDir * padV;
+            const double vB = bit->vAtBottom + vDir * padV;
+
+            KWin::WindowQuad paddedQuad;
+            paddedQuad[0] = KWin::WindowVertex(ox, oy, uL, vT);
+            paddedQuad[1] = KWin::WindowVertex(ox + ow, oy, uR, vT);
+            paddedQuad[2] = KWin::WindowVertex(ox + ow, oy + oh, uR, vB);
+            paddedQuad[3] = KWin::WindowVertex(ox, oy + oh, uL, vB);
             quads.clear();
             quads.append(paddedQuad);
             return;

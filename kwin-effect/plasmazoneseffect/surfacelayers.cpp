@@ -65,152 +65,26 @@ void drawFullscreenQuad()
 
 } // namespace
 
-// Render the window's active surface-layer stack into the transition's FBO chain
-// and return the texture holding the final composited surface. The animation
-// pass then samples this (as `uSurfaceLayer`) instead of the bare live
-// `uTexture0`, so surface layers — the border / rounded corners today, and any
-// future layer (tint, glow) — stay composited UNDER the animation for the whole
-// transition rather than vanishing when the animation shader takes the draw slot.
+// Render the window's active surface-layer stack for an in-flight transition
+// and return the texture holding the final composited surface, or nullptr when
+// the window has no decoration (the caller then animates the bare uTexture0).
 //
-// Layer 0 is the border, rendered through the existing border shader via
-// OffscreenData (the same path captureOldWindowSnapshot uses for the morph
-// snapshot): KWin renders the raw window into its internal FBO, then
-// OffscreenData::paint blits it through the border shader into our chain
-// texture. This reuses the border shader and its MVP vertex path verbatim, so
-// the result shares uTexture0's bottom-origin layout and premultiplied alpha —
-// `surfaceColor()` samples it with the same Y-flip and opacity dim.
-//
-// Additional layers (none today) chain as passthrough-quad FBO→FBO blits over
-// the ping-pong pair; that rung is the documented extension point for future
-// surface effects.
+// Delegates to renderSurfaceChainComposite — the SAME padded full-chain fold
+// the rest path uses — so a transition composites the ENTIRE chain (border +
+// glow + …) over the padded canvas instead of the old bespoke chain[0]-only
+// unpadded blit (which silently dropped every pack after the base and clipped
+// the outer margin for the whole animation). The animation samples the result
+// as uSurfaceLayer through surfaceColor(), whose iLayerRectInTexture remap
+// addresses the padded canvas; force=true because mid-animation there is no
+// OffscreenData blit to fall back on even for a single unpadded pack, and the
+// capture hands the OffscreenEffect slot back to the ANIMATION shader (not the
+// rest path's present passthrough).
 KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transition, KWin::EffectWindow* w, qreal scale)
 {
     if (!w || !transition.cached) {
         return nullptr;
     }
-
-    // Layer 0: border. Mirror reconcileBorderShader's "wants border" gate — a
-    // window with no surface decoration has no active surface layers, so the
-    // caller animates the bare uTexture0 with zero FBO overhead. The LIVE
-    // presence of a WindowBorder entry IS the gate: updateWindowBorder only
-    // inserts one for a window whose resolved profile declares a non-empty pack
-    // chain, and this re-evaluates every frame so a window decorated
-    // MID-transition (opened into a zone, focus-refresh updateAllBorders, a new
-    // rule) composites its border immediately rather than popping in at
-    // transition end. This is safe for the animation: the chain below is
-    // re-rendered per frame (only the texture allocation is cached), and the
-    // animation samples uSurfaceLayer at the same animated UVs as uTexture0
-    // (animation_uniforms.glsl surfaceColor), so the decorated surface moves
-    // WITH the animation. (An earlier design froze this decision at
-    // beginShaderTransition on the then-false premise that engaging
-    // mid-transition would freeze the animation on a static FBO.)
-    const QString windowId = getWindowId(w);
-    const auto bit = m_windowBorders.constFind(windowId);
-    if (bit == m_windowBorders.constEnd()) {
-        return nullptr;
-    }
-    // Compile-on-first-use the window's resolved base pack; a latched compile
-    // failure (null) means no surface layer.
-    CompiledSurfacePack* const pack = compiledPackForWindow(windowId);
-    if (!pack) {
-        return nullptr;
-    }
-    KWin::GLShader* const border = pack->shader.get();
-
-    // Size the chain to the window's expanded geometry × screen scale, exactly
-    // as captureOldWindowSnapshot sizes the morph snapshot — the redirected FBO
-    // covers frame + decoration + shadow. The defensive cap keeps a pathological
-    // window within GL texture limits (sampled by normalised uv, so a reduced
-    // capture scale only costs resolution, never distortion).
-    const QRectF logicalGeometry = w->expandedGeometry();
-    qreal captureScale = scale;
-    constexpr qreal kMaxSurfaceDim = 8192.0;
-    const qreal longestPx = qMax(logicalGeometry.width(), logicalGeometry.height()) * captureScale;
-    if (longestPx > kMaxSurfaceDim) {
-        captureScale *= kMaxSurfaceDim / longestPx;
-    }
-    const QSize textureSize = (logicalGeometry.size() * captureScale).toSize();
-    if (textureSize.isEmpty()) {
-        return nullptr;
-    }
-
-    // Reuse the chain textures across frames; reallocate only when the window's
-    // expanded size × scale changes. Slot 0 holds layer 0's output (and the
-    // final surface for the common single-layer border-only case).
-    if (transition.surfaceLayerChainSize != textureSize || !transition.surfaceLayerChain[0]) {
-        transition.surfaceLayerChain[0] = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
-        // Slot 1 is allocated lazily by the passthrough rung when a second layer
-        // is active; drop any stale ping-pong partner on resize.
-        transition.surfaceLayerChain[1].reset();
-        transition.surfaceLayerChainSize = textureSize;
-        if (!transition.surfaceLayerChain[0]) {
-            transition.surfaceLayerChainSize = QSize();
-            return nullptr;
-        }
-        transition.surfaceLayerChain[0]->setFilter(GL_LINEAR);
-        transition.surfaceLayerChain[0]->setWrapMode(GL_CLAMP_TO_EDGE);
-    }
-
-    KWin::GLTexture* const layer0 = transition.surfaceLayerChain[0].get();
-    KWin::GLFramebuffer fbo(layer0);
-    if (!fbo.valid()) {
-        return nullptr;
-    }
-
-    // Temporarily swap the redirect's bound shader from the animation shader to
-    // the border shader so OffscreenData::paint blits the captured window through
-    // the border. Restore the animation shader afterwards — paintWindow's
-    // transition branch re-binds it and sets the animation uniforms for the
-    // on-screen draw. setShader is idempotent and the redirect is already live
-    // (beginShaderTransition redirected the window), so no redirect() here.
-    KWin::GLShader* const animShader = transition.cached->shader.get();
-    setShader(w, border);
-
-    // Re-entrancy guard: like captureOldWindowSnapshot, suppress the passive
-    // border bind in the drawWindow override (we bind it ourselves below) and
-    // keep apply()'s surface-extent quad deform off so the window is captured
-    // 1:1 into the FBO rather than as the in-flight animation quad.
-    m_capturingSnapshot = true;
-    // Reset the re-entrancy flag on every exit path. A leaked
-    // m_capturingSnapshot == true would suppress the passive border bind for
-    // every subsequent window paint, so guard it against an early return or a
-    // throw from the draw chain rather than relying on the explicit reset below.
-    auto resetCapture = qScopeGuard([this] {
-        m_capturingSnapshot = false;
-    });
-    {
-        KWin::RenderTarget renderTarget(&fbo);
-        KWin::RenderViewport viewport(logicalGeometry, captureScale, renderTarget, QPoint());
-        KWin::GLFramebuffer::pushFramebuffer(&fbo);
-        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        KWin::ItemEffect keepRenderable(w->windowItem());
-        KWin::WindowPaintData captureData;
-        captureData.setOpacity(1.0);
-        const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
-        // Bind the border shader and push the window's border uniforms onto it.
-        // OffscreenData::paint re-binds the SAME program for its blit, so the
-        // uniforms persist into the draw — identical to the passive drawWindow
-        // path. The binder is held across effects->drawWindow.
-        KWin::ShaderBinder binder(border);
-        pushBorderUniforms(w, *bit, bit->basePackId, *pack, captureScale);
-        // Route through effects->drawWindow (not OffscreenEffect::drawWindow) so
-        // KWin's draw-chain iterator is advanced past us before OffscreenData's
-        // internal capture re-enters the chain — same rationale as the on-screen
-        // and snapshot paths.
-        KWin::effects->drawWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
-        KWin::GLFramebuffer::popFramebuffer();
-    }
-    resetCapture.dismiss();
-    m_capturingSnapshot = false;
-
-    setShader(w, animShader);
-
-    // Additional passthrough layers (tint, glow, ...) would chain here, blitting
-    // the current top slot into the other ping-pong slot through each layer's
-    // shader and returning the final slot. None are registered today, so layer
-    // 0's output is the final surface.
-    return layer0;
+    return renderSurfaceChainComposite(w, scale, transition.cached->shader.get(), /*force=*/true);
 }
 
 // Render the MULTIPASS surface pack's buffer passes for @p w into its per-window
@@ -508,7 +382,8 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
 // it through surfacePresentShader). See the header for the full contract. Like
 // renderSurfaceBufferPasses this MUST run from paintWindow — it captures the raw
 // surface via effects->drawWindow, which re-enters KWin's draw-window iterator.
-KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale)
+KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
+                                                                KWin::GLShader* captureRestoreShader, bool force)
 {
     if (!w) {
         return nullptr;
@@ -519,8 +394,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         return nullptr;
     }
     const QStringList chain = bit->chain;
-    if (chain.size() < 2 && bit->outerPadding <= 0) {
-        return nullptr; // single unpadded packs take the cheap OffscreenData path
+    if (!force && chain.size() < 2 && bit->outerPadding <= 0) {
+        return nullptr; // at rest, single unpadded packs take the cheap OffscreenData path
+    }
+    if (chain.isEmpty()) {
+        return nullptr;
     }
     namespace SC = PhosphorSurfaceShaders::SurfaceShaderContract;
 
@@ -636,7 +514,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         }
         resetCapture.dismiss();
         m_capturingSnapshot = false;
-        setShader(w, surfacePresentShader());
+        // Hand the OffscreenEffect slot back: to the passthrough present on
+        // the rest path, or to the caller's animation shader mid-transition.
+        setShader(w, captureRestoreShader ? captureRestoreShader : surfacePresentShader());
     }
 
     // ── Step 2: fold each pack over the running composite ────────────────────

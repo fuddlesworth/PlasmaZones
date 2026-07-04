@@ -351,6 +351,13 @@ inline constexpr const char* kUSurfaceLayer = "uSurfaceLayer";
 /// frame by the kwin-effect; defaults to 0 (GL zero-init), so a shader that
 /// never receives it falls back to the unlayered path.
 inline constexpr const char* kIHasSurfaceLayer = "iHasSurfaceLayer";
+/// Card/anchor-space [0,1] sub-rect of the animated surface WITHIN
+/// uSurfaceLayer's canvas (xy offset, zw scale) — the layer analogue of
+/// iAnchorRectInTexture. The compositor pads the layer canvas by the
+/// decoration chain's outer margin (glow reach), so the layer needs its own
+/// remap; an unpadded layer carries the same value as iAnchorRectInTexture.
+/// Compositor-only, like uSurfaceLayer itself.
+inline constexpr const char* kILayerRectInTexture = "iLayerRectInTexture";
 
 /// `float iWindowOpacity` — the window's effective rule-resolved opacity
 /// in [0.0, 1.0], COMPOSITOR PATH ONLY. A `SetOpacity` rule must

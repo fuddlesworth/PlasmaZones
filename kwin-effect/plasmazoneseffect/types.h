@@ -372,6 +372,9 @@ struct CachedShader
     /// AnimationShaderContract::kUSurfaceLayer / kIHasSurfaceLayer.
     int uSurfaceLayerLoc = -1;
     int iHasSurfaceLayerLoc = -1;
+    /// The layer's own sub-rect remap (padded canvas support) — see
+    /// AnimationShaderContract::kILayerRectInTexture.
+    int iLayerRectInTextureLoc = -1;
 };
 
 /// Per-window in-flight shader transition.
@@ -569,8 +572,6 @@ struct ShaderTransition
     /// reallocated only when the window's expanded size × scale changes; freed
     /// with the transition. `renderSurfaceChain` returns the slot holding the
     /// final composited surface.
-    std::array<std::unique_ptr<KWin::GLTexture>, 2> surfaceLayerChain;
-    QSize surfaceLayerChainSize;
 };
 
 /// First-frame suppression bookkeeping for a window that is about to be
