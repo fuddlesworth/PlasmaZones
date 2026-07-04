@@ -531,6 +531,9 @@ struct ShaderTransition
     /// window (transitions are torn down + reinstalled when the underlying
     /// shader changes), so a follow-up install starts with a fresh probe.
     bool handednessCached = false;
+
+    /// Temporary close-flash diagnostic latch (PZDBG close-frame1 log).
+    bool closeDiagLogged = false;
     double uAtLeft = 0.0;
     double uAtRight = 1.0;
     double vAtTop = 0.0;

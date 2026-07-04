@@ -1445,10 +1445,21 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     } else {
         m_shaderManager.eraseTransition(window);
         st = nullptr;
+        // Clear the redirect's bound shader BEFORE the border/multipass
+        // teardown below destroys the layer textures its uniforms still
+        // reference: the grab release and the Deleted's destruction are not
+        // frame-synchronous, so an EXPIRY-FRAME paint of the ref-held corpse
+        // would otherwise re-run the animation program with iHasSurfaceLayer
+        // stale at 1 and its texture freshly deleted — an unbound sampler
+        // reads opaque black across the whole quad. setShader on the ref-held
+        // deleted window is the same operation close-begin already performs
+        // (KWin's setShader is a keyed no-op only for un-redirected windows;
+        // our redirect is live until the unref).
+        setShader(window, nullptr);
         // Deleted window: drop the border entry the close path deferred.
-        // removeWindowBorder's GL side is a no-op here (findWindowById
-        // resolves nothing for a deleted id), so this is pure bookkeeping;
-        // the windowDeleted handler remains the backstop.
+        // The rest of removeWindowBorder's GL side is a no-op here
+        // (findWindowById resolves nothing for a deleted id); the
+        // windowDeleted handler remains the backstop.
         removeWindowBorder(getWindowId(window));
     }
     if (!surfaceExtentRepaint.isEmpty() && KWin::effects) {
