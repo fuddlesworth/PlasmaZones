@@ -945,6 +945,7 @@ private:
     KWin::GLShader* surfacePresentShader();
     std::unique_ptr<KWin::GLShader> m_surfacePresentShader; ///< compiled passthrough present shader
     int m_surfacePresentFinalLoc = -1; ///< uFinal sampler location on the present shader
+    int m_surfacePresentOpacityLoc = -1; ///< uOpacity (final modulation) location on the present shader
     bool m_surfacePresentFailed = false; ///< latch a failed present-shader compile
 
     /// Continuous seconds for the surface contract's `iTime`, relative to an

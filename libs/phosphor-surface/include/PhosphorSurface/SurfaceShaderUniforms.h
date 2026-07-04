@@ -52,8 +52,9 @@ struct alignas(16) SurfaceUniforms
     // scene behind them. needsBackdrop packs gate their styling on this.
     float uHasBackdrop; // float: 4 bytes at offset 104 (always 0 on the daemon)
 
-    // Explicit std140 alignment hole (108 → 112) before the vec4 array below.
-    float _pad0; // 4 bytes at offset 108
+    // The window's rule-resolved opacity on the compositor; the daemon has
+    // no rule opacity (qt_Opacity carries host opacity) so this pins to 1.
+    float uSurfaceOpacity; // float: 4 bytes at offset 108 (always 1 on the daemon)
 
     // Pack-declared parameters (float/int/bool → customParams, colours →
     // customColors), addressed by the registry-generated `p_<id>` preambles.
@@ -82,6 +83,8 @@ static_assert(offsetof(SurfaceUniforms, uSurfaceFrameSize) == 96,
               "SurfaceUniforms::uSurfaceFrameSize must remain at std140 offset 96");
 static_assert(offsetof(SurfaceUniforms, uHasBackdrop) == 104,
               "SurfaceUniforms::uHasBackdrop must remain at std140 offset 104");
+static_assert(offsetof(SurfaceUniforms, uSurfaceOpacity) == 108,
+              "SurfaceUniforms::uSurfaceOpacity must remain at std140 offset 108");
 static_assert(offsetof(SurfaceUniforms, customParams) == 112,
               "SurfaceUniforms::customParams must remain at std140 offset 112");
 static_assert(offsetof(SurfaceUniforms, customColors) == 240,

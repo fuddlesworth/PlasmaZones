@@ -174,6 +174,15 @@ inline constexpr const char* kITime = "iTime";
 /// the `backdropTexel()` helper). The daemon branch declares no such
 /// sampler; packs MUST sample through `backdropTexel()`, which compiles to
 /// transparent there.
+/// `float uSurfaceOpacity` — the window's rule-resolved opacity (1.0 when
+/// no SetOpacity rule applies; ALWAYS 1.0 on the daemon, whose surfaces
+/// carry qt_Opacity instead). Hosts apply a KWin-style final modulation by
+/// default, so most packs never read this; a pack that declares
+/// `"handlesOpacity": true` suppresses the final modulation and applies
+/// this value itself (frost multiplies only its window content sample so
+/// the frost slab stays solid). Per-frame-dynamic.
+inline constexpr const char* kUSurfaceOpacity = "uSurfaceOpacity";
+
 inline constexpr const char* kUBackdrop = "uBackdrop";
 
 /// `vec4 uBackdropRect` — COMPOSITOR-ONLY. The VALID sub-rect of the

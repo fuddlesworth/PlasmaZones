@@ -25,7 +25,12 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 }
 
 void main() {
-    vec4 window = surfaceTexel(vTexCoord);
+    // handlesOpacity: apply the window's rule-resolved opacity to the
+    // CONTENT sample only (premultiplied multiply). The frost slab below
+    // stays solid, so translucency reveals the blurred backdrop rather
+    // than the raw scene; the host's present pass skips its own final
+    // modulation for this chain.
+    vec4 window = surfaceTexel(vTexCoord) * uSurfaceOpacity;
 
     // Frost slab mask: the frame rect with rounded corners, 1px AA edge.
     vec2 px = surfacePixel(vTexCoord);

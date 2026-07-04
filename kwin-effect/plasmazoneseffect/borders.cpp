@@ -315,6 +315,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     const QVariantMap allPackParams = resolvedProfile.effectiveParameters();
     int outerPadding = 0;
     bool needsBackdrop = false;
+    bool handlesOpacity = false;
     for (const QString& packId : std::as_const(chain)) {
         const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
         if (!eff.isValid()) {
@@ -323,6 +324,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         // Any needsBackdrop pack in the chain switches the window onto the
         // composite path with a per-frame backdrop capture (see paintWindow).
         needsBackdrop = needsBackdrop || eff.needsBackdrop;
+        handlesOpacity = handlesOpacity || eff.handlesOpacity;
         const QVariantMap packOverrides = allPackParams.value(packId).toMap();
         wb.packParamValues.insert(packId, ShaderInternal::resolveSurfaceParamValues(eff, packOverrides));
 
@@ -347,6 +349,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
     wb.outerPadding = qBound(0, outerPadding, 128);
     wb.needsBackdrop = needsBackdrop;
+    wb.chainHandlesOpacity = handlesOpacity;
 
     // Rule-resolved opacity, routing + capture-dim input (see the field doc).
     // Resolved here rather than per paint: every trigger that can flip a
@@ -670,6 +673,17 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowBo
         const float focused = (KWin::effects && w == KWin::effects->activeWindow()) ? 1.0f : 0.0f;
         shader->setUniform(pack.uFocusedLoc, focused);
     }
+    // Rule-resolved window opacity, for handlesOpacity packs (frost dims its
+    // content sample; the present pass skips its final modulation for such
+    // chains). Prefer the per-frame cache prePaintWindow refreshed.
+    if (pack.uOpacityLoc >= 0) {
+        qreal resolved = wb.ruleOpacity;
+        if (m_shaderManager.frameOpacityCached(w)) {
+            const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
+            resolved = frameOpacity ? qBound(0.0, *frameOpacity, 1.0) : 1.0;
+        }
+        shader->setUniform(pack.uOpacityLoc, static_cast<float>(resolved));
+    }
     // Continuous time for an animated pack. -1 (static pack, e.g. the border)
     // pushes nothing; postPaintScreen only drives the window to repaint when a
     // pack actually references iTime (windowSurfaceAnimates), so a static
@@ -774,6 +788,22 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 stateIt->second.compositeTex[stateIt->second.finalSlot]->bind();
                 if (m_surfacePresentFinalLoc >= 0) {
                     present->setUniform(m_surfacePresentFinalLoc, unit);
+                }
+                // Final KWin-style opacity modulation. Pushed EVERY frame —
+                // the program is shared across windows, so a stale value from
+                // another window would leak. 1.0 when a chain pack handles
+                // opacity itself (frost), else the freshest resolved value.
+                if (m_surfacePresentOpacityLoc >= 0) {
+                    float presentOpacity = 1.0f;
+                    if (!bit->chainHandlesOpacity) {
+                        qreal resolved = bit->ruleOpacity;
+                        if (m_shaderManager.frameOpacityCached(w)) {
+                            const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
+                            resolved = frameOpacity ? qBound(0.0, *frameOpacity, 1.0) : 1.0;
+                        }
+                        presentOpacity = static_cast<float>(resolved);
+                    }
+                    present->setUniform(m_surfacePresentOpacityLoc, presentOpacity);
                 }
                 glActiveTexture(GL_TEXTURE0);
                 boundChannels = 1; // unit kSurfaceChannelBaseUnit+0, freed in the cleanup below

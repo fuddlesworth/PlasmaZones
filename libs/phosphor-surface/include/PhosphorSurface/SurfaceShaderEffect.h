@@ -135,6 +135,13 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// transparent, so a pack must style a fallback on that gate.
     bool needsBackdrop = false;
 
+    /// Declares that the pack applies the window's rule-resolved opacity
+    /// itself (reading `uSurfaceOpacity`), so the compositor's present pass
+    /// must NOT also apply its default KWin-style final modulation. Frost
+    /// dims only its window content sample this way, keeping the frost slab
+    /// solid; packs without this flag get uniform whole-output ghosting.
+    bool handlesOpacity = false;
+
     /// Buffer-pass shader paths (relative to effect dir). When non-empty
     /// and `isMultipass` is true, the daemon's surface-layer runtime runs
     /// these as intermediate passes before the main fragment shader.

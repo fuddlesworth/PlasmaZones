@@ -7,6 +7,7 @@
     "category": "Decoration",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
+    "handlesOpacity": true,
     "multipass": true,
     "bufferScale": 0.25,
     "bufferShaders": ["buffer0.frag", "buffer1.frag"],

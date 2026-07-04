@@ -98,6 +98,13 @@ uniform sampler2D uBackdrop;
 uniform vec4 uBackdropRect;
 uniform float uHasBackdrop;
 
+// The window's rule-resolved opacity (1.0 when no SetOpacity rule applies).
+// The host applies a KWin-style FINAL modulation by default, so most packs
+// never read this; a pack that declares `"handlesOpacity": true` suppresses
+// that and applies this value itself (frost dims only its content sample so
+// the frost slab stays solid).
+uniform float uSurfaceOpacity;
+
 #else
 
 // ── Daemon branch — std140 UBO at binding 0 ─────────────────────────────────
@@ -115,7 +122,7 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
     vec2 uSurfaceFrameTopLeft;   // offset 88  (8)
     vec2 uSurfaceFrameSize;      // offset 96  (8)
     float uHasBackdrop;          // offset 104 (4) — always 0 (no scene behind daemon surfaces)
-    // implicit 4-byte std140 pad (108 → 112) before the next vec4
+    float uSurfaceOpacity;       // offset 108 (4) — always 1 on the daemon (qt_Opacity carries host opacity)
     vec4 customParams[8];        // offset 112 (128)
     vec4 customColors[16];       // offset 240 (256)
     vec4 iChannelResolution[4];  // offset 496 (64) — multipass buffer sizes (.xy)

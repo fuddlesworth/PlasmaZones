@@ -59,7 +59,8 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
     // pinned 0 here; only the compositor branch (classic uniforms, not this
     // UBO) can raise its counterpart.
     m_u.uHasBackdrop = 0.0f;
-    m_u._pad0 = 0.0f;
+    // No rule opacity on the daemon — qt_Opacity carries host opacity.
+    m_u.uSurfaceOpacity = 1.0f;
 
     // Loop bounds derive from the destination array extents (pinned by the
     // SurfaceUniforms static_asserts) so they can't silently under-copy if the

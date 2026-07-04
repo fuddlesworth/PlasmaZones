@@ -63,6 +63,10 @@ SurfaceUniforms makeReference(const PhosphorShaders::UboFrameState& s)
     u.uSurfaceFrameTopLeft[1] = s.surfaceFrameTopLeft[1];
     u.uSurfaceFrameSize[0] = s.surfaceFrameSize[0];
     u.uSurfaceFrameSize[1] = s.surfaceFrameSize[1];
+    // Daemon-pinned contract gates: no scene behind a daemon surface, and no
+    // rule opacity (qt_Opacity carries host opacity) — mirrors fill().
+    u.uHasBackdrop = 0.0f;
+    u.uSurfaceOpacity = 1.0f;
     for (int i = 0; i < 8; ++i) {
         for (int c = 0; c < 4; ++c) {
             u.customParams[i][c] = s.customParams[i][c];

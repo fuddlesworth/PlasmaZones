@@ -44,6 +44,8 @@ QJsonObject SurfaceShaderEffect::toJson() const
         obj.insert(QLatin1String("paddingParam"), paddingParam);
     if (needsBackdrop)
         obj.insert(QLatin1String("needsBackdrop"), true);
+    if (handlesOpacity)
+        obj.insert(QLatin1String("handlesOpacity"), true);
     if (!bufferShaderPaths.isEmpty()) {
         QJsonArray arr;
         for (const auto& p : bufferShaderPaths)
@@ -152,6 +154,7 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     e.animated = obj.value(QLatin1String("animated")).toBool(false);
     e.paddingParam = obj.value(QLatin1String("paddingParam")).toString();
     e.needsBackdrop = obj.value(QLatin1String("needsBackdrop")).toBool(false);
+    e.handlesOpacity = obj.value(QLatin1String("handlesOpacity")).toBool(false);
     const QJsonArray bufArr = obj.value(QLatin1String("bufferShaders")).toArray();
     for (const QJsonValue& v : bufArr) {
         const QString name = v.toString();
@@ -301,8 +304,8 @@ bool SurfaceShaderEffect::operator==(const SurfaceShaderEffect& other) const
     if (previewPath != other.previewPath)
         return false;
     if (isMultipass != other.isMultipass || animated != other.animated || paddingParam != other.paddingParam
-        || needsBackdrop != other.needsBackdrop || bufferFeedback != other.bufferFeedback
-        || useDepthBuffer != other.useDepthBuffer)
+        || needsBackdrop != other.needsBackdrop || handlesOpacity != other.handlesOpacity
+        || bufferFeedback != other.bufferFeedback || useDepthBuffer != other.useDepthBuffer)
         return false;
     if (!qFuzzyCompare(bufferScale + 1.0, other.bufferScale + 1.0))
         return false;

@@ -111,6 +111,7 @@ struct CompiledSurfacePack
     int uFrameSizeLoc = -1; ///< uSurfaceFrameSize — frame size excluding shadows, device px
     int uScaleLoc = -1; ///< uSurfaceScale — logical-to-device pixel scale
     int uFocusedLoc = -1; ///< uSurfaceFocused — 1.0 focused / 0.0 unfocused
+    int uOpacityLoc = -1; ///< uSurfaceOpacity — rule-resolved window opacity (handlesOpacity packs)
     int uTimeLoc = -1; ///< iTime — continuous seconds; -1 ⟺ static pack (drives the repaint gate)
     /// uTexture0 — the input-surface sampler (unit 0). On the single-pack path
     /// OffscreenData::paint binds the redirected surface to unit 0 automatically,
@@ -300,6 +301,11 @@ struct WindowBorder
     /// updateWindowBorder, which re-runs on every trigger that can change
     /// a rule verdict (focus, snap state, rule/config edits).
     double ruleOpacity = 1.0;
+
+    /// True when any chain pack declares `"handlesOpacity": true`. The
+    /// present pass then pushes uOpacity = 1.0 (no final modulation) and the
+    /// declaring pack applies uSurfaceOpacity itself.
+    bool chainHandlesOpacity = false;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but

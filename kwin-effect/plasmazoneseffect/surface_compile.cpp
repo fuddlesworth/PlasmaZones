@@ -292,6 +292,7 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     packState.uFrameSizeLoc = shader->uniformLocation(SC::kUSurfaceFrameSize);
     packState.uScaleLoc = shader->uniformLocation(SC::kUSurfaceScale);
     packState.uFocusedLoc = shader->uniformLocation(SC::kUSurfaceFocused);
+    packState.uOpacityLoc = shader->uniformLocation(SC::kUSurfaceOpacity);
     // iTime — present (>= 0) only when the pack's main references it; that is the
     // signal the window must be driven to repaint continuously (windowSurfaceAnimates).
     packState.uTimeLoc = shader->uniformLocation(SC::kITime);

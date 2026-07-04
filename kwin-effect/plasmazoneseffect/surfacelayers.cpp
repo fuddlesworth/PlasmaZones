@@ -378,8 +378,15 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
         "layout(location = 0) in vec2 vTexCoord;\n\n"
         "layout(location = 0) out vec4 fragColor;\n\n"
         "uniform sampler2D uFinal;\n\n"
+        // Final KWin-style opacity modulation (premultiplied multiply): the
+        // WHOLE decorated output ghosts uniformly, exactly like KWin's own
+        // Modulate trait would. Pushed per frame in drawWindow's present
+        // branch; forced to 1.0 when a chain pack declares handlesOpacity
+        // (frost applies the window's opacity to its content sample itself
+        // so its slab stays solid).
+        "uniform float uOpacity;\n\n"
         "void main() {\n"
-        "    fragColor = texture(uFinal, vTexCoord);\n"
+        "    fragColor = texture(uFinal, vTexCoord) * uOpacity;\n"
         "}\n");
 
     // Route BOTH stages through injectKwinDefineAfterVersion, exactly like
@@ -399,6 +406,7 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
         return nullptr;
     }
     m_surfacePresentFinalLoc = shader->uniformLocation("uFinal");
+    m_surfacePresentOpacityLoc = shader->uniformLocation("uOpacity");
     m_surfacePresentShader = std::move(shader);
     m_surfacePresentFailed = false;
     return m_surfacePresentShader.get();
@@ -478,7 +486,17 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
                        (source.y() - logicalGeometry.y()) * captureScale, source.width() * captureScale,
                        source.height() * captureScale);
     const KWin::Rect destination(qRound(destF.x()), qRound(destF.y()), qRound(destF.width()), qRound(destF.height()));
-    if (!fbo.blitFromRenderTarget(renderTarget, viewport, source, destination)) {
+    // Temporary frost diagnostic: log the first few captures so a
+    // blank/misplaced blur can be attributed from journalctl.
+    static int backdropDbgCount = 0;
+    const bool blitOk = fbo.blitFromRenderTarget(renderTarget, viewport, source, destination);
+    if (backdropDbgCount < 4) {
+        ++backdropDbgCount;
+        qCWarning(lcEffect) << "PZDBG backdrop: canvas" << logicalGeometry << "renderRect" << viewport.renderRect()
+                            << "srcLogical" << sourceLogicalF << "texSize" << textureSize << "dest" << destF << "blitOk"
+                            << blitOk << "scale" << captureScale;
+    }
+    if (!blitOk) {
         return;
     }
     // Valid sub-rect in TOP-DOWN normalized coords — matches backdropTexel's
@@ -619,23 +637,13 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             glClear(GL_COLOR_BUFFER_BIT);
             KWin::ItemEffect keepRenderable(w->windowItem());
             KWin::WindowPaintData captureData;
-            // Apply the window's rule-resolved opacity AT CAPTURE TIME: this
-            // nested draw goes through KWin's default modulating shader, so
-            // the dim actually lands (the custom present shader the redirect
-            // holds ignores WindowPaintData::opacity). Content dims exactly
-            // once; the packs stack decoration over the dimmed capture at
-            // full strength, and a frost pack's slab fills the translucency.
-            // NOT on the transition leg (captureRestoreShader set): the
-            // animation shader multiplies the whole layer by iWindowOpacity
-            // itself, and dimming here too would double-apply mid-animation.
-            // Prefer the per-frame cache (prePaintWindow refreshed it this
-            // very frame); fall back to the update-time snapshot.
-            qreal captureOpacity = bit->ruleOpacity;
-            if (m_shaderManager.frameOpacityCached(w)) {
-                const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
-                captureOpacity = frameOpacity ? qBound(0.0, *frameOpacity, 1.0) : 1.0;
-            }
-            captureData.setOpacity(captureRestoreShader ? 1.0 : captureOpacity);
+            // Capture RAW (opacity 1.0). Rule opacity is applied downstream
+            // as a shader concern: the present passthrough modulates the
+            // final composite (KWin-style uniform ghosting), unless a chain
+            // pack declares handlesOpacity and applies uSurfaceOpacity to
+            // its own content sample instead (frost). Dimming the capture
+            // here would double-apply against either.
+            captureData.setOpacity(1.0);
             const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
             KWin::effects->drawWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
             KWin::GLFramebuffer::popFramebuffer();
@@ -777,6 +785,15 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && state.backdropTex && state.backdropRect.z() > 0.0f;
+        // Temporary frost diagnostic (pairs with the PZDBG backdrop log).
+        static int foldDbgCount = 0;
+        if (foldDbgCount < 4 && (pk->uBackdropLoc >= 0 || pk->uHasBackdropLoc >= 0)) {
+            ++foldDbgCount;
+            qCWarning(lcEffect) << "PZDBG fold:" << chain.at(k) << "hasBackdrop" << mainHasBackdrop << "backdropLoc"
+                                << pk->uBackdropLoc << "rect" << state.backdropRect << "bufferPasses"
+                                << pk->bufferPasses.size() << "passCount" << passCount << "opacityLoc"
+                                << pk->uOpacityLoc;
+        }
         {
             KWin::ShaderBinder binder(pk->shader.get());
             // Identity MVP so the NDC fullscreen quad from drawFullscreenQuad maps
