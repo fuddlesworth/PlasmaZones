@@ -771,6 +771,54 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // Null when the window has no surface layers (the common no-border
             // case), in which case surfaceColor() samples the bare uTexture0.
             KWin::GLTexture* const surfaceLayerTex = renderSurfaceChain(transition, w, viewport.scale());
+            // Temporary PIXEL diagnostic: read one texel from the composite's
+            // frame-center and one from the backdrop capture, so "no blur
+            // during animations" can be split into content-missing vs
+            // sampled-wrong. Rate-limited by time.
+            if (surfaceLayerTex && !m_windowBorders.isEmpty()) {
+                static qint64 lastPixLogMs = 0;
+                const qint64 nowPix = ShaderInternal::shaderClockNowMs();
+                const auto pixSt = m_surfaceMultipass.find(getWindowId(w));
+                if (nowPix - lastPixLogMs > 300 && pixSt != m_surfaceMultipass.end()
+                    && pixSt->second.canvasGeo.isValid()) {
+                    lastPixLogMs = nowPix;
+                    const QRectF cv = pixSt->second.canvasGeo;
+                    const QRectF fr = w->frameGeometry();
+                    // frame center in texture px (top-down capture space; the
+                    // GL texture row order matches the blit, so read the raw
+                    // coordinate both ways and log both).
+                    const qreal fx = (fr.center().x() - cv.x()) / cv.width();
+                    const qreal fy = (fr.center().y() - cv.y()) / cv.height();
+                    const int tw = surfaceLayerTex->width();
+                    const int th = surfaceLayerTex->height();
+                    const int px = qBound(0, int(fx * tw), tw - 1);
+                    const int pyTop = qBound(0, int(fy * th), th - 1);
+                    const int pyBot = th - 1 - pyTop;
+                    unsigned char comp[8] = {};
+                    {
+                        KWin::GLFramebuffer fbo(surfaceLayerTex);
+                        KWin::GLFramebuffer::pushFramebuffer(&fbo);
+                        glReadPixels(px, pyTop, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, comp);
+                        glReadPixels(px, pyBot, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, comp + 4);
+                        KWin::GLFramebuffer::popFramebuffer();
+                    }
+                    unsigned char back[4] = {};
+                    if (pixSt->second.backdropTex) {
+                        KWin::GLFramebuffer bfbo(pixSt->second.backdropTex.get());
+                        KWin::GLFramebuffer::pushFramebuffer(&bfbo);
+                        glReadPixels(qBound(0, int(fx * pixSt->second.backdropTex->width()),
+                                            pixSt->second.backdropTex->width() - 1),
+                                     qBound(0, int(fy * pixSt->second.backdropTex->height()),
+                                            pixSt->second.backdropTex->height() - 1),
+                                     1, 1, GL_RGBA, GL_UNSIGNED_BYTE, back);
+                        KWin::GLFramebuffer::popFramebuffer();
+                    }
+                    qCWarning(lcEffect) << "PZDBG pixels:" << getWindowId(w).left(24) << "compTop" << comp[0] << comp[1]
+                                        << comp[2] << comp[3] << "compBot" << comp[4] << comp[5] << comp[6] << comp[7]
+                                        << "backdrop" << back[0] << back[1] << back[2] << back[3] << "rect"
+                                        << pixSt->second.backdropRect;
+                }
+            }
             // Temporary FAILURE diagnostic: a decorated window animating with
             // NO layer texture is exactly the "blur vanishes during animation
             // shaders" symptom — the shader falls back to the bare uTexture0.
