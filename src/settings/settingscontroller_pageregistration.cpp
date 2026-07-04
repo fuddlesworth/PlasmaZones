@@ -287,6 +287,9 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("decoration-popups"), QStringLiteral("decoration-surfaces"), PhosphorI18n::tr("Popups"),
                QStringLiteral("DecorationPopupsPage.qml"), QStringLiteral("view-presentation"));
 
+    regVirtual(QStringLiteral("decoration-sets"), QStringLiteral("decoration-library"),
+               PhosphorI18n::tr("Decoration Sets"), QStringLiteral("DecorationSetsPage.qml"),
+               QStringLiteral("color-palette"));
     regVirtual(QStringLiteral("decoration-shaders"), QStringLiteral("decoration-library"), PhosphorI18n::tr("Shaders"),
                QStringLiteral("DecorationShadersPage.qml"), QStringLiteral("preferences-desktop-display"));
 
@@ -414,7 +417,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
         {QStringLiteral("decoration"), QStringLiteral("decoration-windows")},
         {QStringLiteral("decoration-surfaces"), QStringLiteral("decoration-windows")},
-        {QStringLiteral("decoration-library"), QStringLiteral("decoration-shaders")},
+        {QStringLiteral("decoration-library"), QStringLiteral("decoration-sets")},
         // The "rules" parent virtual retired when Rules promoted
         // to a top-level entry; no redirect needed because there is no
         // longer a parent id to land on.
@@ -477,7 +480,8 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("decoration-osds"),
         QStringLiteral("decoration-popups"),
     };
-    static const QSet<QString> kDecorationLibraryChildren{QStringLiteral("decoration-shaders")};
+    static const QSet<QString> kDecorationLibraryChildren{QStringLiteral("decoration-sets"),
+                                                          QStringLiteral("decoration-shaders")};
     static const QSet<QString> kDecorationAllLeaves = kDecorationSurfacesChildren + kDecorationLibraryChildren;
     // Mid-level *-cat collapsible category headers under the snapping /
     // tiling drill-down parents. Sidebar.qml renders these as collapsible
@@ -739,6 +743,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("decoration-windows"),
         QStringLiteral("decoration-osds"),
         QStringLiteral("decoration-popups"),
+        QStringLiteral("decoration-sets"),
         QStringLiteral("decoration-shaders"),
         QStringLiteral("rules"),
         QStringLiteral("editor"),

@@ -181,6 +181,21 @@ public:
     /// browser's "Used in" chips.
     Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
 
+    // ── Decoration sets (the Motion Sets twin) ──────────────────────────
+    // Named snapshots of the decoration profile tree, persisted as JSON
+    // under ~/.local/share/plasmazones/decorationsets/<slug>.json.
+    // Applying merges: the baseline (when the set captured one) and every
+    // entry replace the DIRECT profile at their path; surfaces the set
+    // does not cover keep their current overrides. All writes go through
+    // ISettings::setDecorationProfileTree, so dirty / apply / discard ride
+    // the normal staging flow.
+
+    /// Saved sets as {name, description, slug, overrideCount} rows.
+    Q_INVOKABLE QVariantList availableDecorationSets() const;
+    Q_INVOKABLE bool applyDecorationSet(const QString& name);
+    Q_INVOKABLE bool saveCurrentAsDecorationSet(const QString& name, const QString& description);
+    Q_INVOKABLE bool removeDecorationSet(const QString& name);
+
 Q_SIGNALS:
     /// Re-emit of `SurfaceShaderRegistry::effectsChanged` so QML can
     /// rebind without poking at the registry directly.
@@ -195,8 +210,14 @@ Q_SIGNALS:
     /// failures with the concrete reason). Routed by ShaderBrowserPage.
     void toastRequested(const QString& text);
 
+    /// Emitted on any successful save/removeDecorationSet so the Sets page
+    /// refreshes its Q_INVOKABLE-loaded list.
+    void decorationSetsChanged();
+
 private:
     QString userShaderDirectoryPath() const;
+    QString decorationSetsDirectoryPath() const;
+    QString decorationSetFilePath(const QString& setName) const;
 
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_registry = nullptr;
     ISettings* m_settings = nullptr;

@@ -1576,6 +1576,14 @@ public:
         return QStringLiteral("/plasmazones/shaders");
     }
 
+    /// Decoration sets — named snapshots of the decoration profile tree
+    /// (the surface-pack chains + parameters across all surfaces), the
+    /// decoration twin of `userMotionSetsSubdir()`.
+    static QString userDecorationSetsSubdir()
+    {
+        return QStringLiteral("/plasmazones/decorationsets");
+    }
+
     /// Surface shader packs (the `data/surface/` family — border, etc.).
     /// Mirrors the `userAnimationsSubdir()` convention so settings + daemon
     /// + compositor code share one source of truth for the on-disk location.
