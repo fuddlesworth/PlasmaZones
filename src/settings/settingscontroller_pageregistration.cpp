@@ -123,7 +123,7 @@ void SettingsController::buildApplicationController()
     // The DecorationPageController is wired in
     // as a headless staging domain below; it has no per-page staged state —
     // dirty tracking rides the global decorationProfileTreeChanged NOTIFY loop.
-    regVirtual(QStringLiteral("decoration"), QStringLiteral("appearance"), PhosphorI18n::tr("Decoration"), QString(),
+    regVirtual(QStringLiteral("decoration"), QStringLiteral("appearance"), PhosphorI18n::tr("Decorations"), QString(),
                QStringLiteral("preferences-desktop-theme"));
     // Headless staging domain — trackDomain() connects dirtyChanged + appends
     // to m_domains so applyAllAsync walks it, exactly as registerPage would,
