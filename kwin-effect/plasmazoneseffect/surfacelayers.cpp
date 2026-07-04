@@ -419,7 +419,7 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
 // surface via effects->drawWindow, which re-enters KWin's draw-window iterator.
 void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTarget,
                                               const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
-                                              const WindowBorder& wb)
+                                              const WindowBorder& wb, const QRectF& animatedFrame)
 {
     // Mirror renderSurfaceChainComposite's canvas math EXACTLY (padded
     // logical rect, capped capture scale, derived texture size) so uBackdrop
@@ -455,13 +455,32 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropTex->setWrapMode(GL_CLAMP_TO_EDGE);
         state.backdropSize = textureSize;
     }
-    // The canvas can hang off the output (a padded canvas at a screen edge, a
-    // window half-dragged off): blit only the part the render target covers
-    // and record the valid sub-rect so packs clamp samples into it rather
-    // than reading the cleared margin. Integer-rounded ONCE, and the
-    // destination is derived from the SAME rounded source, so the copy stays
-    // strictly 1:1 with the composite's texel grid.
-    const QRectF sourceLogicalF = logicalGeometry & viewport.renderRect();
+    // Where to READ the scene from. At rest that is the canvas rect itself;
+    // while an animation draws the window elsewhere (animatedFrame valid),
+    // map the canvas rect through the frame -> animatedFrame transform so
+    // the pane shows the scene behind the MOVING quad. The canvas/texture
+    // stays rest-rect sized either way (it must match the composite); a
+    // moving source of a different size is scaled by the blit.
+    QRectF sourceRect = logicalGeometry;
+    if (animatedFrame.isValid()) {
+        QRectF frame = w->frameGeometry();
+        if (frame.isEmpty()) {
+            frame = animatedFrame;
+        }
+        const qreal sx = animatedFrame.width() / qMax(frame.width(), 1.0);
+        const qreal sy = animatedFrame.height() / qMax(frame.height(), 1.0);
+        sourceRect = QRectF(animatedFrame.x() + (logicalGeometry.x() - frame.x()) * sx,
+                            animatedFrame.y() + (logicalGeometry.y() - frame.y()) * sy, logicalGeometry.width() * sx,
+                            logicalGeometry.height() * sy);
+        if (sourceRect.isEmpty()) {
+            sourceRect = logicalGeometry;
+        }
+    }
+    // The source can hang off the output (a padded canvas at a screen edge,
+    // a window half-dragged off, an animation passing the edge): blit only
+    // the part the render target covers and record the valid sub-rect so
+    // packs clamp samples into it rather than reading the cleared margin.
+    const QRectF sourceLogicalF = sourceRect & viewport.renderRect();
     if (sourceLogicalF.isEmpty()) {
         return;
     }
@@ -482,9 +501,15 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     KWin::GLFramebuffer::popFramebuffer();
     const KWin::Rect source(qRound(sourceLogicalF.x()), qRound(sourceLogicalF.y()), qRound(sourceLogicalF.width()),
                             qRound(sourceLogicalF.height()));
-    const QRectF destF((source.x() - logicalGeometry.x()) * captureScale,
-                       (source.y() - logicalGeometry.y()) * captureScale, source.width() * captureScale,
-                       source.height() * captureScale);
+    // Destination: the source's PROPORTIONAL position within sourceRect,
+    // mapped onto the texture — reduces to the plain scaled copy at rest
+    // (sourceRect == logicalGeometry) and scales a moving/resizing source
+    // into the rest-sized canvas during animations.
+    const qreal texW = textureSize.width();
+    const qreal texH = textureSize.height();
+    const QRectF destF((source.x() - sourceRect.x()) / sourceRect.width() * texW,
+                       (source.y() - sourceRect.y()) / sourceRect.height() * texH,
+                       source.width() / sourceRect.width() * texW, source.height() / sourceRect.height() * texH);
     const KWin::Rect destination(qRound(destF.x()), qRound(destF.y()), qRound(destF.width()), qRound(destF.height()));
     if (!fbo.blitFromRenderTarget(renderTarget, viewport, source, destination)) {
         return;

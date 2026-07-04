@@ -424,7 +424,34 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         const auto backIt = m_windowBorders.constFind(getWindowId(w));
         if (backIt != m_windowBorders.constEnd() && backIt->needsBackdrop
             && (backIt->shaderApplied || m_shaderManager.findTransition(w))) {
-            captureWindowBackdrop(renderTarget, viewport, w, *backIt);
+            // While an animation is drawing the window somewhere other than
+            // its resting rect, capture the backdrop where the quad actually
+            // IS this frame, or the pane shows the wrong slice of the scene
+            // for the whole animation (every snap/zone change here). Two of
+            // the three animation classes expose exact geometry:
+            //   1. C++ WindowAnimator translate+scale — its current rect.
+            //   2. Geometry-morph transitions — lerp(from, to, progress)
+            //      with the same time-based progress the draw uses.
+            //   3. Non-morph shader transitions: anchor-extent packs warp in
+            //      place (rest rect is already right); surface-extent movers
+            //      (fly-in / bounce) place pixels only the shader knows, so
+            //      they keep the rest-rect capture — stale-position frost
+            //      that rides the quad, which motion masks. The reference
+            //      blur effects disable blur outright on transformed
+            //      windows; this degrades strictly less.
+            QRectF animatedFrame = m_windowAnimator->currentValue(w, QRectF());
+            if (!animatedFrame.isValid()) {
+                if (const ShaderTransition* st = m_shaderManager.findTransition(w);
+                    st && st->fromGeometry.isValid() && st->toGeometry.isValid() && st->durationMs > 0) {
+                    const qreal t = qBound(0.0, qreal(frameNowMs - st->startTimeMs) / qreal(st->durationMs), 1.0);
+                    const QRectF& f = st->fromGeometry;
+                    const QRectF& g = st->toGeometry;
+                    animatedFrame =
+                        QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
+                               f.width() + (g.width() - f.width()) * t, f.height() + (g.height() - f.height()) * t);
+                }
+            }
+            captureWindowBackdrop(renderTarget, viewport, w, *backIt, animatedFrame);
         }
     }
 

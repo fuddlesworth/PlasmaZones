@@ -933,8 +933,14 @@ private:
     /// so packs sample composite and backdrop with one uv. Called from
     /// paintWindow for needsBackdrop chains, live windows only (the close
     /// path reuses the frozen composite and must never re-capture).
+    /// animatedFrame: where the animation is DRAWING the window this frame
+    /// (WindowAnimator's current rect, or a morph transition's interpolated
+    /// rect), in logical frame-rect terms. When valid, the blit SOURCE
+    /// follows it (scaled into the rest-rect-sized canvas) so a frost/glass
+    /// pane shows the scene behind the moving quad instead of behind the
+    /// resting rect. Invalid = capture at the live geometry.
     void captureWindowBackdrop(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                               KWin::EffectWindow* w, const WindowBorder& wb);
+                               KWin::EffectWindow* w, const WindowBorder& wb, const QRectF& animatedFrame = QRectF());
     KWin::GLTexture* renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
                                                  KWin::GLShader* captureRestoreShader = nullptr, bool force = false);
 
