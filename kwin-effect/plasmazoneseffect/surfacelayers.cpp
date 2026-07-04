@@ -214,14 +214,21 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     SurfaceMultipassState& state = m_surfaceMultipass[getWindowId(w)];
     // ── Multi-output accumulation ───────────────────────────────────────
     // paintWindow runs once per OUTPUT, and each output can only blit the
-    // slice of the canvas its viewport covers. Captures within one frame
-    // ACCUMULATE: the first clears the texture, subsequent ones add their
-    // (disjoint) slices, and backdropRect grows to the union — a window
-    // straddling a monitor boundary mid-move gets a complete backdrop.
-    // The no-intersection path keeps the previous frame's capture
-    // (slightly stale beats none while the window is mid-animation).
+    // slice of the canvas its viewport covers. OUTPUTS HAVE INDEPENDENT
+    // FRAME CLOCKS, so "same frame" is undecidable from the pinned clock —
+    // keying a clear on it made the neighbour output (whose cycle always
+    // looks like a new frame) wholesale-clear the texture and leave only
+    // its overhang sliver, which the pixel probes showed as a transparent
+    // backdrop exactly while animations kept both outputs cycling. So:
+    // NEVER clear on capture (stale pixels outside the valid rect are
+    // never sampled — backdropTexel clamps into it; the texture is cleared
+    // once at allocation), and treat captures within a short window as one
+    // accumulation generation: their dest slices overwrite in place and
+    // the valid rect grows to the union. A stale generation restarts the
+    // rect at this capture's slice.
     const qint64 pinned = m_shaderManager.currentFrameClockMs();
     const qint64 frameStamp = pinned >= 0 ? pinned : ShaderInternal::shaderClockNowMs();
+    constexpr qint64 kAccumulationWindowMs = 50;
     if (state.backdropSize != textureSize || !state.backdropTex) {
         state.backdropTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
         if (!state.backdropTex) {
@@ -233,6 +240,16 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropSize = textureSize;
         state.backdropRect = QVector4D();
         state.backdropFrameMs = -1;
+        // The only clear the texture ever gets: uncovered regions read
+        // transparent until a capture lands there, and are never sampled
+        // (backdropTexel clamps into the valid rect).
+        KWin::GLFramebuffer clearFbo(state.backdropTex.get());
+        if (clearFbo.valid()) {
+            KWin::GLFramebuffer::pushFramebuffer(&clearFbo);
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            KWin::GLFramebuffer::popFramebuffer();
+        }
     }
     // Where to READ the scene from. At rest that is the canvas rect itself;
     // while an animation draws the window elsewhere (animatedFrame valid),
@@ -263,7 +280,8 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     if (sourceLogicalF.isEmpty()) {
         return; // keep whatever another output captured
     }
-    const bool firstOfFrame = state.backdropFrameMs != frameStamp;
+    const bool sameGeneration =
+        state.backdropFrameMs >= 0 && qAbs(frameStamp - state.backdropFrameMs) < kAccumulationWindowMs;
     // Restore scissor/blend/viewport state — the clear below and the blit
     // both honour scissor, and this runs mid scene-walk (see ScopedGlState).
     const ShaderInternal::ScopedGlState glStateGuard;
@@ -274,16 +292,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropSize = QSize();
         return;
     }
-    // First capture of the frame: clear so uncovered regions read
-    // transparent, not stale. Same-frame captures from other outputs
-    // ACCUMULATE into their own sub-rects — clearing again would erase the
-    // slice a previous output just blitted.
-    if (firstOfFrame) {
-        KWin::GLFramebuffer::pushFramebuffer(&fbo);
-        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        KWin::GLFramebuffer::popFramebuffer();
-    }
+    // No clear here — see the accumulation note above.
     const KWin::Rect source(qRound(sourceLogicalF.x()), qRound(sourceLogicalF.y()), qRound(sourceLogicalF.width()),
                             qRound(sourceLogicalF.height()));
     // Destination: the source's PROPORTIONAL position within sourceRect,
@@ -308,7 +317,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
                        static_cast<float>(destF.y() / textureSize.height()),
                        static_cast<float>(destF.width() / textureSize.width()),
                        static_cast<float>(destF.height() / textureSize.height()));
-    if (!firstOfFrame && state.backdropRect.z() > 0.0f && state.backdropRect.w() > 0.0f) {
+    if (sameGeneration && state.backdropRect.z() > 0.0f && state.backdropRect.w() > 0.0f) {
         const float x0 = qMin(state.backdropRect.x(), destNorm.x());
         const float y0 = qMin(state.backdropRect.y(), destNorm.y());
         const float x1 = qMax(state.backdropRect.x() + state.backdropRect.z(), destNorm.x() + destNorm.z());
