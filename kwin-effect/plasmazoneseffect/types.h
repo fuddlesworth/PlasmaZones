@@ -288,6 +288,19 @@ struct WindowBorder
     /// landing on this window).
     bool needsBackdrop = false;
 
+    /// The window's rule-resolved opacity (SetOpacity), 1.0 when no rule
+    /// applies. Custom MapTexture redirect shaders IGNORE
+    /// WindowPaintData::opacity (KWin only applies it through its own
+    /// default shader's modulation), so a decorated window would render
+    /// fully opaque no matter the rule. When < 1.0 the window routes
+    /// through the composite fold, whose window CAPTURE applies the dim
+    /// (the nested draw uses KWin's default modulating shader) — content
+    /// dims once, decoration packs stack over it at full strength, and a
+    /// frost pack gets the translucency it fills. Kept fresh by
+    /// updateWindowBorder, which re-runs on every trigger that can change
+    /// a rule verdict (focus, snap state, rule/config edits).
+    double ruleOpacity = 1.0;
+
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but
     /// not the margin band OUTSIDE them, so the glow would trail during a

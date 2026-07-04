@@ -619,7 +619,23 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             glClear(GL_COLOR_BUFFER_BIT);
             KWin::ItemEffect keepRenderable(w->windowItem());
             KWin::WindowPaintData captureData;
-            captureData.setOpacity(1.0);
+            // Apply the window's rule-resolved opacity AT CAPTURE TIME: this
+            // nested draw goes through KWin's default modulating shader, so
+            // the dim actually lands (the custom present shader the redirect
+            // holds ignores WindowPaintData::opacity). Content dims exactly
+            // once; the packs stack decoration over the dimmed capture at
+            // full strength, and a frost pack's slab fills the translucency.
+            // NOT on the transition leg (captureRestoreShader set): the
+            // animation shader multiplies the whole layer by iWindowOpacity
+            // itself, and dimming here too would double-apply mid-animation.
+            // Prefer the per-frame cache (prePaintWindow refreshed it this
+            // very frame); fall back to the update-time snapshot.
+            qreal captureOpacity = bit->ruleOpacity;
+            if (m_shaderManager.frameOpacityCached(w)) {
+                const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
+                captureOpacity = frameOpacity ? qBound(0.0, *frameOpacity, 1.0) : 1.0;
+            }
+            captureData.setOpacity(captureRestoreShader ? 1.0 : captureOpacity);
             const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
             KWin::effects->drawWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
             KWin::GLFramebuffer::popFramebuffer();

@@ -348,6 +348,16 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     wb.outerPadding = qBound(0, outerPadding, 128);
     wb.needsBackdrop = needsBackdrop;
 
+    // Rule-resolved opacity, routing + capture-dim input (see the field doc).
+    // Resolved here rather than per paint: every trigger that can flip a
+    // SetOpacity verdict (focus change, snap/float state, rule edits) funnels
+    // through updateWindowBorder already.
+    if (m_shaderManager.hasOpacityRules()) {
+        if (const auto opacity = resolveWindowOpacity(resolveRuleActions(w, windowId))) {
+            wb.ruleOpacity = qBound(0.0, *opacity, 1.0);
+        }
+    }
+
     // Padded chains paint a margin band OUTSIDE the window rect; KWin's own
     // move/resize damage covers only the window's old/new rects, so track the
     // padded rect and damage old ∪ new at screen level on geometry changes or
@@ -570,7 +580,7 @@ void PlasmaZonesEffect::reconcileBorderShader(const QString& windowId, KWin::Eff
         // than leave the window blitting a dead/stale shader forever (a just-ended
         // transition hands the slot back here still redirected).
         KWin::GLShader* redirectShader = nullptr;
-        if (it->chain.size() > 1 || it->outerPadding > 0 || it->needsBackdrop) {
+        if (it->chain.size() > 1 || it->outerPadding > 0 || it->needsBackdrop || it->ruleOpacity < 1.0) {
             redirectShader = surfacePresentShader();
         } else if (CompiledSurfacePack* const pack = compiledPackForWindow(windowId)) {
             redirectShader = pack->shader.get();
@@ -747,7 +757,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
         const QString wid = getWindowId(w);
         const auto bit = m_windowBorders.constFind(wid);
         if (bit != m_windowBorders.constEnd() && bit->shaderApplied
-            && (bit->chain.size() > 1 || bit->outerPadding > 0 || bit->needsBackdrop)) {
+            && (bit->chain.size() > 1 || bit->outerPadding > 0 || bit->needsBackdrop || bit->ruleOpacity < 1.0)) {
             // MULTI-PACK present: the whole chain was already composited into a
             // per-window FBO by paintWindow (renderSurfaceChainComposite). Bind the
             // final slot to a high unit and point the present passthrough's uFinal
