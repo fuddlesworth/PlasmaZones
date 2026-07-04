@@ -15,12 +15,13 @@
 // like exp(-x²) profile that is brightest against the edge and gone well
 // before the margin ends.
 //
-// CAPTURE-MARGIN CONSTRAINT: the halo can only draw into the transparent
-// margin the redirected capture provides (the window's expandedGeometry —
-// frame + decoration shadow). A window with no decoration shadow (e.g. a
-// hidden title bar making it borderless) has no margin, so the glow has
-// nowhere to render. The texture-edge feather below guarantees the halo
-// fades out cleanly at whatever margin exists instead of clipping.
+// CAPTURE MARGIN: metadata declares `"paddingParam": "glowSize"`, so the
+// compositor host inflates the window's capture canvas by the resolved glow
+// size — the halo has real transparent margin to draw into even when the
+// window has no decoration shadow (e.g. a hidden title bar making it
+// borderless). The texture-edge feather below still guarantees a clean
+// fade-out on hosts that provide less margin than the reach (the daemon's
+// host-defined surfaces).
 //
 // Focus-tracking like Oxygen: full strength on the focused surface, dimmed
 // otherwise. Static (no iTime).

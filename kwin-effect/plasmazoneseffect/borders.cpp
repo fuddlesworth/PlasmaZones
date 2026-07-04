@@ -112,8 +112,22 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
                 // path in updateWindowBorder) — without this the stale bordered
                 // frame lingers until unrelated damage arrives.
                 w->addRepaintFull();
+                // A padded chain painted a margin band OUTSIDE the window rect;
+                // per-window repaints clip to the window item, so damage it at
+                // screen level or the stale glow lingers after removal.
+                if (wb.outerPadding > 0 && KWin::effects) {
+                    QRectF padded = w->expandedGeometry();
+                    if (padded.isEmpty()) {
+                        padded = w->frameGeometry();
+                    }
+                    const int pad = wb.outerPadding;
+                    KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
+                }
             }
         }
+    }
+    if (wb.paddedGeoConnection) {
+        disconnect(wb.paddedGeoConnection);
     }
     m_windowBorders.erase(it);
 
@@ -284,13 +298,67 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // to the compiled pack's baked baseline.
     ensureSurfaceRegistryPaths();
     const QVariantMap allPackParams = resolvedProfile.effectiveParameters();
+    int outerPadding = 0;
     for (const QString& packId : std::as_const(chain)) {
         const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
         if (!eff.isValid()) {
             continue;
         }
-        wb.packParamValues.insert(packId,
-                                  ShaderInternal::resolveSurfaceParamValues(eff, allPackParams.value(packId).toMap()));
+        const QVariantMap packOverrides = allPackParams.value(packId).toMap();
+        wb.packParamValues.insert(packId, ShaderInternal::resolveSurfaceParamValues(eff, packOverrides));
+
+        // Outer-margin request (e.g. the glow pack's glowSize): the resolved
+        // per-surface override wins, else the param's declared default. The
+        // chain's largest request pads the capture canvas (composite path).
+        if (!eff.paddingParam.isEmpty()) {
+            double request = 0.0;
+            if (packOverrides.contains(eff.paddingParam)) {
+                request = packOverrides.value(eff.paddingParam).toDouble();
+            } else {
+                for (const auto& param : eff.parameters) {
+                    if (param.id == eff.paddingParam) {
+                        request = param.defaultValue.toDouble();
+                        break;
+                    }
+                }
+            }
+            outerPadding = qMax(outerPadding, qCeil(request));
+        }
+    }
+    // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
+    wb.outerPadding = qBound(0, outerPadding, 128);
+
+    // Padded chains paint a margin band OUTSIDE the window rect; KWin's own
+    // move/resize damage covers only the window's old/new rects, so track the
+    // padded rect and damage old ∪ new at screen level on geometry changes or
+    // the glow trails behind a dragged window. Disconnected by
+    // removeWindowBorder (updateWindowBorder always removes first).
+    if (wb.outerPadding > 0) {
+        QRectF paddedNow = w->expandedGeometry();
+        if (paddedNow.isEmpty()) {
+            paddedNow = w->frameGeometry();
+        }
+        const int pad0 = wb.outerPadding;
+        wb.lastPaddedGeo = paddedNow.adjusted(-pad0, -pad0, pad0, pad0);
+        const QString wid = windowId; // capture by value
+        wb.paddedGeoConnection = connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
+                                         [this, wid](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
+                                             auto it = m_windowBorders.find(wid);
+                                             if (it == m_windowBorders.end() || !ew || !KWin::effects) {
+                                                 return;
+                                             }
+                                             QRectF padded = ew->expandedGeometry();
+                                             if (padded.isEmpty()) {
+                                                 padded = ew->frameGeometry();
+                                             }
+                                             const int pad = it->outerPadding;
+                                             padded.adjust(-pad, -pad, pad, pad);
+                                             if (it->lastPaddedGeo.isValid()) {
+                                                 KWin::effects->addRepaint(KWin::RectF(it->lastPaddedGeo));
+                                             }
+                                             KWin::effects->addRepaint(KWin::RectF(padded));
+                                             it->lastPaddedGeo = padded;
+                                         });
     }
 
     if (showBorder) {
@@ -332,6 +400,17 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // `w` is non-null here (the early-out above returns on !w), so no
     // KWin::effects guard is needed — addRepaintFull is a window method.
     w->addRepaintFull();
+    // Padded chains paint OUTSIDE the window's expanded rect; addRepaintFull
+    // (and addLayerRepaint) clip to the window item, so the margin band needs
+    // screen-level damage (the documented surface-extent repaint pitfall).
+    if (wb.outerPadding > 0 && KWin::effects) {
+        QRectF padded = w->expandedGeometry();
+        if (padded.isEmpty()) {
+            padded = w->frameGeometry();
+        }
+        const int pad = wb.outerPadding;
+        KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
+    }
 }
 
 void PlasmaZonesEffect::updateAllBorders()
@@ -471,7 +550,7 @@ void PlasmaZonesEffect::reconcileBorderShader(const QString& windowId, KWin::Eff
         // than leave the window blitting a dead/stale shader forever (a just-ended
         // transition hands the slot back here still redirected).
         KWin::GLShader* redirectShader = nullptr;
-        if (it->chain.size() > 1) {
+        if (it->chain.size() > 1 || it->outerPadding > 0) {
             redirectShader = surfacePresentShader();
         } else if (CompiledSurfacePack* const pack = compiledPackForWindow(windowId)) {
             redirectShader = pack->shader.get();
@@ -496,7 +575,7 @@ void PlasmaZonesEffect::reconcileBorderShader(const QString& windowId, KWin::Eff
 }
 
 void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& wb, const QString& packId,
-                                           const CompiledSurfacePack& pack, qreal scale)
+                                           const CompiledSurfacePack& pack, qreal scale, qreal texturePaddingLogical)
 {
     // Every caller (drawWindow's idle blit, renderSurfaceChain's transition
     // capture, renderSurfaceChainComposite's per-pack fold) has already resolved
@@ -521,6 +600,14 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowBo
     QRectF expanded = w->expandedGeometry();
     if (expanded.isEmpty()) {
         expanded = frame;
+    }
+    // Padded composite path: the target texture's canvas is the expanded rect
+    // inflated by the chain's outer margin (renderSurfaceChainComposite uses
+    // the same construction), so the geometry uniforms must describe that
+    // padded space. @p texturePaddingLogical is 0 on the unpadded callers
+    // (idle blit, transition capture).
+    if (texturePaddingLogical > 0.0) {
+        expanded.adjust(-texturePaddingLogical, -texturePaddingLogical, texturePaddingLogical, texturePaddingLogical);
     }
     const QVector2D windowExpandedSize(static_cast<float>(expanded.width() * scale),
                                        static_cast<float>(expanded.height() * scale));
@@ -639,7 +726,8 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     if (!m_capturingSnapshot && !m_windowBorders.isEmpty() && !m_shaderManager.findTransition(w)) {
         const QString wid = getWindowId(w);
         const auto bit = m_windowBorders.constFind(wid);
-        if (bit != m_windowBorders.constEnd() && bit->shaderApplied && bit->chain.size() > 1) {
+        if (bit != m_windowBorders.constEnd() && bit->shaderApplied
+            && (bit->chain.size() > 1 || bit->outerPadding > 0)) {
             // MULTI-PACK present: the whole chain was already composited into a
             // per-window FBO by paintWindow (renderSurfaceChainComposite). Bind the
             // final slot to a high unit and point the present passthrough's uFinal

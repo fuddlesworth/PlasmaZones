@@ -858,8 +858,11 @@ private:
     /// per-pack fold) owns the KWin::ShaderBinder, has already resolved @p pack
     /// and the border entry, and has ruled out a transition owning the slot, so
     /// this neither binds/unbinds nor re-validates the window.
+    /// @p texturePaddingLogical: outer margin (logical px) baked into the
+    /// TARGET texture's canvas — non-zero only on the padded composite path,
+    /// where the geometry uniforms must describe the inflated space.
     void pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& wb, const QString& packId,
-                            const CompiledSurfacePack& pack, qreal scale);
+                            const CompiledSurfacePack& pack, qreal scale, qreal texturePaddingLogical = 0.0);
 
     /// Render the window's active surface-layer stack into @p transition's
     /// ping-pong FBO chain and return the texture holding the final composited

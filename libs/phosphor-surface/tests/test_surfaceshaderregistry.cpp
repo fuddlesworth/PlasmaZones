@@ -198,6 +198,28 @@ private Q_SLOTS:
         QVERIFY(!s.toJson().contains(QLatin1String("animated")));
     }
 
+    void paddingParam_parses_and_roundtrips()
+    {
+        // "paddingParam" names the parameter whose resolved value is the
+        // outer margin the compositor pads the capture canvas by. Pin the
+        // parse, the empty default, and the toJson round-trip.
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("halo"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("paddingParam"), QStringLiteral("glowSize"));
+
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(meta);
+        QCOMPARE(e.paddingParam, QStringLiteral("glowSize"));
+        QCOMPARE(SurfaceShaderEffect::fromJson(e.toJson()).paddingParam, QStringLiteral("glowSize"));
+
+        QJsonObject metaPlain;
+        metaPlain.insert(QLatin1String("id"), QStringLiteral("flat"));
+        metaPlain.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        const SurfaceShaderEffect plain = SurfaceShaderEffect::fromJson(metaPlain);
+        QVERIFY(plain.paddingParam.isEmpty());
+        QVERIFY(!plain.toJson().contains(QLatin1String("paddingParam")));
+    }
+
     // ── SurfaceShaderEffect::fromJson validation ─────────────────────────
 
     void fromJson_resets_unknown_texture_wrap_to_empty()

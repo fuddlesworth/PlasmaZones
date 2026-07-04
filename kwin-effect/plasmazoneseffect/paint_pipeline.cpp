@@ -252,6 +252,17 @@ void PlasmaZonesEffect::postPaintScreen()
             }
             if (windowSurfaceAnimates(it.key())) {
                 sw->addRepaintFull();
+                // A padded chain's margin band sits OUTSIDE the window item;
+                // per-window repaints clip to it, so damage the band at
+                // screen level (the documented addLayerRepaint pitfall).
+                if (it->outerPadding > 0) {
+                    QRectF padded = sw->expandedGeometry();
+                    if (padded.isEmpty()) {
+                        padded = sw->frameGeometry();
+                    }
+                    const int pad = it->outerPadding;
+                    KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
+                }
             }
         }
     }
@@ -300,6 +311,16 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // the whole animation. setTranslucent() clears the opaque region
         // so every frame fully recomposites under the window.
         data.setTranslucent();
+    } else if (w && !m_windowBorders.isEmpty()) {
+        // Padded decoration chains (WindowBorder::outerPadding) present on a
+        // quad LARGER than the window's natural rect (see apply()); mark the
+        // window transformed so KWin paints the padded quad unclipped. The
+        // opaque region stays — the window's own content still covers it, so
+        // occlusion culling underneath remains valid.
+        const auto bit = m_windowBorders.constFind(getWindowId(w));
+        if (bit != m_windowBorders.constEnd() && bit->shaderApplied && bit->outerPadding > 0) {
+            data.setTransformed();
+        }
     }
 
     // Resolve + cache the rule-resolved opacity for ANY window with
@@ -1118,7 +1139,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     if (!m_capturingSnapshot && !m_windowBorders.isEmpty() && !m_shaderManager.findTransition(w)) {
         const auto bit = m_windowBorders.constFind(getWindowId(w));
         if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
-            if (bit->chain.size() > 1) {
+            if (bit->chain.size() > 1 || bit->outerPadding > 0) {
                 // MULTI-PACK: composite the whole chain into a per-window FBO here
                 // (each pack's main runs as an FBO pass); drawWindow then presents
                 // the final FBO through the passthrough present shader.
@@ -1244,6 +1265,77 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // handedness-cache block below mutates it on the first call, saving a
     // redundant `findTransition` lookup.
     auto* st = m_shaderManager.findTransition(window);
+
+    // ── Padded decoration present ────────────────────────────────────────
+    // A chain with an outer margin (WindowBorder::outerPadding) composited
+    // into a canvas LARGER than the redirect texture
+    // (renderSurfaceChainComposite inflated the capture rect). Present it on
+    // a matching padded quad so the margin band reaches the screen — the
+    // same quad-rewrite mechanism the surface-extent transitions use (they
+    // stretch to the whole output; this stretches by the padding). Gated on
+    // no live transition: a transition owns the shader slot (shaderApplied
+    // false) and its own quad handling wins.
+    if (!st && !quads.isEmpty() && !m_windowBorders.isEmpty()) {
+        const auto bit = m_windowBorders.find(getWindowId(window));
+        if (bit != m_windowBorders.end() && bit->shaderApplied && bit->outerPadding > 0) {
+            QRectF textureGeo = window->expandedGeometry();
+            if (textureGeo.isEmpty()) {
+                textureGeo = window->frameGeometry();
+            }
+            if (textureGeo.isEmpty()) {
+                return;
+            }
+            const qreal pad = bit->outerPadding;
+            const QRectF padded = textureGeo.adjusted(-pad, -pad, pad, pad);
+
+            // quad-space <-> screen-space is a pure translation at 1:1
+            // logical scale (see the surface-extent branch below for the
+            // full rationale); derive the offset from the actual quads.
+            double qLeft = quads.first().left();
+            double qTop = quads.first().top();
+            for (qsizetype i = 1; i < quads.size(); ++i) {
+                qLeft = qMin(qLeft, quads[i].left());
+                qTop = qMin(qTop, quads[i].top());
+            }
+            const double ox = qLeft + (padded.x() - textureGeo.x());
+            const double oy = qTop + (padded.y() - textureGeo.y());
+            const double ow = padded.width();
+            const double oh = padded.height();
+
+            // Texcoord handedness: replicate from the quad KWin handed us
+            // (not hardcoded) and cache per window — identical rationale to
+            // the surface-extent transitions' handedness cache below.
+            if (!bit->presentHandednessCached) {
+                const KWin::WindowQuad& srcQuad = quads.first();
+                int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
+                for (int i = 1; i < 4; ++i) {
+                    if (srcQuad[i].y() < srcQuad[topIdx].y())
+                        topIdx = i;
+                    if (srcQuad[i].y() > srcQuad[bottomIdx].y())
+                        bottomIdx = i;
+                    if (srcQuad[i].x() < srcQuad[leftIdx].x())
+                        leftIdx = i;
+                    if (srcQuad[i].x() > srcQuad[rightIdx].x())
+                        rightIdx = i;
+                }
+                bit->uAtLeft = (srcQuad[leftIdx].u() <= srcQuad[rightIdx].u()) ? 0.0 : 1.0;
+                bit->uAtRight = 1.0 - bit->uAtLeft;
+                bit->vAtTop = (srcQuad[topIdx].v() <= srcQuad[bottomIdx].v()) ? 0.0 : 1.0;
+                bit->vAtBottom = 1.0 - bit->vAtTop;
+                bit->presentHandednessCached = true;
+            }
+
+            KWin::WindowQuad paddedQuad;
+            paddedQuad[0] = KWin::WindowVertex(ox, oy, bit->uAtLeft, bit->vAtTop);
+            paddedQuad[1] = KWin::WindowVertex(ox + ow, oy, bit->uAtRight, bit->vAtTop);
+            paddedQuad[2] = KWin::WindowVertex(ox + ow, oy + oh, bit->uAtRight, bit->vAtBottom);
+            paddedQuad[3] = KWin::WindowVertex(ox, oy + oh, bit->uAtLeft, bit->vAtBottom);
+            quads.clear();
+            quads.append(paddedQuad);
+            return;
+        }
+    }
+
     if (!st || !st->surfaceExtent || quads.isEmpty()) {
         return;
     }

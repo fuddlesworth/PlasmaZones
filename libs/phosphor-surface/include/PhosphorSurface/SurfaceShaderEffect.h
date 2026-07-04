@@ -108,6 +108,17 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// diagnostic log (see `SurfaceShaderContract.h`).
     bool isMultipass = false;
 
+    /// Names the parameter (an int/float, logical px) whose resolved value is
+    /// the transparent OUTER MARGIN the pack needs around the surface to draw
+    /// into — e.g. the glow pack's `glowSize`. The compositor host inflates
+    /// the window's capture canvas by the chain's largest declared margin
+    /// (per-window, from the surface's resolved parameter overrides) and
+    /// presents on a matching padded quad, so an outer effect renders even
+    /// when the window has no decoration-shadow margin of its own. Empty =
+    /// the pack draws within the surface (no padding requested). Daemon
+    /// hosts ignore it (their capture geometry is host-defined).
+    QString paddingParam;
+
     /// Declares that the pack references `iTime` and needs a per-frame
     /// driver. The compositor detects this itself (a linked iTime uniform
     /// gates the repaint), but the daemon UBO always carries iTime, so its

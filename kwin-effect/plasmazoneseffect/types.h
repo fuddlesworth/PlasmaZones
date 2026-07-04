@@ -10,6 +10,7 @@
 #include <opengl/gltexture.h>
 
 #include <QColor>
+#include <QObject>
 #include <QRect>
 #include <QSize>
 #include <QString>
@@ -234,6 +235,35 @@ struct WindowBorder
     int ruleBorderRadius = 0;
     QColor ruleBorderActiveColor;
     QColor ruleBorderInactiveColor;
+
+    /// Transparent OUTER MARGIN (logical px) the chain's packs need around
+    /// the window to draw into — the max over each pack's resolved
+    /// `paddingParam` value (e.g. the glow pack's glowSize). When > 0 the
+    /// window takes the padded composite path: the capture canvas is
+    /// inflated by this margin on every side, the packs run over the padded
+    /// canvas, and apply() presents the composite on a matching padded quad
+    /// (prePaintWindow marks the window transformed so KWin doesn't clip).
+    /// 0 = the classic path, byte-for-byte unchanged.
+    int outerPadding = 0;
+
+    /// Damage bookkeeping for padded chains across window moves/resizes:
+    /// KWin damages the window's own old/new rects on a geometry change, but
+    /// not the margin band OUTSIDE them, so the glow would trail during a
+    /// drag. updateWindowBorder connects windowFrameGeometryChanged for
+    /// padded windows and damages lastPaddedGeo ∪ the new padded rect at
+    /// screen level; removeWindowBorder disconnects.
+    QRectF lastPaddedGeo;
+    QMetaObject::Connection paddedGeoConnection;
+
+    /// Texcoord-handedness cache for the padded present quad built in
+    /// apply() — same rationale as ShaderTransition::handednessCached: the
+    /// convention comes from KWin's own window quad and doesn't shift, so
+    /// derive it once from the first source quad instead of per frame.
+    bool presentHandednessCached = false;
+    double uAtLeft = 0.0;
+    double uAtRight = 1.0;
+    double vAtTop = 0.0;
+    double vAtBottom = 1.0;
 
     /// Per-window resolved param values for each pack in `chain`, keyed by
     /// pack id — the window's DecorationProfile overrides translated to

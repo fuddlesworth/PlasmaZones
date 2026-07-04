@@ -43,9 +43,11 @@ uniform sampler2D uTexture0;
 
 // Geometry of the surface texture and the content rect within it (device px).
 // uSurfaceSize is the full uTexture0 extent (the compositor redirects the
-// EXPANDED window geometry: frame + decoration + shadow). The content/frame
-// rect sits at uSurfaceFrameTopLeft (top-down) and spans uSurfaceFrameSize, so
-// the decoration rounds to the frame corners, not the shadow-padded bounds.
+// EXPANDED window geometry: frame + decoration + shadow — further inflated by
+// the chain's outer margin when a pack declares `paddingParam`, so an outer
+// effect always has canvas to draw into). The content/frame rect sits at
+// uSurfaceFrameTopLeft (top-down) and spans uSurfaceFrameSize, so the
+// decoration rounds to the frame corners, not the padded bounds.
 uniform vec2 uSurfaceSize;
 uniform vec2 uSurfaceFrameTopLeft;
 uniform vec2 uSurfaceFrameSize;

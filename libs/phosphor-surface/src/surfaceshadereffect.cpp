@@ -40,6 +40,8 @@ QJsonObject SurfaceShaderEffect::toJson() const
         obj.insert(QLatin1String("multipass"), true);
     if (animated)
         obj.insert(QLatin1String("animated"), true);
+    if (!paddingParam.isEmpty())
+        obj.insert(QLatin1String("paddingParam"), paddingParam);
     if (!bufferShaderPaths.isEmpty()) {
         QJsonArray arr;
         for (const auto& p : bufferShaderPaths)
@@ -146,6 +148,7 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     e.previewPath = obj.value(QLatin1String("preview")).toString();
     e.isMultipass = obj.value(QLatin1String("multipass")).toBool(false);
     e.animated = obj.value(QLatin1String("animated")).toBool(false);
+    e.paddingParam = obj.value(QLatin1String("paddingParam")).toString();
     const QJsonArray bufArr = obj.value(QLatin1String("bufferShaders")).toArray();
     for (const QJsonValue& v : bufArr) {
         const QString name = v.toString();
@@ -294,8 +297,8 @@ bool SurfaceShaderEffect::operator==(const SurfaceShaderEffect& other) const
         return false;
     if (previewPath != other.previewPath)
         return false;
-    if (isMultipass != other.isMultipass || animated != other.animated || bufferFeedback != other.bufferFeedback
-        || useDepthBuffer != other.useDepthBuffer)
+    if (isMultipass != other.isMultipass || animated != other.animated || paddingParam != other.paddingParam
+        || bufferFeedback != other.bufferFeedback || useDepthBuffer != other.useDepthBuffer)
         return false;
     if (!qFuzzyCompare(bufferScale + 1.0, other.bufferScale + 1.0))
         return false;

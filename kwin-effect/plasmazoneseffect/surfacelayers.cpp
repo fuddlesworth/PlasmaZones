@@ -512,14 +512,27 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         return nullptr;
     }
     const QStringList chain = bit->chain;
-    if (chain.size() < 2) {
-        return nullptr; // single-pack windows take the cheap OffscreenData path
+    if (chain.size() < 2 && bit->outerPadding <= 0) {
+        return nullptr; // single unpadded packs take the cheap OffscreenData path
     }
     namespace SC = PhosphorSurfaceShaders::SurfaceShaderContract;
 
     // Size the targets to the window's expanded geometry × screen scale, with the
     // same defensive cap as renderSurfaceBufferPasses / renderSurfaceChain.
-    const QRectF logicalGeometry = w->expandedGeometry();
+    //
+    // PADDED CANVAS: when the chain requests an outer margin (a pack with a
+    // paddingParam, e.g. glow), inflate the capture rect by that margin. The
+    // capture viewport below maps the inflated rect onto the FBO, so the
+    // window renders inset with real transparent margin on every side — an
+    // outer effect gets room to draw even when the window has no
+    // decoration-shadow margin of its own (borderless windows). apply()
+    // presents the composite on a matching padded quad.
+    const qreal pad = bit->outerPadding;
+    QRectF logicalGeometry = w->expandedGeometry();
+    if (logicalGeometry.isEmpty()) {
+        logicalGeometry = w->frameGeometry();
+    }
+    logicalGeometry.adjust(-pad, -pad, pad, pad);
     qreal captureScale = scale;
     constexpr qreal kMaxSurfaceDim = 8192.0;
     const qreal longestPx = qMax(logicalGeometry.width(), logicalGeometry.height()) * captureScale;
@@ -744,7 +757,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 }
             }
             // Contract uniforms + pack params (shared with the OffscreenData path).
-            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale);
+            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, pad);
             drawFullscreenQuad();
         }
         for (int i = 0; i < qMin(static_cast<int>(passCount), 4); ++i) {
