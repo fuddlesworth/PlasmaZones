@@ -1068,6 +1068,22 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (cached->iHasSurfaceLayerLoc >= 0) {
                     shader->setUniform(cached->iHasSurfaceLayerLoc, surfaceLayerTex ? 1 : 0);
                 }
+                // Temporary consumption-side diagnostic: whether THIS
+                // animation shader can even see the decorated composite.
+                // uSurfaceLayerLoc == -1 means the shader never samples
+                // uSurfaceLayer (it bypasses surfaceColor()) and the
+                // decoration cannot render during its transitions.
+                {
+                    static int layerDbgCount = 0;
+                    if (layerDbgCount < 8 && surfaceLayerTex) {
+                        ++layerDbgCount;
+                        qCWarning(lcEffect)
+                            << "PZDBG layer-consume: uSurfaceLayerLoc" << cached->uSurfaceLayerLoc
+                            << "iHasSurfaceLayerLoc" << cached->iHasSurfaceLayerLoc << "iLayerRectLoc"
+                            << cached->iLayerRectInTextureLoc << "surfaceExtent" << transition.surfaceExtent << "tex"
+                            << static_cast<const void*>(surfaceLayerTex);
+                    }
+                }
                 if (cached->iLayerRectInTextureLoc >= 0) {
                     shader->setUniform(cached->iLayerRectInTextureLoc, layerRectInTexture);
                 }
