@@ -509,8 +509,14 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         return nullptr;
     }
     const QStringList chain = bit->chain;
-    if (!force && chain.size() < 2 && bit->outerPadding <= 0) {
-        return nullptr; // at rest, single unpadded packs take the cheap OffscreenData path
+    // Rest-path early-out for chains the cheap OffscreenData path serves.
+    // MUST mirror the routing predicate (reconcileBorderShader / paintWindow
+    // / drawWindow): any reason a window is routed onto the present shader is
+    // a reason this fold must actually run — a routed window whose fold
+    // early-outs leaves the present blit sampling an empty or unbound
+    // composite (opaque black / fully transparent window).
+    if (!force && chain.size() < 2 && bit->outerPadding <= 0 && !bit->needsBackdrop && bit->ruleOpacity >= 1.0) {
+        return nullptr;
     }
     if (chain.isEmpty()) {
         return nullptr;

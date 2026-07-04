@@ -56,15 +56,19 @@ void main() {
                              - sdRoundedBox(px - center - vec2(0.0, h), halfSz, radius));
         vec2 normal = length(grad) > 0.0 ? normalize(grad) : vec2(0.0, 1.0);
 
-        // Per-channel refraction offsets in canvas UV. The reach scales with
-        // the bevel depth (concave) and the bevel width, so a wider bevel
-        // bends over a longer run. Red bends most, blue least.
-        float reachPx = concave * clamp(p_refractionStrength, 0.0, 2.0) * 0.4 * edgePx;
-        vec2 offsetUv = normal * (reachPx / max(uSurfaceSize, vec2(1.0)));
+        // Per-channel refraction offsets, reference-scale (kwin-effects-glass
+        // cheap mode): the displacement is a FRACTION OF THE PANE, up to
+        // 0.4 x strength of the frame extent at the rim, not a few pixels —
+        // that magnitude is what makes the backdrop visibly bend at the
+        // bevel instead of reading as frost with a rim. Red bends most,
+        // blue least.
+        float strengthUv = min(0.4 * concave * clamp(p_refractionStrength, 0.0, 2.0), 1.0);
+        // vTexCoord is Y-up on the compositor while the normal is derived in
+        // top-down pixel space, so flip its Y; scale from frame-relative to
+        // canvas UV so the bend is proportional to the pane, like the
+        // reference's region-relative UV.
+        vec2 dirUv = vec2(normal.x, -normal.y) * strengthUv * (uSurfaceFrameSize / max(uSurfaceSize, vec2(1.0)));
         float fringe = clamp(p_fringing, 0.0, 1.0) * 0.4;
-        // vTexCoord is Y-up on the compositor while the offset is derived in
-        // top-down pixel space, so flip its Y before applying.
-        vec2 dirUv = vec2(offsetUv.x, -offsetUv.y);
         float r = texture(iChannel1, vTexCoord + dirUv * (1.0 + fringe)).r;
         vec4 g = texture(iChannel1, vTexCoord + dirUv);
         float b = texture(iChannel1, vTexCoord + dirUv * (1.0 - fringe)).b;
