@@ -1,0 +1,95 @@
+{
+    "id": "frosted-glass",
+    "name": "Frosted Glass",
+    "description": "The phosphor-shell frosted panel look over a real blur. The scene behind the surface is blurred, tinted, and textured with a slowly drifting crystalline grain, with a soft vignette toward the edges. Where no scene exists behind the surface (OSDs and popups) it falls back to the original translucent tint.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Blur",
+    "fragmentShader": "effect.frag",
+    "needsBackdrop": true,
+    "handlesOpacity": true,
+    "animated": true,
+    "multipass": true,
+    "bufferScale": 0.25,
+    "bufferShaders": ["buffer0.frag", "buffer1.frag"],
+    "parameters": [
+        {
+            "id": "blurRadius",
+            "name": "Blur radius",
+            "type": "int",
+            "default": 24,
+            "min": 2,
+            "max": 64,
+            "group": "Blur",
+            "description": "How strongly the scene behind the surface is blurred (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 12,
+            "min": 0,
+            "max": 32,
+            "group": "Shape",
+            "description": "Corner rounding of the pane (px)"
+        },
+        {
+            "id": "grainAmount",
+            "name": "Grain amount",
+            "type": "float",
+            "default": 0.03,
+            "min": 0.0,
+            "max": 0.3,
+            "group": "Frost",
+            "description": "Strength of the crystalline frost grain"
+        },
+        {
+            "id": "grainScale",
+            "name": "Grain scale",
+            "type": "float",
+            "default": 40.0,
+            "min": 5.0,
+            "max": 120.0,
+            "group": "Frost",
+            "description": "Density of the frost crystals"
+        },
+        {
+            "id": "grainSpeed",
+            "name": "Grain drift",
+            "type": "float",
+            "default": 0.3,
+            "min": 0.0,
+            "max": 2.0,
+            "group": "Frost",
+            "description": "How quickly the fine frost detail drifts, where 0 freezes it"
+        },
+        {
+            "id": "tintStrength",
+            "name": "Tint strength",
+            "type": "float",
+            "default": 0.45,
+            "min": 0.0,
+            "max": 1.0,
+            "group": "Tint",
+            "description": "How much of the tint colour is mixed over the blurred scene"
+        },
+        {
+            "id": "vignetteStrength",
+            "name": "Vignette",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.0,
+            "max": 0.5,
+            "group": "Tint",
+            "description": "How much the pane darkens toward its edges"
+        },
+        {
+            "id": "tintColor",
+            "name": "Tint colour",
+            "type": "color",
+            "default": "#1e1e2e",
+            "group": "Tint",
+            "description": "Colour mixed over the blurred scene"
+        }
+    ]
+}
