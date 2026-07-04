@@ -443,9 +443,18 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         return;
     }
     SurfaceMultipassState& state = m_surfaceMultipass[getWindowId(w)];
-    // Zero-size rect = "no capture this frame"; set on every early-out below
-    // so the fold pushes uHasBackdrop = 0 instead of sampling stale content.
-    state.backdropRect = QVector4D();
+    // ── Multi-output arbitration ────────────────────────────────────────
+    // paintWindow runs once per OUTPUT. A canvas overhanging onto a
+    // neighbouring output gets a second capture there covering only the
+    // overhang sliver; last-writer-wins let that sliver (or an empty
+    // intersection) CLOBBER the dominant output's capture, which killed
+    // the blur whenever animations kept both outputs repainting. Compute
+    // this output's canvas coverage up front and only proceed when it
+    // beats the capture already taken THIS frame; keep the previous
+    // frame's capture on the no-intersection path rather than zeroing
+    // (slightly stale beats none while the window is mid-animation).
+    const qint64 pinned = m_shaderManager.currentFrameClockMs();
+    const qint64 frameStamp = pinned >= 0 ? pinned : ShaderInternal::shaderClockNowMs();
     if (state.backdropSize != textureSize || !state.backdropTex) {
         state.backdropTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
         if (!state.backdropTex) {
@@ -455,6 +464,9 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropTex->setFilter(GL_LINEAR);
         state.backdropTex->setWrapMode(GL_CLAMP_TO_EDGE);
         state.backdropSize = textureSize;
+        state.backdropRect = QVector4D();
+        state.backdropFrameMs = -1;
+        state.backdropCoverage = 0.0f;
     }
     // Where to READ the scene from. At rest that is the canvas rect itself;
     // while an animation draws the window elsewhere (animatedFrame valid),
@@ -483,7 +495,12 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // packs clamp samples into it rather than reading the cleared margin.
     const QRectF sourceLogicalF = sourceRect & viewport.renderRect();
     if (sourceLogicalF.isEmpty()) {
-        return;
+        return; // keep whatever another output captured
+    }
+    const qreal sourceArea = qMax(sourceRect.width() * sourceRect.height(), 1.0);
+    const float coverage = static_cast<float>(sourceLogicalF.width() * sourceLogicalF.height() / sourceArea);
+    if (state.backdropFrameMs == frameStamp && coverage <= state.backdropCoverage) {
+        return; // a same-frame capture from another output already covers more
     }
     // Restore scissor/blend/viewport state — the clear below and the blit
     // both honour scissor, and this runs mid scene-walk (see ScopedGlState).
@@ -513,6 +530,8 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
                        source.width() / sourceRect.width() * texW, source.height() / sourceRect.height() * texH);
     const KWin::Rect destination(qRound(destF.x()), qRound(destF.y()), qRound(destF.width()), qRound(destF.height()));
     if (!fbo.blitFromRenderTarget(renderTarget, viewport, source, destination)) {
+        state.backdropRect = QVector4D();
+        state.backdropCoverage = 0.0f;
         return;
     }
     // Valid sub-rect in TOP-DOWN normalized coords — matches backdropTexel's
@@ -521,6 +540,8 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
                                    static_cast<float>(destF.y() / textureSize.height()),
                                    static_cast<float>(destF.width() / textureSize.width()),
                                    static_cast<float>(destF.height() / textureSize.height()));
+    state.backdropFrameMs = frameStamp;
+    state.backdropCoverage = coverage;
 }
 
 KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
