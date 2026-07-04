@@ -482,8 +482,16 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
         "    fragColor = texture(uFinal, vTexCoord);\n"
         "}\n");
 
-    auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, kPresentVertex,
-                                                                        kPresentFragment);
+    // Route BOTH stages through injectKwinDefineAfterVersion, exactly like
+    // every pack shader: KWin rewrites our #version 450 down to the GL context
+    // core version (140), where the `layout(location = N)` qualifiers are
+    // illegal without the ARB extensions the inject helper enables. Passing
+    // the raw sources here failed the present compile on NVIDIA (error C7548)
+    // and latched multi-pack / padded decoration off for the whole session —
+    // the same failure mode surface_compile.cpp documents for frag-only packs.
+    auto shader = KWin::ShaderManager::instance()->generateCustomShader(
+        KWin::ShaderTrait::MapTexture, ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentVertex)),
+        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentFragment)));
     // KWin 6.7 removed GLShader::isValid(); generateCustomShader returns nullptr
     // when compilation or linking fails, so a null check is the validity test.
     if (!shader) {
