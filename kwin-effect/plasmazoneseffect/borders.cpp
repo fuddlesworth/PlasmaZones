@@ -146,10 +146,24 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId, KWin::Effect
     }
     m_windowBorders.erase(it);
 
-    // Free the window's composite / buffer FBO targets — these
-    // are only allocated for multipass packs and only while the window has a
-    // border, so dropping them on border removal / window close reclaims the GPU
-    // memory. No-op for single-pass packs (the map never held an entry).
+    // Free the window's composite / buffer FBO targets, reclaiming GPU
+    // memory — UNLESS a shader transition is mid-flight on this window. The
+    // rotate/snap paths re-resolve the decoration DURING the animation
+    // (state flip → rule flush → updateWindowBorder → here), and erasing the
+    // entry destroys the very composite the animation is sampling — the
+    // at-draw probes caught windows animating with compositeTexId 0. The
+    // transition keeps the state; its own teardown (endShaderTransition →
+    // removeWindowBorder, by then with no live transition) or the
+    // windowDeleted backstop erases it.
+    {
+        KWin::EffectWindow* aliveW = findWindowById(windowId);
+        if (!aliveW) {
+            aliveW = windowHint;
+        }
+        if (aliveW && m_shaderManager.findTransition(aliveW)) {
+            return;
+        }
+    }
     m_surfaceMultipass.erase(windowId);
 }
 
@@ -796,6 +810,36 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 }
                 glActiveTexture(GL_TEXTURE0);
                 boundChannels = 1; // unit kSurfaceChannelBaseUnit+0, freed in the cleanup below
+            }
+        }
+    }
+    // TRANSITION LAYER REBIND: paintWindow pushed the layer uniforms and
+    // bound the composite, but the draw chain between paintWindow and this
+    // point (other effects' drawWindow hooks, item re-renders) can and DOES
+    // unbind the texture unit — the at-draw probes read an EMPTY unit on
+    // every animated frame, which is exactly the "decoration vanishes during
+    // animation shaders" symptom (the shader samples an unbound unit and
+    // degrades to the raw fallback). Re-bind at the LAST moment before
+    // KWin's draw, the same place the rest path's present bind lives — that
+    // path never exhibited the loss. Uniform values persist on the program;
+    // only the raw unit binding needs re-asserting.
+    if (const ShaderTransition* const st = m_shaderManager.findTransition(w); st && st->cached) {
+        const auto reIt = m_surfaceMultipass.find(getWindowId(w));
+        if (reIt != m_surfaceMultipass.end()) {
+            if (KWin::GLTexture* const comp = reIt->second.compositeTex[reIt->second.finalSlot].get()) {
+                constexpr int kSurfaceLayerUnitDraw =
+                    2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnitDraw);
+                comp->bind();
+                // Old-content snapshot (morph cross-fades): same clobber, same
+                // last-moment rebind.
+                if (st->oldSnapshot) {
+                    constexpr int kOldSnapshotUnitDraw =
+                        1 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                    glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnitDraw);
+                    st->oldSnapshot->bind();
+                }
+                glActiveTexture(GL_TEXTURE0);
             }
         }
     }
