@@ -674,7 +674,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (const auto lbIt = m_windowBorders.constFind(getWindowId(w)); lbIt != m_windowBorders.constEnd()) {
                 layerPad = lbIt->outerPadding;
             }
-            const QRectF layerCanvasGeo = expandedGeo.adjusted(-layerPad, -layerPad, layerPad, layerPad);
+            // Prefer the composite's RECORDED canvas rect over recomputing
+            // from live geometry: it describes the texture that actually
+            // exists, which matters for a CLOSING (deleted) window whose
+            // frozen composite is reused while its live geometry may drift.
+            QRectF layerCanvasGeo = expandedGeo.adjusted(-layerPad, -layerPad, layerPad, layerPad);
+            if (const auto lsIt = m_surfaceMultipass.find(getWindowId(w));
+                lsIt != m_surfaceMultipass.end() && lsIt->second.canvasGeo.isValid()) {
+                layerCanvasGeo = lsIt->second.canvasGeo;
+            }
             const QVector4D layerRectInTexture = ShaderInternal::computeTextureSubRect(
                 transition.surfaceExtent ? anchorGeo : expandedGeo, layerCanvasGeo);
             // Surface-layer stack (border / rounded corners, ...): render the

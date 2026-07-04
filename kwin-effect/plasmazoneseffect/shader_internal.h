@@ -45,6 +45,11 @@ public:
         glGetIntegerv(GL_VIEWPORT, m_viewport);
         glGetFloatv(GL_COLOR_CLEAR_VALUE, m_clearColor);
         glGetIntegerv(GL_ACTIVE_TEXTURE, &m_activeTexture);
+        // OffscreenData::paint toggles GL_SCISSOR_TEST — the nested
+        // effects->drawWindow inside a fold can flip it, so it belongs in
+        // the snapshot alongside blend.
+        m_scissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
+        glGetIntegerv(GL_SCISSOR_BOX, m_scissorBox);
     }
     ~ScopedGlState()
     {
@@ -58,6 +63,12 @@ public:
         glViewport(m_viewport[0], m_viewport[1], m_viewport[2], m_viewport[3]);
         glClearColor(m_clearColor[0], m_clearColor[1], m_clearColor[2], m_clearColor[3]);
         glActiveTexture(static_cast<GLenum>(m_activeTexture));
+        if (m_scissorEnabled) {
+            glEnable(GL_SCISSOR_TEST);
+        } else {
+            glDisable(GL_SCISSOR_TEST);
+        }
+        glScissor(m_scissorBox[0], m_scissorBox[1], m_scissorBox[2], m_scissorBox[3]);
     }
     ScopedGlState(const ScopedGlState&) = delete;
     ScopedGlState& operator=(const ScopedGlState&) = delete;
@@ -71,6 +82,8 @@ private:
     GLint m_viewport[4] = {0, 0, 0, 0};
     GLfloat m_clearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     GLint m_activeTexture = GL_TEXTURE0;
+    GLboolean m_scissorEnabled = GL_FALSE;
+    GLint m_scissorBox[4] = {0, 0, 0, 0};
 };
 
 /// Splice `#define PLASMAZONES_KWIN` (plus the ARB explicit-location

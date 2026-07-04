@@ -464,6 +464,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     const PhosphorSurfaceShaders::DecorationProfile profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId));
 
     SurfaceMultipassState& state = m_surfaceMultipass[windowId];
+    state.canvasGeo = logicalGeometry;
 
     // (Re)allocate the composite ping-pong pair on a size change.
     if (state.compositeSize != textureSize || !state.compositeTex[0] || !state.compositeTex[1]) {

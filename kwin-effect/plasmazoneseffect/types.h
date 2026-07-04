@@ -173,6 +173,13 @@ struct SurfaceMultipassState
     QStringList chainKey; ///< the chain `chainBufferTex` was allocated for
     QSize compositeSize; ///< full textureSize the composite targets were allocated for
     int finalSlot = 0; ///< which compositeTex slot holds the final fold
+    /// The logical rect the composite canvas covers (expanded geometry
+    /// inflated by the chain's outer padding, captured when the fold ran).
+    /// The layer-rect remap and the padded quads read THIS instead of
+    /// recomputing from live geometry, so a CLOSING (deleted) window — whose
+    /// frozen composite is reused and whose live geometry may drift — keeps
+    /// its decoration aligned to the texture that actually exists.
+    QRectF canvasGeo;
 };
 
 /// Per-window border + rounded corners, rendered by sampling the redirected
