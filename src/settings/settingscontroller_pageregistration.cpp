@@ -99,11 +99,6 @@ void SettingsController::buildApplicationController()
     // own; redirects to its first leaf.
     regVirtual(QStringLiteral("appearance"), QString(), PhosphorI18n::tr("Appearance"), QString(),
                QStringLiteral("preferences-desktop-theme"), /*collapsible=*/true);
-    // Shared, mode-neutral page under Appearance. Edits config: the window border
-    // / title bar (Windows.*) AND the unified inner/outer gap model (Gaps.*), both
-    // global (not per-mode).
-    regPage(m_windowAppearancePage, QStringLiteral("appearance"), PhosphorI18n::tr("Windows"),
-            QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
     // "animations" is a no-QML drill-down parent under Appearance — register it as
     // a virtual navigation node (like display / placement / snapping / tiling),
     // NOT as m_animationsPage's own id. The AnimationsPageController is the
@@ -122,10 +117,10 @@ void SettingsController::buildApplicationController()
     // Windows and Animations (all visual-surface pages live in that group).
     // PER-SURFACE scope: per-surface CHAINS of decoration shader packs,
     // resolved through a DecorationProfileTree (walk-up inheritance). Each
-    // surface family (window / popup) is its own alwaysEnabled root — there is
-    // no global "General" decoration default, so unlike "animations" the nav
-    // handle ("decoration", redirected to its first surface page) fans straight
-    // out to Windows / OSDs / Popups. The DecorationPageController is wired in
+    // surface family (window / popup) is its own alwaysEnabled root. The nav
+    // handle ("decoration") redirects to its General page (the config-backed
+    // window-appearance page, registered below with the decoration children).
+    // The DecorationPageController is wired in
     // as a headless staging domain below; it has no per-page staged state —
     // dirty tracking rides the global decorationProfileTreeChanged NOTIFY loop.
     regVirtual(QStringLiteral("decoration"), QStringLiteral("appearance"), PhosphorI18n::tr("Decoration"), QString(),
@@ -275,6 +270,16 @@ void SettingsController::buildApplicationController()
     // bars are window-only; daemon surfaces default to no decoration), so
     // Surfaces fans straight out to the per-surface override pages and
     // Library holds the installed-pack browser.
+    // Decoration → General: the shared, mode-neutral window-appearance page
+    // (config-backed window border / title bar Windows.* + the unified gap
+    // model Gaps.*). Lives under Decoration as its General page — the same
+    // slot animations-general occupies — keeping its historical
+    // "window-appearance" id so dirty tracking, the per-page reset manifest,
+    // and deep links stay stable.
+    regPage(m_windowAppearancePage, QStringLiteral("decoration"), PhosphorI18n::tr("General"),
+            QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("configure"), /*collapsible=*/false,
+            /*divider=*/true);
+
     regVirtual(QStringLiteral("decoration-surfaces"), QStringLiteral("decoration"), PhosphorI18n::tr("Surfaces"),
                QString(), QStringLiteral("preferences-desktop-multimedia"), /*collapsible=*/true);
     regVirtual(QStringLiteral("decoration-library"), QStringLiteral("decoration"), PhosphorI18n::tr("Library"),
@@ -402,9 +407,9 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     // the generic "Unknown settings page" warning.
     static const QHash<QString, QString> redirects{
         {QStringLiteral("display"), QStringLiteral("virtualscreens")},
-        // "appearance" is the inline-collapsible parent of the Windows page +
-        // the Animations tree; land on its first leaf (the Windows page).
-        {QStringLiteral("appearance"), QStringLiteral("window-appearance")},
+        // "appearance" is the inline-collapsible parent of the Animations and
+        // Decoration trees; land on its first child's first leaf.
+        {QStringLiteral("appearance"), QStringLiteral("animations-general")},
         // "placement" is the inline-collapsible parent of snapping/tiling; it
         // has no page of its own, so a --page=placement / D-Bus call lands on
         // the first leaf of its first child (snapping → snapping-overlay-behavior).
@@ -415,7 +420,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
         {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
         {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
-        {QStringLiteral("decoration"), QStringLiteral("decoration-windows")},
+        {QStringLiteral("decoration"), QStringLiteral("window-appearance")},
         {QStringLiteral("decoration-surfaces"), QStringLiteral("decoration-windows")},
         {QStringLiteral("decoration-library"), QStringLiteral("decoration-sets")},
         // The "rules" parent virtual retired when Rules promoted
@@ -482,7 +487,10 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     };
     static const QSet<QString> kDecorationLibraryChildren{QStringLiteral("decoration-sets"),
                                                           QStringLiteral("decoration-shaders")};
-    static const QSet<QString> kDecorationAllLeaves = kDecorationSurfacesChildren + kDecorationLibraryChildren;
+    // Decoration → General is the window-appearance page (its historical id).
+    static const QSet<QString> kDecorationDirectChildren{QStringLiteral("window-appearance")};
+    static const QSet<QString> kDecorationAllLeaves =
+        kDecorationDirectChildren + kDecorationSurfacesChildren + kDecorationLibraryChildren;
     // Mid-level *-cat collapsible category headers under the snapping /
     // tiling drill-down parents. Sidebar.qml renders these as collapsible
     // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
@@ -536,10 +544,10 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("decoration-surfaces"), kDecorationSurfacesChildren},
         {QStringLiteral("decoration-library"), kDecorationLibraryChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
-        // "appearance" wraps the Windows page + the whole Animations tree + the
-        // Decoration tree; its collapsed badge lights if any of them is dirty.
-        {QStringLiteral("appearance"),
-         QSet<QString>{QStringLiteral("window-appearance")} + kAnimationsAllLeaves + kDecorationAllLeaves},
+        // "appearance" wraps the Animations and Decoration trees (the window-
+        // appearance page rides kDecorationAllLeaves as Decoration → General);
+        // its collapsed badge lights if any of them is dirty.
+        {QStringLiteral("appearance"), kAnimationsAllLeaves + kDecorationAllLeaves},
         {QStringLiteral("decoration"), kDecorationAllLeaves},
         // Top-level inline-collapsible parents must also propagate
         // dirty state from their leaves — without these entries the
