@@ -1000,19 +1000,6 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (cached->iLayerRectInTextureLoc >= 0) {
                     shader->setUniform(cached->iLayerRectInTextureLoc, layerRectInTexture);
                 }
-                // One-shot close-flash diagnostic (temporary): dump the state
-                // feeding the FIRST close-animation frame so a black flash can
-                // be attributed from journalctl instead of theory.
-                if (w->isDeleted() && !transition.closeDiagLogged) {
-                    transition.closeDiagLogged = true;
-                    qCWarning(lcEffect) << "PZDBG close-frame1: cached" << static_cast<const void*>(cached)
-                                        << "surfaceExtent" << transition.surfaceExtent << "layerTex"
-                                        << static_cast<const void*>(surfaceLayerTex) << "layerRect"
-                                        << layerRectInTexture << "canvas" << layerCanvasGeo << "expanded" << expandedGeo
-                                        << "oldSnap" << static_cast<const void*>(transition.oldSnapshot.get())
-                                        << "locs(old/layer/has)" << cached->iOldWindowLoc << cached->uSurfaceLayerLoc
-                                        << cached->iHasSurfaceLayerLoc << "progress" << progress;
-                }
                 if (surfaceLayerTex && cached->uSurfaceLayerLoc >= 0) {
                     constexpr int kSurfaceLayerUnit =
                         2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
