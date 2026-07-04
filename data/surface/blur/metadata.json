@@ -4,7 +4,7 @@
     "description": "Frosted glass behind the window. The scene behind the surface is blurred and lightly tinted, and shows through wherever the window itself is translucent. Pair it with an opacity rule so the window has translucency for the frost to fill.",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Glass",
+    "category": "Blur",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
     "handlesOpacity": true,
