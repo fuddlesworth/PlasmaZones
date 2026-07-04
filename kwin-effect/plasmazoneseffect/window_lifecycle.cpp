@@ -351,7 +351,10 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // teardown, and the windowDeleted handler is the backstop for a window
     // destroyed mid-animation.
     if (!m_shaderManager.hasTransition(w)) {
-        removeWindowBorder(closedWindowId);
+        // Pass the window pointer: the id no longer resolves via
+        // findWindowById at this point, and the GL release must run (see
+        // removeWindowBorder) or the redirect paints opaque black.
+        removeWindowBorder(closedWindowId, w);
     }
 
     // Notify general daemon for cleanup

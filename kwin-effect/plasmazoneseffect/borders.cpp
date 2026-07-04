@@ -84,7 +84,7 @@ void PlasmaZonesEffect::setupDecorationManager()
             });
 }
 
-void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
+void PlasmaZonesEffect::removeWindowBorder(const QString& windowId, KWin::EffectWindow* windowHint)
 {
     auto it = m_windowBorders.find(windowId);
     if (it == m_windowBorders.end()) {
@@ -100,7 +100,22 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
     // border shader when the border still exists, so dropping the entry here
     // (after this guarded release) is the correct teardown.
     if (wb.shaderApplied) {
-        if (KWin::EffectWindow* w = findWindowById(windowId)) {
+        // findWindowById cannot resolve a window that is already deleted (the
+        // close path calls this AFTER KWin marks it deleted), so fall back to
+        // the caller-supplied pointer. Skipping the release there left the
+        // corpse redirected with the present shader still bound while the
+        // multipass erase below destroyed the composite textures its sampler
+        // uniforms referenced — GL auto-unbinds a deleted texture, an unbound
+        // sampler reads opaque black, and the next paint of the Deleted drew
+        // the whole expanded quad black (the close flash). setShader /
+        // unredirect on the deleted-but-still-painted window are safe: KWin
+        // keys both on the redirected-windows map, and the redirect stays
+        // live until the window is discarded.
+        KWin::EffectWindow* w = findWindowById(windowId);
+        if (!w) {
+            w = windowHint;
+        }
+        if (w) {
             // Only clear when no transition raced in to own the slot between
             // this border being applied and now — reconcileBorderShader would
             // have cleared shaderApplied in that case, but guard defensively.

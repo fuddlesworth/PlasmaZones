@@ -788,7 +788,13 @@ private:
     void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry);
 
     void updateWindowBorder(const QString& windowId, KWin::EffectWindow* w);
-    void removeWindowBorder(const QString& windowId);
+    /// windowHint: the EffectWindow when the caller still holds it and the
+    /// window is already deleted (close / delete paths) — findWindowById
+    /// cannot resolve a deleted id, and without the pointer the GL release
+    /// (setShader(nullptr) + unredirect) is skipped, leaving the corpse
+    /// redirected with a shader whose samplers reference textures this very
+    /// function destroys (unbound sampler = opaque black flash on close).
+    void removeWindowBorder(const QString& windowId, KWin::EffectWindow* windowHint = nullptr);
     void updateAllBorders();
     void clearAllBorders();
 

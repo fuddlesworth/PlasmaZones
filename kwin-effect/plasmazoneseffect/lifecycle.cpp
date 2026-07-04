@@ -567,12 +567,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             // Free the border entry AND its multipass FBO targets keyed by this
             // window id. Normally removeWindowBorder (run from slotWindowClosed)
             // already cleared both; the explicit call here is defence-in-depth
-            // for a window deleted without a preceding close. findWindowById
-            // returns null post-delete, so removeWindowBorder's setShader /
-            // unredirect safely no-op and only the map erases run — critically
-            // dropping the m_windowBorders entry too, so a delete-without-close
-            // can't strand it and keep isActive() pinned true for the session.
-            removeWindowBorder(cachedId);
+            // for a window deleted without a preceding close. Pass the window
+            // pointer so the GL release (setShader(nullptr) + unredirect) can
+            // still run — findWindowById returns null post-delete. Critically
+            // this also drops the m_windowBorders entry, so a delete-without-
+            // close can't strand it and keep isActive() pinned true.
+            removeWindowBorder(cachedId, w);
             // Belt-and-suspenders for the not-expected case of a multipass entry
             // without a border entry (removeWindowBorder's no-border early-return
             // would otherwise skip the FBO cleanup).

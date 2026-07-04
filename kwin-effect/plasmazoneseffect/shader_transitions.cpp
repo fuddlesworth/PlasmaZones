@@ -1460,7 +1460,7 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         // The rest of removeWindowBorder's GL side is a no-op here
         // (findWindowById resolves nothing for a deleted id); the
         // windowDeleted handler remains the backstop.
-        removeWindowBorder(getWindowId(window));
+        removeWindowBorder(getWindowId(window), window);
     }
     if (!surfaceExtentRepaint.isEmpty() && KWin::effects) {
         KWin::effects->addRepaint(KWin::Rect(surfaceExtentRepaint));
