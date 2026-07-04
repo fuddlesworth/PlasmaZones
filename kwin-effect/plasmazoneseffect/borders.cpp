@@ -799,6 +799,48 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
             }
         }
     }
+    // Temporary AT-DRAW probe: for a transition window, read back what the
+    // GL program will ACTUALLY use — the live iHasSurfaceLayer value and the
+    // texture bound on the layer unit — at the last moment before KWin's
+    // draw. Push-time state has checked out repeatedly; if the flag reads 0
+    // or the unit holds a different texture HERE, something between push and
+    // draw rewrote it.
+    if (const ShaderTransition* const st = m_shaderManager.findTransition(w);
+        st && st->cached && st->cached->shader && st->cached->iHasSurfaceLayerLoc >= 0) {
+        static qint64 lastDrawProbeMs = 0;
+        const qint64 nowProbe = ShaderInternal::shaderClockNowMs();
+        if (nowProbe - lastDrawProbeMs > 300) {
+            lastDrawProbeMs = nowProbe;
+            GLint prog = 0;
+            GLint hasLayer = -7;
+            GLint layerUnitVal = -7;
+            {
+                KWin::ShaderBinder binder(st->cached->shader.get());
+                glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
+                if (prog > 0) {
+                    glGetUniformiv(prog, st->cached->iHasSurfaceLayerLoc, &hasLayer);
+                    if (st->cached->uSurfaceLayerLoc >= 0) {
+                        glGetUniformiv(prog, st->cached->uSurfaceLayerLoc, &layerUnitVal);
+                    }
+                }
+            }
+            constexpr int kSurfaceLayerUnitProbe =
+                2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+            GLint boundTex = 0;
+            glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnitProbe);
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &boundTex);
+            glActiveTexture(GL_TEXTURE0);
+            GLuint compositeTexId = 0;
+            if (const auto pIt = m_surfaceMultipass.find(getWindowId(w)); pIt != m_surfaceMultipass.end()) {
+                if (const auto& ct = pIt->second.compositeTex[pIt->second.finalSlot]) {
+                    compositeTexId = ct->texture();
+                }
+            }
+            qCWarning(lcEffect) << "PZDBG at-draw:" << getWindowId(w).left(24) << "prog" << prog << "iHasSurfaceLayer"
+                                << hasLayer << "uSurfaceLayer unit" << layerUnitVal << "boundTexAtUnit" << boundTex
+                                << "compositeTexId" << compositeTexId;
+        }
+    }
     KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 
     // Unbind the multipass channel units we bound and restore GL_TEXTURE0 —
