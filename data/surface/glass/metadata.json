@@ -10,7 +10,10 @@
     "handlesOpacity": true,
     "multipass": true,
     "bufferScale": 0.25,
-    "bufferShaders": ["buffer0.frag", "buffer1.frag"],
+    "bufferShaders": [
+        "buffer0.frag",
+        "buffer1.frag"
+    ],
     "parameters": [
         {
             "id": "blurRadius",
@@ -74,6 +77,56 @@
             "min": 0.0,
             "max": 1.0,
             "description": "How much of the tint colour is mixed over the glass"
+        },
+        {
+            "id": "physicallyBased",
+            "name": "Physically based refraction",
+            "type": "bool",
+            "default": false,
+            "description": "Bend the backdrop with Snell's law instead of the simple offset"
+        },
+        {
+            "id": "bevelIntensity",
+            "name": "Bevel intensity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 3.0,
+            "description": "How steeply the physically based bevel tilts the glass surface"
+        },
+        {
+            "id": "cornerLens",
+            "name": "Corner lens",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "Extra outward lens pull toward the corners in the physically based mode"
+        },
+        {
+            "id": "edgeLighting",
+            "name": "Edge lighting",
+            "type": "bool",
+            "default": false,
+            "description": "Add the backdrop's own light back along the bevel"
+        },
+        {
+            "id": "saturation",
+            "name": "Saturation",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "Saturation of the glass in the OKLab colour space, where 1.0 leaves it unchanged"
+        },
+        {
+            "id": "noiseStrength",
+            "name": "Noise",
+            "type": "float",
+            "default": 0.03,
+            "min": 0.0,
+            "max": 0.2,
+            "description": "Fine grain that masks banding in the blurred glass"
         },
         {
             "id": "tintColor",
