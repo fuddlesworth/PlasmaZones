@@ -127,10 +127,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
 // resulting iChannelN with the same convention it uses for uTexture0 — every
 // stage stays in one consistent bottom-origin space.
 //
-// DURING A TRANSITION this is NOT called: a multipass pack degrades to
-// single-pass while a window animates (renderSurfaceChain runs the border via
-// the main shader with the iChannels unbound → sampled as 0). Feeding the buffer
-// passes into the transition chain is a follow-up.
+// DURING A TRANSITION this is NOT called, and no longer needs to be: the
+// transition path (renderSurfaceChain) delegates to
+// renderSurfaceChainComposite, whose fold runs every pack's buffer passes
+// itself (step 2a) — multipass survives animations through that path. This
+// function only serves the CHEAP single-pack rest path.
 bool PlasmaZonesEffect::renderSurfaceBufferPasses(KWin::EffectWindow* w, qreal scale)
 {
     if (!w) {
@@ -816,6 +817,22 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // bind (frost's main reads the blurred buffers, not uBackdrop).
         const bool backdropAvailable = state.backdropTex && state.backdropRect.z() > 0.0f;
         const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && backdropAvailable;
+        // Temporary transition-blur diagnostic: log the first few TRANSITION
+        // folds (force = renderSurfaceChain path) so "blur vanishes during
+        // animations" can be attributed from journalctl.
+        if (force && (pk->uHasBackdropLoc >= 0 || pk->uBackdropLoc >= 0)) {
+            static int transDbgCount = 0;
+            if (transDbgCount < 6) {
+                ++transDbgCount;
+                qCWarning(lcEffect) << "PZDBG transition-fold:" << chain.at(k) << "available" << backdropAvailable
+                                    << "rect" << state.backdropRect << "bufferPasses" << pk->bufferPasses.size()
+                                    << "bufs"
+                                    << (k < static_cast<int>(state.chainBufferTex.size())
+                                            ? state.chainBufferTex[k].size()
+                                            : size_t(999))
+                                    << "canvas" << state.canvasGeo << "texSize" << state.compositeSize;
+            }
+        }
         {
             KWin::ShaderBinder binder(pk->shader.get());
             // Identity MVP so the NDC fullscreen quad from drawFullscreenQuad maps

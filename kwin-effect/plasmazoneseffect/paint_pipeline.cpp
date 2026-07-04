@@ -452,6 +452,19 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 }
             }
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, animatedFrame);
+            // Temporary transition-blur diagnostic (pairs with the
+            // PZDBG transition-fold log in surfacelayers.cpp).
+            if (m_shaderManager.findTransition(w) || m_windowAnimator->hasAnimation(w)) {
+                static int capDbgCount = 0;
+                if (capDbgCount < 6) {
+                    ++capDbgCount;
+                    const auto stIt = m_surfaceMultipass.find(getWindowId(w));
+                    qCWarning(lcEffect) << "PZDBG anim-capture: animatedFrame" << animatedFrame << "rect"
+                                        << (stIt != m_surfaceMultipass.end() ? stIt->second.backdropRect : QVector4D())
+                                        << "transition" << (m_shaderManager.findTransition(w) != nullptr) << "animator"
+                                        << m_windowAnimator->hasAnimation(w);
+                }
+            }
         }
     }
 
