@@ -688,7 +688,13 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             glViewport(0, 0, target->width(), target->height());
             glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
             glClear(GL_COLOR_BUFFER_BIT);
-            const bool passHasBackdrop = pass.uBackdropLoc >= 0 && state.backdropTex && state.backdropRect.z() > 0.0f;
+            // "A capture exists this frame" drives the uHasBackdrop VALUE for
+            // every stage; whether THIS stage samples it (the linker kept its
+            // uBackdrop) only drives the bind. A pack's main pass typically
+            // reads the blurred buffers rather than uBackdrop itself, so its
+            // own sampler location being -1 must not zero the gate.
+            const bool backdropAvailable = state.backdropTex && state.backdropRect.z() > 0.0f;
+            const bool passHasBackdrop = pass.uBackdropLoc >= 0 && backdropAvailable;
             {
                 KWin::ShaderBinder binder(pass.shader.get());
                 glActiveTexture(GL_TEXTURE0);
@@ -723,7 +729,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     pass.shader->setUniform(pass.uBackdropRectLoc, state.backdropRect);
                 }
                 if (pass.uHasBackdropLoc >= 0) {
-                    pass.shader->setUniform(pass.uHasBackdropLoc, passHasBackdrop ? 1.0f : 0.0f);
+                    pass.shader->setUniform(pass.uHasBackdropLoc, backdropAvailable ? 1.0f : 0.0f);
                 }
                 for (size_t j = 0; j < i && j < 4; ++j) {
                     glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
@@ -784,12 +790,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         glViewport(0, 0, target->width(), target->height());
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-        const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && state.backdropTex && state.backdropRect.z() > 0.0f;
+        // Same split as the buffer passes: the gate VALUE reflects capture
+        // availability; the main pass's own sampler location only gates the
+        // bind (frost's main reads the blurred buffers, not uBackdrop).
+        const bool backdropAvailable = state.backdropTex && state.backdropRect.z() > 0.0f;
+        const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && backdropAvailable;
         // Temporary frost diagnostic (pairs with the PZDBG backdrop log).
         static int foldDbgCount = 0;
         if (foldDbgCount < 4 && (pk->uBackdropLoc >= 0 || pk->uHasBackdropLoc >= 0)) {
             ++foldDbgCount;
-            qCWarning(lcEffect) << "PZDBG fold:" << chain.at(k) << "hasBackdrop" << mainHasBackdrop << "backdropLoc"
+            qCWarning(lcEffect) << "PZDBG fold:" << chain.at(k) << "available" << backdropAvailable << "backdropLoc"
                                 << pk->uBackdropLoc << "rect" << state.backdropRect << "bufferPasses"
                                 << pk->bufferPasses.size() << "passCount" << passCount << "opacityLoc"
                                 << pk->uOpacityLoc;
@@ -832,7 +842,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 pk->shader->setUniform(pk->uBackdropRectLoc, state.backdropRect);
             }
             if (pk->uHasBackdropLoc >= 0) {
-                pk->shader->setUniform(pk->uHasBackdropLoc, mainHasBackdrop ? 1.0f : 0.0f);
+                pk->shader->setUniform(pk->uHasBackdropLoc, backdropAvailable ? 1.0f : 0.0f);
             }
             // Contract uniforms + pack params (shared with the OffscreenData path).
             pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, pad);
