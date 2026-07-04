@@ -739,6 +739,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("decoration-windows"),
         QStringLiteral("decoration-osds"),
         QStringLiteral("decoration-popups"),
+        QStringLiteral("decoration-shaders"),
         QStringLiteral("rules"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
