@@ -250,11 +250,21 @@ void PlasmaZonesEffect::postPaintScreen()
             if (!sw || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
                 continue;
             }
-            // needsBackdrop chains repaint every frame regardless of iTime:
-            // the frost tracks a backdrop that changes without any damage
-            // landing on this window (first-cut gate; a dirty-region-
-            // expansion scheme could narrow this later).
-            if (windowSurfaceAnimates(it.key()) || it->needsBackdrop) {
+            // needsBackdrop chains are repainted for backdrop changes that
+            // land no damage on the window itself, rate-limited to ~30fps
+            // (the better-blur-dx model): between refolds the present blit
+            // reuses the existing composite, so frost over a video costs a
+            // fold every ~33ms instead of every vsync. Window-own damage
+            // still paints (and refolds) immediately through KWin's normal
+            // scheduling, unaffected by this gate.
+            bool backdropDue = false;
+            if (it->needsBackdrop) {
+                constexpr qint64 kBackdropRefoldIntervalMs = 33;
+                const auto stateIt = m_surfaceMultipass.find(it.key());
+                backdropDue = stateIt == m_surfaceMultipass.end() || stateIt->second.lastFoldMs < 0
+                    || (ShaderInternal::shaderClockNowMs() - stateIt->second.lastFoldMs) >= kBackdropRefoldIntervalMs;
+            }
+            if (windowSurfaceAnimates(it.key()) || backdropDue) {
                 sw->addRepaintFull();
                 // A padded chain's margin band sits OUTSIDE the window item;
                 // per-window repaints clip to it, so damage the band at

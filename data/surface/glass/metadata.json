@@ -1,0 +1,93 @@
+{
+    "id": "glass",
+    "name": "Glass",
+    "description": "A pane of glass over the scene behind the window. The backdrop is blurred and bends toward the edges like a bevelled lens, with slight colour fringing and a soft rim light. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Decoration",
+    "fragmentShader": "effect.frag",
+    "needsBackdrop": true,
+    "handlesOpacity": true,
+    "multipass": true,
+    "bufferScale": 0.25,
+    "bufferShaders": ["buffer0.frag", "buffer1.frag"],
+    "parameters": [
+        {
+            "id": "blurRadius",
+            "name": "Blur radius",
+            "type": "int",
+            "default": 16,
+            "min": 2,
+            "max": 64,
+            "description": "How strongly the scene behind the glass is blurred (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Corner rounding of the glass pane (px, match the Border pack)"
+        },
+        {
+            "id": "refractionStrength",
+            "name": "Refraction strength",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "How far the backdrop bends at the pane's bevelled edge"
+        },
+        {
+            "id": "edgeWidth",
+            "name": "Bevel width",
+            "type": "int",
+            "default": 24,
+            "min": 4,
+            "max": 96,
+            "description": "How far the lens bevel reaches in from the edge (px)"
+        },
+        {
+            "id": "fringing",
+            "name": "Colour fringing",
+            "type": "float",
+            "default": 0.35,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Chromatic split between the red and blue refraction"
+        },
+        {
+            "id": "rimStrength",
+            "name": "Rim light",
+            "type": "float",
+            "default": 0.35,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Strength of the rim light along the pane's edge"
+        },
+        {
+            "id": "tintStrength",
+            "name": "Tint strength",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much of the tint colour is mixed over the glass"
+        },
+        {
+            "id": "tintColor",
+            "name": "Tint colour",
+            "type": "color",
+            "default": "#ffffff",
+            "description": "Colour mixed over the glass"
+        },
+        {
+            "id": "rimColor",
+            "name": "Rim colour",
+            "type": "color",
+            "default": "#ffffff",
+            "description": "Colour of the rim light"
+        }
+    ]
+}

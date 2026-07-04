@@ -486,17 +486,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
                        (source.y() - logicalGeometry.y()) * captureScale, source.width() * captureScale,
                        source.height() * captureScale);
     const KWin::Rect destination(qRound(destF.x()), qRound(destF.y()), qRound(destF.width()), qRound(destF.height()));
-    // Temporary frost diagnostic: log the first few captures so a
-    // blank/misplaced blur can be attributed from journalctl.
-    static int backdropDbgCount = 0;
-    const bool blitOk = fbo.blitFromRenderTarget(renderTarget, viewport, source, destination);
-    if (backdropDbgCount < 4) {
-        ++backdropDbgCount;
-        qCWarning(lcEffect) << "PZDBG backdrop: canvas" << logicalGeometry << "renderRect" << viewport.renderRect()
-                            << "srcLogical" << sourceLogicalF << "texSize" << textureSize << "dest" << destF << "blitOk"
-                            << blitOk << "scale" << captureScale;
-    }
-    if (!blitOk) {
+    if (!fbo.blitFromRenderTarget(renderTarget, viewport, source, destination)) {
         return;
     }
     // Valid sub-rect in TOP-DOWN normalized coords — matches backdropTexel's
@@ -795,15 +785,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // bind (frost's main reads the blurred buffers, not uBackdrop).
         const bool backdropAvailable = state.backdropTex && state.backdropRect.z() > 0.0f;
         const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && backdropAvailable;
-        // Temporary frost diagnostic (pairs with the PZDBG backdrop log).
-        static int foldDbgCount = 0;
-        if (foldDbgCount < 4 && (pk->uBackdropLoc >= 0 || pk->uHasBackdropLoc >= 0)) {
-            ++foldDbgCount;
-            qCWarning(lcEffect) << "PZDBG fold:" << chain.at(k) << "available" << backdropAvailable << "backdropLoc"
-                                << pk->uBackdropLoc << "rect" << state.backdropRect << "bufferPasses"
-                                << pk->bufferPasses.size() << "passCount" << passCount << "opacityLoc"
-                                << pk->uOpacityLoc;
-        }
         {
             KWin::ShaderBinder binder(pk->shader.get());
             // Identity MVP so the NDC fullscreen quad from drawFullscreenQuad maps
@@ -862,6 +843,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     }
 
     state.finalSlot = src;
+    state.lastFoldMs = ShaderInternal::shaderClockNowMs();
     return state.compositeTex[src].get();
 }
 

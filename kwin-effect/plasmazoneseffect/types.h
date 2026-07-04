@@ -209,6 +209,14 @@ struct SurfaceMultipassState
     /// zw=size) — the part actually blitted (canvas ∩ output). Zero-size
     /// means "no capture this frame" and pushes uHasBackdrop = 0.
     QVector4D backdropRect;
+
+    /// When the composite last folded (shader clock, ms). Rate-limits the
+    /// backdrop-driven forced repaints in postPaintScreen to ~30fps, the
+    /// better-blur-dx model: between refolds the present blit reuses the
+    /// existing composite (which IS the cache), so frost over a video costs
+    /// a fold every ~33ms instead of every vsync. Damage to the window
+    /// itself still refolds immediately (its paint runs regardless).
+    qint64 lastFoldMs = -1;
 };
 
 /// Per-window border + rounded corners, rendered by sampling the redirected
