@@ -459,10 +459,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (capDbgCount < 6) {
                     ++capDbgCount;
                     const auto stIt = m_surfaceMultipass.find(getWindowId(w));
-                    qCWarning(lcEffect) << "PZDBG anim-capture: animatedFrame" << animatedFrame << "rect"
+                    const ShaderTransition* const dbgSt = m_shaderManager.findTransition(w);
+                    qCWarning(lcEffect) << "PZDBG anim-capture:" << getWindowId(w).left(24) << "animatedFrame"
+                                        << animatedFrame << "rect"
                                         << (stIt != m_surfaceMultipass.end() ? stIt->second.backdropRect : QVector4D())
-                                        << "transition" << (m_shaderManager.findTransition(w) != nullptr) << "animator"
-                                        << m_windowAnimator->hasAnimation(w);
+                                        << "frame" << w->frameGeometry() << "animatorRect"
+                                        << m_windowAnimator->currentValue(w, QRectF()) << "morphFrom"
+                                        << (dbgSt ? dbgSt->fromGeometry : QRectF()) << "morphTo"
+                                        << (dbgSt ? dbgSt->toGeometry : QRectF()) << "viewport"
+                                        << viewport.renderRect();
                 }
             }
         }
@@ -766,6 +771,27 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // Null when the window has no surface layers (the common no-border
             // case), in which case surfaceColor() samples the bare uTexture0.
             KWin::GLTexture* const surfaceLayerTex = renderSurfaceChain(transition, w, viewport.scale());
+            // Temporary FAILURE diagnostic: a decorated window animating with
+            // NO layer texture is exactly the "blur vanishes during animation
+            // shaders" symptom — the shader falls back to the bare uTexture0.
+            // Rate-limited by time (NOT a per-session count, which sampled
+            // only the first frames after login and missed the failures).
+            if (!surfaceLayerTex && !m_windowBorders.isEmpty()) {
+                const auto dbgBit = m_windowBorders.constFind(getWindowId(w));
+                if (dbgBit != m_windowBorders.constEnd()) {
+                    static qint64 lastNullLogMs = 0;
+                    const qint64 nowDbg = ShaderInternal::shaderClockNowMs();
+                    if (nowDbg - lastNullLogMs > 250) {
+                        lastNullLogMs = nowDbg;
+                        const auto stDbg = m_surfaceMultipass.find(getWindowId(w));
+                        qCWarning(lcEffect)
+                            << "PZDBG layer-null:" << getWindowId(w).left(24) << "deleted" << w->isDeleted() << "cached"
+                            << (transition.cached != nullptr) << "chain" << dbgBit->chain << "shaderApplied"
+                            << dbgBit->shaderApplied << "multipassEntry" << (stDbg != m_surfaceMultipass.end())
+                            << "expandedGeo" << w->expandedGeometry();
+                    }
+                }
+            }
             {
                 KWin::ShaderBinder binder(shader);
                 if (cached->iTimeLoc >= 0) {
