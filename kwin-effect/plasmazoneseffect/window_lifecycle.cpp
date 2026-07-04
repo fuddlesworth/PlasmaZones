@@ -125,18 +125,16 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     QString windowId = getWindowId(w);
     m_navigationHandler->syncFloatingStateForWindow(windowId);
 
-    // Decorate the new window immediately ONLY when no window.open transition is
-    // in flight. A floating app window is eligible for the window-node border
-    // default, but it used to get its border only on the next updateAllBorders
-    // (focus / desktop change) — hence "border appears after a focus change". The
-    // animated-open case is handled at transition end (endShaderTransition), which
-    // is also why creating the border here UNCONDITIONALLY broke the open
-    // animation: it fought the transition for the redirect/shader slot. So gate on
-    // hasTransition — if the open animation is running, defer to its end; if there
-    // is none, create the border now. updateWindowBorder self-gates and is
-    // idempotent (snap/autotile re-running it later is harmless). Current-desktop
-    // only, matching updateAllBorders.
-    if (w->isOnCurrentDesktop() && !m_shaderManager.hasTransition(w)) {
+    // Decorate the new window immediately, open transition or not. The old
+    // slot-fight hazard is gone: reconcileBorderShader defers the
+    // redirect/shader slot to any live transition (it only marks the entry,
+    // shaderApplied=false), and renderSurfaceChain re-evaluates the border
+    // entry per frame, compositing the decoration UNDER the open animation via
+    // uSurfaceLayer — so the border flies in WITH the window instead of
+    // popping in at transition end. updateWindowBorder self-gates and is
+    // idempotent (snap/autotile re-running it later is harmless).
+    // Current-desktop only, matching updateAllBorders.
+    if (w->isOnCurrentDesktop()) {
         updateWindowBorder(windowId, w);
     }
 
@@ -345,11 +343,16 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // decoration dies with the window.
     m_decorationManager->forgetWindow(closedWindowId);
 
-    // Drop the window's border entry and release its border-shader redirect
-    // (the redirect is auto-released on delete, but clearing here keeps our
-    // tracking hash free of stale entries and clears the shader slot while the
-    // closing window is still live).
-    removeWindowBorder(closedWindowId);
+    // Drop the window's border entry and release its border-shader redirect —
+    // UNLESS a close transition was just installed above: renderSurfaceChain
+    // re-evaluates the entry per frame and composites the decoration UNDER the
+    // close animation (the border rides the closing window out instead of
+    // vanishing at frame 1). endShaderTransition removes the entry on
+    // teardown, and the windowDeleted handler is the backstop for a window
+    // destroyed mid-animation.
+    if (!m_shaderManager.hasTransition(w)) {
+        removeWindowBorder(closedWindowId);
+    }
 
     // Notify general daemon for cleanup
     notifyWindowClosed(w);

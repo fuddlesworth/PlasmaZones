@@ -91,23 +91,22 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
 
     // Layer 0: border. Mirror reconcileBorderShader's "wants border" gate — a
     // window with no surface decoration has no active surface layers, so the
-    // caller animates the bare uTexture0 with zero FBO overhead. The presence of
-    // a WindowBorder entry IS the gate now: updateWindowBorder only inserts one
-    // for a member window whose resolved profile declares a non-empty pack chain
-    // (border appearance is the pack's own params, not a host width/colour here).
-    // Composite the surface layer ONLY when the window owned an APPLIED border
-    // when this transition began (transition.surfaceLayerActive, frozen in
-    // beginShaderTransition). A window decorated MID-transition — e.g. a fresh
-    // window the focus-refresh updateAllBorders borders while its open animation
-    // runs — has an entry but was NOT bordered at begin, so engaging here would
-    // force the open animation to sample this static surface-layer FBO instead of
-    // the live redirected surface and the animation would not play. The entry
-    // must also still exist (it carries basePackId for compiledPackForWindow and
-    // may have been removed mid-animation, e.g. a move off-desktop).
+    // caller animates the bare uTexture0 with zero FBO overhead. The LIVE
+    // presence of a WindowBorder entry IS the gate: updateWindowBorder only
+    // inserts one for a window whose resolved profile declares a non-empty pack
+    // chain, and this re-evaluates every frame so a window decorated
+    // MID-transition (opened into a zone, focus-refresh updateAllBorders, a new
+    // rule) composites its border immediately rather than popping in at
+    // transition end. This is safe for the animation: the chain below is
+    // re-rendered per frame (only the texture allocation is cached), and the
+    // animation samples uSurfaceLayer at the same animated UVs as uTexture0
+    // (animation_uniforms.glsl surfaceColor), so the decorated surface moves
+    // WITH the animation. (An earlier design froze this decision at
+    // beginShaderTransition on the then-false premise that engaging
+    // mid-transition would freeze the animation on a static FBO.)
     const QString windowId = getWindowId(w);
     const auto bit = m_windowBorders.constFind(windowId);
-    const bool wantsBorder = transition.surfaceLayerActive && bit != m_windowBorders.constEnd();
-    if (!wantsBorder) {
+    if (bit == m_windowBorders.constEnd()) {
         return nullptr;
     }
     // Compile-on-first-use the window's resolved base pack; a latched compile

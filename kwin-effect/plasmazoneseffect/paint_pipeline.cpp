@@ -1256,7 +1256,17 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // expandedGeometry / frameGeometry / screen accessors below would
     // deref freed Item state for a deleted window. Mirrors the same
     // guard endShaderTransition applies for the same race.
-    if (!window || window->isDeleted()) {
+    // A CLOSING window is isDeleted() for its entire close animation (held
+    // alive only by our close grab) — but its surface-extent quad rewrite MUST
+    // still run: paintWindow feeds output-sized anchor uniforms and paints
+    // with an infinite region for surface-extent transitions, so leaving the
+    // natural window-sized quad in place mis-maps the sampled surface far past
+    // the window (the close-animation overshoot). Live geometry accessors on a
+    // ref-held Deleted window are already exercised every close frame by
+    // paintWindow's anchor-uniform block, so reading them here is the same
+    // safety class. Bail only for a deleted window with NO live transition
+    // (nothing of ours paints it).
+    if (!window || (window->isDeleted() && !m_shaderManager.findTransition(window))) {
         return;
     }
     // Only surface-extent transitions deform the quad list. Anchor-extent

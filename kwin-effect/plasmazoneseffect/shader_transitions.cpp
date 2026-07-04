@@ -951,19 +951,6 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // meaningful for surface-extent shaders, mirroring `apply()`'s guard.
     transition.gridSubdivisions = transition.surfaceExtent ? eff.geometryGridSubdivisions : 0;
 
-    // Freeze whether this window owns an APPLIED resting border right now. Only
-    // then does renderSurfaceChain composite the surface layer under the
-    // animation. A freshly-opened window has no border (or one created
-    // mid-animation by the focus-refresh updateAllBorders, with shaderApplied
-    // still false) at this point, so its open animation plays on the live
-    // surface; a window that already owned its border keeps it composited for
-    // the whole transition. Captured here (not read live in renderSurfaceChain)
-    // so a mid-animation border refresh can't flip the decision frame-to-frame.
-    {
-        const auto borderIt = m_windowBorders.constFind(getWindowId(window));
-        transition.surfaceLayerActive = (borderIt != m_windowBorders.constEnd() && borderIt->shaderApplied);
-    }
-
     // Translate the friendly parameter map (e.g. {"direction": 1,
     // "parallax": 0.2}) to slot keys, then pack each
     // `customParams<N>_<x|y|z|w>` set into a vec4 we can blast in one
@@ -1422,6 +1409,13 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         m_shaderManager.eraseTransition(window);
         st = nullptr;
         const QString wid = getWindowId(window);
+        // A CLOSING window's border entry was kept alive so renderSurfaceChain
+        // could composite it under the close animation (slotWindowClosed defers
+        // the removal); the animation is over and the window is going away, so
+        // drop it now rather than re-applying a resting border to a corpse.
+        if (releaseCloseGrab) {
+            removeWindowBorder(wid);
+        }
         const bool stillBordered = m_windowBorders.contains(wid);
         if (stillBordered) {
             reconcileBorderShader(wid, window);
@@ -1449,6 +1443,11 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     } else {
         m_shaderManager.eraseTransition(window);
         st = nullptr;
+        // Deleted window: drop the border entry the close path deferred.
+        // removeWindowBorder's GL side is a no-op here (findWindowById
+        // resolves nothing for a deleted id), so this is pure bookkeeping;
+        // the windowDeleted handler remains the backstop.
+        removeWindowBorder(getWindowId(window));
     }
     if (!surfaceExtentRepaint.isEmpty() && KWin::effects) {
         KWin::effects->addRepaint(KWin::Rect(surfaceExtentRepaint));

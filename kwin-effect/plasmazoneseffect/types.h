@@ -571,17 +571,6 @@ struct ShaderTransition
     /// final composited surface.
     std::array<std::unique_ptr<KWin::GLTexture>, 2> surfaceLayerChain;
     QSize surfaceLayerChainSize;
-
-    /// Whether this window owned an APPLIED resting border when the transition
-    /// began — frozen at beginShaderTransition. renderSurfaceChain composites the
-    /// surface layer UNDER the animation only when this is true, so a window
-    /// decorated MID-transition (e.g. a fresh window the focus-refresh
-    /// updateAllBorders borders while its open animation runs — its WindowBorder
-    /// entry exists but shaderApplied is still false) does NOT engage surface
-    /// compositing, and its open animation plays on the live redirected surface.
-    /// A window that already owned its border keeps compositing it for the whole
-    /// animation, immune to a mid-animation border refresh flipping shaderApplied.
-    bool surfaceLayerActive = false;
 };
 
 /// First-frame suppression bookkeeping for a window that is about to be
