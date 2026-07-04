@@ -825,6 +825,10 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasSurfaceLayer);
         cached.iLayerRectInTextureLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kILayerRectInTexture);
+        // uTexture0 — for the transition-time composite retarget (see
+        // CachedShader::uTexture0Loc). The name is the contract's literal
+        // sampler identifier (animation_uniforms.glsl, both branches).
+        cached.uTexture0Loc = shader->uniformLocation("uTexture0");
         // SetOpacity rule opacity — a separate concern from the morph uniforms
         // above: applies to ALL shaders (compositor path only), so surfaceColor
         // can dim the surface for a SetOpacity rule. See

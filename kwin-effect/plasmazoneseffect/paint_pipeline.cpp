@@ -1087,12 +1087,35 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (cached->iLayerRectInTextureLoc >= 0) {
                     shader->setUniform(cached->iLayerRectInTextureLoc, layerRectInTexture);
                 }
-                if (surfaceLayerTex && cached->uSurfaceLayerLoc >= 0) {
-                    constexpr int kSurfaceLayerUnit =
-                        2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
-                    shader->setUniform(cached->uSurfaceLayerLoc, kSurfaceLayerUnit);
+                constexpr int kSurfaceLayerUnit =
+                    2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                // uTexture0 RETARGET: when the composite canvas maps 1:1 onto
+                // the window texture (unpadded chain, anchor-extent draw —
+                // the layer rect is the identity), point the shader's window
+                // sampler at the composite unit. Every sample then reads the
+                // DECORATED window, including the 25 bundled packs that
+                // sample uTexture0 raw and bypass surfaceColor() — without
+                // this, those shaders drop the border / frost / glass for
+                // the whole transition. Padded chains (glow) keep unit 0:
+                // their canvas is inflated, so a raw 1:1 sample would land
+                // misaligned; surfaceColor()'s remap remains the only
+                // correct path there, exactly as before.
+                const bool layerIdentity = surfaceLayerTex != nullptr && !transition.surfaceExtent
+                    && qAbs(layerRectInTexture.x()) < 0.002f && qAbs(layerRectInTexture.y()) < 0.002f
+                    && qAbs(layerRectInTexture.z() - 1.0f) < 0.004f && qAbs(layerRectInTexture.w() - 1.0f) < 0.004f;
+                const bool retargetUTexture0 = layerIdentity && cached->uTexture0Loc >= 0;
+                if (surfaceLayerTex && (cached->uSurfaceLayerLoc >= 0 || retargetUTexture0)) {
+                    if (cached->uSurfaceLayerLoc >= 0) {
+                        shader->setUniform(cached->uSurfaceLayerLoc, kSurfaceLayerUnit);
+                    }
                     glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnit);
                     surfaceLayerTex->bind();
+                }
+                // ALWAYS push (0 when not retargeting): the program is shared
+                // across windows and a stale retarget from another window
+                // would otherwise leak into this draw.
+                if (cached->uTexture0Loc >= 0) {
+                    shader->setUniform(cached->uTexture0Loc, retargetUTexture0 ? kSurfaceLayerUnit : 0);
                 }
                 // Restore TEXTURE0 as the active unit so KWin's
                 // OffscreenData::paint binds the redirected surface

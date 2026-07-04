@@ -455,6 +455,13 @@ struct CachedShader
     /// The layer's own sub-rect remap (padded canvas support) — see
     /// AnimationShaderContract::kILayerRectInTexture.
     int iLayerRectInTextureLoc = -1;
+    /// uTexture0 sampler location. Used to RETARGET the window sampler at the
+    /// decorated composite during transitions whose layer maps 1:1 onto the
+    /// window texture (unpadded chains): 25 of the bundled animation packs
+    /// sample uTexture0 raw somewhere, bypassing surfaceColor()'s uSurfaceLayer
+    /// path — without the retarget those shaders drop the decoration (border,
+    /// frost, glass) for the whole transition.
+    int uTexture0Loc = -1;
 };
 
 /// Per-window in-flight shader transition.
