@@ -74,6 +74,20 @@ float voronoi(vec2 p) {
     return sqrt(secondMin) - sqrt(minDist);
 }
 
+// Animated two-colour gradient, ported from the shell's gradient.frag
+// computeGradient(): the direction turns continuously with time and the
+// gradient position drifts on two out-of-phase sines, so the colours sweep
+// across the pane rather than sitting still.
+vec3 gradientColor(vec2 panelUv) {
+    float speed = max(p_gradientSpeed, 0.0);
+    float rotatedAngle = radians(p_gradientAngle) + iTime * speed;
+    vec2 dir = vec2(cos(rotatedAngle), sin(rotatedAngle));
+    float t = dot(panelUv - 0.5, dir) + 0.5;
+    t += sin(iTime * speed * 2.7) * 0.55 + sin(iTime * speed * 1.7 + 1.57) * 0.35;
+    t = smoothstep(0.0, 1.0, t);
+    return mix(p_colorA.rgb, p_colorB.rgb, t);
+}
+
 // Multi-octave crystalline texture: dominant crystal structure + drifting
 // fine detail + micro noise.
 float frostedTexture(vec2 p, float time) {
@@ -105,21 +119,22 @@ void main() {
     // Vignette darkens edges, multiplicative so it never brightens.
     float vignette = clamp(1.0 - length((fuv - 0.5) * vec2(0.3, 1.0)) * p_vignetteStrength, 0.0, 1.0);
 
-    vec3 tint = p_tintColor.rgb;
-    float tintStrength = clamp(p_tintStrength, 0.0, 1.0);
+    vec3 grad = gradientColor(fuv);
+    float gradStrength = clamp(p_gradientStrength, 0.0, 1.0);
     vec4 pane;
     if (uHasBackdrop >= 0.5) {
-        // Real frosting: blurred backdrop, tinted, grained, vignetted.
+        // Real frosting: blurred backdrop tinted by the turning gradient,
+        // grained, vignetted.
         vec4 blurred = texture(iChannel1, vTexCoord);
-        vec3 color = mix(blurred.rgb, tint * blurred.a, tintStrength);
+        vec3 color = mix(blurred.rgb, grad * blurred.a, gradStrength);
         color = clamp(color + vec3(variation) * blurred.a, 0.0, 1.0 * max(blurred.a, 0.0001));
         color *= vignette;
         pane = vec4(color, blurred.a) * mask;
     } else {
-        // Original pseudo look: translucent tint slab + grain + vignette
-        // (the shell shader's tintOpacity slab, at the tint strength).
-        float slabAlpha = clamp(0.4 + 0.6 * tintStrength, 0.0, 1.0);
-        vec3 color = clamp(tint + vec3(variation), 0.0, 1.0) * vignette;
+        // Original pseudo look (the shell TopPanel): a translucent animated
+        // gradient slab with the same grain and vignette.
+        float slabAlpha = clamp(0.4 + 0.6 * gradStrength, 0.0, 1.0);
+        vec3 color = clamp(grad + vec3(variation), 0.0, 1.0) * vignette;
         pane = vec4(color, 1.0) * slabAlpha * mask;
     }
 
