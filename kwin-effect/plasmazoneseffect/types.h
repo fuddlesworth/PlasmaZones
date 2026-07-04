@@ -158,21 +158,14 @@ struct CompiledSurfacePack
     std::vector<CompiledSurfaceBufferPass> bufferPasses;
 };
 
-/// Per-window FBO render targets for the multipass SURFACE buffer chain (idle
-/// drawWindow path). `surfaceTex` holds the raw captured window surface (full
-/// resolution, the multipass equivalent of uTexture0); `bufferTex[i]` holds the
-/// output of buffer pass `i` (sized at textureSize × bufferScale). All are
-/// bottom-origin GL FBOs, the SAME layout as KWin's redirected uTexture0, so a
-/// passthrough buffer (fragColor = surfaceTexel(vTexCoord)) reproduces the
-/// surface upright. Reallocated only when the window's expanded size × scale
-/// changes; erased on window close / border removal to free GPU memory.
+/// Per-window FBO state for the decoration composite fold
+/// (renderSurfaceChainComposite): the ping-pong composite pair, the per-pack
+/// buffer-pass textures (chainBufferTex), and the backdrop capture. Keyed by
+/// getWindowId(w) in m_surfaceMultipass; freed by removeWindowBorder.
 struct SurfaceMultipassState
 {
-    // ── Single-pack-with-buffers path (renderSurfaceBufferPasses) ────────────
     // One pack with buffer passes, presented through OffscreenData. Unused on
     // the multi-pack path below (a window uses one path or the other).
-    std::unique_ptr<KWin::GLTexture> surfaceTex;
-    std::vector<std::unique_ptr<KWin::GLTexture>> bufferTex;
     QSize size; ///< full textureSize the single-pack targets were allocated for
 
     // ── Multi-pack chain compositing path (renderSurfaceChainComposite) ──────

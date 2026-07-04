@@ -146,7 +146,7 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId, KWin::Effect
     }
     m_windowBorders.erase(it);
 
-    // Free the window's multipass FBO targets (surfaceTex + buffer chain) — these
+    // Free the window's composite / buffer FBO targets — these
     // are only allocated for multipass packs and only while the window has a
     // border, so dropping them on border removal / window close reclaims the GPU
     // memory. No-op for single-pass packs (the map never held an entry).
@@ -582,12 +582,11 @@ void PlasmaZonesEffect::reconcileBorderShader(const QString& windowId, KWin::Eff
         // Both compile-on-first-use; a null result tears the redirect down rather
         // than leave the window blitting a dead/stale shader forever (a just-ended
         // transition hands the slot back here still redirected).
-        KWin::GLShader* redirectShader = nullptr;
-        if (it->chain.size() > 1 || it->outerPadding > 0 || it->needsBackdrop || it->ruleOpacity < 1.0) {
-            redirectShader = surfacePresentShader();
-        } else if (CompiledSurfacePack* const pack = compiledPackForWindow(windowId)) {
-            redirectShader = pack->shader.get();
-        }
+        // Every decorated window rides the composite path: the redirect always
+        // holds the present passthrough, and paintWindow's per-frame fold
+        // supplies the composite it blits. (The old cheap path bound the pack
+        // shader directly for single unpadded packs; retired — see drawWindow.)
+        KWin::GLShader* const redirectShader = surfacePresentShader();
         if (!redirectShader) {
             // setShader(nullptr)/unredirect are no-ops when the window was never
             // redirected.
@@ -741,37 +740,27 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                                    KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                                    KWin::WindowPaintData& data)
 {
-    // Apply the border shader passively for static bordered windows: bind it +
-    // set its uniforms, then let OffscreenEffect::drawWindow re-blit the
-    // redirected FBO through it. OffscreenData::paint re-binds the SAME program
-    // (the one from setShader in reconcileBorderShader), and uniform values
-    // persist in the program object across our ShaderBinder pop — so the values
-    // we set here are live for that blit. This is the KDE-Rounded-Corners model:
-    // the shader applies on every composite, idle included, with no re-render,
-    // and no forced per-frame repaints. Skip during a transition (the animation
-    // shader owns the setShader slot and paintWindow's transition branch drives
-    // it) and during snapshot capture.
+    // EVERY decorated window presents through the composite: paintWindow ran
+    // the full chain fold (renderSurfaceChainComposite) for it this frame, and
+    // this override binds the final composite slot for the present
+    // passthrough's blit. One regime for one-pack and many-pack chains alike —
+    // the old cheap single-pack OffscreenData path was retired because a
+    // window without a rest composite could not carry its decoration through
+    // close animations (and every regime split is a class of "decoration
+    // missing in instance X" bugs). Skip during a transition (the animation
+    // shader owns the setShader slot and paintWindow's transition branch
+    // drives it) and during snapshot capture.
     //
-    // MULTIPASS surface packs additionally run their buffer passes
-    // (renderSurfaceBufferPasses) into per-window FBOs and bind the outputs as
-    // iChannel0..3 so the main pass can sample them. Single-pass packs (the
-    // border, pack.bufferPasses empty) skip all of this and take the cheap
-    // OffscreenData path unchanged.
-    //
-    // Texture-unit map for the idle border blit's multipass channels: start a
-    // few units PAST the animation path's user-texture / old-snapshot /
-    // surface-layer units (which live at 0..2+kMaxUserTextureSlots on the
-    // paintWindow transition path) so the two paths never collide even though
-    // they don't run for the same window at the same time. Unit 0 is uTexture0
-    // (KWin's OffscreenData::paint binds the redirected surface there); the
-    // buffer-output iChannelN go to kSurfaceChannelBaseUnit + N.
-    int boundChannels = 0; // # of iChannel units we bound (for post-draw cleanup)
+    // Texture-unit map: unit 0 is uTexture0 (KWin's OffscreenData::paint binds
+    // the redirected surface there); the composite binds at
+    // kSurfaceChannelBaseUnit, PAST the animation path's units so the two
+    // paths never collide.
+    int boundChannels = 0; // # of units we bound (for post-draw cleanup)
     constexpr int kSurfaceChannelBaseUnit = 3 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
     if (!m_capturingSnapshot && !m_windowBorders.isEmpty() && !m_shaderManager.findTransition(w)) {
         const QString wid = getWindowId(w);
         const auto bit = m_windowBorders.constFind(wid);
-        if (bit != m_windowBorders.constEnd() && bit->shaderApplied
-            && (bit->chain.size() > 1 || bit->outerPadding > 0 || bit->needsBackdrop || bit->ruleOpacity < 1.0)) {
+        if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
             // MULTI-PACK present: the whole chain was already composited into a
             // per-window FBO by paintWindow (renderSurfaceChainComposite). Bind the
             // final slot to a high unit and point the present passthrough's uFinal
@@ -807,52 +796,6 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 }
                 glActiveTexture(GL_TEXTURE0);
                 boundChannels = 1; // unit kSurfaceChannelBaseUnit+0, freed in the cleanup below
-            }
-        } else if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
-            // Per-window resolved base pack — replaces the old single global
-            // m_borderShader. nullptr → compile failed/latched (render nothing).
-            CompiledSurfacePack* const pack = compiledPackForWindow(wid);
-            if (pack) {
-                // Multipass buffer outputs are rendered in paintWindow
-                // (renderSurfaceBufferPasses), NOT here. That render re-enters the
-                // draw chain (effects->drawWindow) to capture the raw surface;
-                // calling it from inside THIS drawWindow override would re-enter
-                // KWin's shared draw-window iterator while it is already mid-walk,
-                // corrupting it and crashing the OffscreenEffect::drawWindow below.
-                // paintWindow runs the capture on a fresh iterator; here we only bind
-                // the ready per-window buffer textures as iChannels.
-                const auto stateIt = m_surfaceMultipass.find(wid);
-                const bool channelsReady = !pack->bufferPasses.empty() && stateIt != m_surfaceMultipass.end()
-                    && !stateIt->second.bufferTex.empty();
-
-                KWin::ShaderBinder binder(pack->shader.get());
-                pushBorderUniforms(w, *bit, bit->basePackId, *pack, viewport.scale());
-
-                if (channelsReady) {
-                    const SurfaceMultipassState& state = stateIt->second;
-                    const int n = qMin(static_cast<int>(state.bufferTex.size()), 4);
-                    for (int i = 0; i < n; ++i) {
-                        if (!state.bufferTex[i]) {
-                            continue;
-                        }
-                        const int unit = kSurfaceChannelBaseUnit + i;
-                        glActiveTexture(GL_TEXTURE0 + unit);
-                        state.bufferTex[i]->bind();
-                        if (pack->iChannelLoc[i] >= 0) {
-                            pack->shader->setUniform(pack->iChannelLoc[i], unit);
-                        }
-                        if (pack->iChannelResolutionLoc[i] >= 0) {
-                            const QVector4D res(static_cast<float>(state.bufferTex[i]->width()),
-                                                static_cast<float>(state.bufferTex[i]->height()), 0.0f, 0.0f);
-                            pack->shader->setUniform(pack->iChannelResolutionLoc[i], res);
-                        }
-                        ++boundChannels;
-                    }
-                    // Restore GL_TEXTURE0 as the active unit so OffscreenData::paint
-                    // (which binds the redirected surface to unit 0 without a
-                    // preceding glActiveTexture) targets the right unit.
-                    glActiveTexture(GL_TEXTURE0);
-                }
             }
         }
     }

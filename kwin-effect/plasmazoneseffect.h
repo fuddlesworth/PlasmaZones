@@ -839,8 +839,7 @@ private:
     /// compile failed (compileFailed latch / null shader) — the caller then
     /// renders nothing for it. The single render-path lookup shared by
     /// reconcileBorderShader / drawWindow / renderSurfaceChain /
-    /// renderSurfaceBufferPasses, replacing the old single m_borderShader.
-    CompiledSurfacePack* compiledPackForWindow(const QString& windowId);
+    /// the composite fold, replacing the old single m_borderShader.
 
     /// Populate the surface-shader registry's search paths (the bundled
     /// ${XDG_DATA_DIRS}/plasmazones/surface dirs + the user override) on first
@@ -906,7 +905,6 @@ private:
     /// degrades to single-pass (renderSurfaceChain runs the border via the main
     /// shader with iChannels unbound); wiring buffer passes into the transition
     /// chain is a follow-up.
-    bool renderSurfaceBufferPasses(KWin::EffectWindow* w, qreal scale);
 
     /// Composite a MULTI-PACK decoration chain (chain.size() > 1) for @p w into a
     /// per-window ping-pong FBO. The final fold is consumed via
@@ -919,7 +917,7 @@ private:
     /// 0, its buffers as iChannels) into the other slot. drawWindow presents the
     /// final slot through surfacePresentShader(). Buffers are cached per
     /// window+chain (animation-ready). Implemented in surfacelayers.cpp; like
-    /// renderSurfaceBufferPasses it MUST be driven from paintWindow (it captures
+    /// the composite fold it MUST be driven from paintWindow (it captures
     /// via effects->drawWindow).
     /// @p captureRestoreShader: the shader to hand the OffscreenEffect slot
     /// back to after the raw capture (null = surfacePresentShader(), the rest
@@ -995,7 +993,7 @@ private:
     std::unordered_map<QString, CompiledSurfacePack> m_compiledPacks;
 
     /// Per-window multipass FBO targets (surfaceTex + bufferTex chain). Keyed by
-    /// getWindowId(w). Allocated lazily by renderSurfaceBufferPasses, reallocated
+    /// getWindowId(w). Allocated lazily by the composite fold, reallocated
     /// when the window's expanded size × scale changes, and erased on window
     /// close / border removal (removeWindowBorder) to free GPU memory.
     std::unordered_map<QString, SurfaceMultipassState> m_surfaceMultipass;

@@ -430,21 +430,4 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     return &packState;
 }
 
-CompiledSurfacePack* PlasmaZonesEffect::compiledPackForWindow(const QString& windowId)
-{
-    const auto it = m_windowBorders.constFind(windowId);
-    if (it == m_windowBorders.constEnd()) {
-        return nullptr;
-    }
-    // Re-resolve the window's profile to feed the base pack's parameter overrides.
-    // The profile is cheap (a hash walk-up) and only matters on first compile —
-    // compiledPack bakes the param VALUES once per pack id, then returns the cache.
-    const PhosphorSurfaceShaders::DecorationProfile profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId));
-    CompiledSurfacePack* const pack = compiledPack(it->basePackId, profile);
-    if (!pack || !pack->shader) {
-        return nullptr;
-    }
-    return pack;
-}
-
 } // namespace PlasmaZones

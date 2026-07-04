@@ -1267,35 +1267,24 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         }
     }
 
-    // Border rendering is NOT handled here. A static bordered window is rendered
-    // through the offscreen border shader passively in the drawWindow override
-    // (the KDE-Rounded-Corners model), which applies the shader on every
-    // composite including idle frames. paintWindow only drives the animation
-    // transition path above; everything else falls through unchanged.
-    //
-    // EXCEPTION — multipass surface packs: render the buffer passes HERE, before
-    // the draw-chain walk below, when the (non-transition) window has a multipass
-    // border. renderSurfaceBufferPasses captures the raw surface via
-    // effects->drawWindow; that nested draw-chain walk MUST run from paintWindow
-    // (a fresh draw-window iterator) — doing it from inside the drawWindow
-    // override re-enters KWin's iterator mid-walk and corrupts it (crash in the
-    // following OffscreenEffect::drawWindow). The override then only BINDS the
-    // per-window buffer textures this prepared. Single-pass packs (border) have
-    // no compiled buffer passes → renderSurfaceBufferPasses cheap-early-outs (it
-    // resolves the window's base pack from the cache and returns when its
-    // bufferPasses are empty), no capture. The pre-gate here just skips windows
-    // with no applied border (no decoration at all) without a map+cache lookup.
+    // Decoration fold for every (non-transition) decorated window. It runs
+    // HERE, not in drawWindow: the fold's capture re-enters the draw chain
+    // (effects->drawWindow), which MUST happen on a fresh draw-window
+    // iterator — re-entering from inside the drawWindow override corrupts
+    // KWin's iterator mid-walk (crash in the following
+    // OffscreenEffect::drawWindow). The override then only BINDS the ready
+    // composite for the present blit. The pre-gate skips windows with no
+    // applied border without a map lookup.
     if (!m_capturingSnapshot && !m_windowBorders.isEmpty() && !m_shaderManager.findTransition(w)) {
         const auto bit = m_windowBorders.constFind(getWindowId(w));
         if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
-            if (bit->chain.size() > 1 || bit->outerPadding > 0 || bit->needsBackdrop || bit->ruleOpacity < 1.0) {
-                // MULTI-PACK: composite the whole chain into a per-window FBO here
-                // (each pack's main runs as an FBO pass); drawWindow then presents
-                // the final FBO through the passthrough present shader.
-                renderSurfaceChainComposite(w, viewport.scale());
-            } else {
-                renderSurfaceBufferPasses(w, viewport.scale());
-            }
+            // Composite the whole chain into the per-window FBO (each pack's
+            // main runs as an FBO pass); drawWindow presents the final slot
+            // through the passthrough present shader. EVERY decorated window
+            // takes this path — one-pack chains included — so a rest
+            // composite always exists (the close path reuses it to carry the
+            // decoration through close animations).
+            renderSurfaceChainComposite(w, viewport.scale());
         }
     }
 
