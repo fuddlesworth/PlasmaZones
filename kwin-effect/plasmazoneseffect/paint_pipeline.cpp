@@ -1072,6 +1072,16 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // fallback (the live redirect) every snapshot-less frame.
                     shader->setUniform(cached->iOldWindowLoc, 0);
                 }
+                // Snapshot-presence flag: old-content samplers gate on this and
+                // fall back to surfaceColor() when 0 — the unit-0 alias above is
+                // the RAW undecorated window, and cross-fading from it blanked
+                // every decoration pack for the fade-in of snapshot-less
+                // lifecycle transitions (window.move at every drag start).
+                // Always push: the shared program otherwise carries the flag
+                // from whichever transition ran last.
+                if (cached->iHasOldWindowLoc >= 0) {
+                    shader->setUniform(cached->iHasOldWindowLoc, transition.oldSnapshot ? 1 : 0);
+                }
                 // Surface-layer stack (uSurfaceLayer). When renderSurfaceChain
                 // composited the window's layers (border / rounded corners, ...)
                 // into an FBO, bind it to a dedicated unit just past the

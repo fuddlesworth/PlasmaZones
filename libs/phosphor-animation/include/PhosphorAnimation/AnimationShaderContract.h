@@ -351,6 +351,16 @@ inline constexpr const char* kUSurfaceLayer = "uSurfaceLayer";
 /// frame by the kwin-effect; defaults to 0 (GL zero-init), so a shader that
 /// never receives it falls back to the unlayered path.
 inline constexpr const char* kIHasSurfaceLayer = "iHasSurfaceLayer";
+
+/// `int iHasOldWindow` — COMPOSITOR PATH ONLY. 1 when `uOldWindow` holds a
+/// genuinely captured old-content snapshot for this transition, 0 when no
+/// capture ran (lifecycle events like window.move / window.resize begin with
+/// no geometry change to snapshot). Old-content samplers MUST gate on this
+/// and fall back to `surfaceColor()` when 0: the compositor's no-snapshot
+/// fallback aliases `uOldWindow` onto unit 0 (the RAW undecorated window),
+/// so an ungated cross-fade from "old" blanks every decoration pack until
+/// the fade completes.
+inline constexpr const char* kIHasOldWindow = "iHasOldWindow";
 /// Card/anchor-space [0,1] sub-rect of the animated surface WITHIN
 /// uSurfaceLayer's canvas (xy offset, zw scale) — the layer analogue of
 /// iAnchorRectInTexture. The compositor pads the layer canvas by the

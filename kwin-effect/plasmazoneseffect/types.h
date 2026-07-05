@@ -436,6 +436,11 @@ struct CachedShader
     int iFromRectLoc = -1;
     int iToRectLoc = -1;
     int iOldWindowLoc = -1;
+    /// `iHasOldWindow` — 1 when a captured old-content snapshot is bound for
+    /// this transition, 0 otherwise (the shader then falls back to
+    /// surfaceColor() for its "old" side instead of sampling the raw window
+    /// through the unit-0 alias).
+    int iHasOldWindowLoc = -1;
     /// Surface-layer-stack uniforms (compositor path). `uSurfaceLayer` is the
     /// pre-composited layered surface (border / rounded corners, ...) sampled in
     /// place of the live `uTexture0` while a layered window animates;

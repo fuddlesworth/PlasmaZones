@@ -211,6 +211,13 @@ uniform sampler2D uTexture3;
 // the unlayered path untouched.
 uniform sampler2D uSurfaceLayer;
 uniform int iHasSurfaceLayer;
+
+// 1 when uOldWindow holds a real captured old-content snapshot, 0 when the
+// transition began without a capture (lifecycle moves/resizes). Old-content
+// samplers gate on this and fall back to surfaceColor() — the no-snapshot
+// compositor fallback points uOldWindow at unit 0 (the RAW window), which
+// would otherwise blank the decoration for the old side of a cross-fade.
+uniform int iHasOldWindow;
 // The animated surface's [0,1] sub-rect within uSurfaceLayer's canvas — the
 // layer analogue of iAnchorRectInTexture. The compositor pads the layer canvas
 // by the decoration chain's outer margin (glow reach), so the layer cannot be

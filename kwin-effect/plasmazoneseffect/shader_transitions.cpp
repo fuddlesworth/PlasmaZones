@@ -823,6 +823,8 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUSurfaceLayer);
         cached.iHasSurfaceLayerLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasSurfaceLayer);
+        cached.iHasOldWindowLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasOldWindow);
         cached.iLayerRectInTextureLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kILayerRectInTexture);
         // uTexture0 — for the transition-time composite retarget (see
