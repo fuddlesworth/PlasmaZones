@@ -33,6 +33,9 @@ QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
         obj[JsonKeys::Y] = entry.targetGeometry.y();
         obj[JsonKeys::Width] = entry.targetGeometry.width();
         obj[JsonKeys::Height] = entry.targetGeometry.height();
+        if (entry.virtualDesktop > 0) {
+            obj[JsonKeys::VirtualDesktop] = entry.virtualDesktop;
+        }
         array.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));

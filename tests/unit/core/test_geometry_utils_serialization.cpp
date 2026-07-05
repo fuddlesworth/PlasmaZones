@@ -237,6 +237,32 @@ private Q_SLOTS:
         }
     }
 
+    void test_serializeZoneAssignments_virtualDesktop()
+    {
+        // A pinned desktop (>0) must survive the wire format so the batch
+        // commit on the receiving side records the assignment on the window's
+        // own desktop; 0 (current-desktop default) is omitted from the JSON.
+        ZoneAssignmentEntry pinned;
+        pinned.windowId = QStringLiteral("win-1");
+        pinned.targetZoneId = QStringLiteral("tgt-A");
+        pinned.targetGeometry = QRect(0, 0, 100, 100);
+        pinned.virtualDesktop = 2;
+
+        ZoneAssignmentEntry unpinned;
+        unpinned.windowId = QStringLiteral("win-2");
+        unpinned.targetZoneId = QStringLiteral("tgt-B");
+        unpinned.targetGeometry = QRect(100, 0, 100, 100);
+
+        QString json = GeometryUtils::serializeZoneAssignments({pinned, unpinned});
+
+        QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+        QVERIFY(doc.isArray());
+        QJsonArray arr = doc.array();
+        QCOMPARE(arr.size(), 2);
+        QCOMPARE(arr[0].toObject().value(QLatin1String("virtualDesktop")).toInt(), 2);
+        QVERIFY(!arr[1].toObject().contains(QLatin1String("virtualDesktop")));
+    }
+
     void test_rectToJson_roundTrip()
     {
         QRect original(123, 456, 789, 1011);

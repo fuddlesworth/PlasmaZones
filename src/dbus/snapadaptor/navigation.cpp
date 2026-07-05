@@ -209,6 +209,7 @@ void SnapAdaptor::handleBatchedResnap(const QString& resnapData)
         entry.targetGeometry =
             QRect(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
                   obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
+        entry.virtualDesktop = obj.value(QLatin1String("virtualDesktop")).toInt();
         if (!entry.windowId.isEmpty() && !entry.targetZoneId.isEmpty()) {
             entries.append(entry);
         }

@@ -1723,8 +1723,15 @@ bool Daemon::init()
             // Resnap only the snapping-mode screens whose assignments actually changed.
             // changedScreenIds scopes the resnap to avoid spurious geometry-set on
             // screens whose layout didn't change (prevents flicker on unrelated VS).
+            // Restrict the resnap to each screen's CURRENT virtual desktop (the
+            // filter compares every window against its own screen's desktop, so
+            // multi-screen KCM applies stay correct). Without it, a per-desktop
+            // assignment change resnaps windows parked on OTHER desktops into the
+            // just-assigned layout's zones — the user sees one desktop's layout
+            // leak onto every desktop. Mirrors resnapIfManualMode (navigation.cpp).
             armResnapOsdSuppression(osdEntries.size());
-            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
+            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds,
+                                                                                  currentDesktop());
             m_snapAdaptor->resnapToNewLayout();
             // Restore snap-float positions for windows this KCM apply released
             // from autotile — the buffer-based resnap above cannot cover

@@ -105,6 +105,11 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
             assignEntry.sourceZoneId = QString();
             assignEntry.targetZoneId = targetZone->id().toString();
             assignEntry.targetGeometry = geo;
+            // Preserve the window's recorded desktop through the commit so a
+            // resnap batch never re-stamps a window onto the desktop the user
+            // happens to be viewing (0 = sticky/unknown keeps the historical
+            // current-desktop stamp in commitSnapImpl).
+            assignEntry.virtualDesktop = entry->virtualDesktop;
             result.append(assignEntry);
         }
     }

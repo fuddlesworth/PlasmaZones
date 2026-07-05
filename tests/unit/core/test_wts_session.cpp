@@ -225,6 +225,81 @@ private Q_SLOTS:
         QVERIFY2(found, "durable-recorded snap window must enter the resnap buffer when the live map is cold");
     }
 
+    // Regression (#layout-leak): a per-desktop layout change must resnap only
+    // the windows on that desktop. Without the desktop filter, assigning a
+    // layout to desktop 2 pulled desktop 1's windows into desktop 2's zones —
+    // the user saw one desktop's layout leak onto every desktop. With no VDM
+    // wired, each window compares against the passed filter value directly.
+    void testResnapBuffer_desktopFilterExcludesOtherDesktops()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        const QString winDesk1 = QStringLiteral("app1|111");
+        const QString winDesk2 = QStringLiteral("app2|222");
+        const QString winSticky = QStringLiteral("app3|333");
+
+        m_service->assignWindowToZone(winDesk1, m_zoneIds[0], screen, 1);
+        m_service->assignWindowToZone(winDesk2, m_zoneIds[1], screen, 2);
+        m_service->assignWindowToZone(winSticky, m_zoneIds[2], screen, 0);
+
+        m_service->populateResnapBufferForAllScreens({}, {}, 2);
+
+        const QVector<PhosphorEngine::ResnapEntry> buf = m_service->takeResnapBuffer();
+        QSet<QString> ids;
+        for (const PhosphorEngine::ResnapEntry& e : buf) {
+            ids.insert(e.windowId);
+            if (e.windowId == winDesk2) {
+                QCOMPARE(e.virtualDesktop, 2); // buffer preserves the recorded desktop
+            }
+        }
+        QVERIFY2(!ids.contains(winDesk1), "a window recorded on desktop 1 must not enter a desktop-2 resnap");
+        QVERIFY(ids.contains(winDesk2));
+        QVERIFY2(ids.contains(winSticky), "sticky/unknown (desktop 0) windows resnap regardless of the filter");
+    }
+
+    // Regression (#layout-leak): the resnap calculation must carry each
+    // window's recorded desktop into the ZoneAssignmentEntry so the batch
+    // commit re-records it on ITS desktop, not the currently-viewed one.
+    void testCalculateResnap_preservesRecordedDesktop()
+    {
+        const QString win = QStringLiteral("app1|111");
+        m_service->assignWindowToZone(win, m_zoneIds[0], QString(), 2);
+
+        PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(newLayout);
+        m_layoutManager->setActiveLayout(newLayout);
+        m_service->onLayoutChanged();
+
+        const QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
+        QVERIFY(!resnap.isEmpty());
+        for (const ZoneAssignmentEntry& e : resnap) {
+            if (e.windowId == win) {
+                QCOMPARE(e.virtualDesktop, 2);
+                return;
+            }
+        }
+        QFAIL("window missing from resnap entries");
+    }
+
+    // Regression (#layout-leak): applyBatchAssignments must commit on the
+    // entry's desktop. Dropping it re-stamped off-desktop windows onto the
+    // current desktop, making the cross-desktop resnap corruption durable.
+    void testApplyBatchAssignments_commitsOnEntryDesktop()
+    {
+        const QString win = QStringLiteral("app1|111");
+
+        ZoneAssignmentEntry entry;
+        entry.windowId = win;
+        entry.targetZoneId = m_zoneIds[0];
+        entry.targetGeometry = QRect(0, 0, 800, 600);
+        entry.targetScreenId = QStringLiteral("DP-1");
+        entry.virtualDesktop = 2;
+
+        const auto geometries =
+            m_engine->applyBatchAssignments({entry}, PhosphorEngine::SnapIntent::UserInitiated, nullptr);
+        QCOMPARE(geometries.size(), 1);
+        QCOMPARE(m_engine->snapState()->desktopForWindow(win), 2);
+    }
+
     // =====================================================================
     // P1: Rotation
     // =====================================================================

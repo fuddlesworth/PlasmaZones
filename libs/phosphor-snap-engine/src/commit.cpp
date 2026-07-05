@@ -227,9 +227,9 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
         }
 
         if (entry.targetZoneIds.size() > 1) {
-            commitMultiZoneSnap(entry.windowId, entry.targetZoneIds, screenId, intent);
+            commitMultiZoneSnap(entry.windowId, entry.targetZoneIds, screenId, intent, entry.virtualDesktop);
         } else {
-            commitSnap(entry.windowId, entry.targetZoneId, screenId, intent);
+            commitSnap(entry.windowId, entry.targetZoneId, screenId, intent, entry.virtualDesktop);
         }
         resolvedScreens.append(screenId);
     }
