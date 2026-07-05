@@ -49,6 +49,11 @@ ColumnLayout {
     // chain is explicit (remove a pack instead of disabling it), and the
     // toggles would write to the DecorationProfileTree, not the rule.
     property bool showLayerToggles: true
+    // The rules-action embed renders its own compact add-picker inline with
+    // the THEN selector, so it hides this component's bottom add row (and
+    // the empty-state hint adjusts: an empty rule chain is the "no
+    // decoration" sentinel rather than an invitation to add below).
+    property bool showAddRow: true
     // Stable empty-map identity for param-less packs: a per-evaluation `({})`
     // literal would hand the inner ShaderParamsEditor a new object identity on
     // every host refresh and churn its currentValues rebind (same hoist as
@@ -116,7 +121,7 @@ ColumnLayout {
     Label {
         Layout.fillWidth: true
         visible: !root.chain || root.chain.length === 0
-        text: i18n("No decoration packs. Add one below.")
+        text: root.showAddRow ? i18n("No decoration packs. Add one below.") : i18n("No decoration packs. Matched windows render undecorated.")
         wrapMode: Text.WordWrap
         opacity: 0.7
     }
@@ -280,7 +285,7 @@ ColumnLayout {
     // into the last pack's card.
     SettingsSeparator {
         Layout.topMargin: Kirigami.Units.smallSpacing
-        visible: root.chain && root.chain.length > 0
+        visible: root.showAddRow && root.chain && root.chain.length > 0
     }
 
     // ── Add row ──────────────────────────────────────────────────────────
@@ -291,6 +296,7 @@ ColumnLayout {
     // empty and the button always shows its placeholder.
     SettingsRow {
         Layout.fillWidth: true
+        visible: root.showAddRow
         title: i18n("Add decoration pack")
         description: root._addableEffects().length > 0 ? i18n("Stack another pack onto this surface's chain") : i18n("All installed packs are already in the chain")
 

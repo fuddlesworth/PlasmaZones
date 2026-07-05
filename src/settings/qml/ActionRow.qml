@@ -163,6 +163,7 @@ ColumnLayout {
     // value is the effect id.
     property Component _shaderEffectEditor
     property Component _decorationChainEditor
+    property Component _decorationChainListEditor
     // Overlay-shader picker for OverrideOverlayShader actions — the overlay/
     // snapping shader registry (Snapping → Shaders page), distinct from the
     // animation shaders above. Wire value is the shader id.
@@ -476,6 +477,20 @@ ColumnLayout {
         active: row._activeShaderParamSchema.length > 0
         visible: active
         sourceComponent: row._shaderParamsEditor
+    }
+
+    // ── Bottom: decoration-chain rows for OverrideDecorationChain ────────────
+    // The inline slot holds only the compact add-picker; the chain itself
+    // (ordered rows with reorder/remove and inline per-pack parameters)
+    // renders full-width down here, mirroring the decoration surface cards.
+    Loader {
+        id: decorationChainLoader
+
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+        active: row.action.type === "overrideDecorationChain"
+        visible: active
+        sourceComponent: row._decorationChainListEditor
     }
 
     _stringParamEditor: Component {
@@ -937,23 +952,56 @@ ColumnLayout {
     }
 
     _decorationChainEditor: Component {
-        // Full chain editor for OverrideDecorationChain — the SAME component
-        // the decoration surface cards embed (ordered packs, add/remove/
-        // reorder, inline per-pack parameter editors), rewired so every
-        // signal mutates the ACTION payload instead of the
-        // DecorationProfileTree: the pack list rides `chain`, the per-pack
-        // values ride the nested `params` object. Layer toggles are hidden
-        // because a rule chain is explicit (remove a pack instead of
-        // disabling it). An empty chain is the valid "no decoration"
-        // sentinel, so the editor's empty state doubles as "block
-        // decoration for matched windows."
-        ChainEditor {
+        // Inline half of the OverrideDecorationChain editor: a compact
+        // add-picker sitting in the THEN row (mirroring the shader-effect
+        // picker's placement); selecting a pack APPENDS it to the action's
+        // chain. The chain rows themselves render full-width BELOW the row
+        // via decorationChainLoader, exactly like the shader-uniform editor
+        // splits from its inline effect picker.
+        PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
+            readonly property var _chain: row.action[_param.key] || []
+            // Packs not already in the chain; re-evaluates as the chain grows.
+            readonly property var _addable: {
+                var all = row.appSettings && row.appSettings.decorationPage ? row.appSettings.decorationPage.availableShaderEffects() : [];
+                var out = [];
+                for (var i = 0; i < all.length; i++) {
+                    if (all[i] && all[i].id && _chain.indexOf(all[i].id) < 0)
+                        out.push(all[i]);
+                }
+                return out;
+            }
 
+            items: _addable
+            enabled: _addable.length > 0
+            currentId: ""
+            includeNoneEntry: false
+            placeholderText: i18nc("@action:button", "Add a pack…")
+            Accessible.description: _param.label
+            onSelected: function (id) {
+                if (!id || id.length === 0)
+                    return;
+                var next = _chain.slice();
+                next.push(id);
+                row.actionEdited(row._withParam(_param.key, next));
+            }
+        }
+    }
+
+    _decorationChainListEditor: Component {
+        // Below-row half of the OverrideDecorationChain editor: the SAME
+        // chain rows the decoration surface cards embed (reorder, remove,
+        // expand for full descriptions + per-pack parameters), rewired so
+        // every signal mutates the ACTION payload. The add row is hidden
+        // (the inline picker above owns adding) and so are the layer
+        // toggles (a rule chain is explicit; remove a pack instead). An
+        // empty chain is the valid "no decoration" sentinel.
+        ChainEditor {
             availableShaders: row.appSettings && row.appSettings.decorationPage ? row.appSettings.decorationPage.availableShaderEffects() : []
-            chain: row.action[_param.key] || []
+            chain: row.action.chain || []
             packParameters: row.action.params || ({})
             showLayerToggles: false
+            showAddRow: false
             onChainChangeRequested: function (newChain) {
                 // Prune params of removed packs, mirroring
                 // DecorationPageController.setChain: re-adding a pack starts
@@ -964,7 +1012,7 @@ ColumnLayout {
                     if (newChain.indexOf(pid) >= 0)
                         pruned[pid] = cur[pid];
                 }
-                var next = row._withParam(_param.key, newChain);
+                var next = row._withParam("chain", newChain);
                 next.params = pruned;
                 row.actionEdited(next);
             }
