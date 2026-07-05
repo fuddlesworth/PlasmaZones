@@ -4,7 +4,8 @@ import QtQuick
 
 // Decoration → OSDs. Viewport-virtualized by DecorationSurfaceCardList; thin
 // model declaration like the animation sub-pages. The OSD surface is its own
-// alwaysEnabled root (no global decoration default to inherit). No title bar.
+// root card whose toggle engages/clears the "osd" override (OFF inherits
+// the empty baseline, rendering the OSD undecorated). No title bar.
 DecorationSurfaceCardList {
     Accessible.name: i18n("OSD decoration surface")
     headerText: i18n("Decoration for the on-screen display.")
@@ -12,7 +13,7 @@ DecorationSurfaceCardList {
         {
             "surfacePath": "osd",
             "cardLabel": i18n("On-Screen Display"),
-            "alwaysEnabled": true,
+            "alwaysEnabled": false,
             "isParentNode": false
         }
     ]

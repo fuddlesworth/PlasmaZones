@@ -6,7 +6,9 @@ import QtQuick
 // thin model declaration like AnimationsWindowsPage. Labels are i18n() here in
 // QML (not derived in C++), matching the animation page models.
 //
-// "All Windows" (path "window") is the alwaysEnabled root that carries the
+// "All Windows" (path "window") is the category root card. Its toggle
+// engages the "window" override for editing; OFF clears it so the whole
+// category inherits the (empty) baseline and windows render undecorated,
 // window decoration default; an override on a child placement-state card
 // (window.tiled / window.snapped / window.floating) diverges from it via the
 // DecorationProfileTree walk-up.
@@ -17,7 +19,7 @@ DecorationSurfaceCardList {
         {
             "surfacePath": "window",
             "cardLabel": i18n("All Windows"),
-            "alwaysEnabled": true,
+            "alwaysEnabled": false,
             "isParentNode": true
         },
         {

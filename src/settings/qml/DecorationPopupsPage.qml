@@ -5,7 +5,7 @@ import QtQuick
 // Decoration → Popups. Viewport-virtualized by DecorationSurfaceCardList; thin
 // model declaration like the animation sub-pages, with i18n() labels in QML.
 //
-// "All Popups" (path "popup") is the alwaysEnabled root for the transient
+// "All Popups" (path "popup") is the category root card for the transient
 // popups (snap assist, zone selector, layout picker); each can override it via
 // the DecorationProfileTree walk-up. Popups have no title bar, so none expose
 // the toggle.
@@ -16,7 +16,7 @@ DecorationSurfaceCardList {
         {
             "surfacePath": "popup",
             "cardLabel": i18n("All Popups"),
-            "alwaysEnabled": true,
+            "alwaysEnabled": false,
             "isParentNode": true
         },
         {

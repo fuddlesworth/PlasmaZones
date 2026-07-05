@@ -9,16 +9,18 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Per-surface decoration override card. Mirrors AnimationEventCard.
  *
- * One card per surface path. CATEGORY paths (window, popup) and the
- * standalone osd surface are alwaysEnabled ROOTS — there is no
- * global decoration default above them, so they have no override toggle and
- * always edit their own profile (a category root additionally shows the
- * "applies to all children" cascade banner). Concrete leaf paths under a
- * category (window.tiled / window.snapped / window.floating, popup.*) are
- * override cards: the master toggle engages a per-surface override in the
- * DecorationProfileTree; OFF clears it (reset to inherited — same as
- * AnimationEventCard, no separate reset button) and the card shows the
- * RESOLVED chain read-only with an "Inheriting from: …" breadcrumb.
+ * One card per surface path, every one an override card: the master toggle
+ * engages a per-surface override in the DecorationProfileTree; OFF clears
+ * it (reset to inherited — same as AnimationEventCard, no separate reset
+ * button) and the card shows the RESOLVED chain read-only with an
+ * "Inheriting from: …" breadcrumb. CATEGORY paths (window, popup) and the
+ * standalone osd surface inherit from the tree's BASELINE (empty by
+ * default), so their toggle doubles as the category's decoration master
+ * switch: OFF renders the whole category undecorated, matching the
+ * animations pages' top-level toggles. A category root additionally shows
+ * the "applies to all children" cascade banner while editing. The
+ * alwaysEnabled escape hatch (no toggle, always editing) remains for any
+ * future surface that must never be disableable.
  *
  * Reactive-latch pattern: imperative refresh from the controller on
  * `profilesChanged` / `shaderEffectsChanged`, NOT function bindings that
