@@ -1482,7 +1482,7 @@ bool Daemon::init()
     // window's CURRENT screen mode. This replaces the old single shared
     // m_floatingWindows + m_snapState bit that both engines read/wrote.
     //
-    // Mode resolution: the window's tracked screen (WTS screenAssignments, with
+    // Mode resolution: the window's tracked screen (WTS screenForWindow, with
     // the autotile engine's own tracked screen as the fallback for windows snap
     // never saw) → LayoutRegistry::modeForScreen → the owning engine.
     {
@@ -1723,8 +1723,15 @@ bool Daemon::init()
             // Resnap only the snapping-mode screens whose assignments actually changed.
             // changedScreenIds scopes the resnap to avoid spurious geometry-set on
             // screens whose layout didn't change (prevents flicker on unrelated VS).
+            // Restrict the resnap to each screen's CURRENT virtual desktop (the
+            // filter compares every window against its own screen's desktop, so
+            // multi-screen KCM applies stay correct). Without it, a per-desktop
+            // assignment change resnaps windows parked on OTHER desktops into the
+            // just-assigned layout's zones — the user sees one desktop's layout
+            // leak onto every desktop. Mirrors resnapIfManualMode (navigation.cpp).
             armResnapOsdSuppression(osdEntries.size());
-            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
+            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds,
+                                                                                  currentDesktop());
             m_snapAdaptor->resnapToNewLayout();
             // Restore snap-float positions for windows this KCM apply released
             // from autotile — the buffer-based resnap above cannot cover
@@ -2307,7 +2314,7 @@ void Daemon::stop()
     // teardown contract grep-discoverable and survives that refactor.
     // `m_snapEngine` is base-typed `PlacementEngineBase*`; the setter
     // lives on the concrete `SnapEngine`. qobject_cast mirrors the
-    // narrowing in the autotile-toggle branch above (~ line 893).
+    // narrowing in the settingsChanged autotile-disabled branch above.
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         concreteSnap->setExcludeRuleSet(nullptr);
     }

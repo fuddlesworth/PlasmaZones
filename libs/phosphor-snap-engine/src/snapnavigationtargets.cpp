@@ -230,9 +230,10 @@ QStringList SnapNavigationTargetResolver::windowsInZoneOnScreen(const QString& z
 {
     QStringList result;
     const QStringList windows = m_service->windowsInZone(zoneId);
-    const QHash<QString, QString>& screens = m_service->screenAssignments();
     for (const QString& windowId : windows) {
-        if (screens.value(windowId) == screenName) {
+        // screenForWindow canonicalizes the id (issue #628); the exact-equality
+        // screen comparison is unchanged.
+        if (m_service->screenForWindow(windowId) == screenName) {
             result.append(windowId);
         }
     }

@@ -39,14 +39,14 @@ PhosphorProtocol::WindowStateList WindowTrackingAdaptor::getAllWindowStates()
     QSet<QString> allWindowIds;
 
     // Add snapped windows
-    const auto& zoneAssignments = m_service->zoneAssignments();
-    for (auto it = zoneAssignments.constBegin(); it != zoneAssignments.constEnd(); ++it) {
-        allWindowIds.insert(it.key());
+    const QStringList snapped = m_service->snappedWindows();
+    for (const QString& windowId : snapped) {
+        allWindowIds.insert(windowId);
     }
 
     // Add floating windows
-    const QStringList floatingWindows = m_service->floatingWindows();
-    for (const QString& windowId : floatingWindows) {
+    const QStringList floating = m_service->floatingWindows();
+    for (const QString& windowId : floating) {
         allWindowIds.insert(windowId);
     }
 

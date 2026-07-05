@@ -215,6 +215,7 @@ buildEmptyZoneList(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Layout* l
 using ::PhosphorGeometry::enforceMinSizes;
 using ::PhosphorGeometry::removeRectOverlaps;
 
+using ::PhosphorEngine::GeometryUtils::deserializeZoneAssignments;
 using ::PhosphorEngine::GeometryUtils::serializeZoneAssignments;
 using ::PhosphorGeometry::rectToJson;
 

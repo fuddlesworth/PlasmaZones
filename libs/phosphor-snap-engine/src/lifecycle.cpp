@@ -371,7 +371,11 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                         }
                         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore: placement(snapped) for"
                                                                  << windowId << "->" << geo << "freeGeo=" << freeGeo;
-                        return SnapResult{true, geo, zoneIds.first(), zoneIds, restoreScreen};
+                        return SnapResult{.shouldSnap = true,
+                                          .geometry = geo,
+                                          .zoneId = zoneIds.first(),
+                                          .zoneIds = zoneIds,
+                                          .screenId = restoreScreen};
                     }
                 }
                 // Disabled context, managed-restore opt-out

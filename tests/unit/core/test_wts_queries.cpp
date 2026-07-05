@@ -171,8 +171,10 @@ private Q_SLOTS:
         QString windowId = QStringLiteral("app:window:12345");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("HDMI-1"), 2);
 
-        QCOMPARE(m_service->screenAssignments().value(windowId), QStringLiteral("HDMI-1"));
-        QCOMPARE(m_service->desktopAssignments().value(windowId), 2);
+        QCOMPARE(m_service->screenForWindow(windowId), QStringLiteral("HDMI-1"));
+        // The desktop is recorded on the owning snap store (the WTS-level point
+        // accessor was retired along with the flat union maps).
+        QCOMPARE(m_engine->snapState()->desktopForWindow(windowId), 2);
     }
 
     void testUnassignWindow_emitsSignal()
@@ -202,11 +204,19 @@ private Q_SLOTS:
         m_service->assignWindowToZone(window2, m_zoneIds[1], QStringLiteral("DP-1"), 0);
         m_service->setWindowFloating(window1, true);
 
+        // The floated window keeps its preserved zone assignment (for resnap
+        // on mode switch) but must not make its zone appear occupied.
         QStringList snapped = m_service->snappedWindows();
         QVERIFY(snapped.contains(window1));
         QVERIFY(snapped.contains(window2));
         QVERIFY(m_service->isWindowFloating(window1));
         QVERIFY(!m_service->isWindowFloating(window2));
+
+        const QSet<QUuid> occupied = m_service->buildOccupiedZoneSet(QStringLiteral("DP-1"));
+        const QUuid zone0 = *Utils::parseUuid(m_zoneIds[0]);
+        const QUuid zone1 = *Utils::parseUuid(m_zoneIds[1]);
+        QVERIFY2(!occupied.contains(zone0), "a floating window's zone must not appear occupied");
+        QVERIFY2(occupied.contains(zone1), "a snapped window's zone must appear occupied");
     }
 
     // Regression test for discussion #323: windows parked on other virtual
@@ -291,6 +301,42 @@ private Q_SLOTS:
         QVERIFY(geo.isValid());
         QVERIFY(geo.contains(zone0));
         QVERIFY(geo.contains(zone1));
+        QVERIFY(qAbs(geo.left() - expectedUnion.left()) <= 1);
+        QVERIFY(qAbs(geo.top() - expectedUnion.top()) <= 1);
+        QVERIFY(qAbs(geo.right() - expectedUnion.right()) <= 1);
+        QVERIFY(qAbs(geo.bottom() - expectedUnion.bottom()) <= 1);
+    }
+
+    // Edge case (project rule "overlapping zones"): the multi-zone geometry must
+    // be the tight bounding box even when the member zones overlap — the union
+    // must not depend on the zones being disjoint.
+    void testMultiZoneGeometry_overlappingZones()
+    {
+        auto* overlapLayout = new PhosphorZones::Layout(QStringLiteral("OverlapLayout"), m_layoutManager);
+        auto* zoneA = new PhosphorZones::Zone(overlapLayout);
+        zoneA->setRelativeGeometry(QRectF(0.0, 0.0, 0.6, 1.0));
+        zoneA->setZoneNumber(1);
+        overlapLayout->addZone(zoneA);
+        auto* zoneB = new PhosphorZones::Zone(overlapLayout);
+        zoneB->setRelativeGeometry(QRectF(0.4, 0.0, 0.6, 1.0)); // overlaps zoneA horizontally
+        zoneB->setZoneNumber(2);
+        overlapLayout->addZone(zoneB);
+        m_layoutManager->addLayout(overlapLayout);
+        m_layoutManager->setActiveLayout(overlapLayout);
+
+        const QString idA = zoneA->id().toString();
+        const QString idB = zoneB->id().toString();
+        const QRect geoA = m_service->zoneGeometry(idA, QString());
+        const QRect geoB = m_service->zoneGeometry(idB, QString());
+        QVERIFY(geoA.isValid());
+        QVERIFY(geoB.isValid());
+        QVERIFY2(geoA.intersects(geoB), "fixture zones must overlap for this test to be meaningful");
+
+        const QRect geo = m_service->multiZoneGeometry({idA, idB}, QString());
+        const QRect expectedUnion = geoA.united(geoB);
+        QVERIFY(geo.isValid());
+        QVERIFY(geo.contains(geoA));
+        QVERIFY(geo.contains(geoB));
         QVERIFY(qAbs(geo.left() - expectedUnion.left()) <= 1);
         QVERIFY(qAbs(geo.top() - expectedUnion.top()) <= 1);
         QVERIFY(qAbs(geo.right() - expectedUnion.right()) <= 1);

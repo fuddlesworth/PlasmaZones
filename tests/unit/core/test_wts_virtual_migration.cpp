@@ -33,14 +33,11 @@
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/LayoutRegistryTestHelpers.h"
-#include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-
-using StubSettingsMigration = StubSettings;
 
 // =========================================================================
 // Test Class
@@ -55,7 +52,6 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
-        m_settings = new StubSettingsMigration(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
@@ -80,8 +76,6 @@ private Q_SLOTS:
         m_service = nullptr;
         delete m_zoneDetector;
         m_zoneDetector = nullptr;
-        delete m_settings;
-        m_settings = nullptr;
         delete m_layoutManager;
         m_layoutManager = nullptr;
         m_testLayout = nullptr;
@@ -112,13 +106,13 @@ private Q_SLOTS:
         // Assign window to physical screen
         const QString windowId = QStringLiteral("konsole|aaa-bbb");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], physId, 1);
-        QCOMPARE(m_service->screenAssignments().value(windowId), physId);
+        QCOMPARE(m_service->screenForWindow(windowId), physId);
 
         // With nullptr PhosphorScreens::ScreenManager, migrateToVirtual is a no-op (guard clause)
         m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, nullptr);
 
         // Window should remain on the physical screen (no migration occurred)
-        QCOMPARE(m_service->screenAssignments().value(windowId), physId);
+        QCOMPARE(m_service->screenForWindow(windowId), physId);
     }
 
     // =====================================================================
@@ -137,14 +131,14 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win1, m_zoneIds[0], vs0, 1);
         m_service->assignWindowToZone(win2, m_zoneIds[1], vs1, 1);
 
-        QCOMPARE(m_service->screenAssignments().value(win1), vs0);
-        QCOMPARE(m_service->screenAssignments().value(win2), vs1);
+        QCOMPARE(m_service->screenForWindow(win1), vs0);
+        QCOMPARE(m_service->screenForWindow(win2), vs1);
 
         // Migrate back to physical
         m_service->migrateScreenAssignmentsFromVirtual(physId);
 
-        QCOMPARE(m_service->screenAssignments().value(win1), physId);
-        QCOMPARE(m_service->screenAssignments().value(win2), physId);
+        QCOMPARE(m_service->screenForWindow(win1), physId);
+        QCOMPARE(m_service->screenForWindow(win2), physId);
     }
 
     // =====================================================================
@@ -164,12 +158,12 @@ private Q_SLOTS:
         m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
 
         // Verify starting state: window on virtual screen
-        QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
+        QCOMPARE(m_service->screenForWindow(windowId), vs0);
         QVERIFY(m_service->isWindowSnapped(windowId));
 
         // Virtual -> Physical
         m_service->migrateScreenAssignmentsFromVirtual(physId);
-        QCOMPARE(m_service->screenAssignments().value(windowId), physId);
+        QCOMPARE(m_service->screenForWindow(windowId), physId);
         QVERIFY(m_service->isWindowSnapped(windowId));
 
         // PhosphorZones::Zone assignment is preserved throughout migration
@@ -194,7 +188,27 @@ private Q_SLOTS:
         // Migrate the Dell screen — should not touch the LG window
         m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, nullptr);
 
-        QCOMPARE(m_service->screenAssignments().value(windowId), otherPhysId);
+        QCOMPARE(m_service->screenForWindow(windowId), otherPhysId);
+    }
+
+    void testMigrateFromVirtual_migratesPreFloatScreen()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+
+        // Snap on a virtual screen, then float: unsnapForFloat records the
+        // pre-float zone AND screen (vs0) in the owning store.
+        const QString windowId = QStringLiteral("konsole|prefloat");
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
+        m_service->unsnapForFloat(windowId);
+        QCOMPARE(m_service->preFloatScreen(windowId), vs0);
+
+        // Removing the virtual config must fold the pre-float screen back to
+        // the physical id, or a later unfloat would target a dead virtual
+        // screen and restore to the wrong geometry.
+        m_service->migrateScreenAssignmentsFromVirtual(physId);
+
+        QCOMPARE(m_service->preFloatScreen(windowId), physId);
     }
 
     void testMigrateFromVirtual_noVirtualWindows_noop()
@@ -208,7 +222,7 @@ private Q_SLOTS:
         // Migrate from virtual — no virtual IDs to convert, window stays on physId
         m_service->migrateScreenAssignmentsFromVirtual(physId);
 
-        QCOMPARE(m_service->screenAssignments().value(windowId), physId);
+        QCOMPARE(m_service->screenForWindow(windowId), physId);
     }
 
     // =====================================================================
@@ -226,7 +240,7 @@ private Q_SLOTS:
         // Window initially on vs:0 (left half)
         const QString windowId = QStringLiteral("konsole|cross-boundary");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
-        QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
+        QCOMPARE(m_service->screenForWindow(windowId), vs0);
         QVERIFY(m_service->isWindowSnapped(windowId));
 
         // Simulate the window moving to vs:1 (right half) by reassigning
@@ -235,7 +249,7 @@ private Q_SLOTS:
         m_service->assignWindowToZone(windowId, m_zoneIds[1], vs1, 1);
 
         // Verify the WTS detects the screen change and updates the assignment
-        QCOMPARE(m_service->screenAssignments().value(windowId), vs1);
+        QCOMPARE(m_service->screenForWindow(windowId), vs1);
         QCOMPARE(m_service->zonesForWindow(windowId).first(), m_zoneIds[1]);
         QVERIFY(m_service->isWindowSnapped(windowId));
     }
@@ -267,7 +281,7 @@ private Q_SLOTS:
         const QString windowId = QStringLiteral("konsole|config-change");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
 
-        QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
+        QCOMPARE(m_service->screenForWindow(windowId), vs0);
         QVERIFY(m_service->isWindowSnapped(windowId));
 
         // Simulate "time passes, boundary shifts" — no migration API called.
@@ -276,12 +290,12 @@ private Q_SLOTS:
         m_service->assignWindowToZone(windowId2, m_zoneIds[1], vs1, 1);
 
         // Original window must still be on vs:0 with its zone intact
-        QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
+        QCOMPARE(m_service->screenForWindow(windowId), vs0);
         QCOMPARE(m_service->zonesForWindow(windowId).first(), m_zoneIds[0]);
         QVERIFY(m_service->isWindowSnapped(windowId));
 
         // Second window must be on vs:1
-        QCOMPARE(m_service->screenAssignments().value(windowId2), vs1);
+        QCOMPARE(m_service->screenForWindow(windowId2), vs1);
         QCOMPARE(m_service->zonesForWindow(windowId2).first(), m_zoneIds[1]);
     }
 
@@ -304,17 +318,17 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win3, m_zoneIds[2], vs0, 1);
 
         // Verify starting state: all on virtual screens
-        QCOMPARE(m_service->screenAssignments().value(win1), vs0);
-        QCOMPARE(m_service->screenAssignments().value(win2), vs1);
-        QCOMPARE(m_service->screenAssignments().value(win3), vs0);
+        QCOMPARE(m_service->screenForWindow(win1), vs0);
+        QCOMPARE(m_service->screenForWindow(win2), vs1);
+        QCOMPARE(m_service->screenForWindow(win3), vs0);
 
         // Remove all virtual screen config (revert to physical-only)
         m_service->migrateScreenAssignmentsFromVirtual(physId);
 
         // All tracked windows should transition to the physical screen ID
-        QCOMPARE(m_service->screenAssignments().value(win1), physId);
-        QCOMPARE(m_service->screenAssignments().value(win2), physId);
-        QCOMPARE(m_service->screenAssignments().value(win3), physId);
+        QCOMPARE(m_service->screenForWindow(win1), physId);
+        QCOMPARE(m_service->screenForWindow(win2), physId);
+        QCOMPARE(m_service->screenForWindow(win3), physId);
 
         // PhosphorZones::Zone assignments should be preserved
         QVERIFY(m_service->isWindowSnapped(win1));
@@ -346,10 +360,10 @@ private Q_SLOTS:
         m_service->migrateScreenAssignmentsFromVirtual(physId1);
 
         // physId1 windows should revert to physical
-        QCOMPARE(m_service->screenAssignments().value(win1), physId1);
-        QCOMPARE(m_service->screenAssignments().value(win2), physId1);
+        QCOMPARE(m_service->screenForWindow(win1), physId1);
+        QCOMPARE(m_service->screenForWindow(win2), physId1);
         // physId2 window should remain on its virtual screen
-        QCOMPARE(m_service->screenAssignments().value(win3), vs2_0);
+        QCOMPARE(m_service->screenForWindow(win3), vs2_0);
     }
 
     // =====================================================================
@@ -373,8 +387,8 @@ private Q_SLOTS:
         // Migrate only physId1 from virtual
         m_service->migrateScreenAssignmentsFromVirtual(physId1);
 
-        QCOMPARE(m_service->screenAssignments().value(win1), physId1);
-        QCOMPARE(m_service->screenAssignments().value(win2), vs2_0);
+        QCOMPARE(m_service->screenForWindow(win1), physId1);
+        QCOMPARE(m_service->screenForWindow(win2), vs2_0);
     }
 
     // =====================================================================
@@ -389,7 +403,7 @@ private Q_SLOTS:
 
         m_service->migrateScreenAssignmentsToVirtual(physId, {}, nullptr);
 
-        QCOMPARE(m_service->screenAssignments().value(windowId), physId);
+        QCOMPARE(m_service->screenForWindow(windowId), physId);
     }
 
     // =====================================================================
@@ -440,7 +454,6 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    StubSettingsMigration* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;

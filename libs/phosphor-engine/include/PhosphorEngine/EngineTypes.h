@@ -111,7 +111,10 @@ struct SnapResult
 
     static SnapResult noSnap()
     {
-        return SnapResult{false, QRect(), QString(), QStringList(), QString()};
+        // Value-initialize so every field takes its in-class default; a
+        // positional initializer here would silently stop covering fields
+        // added to the struct later.
+        return SnapResult{};
     }
 };
 
@@ -125,12 +128,18 @@ struct UnfloatResult
 
 struct ZoneAssignmentEntry
 {
-    QString windowId{};
-    QString sourceZoneId{};
-    QString targetZoneId{};
-    QStringList targetZoneIds{};
-    QRect targetGeometry{};
-    QString targetScreenId{};
+    QString windowId;
+    QString sourceZoneId;
+    QString targetZoneId;
+    QStringList targetZoneIds;
+    QRect targetGeometry;
+    QString targetScreenId;
+    /// Virtual desktop to record the assignment on (1-based). 0 means "the
+    /// window's current desktop" — the historical behaviour. Resnap producers
+    /// stamp the window's recorded desktop here so a batch commit preserves it
+    /// instead of re-stamping whatever desktop is currently active (which
+    /// corrupts off-desktop windows caught in a cross-desktop batch).
+    int virtualDesktop = 0;
 };
 
 enum class StickyWindowHandling {

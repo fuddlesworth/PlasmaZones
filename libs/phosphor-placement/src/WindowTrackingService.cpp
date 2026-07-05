@@ -210,8 +210,8 @@ QStringList WindowTrackingService::zonesForWindow(const QString& windowId) const
 QString WindowTrackingService::screenForWindow(const QString& windowId) const
 {
     // Delegates to the owning SnapState, which canonicalizes the id — the
-    // canonicalizing point accessor external callers use instead of
-    // screenAssignments().value().
+    // canonicalizing point accessor external callers use instead of a raw
+    // flat-map lookup.
     const PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId);
     return snapState ? snapState->screenForWindow(windowId) : QString();
 }
@@ -224,8 +224,8 @@ QString WindowTrackingService::screenForWindow(const QString& windowId, const QS
     }
     // Return defaultScreen when the window has no usable (non-empty) screen
     // assignment. Callers (snap commit / unfloat) always record a real screen, so
-    // in practice this matches the old screenAssignments().value(windowId,
-    // defaultScreen) idiom while also canonicalizing the id (issue #628).
+    // in practice this matches a with-default map lookup while also
+    // canonicalizing the id (issue #628).
     const QString screen = snapState->screenForWindow(windowId);
     return screen.isEmpty() ? defaultScreen : screen;
 }
@@ -773,21 +773,21 @@ bool WindowTrackingService::isWindowSticky(const QString& rawWindowId) const
 // Out-of-line accessors delegating to SnapState
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const QHash<QString, QStringList>& WindowTrackingService::zoneAssignments() const
+void WindowTrackingService::forEachZoneAssignedWindow(
+    const std::function<void(const QString&, const QStringList&, const QString&, int)>& fn) const
 {
     Q_ASSERT(hasSnapState());
-    // Materialise the union of every store's zone map. Each window lives in exactly
-    // one store, so there are no key collisions and the result equals the former
-    // single store's flat map. The reference stays valid until the next call to
-    // THIS getter (the mutable cache is per-field).
-    m_aggZoneAssignments.clear();
+    if (!hasSnapState()) {
+        return;
+    }
     for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        const QHash<QString, QStringList>& src = state->zoneAssignments();
-        for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
-            m_aggZoneAssignments.insert(it.key(), it.value());
+        const QHash<QString, QStringList>& zones = state->zoneAssignments();
+        const QHash<QString, QString>& screens = state->screenAssignments();
+        const QHash<QString, int>& desktops = state->desktopAssignments();
+        for (auto it = zones.constBegin(); it != zones.constEnd(); ++it) {
+            fn(it.key(), it.value(), screens.value(it.key()), desktops.value(it.key(), 0));
         }
     }
-    return m_aggZoneAssignments;
 }
 
 QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) const
@@ -813,32 +813,6 @@ QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) co
         }
     }
     return {};
-}
-
-const QHash<QString, QString>& WindowTrackingService::screenAssignments() const
-{
-    Q_ASSERT(hasSnapState());
-    m_aggScreenAssignments.clear();
-    for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        const QHash<QString, QString>& src = state->screenAssignments();
-        for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
-            m_aggScreenAssignments.insert(it.key(), it.value());
-        }
-    }
-    return m_aggScreenAssignments;
-}
-
-const QHash<QString, int>& WindowTrackingService::desktopAssignments() const
-{
-    Q_ASSERT(hasSnapState());
-    m_aggDesktopAssignments.clear();
-    for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        const QHash<QString, int>& src = state->desktopAssignments();
-        for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
-            m_aggDesktopAssignments.insert(it.key(), it.value());
-        }
-    }
-    return m_aggDesktopAssignments;
 }
 
 bool WindowTrackingService::clearGlobalLastUsedIfRemoved(const QStringList& removedZones,
@@ -940,72 +914,6 @@ void WindowTrackingService::setUserSnappedClasses(const QSet<QString>& classes)
         return;
     }
     globals->setUserSnappedClasses(classes);
-}
-
-const QHash<QString, QStringList>& WindowTrackingService::preFloatZoneAssignments() const
-{
-    m_aggPreFloatZoneAssignments.clear();
-    for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        const QHash<QString, QStringList>& src = state->preFloatZoneAssignments();
-        for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
-            m_aggPreFloatZoneAssignments.insert(it.key(), it.value());
-        }
-    }
-    return m_aggPreFloatZoneAssignments;
-}
-
-const QHash<QString, QString>& WindowTrackingService::preFloatScreenAssignments() const
-{
-    m_aggPreFloatScreenAssignments.clear();
-    for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        const QHash<QString, QString>& src = state->preFloatScreenAssignments();
-        for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
-            m_aggPreFloatScreenAssignments.insert(it.key(), it.value());
-        }
-    }
-    return m_aggPreFloatScreenAssignments;
-}
-
-void WindowTrackingService::setPreFloatZoneAssignments(const QHash<QString, QStringList>& assignments)
-{
-    if (!hasSnapState()) {
-        qCWarning(lcPlacement) << "setPreFloatZoneAssignments: no SnapState — dropping" << assignments.size()
-                               << "entries";
-        return;
-    }
-    // Distribute each entry to the store that owns the window; entries with no
-    // owning store (appId aliases with no live window) fall to the global holder.
-    QHash<PhosphorSnapEngine::SnapState*, QHash<QString, QStringList>> perState;
-    for (auto it = assignments.constBegin(); it != assignments.constEnd(); ++it) {
-        PhosphorSnapEngine::SnapState* owner = snapForWindow(it.key());
-        if (!owner) {
-            owner = snapGlobals();
-        }
-        perState[owner].insert(it.key(), it.value());
-    }
-    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        state->setPreFloatZoneAssignments(perState.value(state));
-    }
-}
-
-void WindowTrackingService::setPreFloatScreenAssignments(const QHash<QString, QString>& assignments)
-{
-    if (!hasSnapState()) {
-        qCWarning(lcPlacement) << "setPreFloatScreenAssignments: no SnapState — dropping" << assignments.size()
-                               << "entries";
-        return;
-    }
-    QHash<PhosphorSnapEngine::SnapState*, QHash<QString, QString>> perState;
-    for (auto it = assignments.constBegin(); it != assignments.constEnd(); ++it) {
-        PhosphorSnapEngine::SnapState* owner = snapForWindow(it.key());
-        if (!owner) {
-            owner = snapGlobals();
-        }
-        perState[owner].insert(it.key(), it.value());
-    }
-    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        state->setPreFloatScreenAssignments(perState.value(state));
-    }
 }
 
 QRect WindowTrackingService::resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
