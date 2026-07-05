@@ -384,6 +384,48 @@ private Q_SLOTS:
         QFAIL("window missing from resnap entries");
     }
 
+    // Producer-level twin of the rotation targetScreenId assertion: the
+    // previous-layout resnap producer stamps each entry's authoritative
+    // target screen so the commit side never re-derives it from geometry.
+    void testResnapFromPreviousLayout_stampsTargetScreen()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        const QString win = QStringLiteral("app1|111");
+        m_service->assignWindowToZone(win, m_zoneIds[0], screen, 1);
+
+        PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(newLayout);
+        m_layoutManager->setActiveLayout(newLayout);
+        const QString newLayoutId = newLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([newLayoutId]() {
+            return newLayoutId;
+        });
+        m_service->onLayoutChanged();
+
+        const QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
+        QVERIFY(!resnap.isEmpty());
+        for (const ZoneAssignmentEntry& e : resnap) {
+            QCOMPARE(e.targetScreenId, screen);
+        }
+    }
+
+    // Same stamp assertion for the current-assignments producer (gap reflow,
+    // VS reconfigure).
+    void testCalculateResnapFromCurrentAssignments_stampsTargetScreen()
+    {
+        const QString screen = QStringLiteral("DP-1");
+        const QString win = QStringLiteral("app1|111");
+        m_service->assignWindowToZone(win, m_zoneIds[0], screen, 1);
+
+        const QVector<ZoneAssignmentEntry> entries = m_engine->calculateResnapFromCurrentAssignments(QString());
+        if (entries.isEmpty()) {
+            QSKIP("resnap produced no geometry in headless harness — screen unavailable");
+        }
+        for (const ZoneAssignmentEntry& e : entries) {
+            QCOMPARE(e.targetScreenId, screen);
+        }
+    }
+
     // Regression (#layout-leak): applyBatchAssignments must commit on the
     // entry's desktop. Dropping it re-stamped off-desktop windows onto the
     // current desktop, making the cross-desktop resnap corruption durable.

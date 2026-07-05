@@ -154,7 +154,8 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
         return {};
     }
 
-    // Build zone UUID → zone number lookup (both formats for robustness)
+    // Build zone UUID → zone number lookup (braced-string keys, matching the
+    // braced zone ids the assignments store)
     const QVector<PhosphorZones::Zone*> zones = layout->zones();
     QHash<QString, int> zoneNumberMap;
     for (PhosphorZones::Zone* zone : zones) {

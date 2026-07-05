@@ -2314,7 +2314,7 @@ void Daemon::stop()
     // teardown contract grep-discoverable and survives that refactor.
     // `m_snapEngine` is base-typed `PlacementEngineBase*`; the setter
     // lives on the concrete `SnapEngine`. qobject_cast mirrors the
-    // narrowing in the autotile-toggle branch above (~ line 893).
+    // narrowing in the settingsChanged autotile-disabled branch above.
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         concreteSnap->setExcludeRuleSet(nullptr);
     }
