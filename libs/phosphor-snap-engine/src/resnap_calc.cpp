@@ -570,6 +570,11 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
                 entry.sourceZoneId = sourceZone->id().toString();
                 entry.targetZoneId = targetZone->id().toString();
                 entry.targetGeometry = geo;
+                // Stamp the authoritative target screen so the receive side
+                // skips the racy geometry.center() re-derivation — symmetric
+                // with the stamps in calculateResnapFromPreviousLayout and
+                // calculateResnapFromCurrentAssignments.
+                entry.targetScreenId = screenId;
                 // Preserve each window's recorded desktop (captured from its
                 // owning store at collection time) through the commit: sticky
                 // windows (desktop 0) and windows on a screen whose current

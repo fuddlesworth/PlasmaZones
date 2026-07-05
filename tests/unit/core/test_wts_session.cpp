@@ -490,6 +490,10 @@ private Q_SLOTS:
         QSet<QString> ids;
         for (const ZoneAssignmentEntry& e : cw) {
             ids.insert(e.windowId);
+            // Rotation stamps the authoritative target screen, like the two
+            // resnap producers, so the commit side never re-derives it from
+            // the geometry center.
+            QCOMPARE(e.targetScreenId, screen);
         }
         QVERIFY2(ids.contains(winDesk2), "the window on DP-1's current desktop must rotate");
         QVERIFY2(ids.contains(winSticky), "sticky (desktop 0) windows rotate regardless of the filter");
