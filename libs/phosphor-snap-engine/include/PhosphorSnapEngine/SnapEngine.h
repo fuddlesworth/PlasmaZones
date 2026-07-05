@@ -661,8 +661,9 @@ public:
 
     /// @p virtualDesktop pins the assignment to a specific 1-based desktop; 0
     /// (default) records it on the window's current desktop. Non-zero is used by
-    /// the RouteToDesktop placement path so the zone assignment is tracked on the
-    /// desktop the window is being moved to.
+    /// the RouteToDesktop placement path (track the assignment on the destination
+    /// desktop) and by batch resnap entries that preserve a window's recorded
+    /// desktop through the commit (see ZoneAssignmentEntry::virtualDesktop).
     void commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId,
                     PhosphorEngine::SnapIntent intent = PhosphorEngine::SnapIntent::UserInitiated,
                     int virtualDesktop = 0);

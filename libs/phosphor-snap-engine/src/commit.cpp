@@ -41,10 +41,13 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
         }
     }
 
-    // A RouteToDesktop placement pins the assignment to its destination desktop
-    // (virtualDesktop >= 1); every other commit path records on the window's
-    // current desktop. Tracking the right desktop keeps zone occupancy, snap-assist,
-    // and empty-zone detection correct on both the source and destination desktops.
+    // A pinned desktop (virtualDesktop >= 1) is preserved as-is: RouteToDesktop
+    // placements pin their destination desktop, and resnap batch entries pin each
+    // window's recorded desktop (ZoneAssignmentEntry::virtualDesktop) so a
+    // cross-desktop batch never re-stamps an off-desktop window. Unpinned (0)
+    // commits record on the window's current desktop. Tracking the right desktop
+    // keeps zone occupancy, snap-assist, and empty-zone detection correct on both
+    // the source and destination desktops.
     const int assignmentDesktop = virtualDesktop >= 1 ? virtualDesktop : currentVirtualDesktopForScreen(screenId);
     if (zoneIds.size() > 1) {
         m_windowTracker->assignWindowToZones(windowId, zoneIds, screenId, assignmentDesktop);
