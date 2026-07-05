@@ -4,7 +4,7 @@
     "description": "A soft coloured shadow that hugs the surface's edge, brightest against the window and fading out over the glow size. It follows the frame's rounded corners and dims when the surface loses focus.",
     "author": "PlasmaZones",
     "version": "1.1",
-    "category": "Glow",
+    "category": "Ambience",
     "fragmentShader": "effect.frag",
     "paddingParam": "glowSize",
     "parameters": [

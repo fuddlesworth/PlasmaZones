@@ -4,7 +4,7 @@
     "description": "A handful of soft glowing sparks drifting around the window in the clear margin outside its frame, each blinking on its own rhythm. The swarm dims when the surface loses focus. Count, spark size, drift range, drift speed and the two spark colours are this pack's own parameters.",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Glow",
+    "category": "Ambience",
     "animated": true,
     "fragmentShader": "effect.frag",
     "paddingParam": "flyRange",
