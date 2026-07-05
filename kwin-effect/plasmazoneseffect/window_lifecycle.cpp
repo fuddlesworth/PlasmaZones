@@ -363,8 +363,21 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // Clean up caches AFTER all consumers that call getWindowId(w).
     // The windowDeleted handler does final cleanup, but removing here
     // prevents re-insertion by any late calls.
-    m_windowIdCache.remove(w);
-    m_windowIdReverse.remove(closedWindowId);
+    //
+    // EXCEPT while a close transition is in flight: the border /
+    // multipass-composite entries kept alive above are keyed by the FROZEN
+    // windowId, and every close-frame fold lookup re-derives its key via
+    // getWindowId(w). Scrubbing the cache here would make that re-derive
+    // recompute from the now-Deleted window (empty window() / mutated
+    // class), yielding a different or empty id — every lookup misses, the
+    // fold never binds uSurfaceLayer, and the decoration vanishes at close
+    // frame 1 even though its entries were deliberately preserved. Keep the
+    // frozen mapping for the animation's lifetime; endShaderTransition and
+    // the windowDeleted backstop both re-scrub on teardown.
+    if (!m_shaderManager.hasTransition(w)) {
+        m_windowIdCache.remove(w);
+        m_windowIdReverse.remove(closedWindowId);
+    }
     m_trackedScreenPerWindow.remove(w);
     m_restoreSuppress.remove(w);
     // Drop any pending-but-not-yet-flushed frame geometry for the
