@@ -10,15 +10,15 @@ import org.plasmazones.common as PZCommon
 /**
  * @brief Ordered editor for a chain of decoration shader packs.
  *
- * Renders the chain as an ordered list of pack rows. Each row shows the
- * pack's display name, reorder up/down arrows, and a remove (x) button.
- * Directly beneath each row, a ShaderParamsEditor is shown inline
- * (whenever the pack declares parameters) bound to that pack's parameter
- * schema + the surface's per-pack parameter overrides — mirroring the
- * always-visible shader editor in AnimationProfileEditor, so the per-pack
- * settings (e.g. the Border pack's width / radius / colours) are editable
- * in place rather than hidden behind an expander. An "Add" combo at the
- * bottom appends a pack not already in the chain.
+ * Renders the chain as an ordered list of expandable pack rows. A
+ * collapsed row shows the enable switch, the pack's display name, a
+ * ONE-LINE elided description teaser, and a remove (x) button. Expanding
+ * a row reveals the FULL wrapped description (pack descriptions run to
+ * several sentences, and the collapsed header cannot afford more than a
+ * line) followed by a ShaderParamsEditor bound to that pack's parameter
+ * schema + the surface's per-pack parameter overrides. Rows expand even
+ * for param-less packs so the description is always reachable. An "Add"
+ * combo at the bottom appends a pack not already in the chain.
  *
  * Pure props-and-signals — the component owns no persistence. The host
  * (DecorationSurfaceCard) feeds:
@@ -160,8 +160,13 @@ ColumnLayout {
             readonly property string _description: (packDelegate._effect && packDelegate._effect.description) ? packDelegate._effect.description : ""
             readonly property bool _hasParams: packDelegate._schema.length > 0
 
-            expandable: packDelegate._hasParams
-            expansionContent: packDelegate._hasParams ? paramsComponent : null
+            // Expandable whenever there is anything to reveal: the parameter
+            // editor OR the full pack description. Pack descriptions run to
+            // several sentences and the collapsed header can only afford one
+            // elided line, so the expansion is where the full text lives —
+            // param-less packs stay expandable for exactly that reason.
+            expandable: packDelegate._hasParams || packDelegate._description.length > 0
+            expansionContent: (packDelegate._hasParams || packDelegate._description.length > 0) ? expansionComponent : null
 
             readonly property bool _layerEnabled: root._isLayerEnabled(packDelegate.packId)
 
@@ -192,9 +197,13 @@ ColumnLayout {
                     elide: Text.ElideRight
                 }
 
+                // One-line teaser while collapsed; hidden when expanded — the
+                // expansion body shows the FULL wrapped description instead,
+                // so the text never appears twice and never truncates where
+                // the user cannot recover it.
                 Label {
                     Layout.fillWidth: true
-                    visible: packDelegate._description.length > 0
+                    visible: packDelegate._description.length > 0 && !packDelegate.expanded
                     text: packDelegate._description
                     opacity: packDelegate._layerEnabled ? 0.7 : 0.4
                     elide: Text.ElideRight
@@ -213,32 +222,48 @@ ColumnLayout {
             }
 
             ExpandChevron {
-                visible: packDelegate._hasParams
+                visible: packDelegate.expandable
                 expanded: packDelegate.expanded
             }
 
-            // Lazily-loaded parameter editor, hosted by the shell's expansion
-            // Loader. Reuses the shared ShaderParamsEditor — the same editor +
-            // colour dialog + lock / randomize host the animation profile
-            // editor and App-Rules action row use — so behaviour is identical
-            // everywhere.
+            // Lazily-loaded expansion, hosted by the shell's Loader: the
+            // FULL wrapped pack description (the header shows only a one-line
+            // elided teaser while collapsed), then the parameter editor when
+            // the pack declares parameters. The editor reuses the shared
+            // ShaderParamsEditor — the same editor + colour dialog + lock /
+            // randomize host the animation profile editor and App-Rules
+            // action row use — so behaviour is identical everywhere.
             Component {
-                id: paramsComponent
+                id: expansionComponent
 
-                PZCommon.ShaderParamsEditor {
-                    compact: true
-                    enableGroups: true
-                    enableLocking: true
-                    enableRandomize: true
-                    enableImage: false
-                    parameters: packDelegate._schema
-                    currentValues: packDelegate._values
-                    effectId: packDelegate.packId
-                    onValueChanged: function (effectId, paramId, value) {
-                        root.paramChangeRequested(effectId, paramId, value);
+                ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        Layout.fillWidth: true
+                        visible: packDelegate._description.length > 0
+                        text: packDelegate._description
+                        wrapMode: Text.WordWrap
+                        opacity: packDelegate._layerEnabled ? 0.7 : 0.4
                     }
-                    onRandomizeRequested: function (rolled) {
-                        root.paramsRandomizeRequested(packDelegate.packId, rolled);
+
+                    PZCommon.ShaderParamsEditor {
+                        Layout.fillWidth: true
+                        visible: packDelegate._hasParams
+                        compact: true
+                        enableGroups: true
+                        enableLocking: true
+                        enableRandomize: true
+                        enableImage: false
+                        parameters: packDelegate._schema
+                        currentValues: packDelegate._values
+                        effectId: packDelegate.packId
+                        onValueChanged: function (effectId, paramId, value) {
+                            root.paramChangeRequested(effectId, paramId, value);
+                        }
+                        onRandomizeRequested: function (rolled) {
+                            root.paramsRandomizeRequested(packDelegate.packId, rolled);
+                        }
                     }
                 }
             }
