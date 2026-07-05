@@ -10,6 +10,7 @@
 #include <QStringList>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <optional>
 
 namespace PhosphorSurfaceShaders {
@@ -53,6 +54,14 @@ public:
     /// inherit. Engaged-but-empty map = explicitly use all defaults.
     std::optional<QVariantMap> parameters;
 
+    /// Pack ids from `chain` that are toggled OFF (the per-layer disable
+    /// toggle — same semantics as a rule's `enabled` flag, inverted so an
+    /// absent field means "everything on"). A disabled pack stays in the
+    /// chain with its parameters intact; only `enabledChain()` filters it,
+    /// so re-enabling restores the exact prior look. `std::nullopt` =
+    /// inherit. Engaged-but-empty list = explicitly nothing disabled.
+    std::optional<QStringList> disabledPacks;
+
     // ─────── Effective getters ───────
 
     QStringList effectiveChain() const
@@ -63,6 +72,26 @@ public:
     {
         return parameters.value_or(QVariantMap());
     }
+    QStringList effectiveDisabledPacks() const
+    {
+        return disabledPacks.value_or(QStringList());
+    }
+
+    /// The chain the RENDERERS consume: `effectiveChain()` minus the disabled
+    /// packs. Edit-facing consumers (the settings chain editor) keep reading
+    /// `effectiveChain()` so a disabled layer still shows in the list.
+    QStringList enabledChain() const
+    {
+        QStringList out = effectiveChain();
+        if (disabledPacks && !disabledPacks->isEmpty()) {
+            out.erase(std::remove_if(out.begin(), out.end(),
+                                     [this](const QString& id) {
+                                         return disabledPacks->contains(id);
+                                     }),
+                      out.end());
+        }
+        return out;
+    }
 
     DecorationProfile withDefaults() const;
 
@@ -70,6 +99,7 @@ public:
 
     static constexpr auto JsonFieldChain = "chain";
     static constexpr auto JsonFieldParameters = "parameters";
+    static constexpr auto JsonFieldDisabledPacks = "disabledPacks";
 
     QJsonObject toJson() const;
     static DecorationProfile fromJson(const QJsonObject& obj);

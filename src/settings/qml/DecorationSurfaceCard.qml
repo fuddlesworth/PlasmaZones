@@ -57,6 +57,7 @@ Item {
     // resolved chain (so the user previews "what they'd start from").
     property var _chain: []
     property var _params: ({})
+    property var _disabledPacks: []
     property string _parentChainText: ""
     // Parent-node only: count of descendant surfaces with their own override
     // that shadow this node, driving the "Clear shadowing children" warning.
@@ -80,6 +81,7 @@ Item {
         root._raw = root.bridge.rawProfile(root.surfacePath);
         root._chain = root.bridge.chainAt(root.surfacePath);
         root._params = (root._raw && root._raw.parameters) ? root._raw.parameters : ({});
+        root._disabledPacks = root.bridge.disabledPacksAt(root.surfacePath);
         root._parentChainText = root._computeParentChainText();
         root._shadowingChildrenCount = root.bridge.overrideDescendantCount(root.surfacePath);
     }
@@ -225,9 +227,14 @@ Item {
                     availableShaders: root._effects
                     chain: root._chain
                     packParameters: root._params
+                    disabledPacks: root._disabledPacks
                     onChainChangeRequested: function (newChain) {
                         if (root.bridge)
                             root.bridge.setChain(root.surfacePath, newChain);
+                    }
+                    onLayerEnabledChangeRequested: function (packId, enabled) {
+                        if (root.bridge)
+                            root.bridge.setChainLayerEnabled(root.surfacePath, packId, enabled);
                     }
                     onParamChangeRequested: function (packId, paramId, value) {
                         if (root.bridge)

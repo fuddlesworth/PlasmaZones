@@ -146,6 +146,18 @@ public:
     /// tree write instead of one per parameter. For "" edits the baseline.
     Q_INVOKABLE void setChainParams(const QString& path, const QString& packId, const QVariantMap& params);
 
+    /// The effective (resolved) set of chain packs toggled OFF at @p path.
+    /// Pairs with chainAt(): the editor renders every declared pack and
+    /// greys the ones listed here; the renderers exclude them.
+    Q_INVOKABLE QStringList disabledPacksAt(const QString& path) const;
+
+    /// Toggle one chain layer on/off at @p path without touching the chain
+    /// order or the pack's parameters — the per-layer counterpart of a
+    /// rule's setRuleEnabled. First direct edit at @p path seeds the set
+    /// from the resolved (inherited) value, mirroring how the override
+    /// editor seeds the chain. For "" edits the baseline.
+    Q_INVOKABLE void setChainLayerEnabled(const QString& path, const QString& packId, bool enabled);
+
     // ── Whole-override mutator ─────────────────────────────────────────────
 
     /// Drop the entire per-surface override at @p path so the surface

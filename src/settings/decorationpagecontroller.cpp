@@ -182,6 +182,47 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
         }
         profile.parameters = params;
     }
+    // Same pruning for the per-layer disable set: a removed pack's toggle
+    // state dies with it, so re-adding starts enabled (the default).
+    if (profile.disabledPacks) {
+        QStringList disabled = *profile.disabledPacks;
+        disabled.erase(std::remove_if(disabled.begin(), disabled.end(),
+                                      [&chain](const QString& id) {
+                                          return !chain.contains(id);
+                                      }),
+                       disabled.end());
+        profile.disabledPacks = disabled;
+    }
+    writeDirectProfile(m_settings, tree, path, profile);
+}
+
+QStringList DecorationPageController::disabledPacksAt(const QString& path) const
+{
+    return readTree(m_settings).resolve(path).effectiveDisabledPacks();
+}
+
+void DecorationPageController::setChainLayerEnabled(const QString& path, const QString& packId, bool enabled)
+{
+    if (!m_settings || packId.isEmpty())
+        return;
+    if (!path.isEmpty() && !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
+        return;
+    DecorationProfileTree tree = readTree(m_settings);
+    DecorationProfile profile = directProfileAt(tree, path);
+    // First direct edit at this path: seed from the RESOLVED value so the
+    // toggle diverges from what the user was previewing instead of silently
+    // re-enabling every inherited-off layer (mirrors _engageOverride's
+    // chain/params seeding in DecorationSurfaceCard).
+    QStringList disabled = profile.disabledPacks ? *profile.disabledPacks : tree.resolve(path).effectiveDisabledPacks();
+    const bool currentlyDisabled = disabled.contains(packId);
+    if (enabled == !currentlyDisabled) {
+        return; // already in the requested state — avoid a no-op tree write
+    }
+    if (enabled)
+        disabled.removeAll(packId);
+    else
+        disabled.append(packId);
+    profile.disabledPacks = disabled;
     writeDirectProfile(m_settings, tree, path, profile);
 }
 

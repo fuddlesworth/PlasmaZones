@@ -63,6 +63,44 @@ private Q_SLOTS:
         QVERIFY(restored.directOverride(QStringLiteral("window.tiled")).chain->isEmpty());
     }
 
+    void disabledPacks_roundTrip_filter_and_inheritance()
+    {
+        // Round-trip: an engaged disabled set survives JSON; an absent field
+        // restores to nullopt (pre-toggle configs load with every pack on).
+        DecorationProfile p =
+            makeProfile(QStringList{QStringLiteral("border"), QStringLiteral("glow")}, 2.0, QStringLiteral("#112233"));
+        p.disabledPacks = QStringList{QStringLiteral("glow")};
+        const DecorationProfile restored = DecorationProfile::fromJson(p.toJson());
+        QCOMPARE(restored, p);
+        QVERIFY(restored.disabledPacks.has_value());
+
+        const DecorationProfile legacy = DecorationProfile::fromJson(
+            makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233")).toJson());
+        QVERIFY(!legacy.disabledPacks.has_value());
+        QCOMPARE(legacy.enabledChain(), QStringList{QStringLiteral("border")});
+
+        // enabledChain filters the disabled pack; effectiveChain keeps it so
+        // the editor still lists it.
+        QCOMPARE(p.enabledChain(), QStringList{QStringLiteral("border")});
+        QCOMPARE(p.effectiveChain(), (QStringList{QStringLiteral("border"), QStringLiteral("glow")}));
+
+        // Engaged-but-empty means "explicitly nothing disabled" and blocks an
+        // ancestor's disabled set through overlay, same as chain's semantics.
+        DecorationProfileTree tree;
+        tree.setBaseline(p);
+        DecorationProfile child;
+        child.disabledPacks = QStringList();
+        tree.setOverride(QStringLiteral("window"), child);
+        QCOMPARE(tree.resolve(QStringLiteral("window")).enabledChain(),
+                 (QStringList{QStringLiteral("border"), QStringLiteral("glow")}));
+
+        // A child that leaves the field unset inherits the baseline's set.
+        DecorationProfile inheriting;
+        tree.setOverride(QStringLiteral("window"), inheriting);
+        QCOMPARE(tree.resolve(QStringLiteral("window")).enabledChain(), QStringList{QStringLiteral("border")});
+        QCOMPARE(tree.resolve(QStringLiteral("window")).effectiveDisabledPacks(), QStringList{QStringLiteral("glow")});
+    }
+
     void empty_tree_serializes_to_nonempty_object()
     {
         // Load-bearing: Settings::decorationProfileTree's isEmpty() guard

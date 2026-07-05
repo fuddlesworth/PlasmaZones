@@ -41,6 +41,10 @@ ColumnLayout {
     required property var availableShaders
     required property var chain
     property var packParameters: ({})
+    // Pack ids from `chain` whose per-layer toggle is OFF. The row stays in
+    // the list (params editable, reorderable) but renders dimmed with its
+    // switch off — the same read a disabled rule row gives in the rules list.
+    property var disabledPacks: []
     // Stable empty-map identity for param-less packs: a per-evaluation `({})`
     // literal would hand the inner ShaderParamsEditor a new object identity on
     // every host refresh and churn its currentValues rebind (same hoist as
@@ -50,6 +54,12 @@ ColumnLayout {
     signal chainChangeRequested(var newChain)
     signal paramChangeRequested(string packId, string paramId, var value)
     signal paramsRandomizeRequested(string packId, var rolled)
+    signal layerEnabledChangeRequested(string packId, bool enabled)
+
+    function _isLayerEnabled(packId) {
+        var d = root.disabledPacks || [];
+        return d.indexOf(packId) === -1;
+    }
 
     function _effectFor(packId) {
         if (!root.availableShaders)
@@ -153,14 +163,32 @@ ColumnLayout {
             expandable: packDelegate._hasParams
             expansionContent: packDelegate._hasParams ? paramsComponent : null
 
+            readonly property bool _layerEnabled: root._isLayerEnabled(packDelegate.packId)
+
+            // Enable/disable toggle — LEADS the row, before the pack name,
+            // in the same position as the rule rows' switch so the two lists
+            // read identically (the shared ExpandableRowDelegate shell lets
+            // the switch consume its own clicks before row-expand).
+            SettingsSwitch {
+                Layout.alignment: Qt.AlignVCenter
+                checked: packDelegate._layerEnabled
+                accessibleName: packDelegate._layerEnabled ? i18n("Disable %1", root._displayName(packDelegate.packId)) : i18n("Enable %1", root._displayName(packDelegate.packId))
+                onToggled: function (newValue) {
+                    root.layerEnabledChangeRequested(packDelegate.packId, newValue);
+                }
+            }
+
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 0
 
+                // Disabled layers dim with the SAME per-label opacities as a
+                // disabled rule row (name 1 -> 0.5, summary 0.7 -> 0.4).
                 Label {
                     Layout.fillWidth: true
                     text: root._displayName(packDelegate.packId)
                     font.bold: true
+                    opacity: packDelegate._layerEnabled ? 1 : 0.5
                     elide: Text.ElideRight
                 }
 
@@ -168,7 +196,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     visible: packDelegate._description.length > 0
                     text: packDelegate._description
-                    opacity: 0.7
+                    opacity: packDelegate._layerEnabled ? 0.7 : 0.4
                     elide: Text.ElideRight
                 }
             }

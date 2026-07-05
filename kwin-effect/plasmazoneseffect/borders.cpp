@@ -285,10 +285,12 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
 
     // User decoration packs from the tree. The "border" id is rule-owned, so an
     // explicit user "border" entry is dropped here (the rule path owns it).
+    // enabledChain(): packs the user toggled off stay in the profile but must
+    // not render, exactly like a disabled rule is skipped by the evaluator.
     QStringList userPacks;
     const QString surfacePath = resolveSurfacePathFor(windowId);
     const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = m_decorationTree.resolve(surfacePath);
-    const QStringList treeChain = resolvedProfile.effectiveChain();
+    const QStringList treeChain = resolvedProfile.enabledChain();
     for (const QString& pack : treeChain) {
         if (pack != QStringLiteral("border")) {
             userPacks.append(pack);
@@ -841,48 +843,6 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 }
                 glActiveTexture(GL_TEXTURE0);
             }
-        }
-    }
-    // Temporary AT-DRAW probe: for a transition window, read back what the
-    // GL program will ACTUALLY use — the live iHasSurfaceLayer value and the
-    // texture bound on the layer unit — at the last moment before KWin's
-    // draw. Push-time state has checked out repeatedly; if the flag reads 0
-    // or the unit holds a different texture HERE, something between push and
-    // draw rewrote it.
-    if (const ShaderTransition* const st = m_shaderManager.findTransition(w);
-        st && st->cached && st->cached->shader && st->cached->iHasSurfaceLayerLoc >= 0) {
-        static qint64 lastDrawProbeMs = 0;
-        const qint64 nowProbe = ShaderInternal::shaderClockNowMs();
-        if (nowProbe - lastDrawProbeMs > 300) {
-            lastDrawProbeMs = nowProbe;
-            GLint prog = 0;
-            GLint hasLayer = -7;
-            GLint layerUnitVal = -7;
-            {
-                KWin::ShaderBinder binder(st->cached->shader.get());
-                glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
-                if (prog > 0) {
-                    glGetUniformiv(prog, st->cached->iHasSurfaceLayerLoc, &hasLayer);
-                    if (st->cached->uSurfaceLayerLoc >= 0) {
-                        glGetUniformiv(prog, st->cached->uSurfaceLayerLoc, &layerUnitVal);
-                    }
-                }
-            }
-            constexpr int kSurfaceLayerUnitProbe =
-                2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
-            GLint boundTex = 0;
-            glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnitProbe);
-            glGetIntegerv(GL_TEXTURE_BINDING_2D, &boundTex);
-            glActiveTexture(GL_TEXTURE0);
-            GLuint compositeTexId = 0;
-            if (const auto pIt = m_surfaceMultipass.find(getWindowId(w)); pIt != m_surfaceMultipass.end()) {
-                if (const auto& ct = pIt->second.compositeTex[pIt->second.finalSlot]) {
-                    compositeTexId = ct->texture();
-                }
-            }
-            qCWarning(lcEffect) << "PZDBG at-draw:" << getWindowId(w).left(24) << "prog" << prog << "iHasSurfaceLayer"
-                                << hasLayer << "uSurfaceLayer unit" << layerUnitVal << "boundTexAtUnit" << boundTex
-                                << "compositeTexId" << compositeTexId;
         }
     }
     KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
