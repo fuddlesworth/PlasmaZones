@@ -202,11 +202,19 @@ private Q_SLOTS:
         m_service->assignWindowToZone(window2, m_zoneIds[1], QStringLiteral("DP-1"), 0);
         m_service->setWindowFloating(window1, true);
 
+        // The floated window keeps its preserved zone assignment (for resnap
+        // on mode switch) but must not make its zone appear occupied.
         QStringList snapped = m_service->snappedWindows();
         QVERIFY(snapped.contains(window1));
         QVERIFY(snapped.contains(window2));
         QVERIFY(m_service->isWindowFloating(window1));
         QVERIFY(!m_service->isWindowFloating(window2));
+
+        const QSet<QUuid> occupied = m_service->buildOccupiedZoneSet(QStringLiteral("DP-1"));
+        const QUuid zone0 = QUuid::fromString(m_zoneIds[0]);
+        const QUuid zone1 = QUuid::fromString(m_zoneIds[1]);
+        QVERIFY2(!occupied.contains(zone0), "a floating window's zone must not appear occupied");
+        QVERIFY2(occupied.contains(zone1), "a snapped window's zone must appear occupied");
     }
 
     // Regression test for discussion #323: windows parked on other virtual

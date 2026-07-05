@@ -410,7 +410,10 @@ private Q_SLOTS:
     // P0: Daemon Restart / Pending Restore
     // =====================================================================
 
-    void testDaemonRestart_pendingRestoresAvailableEmitted()
+    // Pins the pending-restore queue round-trip across a simulated daemon
+    // restart (setter + readback); this is state persistence, not signal
+    // emission, so no QSignalSpy is involved.
+    void testDaemonRestart_pendingRestoresRoundTrip()
     {
         QString appId = QStringLiteral("firefox");
 

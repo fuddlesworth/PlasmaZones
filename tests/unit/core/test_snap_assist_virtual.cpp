@@ -251,11 +251,15 @@ private Q_SLOTS:
 
     void testGetEmptyZones_virtualScreen_returnsValidList()
     {
-        // getEmptyZones with virtual screen ID may return an empty list in
-        // headless mode (no QScreen), but whatever it returns must be
-        // structurally sound: non-empty, unique zone ids.
+        // getEmptyZones with a virtual screen ID: every returned entry must be
+        // structurally sound (non-empty, unique zone ids). Skip rather than
+        // pass vacuously when the headless harness resolves no screen geometry
+        // and the list is legitimately empty.
         QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
         const PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(vsId);
+        if (result.isEmpty()) {
+            QSKIP("getEmptyZones returned no entries in headless harness — screen geometry unavailable");
+        }
         QSet<QString> seenZoneIds;
         for (const auto& zone : result) {
             QVERIFY2(!zone.zoneId.isEmpty(), "an empty-zone entry must carry a zone id");
@@ -266,8 +270,12 @@ private Q_SLOTS:
 
     void testGetEmptyZones_emptyScreenId_returnsValidList()
     {
-        // Empty screen ID fallback: same structural invariants as above.
+        // Empty screen ID fallback: same structural invariants and skip
+        // semantics as the virtual-screen variant above.
         const PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(QString());
+        if (result.isEmpty()) {
+            QSKIP("getEmptyZones returned no entries in headless harness — screen geometry unavailable");
+        }
         QSet<QString> seenZoneIds;
         for (const auto& zone : result) {
             QVERIFY2(!zone.zoneId.isEmpty(), "an empty-zone entry must carry a zone id");
@@ -423,7 +431,7 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowSnapped(win2));
     }
 
-    void testPruneStaleAssignments_cleansFloatingAndAutotileFloated()
+    void testPruneStaleAssignments_cleansFloatingState()
     {
         QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
         QString win1 = QStringLiteral("app1|aaa");
@@ -433,12 +441,17 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
         m_service->setWindowFloating(win1, true);
 
-        // Only win2 is alive — win1 should be fully cleaned
+        // Only win2 is alive — win1's assignment AND floating state must be
+        // fully cleaned; win2 must be untouched. The return value counts
+        // pruned ITEMS across the stores, not windows: win1 contributes its
+        // zone assignment (snap store) plus its floating entry (WTS set).
         QSet<QString> alive{win2};
         int pruned = m_service->pruneStaleAssignments(alive);
 
-        QVERIFY(pruned >= 1);
+        QCOMPARE(pruned, 2);
         QVERIFY(!m_service->isWindowFloating(win1));
+        QVERIFY(!m_service->isWindowSnapped(win1));
+        QVERIFY(m_service->isWindowSnapped(win2));
     }
 
     void testScreensMatch_virtualScreenIdsAreDistinct()
