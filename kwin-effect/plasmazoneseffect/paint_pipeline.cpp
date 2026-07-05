@@ -452,24 +452,6 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 }
             }
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, animatedFrame);
-            // Temporary transition-blur diagnostic (pairs with the
-            // PZDBG transition-fold log in surfacelayers.cpp).
-            if (m_shaderManager.findTransition(w) || m_windowAnimator->hasAnimation(w)) {
-                static int capDbgCount = 0;
-                if (capDbgCount < 6) {
-                    ++capDbgCount;
-                    const auto stIt = m_surfaceMultipass.find(getWindowId(w));
-                    const ShaderTransition* const dbgSt = m_shaderManager.findTransition(w);
-                    qCWarning(lcEffect) << "PZDBG anim-capture:" << getWindowId(w).left(24) << "animatedFrame"
-                                        << animatedFrame << "rect"
-                                        << (stIt != m_surfaceMultipass.end() ? stIt->second.backdropRect : QVector4D())
-                                        << "frame" << w->frameGeometry() << "animatorRect"
-                                        << m_windowAnimator->currentValue(w, QRectF()) << "morphFrom"
-                                        << (dbgSt ? dbgSt->fromGeometry : QRectF()) << "morphTo"
-                                        << (dbgSt ? dbgSt->toGeometry : QRectF()) << "viewport"
-                                        << viewport.renderRect();
-                }
-            }
         }
     }
 
@@ -747,20 +729,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // anchorRectInTexture's split) is located WITHIN that padded
             // canvas. Unpadded windows reduce to the uTexture0 mapping.
             qreal layerPad = 0.0;
+            bool chainBakesOpacity = false;
             if (const auto lbIt = m_windowBorders.constFind(getWindowId(w)); lbIt != m_windowBorders.constEnd()) {
                 layerPad = lbIt->outerPadding;
+                chainBakesOpacity = lbIt->chainHandlesOpacity;
             }
-            // Prefer the composite's RECORDED canvas rect over recomputing
-            // from live geometry: it describes the texture that actually
-            // exists, which matters for a CLOSING (deleted) window whose
-            // frozen composite is reused while its live geometry may drift.
-            QRectF layerCanvasGeo = expandedGeo.adjusted(-layerPad, -layerPad, layerPad, layerPad);
-            if (const auto lsIt = m_surfaceMultipass.find(getWindowId(w));
-                lsIt != m_surfaceMultipass.end() && lsIt->second.canvasGeo.isValid()) {
-                layerCanvasGeo = lsIt->second.canvasGeo;
-            }
-            const QVector4D layerRectInTexture = ShaderInternal::computeTextureSubRect(
-                transition.surfaceExtent ? anchorGeo : expandedGeo, layerCanvasGeo);
             // Surface-layer stack (border / rounded corners, ...): render the
             // window's active layers into an FBO so the animation composites
             // OVER the layered surface and the border stays visible for the
@@ -771,75 +744,23 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // Null when the window has no surface layers (the common no-border
             // case), in which case surfaceColor() samples the bare uTexture0.
             KWin::GLTexture* const surfaceLayerTex = renderSurfaceChain(transition, w, viewport.scale());
-            // Temporary PIXEL diagnostic: read one texel from the composite's
-            // frame-center and one from the backdrop capture, so "no blur
-            // during animations" can be split into content-missing vs
-            // sampled-wrong. Rate-limited by time.
-            if (surfaceLayerTex && !m_windowBorders.isEmpty()) {
-                static qint64 lastPixLogMs = 0;
-                const qint64 nowPix = ShaderInternal::shaderClockNowMs();
-                const auto pixSt = m_surfaceMultipass.find(getWindowId(w));
-                if (nowPix - lastPixLogMs > 300 && pixSt != m_surfaceMultipass.end()
-                    && pixSt->second.canvasGeo.isValid()) {
-                    lastPixLogMs = nowPix;
-                    const QRectF cv = pixSt->second.canvasGeo;
-                    const QRectF fr = w->frameGeometry();
-                    // frame center in texture px (top-down capture space; the
-                    // GL texture row order matches the blit, so read the raw
-                    // coordinate both ways and log both).
-                    const qreal fx = (fr.center().x() - cv.x()) / cv.width();
-                    const qreal fy = (fr.center().y() - cv.y()) / cv.height();
-                    const int tw = surfaceLayerTex->width();
-                    const int th = surfaceLayerTex->height();
-                    const int px = qBound(0, int(fx * tw), tw - 1);
-                    const int pyTop = qBound(0, int(fy * th), th - 1);
-                    const int pyBot = th - 1 - pyTop;
-                    unsigned char comp[8] = {};
-                    {
-                        KWin::GLFramebuffer fbo(surfaceLayerTex);
-                        KWin::GLFramebuffer::pushFramebuffer(&fbo);
-                        glReadPixels(px, pyTop, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, comp);
-                        glReadPixels(px, pyBot, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, comp + 4);
-                        KWin::GLFramebuffer::popFramebuffer();
-                    }
-                    unsigned char back[4] = {};
-                    if (pixSt->second.backdropTex) {
-                        KWin::GLFramebuffer bfbo(pixSt->second.backdropTex.get());
-                        KWin::GLFramebuffer::pushFramebuffer(&bfbo);
-                        glReadPixels(qBound(0, int(fx * pixSt->second.backdropTex->width()),
-                                            pixSt->second.backdropTex->width() - 1),
-                                     qBound(0, int(fy * pixSt->second.backdropTex->height()),
-                                            pixSt->second.backdropTex->height() - 1),
-                                     1, 1, GL_RGBA, GL_UNSIGNED_BYTE, back);
-                        KWin::GLFramebuffer::popFramebuffer();
-                    }
-                    qCWarning(lcEffect) << "PZDBG pixels:" << getWindowId(w).left(24) << "compTop" << comp[0] << comp[1]
-                                        << comp[2] << comp[3] << "compBot" << comp[4] << comp[5] << comp[6] << comp[7]
-                                        << "backdrop" << back[0] << back[1] << back[2] << back[3] << "rect"
-                                        << pixSt->second.backdropRect;
-                }
+            // Prefer the composite's RECORDED canvas rect over recomputing
+            // from live geometry: it describes the texture that actually
+            // exists, which matters for a CLOSING (deleted) window whose
+            // frozen composite is reused while its live geometry may drift.
+            // Derived AFTER the fold above on purpose: the fold re-stamps
+            // canvasGeo (and may reallocate the composite at a new size), so
+            // reading it earlier would sample this frame's texture through
+            // last frame's rect on every geometry-change frame. The live-
+            // geometry fallback stays for the fold's failure paths, which can
+            // erase the multipass entry.
+            QRectF layerCanvasGeo = expandedGeo.adjusted(-layerPad, -layerPad, layerPad, layerPad);
+            if (const auto lsIt = m_surfaceMultipass.find(getWindowId(w));
+                lsIt != m_surfaceMultipass.end() && lsIt->second.canvasGeo.isValid()) {
+                layerCanvasGeo = lsIt->second.canvasGeo;
             }
-            // Temporary FAILURE diagnostic: a decorated window animating with
-            // NO layer texture is exactly the "blur vanishes during animation
-            // shaders" symptom — the shader falls back to the bare uTexture0.
-            // Rate-limited by time (NOT a per-session count, which sampled
-            // only the first frames after login and missed the failures).
-            if (!surfaceLayerTex && !m_windowBorders.isEmpty()) {
-                const auto dbgBit = m_windowBorders.constFind(getWindowId(w));
-                if (dbgBit != m_windowBorders.constEnd()) {
-                    static qint64 lastNullLogMs = 0;
-                    const qint64 nowDbg = ShaderInternal::shaderClockNowMs();
-                    if (nowDbg - lastNullLogMs > 250) {
-                        lastNullLogMs = nowDbg;
-                        const auto stDbg = m_surfaceMultipass.find(getWindowId(w));
-                        qCWarning(lcEffect)
-                            << "PZDBG layer-null:" << getWindowId(w).left(24) << "deleted" << w->isDeleted() << "cached"
-                            << (transition.cached != nullptr) << "chain" << dbgBit->chain << "shaderApplied"
-                            << dbgBit->shaderApplied << "multipassEntry" << (stDbg != m_surfaceMultipass.end())
-                            << "expandedGeo" << w->expandedGeometry();
-                    }
-                }
-            }
+            const QVector4D layerRectInTexture = ShaderInternal::computeTextureSubRect(
+                transition.surfaceExtent ? anchorGeo : expandedGeo, layerCanvasGeo);
             {
                 KWin::ShaderBinder binder(shader);
                 if (cached->iTimeLoc >= 0) {
@@ -1017,6 +938,24 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                             winOpacity = static_cast<float>(*cachedOpacity);
                         }
                     }
+                    // handlesOpacity chains (frost / glass) already baked the
+                    // rule opacity into the composite at fold time: the pack
+                    // multiplies its content sample by uSurfaceOpacity and
+                    // fills the created translucency with the blurred pane,
+                    // emitting an OPAQUE slab. Re-applying the rule here
+                    // collapses that slab back to rule alpha — GL blending
+                    // then shows the sharp live scene through the quad and
+                    // the blur is visually absent for the whole transition.
+                    // Mirror the rest path's present exemption
+                    // (surfacePresentOpacity stays 1.0 for such chains):
+                    // push 1.0 whenever the fold produced the composite the
+                    // shader samples. The bare-uTexture0 fallback keeps the
+                    // resolved value — nothing else has applied the rule
+                    // there — and the uTexture0 retarget is covered too (it
+                    // requires surfaceLayerTex).
+                    if (chainBakesOpacity && surfaceLayerTex) {
+                        winOpacity = 1.0f;
+                    }
                     shader->setUniform(cached->iWindowOpacityLoc, winOpacity);
                 }
                 if (cached->iAnchorRectInTextureLoc >= 0) {
@@ -1141,22 +1080,6 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 // window with no surface layers animates uTexture0 unchanged.
                 if (cached->iHasSurfaceLayerLoc >= 0) {
                     shader->setUniform(cached->iHasSurfaceLayerLoc, surfaceLayerTex ? 1 : 0);
-                }
-                // Temporary consumption-side diagnostic: whether THIS
-                // animation shader can even see the decorated composite.
-                // uSurfaceLayerLoc == -1 means the shader never samples
-                // uSurfaceLayer (it bypasses surfaceColor()) and the
-                // decoration cannot render during its transitions.
-                {
-                    static int layerDbgCount = 0;
-                    if (layerDbgCount < 8 && surfaceLayerTex) {
-                        ++layerDbgCount;
-                        qCWarning(lcEffect)
-                            << "PZDBG layer-consume: uSurfaceLayerLoc" << cached->uSurfaceLayerLoc
-                            << "iHasSurfaceLayerLoc" << cached->iHasSurfaceLayerLoc << "iLayerRectLoc"
-                            << cached->iLayerRectInTextureLoc << "surfaceExtent" << transition.surfaceExtent << "tex"
-                            << static_cast<const void*>(surfaceLayerTex);
-                    }
                 }
                 if (cached->iLayerRectInTextureLoc >= 0) {
                     shader->setUniform(cached->iLayerRectInTextureLoc, layerRectInTexture);
@@ -1416,6 +1339,84 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     if (!fbo.valid()) {
         transition.needsSnapshot = false;
         return;
+    }
+
+    // Seed the snapshot from the decorated REST composite when one exists.
+    // The raw capture below draws the window WITHOUT its decoration chain:
+    // the fold never runs during a capture (m_capturingSnapshot short-
+    // circuits paintWindow) and the decorated appearance lives only in the
+    // multipass composite, never in the window item itself. A morph shader
+    // cross-fades uOldWindow against the decorated live side, so a raw old
+    // side visibly strips the decoration — most glaringly the frost/blur
+    // pane — for the early part of every geometry morph. The multipass entry
+    // still holds the last rest-path fold of the OLD appearance (the
+    // deferred erase keeps it alive through a live transition); that frozen
+    // frame is exactly what the morph should carry — the same reuse the
+    // close path applies to deleted windows.
+    //
+    // Alignment: the shader samples uOldWindow through iAnchorRectInTexture,
+    // the NEW frame's sub-rect of the NEW expanded rect, while the composite
+    // canvas covers the OLD padded rect. Map frame→frame affinely (the old
+    // frame's pixels land at the new frame's sub-rect; the surrounding
+    // canvas scales along, so border strokes and glow bands just outside the
+    // frame carry over), clip the source to the canvas, and shrink the dest
+    // through the same map so the copied band lands where it belongs — the
+    // rest of the snapshot stays cleared. Both textures come out of the same
+    // RenderViewport draw path, and blitFromFramebuffer speaks top-down
+    // rects, flipping both sides against their own heights internally.
+    // Falls back to the raw capture when no composite exists (undecorated
+    // windows, or the entry was flushed before the transition began).
+    if (const auto mpIt = m_surfaceMultipass.find(getWindowId(window)); mpIt != m_surfaceMultipass.end()) {
+        const SurfaceMultipassState& mp = mpIt->second;
+        KWin::GLTexture* const comp = mp.compositeTex[mp.finalSlot].get();
+        const QRectF oldFrame = transition.fromGeometry;
+        const QRectF newFrame = window->frameGeometry();
+        if (comp && mp.canvasGeo.isValid() && !mp.canvasGeo.isEmpty() && oldFrame.width() > 0.0
+            && oldFrame.height() > 0.0 && newFrame.width() > 0.0 && newFrame.height() > 0.0) {
+            // T maps snapshot-space logical points into composite space:
+            // T(p) = oldFrame.topLeft + (p - newFrame.topLeft) ⊙ s
+            const qreal sx = oldFrame.width() / newFrame.width();
+            const qreal sy = oldFrame.height() / newFrame.height();
+            const QRectF srcLogical(oldFrame.x() + (logicalGeometry.x() - newFrame.x()) * sx,
+                                    oldFrame.y() + (logicalGeometry.y() - newFrame.y()) * sy,
+                                    logicalGeometry.width() * sx, logicalGeometry.height() * sy);
+            const QRectF srcClipped = srcLogical & mp.canvasGeo;
+            if (!srcClipped.isEmpty()) {
+                const QRectF dstLogical(newFrame.x() + (srcClipped.x() - oldFrame.x()) / sx,
+                                        newFrame.y() + (srcClipped.y() - oldFrame.y()) / sy, srcClipped.width() / sx,
+                                        srcClipped.height() / sy);
+                const qreal srcPxPerX = comp->width() / mp.canvasGeo.width();
+                const qreal srcPxPerY = comp->height() / mp.canvasGeo.height();
+                const qreal dstPxPerX = textureSize.width() / logicalGeometry.width();
+                const qreal dstPxPerY = textureSize.height() / logicalGeometry.height();
+                const QRect srcPx = QRectF((srcClipped.x() - mp.canvasGeo.x()) * srcPxPerX,
+                                           (srcClipped.y() - mp.canvasGeo.y()) * srcPxPerY,
+                                           srcClipped.width() * srcPxPerX, srcClipped.height() * srcPxPerY)
+                                        .toRect();
+                const QRect dstPx = QRectF((dstLogical.x() - logicalGeometry.x()) * dstPxPerX,
+                                           (dstLogical.y() - logicalGeometry.y()) * dstPxPerY,
+                                           dstLogical.width() * dstPxPerX, dstLogical.height() * dstPxPerY)
+                                        .toRect();
+                KWin::GLFramebuffer srcFbo(comp);
+                if (!srcPx.isEmpty() && !dstPx.isEmpty() && srcFbo.valid()) {
+                    // The clear and the blit both honour scissor, and this
+                    // runs mid scene-walk; the ScopedGlState guard above
+                    // restores the enable state.
+                    glDisable(GL_SCISSOR_TEST);
+                    KWin::GLFramebuffer::pushFramebuffer(&fbo);
+                    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                    glClear(GL_COLOR_BUFFER_BIT);
+                    KWin::GLFramebuffer::popFramebuffer();
+                    KWin::GLFramebuffer::pushFramebuffer(&srcFbo);
+                    fbo.blitFromFramebuffer(KWin::Rect(srcPx.x(), srcPx.y(), srcPx.width(), srcPx.height()),
+                                            KWin::Rect(dstPx.x(), dstPx.y(), dstPx.width(), dstPx.height()), GL_LINEAR);
+                    KWin::GLFramebuffer::popFramebuffer();
+                    transition.oldSnapshot = std::move(tex);
+                    transition.needsSnapshot = false;
+                    return;
+                }
+            }
+        }
     }
 
     // Bypass the morph shader for the raw capture, restore it afterwards.

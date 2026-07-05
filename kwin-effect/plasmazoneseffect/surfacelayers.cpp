@@ -613,22 +613,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // bind (frost's main reads the blurred buffers, not uBackdrop).
         const bool backdropAvailable = state.backdropTex && state.backdropRect.z() > 0.0f;
         const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && backdropAvailable;
-        // Temporary transition-blur diagnostic: log the first few TRANSITION
-        // folds (force = renderSurfaceChain path) so "blur vanishes during
-        // animations" can be attributed from journalctl.
-        if (force && (pk->uHasBackdropLoc >= 0 || pk->uBackdropLoc >= 0)) {
-            static int transDbgCount = 0;
-            if (transDbgCount < 6) {
-                ++transDbgCount;
-                qCWarning(lcEffect) << "PZDBG transition-fold:" << chain.at(k) << "available" << backdropAvailable
-                                    << "rect" << state.backdropRect << "bufferPasses" << pk->bufferPasses.size()
-                                    << "bufs"
-                                    << (k < static_cast<int>(state.chainBufferTex.size())
-                                            ? state.chainBufferTex[k].size()
-                                            : size_t(999))
-                                    << "canvas" << state.canvasGeo << "texSize" << state.compositeSize;
-            }
-        }
         {
             KWin::ShaderBinder binder(pk->shader.get());
             // Identity MVP so the NDC fullscreen quad from drawFullscreenQuad maps
@@ -688,50 +672,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
 
     state.finalSlot = src;
     state.lastFoldMs = ShaderInternal::shaderClockNowMs();
-    // Temporary BLUR-CONTENT diagnostic: read an 8-texel horizontal strip
-    // from the backdrop capture and from the LAST blur buffer of the first
-    // needsBackdrop pack — a working Gaussian shows the buffer strip far
-    // smoother than the backdrop strip; near-identical variance means the
-    // buffers never blurred and every pack degrades to a sharp backdrop.
-    {
-        static qint64 lastStripMs = 0;
-        const qint64 nowStrip = ShaderInternal::shaderClockNowMs();
-        if (nowStrip - lastStripMs > 1000 && state.backdropTex) {
-            for (int k = 0; k < chain.size() && k < static_cast<int>(state.chainBufferTex.size()); ++k) {
-                const auto& bufs = state.chainBufferTex[k];
-                if (bufs.empty() || !bufs.back()) {
-                    continue;
-                }
-                lastStripMs = nowStrip;
-                auto strip = [](KWin::GLTexture* tex, unsigned char* out8x4) {
-                    KWin::GLFramebuffer fbo(tex);
-                    if (!fbo.valid()) {
-                        return;
-                    }
-                    KWin::GLFramebuffer::pushFramebuffer(&fbo);
-                    const int y = tex->height() / 2;
-                    const int x0 = qMax(0, tex->width() / 2 - 16);
-                    for (int i = 0; i < 8; ++i) {
-                        glReadPixels(qMin(x0 + i * 4, tex->width() - 1), y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
-                                     out8x4 + i * 4);
-                    }
-                    KWin::GLFramebuffer::popFramebuffer();
-                };
-                unsigned char back[32] = {};
-                unsigned char blur[32] = {};
-                strip(state.backdropTex.get(), back);
-                strip(bufs.back().get(), blur);
-                QStringList bs, ls;
-                for (int i = 0; i < 8; ++i) {
-                    bs << QString::number(back[i * 4]);
-                    ls << QString::number(blur[i * 4]);
-                }
-                qCWarning(lcEffect) << "PZDBG strip:" << chain.at(k) << "backdropR" << bs.join(QLatin1Char(','))
-                                    << "blurR" << ls.join(QLatin1Char(','));
-                break;
-            }
-        }
-    }
     return state.compositeTex[src].get();
 }
 
