@@ -1,0 +1,92 @@
+{
+    "id": "crt",
+    "name": "CRT",
+    "description": "The scene behind the window blurred and displayed as an old tube monitor, with barrel curvature, scanlines, a phosphor mask, a slow rolling band and a corner vignette. An optional phosphor tint pushes it toward the classic green or amber terminal look. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Blur",
+    "animated": true,
+    "fragmentShader": "effect.frag",
+    "needsBackdrop": true,
+    "handlesOpacity": true,
+    "multipass": true,
+    "bufferScale": 0.25,
+    "bufferShaders": [
+        "buffer0.frag",
+        "buffer1.frag"
+    ],
+    "parameters": [
+        {
+            "id": "blurRadius",
+            "name": "Blur radius",
+            "type": "int",
+            "default": 16,
+            "min": 2,
+            "max": 64,
+            "description": "How strongly the scene behind the window is blurred (px)",
+            "group": "Blur"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Corner rounding of the pane (px, match the Border pack)",
+            "group": "Shape"
+        },
+        {
+            "id": "curvature",
+            "name": "Curvature",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.0,
+            "max": 0.35,
+            "description": "How strongly the picture bulges like a tube"
+        },
+        {
+            "id": "scanlines",
+            "name": "Scanlines",
+            "type": "float",
+            "default": 0.35,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Darkness of the horizontal scanlines"
+        },
+        {
+            "id": "maskStrength",
+            "name": "Phosphor mask",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.0,
+            "max": 0.6,
+            "description": "Strength of the vertical RGB phosphor stripes"
+        },
+        {
+            "id": "rollSpeed",
+            "name": "Roll speed",
+            "type": "float",
+            "default": 0.06,
+            "min": 0.0,
+            "max": 0.5,
+            "description": "How fast the bright band rolls up the picture, where 0 disables it"
+        },
+        {
+            "id": "tintStrength",
+            "name": "Phosphor tint",
+            "type": "float",
+            "default": 0.25,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How strongly the picture shifts toward the tint colour, where 1.0 is a monochrome terminal"
+        },
+        {
+            "id": "tintColor",
+            "name": "Tint colour",
+            "type": "color",
+            "default": "#ff7dffb0",
+            "description": "Phosphor colour, terminal green by default"
+        }
+    ]
+}

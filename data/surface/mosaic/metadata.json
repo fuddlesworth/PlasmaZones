@@ -1,0 +1,48 @@
+{
+    "id": "mosaic",
+    "name": "Mosaic",
+    "description": "The scene behind the window pixelated into coarse cells instead of blurred, the privacy-glass look. Nothing behind the window is readable but its colours still show through. Cell size, corner radius and an optional tint are this pack's own parameters. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Blur",
+    "fragmentShader": "effect.frag",
+    "needsBackdrop": true,
+    "handlesOpacity": true,
+    "parameters": [
+        {
+            "id": "cellSize",
+            "name": "Cell size",
+            "type": "int",
+            "default": 14,
+            "min": 4,
+            "max": 48,
+            "description": "Size of the mosaic cells (px), larger cells hide more"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Corner rounding of the pane (px, match the Border pack)",
+            "group": "Shape"
+        },
+        {
+            "id": "tintStrength",
+            "name": "Tint strength",
+            "type": "float",
+            "default": 0.12,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How strongly the tint colour washes over the cells"
+        },
+        {
+            "id": "tintColor",
+            "name": "Tint colour",
+            "type": "color",
+            "default": "#ff1d1d2e",
+            "description": "Colour washed over the mosaic"
+        }
+    ]
+}

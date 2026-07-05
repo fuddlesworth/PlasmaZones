@@ -1,0 +1,76 @@
+{
+    "id": "rain-glass",
+    "name": "Rain on Glass",
+    "description": "The scene behind the window fogged by a blur, with rain droplets running down the pane. Each droplet refracts the scene and leaves a trail of beads that fade as it falls. Droplet size, rain amount, fall speed and refraction strength are this pack's own parameters. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Blur",
+    "animated": true,
+    "fragmentShader": "effect.frag",
+    "needsBackdrop": true,
+    "handlesOpacity": true,
+    "multipass": true,
+    "bufferScale": 0.25,
+    "bufferShaders": [
+        "buffer0.frag",
+        "buffer1.frag"
+    ],
+    "parameters": [
+        {
+            "id": "blurRadius",
+            "name": "Fog radius",
+            "type": "int",
+            "default": 20,
+            "min": 2,
+            "max": 64,
+            "description": "How strongly the scene fogs behind the glass (px)",
+            "group": "Blur"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Corner rounding of the pane (px, match the Border pack)",
+            "group": "Shape"
+        },
+        {
+            "id": "dropletScale",
+            "name": "Droplet size",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.5,
+            "max": 2.0,
+            "description": "Overall size of the droplets, larger values mean bigger drops"
+        },
+        {
+            "id": "rainAmount",
+            "name": "Rain amount",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.1,
+            "max": 1.0,
+            "description": "How much of the pane carries droplets"
+        },
+        {
+            "id": "rainSpeed",
+            "name": "Fall speed",
+            "type": "float",
+            "default": 0.25,
+            "min": 0.05,
+            "max": 1.0,
+            "description": "How quickly the droplets run down the pane"
+        },
+        {
+            "id": "refraction",
+            "name": "Refraction",
+            "type": "float",
+            "default": 40.0,
+            "min": 5.0,
+            "max": 100.0,
+            "description": "How strongly droplets bend the scene behind them (px)"
+        }
+    ]
+}
