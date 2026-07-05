@@ -98,6 +98,7 @@ public:
     /// animation shader registry (the same source the rule editor's shader
     /// picker uses), so the list renders "Dissolve" rather than the raw id.
     void setShaderEffectLookup(RuleModel::LabelLookup fn);
+    void setDecorationPackLookup(RuleModel::LabelLookup fn);
     /// Overlay shader id → display name resolver for OverrideOverlayShader
     /// actions. SettingsController wires this from the overlay/snapping shader
     /// registry (the source the rule editor's overlay-shader picker uses), so

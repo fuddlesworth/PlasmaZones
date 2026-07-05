@@ -211,7 +211,8 @@ QString engineModeDisplayLabel(const QString& wire)
 QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snappingLayoutLookup,
                     const RuleModel::LabelLookup& tilingAlgorithmLookup,
                     const RuleModel::LabelLookup& shaderEffectLookup, const RuleModel::LabelLookup& overlayShaderLookup,
-                    const RuleModel::LabelLookup& curveLookup, const RuleModel::LabelLookup& screenLookup)
+                    const RuleModel::LabelLookup& curveLookup, const RuleModel::LabelLookup& screenLookup,
+                    const RuleModel::LabelLookup& decorationPackLookup)
 {
     auto resolveWith = [](const QString& wire, const RuleModel::LabelLookup& lookup) {
         if (wire.isEmpty() || !lookup) {
@@ -310,6 +311,20 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         const QString id = action.params.value(PhosphorRules::ActionParam::EffectId).toString();
         return id.isEmpty() ? PhosphorI18n::tr("Block animation shader")
                             : PhosphorI18n::tr("Shader: %1").arg(resolveWith(id, shaderEffectLookup));
+    }
+    if (action.type == ActionType::OverrideDecorationChain) {
+        const QJsonArray chain = action.params.value(PhosphorRules::ActionParam::Chain).toArray();
+        if (chain.isEmpty()) {
+            return PhosphorI18n::tr("Block decoration");
+        }
+        QStringList names;
+        for (const QJsonValue& entry : chain) {
+            const QString id = entry.toString();
+            if (!id.isEmpty()) {
+                names.append(resolveWith(id, decorationPackLookup));
+            }
+        }
+        return PhosphorI18n::tr("Decoration: %1").arg(names.join(QStringLiteral(", ")));
     }
     if (action.type == ActionType::OverrideAnimationTiming) {
         const int ms = action.params.value(PhosphorRules::ActionParam::DurationMs).toInt();
@@ -815,7 +830,7 @@ QString RuleModel::actionSummary(const QList<RuleAction>& actions) const
     QStringList parts;
     for (const RuleAction& a : actions) {
         parts.append(actionLabel(a, m_snappingLayoutLookup, m_tilingAlgorithmLookup, m_shaderEffectLookup,
-                                 m_overlayShaderLookup, m_curveLookup, m_screenLookup));
+                                 m_overlayShaderLookup, m_curveLookup, m_screenLookup, m_decorationPackLookup));
     }
     return parts.join(QStringLiteral(" · "));
 }
@@ -876,6 +891,11 @@ void RuleModel::setTilingAlgorithmLabelLookup(LabelLookup fn)
 void RuleModel::setShaderEffectLabelLookup(LabelLookup fn)
 {
     m_shaderEffectLookup = std::move(fn);
+}
+
+void RuleModel::setDecorationPackLabelLookup(LabelLookup fn)
+{
+    m_decorationPackLookup = std::move(fn);
 }
 
 void RuleModel::setOverlayShaderLabelLookup(LabelLookup fn)

@@ -99,6 +99,10 @@ SettingsFlickable {
         // (the overlay/snapping shader catalog) for the overlayShader picker
         // editor (OverrideOverlayShader) and its read-only name resolution.
         readonly property var snappingShadersPage: settingsController.snappingShadersPage
+        // `DecorationPageController` — exposes `availableShaderEffects()` (the
+        // surface-pack catalog) for the decorationChain editor in ActionRow
+        // (OverrideDecorationChain) and its read-only name resolution.
+        readonly property var decorationPage: settingsController.decorationPage
         // Reference to the page-level WindowPickerDialog — exposed via the
         // bridge so MatchLeafEditor can open the picker without having to
         // own its own instance. Hosting the picker inside the OverlaySheet

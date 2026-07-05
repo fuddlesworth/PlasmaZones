@@ -45,6 +45,10 @@ ColumnLayout {
     // the list (params editable, reorderable) but renders dimmed with its
     // switch off — the same read a disabled rule row gives in the rules list.
     property var disabledPacks: []
+    // The rules-action embed hides the per-layer enable switches: a rule
+    // chain is explicit (remove a pack instead of disabling it), and the
+    // toggles would write to the DecorationProfileTree, not the rule.
+    property bool showLayerToggles: true
     // Stable empty-map identity for param-less packs: a per-evaluation `({})`
     // literal would hand the inner ShaderParamsEditor a new object identity on
     // every host refresh and churn its currentValues rebind (same hoist as
@@ -175,6 +179,7 @@ ColumnLayout {
             // read identically (the shared ExpandableRowDelegate shell lets
             // the switch consume its own clicks before row-expand).
             SettingsSwitch {
+                visible: root.showLayerToggles
                 Layout.alignment: Qt.AlignVCenter
                 checked: packDelegate._layerEnabled
                 accessibleName: packDelegate._layerEnabled ? i18n("Disable %1", root._displayName(packDelegate.packId)) : i18n("Enable %1", root._displayName(packDelegate.packId))

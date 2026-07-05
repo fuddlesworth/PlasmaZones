@@ -10,6 +10,8 @@
 
 #include <QColor>
 #include <QString>
+#include <QStringList>
+#include <QVariantMap>
 
 #include <optional>
 
@@ -185,5 +187,26 @@ struct ResolvedWindowAppearance
 /// known (the sentinel then contributes no colour for that state).
 std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRules::ResolvedActions& resolved,
                                                                 const QColor& accentColor, const QColor& inactiveColor);
+
+/**
+ * @brief Per-window decoration-chain override — the runtime consumer for the
+ *        OverrideDecorationChain rule.
+ *
+ * `chain` is the ordered surface-pack id list that REPLACES the
+ * DecorationProfileTree's user packs for the matched window; an empty list is
+ * the "no decoration" sentinel (block the tree chain outright). The reserved
+ * rule-owned "border" id is filtered here so a hand-edited rule cannot inject
+ * a second base border. `params` carries the action's per-pack parameter map
+ * ({packId -> {paramId -> value}}), which overrides the tree profile's map
+ * per pack. Returns `std::nullopt` when no rule fills the slot, so
+ * updateWindowBorder falls through to the tree unchanged.
+ */
+struct ResolvedDecorationChain
+{
+    QStringList chain;
+    QVariantMap params;
+};
+
+std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRules::ResolvedActions& resolved);
 
 } // namespace PlasmaZones

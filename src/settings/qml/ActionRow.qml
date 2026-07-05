@@ -162,6 +162,7 @@ ColumnLayout {
     // ones incompatible with the action's target event render dimmed. Wire
     // value is the effect id.
     property Component _shaderEffectEditor
+    property Component _decorationChainEditor
     // Overlay-shader picker for OverrideOverlayShader actions — the overlay/
     // snapping shader registry (Snapping → Shaders page), distinct from the
     // animation shaders above. Wire value is the shader id.
@@ -404,6 +405,9 @@ ColumnLayout {
 
                     if (modelData.kind === "shaderEffect")
                         return row._shaderEffectEditor;
+
+                    if (modelData.kind === "decorationChain")
+                        return row._decorationChainEditor;
 
                     if (modelData.kind === "overlayShader")
                         return row._overlayShaderEditor;
@@ -928,6 +932,68 @@ ColumnLayout {
                     var encoded = "spring:" + omega.toFixed(2) + "," + zeta.toFixed(2);
                     row.actionEdited(row._withParam(curveSlot._param.key, encoded));
                 }
+            }
+        }
+    }
+
+    _decorationChainEditor: Component {
+        // Full chain editor for OverrideDecorationChain — the SAME component
+        // the decoration surface cards embed (ordered packs, add/remove/
+        // reorder, inline per-pack parameter editors), rewired so every
+        // signal mutates the ACTION payload instead of the
+        // DecorationProfileTree: the pack list rides `chain`, the per-pack
+        // values ride the nested `params` object. Layer toggles are hidden
+        // because a rule chain is explicit (remove a pack instead of
+        // disabling it). An empty chain is the valid "no decoration"
+        // sentinel, so the editor's empty state doubles as "block
+        // decoration for matched windows."
+        ChainEditor {
+            readonly property var _param: parent.modelData
+
+            availableShaders: row.appSettings && row.appSettings.decorationPage ? row.appSettings.decorationPage.availableShaderEffects() : []
+            chain: row.action[_param.key] || []
+            packParameters: row.action.params || ({})
+            showLayerToggles: false
+            onChainChangeRequested: function (newChain) {
+                // Prune params of removed packs, mirroring
+                // DecorationPageController.setChain: re-adding a pack starts
+                // from its defaults rather than resurrecting old overrides.
+                var cur = row.action.params || {};
+                var pruned = {};
+                for (var pid in cur) {
+                    if (newChain.indexOf(pid) >= 0)
+                        pruned[pid] = cur[pid];
+                }
+                var next = row._withParam(_param.key, newChain);
+                next.params = pruned;
+                row.actionEdited(next);
+            }
+            onParamChangeRequested: function (packId, paramId, value) {
+                var cur = row.action.params || {};
+                var params = {};
+                for (var pid in cur)
+                    params[pid] = cur[pid];
+                var packParams = {};
+                var curPack = params[packId] || {};
+                for (var k in curPack)
+                    packParams[k] = curPack[k];
+                packParams[paramId] = value;
+                params[packId] = packParams;
+                row.actionEdited(row._withParam("params", params));
+            }
+            onParamsRandomizeRequested: function (packId, rolled) {
+                var cur = row.action.params || {};
+                var params = {};
+                for (var pid in cur)
+                    params[pid] = cur[pid];
+                var packParams = {};
+                var curPack = params[packId] || {};
+                for (var k in curPack)
+                    packParams[k] = curPack[k];
+                for (var r in rolled)
+                    packParams[r] = rolled[r];
+                params[packId] = packParams;
+                row.actionEdited(row._withParam("params", params));
             }
         }
     }

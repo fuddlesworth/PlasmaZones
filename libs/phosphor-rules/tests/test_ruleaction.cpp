@@ -74,6 +74,7 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::SetBorderRadius,
     ActionType::SetBorderColorActive,
     ActionType::SetBorderColorInactive,
+    ActionType::OverrideDecorationChain,
 };
 } // namespace
 
@@ -89,6 +90,37 @@ private Q_SLOTS:
         const auto reloaded = RuleAction::fromJson(a.toJson());
         QVERIFY(reloaded.has_value());
         QCOMPARE(*reloaded, a);
+    }
+
+    void testOverrideDecorationChain_roundTripAndSentinels()
+    {
+        // Full payload: ordered chain array + nested per-pack params object
+        // (the OverrideAnimationShader Params precedent) round-trip intact.
+        QJsonObject params;
+        params.insert(QString(ActionParam::Chain), QJsonArray{QStringLiteral("frosted-glass"), QStringLiteral("glow")});
+        QJsonObject glowParams;
+        glowParams.insert(QStringLiteral("glowSize"), 32);
+        QJsonObject packParams;
+        packParams.insert(QStringLiteral("glow"), glowParams);
+        params.insert(QString(ActionParam::Params), packParams);
+        const RuleAction a{QString(ActionType::OverrideDecorationChain), params};
+        const auto reloaded = RuleAction::fromJson(a.toJson());
+        QVERIFY(reloaded.has_value());
+        QCOMPARE(*reloaded, a);
+
+        // An EMPTY chain array is the valid "no decoration" sentinel.
+        QJsonObject emptyChain;
+        emptyChain.insert(QString(ActionParam::Chain), QJsonArray{});
+        const RuleAction sentinel{QString(ActionType::OverrideDecorationChain), emptyChain};
+        QVERIFY(RuleAction::fromJson(sentinel.toJson()).has_value());
+
+        // A missing or non-array chain fails the descriptor validator.
+        const RuleAction missing{QString(ActionType::OverrideDecorationChain), QJsonObject()};
+        QVERIFY(!RuleAction::fromJson(missing.toJson()).has_value());
+        QJsonObject wrongShape;
+        wrongShape.insert(QString(ActionParam::Chain), QStringLiteral("frosted-glass"));
+        const RuleAction nonArray{QString(ActionType::OverrideDecorationChain), wrongShape};
+        QVERIFY(!RuleAction::fromJson(nonArray.toJson()).has_value());
     }
 
     void testJson_typeWrittenInline()

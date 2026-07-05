@@ -24,6 +24,7 @@
 #include <PhosphorRules/WindowQuery.h>
 
 #include <QColor>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QtGlobal>
@@ -304,6 +305,40 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
     if (!out.any()) {
         return std::nullopt;
     }
+    return out;
+}
+
+std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRules::ResolvedActions& resolved)
+{
+    // Constant slot id — same static-hoist rationale as resolveWindowOpacity.
+    static const QString kChainSlot = QString(PhosphorRules::ActionSlot::DecorationChain);
+    const auto action = resolved.slot(kChainSlot);
+    if (!action) {
+        return std::nullopt;
+    }
+    // The load-time validator guarantees `chain` is present and an array;
+    // re-check here (defence in depth against programmatic construction
+    // paths) and drop non-string entries plus the reserved rule-owned
+    // "border" id, which SetBorderVisible governs — a hand-edited rule must
+    // not inject a second base border into the fold.
+    const QJsonValue chainVal = action->params.value(PhosphorRules::ActionParam::Chain);
+    if (!chainVal.isArray()) {
+        return std::nullopt;
+    }
+    ResolvedDecorationChain out;
+    const QJsonArray arr = chainVal.toArray();
+    for (const QJsonValue& entry : arr) {
+        const QString id = entry.toString();
+        if (id.isEmpty() || id == QLatin1String("border")) {
+            continue;
+        }
+        out.chain.append(id);
+    }
+    // Optional per-pack params override, same nested-object shape the tree
+    // profile uses ({packId -> {paramId -> value}}); mirrors how the
+    // animation override reads ActionParam::Params in
+    // resolveAnimationShaderAndDuration.
+    out.params = action->params.value(PhosphorRules::ActionParam::Params).toObject().toVariantMap();
     return out;
 }
 

@@ -297,6 +297,21 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         }
     }
 
+    // Rule-resolved decoration-chain override: a matched
+    // OverrideDecorationChain rule REPLACES the tree's user packs wholesale
+    // (its empty-chain sentinel blocks decoration outright), and its
+    // per-pack params override the tree profile's map below. The reserved
+    // "border" id was already filtered by the resolver, and the tree's
+    // per-layer disable set deliberately does not apply — a rule chain is
+    // explicit. Reads the same cached per-window action walk the opacity /
+    // border-appearance resolvers use, so it refreshes on every trigger
+    // that re-runs updateWindowBorder (rule edits, focus, snap flips,
+    // desktop changes).
+    const std::optional<ResolvedDecorationChain> ruleChain = resolveDecorationChain(resolveRuleActions(w, windowId));
+    if (ruleChain) {
+        userPacks = ruleChain->chain;
+    }
+
     // DECORATE GATE: render when the rule shows a border OR the tree declares user
     // packs. Neither → nothing to render. The "border" base (when present) renders
     // first; user packs composite over it (chain[1..]).
@@ -328,7 +343,16 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // A pack the registry cannot resolve gets no entry; consumers fall back
     // to the compiled pack's baked baseline.
     ensureSurfaceRegistryPaths();
-    const QVariantMap allPackParams = resolvedProfile.effectiveParameters();
+    QVariantMap allPackParams = resolvedProfile.effectiveParameters();
+    if (ruleChain) {
+        // Per-pack REPLACE, not deep-merge: a rule that carries params for a
+        // pack owns that pack's values outright (mirroring the animation
+        // override's params semantics); packs the rule says nothing about
+        // keep the tree/default values.
+        for (auto it = ruleChain->params.constBegin(); it != ruleChain->params.constEnd(); ++it) {
+            allPackParams.insert(it.key(), it.value());
+        }
+    }
     int outerPadding = 0;
     bool needsBackdrop = false;
     bool handlesOpacity = false;

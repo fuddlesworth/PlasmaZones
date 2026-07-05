@@ -686,6 +686,19 @@ SettingsController::SettingsController(QObject* parent)
         return name.isEmpty() ? effectId : name;
     };
     m_rulesPage->setOverlayShaderLookup(resolveOverlayShaderLookup);
+    // OverrideDecorationChain stores surface-pack ids ("frosted-glass");
+    // resolve them to friendly names via the surface shader registry (the
+    // same source the decoration pages' pack picker reads), so the list
+    // shows "Decoration: Frosted Glass, Glow" rather than raw ids. Unknown
+    // ids round-trip verbatim, matching the other lookups' fallbacks.
+    auto resolveDecorationPackLookup = [this](const QString& packId) -> QString {
+        if (packId.isEmpty() || !m_surfaceShaderRegistry || !m_surfaceShaderRegistry->hasEffect(packId)) {
+            return packId;
+        }
+        const QString name = m_surfaceShaderRegistry->effect(packId).name;
+        return name.isEmpty() ? packId : name;
+    };
+    m_rulesPage->setDecorationPackLookup(resolveDecorationPackLookup);
     auto refreshRuleLabels = [this]() {
         if (m_rulesPage && m_rulesPage->model()) {
             m_rulesPage->model()->refreshLabels();
@@ -697,6 +710,10 @@ SettingsController::SettingsController(QObject* parent)
     // A shader-pack rescan (user drops in a new effect, or one is removed)
     // can change an id→name mapping; refresh so resolved Shader labels track it.
     connect(m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
+            refreshRuleLabels);
+    // Same refresh for surface-pack rescans so resolved Decoration labels
+    // track pack installs/removals.
+    connect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
             refreshRuleLabels);
 
     // Overlay shader registry — settings-side mirror of the daemon's. The

@@ -879,6 +879,26 @@ void ActionRegistry::registerBuiltins()
         .displayOrder = 5,
         .tags = {QString(Tag::Border), QString(Tag::Effect)},
     });
+    // Decoration-chain override: an ordered surface-pack list (empty array =
+    // "no decoration" sentinel, so `Chain` must be PRESENT and an array but
+    // may be empty) plus an optional per-pack params object riding the shared
+    // `Params` key out-of-band, exactly like OverrideAnimationShader's
+    // uniform map (the editor writes it; it is not in the params schema).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OverrideDecorationChain),
+        .slotFor = constantSlot(ActionSlot::DecorationChain),
+        .validate =
+            [](const QJsonObject& p) {
+                return p.contains(ActionParam::Chain) && p.value(ActionParam::Chain).isArray();
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Chain), QString(ActionParam::Params)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Chain), .kind = QStringLiteral("decorationChain")}},
+        .category = QStringLiteral("borderAppearance"),
+        .displayOrder = 6,
+        .tags = {QString(Tag::Border), QString(Tag::Effect)},
+    });
 
     // ── per-context gap slots (domain Context) ──
     // Resolved daemon-side at zone-geometry time (DaemonGeometryResolver) as
