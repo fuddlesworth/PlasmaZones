@@ -6,6 +6,7 @@
 #include "../../core/logging.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorEngine/JsonKeys.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -191,25 +192,27 @@ void SnapAdaptor::handleBatchedResnap(const QString& resnapData)
         return;
     }
 
-    // Deserialize ZoneAssignmentEntry array
+    // Deserialize ZoneAssignmentEntry array. Keys come from the same
+    // PhosphorEngine::JsonKeys constants the serializer uses
+    // (GeometryUtils::serializeZoneAssignments) so the two sides cannot drift.
+    namespace JsonKeys = PhosphorEngine::JsonKeys;
     QVector<ZoneAssignmentEntry> entries;
     const QJsonArray arr = doc.array();
     for (const QJsonValue& val : arr) {
         QJsonObject obj = val.toObject();
         ZoneAssignmentEntry entry;
-        entry.windowId = obj.value(QLatin1String("windowId")).toString();
-        entry.targetZoneId = obj.value(QLatin1String("targetZoneId")).toString();
-        entry.sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();
+        entry.windowId = obj.value(JsonKeys::WindowId).toString();
+        entry.targetZoneId = obj.value(JsonKeys::TargetZoneId).toString();
+        entry.sourceZoneId = obj.value(JsonKeys::SourceZoneId).toString();
         // Deserialize multi-zone IDs (for zone-spanning windows)
-        const QJsonArray zoneIdsArr = obj.value(QLatin1String("targetZoneIds")).toArray();
+        const QJsonArray zoneIdsArr = obj.value(JsonKeys::TargetZoneIds).toArray();
         if (!zoneIdsArr.isEmpty()) {
             for (const QJsonValue& v : zoneIdsArr)
                 entry.targetZoneIds.append(v.toString());
         }
-        entry.targetGeometry =
-            QRect(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
-                  obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
-        entry.virtualDesktop = obj.value(QLatin1String("virtualDesktop")).toInt();
+        entry.targetGeometry = QRect(obj.value(JsonKeys::X).toInt(), obj.value(JsonKeys::Y).toInt(),
+                                     obj.value(JsonKeys::Width).toInt(), obj.value(JsonKeys::Height).toInt());
+        entry.virtualDesktop = obj.value(JsonKeys::VirtualDesktop).toInt();
         if (!entry.windowId.isEmpty() && !entry.targetZoneId.isEmpty()) {
             entries.append(entry);
         }

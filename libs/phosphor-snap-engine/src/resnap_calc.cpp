@@ -5,6 +5,7 @@
 // Part of SnapEngine — split into its own translation unit for SRP.
 
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -170,6 +171,12 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
         // re-derivation could land in a sibling VS and clobber the stored
         // assignment. Trust the source screen we already read above.
         entry.targetScreenId = screenId;
+        // The aggregated zoneAssignments map spans every desktop's snap store,
+        // so this resnap (gap reflow, VS reconfigure) can carry off-desktop
+        // windows. Preserve each window's recorded desktop through the commit
+        // — see the matching stamp in calculateResnapFromPreviousLayout.
+        const SnapState* st = stateForWindow(windowId);
+        entry.virtualDesktop = st ? st->desktopForWindow(windowId) : 0;
         result.append(entry);
     }
 
@@ -526,6 +533,11 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
                 entry.sourceZoneId = sourceZone->id().toString();
                 entry.targetZoneId = targetZone->id().toString();
                 entry.targetGeometry = geo;
+                // Rotation iterates the aggregated (all-desktop) assignment map;
+                // preserve each window's recorded desktop through the commit —
+                // see the matching stamp in calculateResnapFromPreviousLayout.
+                const SnapState* st = stateForWindow(pair.first);
+                entry.virtualDesktop = st ? st->desktopForWindow(pair.first) : 0;
                 result.append(entry);
             }
         }

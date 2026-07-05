@@ -304,13 +304,37 @@ private Q_SLOTS:
     // P1: Rotation
     // =====================================================================
 
+    // Regression (#layout-leak): resnap-from-current-assignments (gap reflow,
+    // VS reconfigure) iterates the aggregated all-desktop assignment map, so
+    // its entries must carry each window's recorded desktop or the batch
+    // commit re-stamps off-desktop windows onto the current desktop.
+    void testCalculateResnapFromCurrentAssignments_preservesRecordedDesktop()
+    {
+        const QString win = QStringLiteral("app1|111");
+        m_service->assignWindowToZone(win, m_zoneIds[0], QString(), 2);
+
+        const QVector<ZoneAssignmentEntry> entries = m_engine->calculateResnapFromCurrentAssignments(QString());
+        if (entries.isEmpty()) {
+            QSKIP("resnap produced no geometry in headless harness — screen unavailable");
+        }
+        for (const ZoneAssignmentEntry& e : entries) {
+            if (e.windowId == win) {
+                QCOMPARE(e.virtualDesktop, 2);
+                return;
+            }
+        }
+        QFAIL("window missing from resnap entries");
+    }
+
     void testCalculateRotation_clockwiseAndCounterClockwise()
     {
         QString window1 = QStringLiteral("app1|111");
         QString window2 = QStringLiteral("app2|222");
 
-        m_service->assignWindowToZone(window1, m_zoneIds[0], QString(), 0);
-        m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 0);
+        // Desktop 2 so the rotation entries can be checked for desktop
+        // preservation below (regression #layout-leak).
+        m_service->assignWindowToZone(window1, m_zoneIds[0], QString(), 2);
+        m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 2);
 
         QVector<ZoneAssignmentEntry> cw = m_engine->calculateRotation(true);
         QVector<ZoneAssignmentEntry> ccw = m_engine->calculateRotation(false);
@@ -341,6 +365,12 @@ private Q_SLOTS:
         QVERIFY(!cwTarget.isEmpty());
         QVERIFY(!ccwTarget.isEmpty());
         QVERIFY(cwTarget != ccwTarget);
+
+        // Rotation entries preserve each window's recorded desktop
+        // (regression #layout-leak — see the resnap desktop tests above).
+        for (const ZoneAssignmentEntry& e : cw) {
+            QCOMPARE(e.virtualDesktop, 2);
+        }
     }
 
     // =====================================================================
