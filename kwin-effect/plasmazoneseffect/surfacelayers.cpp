@@ -343,6 +343,47 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     if (chain.isEmpty()) {
         return nullptr;
     }
+
+    // Elastic-ambience motion spring: track the frame velocity through an
+    // underdamped spring on every fold (the fold runs per damaged frame, so
+    // a drag integrates continuously). Published to the packs as
+    // uSurfaceMoveVelocity by pushBorderUniforms; windowSurfaceAnimates
+    // keeps repaints flowing while the spring still carries energy after
+    // the pointer stops, so an elastic halo settles instead of freezing.
+    // The instantaneous sample is capped so a teleport between folds
+    // (snap restore) cannot whip the halo across the screen.
+    {
+        const auto wbIt = m_windowDecorations.find(windowId);
+        if (wbIt != m_windowDecorations.end()) {
+            WindowDecoration& wbMut = wbIt.value();
+            const QPointF pos = w->frameGeometry().topLeft();
+            const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+            if (wbMut.moveLastSampleMs >= 0) {
+                const qreal dt = qBound(0.0, qreal(nowMs - wbMut.moveLastSampleMs) / 1000.0, 0.05);
+                if (dt > 0.0) {
+                    QPointF inst = (pos - wbMut.moveLastPos) / dt;
+                    const qreal instMag = qAbs(inst.x()) + qAbs(inst.y());
+                    constexpr qreal kMaxInst = 5000.0;
+                    if (instMag > kMaxInst) {
+                        inst *= kMaxInst / instMag;
+                    }
+                    constexpr qreal kSpring = 90.0; // rad^2 — tracking stiffness
+                    constexpr qreal kDamp = 12.0; // < 2*sqrt(kSpring): underdamped
+                    wbMut.moveSpringVel += ((inst - wbMut.moveSpringLag) * kSpring - wbMut.moveSpringVel * kDamp) * dt;
+                    wbMut.moveSpringLag += wbMut.moveSpringVel * dt;
+                }
+            }
+            wbMut.moveLastPos = pos;
+            wbMut.moveLastSampleMs = nowMs;
+            wbMut.moveSpringActive = (qAbs(wbMut.moveSpringLag.x()) + qAbs(wbMut.moveSpringLag.y())
+                                      + qAbs(wbMut.moveSpringVel.x()) + qAbs(wbMut.moveSpringVel.y()))
+                > 2.0;
+            if (!wbMut.moveSpringActive) {
+                wbMut.moveSpringLag = QPointF();
+                wbMut.moveSpringVel = QPointF();
+            }
+        }
+    }
     // Restore blend/viewport/clear/active-texture on every exit path — the
     // fold runs right before KWin's on-screen draw of this same frame, which
     // must not inherit our offscreen state (see ScopedGlState).
@@ -698,6 +739,12 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
     const auto it = m_windowDecorations.constFind(windowId);
     if (it == m_windowDecorations.constEnd()) {
         return false;
+    }
+    // Elastic-ambience spring still ringing: keep repaints flowing so the
+    // halo settles to rest after the drag stops. Self-terminating — the
+    // fold clears moveSpringActive once the spring's energy dies.
+    if (it->moveSpringActive) {
+        return true;
     }
     // Resolve the decoration profile LAZILY: compiledPack only reads it on a
     // compile-cache miss, and this runs in the per-frame idle-repaint loop for

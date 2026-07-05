@@ -113,6 +113,7 @@ struct CompiledSurfacePack
     int uFocusedLoc = -1; ///< uSurfaceFocused — 1.0 focused / 0.0 unfocused
     int uOpacityLoc = -1; ///< uSurfaceOpacity — rule-resolved window opacity (handlesOpacity packs)
     int uTimeLoc = -1; ///< iTime — continuous seconds; -1 ⟺ static pack (drives the repaint gate)
+    int uMoveVelocityLoc = -1; ///< uSurfaceMoveVelocity — elastic-halo motion (drives the repaint gate while ringing)
     /// uTexture0 — the input-surface sampler (unit 0). On the single-pack path
     /// OffscreenData::paint binds the redirected surface to unit 0 automatically,
     /// so this is unused there; the multi-pack composite (renderSurfaceChainComposite)
@@ -250,6 +251,20 @@ struct SurfaceMultipassState
 /// the per-window hide-titlebar choice; the appearance lives with the pack.
 struct WindowDecoration
 {
+    /// ── Elastic-ambience motion spring ──
+    /// Underdamped spring tracking the window's frame velocity, integrated
+    /// on every chain fold (renderSurfaceChainComposite) and published to
+    /// the packs as uSurfaceMoveVelocity. Lives HERE, not on the shader
+    /// transition, so elastic halos work with no move animation assigned.
+    /// moveSpringActive keeps windowSurfaceAnimates driving repaints while
+    /// the spring still carries energy after the drag stops, so the halo
+    /// settles instead of freezing mid-lag.
+    QPointF moveSpringLag;
+    QPointF moveSpringVel;
+    QPointF moveLastPos;
+    qint64 moveLastSampleMs = -1;
+    bool moveSpringActive = false;
+
     /// True when THIS border owns the window's OffscreenEffect redirect +
     /// border shader slot. False while an animation transition has taken over
     /// the slot (the animation path's begin/end coordinates the handover) —
@@ -441,6 +456,9 @@ struct CachedShader
     /// surfaceColor() for its "old" side instead of sampling the raw window
     /// through the unit-0 alias).
     int iHasOldWindowLoc = -1;
+    /// Interactive-move motion uniforms (held move/resize transitions).
+    int iMoveVelocityLoc = -1;
+    int iMoveOffsetLoc = -1;
     /// Surface-layer-stack uniforms (compositor path). `uSurfaceLayer` is the
     /// pre-composited layered surface (border / rounded corners, ...) sampled in
     /// place of the live `uTexture0` while a layered window animates;
@@ -630,6 +648,24 @@ struct ShaderTransition
     /// `oldSnapshot` and clears this. The window content is captured before
     /// the moveResize configure round-trips, so it holds the OLD frame.
     bool needsSnapshot = false;
+    /// ── Held interactive-move state (window.move / window.resize) ──
+    /// True while the user is still dragging: the transition stays active
+    /// past durationMs (progress clamps at 1) and the duration-timer
+    /// teardown is skipped — windowFinishUserMovedResized schedules the
+    /// real teardown after a settle tail so velocity-driven shaders can
+    /// relax. Set at the move-start install site.
+    bool holdUntilRelease = false;
+    /// Frame origin at grab — iMoveOffset = current origin - this.
+    QPointF grabOrigin;
+    /// Underdamped spring filter over the instantaneous frame velocity;
+    /// springLag is what iMoveVelocity publishes (logical px/s). The
+    /// underdamping makes the published velocity decay through zero with a
+    /// small overshoot after release, giving stateless shaders a natural
+    /// settle for free. Integrated per paint in the transition branch.
+    QPointF springLag;
+    QPointF springVel;
+    QPointF lastMovePos;
+    qint64 lastMoveSampleMs = -1;
     /// Snapshot of the window's OLD content, bound as `uOldWindow` so the
     /// shader can cross-fade the old content out while the live new content
     /// fades in. Captured on the first morph paint AFTER the instant

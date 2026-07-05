@@ -825,6 +825,10 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasSurfaceLayer);
         cached.iHasOldWindowLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasOldWindow);
+        cached.iMoveVelocityLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveVelocity);
+        cached.iMoveOffsetLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveOffset);
         cached.iLayerRectInTextureLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kILayerRectInTexture);
         // uTexture0 — for the transition-time composite retarget (see
@@ -1698,6 +1702,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
             return;
         }
         if (const auto* live = m_shaderManager.findTransition(safeWindow); live && live->generation == myGeneration) {
+            // HELD transitions (interactive move/resize) outlive their
+            // nominal duration by design: the user is still dragging.
+            // windowFinishUserMovedResized owns their teardown (a settle
+            // tail after release), so the duration timer stands down.
+            if (live->holdUntilRelease) {
+                return;
+            }
             endShaderTransition(safeWindow);
         }
         // else: a newer transition replaced us (last-event-wins) and owns

@@ -41,6 +41,15 @@
             "type": "color",
             "default": "#ff3daee9",
             "description": "Colour of the halo"
+        },
+        {
+            "id": "elasticity",
+            "name": "Elasticity",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 200.0,
+            "description": "How far the halo trails behind the window while it moves, in milliseconds of lag, where 0 keeps it rigid"
         }
     ]
 }

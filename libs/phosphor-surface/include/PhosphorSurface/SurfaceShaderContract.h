@@ -156,6 +156,11 @@ inline constexpr const char* kUSurfaceScale = "uSurfaceScale";
 /// a future runtime that elects to ramp this for a focus-fade transition
 /// degrades gracefully.
 inline constexpr const char* kUSurfaceFocused = "uSurfaceFocused";
+/// `vec2 uSurfaceMoveVelocity` — spring-smoothed window velocity during an
+/// interactive move (logical px/s), zero at rest and on the daemon branch
+/// (declared const there). Underdamped host-side so it rings through zero
+/// after release; elastic halos trail and settle with no shader state.
+inline constexpr const char* kUSurfaceMoveVelocity = "uSurfaceMoveVelocity";
 
 /// `float iTime` — continuously-increasing seconds for ANIMATED surface
 /// packs (pulsing glow, shimmer, …), the same role iTime plays in the

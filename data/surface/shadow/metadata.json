@@ -59,6 +59,15 @@
             "type": "color",
             "default": "#99000000",
             "description": "Colour of the shadow, translucent black by default"
+        },
+        {
+            "id": "elasticity",
+            "name": "Elasticity",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 200.0,
+            "description": "How far the halo trails behind the window while it moves, in milliseconds of lag, where 0 keeps it rigid"
         }
     ]
 }

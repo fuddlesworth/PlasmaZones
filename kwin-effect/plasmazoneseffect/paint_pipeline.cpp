@@ -604,6 +604,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (elapsed >= 0 && elapsed <= transition.durationMs) {
                 progress = qreal(elapsed) / qreal(transition.durationMs);
                 active = true;
+            } else if (transition.holdUntilRelease && elapsed > transition.durationMs) {
+                // HELD move/resize: the drag outlives the nominal duration
+                // by design. Stay active with progress pinned at 1 — the
+                // motion uniforms (iMoveVelocity / iMoveOffset), not the
+                // clock, drive the shader from here.
+                progress = 1.0;
+                active = true;
             }
         } else {
             const auto* anim = m_windowAnimator->animationFor(w);
@@ -982,6 +989,44 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     if (loc < 0)
                         continue;
                     shader->setUniform(loc, transition.customColorsValues[slot]);
+                }
+                // Held-move motion state: integrate the underdamped velocity
+                // spring on the frame clock and publish it. springLag tracks
+                // the instantaneous frame velocity through a spring (k, c
+                // slightly underdamped), so after the pointer stops or
+                // releases the published velocity rings down through zero and
+                // a velocity-driven deformation settles like a real object.
+                // toGeometry mirrors the live frame each frame so a vertex
+                // stage can anchor to the current rect via iToRect
+                // (fromGeometry stays invalid — this is not a morph).
+                if (transition.holdUntilRelease) {
+                    const QPointF pos = w->frameGeometry().topLeft();
+                    if (transition.lastMoveSampleMs >= 0) {
+                        const qreal dt = qBound(0.0, qreal(nowMs - transition.lastMoveSampleMs) / 1000.0, 0.05);
+                        if (dt > 0.0) {
+                            const QPointF inst = (pos - transition.lastMovePos) / dt;
+                            constexpr qreal kSpring = 90.0; // rad^2 — tracking stiffness
+                            constexpr qreal kDamp = 12.0; // < 2*sqrt(kSpring): underdamped
+                            transition.springVel +=
+                                ((inst - transition.springLag) * kSpring - transition.springVel * kDamp) * dt;
+                            transition.springLag += transition.springVel * dt;
+                        }
+                    }
+                    transition.lastMovePos = pos;
+                    transition.lastMoveSampleMs = nowMs;
+                    transition.toGeometry = w->frameGeometry();
+                }
+                if (cached->iMoveVelocityLoc >= 0) {
+                    shader->setUniform(cached->iMoveVelocityLoc,
+                                       QVector2D(static_cast<float>(transition.springLag.x()),
+                                                 static_cast<float>(transition.springLag.y())));
+                }
+                if (cached->iMoveOffsetLoc >= 0) {
+                    const QPointF off = transition.holdUntilRelease
+                        ? (w->frameGeometry().topLeft() - transition.grabOrigin)
+                        : QPointF();
+                    shader->setUniform(cached->iMoveOffsetLoc,
+                                       QVector2D(static_cast<float>(off.x()), static_cast<float>(off.y())));
                 }
                 // Geometry-morph endpoints. The window already jumped to its
                 // destination via moveResize; the morph shader animates the

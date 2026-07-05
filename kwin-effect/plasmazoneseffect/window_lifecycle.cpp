@@ -733,13 +733,44 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // !oldSnapshot guard preserves an existing capture on a
             // retargeted transition, mirroring drag_snap; a failed capture
             // clears needsSnapshot and the shader-side fallback covers it.
-            if (auto* st = m_shaderManager.findTransition(window);
-                st && st->cached && st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
-                st->needsSnapshot = true;
+            if (auto* st = m_shaderManager.findTransition(window); st && st->cached) {
+                if (st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
+                    st->needsSnapshot = true;
+                }
+                // HELD transition: the drag is open-ended, so the shader
+                // stays active (progress clamped at 1) until the release
+                // handler below schedules the settle-tail teardown; the
+                // duration timer stands down for held transitions. The
+                // grab origin anchors iMoveOffset, and the velocity spring
+                // integrates from here (see the paint pipeline).
+                st->holdUntilRelease = true;
+                st->grabOrigin = window->frameGeometry().topLeft();
+                st->lastMovePos = st->grabOrigin;
+                st->lastMoveSampleMs = -1;
             }
         }
     });
     connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {
+        // Release a HELD move/resize transition with a settle tail: the
+        // velocity spring decays through zero over the next fraction of a
+        // second, letting wobble/tilt shaders relax to rest before the
+        // teardown lands. Generation-guarded exactly like the duration
+        // timer so an interrupting transition owns its own lifetime.
+        if (window) {
+            if (auto* st = m_shaderManager.findTransition(window); st && st->holdUntilRelease) {
+                const quint64 myGeneration = st->generation;
+                QPointer<KWin::EffectWindow> safeWindow(window);
+                QTimer::singleShot(animationDurationMs(), this, [this, safeWindow, myGeneration]() {
+                    if (!safeWindow) {
+                        return;
+                    }
+                    if (const auto* live = m_shaderManager.findTransition(safeWindow);
+                        live && live->generation == myGeneration) {
+                        endShaderTransition(safeWindow);
+                    }
+                });
+            }
+        }
         const bool wasResize = (window && m_resizingWindow == window);
         m_resizingWindow = nullptr;
         // A floating window the user just RESIZED has a new free size. Persist it

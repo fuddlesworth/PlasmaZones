@@ -105,6 +105,12 @@ uniform float uHasBackdrop;
 // the frost slab stays solid).
 uniform float uSurfaceOpacity;
 
+// Spring-smoothed window velocity during an interactive move (logical
+// px/s), zero at rest. Deliberately underdamped host-side: after the
+// pointer stops or releases it rings through zero, so an elastic halo
+// (glow/shadow `elasticity`) overshoots and settles like a real object.
+uniform vec2 uSurfaceMoveVelocity;
+
 #else
 
 // ── Daemon branch — std140 UBO at binding 0 ─────────────────────────────────
@@ -127,6 +133,10 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
     vec4 customColors[16];       // offset 240 (256)
     vec4 iChannelResolution[4];  // offset 496 (64) — multipass buffer sizes (.xy)
 };                               // total 560 bytes
+
+// Daemon surfaces never drag: constant zero keeps elastic packs compiling
+// on this branch without touching the hand-laid UBO layout above.
+const vec2 uSurfaceMoveVelocity = vec2(0.0);
 
 layout(binding = 7) uniform sampler2D uTexture0;
 

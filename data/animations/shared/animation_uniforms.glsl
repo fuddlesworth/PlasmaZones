@@ -218,6 +218,14 @@ uniform int iHasSurfaceLayer;
 // compositor fallback points uOldWindow at unit 0 (the RAW window), which
 // would otherwise blank the decoration for the old side of a cross-fade.
 uniform int iHasOldWindow;
+
+// Interactive-move motion state (held move/resize transitions only; zero
+// otherwise). iMoveVelocity is spring-smoothed logical px/s and decays
+// through zero with a slight overshoot after release, so velocity-driven
+// deformations settle naturally. iMoveOffset is the raw frame-origin
+// displacement since the grab, logical px.
+uniform vec2 iMoveVelocity;
+uniform vec2 iMoveOffset;
 // The animated surface's [0,1] sub-rect within uSurfaceLayer's canvas — the
 // layer analogue of iAnchorRectInTexture. The compositor pads the layer canvas
 // by the decoration chain's outer margin (glow reach), so the layer cannot be

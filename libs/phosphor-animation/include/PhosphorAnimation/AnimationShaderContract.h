@@ -361,6 +361,19 @@ inline constexpr const char* kIHasSurfaceLayer = "iHasSurfaceLayer";
 /// so an ungated cross-fade from "old" blanks every decoration pack until
 /// the fade completes.
 inline constexpr const char* kIHasOldWindow = "iHasOldWindow";
+
+/// `vec2 iMoveVelocity` — COMPOSITOR PATH ONLY. Spring-smoothed window
+/// velocity in logical px/s during a HELD interactive move/resize
+/// transition (holdUntilRelease). The smoothing filter is underdamped on
+/// purpose: after the pointer stops or releases, the value decays through
+/// zero with a slight overshoot, so a velocity-driven deformation (wobble,
+/// tilt) relaxes with a natural spring settle instead of freezing. Zero
+/// for time-driven transitions and on the daemon path.
+inline constexpr const char* kIMoveVelocity = "iMoveVelocity";
+/// `vec2 iMoveOffset` — COMPOSITOR PATH ONLY. Raw displacement of the
+/// window's frame origin since the interactive grab, logical px. Zero for
+/// non-held transitions and on the daemon path.
+inline constexpr const char* kIMoveOffset = "iMoveOffset";
 /// Card/anchor-space [0,1] sub-rect of the animated surface WITHIN
 /// uSurfaceLayer's canvas (xy offset, zw scale) — the layer analogue of
 /// iAnchorRectInTexture. The compositor pads the layer canvas by the

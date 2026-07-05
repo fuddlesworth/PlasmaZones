@@ -34,7 +34,14 @@ void main() {
     // evaluating the fragment against the shifted frame moves the whole
     // shadow body down/right, the classic dropped look.
     vec2 offset = vec2(p_offsetX, p_offsetY) * uSurfaceScale;
-    vec2 p = surfacePixel(vTexCoord) - offset;
+    // Elastic trail: the shadow body lags OPPOSITE the motion on top of its
+    // cast offset, ringing to rest after release (see the glow pack).
+    vec2 elastic = uSurfaceMoveVelocity * (p_elasticity / 1000.0) * uSurfaceScale;
+    float em = length(elastic);
+    if (em > 96.0) {
+        elastic *= 96.0 / em;
+    }
+    vec2 p = surfacePixel(vTexCoord) - offset + elastic;
     float radius = p_cornerRadius * uSurfaceScale;
     vec2 halfSz = 0.5 * uSurfaceFrameSize;
     vec2 cen = uSurfaceFrameTopLeft + halfSz;

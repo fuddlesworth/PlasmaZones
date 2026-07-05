@@ -1,0 +1,44 @@
+{
+    "id": "wobble",
+    "name": "Wobbly Move",
+    "description": "Drag transition where the window turns soft and trails behind the pointer, wobbling like jelly and settling with a spring when you let go. The grip area follows the pointer tightly while the far edge lags. Softness, grip and maximum bend are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Geometry",
+    "appliesTo": [
+        "geometry"
+    ],
+    "fragmentShader": "effect.frag",
+    "vertexShader": "effect.vert",
+    "fboExtent": "surface",
+    "geometryGrid": 32,
+    "parameters": [
+        {
+            "id": "softness",
+            "name": "Softness",
+            "type": "float",
+            "default": 90.0,
+            "min": 20.0,
+            "max": 250.0,
+            "description": "How far the body trails behind the motion, in milliseconds of lag"
+        },
+        {
+            "id": "grip",
+            "name": "Grip",
+            "type": "float",
+            "default": 0.3,
+            "min": 0.0,
+            "max": 0.9,
+            "description": "How tightly the grabbed edge follows the pointer, where higher values keep the top stiffer"
+        },
+        {
+            "id": "maxBend",
+            "name": "Maximum bend",
+            "type": "int",
+            "default": 72,
+            "min": 16,
+            "max": 160,
+            "description": "Cap on how far any part of the window may trail (px)"
+        }
+    ]
+}

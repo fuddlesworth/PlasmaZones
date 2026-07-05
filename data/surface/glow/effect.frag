@@ -47,6 +47,17 @@ void main() {
     // Rounded-rect SDF over the frame rect (same construction as the border
     // pack). d > 0 outside the frame — the region the halo lives in.
     vec2 p = surfacePixel(vTexCoord);
+    // Elastic trail: evaluate the halo against a frame displaced OPPOSITE
+    // the motion (the spring velocity rings through zero after release, so
+    // the halo overshoots and settles). Capped so a fling cannot push the
+    // body past the capture margin's edge feather. Content sampling and
+    // the feather itself stay on the real fragment position.
+    vec2 elastic = uSurfaceMoveVelocity * (p_elasticity / 1000.0) * uSurfaceScale;
+    float em = length(elastic);
+    if (em > 96.0) {
+        elastic *= 96.0 / em;
+    }
+    p += elastic;
     float radius = p_cornerRadius * uSurfaceScale;
     vec2 halfSz = 0.5 * uSurfaceFrameSize;
     vec2 cen = uSurfaceFrameTopLeft + halfSz;
@@ -65,7 +76,8 @@ void main() {
     // texture edge so a slim shadow margin yields a smaller glow, not a halo
     // cut off in a hard rectangle. (With NO margin — a borderless window whose
     // expandedGeometry equals its frame — this zeroes the halo entirely.)
-    float edgeDist = min(min(p.x, p.y), min(uSurfaceSize.x - p.x, uSurfaceSize.y - p.y));
+    vec2 rp = surfacePixel(vTexCoord);
+    float edgeDist = min(min(rp.x, rp.y), min(uSurfaceSize.x - rp.x, uSurfaceSize.y - rp.y));
     halo *= smoothstep(0.0, min(0.35 * reach, 12.0 * uSurfaceScale), edgeDist);
 
     // Outer-only: confined to where the surface itself is transparent, so the
