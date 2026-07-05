@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Animated border surface shader — the Border pack's rounded-rect clip +
+// Sweep border surface shader — the Border pack's rounded-rect clip +
 // border band, with the band colour replaced by a travelling two-colour
 // sweep. An angular gradient (centred on the frame) circulates around the
 // perimeter at p_sweepSpeed rotations per second, blending p_colorA and

@@ -1,0 +1,62 @@
+{
+    "id": "border-pulse",
+    "name": "Pulse Border",
+    "description": "Rounded corners and a window border that breathes between two colours on a smooth cycle, with an optional brightness dip at the low end. The pulse dims when the surface loses focus. Width, corner radius, pulse speed, dip depth and the two colours are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Borders",
+    "animated": true,
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "borderWidth",
+            "name": "Border width",
+            "type": "int",
+            "default": 2,
+            "min": 0,
+            "max": 10,
+            "description": "Thickness of the pulsing border (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Roundness of the corners (px, 0 for square)"
+        },
+        {
+            "id": "pulseSpeed",
+            "name": "Pulse speed",
+            "type": "float",
+            "default": 0.4,
+            "min": 0.05,
+            "max": 3.0,
+            "description": "How many pulse cycles play per second"
+        },
+        {
+            "id": "pulseDepth",
+            "name": "Dip depth",
+            "type": "float",
+            "default": 0.25,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How far the border fades at the low end of the pulse, where 0 keeps it solid"
+        },
+        {
+            "id": "colorA",
+            "name": "First colour",
+            "type": "color",
+            "default": "#ff3daee9",
+            "description": "Colour at the top of the pulse"
+        },
+        {
+            "id": "colorB",
+            "name": "Second colour",
+            "type": "color",
+            "default": "#ff9b59b6",
+            "description": "Colour at the bottom of the pulse"
+        }
+    ]
+}

@@ -1,11 +1,10 @@
 {
-    "id": "border-animated",
-    "name": "Animated Border",
-    "description": "Rounded corners and a window border with a moving colour sweep. Two colours circulate around the border band, and the sweep dims when the surface loses focus. Width, corner radius, sweep speed and the two colours are this pack's own parameters.",
+    "id": "border-gradient",
+    "name": "Gradient Border",
+    "description": "Rounded corners and a window border coloured by a still two-colour gradient across the frame. The gradient direction is set in degrees, and the band dims when the surface loses focus. Width, corner radius, angle and the two colours are this pack's own parameters.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Borders",
-    "animated": true,
     "fragmentShader": "effect.frag",
     "parameters": [
         {
@@ -15,7 +14,7 @@
             "default": 2,
             "min": 0,
             "max": 10,
-            "description": "Thickness of the coloured border (px)"
+            "description": "Thickness of the gradient border (px)"
         },
         {
             "id": "cornerRadius",
@@ -27,27 +26,27 @@
             "description": "Roundness of the corners (px, 0 for square)"
         },
         {
-            "id": "sweepSpeed",
-            "name": "Sweep speed",
+            "id": "gradientAngle",
+            "name": "Gradient angle",
             "type": "float",
-            "default": 0.25,
-            "min": 0.02,
-            "max": 2.0,
-            "description": "How many times per second the colours travel around the border"
+            "default": 45.0,
+            "min": 0.0,
+            "max": 360.0,
+            "description": "Direction of the gradient across the frame (degrees)"
         },
         {
             "id": "colorA",
             "name": "First colour",
             "type": "color",
             "default": "#ff3daee9",
-            "description": "First colour of the travelling sweep"
+            "description": "Gradient start colour"
         },
         {
             "id": "colorB",
             "name": "Second colour",
             "type": "color",
             "default": "#ff9b59b6",
-            "description": "Second colour of the travelling sweep"
+            "description": "Gradient end colour"
         }
     ]
 }
