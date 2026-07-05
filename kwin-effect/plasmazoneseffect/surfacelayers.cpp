@@ -93,7 +93,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
     // padded/multi-pack window doesn't need one: renderSurfaceChainComposite
     // ran on every ALIVE paint frame and m_surfaceMultipass still holds the
     // final pre-close decorated composite (the entry outlives close because
-    // slotWindowClosed defers removeWindowBorder), which is exactly the frozen
+    // slotWindowClosed defers removeWindowDecoration), which is exactly the frozen
     // frame the close animation should carry. A plain single-pack unpadded
     // window has no rest composite and animates the bare frozen uTexture0
     // (its border does not ride the close — strictly better than the flash;
@@ -125,7 +125,7 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
     if (m_surfacePresentFailed) {
         return nullptr;
     }
-    // Same off-paint-caller guard as compiledPack(): reconcileBorderShader
+    // Same off-paint-caller guard as compiledPack(): reconcileDecorationShader
     // reaches here from D-Bus/settings/lifecycle contexts where the GL context
     // is not guaranteed current. A no-context call must return without
     // latching so the next use (at latest the paint cycle) retries.
@@ -189,7 +189,7 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
 // the content painted below this window.
 void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTarget,
                                               const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
-                                              const WindowBorder& wb, const QRectF& animatedFrame)
+                                              const WindowDecoration& wb, const QRectF& animatedFrame)
 {
     // Mirror renderSurfaceChainComposite's canvas math EXACTLY (padded
     // logical rect, capped capture scale, derived texture size) so uBackdrop
@@ -335,8 +335,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         return nullptr;
     }
     const QString windowId = getWindowId(w);
-    const auto bit = m_windowBorders.constFind(windowId);
-    if (bit == m_windowBorders.constEnd()) {
+    const auto bit = m_windowDecorations.constFind(windowId);
+    if (bit == m_windowDecorations.constEnd()) {
         return nullptr;
     }
     const QStringList chain = bit->chain;
@@ -695,8 +695,8 @@ float PlasmaZonesEffect::surfaceShaderTimeSeconds()
 // next postPaintScreen picks the animation up.
 bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
 {
-    const auto it = m_windowBorders.constFind(windowId);
-    if (it == m_windowBorders.constEnd()) {
+    const auto it = m_windowDecorations.constFind(windowId);
+    if (it == m_windowDecorations.constEnd()) {
         return false;
     }
     // Resolve the decoration profile LAZILY: compiledPack only reads it on a

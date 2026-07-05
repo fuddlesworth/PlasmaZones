@@ -1406,10 +1406,10 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         // hand the slot BACK to the border shader and KEEP the redirect, rather
         // than unredirecting. Unredirecting here would drop the border outline
         // on every snapped window the moment its open/focus/move animation
-        // ends. reconcileBorderShader re-applies the border shader (setShader +
-        // redirect, both idempotent) and stamps WindowBorder::shaderApplied so
-        // the per-frame uniform push and removeWindowBorder resume owning the
-        // slot. We must erase the transition FIRST so reconcileBorderShader's
+        // ends. reconcileDecorationShader re-applies the border shader (setShader +
+        // redirect, both idempotent) and stamps WindowDecoration::shaderApplied so
+        // the per-frame uniform push and removeWindowDecoration resume owning the
+        // slot. We must erase the transition FIRST so reconcileDecorationShader's
         // own findTransition() check sees no live transition and takes the
         // apply branch.
         m_shaderManager.eraseTransition(window);
@@ -1420,11 +1420,11 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         // the removal); the animation is over and the window is going away, so
         // drop it now rather than re-applying a resting border to a corpse.
         if (releaseCloseGrab) {
-            removeWindowBorder(wid);
+            removeWindowDecoration(wid);
         }
-        const bool stillBordered = m_windowBorders.contains(wid);
+        const bool stillBordered = m_windowDecorations.contains(wid);
         if (stillBordered) {
-            reconcileBorderShader(wid, window);
+            reconcileDecorationShader(wid, window);
         } else if (!releaseCloseGrab) {
             // First decoration opportunity for a freshly-opened window. Its
             // window.open animation borrowed the OffscreenEffect redirect/shader
@@ -1432,13 +1432,13 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
             // in-flight transition (and the open animation visibly broke). Now
             // that the transition is torn down, create it here so the border
             // appears the moment the open animation ends — no focus change needed.
-            // updateWindowBorder self-gates (app-window filter + non-empty chain)
-            // and re-applies via reconcileBorderShader (the transition is already
+            // updateWindowDecoration self-gates (app-window filter + non-empty chain)
+            // and re-applies via reconcileDecorationShader (the transition is already
             // erased, so it takes the apply branch). Skipped for a CLOSING window
             // (releaseCloseGrab) — no point decorating a window on its way out.
             // If the window isn't decoratable, hand the slot back to KWin.
-            updateWindowBorder(wid, window);
-            if (!m_windowBorders.contains(wid)) {
+            updateWindowDecoration(wid, window);
+            if (!m_windowDecorations.contains(wid)) {
                 setShader(window, nullptr);
                 unredirect(window);
             }
@@ -1461,10 +1461,10 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
         // our redirect is live until the unref).
         setShader(window, nullptr);
         // Deleted window: drop the border entry the close path deferred.
-        // The rest of removeWindowBorder's GL side is a no-op here
+        // The rest of removeWindowDecoration's GL side is a no-op here
         // (findWindowById resolves nothing for a deleted id); the
         // windowDeleted handler remains the backstop.
-        removeWindowBorder(getWindowId(window), window);
+        removeWindowDecoration(getWindowId(window), window);
     }
     if (!surfaceExtentRepaint.isEmpty() && KWin::effects) {
         KWin::effects->addRepaint(KWin::Rect(surfaceExtentRepaint));
@@ -1817,9 +1817,9 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
         // Per-window border / title-bar rules ride the same animation rule set
         // (Tag::Effect admits them). Refresh borders so an edited /
         // added / removed SetBorder* / SetHideTitleBar rule applies immediately
-        // — updateAllBorders re-merges every window and reconciles rule-hidden
+        // — updateAllDecorations re-merges every window and reconciles rule-hidden
         // title bars against the fresh evaluator.
-        updateAllBorders();
+        updateAllDecorations();
 
         // Update the drag-gate exclusion rule set from the same unified
         // payload — `loadRuleAnimationsFromDbus` is the effect's one

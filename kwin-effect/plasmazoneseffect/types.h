@@ -70,7 +70,7 @@ struct CompiledSurfaceBufferPass
 /// Resolved customParams / customColors uniform VALUES for one surface pack —
 /// the pack's declared parameter defaults merged with a DecorationProfile's
 /// per-pack overrides, translated to contract slots. Stored per (window, pack)
-/// on WindowBorder::packParamValues so windows on different surface paths
+/// on WindowDecoration::packParamValues so windows on different surface paths
 /// (window.tiled vs window.snapped vs window.floating) can carry different
 /// override values for the SAME pack; the pack's compiled program is
 /// value-independent, so only these arrays vary per window.
@@ -96,8 +96,8 @@ struct SurfaceParamValues
 ///
 /// The param VALUES baked here at first-compile time are the BASELINE fallback
 /// only (the profile that triggered the compile). The render paths prefer the
-/// per-window values updateWindowBorder resolves into
-/// WindowBorder::packParamValues, so windows on different surface paths can
+/// per-window values updateWindowDecoration resolves into
+/// WindowDecoration::packParamValues, so windows on different surface paths can
 /// carry different overrides for the same pack; these baked arrays are used
 /// only when a window has no per-window entry for the pack.
 struct CompiledSurfacePack
@@ -161,7 +161,7 @@ struct CompiledSurfacePack
 /// Per-window FBO state for the decoration composite fold
 /// (renderSurfaceChainComposite): the ping-pong composite pair, the per-pack
 /// buffer-pass textures (chainBufferTex), and the backdrop capture. Keyed by
-/// getWindowId(w) in m_surfaceMultipass; freed by removeWindowBorder.
+/// getWindowId(w) in m_surfaceMultipass; freed by removeWindowDecoration.
 struct SurfaceMultipassState
 {
     // One pack with buffer passes, presented through OffscreenData. Unused on
@@ -193,7 +193,7 @@ struct SurfaceMultipassState
     /// window blitted from the live render target over the SAME padded
     /// canvas as the composite (texel-aligned — a pack samples both with one
     /// uv). Reallocated on size change; freed with the rest of this state in
-    /// removeWindowBorder, and NEVER sampled on the deleted/close path (the
+    /// removeWindowDecoration, and NEVER sampled on the deleted/close path (the
     /// fold doesn't run there; the frozen composite carries the last-alive
     /// frost baked in).
     std::unique_ptr<KWin::GLTexture> backdropTex;
@@ -248,7 +248,7 @@ struct SurfaceMultipassState
 /// CompiledSurfacePack's customParams/customColors at compile time and pushed by
 /// pushBorderUniforms. This struct now only records WHICH pack chain renders and
 /// the per-window hide-titlebar choice; the appearance lives with the pack.
-struct WindowBorder
+struct WindowDecoration
 {
     /// True when THIS border owns the window's OffscreenEffect redirect +
     /// border shader slot. False while an animation transition has taken over
@@ -310,7 +310,7 @@ struct WindowBorder
     /// (the nested draw uses KWin's default modulating shader) — content
     /// dims once, decoration packs stack over it at full strength, and a
     /// frost pack gets the translucency it fills. Kept fresh by
-    /// updateWindowBorder, which re-runs on every trigger that can change
+    /// updateWindowDecoration, which re-runs on every trigger that can change
     /// a rule verdict (focus, snap state, rule/config edits).
     double ruleOpacity = 1.0;
 
@@ -322,9 +322,9 @@ struct WindowBorder
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but
     /// not the margin band OUTSIDE them, so the glow would trail during a
-    /// drag. updateWindowBorder connects windowFrameGeometryChanged for
+    /// drag. updateWindowDecoration connects windowFrameGeometryChanged for
     /// padded windows and damages lastPaddedGeo ∪ the new padded rect at
-    /// screen level; removeWindowBorder disconnects.
+    /// screen level; removeWindowDecoration disconnects.
     QRectF lastPaddedGeo;
     QMetaObject::Connection paddedGeoConnection;
 
@@ -341,7 +341,7 @@ struct WindowBorder
     /// Per-window resolved param values for each pack in `chain`, keyed by
     /// pack id — the window's DecorationProfile overrides translated to
     /// contract slots (ShaderInternal::resolveSurfaceParamValues). Filled by
-    /// updateWindowBorder alongside the chain itself, so it refreshes on
+    /// updateWindowDecoration alongside the chain itself, so it refreshes on
     /// exactly the same triggers (tree change, tile/snap membership change).
     /// The render paths prefer these over the CompiledSurfacePack's baked
     /// baseline values; a missing key falls back to the baked ones.

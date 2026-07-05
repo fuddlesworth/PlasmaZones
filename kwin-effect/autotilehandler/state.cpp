@@ -329,7 +329,7 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
     // path has to clean up after itself.
     m_autotileTargetZones.remove(windowId);
     m_centeredWaylandZones.remove(windowId);
-    m_effect->removeWindowBorder(windowId);
+    m_effect->removeWindowDecoration(windowId);
     unmaximizeMonocleWindow(windowId);
 }
 

@@ -680,7 +680,7 @@ private:
     std::unique_ptr<AutotileHandler> m_autotileHandler;
     std::unique_ptr<SnapHandler> m_snapHandler;
 
-    QHash<QString, WindowBorder> m_windowBorders; // windowId → border
+    QHash<QString, WindowDecoration> m_windowDecorations; // windowId → border
 
     // Live system colours that a `BorderColorToken::Accent` sentinel in a
     // border-colour rule resolves to. The sentinel tracks the system colour
@@ -794,16 +794,16 @@ private:
     QRect m_resizeStartGeometry;
     void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry);
 
-    void updateWindowBorder(const QString& windowId, KWin::EffectWindow* w);
+    void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
     /// windowHint: the EffectWindow when the caller still holds it and the
     /// window is already deleted (close / delete paths) — findWindowById
     /// cannot resolve a deleted id, and without the pointer the GL release
     /// (setShader(nullptr) + unredirect) is skipped, leaving the corpse
     /// redirected with a shader whose samplers reference textures this very
     /// function destroys (unbound sampler = opaque black flash on close).
-    void removeWindowBorder(const QString& windowId, KWin::EffectWindow* windowHint = nullptr);
-    void updateAllBorders();
-    void clearAllBorders();
+    void removeWindowDecoration(const QString& windowId, KWin::EffectWindow* windowHint = nullptr);
+    void updateAllDecorations();
+    void clearAllDecorations();
 
     // ── Offscreen border shader (flush rounded corners + per-window outline) ──
     //
@@ -833,12 +833,12 @@ private:
     CompiledSurfacePack* compiledPack(const QString& packId, const PhosphorSurfaceShaders::DecorationProfile& profile);
 
     /// Resolve the CompiledSurfacePack for the window @p windowId's stored base
-    /// pack id (WindowBorder::basePackId), re-resolving its DecorationProfile from
+    /// pack id (WindowDecoration::basePackId), re-resolving its DecorationProfile from
     /// the window's surface path to feed the pack's parameter overrides. Returns
     /// nullptr when the window has no border entry, no GL context, or the pack's
     /// compile failed (compileFailed latch / null shader) — the caller then
     /// renders nothing for it. The single render-path lookup shared by
-    /// reconcileBorderShader / drawWindow / renderSurfaceChain /
+    /// reconcileDecorationShader / drawWindow / renderSurfaceChain /
     /// the composite fold, replacing the old single m_borderShader.
 
     /// Populate the surface-shader registry's search paths (the bundled
@@ -848,19 +848,19 @@ private:
 
     /// Decide and apply the desired offscreen shader for @p windowId / @p w:
     ///   • a transition is active (animation owns the slot) → leave it alone;
-    ///   • else the window has a border in m_windowBorders → redirect + set the
-    ///     border shader, marking the WindowBorder `shaderApplied`;
+    ///   • else the window has a border in m_windowDecorations → redirect + set the
+    ///     border shader, marking the WindowDecoration `shaderApplied`;
     ///   • else if WE applied the border shader → setShader(nullptr) + unredirect.
-    /// Idempotent and safe to call from updateWindowBorder / removeWindowBorder /
+    /// Idempotent and safe to call from updateWindowDecoration / removeWindowDecoration /
     /// transition end. Never unredirects a window the animation system owns.
-    void reconcileBorderShader(const QString& windowId, KWin::EffectWindow* w);
+    void reconcileDecorationShader(const QString& windowId, KWin::EffectWindow* w);
 
     /// Per-frame uniform push for a bordered window painted through @p pack's
     /// surface shader. Sets the geometry uniforms (uSurfaceSize, uSurfaceFrameTopLeft,
     /// uSurfaceFrameSize) from the window's frame/expanded geometry × @p scale, the
     /// logical-to-device @p scale itself (uSurfaceScale), the focus flag
     /// (uSurfaceFocused), plus @p packId's customParams/customColors — seeded from
-    /// THIS window's resolved values (WindowBorder::packParamValues) with the
+    /// THIS window's resolved values (WindowDecoration::packParamValues) with the
     /// compiled pack's baked baseline as fallback. @p wb is the window's border
     /// entry: when its ruleBorder flag is set AND @p packId is the rule-owned
     /// border base, THIS window's rule-resolved width / radius / colours override
@@ -873,7 +873,7 @@ private:
     /// @p texturePaddingLogical: outer margin (logical px) baked into the
     /// TARGET texture's canvas — non-zero only on the padded composite path,
     /// where the geometry uniforms must describe the inflated space.
-    void pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& wb, const QString& packId,
+    void pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
                             const CompiledSurfacePack& pack, qreal scale, qreal texturePaddingLogical = 0.0);
 
     /// Render the window's active surface-layer stack into @p transition's
@@ -938,7 +938,8 @@ private:
     /// pane shows the scene behind the moving quad instead of behind the
     /// resting rect. Invalid = capture at the live geometry.
     void captureWindowBackdrop(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                               KWin::EffectWindow* w, const WindowBorder& wb, const QRectF& animatedFrame = QRectF());
+                               KWin::EffectWindow* w, const WindowDecoration& wb,
+                               const QRectF& animatedFrame = QRectF());
     KWin::GLTexture* renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
                                                  KWin::GLShader* captureRestoreShader = nullptr, bool force = false);
 
@@ -989,13 +990,13 @@ private:
     /// passes for that one pack). Populated on first use by compiledPack();
     /// cleared wholesale on a SurfaceShaderRegistry hot-reload (effectsChanged)
     /// and on teardown. A window's render path looks up its resolved base pack id
-    /// (WindowBorder::basePackId) here.
+    /// (WindowDecoration::basePackId) here.
     std::unordered_map<QString, CompiledSurfacePack> m_compiledPacks;
 
     /// Per-window multipass FBO targets (surfaceTex + bufferTex chain). Keyed by
     /// getWindowId(w). Allocated lazily by the composite fold, reallocated
     /// when the window's expanded size × scale changes, and erased on window
-    /// close / border removal (removeWindowBorder) to free GPU memory.
+    /// close / border removal (removeWindowDecoration) to free GPU memory.
     std::unordered_map<QString, SurfaceMultipassState> m_surfaceMultipass;
 
     /// Resolve the DECORATION SURFACE PATH for @p windowId based on MEMBERSHIP
@@ -1005,7 +1006,7 @@ private:
     ///   • else                                                  → "window.floating"
     /// Autotile-first precedence. The resolved profile's effectiveChain() (an
     /// empty chain = no decoration) is the sole render gate (see
-    /// updateWindowBorder); there is no separate show-border gate.
+    /// updateWindowDecoration); there is no separate show-border gate.
     QString resolveSurfacePathFor(const QString& windowId) const;
 
     /// Seed m_decorationTree with the empty/neutral default (mirroring the
@@ -1021,7 +1022,7 @@ private:
     /// Coalesce a full border sweep to the end of the event-loop turn. The
     /// config-default appearance loaders (and the accent / inactive colour
     /// loaders) each land as a separate async settings reply; several arriving in
-    /// one turn would otherwise each run a full updateAllBorders(). Collapsing them
+    /// one turn would otherwise each run a full updateAllDecorations(). Collapsing them
     /// to a single deferred sweep keeps the last-value result while doing the work
     /// once. The sweep still lands before the next paint.
     void scheduleBorderSweep();
@@ -1334,7 +1335,7 @@ private:
 
     // Set while a coalesced border sweep is queued for the end of the turn (see
     // scheduleBorderSweep); collapses a burst of appearance-setting replies into
-    // one updateAllBorders().
+    // one updateAllDecorations().
     bool m_borderSweepPending = false;
 
     // Cached daemon D-Bus service registration state.

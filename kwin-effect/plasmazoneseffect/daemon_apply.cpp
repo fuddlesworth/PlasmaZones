@@ -580,18 +580,18 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
         }
         // Recreate this window's border so a state-scoped border colour
         // re-applies. Border overlays are visual-only, so build them only for a
-        // window on the current desktop — matching updateAllBorders, which gates
+        // window on the current desktop — matching updateAllDecorations, which gates
         // the same call this way to avoid building an invisible off-desktop item
         // that the next desktop switch tears down.
         if (w->isOnCurrentDesktop()) {
-            updateWindowBorder(windowId, w);
+            updateWindowDecoration(windowId, w);
         }
         // Re-resolve the hide-title-bar override too: a SetHideTitleBar rule
         // scoped on a placement field (IsSnapped / IsFloating / Zone / Mode) must
         // recompute on a snap/unsnap, otherwise a title bar hidden WHEN isSnapped
-        // stays hidden after unsnap until the next updateAllBorders. The
+        // stays hidden after unsnap until the next updateAllDecorations. The
         // decoration state survives desktop switches, so reconcile it for the
-        // window regardless of which desktop it sits on (as updateAllBorders does).
+        // window regardless of which desktop it sits on (as updateAllDecorations does).
         reconcileRuleHiddenTitleBar(windowId, w);
         // An opacity-only (borderless) window needs an explicit repaint for its
         // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
@@ -611,7 +611,7 @@ void PlasmaZonesEffect::scheduleBorderSweep()
     // before the turn ends.
     QTimer::singleShot(0, this, [this] {
         m_borderSweepPending = false;
-        updateAllBorders();
+        updateAllDecorations();
     });
 }
 

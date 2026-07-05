@@ -126,16 +126,16 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     m_navigationHandler->syncFloatingStateForWindow(windowId);
 
     // Decorate the new window immediately, open transition or not. The old
-    // slot-fight hazard is gone: reconcileBorderShader defers the
+    // slot-fight hazard is gone: reconcileDecorationShader defers the
     // redirect/shader slot to any live transition (it only marks the entry,
     // shaderApplied=false), and renderSurfaceChain re-evaluates the border
     // entry per frame, compositing the decoration UNDER the open animation via
     // uSurfaceLayer — so the border flies in WITH the window instead of
-    // popping in at transition end. updateWindowBorder self-gates and is
+    // popping in at transition end. updateWindowDecoration self-gates and is
     // idempotent (snap/autotile re-running it later is harmless).
-    // Current-desktop only, matching updateAllBorders.
+    // Current-desktop only, matching updateAllDecorations.
     if (w->isOnCurrentDesktop()) {
-        updateWindowBorder(windowId, w);
+        updateWindowDecoration(windowId, w);
     }
 
     bool onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
@@ -334,7 +334,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_autotileHandler->clearDesktopMoveStash(closedWindowId);
 
     // Mirror that cleanup for snapping's own border set. Pure bookkeeping —
-    // the window is being destroyed, so no setNoBorder/removeWindowBorder is
+    // the window is being destroyed, so no setNoBorder/removeWindowDecoration is
     // needed here (the border entry / shader redirect is dropped just below and
     // the title bar dies with the window).
     m_snapHandler->onWindowClosed(closedWindowId);
@@ -353,8 +353,8 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     if (!m_shaderManager.hasTransition(w)) {
         // Pass the window pointer: the id no longer resolves via
         // findWindowById at this point, and the GL release must run (see
-        // removeWindowBorder) or the redirect paints opaque black.
-        removeWindowBorder(closedWindowId, w);
+        // removeWindowDecoration) or the redirect paints opaque black.
+        removeWindowDecoration(closedWindowId, w);
     }
 
     // Notify general daemon for cleanup
@@ -422,14 +422,14 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
         m_shaderManager.animationRuleEvaluator().clearCache();
 
         // A focus-scoped SetOpacity rule changes a window's resolved opacity
-        // when it gains or loses focus. updateAllBorders() below repaints any
-        // bordered window (updateWindowBorder requests a full repaint), but an
+        // when it gains or loses focus. updateAllDecorations() below repaints any
+        // bordered window (updateWindowDecoration requests a full repaint), but an
         // opacity-only (borderless) window has no border to re-resolve — so
         // without an explicit repaint its re-resolved opacity would not reach
         // the screen until some unrelated damage happened to repaint it. Force a
         // repaint of both the window gaining focus (w) and the one losing it
         // (m_lastActivatedWindow). Gated on hasOpacityRules() because pure
-        // border-colour changes are already covered by updateAllBorders()'s
+        // border-colour changes are already covered by updateAllDecorations()'s
         // per-window repaint.
         if (m_shaderManager.hasOpacityRules()) {
             if (w) {
@@ -447,9 +447,9 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
 
     // Re-resolve every window's border against the new focus state so the
     // active window picks up the active colour and the rest the inactive one.
-    // updateAllBorders tears down and re-applies the per-window border shader
-    // (reconcileBorderShader) for each tracked window.
-    updateAllBorders();
+    // updateAllDecorations tears down and re-applies the per-window border shader
+    // (reconcileDecorationShader) for each tracked window.
+    updateAllDecorations();
 }
 
 void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
@@ -474,11 +474,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
 
                 // Title-bar state is rule-driven (no autotile decoration claim
                 // to release): KWin's off-desktop noBorder reset is corrected on
-                // desktop return by updateAllBorders → resyncWindow for any
+                // desktop return by updateAllDecorations → resyncWindow for any
                 // rule-owned window. onWindowClosed below only clears effect-side
                 // tracking (shared with the genuine-close path).
                 m_autotileHandler->onWindowClosed(windowId, screenId);
-                removeWindowBorder(windowId);
+                removeWindowDecoration(windowId);
                 qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
             }
         }
@@ -853,7 +853,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // Self-heal a noBorder reset KWin issues asynchronously after a
                 // cross-OUTPUT move. For a rule-owned (title-bar-hidden) window
                 // the manager already believes it hidden, so the synchronous
-                // resync in updateAllBorders bails ("still suppressed") when it
+                // resync in updateAllDecorations bails ("still suppressed") when it
                 // runs before KWin re-evaluates the decoration. KWin grows the
                 // frame by the title-bar height when it re-decorates, firing this
                 // very signal: resyncWindow re-hides exactly the windows the

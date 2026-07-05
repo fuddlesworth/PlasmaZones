@@ -84,7 +84,7 @@ public:
     /// AutotileHandler::clearTiledTracking).
     void clearSnapTracking();
     /// Drop snap border/title-bar tracking for a window being destroyed. Pure
-    /// bookkeeping — no setNoBorder/removeWindowBorder, the window is going away.
+    /// bookkeeping — no setNoBorder/removeWindowDecoration, the window is going away.
     void onWindowClosed(const QString& windowId);
 
     // ── Snapping focus-follows-mouse (mirrors AutotileHandler) ──

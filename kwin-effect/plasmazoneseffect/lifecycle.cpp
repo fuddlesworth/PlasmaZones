@@ -519,12 +519,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             &ScreenChangeHandler::scheduleClientAreaReport);
 
     // Border overlays are built only for current-desktop windows (markWindowSnapped
-    // and updateAllBorders both gate on isOnCurrentDesktop), so the overlay for a
+    // and updateAllDecorations both gate on isOnCurrentDesktop), so the overlay for a
     // window snapped while on another desktop isn't created until that desktop
     // becomes current. Rebuild on every desktop switch so those borders appear
     // without waiting for the window to be re-activated.
     connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, [this]() {
-        updateAllBorders();
+        updateAllDecorations();
     });
 
     // Per-output virtual desktops (Plasma 6.7 "switch desktops independently for
@@ -565,16 +565,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             const QString cachedId = m_windowIdCache.take(w);
             m_windowIdReverse.remove(cachedId);
             // Free the border entry AND its multipass FBO targets keyed by this
-            // window id. Normally removeWindowBorder (run from slotWindowClosed)
+            // window id. Normally removeWindowDecoration (run from slotWindowClosed)
             // already cleared both; the explicit call here is defence-in-depth
             // for a window deleted without a preceding close. Pass the window
             // pointer so the GL release (setShader(nullptr) + unredirect) can
             // still run — findWindowById returns null post-delete. Critically
-            // this also drops the m_windowBorders entry, so a delete-without-
+            // this also drops the m_windowDecorations entry, so a delete-without-
             // close can't strand it and keep isActive() pinned true.
-            removeWindowBorder(cachedId, w);
+            removeWindowDecoration(cachedId, w);
             // Belt-and-suspenders for the not-expected case of a multipass entry
-            // without a border entry (removeWindowBorder's no-border early-return
+            // without a border entry (removeWindowDecoration's no-border early-return
             // would otherwise skip the FBO cleanup).
             m_surfaceMultipass.erase(cachedId);
             // Mirror the m_pendingFrameGeometry cleanup that
@@ -823,13 +823,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // gone. Clear the handlers' tiled tracking FIRST: restoreAll() emits
         // windowDecorationRestored per window, and the rebuild-on-restore
         // handler would otherwise recreate a border item for every still-
-        // tracked window only for clearAllBorders() to destroy it moments
+        // tracked window only for clearAllDecorations() to destroy it moments
         // later. With tracking cleared, resolveSurfacePathFor resolves
         // mode-tracked windows to window.floating during the restore burst and
         // the handler drops their items. Windows matched by a still-live SetBorder rule
         // (the rule sets deliberately survive daemon loss, see below) can
         // still get an item recreated and immediately torn down by
-        // clearAllBorders() — bounded, invisible churn that is cheaper than
+        // clearAllDecorations() — bounded, invisible churn that is cheaper than
         // suppressing the handler across the burst.
         m_autotileHandler->clearTiledTracking();
         m_snapHandler->clearSnapTracking();
@@ -847,12 +847,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // SetOpacity rule keyed on IsSnapped/IsFloating/Zone caches its verdict
         // per (windowId, ruleSet revision) — neither moves here — so without this
         // the window keeps its stale opacity (borders revert via restoreAll /
-        // clearAllBorders below, but opacity would not). Re-resolve every opacity
+        // clearAllDecorations below, but opacity would not). Re-resolve every opacity
         // window against the now-cleared placement, matching the border teardown.
         invalidateAllRuleCaches();
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
-        clearAllBorders();
+        clearAllDecorations();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
         // `m_animationExclusionRuleSet`, or the shader manager's animation
         // rule set. Across a daemon restart the user's last-known rule set
@@ -976,7 +976,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         m_snapHandler->clearSnapTracking();
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
-        clearAllBorders();
+        clearAllDecorations();
     }
 
     if (m_keyboardGrabbed && KWin::effects) {
@@ -999,7 +999,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // bookkeeping ran. Iterates a snapshot because endShaderTransition
     // erases from `m_shaderManager.m_shaderTransitions` mid-loop.
     //
-    // Guarded by `if (KWin::effects)` matching the clearAllBorders /
+    // Guarded by `if (KWin::effects)` matching the clearAllDecorations /
     // ungrabKeyboard guards above: during compositor teardown the global
     // is null and `endShaderTransition` dereferences it (setShader,
     // unredirect, refWindow). The compositor's own teardown reclaims

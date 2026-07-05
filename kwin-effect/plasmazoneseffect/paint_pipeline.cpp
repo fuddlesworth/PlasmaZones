@@ -241,8 +241,8 @@ void PlasmaZonesEffect::postPaintScreen()
     // composite degrades to single-pass there anyway). A purely static
     // decoration (border-only) is not matched, so this is a no-op in the common
     // case. windowSurfaceAnimates is per-pack-cache hash lookups.
-    if (KWin::effects && !m_windowBorders.isEmpty()) {
-        for (auto it = m_windowBorders.cbegin(); it != m_windowBorders.cend(); ++it) {
+    if (KWin::effects && !m_windowDecorations.isEmpty()) {
+        for (auto it = m_windowDecorations.cbegin(); it != m_windowDecorations.cend(); ++it) {
             if (!it->shaderApplied) {
                 continue;
             }
@@ -325,14 +325,14 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // the whole animation. setTranslucent() clears the opaque region
         // so every frame fully recomposites under the window.
         data.setTranslucent();
-    } else if (w && !m_windowBorders.isEmpty()) {
-        // Padded decoration chains (WindowBorder::outerPadding) present on a
+    } else if (w && !m_windowDecorations.isEmpty()) {
+        // Padded decoration chains (WindowDecoration::outerPadding) present on a
         // quad LARGER than the window's natural rect (see apply()); mark the
         // window transformed so KWin paints the padded quad unclipped. The
         // opaque region stays — the window's own content still covers it, so
         // occlusion culling underneath remains valid.
-        const auto bit = m_windowBorders.constFind(getWindowId(w));
-        if (bit != m_windowBorders.constEnd() && bit->shaderApplied && bit->outerPadding > 0) {
+        const auto bit = m_windowDecorations.constFind(getWindowId(w));
+        if (bit != m_windowDecorations.constEnd() && bit->shaderApplied && bit->outerPadding > 0) {
             data.setTransformed();
         }
     }
@@ -380,9 +380,9 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // and shaderApplied so only windows we actually border pay the cost; the
     // transform-driven branch above already set translucent for transitioning
     // windows, so this only adds the idle bordered case.
-    if (w && !transformDriven && !m_windowBorders.isEmpty()) {
-        const auto bit = m_windowBorders.constFind(getWindowId(w));
-        if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
+    if (w && !transformDriven && !m_windowDecorations.isEmpty()) {
+        const auto bit = m_windowDecorations.constFind(getWindowId(w));
+        if (bit != m_windowDecorations.constEnd() && bit->shaderApplied) {
             data.setTranslucent();
         }
     }
@@ -420,9 +420,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // fold sites (the rest-path composite further down AND the transition
     // branch's renderSurfaceChain), hence the shaderApplied-or-transition
     // gate rather than shaderApplied alone.
-    if (w && !w->isDeleted() && !m_capturingSnapshot && !m_windowBorders.isEmpty()) {
-        const auto backIt = m_windowBorders.constFind(getWindowId(w));
-        if (backIt != m_windowBorders.constEnd() && backIt->needsBackdrop
+    if (w && !w->isDeleted() && !m_capturingSnapshot && !m_windowDecorations.isEmpty()) {
+        const auto backIt = m_windowDecorations.constFind(getWindowId(w));
+        if (backIt != m_windowDecorations.constEnd() && backIt->needsBackdrop
             && (backIt->shaderApplied || m_shaderManager.findTransition(w))) {
             // While an animation is drawing the window somewhere other than
             // its resting rect, capture the backdrop where the quad actually
@@ -730,7 +730,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // canvas. Unpadded windows reduce to the uTexture0 mapping.
             qreal layerPad = 0.0;
             bool chainBakesOpacity = false;
-            if (const auto lbIt = m_windowBorders.constFind(getWindowId(w)); lbIt != m_windowBorders.constEnd()) {
+            if (const auto lbIt = m_windowDecorations.constFind(getWindowId(w));
+                lbIt != m_windowDecorations.constEnd()) {
                 layerPad = lbIt->outerPadding;
                 chainBakesOpacity = lbIt->chainHandlesOpacity;
             }
@@ -1272,9 +1273,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // OffscreenEffect::drawWindow). The override then only BINDS the ready
     // composite for the present blit. The pre-gate skips windows with no
     // applied border without a map lookup.
-    if (!m_capturingSnapshot && !m_windowBorders.isEmpty() && !m_shaderManager.findTransition(w)) {
-        const auto bit = m_windowBorders.constFind(getWindowId(w));
-        if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
+    if (!m_capturingSnapshot && !m_windowDecorations.isEmpty() && !m_shaderManager.findTransition(w)) {
+        const auto bit = m_windowDecorations.constFind(getWindowId(w));
+        if (bit != m_windowDecorations.constEnd() && bit->shaderApplied) {
             // Composite the whole chain into the per-window FBO (each pack's
             // main runs as an FBO pass); drawWindow presents the final slot
             // through the passthrough present shader. EVERY decorated window
@@ -1495,7 +1496,7 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     auto* st = m_shaderManager.findTransition(window);
 
     // ── Padded decoration present ────────────────────────────────────────
-    // A chain with an outer margin (WindowBorder::outerPadding) composited
+    // A chain with an outer margin (WindowDecoration::outerPadding) composited
     // into a canvas LARGER than the redirect texture
     // (renderSurfaceChainComposite inflated the capture rect). Present it on
     // a matching padded quad so the margin band reaches the screen — the
@@ -1503,9 +1504,9 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // stretch to the whole output; this stretches by the padding). Gated on
     // no live transition: a transition owns the shader slot (shaderApplied
     // false) and its own quad handling wins.
-    if (!st && !quads.isEmpty() && !m_windowBorders.isEmpty()) {
-        const auto bit = m_windowBorders.find(getWindowId(window));
-        if (bit != m_windowBorders.end() && bit->shaderApplied && bit->outerPadding > 0) {
+    if (!st && !quads.isEmpty() && !m_windowDecorations.isEmpty()) {
+        const auto bit = m_windowDecorations.find(getWindowId(window));
+        if (bit != m_windowDecorations.end() && bit->shaderApplied && bit->outerPadding > 0) {
             QRectF textureGeo = window->expandedGeometry();
             if (textureGeo.isEmpty()) {
                 textureGeo = window->frameGeometry();
@@ -1573,9 +1574,9 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // padded uSurfaceLayer. (Out-of-range uTexture0 samples only matter when
     // the layer is absent, where CLAMP smears the feathered-transparent
     // margin edge — invisible.)
-    if (st && !st->surfaceExtent && !quads.isEmpty() && !m_windowBorders.isEmpty()) {
-        const auto bit = m_windowBorders.find(getWindowId(window));
-        if (bit != m_windowBorders.end() && bit->outerPadding > 0) {
+    if (st && !st->surfaceExtent && !quads.isEmpty() && !m_windowDecorations.isEmpty()) {
+        const auto bit = m_windowDecorations.find(getWindowId(window));
+        if (bit != m_windowDecorations.end() && bit->outerPadding > 0) {
             QRectF textureGeo = window->expandedGeometry();
             if (textureGeo.isEmpty()) {
                 textureGeo = window->frameGeometry();

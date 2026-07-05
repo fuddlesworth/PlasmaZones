@@ -81,7 +81,7 @@ bool PlasmaZonesEffect::isActive() const
     // effect consulted (and the window composited rather than
     // direct-scanned-out) when a frame is produced.
     //
-    // `!m_windowBorders.isEmpty()` is the SAME persistent case as opacity
+    // `!m_windowDecorations.isEmpty()` is the SAME persistent case as opacity
     // rules: a per-window border is rendered passively in drawWindow by
     // re-blitting the redirected window through the border shader on every
     // composite (the KDE-Rounded-Corners / LightlyShaders model). Those
@@ -94,7 +94,7 @@ bool PlasmaZonesEffect::isActive() const
     // survives idle. O(1) — a QHash emptiness check, safe in this per-frame
     // hot path.
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
-        || m_shaderManager.hasOpacityRules() || !m_windowBorders.isEmpty();
+        || m_shaderManager.hasOpacityRules() || !m_windowDecorations.isEmpty();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)

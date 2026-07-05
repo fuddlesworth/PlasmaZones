@@ -609,7 +609,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     // System colours for window-border rules: the zone highlight / inactive
     // colours track the Plasma colour scheme (when "use system colours" is on the
     // daemon keeps them in sync), and they are what a border-colour `accent`
-    // sentinel resolves to in updateWindowBorder — highlight for the focused
+    // sentinel resolves to in updateWindowDecoration — highlight for the focused
     // (active) slot, inactive for the unfocused (inactive) slot, mirroring the
     // distinct active/inactive system border colours the per-mode appearance
     // settings used before they folded into rules. Both are re-fetched on every
@@ -635,7 +635,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     // inactive colour loaders above). Re-fetched on every settingsChanged, so a
     // Window Appearance page edit takes effect without a relog. Guarded on an
     // actual value change to avoid a redundant full border rebuild per fetch.
-    loadSettingAsync(QStringLiteral("showWindowBorder"), [this](const QVariant& v) {
+    loadSettingAsync(QStringLiteral("showWindowDecoration"), [this](const QVariant& v) {
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.showBorder != b) {
             m_windowAppearanceDefault.showBorder = b;
@@ -808,12 +808,12 @@ void PlasmaZonesEffect::loadCachedSettings()
     // Window border / title-bar appearance is pushed as unified config defaults
     // (the window-appearance loaders above). Each slot is resolved as that config
     // default, scope-gated, with per-window rule overrides layered on top inside
-    // updateWindowBorder / reconcileRuleHiddenTitleBar (resolveEffectiveWindowAppearance).
+    // updateWindowDecoration / reconcileRuleHiddenTitleBar (resolveEffectiveWindowAppearance).
 
     // Per-surface decoration profile tree (Stage 2a): the SSOT for each surface's
     // USER shader-pack chain (e.g. glow) plus each pack's parameter overrides,
     // keyed by surface path (window.tiled / window.snapped / window.floating).
-    // The appearance-owned "border" base pack is prepended by updateWindowBorder
+    // The appearance-owned "border" base pack is prepended by updateWindowDecoration
     // from the config/rule resolution above; this tree contributes the packs the
     // user chained on top. The autotile/snap BorderState is still maintained (it
     // drives MEMBERSHIP — which windows are tiled/snapped — and the daemon's
@@ -839,7 +839,7 @@ void PlasmaZonesEffect::loadCachedSettings()
             // alters parameters[packId] requires a recompile of that pack — clear the
             // whole compiled-pack cache (it lazily recompiles on the next paint).
             m_compiledPacks.clear();
-            updateAllBorders();
+            updateAllDecorations();
             if (KWin::effects) {
                 KWin::effects->addRepaintFull();
             }

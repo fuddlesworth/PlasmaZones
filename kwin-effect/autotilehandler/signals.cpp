@@ -60,7 +60,7 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
         // Drop any in-flight debounced minimize→float commits — they must not
         // fire against a disabled engine.
         clearAllPendingMinimizeFloats();
-        m_effect->updateAllBorders();
+        m_effect->updateAllDecorations();
     }
 }
 
@@ -252,7 +252,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     requestDaemonPreTileRestore(w, windowId);
                 }
             }
-            m_effect->updateAllBorders();
+            m_effect->updateAllDecorations();
         } else {
             QSet<QString> windowsOnRemovedScreens;
             for (KWin::EffectWindow* w : windows) {
@@ -464,11 +464,11 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // Refresh active border for the focused window on the returned-to
             // desktop. This also re-asserts borderless state: KWin silently
             // resets noBorder for windows on non-current desktops and the
-            // daemon skips the retile on desktop return, but updateAllBorders
+            // daemon skips the retile on desktop return, but updateAllDecorations
             // runs DecorationManager::resyncWindow for every window — a
             // self-guarding, owner-kind-agnostic re-hide of exactly the
             // windows the manager owns whose decoration came back.
-            m_effect->updateAllBorders();
+            m_effect->updateAllDecorations();
         } else {
             // Genuine user toggle — process all added screens as new.
 
@@ -846,7 +846,7 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         }
         markWindowTiled(screenId, windowId);
         // Title-bar (borderless) state is driven by rules.
-        m_effect->updateAllBorders();
+        m_effect->updateAllDecorations();
         return;
     }
     // Clear border tracking so borders are not drawn over fullscreen content
@@ -861,7 +861,7 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // geometry (same cleanup applyFloatCleanup performs).
     m_autotileTargetZones.remove(windowId);
     m_centeredWaylandZones.remove(windowId);
-    m_effect->removeWindowBorder(windowId);
+    m_effect->removeWindowDecoration(windowId);
 }
 
 } // namespace PlasmaZones

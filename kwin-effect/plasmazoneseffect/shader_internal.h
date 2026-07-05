@@ -114,7 +114,7 @@ namespace ShaderInternal {
 /// values (SurfaceParamValues, types.h). Defined in surface_compile.cpp;
 /// external linkage for the same Unity-build reason as
 /// injectKwinDefineAfterVersion. Used by compiledPack() for the baseline bake
-/// and by updateWindowBorder() for the per-window values.
+/// and by updateWindowDecoration() for the per-window values.
 SurfaceParamValues resolveSurfaceParamValues(const PhosphorSurfaceShaders::SurfaceShaderEffect& eff,
                                              const QVariantMap& friendlyOverrides);
 

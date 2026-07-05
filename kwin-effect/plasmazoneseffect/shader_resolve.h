@@ -168,7 +168,7 @@ struct ResolvedWindowAppearance
     // defaulted to active when that action was omitted). The accent sentinel has
     // been resolved to the matching system colour by the time it lands here —
     // the accent/highlight in activeColor, the inactive colour in inactiveColor.
-    // updateWindowBorder picks by the window's focus state. A focus-scoped
+    // updateWindowDecoration picks by the window's focus state. A focus-scoped
     // single-colour rule (matching IsFocused) still works — it just fills
     // activeColor in its matching state.
     std::optional<QColor> activeColor;
@@ -199,7 +199,7 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
  * a second base border. `params` carries the action's per-pack parameter map
  * ({packId -> {paramId -> value}}), which overrides the tree profile's map
  * per pack. Returns `std::nullopt` when no rule fills the slot, so
- * updateWindowBorder falls through to the tree unchanged.
+ * updateWindowDecoration falls through to the tree unchanged.
  */
 struct ResolvedDecorationChain
 {

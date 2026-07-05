@@ -69,11 +69,11 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     // handler only records snap tiled-tracking for border RENDERING.
 
     // Border overlays are visual-only, so skip the off-desktop case (consistent
-    // with updateAllBorders): redirecting an invisible window through the border
+    // with updateAllDecorations): redirecting an invisible window through the border
     // shader is wasted work. When the user switches to that window's desktop, the
-    // desktopChanged → updateAllBorders connection rebuilds its border.
+    // desktopChanged → updateAllDecorations connection rebuilds its border.
     if (w->isOnCurrentDesktop()) {
-        m_effect->updateWindowBorder(windowId, w);
+        m_effect->updateWindowDecoration(windowId, w);
     }
 }
 
@@ -83,7 +83,7 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
         return;
     }
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-    m_effect->removeWindowBorder(windowId);
+    m_effect->removeWindowDecoration(windowId);
     // A window that is no longer snap-managed occupies no zone. The zone cache
     // is the source of the IsSnapped / Zone rule-match fields, and several
     // unsnap paths (drag-out unsnap in particular) get their answer in the
@@ -104,14 +104,14 @@ void SnapHandler::clearSnapTracking()
     // Bookkeeping only. Physical title-bar restores are the
     // DecorationManager's job — teardown callers pair this with
     // DecorationManager::restoreAll(). Callers also pair it with
-    // clearAllBorders() to release the per-window border shader redirect.
+    // clearAllDecorations() to release the per-window border shader redirect.
     m_border.tiledWindowsByScreen.clear();
 }
 
 void SnapHandler::onWindowClosed(const QString& windowId)
 {
     // Pure bookkeeping — the window is being destroyed, so no setNoBorder /
-    // removeWindowBorder is needed (the effect's close path drops the border
+    // removeWindowDecoration is needed (the effect's close path drops the border
     // entry / shader redirect and the title bar dies with the window).
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
 }

@@ -156,7 +156,7 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     }
 
     // First compile for this pack id. Callers are not only paint-cycle code:
-    // reconcileBorderShader runs from D-Bus reply lambdas, settings handlers,
+    // reconcileDecorationShader runs from D-Bus reply lambdas, settings handlers,
     // and window-lifecycle slots, where KWin's GL context is not guaranteed
     // current (the snap-assist thumbnail capture makes this same guard before
     // its off-paint GL work). Make it current BEFORE inserting the cache slot:
