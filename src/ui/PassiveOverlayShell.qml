@@ -172,9 +172,15 @@ Window {
         // before each show; empty source = no decoration (card draws natively).
         // Consumed by the SurfaceDecoration sibling below, which captures the
         // loaded card's PopupFrame shaderAnchor and re-renders it rounded.
-        property url decorationShaderSource
-        property string decorationParamPreamble: ""
-        property var decorationShaderParams: ({})
+        // Resolved decoration chain: ordered stage list ({source,
+        // vertexSource, preamble, params, animated} per pack), plus the
+        // chain's largest declared outer margin (logical px, e.g. glow's
+        // glowSize) the decoration host inflates its capture by. MUST be
+        // declared + forwarded: C++ writes them with setProperty, and an
+        // undeclared name silently becomes a dynamic property no binding
+        // observes — the decoration would never update.
+        property var decorationChain: []
+        property real decorationOuterPadding: 0
 
         /// Restart the loaded OSD content's auto-dismiss timer. C++
         /// invokes this after every OSD show via QMetaObject::invokeMethod.
@@ -285,9 +291,8 @@ Window {
         SurfaceDecoration {
             anchors.fill: parent
             contentItem: osdLoader.item
-            decorationShaderSource: osdSlot.decorationShaderSource
-            decorationParamPreamble: osdSlot.decorationParamPreamble
-            decorationShaderParams: osdSlot.decorationShaderParams
+            decorationChain: osdSlot.decorationChain
+            decorationOuterPadding: osdSlot.decorationOuterPadding
         }
     }
 
@@ -317,9 +322,15 @@ Window {
         // resolves the "popup.snapAssist" pack and writes these before each show;
         // empty source = no decoration (card draws natively). Consumed by the
         // SurfaceDecoration sibling below.
-        property url decorationShaderSource
-        property string decorationParamPreamble: ""
-        property var decorationShaderParams: ({})
+        // Resolved decoration chain: ordered stage list ({source,
+        // vertexSource, preamble, params, animated} per pack), plus the
+        // chain's largest declared outer margin (logical px, e.g. glow's
+        // glowSize) the decoration host inflates its capture by. MUST be
+        // declared + forwarded: C++ writes them with setProperty, and an
+        // undeclared name silently becomes a dynamic property no binding
+        // observes — the decoration would never update.
+        property var decorationChain: []
+        property real decorationOuterPadding: 0
 
         anchors.fill: parent
         // Popup tier — modal pickers paint above the zone selector and
@@ -333,12 +344,16 @@ Window {
 
             anchors.fill: parent
             active: snapAssistSlot.loaded
-            // asynchronous: true keeps the GUI thread responsive while
-            // the snap-assist body (Repeater of zones × Repeater of
-            // candidate cards) is instantiated. Without async loading a
-            // sibling slot's animation (e.g. an OSD fly-in) stalls
-            // mid-flight while this content mounts.
-            asynchronous: true
+            // SYNCHRONOUS by contract: the C++ show path toggles `loaded`
+            // and calls SurfaceAnimator::beginShow in the SAME tick, and
+            // beginShow resolves the shaderAnchor from the live item tree.
+            // An asynchronous load loses that race intermittently — no
+            // anchor exists yet, the animator falls back to the bare slot
+            // (no capture, no sibling hiding), the shader leg snaps opacity
+            // to 1.0, and the content + decoration then mount mid-leg as a
+            // STATIC fully-decorated surface that pops at completion. The
+            // mount jank a sync load costs is the OSD loader's long-proven
+            // behaviour; a correct entrance animation outranks it.
             sourceComponent: snapAssistContentComp
             onLoaded: {
                 if (snapAssistLoader.item) {
@@ -373,9 +388,8 @@ Window {
         SurfaceDecoration {
             anchors.fill: parent
             contentItem: snapAssistLoader.item
-            decorationShaderSource: snapAssistSlot.decorationShaderSource
-            decorationParamPreamble: snapAssistSlot.decorationParamPreamble
-            decorationShaderParams: snapAssistSlot.decorationShaderParams
+            decorationChain: snapAssistSlot.decorationChain
+            decorationOuterPadding: snapAssistSlot.decorationOuterPadding
         }
     }
 
@@ -412,9 +426,15 @@ Window {
         // resolves the "popup.layoutPicker" pack and writes these before each
         // show; empty source = no decoration. Consumed by the SurfaceDecoration
         // sibling below.
-        property url decorationShaderSource
-        property string decorationParamPreamble: ""
-        property var decorationShaderParams: ({})
+        // Resolved decoration chain: ordered stage list ({source,
+        // vertexSource, preamble, params, animated} per pack), plus the
+        // chain's largest declared outer margin (logical px, e.g. glow's
+        // glowSize) the decoration host inflates its capture by. MUST be
+        // declared + forwarded: C++ writes them with setProperty, and an
+        // undeclared name silently becomes a dynamic property no binding
+        // observes — the decoration would never update.
+        property var decorationChain: []
+        property real decorationOuterPadding: 0
 
         // Forwards to LayoutPickerContent.moveSelection / confirmSelection
         // — invoked by C++ on global-accel callbacks since the shell is
@@ -441,7 +461,10 @@ Window {
 
             anchors.fill: parent
             active: layoutPickerSlot.loaded
-            asynchronous: true
+            // SYNCHRONOUS by contract — see snapAssistLoader: beginShow
+            // resolves the shaderAnchor in the same tick as the `loaded`
+            // toggle; an async mount races it and the entrance animation
+            // intermittently degrades to a static surface + end pop.
             sourceComponent: layoutPickerContentComp
             onLoaded: {
                 if (layoutPickerLoader.item) {
@@ -490,9 +513,8 @@ Window {
         SurfaceDecoration {
             anchors.fill: parent
             contentItem: layoutPickerLoader.item
-            decorationShaderSource: layoutPickerSlot.decorationShaderSource
-            decorationParamPreamble: layoutPickerSlot.decorationParamPreamble
-            decorationShaderParams: layoutPickerSlot.decorationShaderParams
+            decorationChain: layoutPickerSlot.decorationChain
+            decorationOuterPadding: layoutPickerSlot.decorationOuterPadding
         }
     }
 
@@ -573,9 +595,15 @@ Window {
         // resolves the "popup.zoneSelector" pack and writes these before each
         // show; empty source = no decoration. Consumed by the SurfaceDecoration
         // sibling below.
-        property url decorationShaderSource
-        property string decorationParamPreamble: ""
-        property var decorationShaderParams: ({})
+        // Resolved decoration chain: ordered stage list ({source,
+        // vertexSource, preamble, params, animated} per pack), plus the
+        // chain's largest declared outer margin (logical px, e.g. glow's
+        // glowSize) the decoration host inflates its capture by. MUST be
+        // declared + forwarded: C++ writes them with setProperty, and an
+        // undeclared name silently becomes a dynamic property no binding
+        // observes — the decoration would never update.
+        property var decorationChain: []
+        property real decorationOuterPadding: 0
 
         function applyScrollDelta(angleDeltaY) {
             if (zoneSelectorLoader.item)
@@ -603,7 +631,10 @@ Window {
 
             anchors.fill: parent
             active: zoneSelectorSlot.loaded
-            asynchronous: true
+            // SYNCHRONOUS by contract — see snapAssistLoader: beginShow
+            // resolves the shaderAnchor in the same tick as the `loaded`
+            // toggle; an async mount races it and the entrance animation
+            // intermittently degrades to a static surface + end pop.
             sourceComponent: zoneSelectorContentComp
             // No signal wiring: the zone-selector slot is input-transparent by
             // design (see ZoneSelectorContent's `interactive: false`). Cursor
@@ -690,9 +721,8 @@ Window {
         SurfaceDecoration {
             anchors.fill: parent
             contentItem: zoneSelectorLoader.item
-            decorationShaderSource: zoneSelectorSlot.decorationShaderSource
-            decorationParamPreamble: zoneSelectorSlot.decorationParamPreamble
-            decorationShaderParams: zoneSelectorSlot.decorationShaderParams
+            decorationChain: zoneSelectorSlot.decorationChain
+            decorationOuterPadding: zoneSelectorSlot.decorationOuterPadding
         }
     }
 
@@ -788,7 +818,10 @@ Window {
 
             anchors.fill: parent
             active: mainOverlaySlot.loaded
-            asynchronous: true
+            // SYNCHRONOUS by contract — see snapAssistLoader: beginShow
+            // resolves the shaderAnchor in the same tick as the `loaded`
+            // toggle; an async mount races it and the entrance animation
+            // intermittently degrades to a static surface + end pop.
             sourceComponent: mainOverlaySlot.useShader ? renderNodeContentComp : zoneOverlayContentComp
         }
 

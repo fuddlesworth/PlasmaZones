@@ -315,16 +315,11 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         return;
     }
 
-    // Helper to leave the slot undecorated: clear the source so the QML
+    // Helper to leave the slot undecorated: clear the chain so the QML
     // SurfaceDecoration stays inert and the card draws its native chrome.
-    // Mirror applyShaderInfoToWindow's clear-first discipline (an empty URL
-    // tears down any prior decoration before new aux props would matter).
     const auto clearDecoration = [slot]() {
-        writeQmlProperty(slot, QStringLiteral("decorationShaderSource"), QUrl());
-        writeQmlProperty(slot, QStringLiteral("decorationVertexShaderSource"), QUrl());
-        writeQmlProperty(slot, QStringLiteral("decorationParamPreamble"), QString());
-        writeQmlProperty(slot, QStringLiteral("decorationShaderParams"), QVariant::fromValue(QVariantMap()));
-        writeQmlProperty(slot, QStringLiteral("decorationAnimated"), false);
+        writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(QVariantList()));
+        writeQmlProperty(slot, QStringLiteral("decorationOuterPadding"), 0.0);
     };
 
     if (!m_settings || !m_surfaceShaderRegistry) {
@@ -337,63 +332,101 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // effective CHAIN (ordered pack ids) plus a per-pack parameters map.
     const PhosphorSurfaceShaders::DecorationProfileTree tree = m_settings->decorationProfileTree();
     const PhosphorSurfaceShaders::DecorationProfile profile = tree.resolve(surfacePath);
-    const QStringList chain = profile.effectiveChain();
+    // enabledChain(): a pack the user toggled off must not render here either.
+    const QStringList chain = profile.enabledChain();
     if (chain.isEmpty()) {
         // No decoration packs configured for this surface — render it plainly.
         clearDecoration();
         return;
     }
 
-    // The daemon overlay decoration path is single-pass by design: the QML
-    // SurfaceDecoration host runs ONE SurfaceShaderItem, so it renders the
-    // primary (first) pack of the resolved chain. Multi-pack buffer-chain
-    // composition is exclusive to the kwin-effect window path
-    // (renderSurfaceChainComposite), which has the FBO ping-pong machinery the
-    // QML overlay host does not.
-    const QString packId = chain.constFirst();
-    if (!m_surfaceShaderRegistry->hasEffect(packId)) {
-        qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
-                             << "is not present in the surface-shader registry — rendering without decoration";
-        clearDecoration();
-        return;
-    }
-
-    const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_surfaceShaderRegistry->effect(packId);
-    // isValid() already requires a non-empty fragmentShaderPath.
-    if (!effect.isValid()) {
-        qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): pack" << packId
-                             << "has no valid fragment shader — rendering without decoration";
-        clearDecoration();
-        return;
-    }
-
-    // The per-pack parameter overrides for THIS pack from the resolved profile.
-    // Shape is { packId -> { paramId -> value } }; pull this pack's inner map.
-    // p_useSystemAccent is a host-consumed flag; the overlay path passes the
-    // pack's declared colour params through translateSurfaceParams unchanged
-    // (system-accent colour resolution is performed by the daemon's colour
-    // pipeline, not synthesised here).
+    // The daemon composes the FULL chain: the QML SurfaceDecoration host runs
+    // one SurfaceShaderItem per stage, each sampling the previous stage's
+    // output through an interposed ShaderEffectSource — the QML analogue of
+    // the compositor's composite ping-pong (renderSurfaceChainComposite), so
+    // a border + glow chain renders both packs here too. Buffer passes
+    // (multipass packs like the blur family) still degrade to single-pass on
+    // this host; needsBackdrop packs have no scene to sample on the daemon
+    // and take their documented uHasBackdrop = 0 fallback regardless.
+    //
+    // Per-pack parameter overrides come from the resolved profile (shape
+    // { packId -> { paramId -> value } }). p_useSystemAccent is a
+    // host-consumed flag; the overlay path passes the pack's declared colour
+    // params through translateSurfaceParams unchanged (system-accent colour
+    // resolution is performed by the daemon's colour pipeline, not
+    // synthesised here). Each stage's vertexSource satisfies the warm-bake
+    // HOST-WIRING PRECONDITION (daemon.cpp): a pack declaring its own vertex
+    // stage keys the same vert here as the warm bake; the empty-URL case
+    // (every current pack) falls through to the item's shared-surface.vert
+    // resolution.
     const QVariantMap allPackParams = profile.effectiveParameters();
-    const QVariantMap friendlyParams = allPackParams.value(packId).toMap();
-    const QVariantMap translatedParams = m_surfaceShaderRegistry->translateSurfaceParams(packId, friendlyParams);
-    const QString preamble = PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(effect);
+    QVariantList stages;
+    double outerPadding = 0.0;
+    for (const QString& packId : chain) {
+        if (!m_surfaceShaderRegistry->hasEffect(packId)) {
+            qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
+                                 << "is not present in the surface-shader registry — skipping this chain stage";
+            continue;
+        }
+        const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_surfaceShaderRegistry->effect(packId);
+        // isValid() already requires a non-empty fragmentShaderPath.
+        if (!effect.isValid()) {
+            qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): pack" << packId
+                                 << "has no valid fragment shader — skipping this chain stage";
+            continue;
+        }
+        const QVariantMap friendlyParams = allPackParams.value(packId).toMap();
 
-    // Write order mirrors applyShaderInfoToWindow: clear the source first, push
-    // aux props (vertex + preamble + params), then write the source LAST so the
-    // QML SurfaceShaderItem's load triggers with everything already in place on
-    // its first bake. The vertex write satisfies the warm-bake HOST-WIRING
-    // PRECONDITION (daemon.cpp): a pack declaring its own vertex stage keys the
-    // same vert here as the warm bake; the empty-URL case (every current pack)
-    // falls through to the item's shared-surface.vert resolution.
-    writeQmlProperty(slot, QStringLiteral("decorationShaderSource"), QUrl());
-    writeQmlProperty(slot, QStringLiteral("decorationVertexShaderSource"),
-                     effect.vertexShaderPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(effect.vertexShaderPath));
-    writeQmlProperty(slot, QStringLiteral("decorationParamPreamble"), preamble);
-    writeQmlProperty(slot, QStringLiteral("decorationShaderParams"), QVariant::fromValue(translatedParams));
-    // Animated packs declare it in metadata; the QML host gates the item's
-    // per-frame iTime tick (playing) on this so static packs pay nothing.
-    writeQmlProperty(slot, QStringLiteral("decorationAnimated"), effect.animated);
-    writeQmlProperty(slot, QStringLiteral("decorationShaderSource"), QUrl::fromLocalFile(effect.fragmentShaderPath));
+        // Outer-margin request (the pack's declared paddingParam, e.g. glow's
+        // glowSize): the per-surface override wins, else the param's declared
+        // default — the same resolution the compositor's updateWindowBorder
+        // applies, with the chain's LARGEST request padding the shared canvas.
+        // The QML host inflates the capture + shader items by this logical-px
+        // margin so an outer effect gets real transparent room; 0 (a
+        // margin-less chain) keeps the classic 1:1 geometry.
+        if (!effect.paddingParam.isEmpty()) {
+            double request = 0.0;
+            if (friendlyParams.contains(effect.paddingParam)) {
+                request = friendlyParams.value(effect.paddingParam).toDouble();
+            } else {
+                for (const auto& param : effect.parameters) {
+                    if (param.id == effect.paddingParam) {
+                        request = param.defaultValue.toDouble();
+                        break;
+                    }
+                }
+            }
+            outerPadding = qMax(outerPadding, request);
+        }
+
+        QVariantMap stageMap;
+        stageMap.insert(QStringLiteral("source"), QUrl::fromLocalFile(effect.fragmentShaderPath));
+        stageMap.insert(QStringLiteral("vertexSource"),
+                        effect.vertexShaderPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(effect.vertexShaderPath));
+        stageMap.insert(QStringLiteral("preamble"),
+                        PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(effect));
+        stageMap.insert(QStringLiteral("params"),
+                        m_surfaceShaderRegistry->translateSurfaceParams(packId, friendlyParams));
+        // Animated packs declare it in metadata; the QML host gates that
+        // stage's per-frame iTime tick (playing) on this so static packs pay
+        // nothing.
+        stageMap.insert(QStringLiteral("animated"), effect.animated);
+        stages.append(stageMap);
+    }
+    if (stages.isEmpty()) {
+        clearDecoration();
+        return;
+    }
+    // Same defensive cap as the compositor's wb.outerPadding.
+    outerPadding = qBound(0.0, outerPadding, 128.0);
+
+    // Padding BEFORE the chain: the chain write is the load trigger, and the
+    // single list write hands every stage's source + params to QML atomically,
+    // so no stage ever bakes against a half-written sibling (the old
+    // per-property protocol needed a clear-first + source-last dance for the
+    // same guarantee).
+    writeQmlProperty(slot, QStringLiteral("decorationOuterPadding"), outerPadding);
+    writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(stages));
 }
 
 void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)

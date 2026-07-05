@@ -56,7 +56,7 @@ import QtQuick.Window
  *
  * The host slot (PassiveOverlayShell.osdSlot / snapAssistSlot / layoutPickerSlot
  * / zoneSelectorSlot) passes the loaded content root as `contentItem` and the
- * C++-resolved decoration props. When `decorationShaderSource` is empty (no pack
+ * C++-resolved decoration props. When `decorationChain` is empty (no pack
  * resolves for this surface path) the component is inert: the capture/shader
  * items don't activate and the card draws normally with its native
  * square-cornered chrome.
@@ -69,23 +69,32 @@ Item {
     /// the `shaderAnchor` capture item we decorate.
     property Item contentItem: null
 
-    /// C++-resolved surface pack, written by OverlayService::applyDecoration:
-    ///   • decorationShaderSource  — file:// url of the pack's effect.frag (""
-    ///                               = no decoration; component stays inert).
-    ///   • decorationVertexShaderSource — file:// url of the pack's declared
-    ///                               vertex stage; empty for the (current) packs
-    ///                               that ship none, letting the item fall
-    ///                               through to the shared surface.vert.
-    ///   • decorationParamPreamble — generated `#define p_<id> …` preamble.
-    ///   • decorationShaderParams  — translated `customParamsN_*` / `customColorN`
-    ///                               slot map (SurfaceShaderRegistry output).
-    ///   • decorationAnimated      — the pack references iTime (metadata
-    ///                               "animated"); gates the item's per-frame tick.
-    property url decorationShaderSource
-    property url decorationVertexShaderSource
-    property string decorationParamPreamble: ""
-    property var decorationShaderParams: ({})
-    property bool decorationAnimated: false
+    /// C++-resolved surface pack CHAIN, written by OverlayService::
+    /// applyDecoration:
+    ///   • decorationChain — ordered stage list, one entry per resolved pack:
+    ///     { source (file:// url of effect.frag), vertexSource (url or ""),
+    ///       preamble (generated `#define p_<id> …`), params (translated
+    ///       `customParamsN_*` / `customColorN` slot map), animated (bool,
+    ///       gates that stage's per-frame iTime tick) }. Empty list = no
+    ///     decoration; the component stays inert. Stages fold left-to-right:
+    ///     stage 0 samples the card snapshot, each later stage samples the
+    ///     previous stage's output — the QML analogue of the compositor's
+    ///     composite ping-pong, so a border + glow chain composes here too.
+    ///   • decorationOuterPadding  — the chain's LARGEST declared paddingParam
+    ///                               value (logical px, e.g. glow's glowSize).
+    ///                               The capture + shader items are inflated by
+    ///                               this margin on every side so an OUTER
+    ///                               effect has transparent room to draw —
+    ///                               the daemon analogue of the compositor's
+    ///                               padded capture canvas. 0 for margin-less
+    ///                               chains keeps the classic 1:1 geometry.
+    property var decorationChain: []
+    property real decorationOuterPadding: 0
+
+    /// Sanitised device-independent margin. The capture's sourceRect and every
+    /// geometry binding below read THIS, so a garbage negative value can't
+    /// mirror the capture.
+    readonly property real outerPad: Math.max(0, decorationOuterPadding)
 
     /// Logical→device scale for the decorated surface. The OSD shell tracks the
     /// active output's devicePixelRatio; Screen.devicePixelRatio is the live
@@ -94,7 +103,7 @@ Item {
 
     /// Whether any decoration is active. Gates the capture + shader items so an
     /// undecorated card pays nothing and draws its native card.
-    readonly property bool decorationActive: decorationShaderSource.toString() !== "" && shaderAnchorItem !== null
+    readonly property bool decorationActive: (decorationChain ? decorationChain.length : 0) > 0 && shaderAnchorItem !== null
 
     /// The shaderAnchor capture item inside (or equal to) the loaded content.
     /// Re-resolved whenever the content swaps (Loader re-instantiation on each
@@ -184,8 +193,14 @@ Item {
         sourceItem: root.decorationActive ? root.shaderAnchorItem : null
         live: true
         hideSource: root.decorationActive
-        width: root.shaderAnchorItem ? root.shaderAnchorItem.width : 0
-        height: root.shaderAnchorItem ? root.shaderAnchorItem.height : 0
+        // Padded capture: when the pack declares an outer margin, capture a
+        // sourceRect inflated past the anchor's bounds — the out-of-bounds
+        // band renders TRANSPARENT, which is exactly the room an outer
+        // effect (glow) lights up. The all-zero rect is the documented
+        // "whole item" default for the margin-less case.
+        sourceRect: root.outerPad > 0 ? Qt.rect(-root.outerPad, -root.outerPad, (root.shaderAnchorItem ? root.shaderAnchorItem.width : 0) + root.outerPad * 2, (root.shaderAnchorItem ? root.shaderAnchorItem.height : 0) + root.outerPad * 2) : Qt.rect(0, 0, 0, 0)
+        width: (root.shaderAnchorItem ? root.shaderAnchorItem.width : 0) + root.outerPad * 2
+        height: (root.shaderAnchorItem ? root.shaderAnchorItem.height : 0) + root.outerPad * 2
         x: offscreenCoord
         y: offscreenCoord
         // MUST stay visible: SurfaceAnimator's rationale (surfaceanimator.cpp
@@ -197,69 +212,182 @@ Item {
         visible: true
     }
 
-    // ── Surface shader pass ──────────────────────────────────────────────────
-    // Sibling of the captured card (parented to this host, which is a sibling of
-    // the slot's content Loader — never an ancestor of the anchor, so no feedback
-    // loop). Positioned over the anchor's on-screen rect, mapped into this
-    // host's coordinate space.
-    SurfaceShaderItem {
-        id: decoration
+    // ── Surface shader chain ─────────────────────────────────────────────────
+    // One stage per chain pack, folded left-to-right: stage 0 samples the card
+    // snapshot, stage k samples stage k-1's output through an interposed
+    // ShaderEffectSource (a SurfaceShaderItem is a render-node item, not a
+    // texture provider, so every hop needs the explicit capture — the QML
+    // analogue of the compositor's composite ping-pong). Only the LAST stage
+    // draws on screen: each earlier stage's direct draw is suppressed by the
+    // next stage's hideSource capture. The last stage also carries the
+    // SurfaceAnimator anchor tags, so show/hide transitions animate the FULLY
+    // composited output.
+    Repeater {
+        id: stageRepeater
 
-        // Anchor rect mapped into this host's coordinate space. The anchor lives
-        // deep inside the loaded content; mapToItem walks the transform chain so
-        // the decoration lands exactly over the card regardless of nesting.
-        // Assumes the overlay host uses a fixed anchors.fill layout (it does):
-        // mapToItem is not reactive to an ancestor transform change, so this
-        // binding re-resolves only on decorationActive / shaderAnchorItem change,
-        // not if a future host animated the anchor's ancestors mid-frame.
-        readonly property point anchorOrigin: (root.decorationActive && root.shaderAnchorItem) ? root.shaderAnchorItem.mapToItem(root, 0, 0) : Qt.point(0, 0)
+        model: root.decorationActive ? root.decorationChain.length : 0
 
-        // SurfaceAnimator anchor (compose — see _applyAnchorRouting). When
-        // decoration is active this item IS the surface the animator captures and
-        // animates; the raw card's shaderAnchor is demoted so the animator picks
-        // this one. shaderContentRect mirrors the raw card's frame rect (this item
-        // is sized to and positioned over the raw anchor 1:1, so the same local
-        // coords apply) — the animator uses it for its card-space remap.
-        property bool shaderAnchor: root.decorationActive
-        property rect shaderContentRect: (root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? root.shaderAnchorItem.shaderContentRect : Qt.rect(0, 0, width, height)
+        // Detag RELEASED delegates immediately. The Repeater releases old
+        // delegates with deleteLater, so on a dismiss → fast re-show they
+        // are still in the item tree (and their bindings still LIVE) when
+        // SurfaceAnimator's beginShow walks it in the same event-loop turn:
+        // the dying last stage re-evaluates `decorationActive && isLast`
+        // against the NEW chain and tags itself again, and the animator can
+        // anchor the corpse — it then animates a frozen capture invisibly
+        // while the real new stage draws the full decorated surface
+        // statically until teardown ("surface pops in when the animation
+        // stops", intermittent). The imperative writes below both clear the
+        // tags and BREAK those bindings, so a released delegate can never
+        // re-tag itself while it waits for deletion.
+        onItemRemoved: function (index, item) {
+            if (item && item.detagAnchors)
+                item.detagAnchors();
+        }
 
-        visible: root.decorationActive
-        x: anchorOrigin.x
-        y: anchorOrigin.y
-        width: root.shaderAnchorItem ? root.shaderAnchorItem.width : 0
-        height: root.shaderAnchorItem ? root.shaderAnchorItem.height : 0
+        delegate: Item {
+            id: stage
 
-        // The pack samples this snapshot as uTexture0 and REPLACES the card.
-        sourceItem: cardSnapshot
+            required property int index
+            readonly property var stageData: root.decorationChain[stage.index] || ({})
+            readonly property bool isLast: stage.index === (root.decorationChain ? root.decorationChain.length : 0) - 1
+            // Output tap for the NEXT stage's sourceItem lookup.
+            readonly property Item outputTap: tap
 
-        // Surface-state inputs (device px). The whole CAPTURE item is uTexture0;
-        // the FRAME rect within it (shaderContentRect, anchor-local logical px)
-        // scaled to device px is what the border rounds to — excluding the glow
-        // ring PopupFrame's capture adds. surfaceFrameSize == surfaceSize only
-        // if the capture had no padding; PopupFrame pads, so the real frame
-        // rect is fed through.
-        surfaceScale: root.surfaceScale
-        // These overlays (OSD + transient popups) are always shown for the
-        // active context — the focused colour params are the intended look. A
-        // literal true is correct here.
-        surfaceFocused: true
-        surfaceSize: root.shaderAnchorItem ? Qt.size(root.shaderAnchorItem.width * root.surfaceScale, root.shaderAnchorItem.height * root.surfaceScale) : Qt.size(0, 0)
-        surfaceFrameTopLeft: (root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? Qt.point(root.shaderAnchorItem.shaderContentRect.x * root.surfaceScale, root.shaderAnchorItem.shaderContentRect.y * root.surfaceScale) : Qt.point(0, 0)
-        surfaceFrameSize: (root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? Qt.size(root.shaderAnchorItem.shaderContentRect.width * root.surfaceScale, root.shaderAnchorItem.shaderContentRect.height * root.surfaceScale) : Qt.size(0, 0)
+            // Called by the Repeater's onItemRemoved when this delegate is
+            // released: imperative assignment clears the animator tags AND
+            // severs their bindings, so the deleteLater-pending item cannot
+            // re-tag itself against the successor chain.
+            function detagAnchors() {
+                stageItem.shaderAnchor = false;
+                stageItem.shaderAnchorOverride = false;
+            }
 
-        // Pack source + params. paramPreamble/shaderParams BEFORE shaderSource
-        // is the load-trigger ordering the inherited ShaderEffect setters expect;
-        // here they are bindings, so QML evaluates the value graph before the
-        // first paint regardless of declaration order, but mirroring the
-        // applyShaderInfoToWindow order keeps the intent explicit.
-        paramPreamble: root.decorationParamPreamble
-        shaderParams: root.decorationShaderParams
-        vertexShaderUrl: root.decorationVertexShaderSource
-        shaderSource: root.decorationShaderSource
-        // iTime driver: only an animated pack (metadata "animated", relayed by
-        // applyDecoration) subscribes to the per-frame tick — static packs
-        // (the border) leave iTime at its default and pay nothing. Gated on
-        // decorationActive so a cleared decoration stops ticking.
-        playing: root.decorationAnimated && root.decorationActive
+            anchors.fill: parent
+
+            SurfaceShaderItem {
+                id: stageItem
+
+                // Anchor rect mapped into the host's coordinate space (the
+                // delegate fills the host, so its coordinates coincide). The
+                // anchor lives deep inside the loaded content; mapToItem walks
+                // the transform chain so the decoration lands exactly over the
+                // card regardless of nesting. mapToItem is not reactive to an
+                // ancestor transform change, so this binding re-resolves only
+                // on decorationActive / shaderAnchorItem change.
+                readonly property point anchorOrigin: (root.decorationActive && root.shaderAnchorItem) ? root.shaderAnchorItem.mapToItem(root, 0, 0) : Qt.point(0, 0)
+
+                // SurfaceAnimator anchor (compose — see _applyAnchorRouting).
+                // Only the LAST stage carries the tags: it IS the fully
+                // composited surface the animator captures and animates.
+                // shaderAnchorOverride makes the preference structural: the
+                // animator's findShaderAnchorRecursive picks an override over
+                // ANY plain shaderAnchor, so the decorated output wins even if
+                // a demote / promote write lands late relative to a beginShow
+                // resolution — the ordering class behind "the border draws
+                // statically at final size while the card animates in".
+                //
+                // Card rect for the animator's card-space remap: with an outer
+                // margin the WHOLE padded canvas is published as the card. The
+                // margin band carries drawn decoration (the glow halo), and a
+                // sub-canvas card rect would leave that band OUTSIDE the
+                // animation shader's card space, where transition shaders
+                // resolve to a static 1:1 passthrough — the halo then sits at
+                // full final size while the card animates (the glow flavour of
+                // the detachment bug). Publishing the full canvas makes the
+                // transition sweep the halo together with the card. Margin-less
+                // chains keep mirroring the raw card's frame rect, the geometry
+                // the border-detachment fix shipped with.
+                property bool shaderAnchor: root.decorationActive && stage.isLast
+                property bool shaderAnchorOverride: root.decorationActive && stage.isLast
+                property rect shaderContentRect: root.outerPad > 0 ? Qt.rect(0, 0, width, height) : ((root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? root.shaderAnchorItem.shaderContentRect : Qt.rect(0, 0, width, height))
+
+                // Every stage stays VISIBLE while active: an explicitly
+                // invisible item generates no scene-graph nodes, so the next
+                // stage's capture would render EMPTY and the downstream pack
+                // would composite against a transparent base (glow's
+                // outer-only gate then lights the WHOLE canvas — the cyan
+                // slab bug). Intermediate stages are hidden from the direct
+                // draw by the next stage's hideSource capture instead; only
+                // the last stage actually reaches the screen.
+                visible: root.decorationActive
+                x: anchorOrigin.x - root.outerPad
+                y: anchorOrigin.y - root.outerPad
+                width: (root.shaderAnchorItem ? root.shaderAnchorItem.width : 0) + root.outerPad * 2
+                height: (root.shaderAnchorItem ? root.shaderAnchorItem.height : 0) + root.outerPad * 2
+
+                // Stage 0 samples the card snapshot; stage k samples stage
+                // k-1's output tap. itemAt is NOT notifiable, so the binding
+                // reads stageRepeater.count first — count changes as the
+                // Repeater populates, forcing a re-evaluation once the
+                // previous delegate exists (creation is in index order, so
+                // by full population every hop resolves).
+                sourceItem: {
+                    if (stage.index === 0)
+                        return cardSnapshot;
+                    var populated = stageRepeater.count;
+                    var prev = populated > stage.index ? stageRepeater.itemAt(stage.index - 1) : null;
+                    return prev ? prev.outputTap : null;
+                }
+
+                // Surface-state inputs (device px). The whole padded canvas is
+                // uTexture0; the FRAME rect within it (shaderContentRect,
+                // anchor-local logical px, shifted inward by the outer margin)
+                // scaled to device px is what the border rounds to — so the
+                // pack outlines the visible card while a halo lands in the
+                // transparent band (uSurfaceSize > uSurfaceFrameSize by
+                // 2 × outerPad, exactly like the compositor's padded
+                // composite canvas). Identical for every stage, mirroring the
+                // compositor's fold where each pack sees the same canvas.
+                surfaceScale: root.surfaceScale
+                // These overlays (OSD + transient popups) are always shown for
+                // the active context — the focused colour params are the
+                // intended look. A literal true is correct here.
+                surfaceFocused: true
+                surfaceSize: root.shaderAnchorItem ? Qt.size((root.shaderAnchorItem.width + root.outerPad * 2) * root.surfaceScale, (root.shaderAnchorItem.height + root.outerPad * 2) * root.surfaceScale) : Qt.size(0, 0)
+                surfaceFrameTopLeft: (root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? Qt.point((root.shaderAnchorItem.shaderContentRect.x + root.outerPad) * root.surfaceScale, (root.shaderAnchorItem.shaderContentRect.y + root.outerPad) * root.surfaceScale) : Qt.point(root.outerPad * root.surfaceScale, root.outerPad * root.surfaceScale)
+                // No published shaderContentRect (root-as-anchor content like
+                // snap-assist): the frame IS the whole anchor, per this
+                // component's documented fallback. A (0, 0) fallback here
+                // would trip every pack's degenerate-frame guard
+                // (uSurfaceFrameSize < 1 → passthrough) and render nothing on
+                // those surfaces.
+                surfaceFrameSize: (root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? Qt.size(root.shaderAnchorItem.shaderContentRect.width * root.surfaceScale, root.shaderAnchorItem.shaderContentRect.height * root.surfaceScale) : (root.shaderAnchorItem ? Qt.size(root.shaderAnchorItem.width * root.surfaceScale, root.shaderAnchorItem.height * root.surfaceScale) : Qt.size(0, 0))
+
+                // Pack source + params, per stage. paramPreamble/shaderParams
+                // BEFORE shaderSource is the load-trigger ordering the
+                // inherited ShaderEffect setters expect; here they are
+                // bindings, so QML evaluates the value graph before the first
+                // paint regardless of declaration order, but mirroring the
+                // applyShaderInfoToWindow order keeps the intent explicit.
+                paramPreamble: stage.stageData.preamble !== undefined ? stage.stageData.preamble : ""
+                shaderParams: stage.stageData.params !== undefined ? stage.stageData.params : ({})
+                vertexShaderUrl: stage.stageData.vertexSource !== undefined ? stage.stageData.vertexSource : ""
+                shaderSource: stage.stageData.source !== undefined ? stage.stageData.source : ""
+                // iTime driver: only a stage whose pack declares "animated"
+                // subscribes to the per-frame tick — static packs (the border)
+                // leave iTime at its default and pay nothing. Gated on
+                // decorationActive so a cleared decoration stops ticking.
+                playing: stage.stageData.animated === true && root.decorationActive
+            }
+
+            // The next stage's uTexture0: captures this stage's output. Same
+            // hide-source idiom as cardSnapshot — parked off-screen with the
+            // FBO render alive (visible:false would starve the consumer).
+            // Inert on the last stage (no consumer; the stage draws directly).
+            ShaderEffectSource {
+                id: tap
+
+                readonly property real offscreenCoord: -1000000
+
+                sourceItem: stage.isLast ? null : stageItem
+                live: true
+                hideSource: !stage.isLast
+                width: stageItem.width
+                height: stageItem.height
+                x: offscreenCoord
+                y: offscreenCoord
+                visible: true
+            }
+        }
     }
 }

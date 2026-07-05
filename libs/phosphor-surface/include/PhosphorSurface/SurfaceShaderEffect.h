@@ -114,9 +114,11 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// the window's capture canvas by the chain's largest declared margin
     /// (per-window, from the surface's resolved parameter overrides) and
     /// presents on a matching padded quad, so an outer effect renders even
-    /// when the window has no decoration-shadow margin of its own. Empty =
-    /// the pack draws within the surface (no padding requested). Daemon
-    /// hosts ignore it (their capture geometry is host-defined).
+    /// when the window has no decoration-shadow margin of its own. The daemon
+    /// host resolves the PRIMARY pack's margin the same way and publishes it
+    /// as `decorationOuterPadding`; SurfaceDecoration inflates its capture
+    /// sourceRect + shader item by it (OverlayService::applyDecoration).
+    /// Empty = the pack draws within the surface (no padding requested).
     QString paddingParam;
 
     /// Declares that the pack references `iTime` and needs a per-frame
