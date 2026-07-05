@@ -1,0 +1,45 @@
+{
+    "id": "focus-fade",
+    "name": "Focus Fade",
+    "description": "Washes out the window itself while it is unfocused, so the focused window stands out at a glance. Unfocused windows lose saturation, darken slightly and can take an optional tint; the focused window passes through untouched. Desaturation, dimming, tint strength and the tint colour are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Focus",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "desaturate",
+            "name": "Desaturation",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much colour unfocused windows lose, where 1.0 is full grayscale"
+        },
+        {
+            "id": "dim",
+            "name": "Dimming",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.0,
+            "max": 0.6,
+            "description": "How much unfocused windows darken"
+        },
+        {
+            "id": "tintStrength",
+            "name": "Tint strength",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How strongly the tint colour washes over unfocused windows, where 0 keeps the plain fade"
+        },
+        {
+            "id": "tintColor",
+            "name": "Tint colour",
+            "type": "color",
+            "default": "#ff704214",
+            "description": "Colour of the optional unfocused wash, sepia by default"
+        }
+    ]
+}
