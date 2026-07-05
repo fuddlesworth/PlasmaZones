@@ -211,8 +211,8 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowFloating(window2));
 
         const QSet<QUuid> occupied = m_service->buildOccupiedZoneSet(QStringLiteral("DP-1"));
-        const QUuid zone0 = QUuid::fromString(m_zoneIds[0]);
-        const QUuid zone1 = QUuid::fromString(m_zoneIds[1]);
+        const QUuid zone0 = *Utils::parseUuid(m_zoneIds[0]);
+        const QUuid zone1 = *Utils::parseUuid(m_zoneIds[1]);
         QVERIFY2(!occupied.contains(zone0), "a floating window's zone must not appear occupied");
         QVERIFY2(occupied.contains(zone1), "a snapped window's zone must appear occupied");
     }

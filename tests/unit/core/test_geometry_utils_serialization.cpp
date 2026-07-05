@@ -48,7 +48,8 @@ private Q_SLOTS:
 
     void test_rectToJson_emptyRect()
     {
-        // Default QRect is (0,0,0,0) which Qt considers invalid
+        // Default QRect() has zero width/height (Qt considers it invalid);
+        // rectToJson serializes those extents as 0.
         QRect rect;
         QString json = GeometryUtils::rectToJson(rect);
 
