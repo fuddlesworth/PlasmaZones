@@ -725,6 +725,20 @@ private:
         return m_windowAppearanceDefault.showBorder || m_windowAppearanceDefault.hideTitleBar;
     }
 
+    /// True when the decoration profile tree could decorate some window (a
+    /// baseline chain or any per-path override exists). Placement-change
+    /// reconciliation must also run when THIS is true: surface paths are
+    /// placement-derived (window.snapped / window.floating / ...), so a
+    /// snap/unsnap changes which chain resolves even with no rules and no
+    /// config-default border — the gate being blind to tree packs left
+    /// chain-decorated windows undecorated from a drag-start unsnap until an
+    /// unrelated push rebuilt them.
+    bool hasDecorationTreeContent() const
+    {
+        return !m_decorationTree.resolve(QString()).effectiveChain().isEmpty()
+            || !m_decorationTree.overriddenPaths().isEmpty();
+    }
+
     /// Evaluate a config-default appearance scope token against a live window.
     /// "tiled" → the window is snapped or autotile-managed; "normal" → its
     /// window type is Normal and it is not transient; "all" → always true;

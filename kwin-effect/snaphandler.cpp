@@ -83,7 +83,6 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
         return;
     }
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-    m_effect->removeWindowDecoration(windowId);
     // A window that is no longer snap-managed occupies no zone. The zone cache
     // is the source of the IsSnapped / Zone rule-match fields, and several
     // unsnap paths (drag-out unsnap in particular) get their answer in the
@@ -95,8 +94,24 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
     // place every unsnap funnels through, keeps the fact and the tracking in
     // lockstep; clearWindowZone re-resolves the rules only when an entry was
     // actually dropped, so this is free for callers whose broadcast already
-    // landed.
+    // landed. Cleared BEFORE the re-decorate below so the re-resolve sees the
+    // window as unsnapped and picks the floating-state chain, not the snapped
+    // one it is leaving.
     m_effect->clearWindowZone(windowId);
+    // Re-resolve the decoration SYNCHRONOUSLY instead of dropping it: this
+    // funnel runs at drag start (the daemon floats the grabbed window), and a
+    // bare removeWindowDecoration here blanked EVERY pack — interior blur
+    // included — until some later push happened to rebuild the entry
+    // mid-drag. updateWindowDecoration removes-then-recreates in the same
+    // turn under the window's new placement state, so the swap is invisible.
+    // Exact-id re-check like the windowDecorationRestored path: the fuzzy
+    // appId fallback must not decorate a same-app sibling under a dead id.
+    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+    if (w && m_effect->getWindowId(w) == windowId && w->isOnCurrentDesktop()) {
+        m_effect->updateWindowDecoration(windowId, w);
+    } else {
+        m_effect->removeWindowDecoration(windowId);
+    }
 }
 
 void SnapHandler::clearSnapTracking()
