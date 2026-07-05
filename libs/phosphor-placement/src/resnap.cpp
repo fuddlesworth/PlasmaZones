@@ -232,7 +232,7 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     return result;
 }
 
-// calculateSnapAllWindows moved to SnapEngine (src/snap/snapengine/resnap_calc.cpp).
+// calculateSnapAllWindows moved to SnapEngine (libs/phosphor-snap-engine/src/navigation.cpp).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Resolution Change Handling

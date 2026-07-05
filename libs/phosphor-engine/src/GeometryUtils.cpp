@@ -3,7 +3,6 @@
 
 #include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorEngine/JsonKeys.h>
-#include <PhosphorEngine/EngineTypes.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>

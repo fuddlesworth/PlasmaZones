@@ -3,13 +3,16 @@
 
 /**
  * @file test_geometry_utils_serialization.cpp
- * @brief Unit tests for GeometryUtils::rectToJson() and serializeZoneAssignments()
+ * @brief Unit tests for GeometryUtils::rectToJson(), serializeZoneAssignments(),
+ *        and deserializeZoneAssignments()
  *
  * Tests cover:
  * - rectToJson with valid and empty/invalid QRects
  * - serializeZoneAssignments with empty, single, and multiple entries
  * - Entries with empty string fields
- * - Round-trip: serialize then parse back and verify all fields match
+ * - Round-trip: serialize then deserialize and verify all fields match
+ * - deserializeZoneAssignments dropping incomplete entries, clamping negative
+ *   wire desktops, and reporting malformed JSON via errorString
  */
 
 #include <QTest>

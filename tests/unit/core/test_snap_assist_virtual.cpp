@@ -367,7 +367,9 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
         m_service->assignWindowToZone(win3, m_zoneIds[2], vsId, 1);
 
-        // Only win1 and win2 are alive
+        // Only win1 and win2 are alive. The return value counts pruned store
+        // ITEMS, not windows (see testPruneStaleAssignments_cleansFloatingState);
+        // win3 holds only its zone assignment, so one item.
         QSet<QString> alive{win1, win2};
         int pruned = m_service->pruneStaleAssignments(alive);
 
@@ -377,7 +379,7 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowSnapped(win3));
         // Screen and desktop assignments should also be gone
         QVERIFY(m_service->screenForWindow(win3).isEmpty());
-        QCOMPARE(m_service->desktopForWindow(win3), 0);
+        QCOMPARE(m_snapState->desktopForWindow(win3), 0);
     }
 
     void testPruneStaleAssignments_preservesAliveWindows()
@@ -408,7 +410,8 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
         m_service->assignWindowToZone(win3, m_zoneIds[2], vsId, 1);
 
-        // Only win1 is alive — 2 should be pruned
+        // Only win1 is alive. The return counts pruned store items: win2 and
+        // win3 each hold only a zone assignment, so two items.
         QSet<QString> alive{win1};
         int pruned = m_service->pruneStaleAssignments(alive);
 
@@ -427,7 +430,8 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win1, m_zoneIds[0], vsId, 1);
         m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
 
-        // Empty alive set — all windows should be pruned
+        // Empty alive set — all windows should be pruned. Two store items:
+        // one zone assignment per window, nothing floating.
         QSet<QString> alive;
         int pruned = m_service->pruneStaleAssignments(alive);
 

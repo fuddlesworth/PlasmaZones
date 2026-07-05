@@ -790,12 +790,6 @@ void WindowTrackingService::forEachZoneAssignedWindow(
     }
 }
 
-int WindowTrackingService::desktopForWindow(const QString& windowId) const
-{
-    const PhosphorSnapEngine::SnapState* state = snapForWindow(windowId);
-    return state ? state->desktopForWindow(windowId) : 0;
-}
-
 QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) const
 {
     // Prefer the live, runtime assignment — it reflects this session's snaps.

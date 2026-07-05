@@ -7,13 +7,12 @@
  *
  * Tests cover:
  * 1. Clear stale pending assignments
- * 2. Resnap from previous layout
+ * 2. Resnap buffer population (desktop filter, per-screen VDM desktops,
+ *    durable-record fallback) and resnap calculations from the previous layout
  * 3. Rotation calculations
- * 4. Daemon restart / pending-restore-available emission
- * 5. Multi-monitor restore edge cases
- * 6. Auto-snap marking
- * 7. Consume pending assignment
- * 8. Layout import UUID collision
+ * 4. Pending-restore queue persistence round-trips
+ * 5. Auto-snap marking
+ * 6. Consume pending assignment
  *
  * Session zone-restore-from-session (the old calculateRestoreFromSession /
  * PendingRestoreQueues path) is now covered by the unified WindowPlacementStore
@@ -70,6 +69,27 @@ using StubSettingsSession = StubSettings;
 // =========================================================================
 
 using StubZoneDetectorSession = StubZoneDetector;
+
+namespace {
+
+/// VDM double whose per-screen answer is scripted. The real
+/// PhosphorWorkspaces::VirtualDesktopManager can never report an UNKNOWN screen
+/// desktop through its public API (updateScreenDesktop rejects values below 1,
+/// and a screen with no entry falls back to the global desktop, which is always
+/// at least 1), so the vdmDesktop <= 0 fallback in
+/// populateResnapBufferForAllScreens is only reachable with an override.
+class ScriptedVdm : public PhosphorWorkspaces::VirtualDesktopManager
+{
+public:
+    using PhosphorWorkspaces::VirtualDesktopManager::VirtualDesktopManager;
+    int scriptedDesktop = 0; ///< returned for every screen
+    int currentDesktopForScreen(const QString& /*screenId*/) const override
+    {
+        return scriptedDesktop;
+    }
+};
+
+} // namespace
 
 // =========================================================================
 // Test Class
@@ -171,18 +191,34 @@ private Q_SLOTS:
         PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->setActiveLayout(newLayout);
+        // resolveLayoutForScreen falls back to defaultLayout() when the screen
+        // has no explicit assignment — point the default at the NEW layout so
+        // the resnap maps positions into it (same pattern as the cross-desktop
+        // tests in test_wts_queries.cpp).
+        const QString newLayoutId = newLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([newLayoutId]() {
+            return newLayoutId;
+        });
         m_service->onLayoutChanged();
 
-        QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
-        // The previously-assigned windows are mapped into the new layout's zones:
-        // the first call yields restore entries, each for one of the assigned windows
-        // targeting a real zone.
-        QVERIFY(!resnap.isEmpty());
-        const QSet<QString> sources = {window1, window2, window3};
-        for (const ZoneAssignmentEntry& e : resnap) {
-            QVERIFY(sources.contains(e.windowId));
-            QVERIFY(!e.targetZoneId.isEmpty());
+        // Old zone positions map 1:1 into the new layout by zone number
+        // (1 -> 1, 2 -> 2). window3's old position 3 exceeds the new 2-zone
+        // layout and there is no captured pre-tile geometry to restore, so it
+        // yields no entry at all.
+        QHash<int, QString> newZoneByNumber;
+        for (PhosphorZones::Zone* z : newLayout->zones()) {
+            newZoneByNumber.insert(z->zoneNumber(), z->id().toString());
         }
+
+        QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
+        QCOMPARE(resnap.size(), 2);
+        QHash<QString, QString> targetByWindow;
+        for (const ZoneAssignmentEntry& e : resnap) {
+            targetByWindow.insert(e.windowId, e.targetZoneId);
+        }
+        QCOMPARE(targetByWindow.value(window1), newZoneByNumber.value(1));
+        QCOMPARE(targetByWindow.value(window2), newZoneByNumber.value(2));
+        QVERIFY(!targetByWindow.contains(window3));
 
         QVector<ZoneAssignmentEntry> secondCall = m_engine->calculateResnapFromPreviousLayout();
         QVERIFY(secondCall.isEmpty()); // Buffer consumed on first call
@@ -255,6 +291,73 @@ private Q_SLOTS:
         QVERIFY2(!ids.contains(winDesk1), "a window recorded on desktop 1 must not enter a desktop-2 resnap");
         QVERIFY(ids.contains(winDesk2));
         QVERIFY2(ids.contains(winSticky), "sticky/unknown (desktop 0) windows resnap regardless of the filter");
+    }
+
+    // Per-output virtual desktops (#648): with a VDM wired, the desktop filter
+    // compares each window against ITS screen's current desktop, not against
+    // the single global filter value the caller passed.
+    void testResnapBuffer_desktopFilterUsesPerScreenDesktop()
+    {
+        const QString screen = QStringLiteral("DP-1");
+
+        PhosphorWorkspaces::VirtualDesktopManager vdm;
+        vdm.updateScreenDesktop(screen, 3); // DP-1 is viewing desktop 3
+
+        SnapState state(QString(), nullptr);
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, m_zoneDetector, nullptr, &vdm);
+        service.setSnapState(&state);
+
+        const QString winDesk3 = QStringLiteral("app1|111");
+        const QString winDesk2 = QStringLiteral("app2|222");
+        service.assignWindowToZone(winDesk3, m_zoneIds[0], screen, 3);
+        service.assignWindowToZone(winDesk2, m_zoneIds[1], screen, 2);
+
+        // The caller's global filter says desktop 2, but DP-1's own current
+        // desktop is 3: the per-screen comparison must win.
+        service.populateResnapBufferForAllScreens({}, {}, 2);
+
+        const QVector<PhosphorEngine::ResnapEntry> buf = service.takeResnapBuffer();
+        QSet<QString> ids;
+        for (const PhosphorEngine::ResnapEntry& e : buf) {
+            ids.insert(e.windowId);
+        }
+        QVERIFY2(ids.contains(winDesk3), "the window on DP-1's actual desktop (3) must resnap");
+        QVERIFY2(!ids.contains(winDesk2),
+                 "a window recorded on desktop 2 must not resnap while its screen shows desktop 3");
+
+        service.setSnapState(nullptr);
+    }
+
+    // The second fallback in the resnap desktop filter: a wired VDM that does
+    // NOT know a screen's desktop (returns <= 0) must fall back to the caller's
+    // filter value — without it, an unknown screen desktop would exclude every
+    // non-sticky window on that screen from the resnap.
+    void testResnapBuffer_desktopFilterFallsBackWhenVdmUnknown()
+    {
+        const QString screen = QStringLiteral("DP-1");
+
+        ScriptedVdm vdm; // scriptedDesktop stays 0: no screen desktop known
+
+        SnapState state(QString(), nullptr);
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, m_zoneDetector, nullptr, &vdm);
+        service.setSnapState(&state);
+
+        const QString winDesk2 = QStringLiteral("app1|111");
+        const QString winDesk1 = QStringLiteral("app2|222");
+        service.assignWindowToZone(winDesk2, m_zoneIds[0], screen, 2);
+        service.assignWindowToZone(winDesk1, m_zoneIds[1], screen, 1);
+
+        service.populateResnapBufferForAllScreens({}, {}, 2);
+
+        const QVector<PhosphorEngine::ResnapEntry> buf = service.takeResnapBuffer();
+        QSet<QString> ids;
+        for (const PhosphorEngine::ResnapEntry& e : buf) {
+            ids.insert(e.windowId);
+        }
+        QVERIFY2(ids.contains(winDesk2), "with the screen desktop unknown, the filter value itself must apply");
+        QVERIFY2(!ids.contains(winDesk1), "a window recorded on desktop 1 must not enter a desktop-2 resnap");
+
+        service.setSnapState(nullptr);
     }
 
     // Regression (#layout-leak): the resnap calculation must carry each

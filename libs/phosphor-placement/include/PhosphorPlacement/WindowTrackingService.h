@@ -906,12 +906,6 @@ public:
     /// See IWindowTrackingService::recordedSnapZones.
     QStringList recordedSnapZones(const QString& windowId) const override;
 
-    /// The virtual desktop a window's snap assignment is recorded on, read from
-    /// the store that owns the window (0 = sticky / untracked), canonicalizing
-    /// the id. Point accessor — whole-map consumers iterate per state via
-    /// forEachZoneAssignedWindow instead of a flat union.
-    int desktopForWindow(const QString& windowId) const;
-
     using PendingRestore = PhosphorEngine::PendingRestore;
     using ResnapEntry = PhosphorEngine::ResnapEntry;
 

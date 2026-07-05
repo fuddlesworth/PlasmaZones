@@ -128,12 +128,12 @@ struct UnfloatResult
 
 struct ZoneAssignmentEntry
 {
-    QString windowId{};
-    QString sourceZoneId{};
-    QString targetZoneId{};
-    QStringList targetZoneIds{};
-    QRect targetGeometry{};
-    QString targetScreenId{};
+    QString windowId;
+    QString sourceZoneId;
+    QString targetZoneId;
+    QStringList targetZoneIds;
+    QRect targetGeometry;
+    QString targetScreenId;
     /// Virtual desktop to record the assignment on (1-based). 0 means "the
     /// window's current desktop" — the historical behaviour. Resnap producers
     /// stamp the window's recorded desktop here so a batch commit preserves it
