@@ -53,6 +53,11 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     const QHash<QString, int> globalZoneIdToPosition =
         PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts());
 
+    // Per-screen current-desktop memo for the filter below: one VDM lookup per
+    // screen instead of one per candidate window (live pass + durable pass both
+    // funnel through addCandidate).
+    QHash<QString, int> screenDesktopMemo;
+
     // Per-window candidate processing, shared by the live and durable passes below.
     const auto addCandidate = [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                   int virtualDesktop) {
@@ -72,11 +77,21 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         // Under Plasma 6.7 per-output virtual desktops (#648) the "current desktop"
         // is per-screen, so when filtering (desktopFilter > 0) compare each window
         // against ITS screen's current desktop rather than the single global value
-        // the caller passed (falling back to that value when no VDM is wired).
-        const int screenDesktop =
-            m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : desktopFilter;
-        if (desktopFilter > 0 && virtualDesktop != 0 && virtualDesktop != screenDesktop)
-            return;
+        // the caller passed. Fall back to that value both when no VDM is wired AND
+        // when the VDM does not know the screen's desktop (returns <= 0) — without
+        // the second fallback, an unknown screen desktop would exclude every
+        // non-sticky window on that screen from the resnap.
+        if (desktopFilter > 0 && virtualDesktop != 0) {
+            int screenDesktop = screenDesktopMemo.value(screenId, 0);
+            if (screenDesktop <= 0) {
+                const int vdmDesktop =
+                    m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
+                screenDesktop = vdmDesktop > 0 ? vdmDesktop : desktopFilter;
+                screenDesktopMemo.insert(screenId, screenDesktop);
+            }
+            if (virtualDesktop != screenDesktop)
+                return;
+        }
 
         if (addedIds.contains(windowId))
             return;

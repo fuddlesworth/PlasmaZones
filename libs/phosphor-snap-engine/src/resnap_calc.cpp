@@ -118,9 +118,36 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
     return result;
 }
 
+void SnapEngine::forEachSnapAssignment(
+    const std::function<void(const QString&, const QStringList&, const QString&, int)>& fn) const
+{
+    for (const SnapState* st : allSnapStates()) {
+        const QHash<QString, QStringList>& stZones = st->zoneAssignments();
+        const QHash<QString, QString>& stScreens = st->screenAssignments();
+        const QHash<QString, int>& stDesktops = st->desktopAssignments();
+        for (auto it = stZones.constBegin(); it != stZones.constEnd(); ++it) {
+            fn(it.key(), it.value(), stScreens.value(it.key()), stDesktops.value(it.key(), 0));
+        }
+    }
+}
+
 QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(const QString& screenFilter) const
 {
     QVector<ZoneAssignmentEntry> result;
+
+    // Screen-filter predicate shared by the main pass and the debug dump below.
+    // If the filter is a virtual screen ID, require exact equality — screensMatch
+    // already enforces that distinct VS IDs (and VS vs physical) never match. If
+    // the filter is a physical screen ID, match windows stored on that physical
+    // screen OR on any of its virtual children — belongsToPhysicalScreen handles
+    // both cases.
+    const auto screenMatches = [&](const QString& screen) {
+        if (screenFilter.isEmpty())
+            return true;
+        return PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
+            ? PhosphorScreens::ScreenIdentity::screensMatch(screen, screenFilter)
+            : PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(screen, screenFilter);
+    };
 
     // Iterate the engine's own per-context stores directly — the autotile mirror
     // (engine methods read engine state). Each window's screen and desktop come
@@ -128,42 +155,26 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
     // preserves every window's recorded desktop through the commit by
     // construction — see the matching stamp in calculateResnapFromPreviousLayout.
     int totalAssignments = 0;
-    for (const SnapState* st : allSnapStates()) {
-        const QHash<QString, QStringList>& stZones = st->zoneAssignments();
-        const QHash<QString, QString>& stScreens = st->screenAssignments();
-        const QHash<QString, int>& stDesktops = st->desktopAssignments();
-        totalAssignments += stZones.size();
-        for (auto it = stZones.constBegin(); it != stZones.constEnd(); ++it) {
-            const QString& windowId = it.key();
-            const QStringList& zoneIds = it.value();
+    forEachSnapAssignment(
+        [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId, int desktop) {
+            ++totalAssignments;
             if (zoneIds.isEmpty()) {
-                continue;
+                return;
             }
             // Skip ALL floating windows. Floating state persists across mode
             // toggles — if the user floated a window (in either mode), it stays
             // floating and should not be resnapped to a zone.
             if (m_windowTracker->isWindowFloating(windowId)) {
-                continue;
+                return;
             }
 
-            QString screenId = stScreens.value(windowId);
-            if (!screenFilter.isEmpty()) {
-                // If the filter is a virtual screen ID, require exact equality —
-                // screensMatch already enforces that distinct VS IDs (and VS vs
-                // physical) never match. If the filter is a physical screen ID,
-                // match windows stored on that physical screen OR on any of its
-                // virtual children — belongsToPhysicalScreen handles both cases.
-                const bool match = PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
-                    ? PhosphorScreens::ScreenIdentity::screensMatch(screenId, screenFilter)
-                    : PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(screenId, screenFilter);
-                if (!match) {
-                    continue;
-                }
+            if (!screenMatches(screenId)) {
+                return;
             }
 
             QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, screenId);
             if (!geo.isValid()) {
-                continue;
+                return;
             }
 
             ZoneAssignmentEntry entry;
@@ -179,10 +190,9 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
             // re-derivation could land in a sibling VS and clobber the stored
             // assignment. Trust the source screen we already read above.
             entry.targetScreenId = screenId;
-            entry.virtualDesktop = stDesktops.value(windowId, 0);
+            entry.virtualDesktop = desktop;
             result.append(entry);
-        }
-    }
+        });
 
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "Resnap from current assignments:" << result.size() << "windows"
@@ -190,26 +200,14 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
         << (screenFilter.isEmpty() ? QStringLiteral("(all screens)")
                                    : QStringLiteral("(screen: %1)").arg(screenFilter));
     if (result.isEmpty() && totalAssignments > 0 && PhosphorSnapEngine::lcSnapEngine().isDebugEnabled()) {
-        auto screenMatches = [&](const QString& screen) {
-            if (screenFilter.isEmpty())
-                return true;
-            return PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
-                ? PhosphorScreens::ScreenIdentity::screensMatch(screen, screenFilter)
-                : PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(screen, screenFilter);
-        };
-        for (const SnapState* st : allSnapStates()) {
-            const QHash<QString, QStringList>& stZones = st->zoneAssignments();
-            const QHash<QString, QString>& stScreens = st->screenAssignments();
-            for (auto it = stZones.constBegin(); it != stZones.constEnd(); ++it) {
-                QString screen = stScreens.value(it.key());
-                bool floating = m_windowTracker->isWindowFloating(it.key());
-                QRect geo = it.value().isEmpty() ? QRect() : m_windowTracker->resolveZoneGeometry(it.value(), screen);
+        forEachSnapAssignment(
+            [&](const QString& windowId, const QStringList& zoneIds, const QString& screen, int /*desktop*/) {
+                bool floating = m_windowTracker->isWindowFloating(windowId);
+                QRect geo = zoneIds.isEmpty() ? QRect() : m_windowTracker->resolveZoneGeometry(zoneIds, screen);
                 qCDebug(PhosphorSnapEngine::lcSnapEngine)
-                    << "  skipped:" << it.key() << "zones=" << it.value() << "screen=" << screen
-                    << "floating=" << floating << "geoValid=" << geo.isValid()
-                    << "screenMatch=" << screenMatches(screen);
-            }
-        }
+                    << "  skipped:" << windowId << "zones=" << zoneIds << "screen=" << screen << "floating=" << floating
+                    << "geoValid=" << geo.isValid() << "screenMatch=" << screenMatches(screen);
+            });
     }
     return result;
 }
@@ -453,26 +451,19 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
         int desktop = 0;
     };
     QHash<QString, QVector<RotationCandidate>> windowsByScreen; // screenId -> candidates
-    for (const SnapState* st : allSnapStates()) {
-        const QHash<QString, QStringList>& stZones = st->zoneAssignments();
-        const QHash<QString, QString>& stScreens = st->screenAssignments();
-        const QHash<QString, int>& stDesktops = st->desktopAssignments();
-        for (auto it = stZones.constBegin(); it != stZones.constEnd(); ++it) {
-            const QStringList& zoneIdList = it.value();
+    forEachSnapAssignment(
+        [&](const QString& windowId, const QStringList& zoneIdList, const QString& screenId, int desktop) {
             if (zoneIdList.isEmpty()) {
-                continue;
+                return;
             }
-
-            QString screenId = stScreens.value(it.key());
 
             // When a screen filter is set, only include windows on that screen
             if (!screenFilter.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(screenId, screenFilter)) {
-                continue;
+                return;
             }
 
-            windowsByScreen[screenId].append({it.key(), zoneIdList.first(), stDesktops.value(it.key(), 0)});
-        }
-    }
+            windowsByScreen[screenId].append({windowId, zoneIdList.first(), desktop});
+        });
 
     // Process each screen independently
     for (auto screenIt = windowsByScreen.constBegin(); screenIt != windowsByScreen.constEnd(); ++screenIt) {

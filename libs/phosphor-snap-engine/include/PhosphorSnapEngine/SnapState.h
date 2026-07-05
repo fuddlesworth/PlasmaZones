@@ -91,9 +91,12 @@ public:
     int desktopForWindow(const QString& windowId) const;
 
     /// Re-stamp a snapped window's virtual-desktop membership to @p virtualDesktop,
-    /// keeping its zone and screen. The ONE place a desktop other than the live
-    /// current one is written — used by cross-desktop directional move, where
-    /// the window relocates to another desktop but keeps its snapped slot.
+    /// keeping its zone and screen. The one place a desktop is re-stamped on an
+    /// EXISTING assignment without touching its zone or screen — used by
+    /// cross-desktop directional move, where the window relocates to another
+    /// desktop but keeps its snapped slot. (Full assignment writes can also carry
+    /// a non-current desktop: RouteToDesktop pins and batch-resnap desktop
+    /// preservation both route through assignWindowToZones.)
     /// No-op for a window that isn't currently assigned. Returns true on change.
     bool reassignDesktop(const QString& windowId, int virtualDesktop);
 

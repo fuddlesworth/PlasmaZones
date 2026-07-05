@@ -197,6 +197,26 @@ private Q_SLOTS:
         QCOMPARE(m_service->screenForWindow(windowId), otherPhysId);
     }
 
+    void testMigrateFromVirtual_migratesPreFloatScreen()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+
+        // Snap on a virtual screen, then float: unsnapForFloat records the
+        // pre-float zone AND screen (vs0) in the owning store.
+        const QString windowId = QStringLiteral("konsole|prefloat");
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
+        m_service->unsnapForFloat(windowId);
+        QCOMPARE(m_service->preFloatScreen(windowId), vs0);
+
+        // Removing the virtual config must fold the pre-float screen back to
+        // the physical id, or a later unfloat would target a dead virtual
+        // screen and restore to the wrong geometry.
+        m_service->migrateScreenAssignmentsFromVirtual(physId);
+
+        QCOMPARE(m_service->preFloatScreen(windowId), physId);
+    }
+
     void testMigrateFromVirtual_noVirtualWindows_noop()
     {
         const QString physId = QStringLiteral("Dell:U2722D:115107");

@@ -37,16 +37,14 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include <PhosphorScreens/ScreenIdentity.h>
+
 #include "../helpers/LayoutRegistryTestHelpers.h"
-#include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-
-// Type alias — shared StubSettings with snap assist enabled for this test file
-using StubSettingsSnapAssist = StubSettings;
 
 // =========================================================================
 // Test Class
@@ -61,9 +59,6 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
-        m_settings = new StubSettingsSnapAssist(nullptr);
-        m_settings->setSnapAssistFeatureEnabled(true);
-        m_settings->setSnapAssistEnabled(true);
         m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
@@ -88,8 +83,6 @@ private Q_SLOTS:
         m_service = nullptr;
         delete m_zoneDetector;
         m_zoneDetector = nullptr;
-        delete m_settings;
-        m_settings = nullptr;
         delete m_layoutManager;
         m_layoutManager = nullptr;
         m_testLayout = nullptr;
@@ -258,19 +251,29 @@ private Q_SLOTS:
 
     void testGetEmptyZones_virtualScreen_returnsValidList()
     {
-        // getEmptyZones with virtual screen ID should return a list
-        // (may be empty in headless mode since there's no QScreen, but must not crash)
+        // getEmptyZones with virtual screen ID may return an empty list in
+        // headless mode (no QScreen), but whatever it returns must be
+        // structurally sound: non-empty, unique zone ids.
         QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
-        PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(vsId);
-        // Just verify it doesn't crash and returns a valid (possibly empty) list
-        Q_UNUSED(result);
+        const PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(vsId);
+        QSet<QString> seenZoneIds;
+        for (const auto& zone : result) {
+            QVERIFY2(!zone.zoneId.isEmpty(), "an empty-zone entry must carry a zone id");
+            QVERIFY2(!seenZoneIds.contains(zone.zoneId), "a zone must not be listed empty twice");
+            seenZoneIds.insert(zone.zoneId);
+        }
     }
 
     void testGetEmptyZones_emptyScreenId_returnsValidList()
     {
-        // Empty screen ID fallback should not crash
-        PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(QString());
-        Q_UNUSED(result);
+        // Empty screen ID fallback: same structural invariants as above.
+        const PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(QString());
+        QSet<QString> seenZoneIds;
+        for (const auto& zone : result) {
+            QVERIFY2(!zone.zoneId.isEmpty(), "an empty-zone entry must carry a zone id");
+            QVERIFY2(!seenZoneIds.contains(zone.zoneId), "a zone must not be listed empty twice");
+            seenZoneIds.insert(zone.zoneId);
+        }
     }
 
     // =====================================================================
@@ -484,7 +487,6 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    StubSettingsSnapAssist* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;
@@ -494,4 +496,3 @@ private:
 
 QTEST_MAIN(TestSnapAssistVirtual)
 #include "test_snap_assist_virtual.moc"
-#include <PhosphorScreens/ScreenIdentity.h>

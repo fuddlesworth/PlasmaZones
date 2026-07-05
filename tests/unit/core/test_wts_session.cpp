@@ -34,6 +34,7 @@
 #include <QRectF>
 #include <memory>
 
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -296,6 +297,34 @@ private Q_SLOTS:
 
         const auto geometries =
             m_engine->applyBatchAssignments({entry}, PhosphorEngine::SnapIntent::UserInitiated, nullptr);
+        QCOMPARE(geometries.size(), 1);
+        QCOMPARE(m_engine->snapState()->desktopForWindow(win), 2);
+    }
+
+    // Regression (#layout-leak): the pinned desktop must survive the FULL wire —
+    // serialize (emitBatchedResnap's format), deserialize (the parse
+    // handleBatchedResnap runs), then batch-commit. The through-the-wire twin of
+    // testApplyBatchAssignments_commitsOnEntryDesktop.
+    void testBatchedResnapWire_commitsOnEntryDesktop()
+    {
+        const QString win = QStringLiteral("app1|111");
+
+        ZoneAssignmentEntry entry;
+        entry.windowId = win;
+        entry.targetZoneId = m_zoneIds[0];
+        entry.targetGeometry = QRect(0, 0, 800, 600);
+        entry.targetScreenId = QStringLiteral("DP-1");
+        entry.virtualDesktop = 2;
+
+        const QString wire = PhosphorEngine::GeometryUtils::serializeZoneAssignments({entry});
+        QString parseError;
+        const QVector<ZoneAssignmentEntry> parsed =
+            PhosphorEngine::GeometryUtils::deserializeZoneAssignments(wire, &parseError);
+        QVERIFY(parseError.isEmpty());
+        QCOMPARE(parsed.size(), 1);
+
+        const auto geometries =
+            m_engine->applyBatchAssignments(parsed, PhosphorEngine::SnapIntent::UserInitiated, nullptr);
         QCOMPARE(geometries.size(), 1);
         QCOMPARE(m_engine->snapState()->desktopForWindow(win), 2);
     }

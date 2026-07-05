@@ -263,6 +263,79 @@ private Q_SLOTS:
         QVERIFY(!arr[1].toObject().contains(QLatin1String("virtualDesktop")));
     }
 
+    void test_deserializeZoneAssignments_roundTrip()
+    {
+        // The full serializer/deserializer pair: every field including the
+        // pinned desktop must survive the wire in both directions. This is
+        // the parse handleBatchedResnap runs on the receiving side, so it is
+        // the load-bearing half of the cross-desktop leak fix.
+        ZoneAssignmentEntry pinned;
+        pinned.windowId = QStringLiteral("win-1");
+        pinned.sourceZoneId = QStringLiteral("src-A");
+        pinned.targetZoneId = QStringLiteral("tgt-A");
+        pinned.targetZoneIds = {QStringLiteral("tgt-A"), QStringLiteral("tgt-B")};
+        pinned.targetGeometry = QRect(10, 20, 300, 400);
+        pinned.virtualDesktop = 2;
+
+        ZoneAssignmentEntry unpinned;
+        unpinned.windowId = QStringLiteral("win-2");
+        unpinned.targetZoneId = QStringLiteral("tgt-C");
+        unpinned.targetGeometry = QRect(100, 0, 100, 100);
+
+        QString errorString;
+        const QVector<ZoneAssignmentEntry> parsed = GeometryUtils::deserializeZoneAssignments(
+            GeometryUtils::serializeZoneAssignments({pinned, unpinned}), &errorString);
+
+        QVERIFY(errorString.isEmpty());
+        QCOMPARE(parsed.size(), 2);
+        QCOMPARE(parsed[0].windowId, pinned.windowId);
+        QCOMPARE(parsed[0].sourceZoneId, pinned.sourceZoneId);
+        QCOMPARE(parsed[0].targetZoneId, pinned.targetZoneId);
+        QCOMPARE(parsed[0].targetZoneIds, pinned.targetZoneIds);
+        QCOMPARE(parsed[0].targetGeometry, pinned.targetGeometry);
+        QCOMPARE(parsed[0].virtualDesktop, 2);
+        // Unpinned entry: the key is omitted on the wire and parses back to 0.
+        QCOMPARE(parsed[1].virtualDesktop, 0);
+        QCOMPARE(parsed[1].targetGeometry, unpinned.targetGeometry);
+    }
+
+    void test_deserializeZoneAssignments_dropsInvalidAndClampsDesktop()
+    {
+        // Entries missing a windowId or targetZoneId are dropped; a negative
+        // wire desktop clamps to 0 (the current-desktop default).
+        const QString json = QStringLiteral(
+            "["
+            "{\"windowId\":\"\",\"targetZoneId\":\"z\",\"x\":0,\"y\":0,\"width\":1,\"height\":1},"
+            "{\"windowId\":\"w\",\"targetZoneId\":\"\",\"x\":0,\"y\":0,\"width\":1,\"height\":1},"
+            "{\"windowId\":\"w\",\"targetZoneId\":\"z\",\"x\":0,\"y\":0,\"width\":1,\"height\":1,"
+            "\"virtualDesktop\":-3}"
+            "]");
+
+        QString errorString;
+        const QVector<ZoneAssignmentEntry> parsed = GeometryUtils::deserializeZoneAssignments(json, &errorString);
+
+        QVERIFY(errorString.isEmpty());
+        QCOMPARE(parsed.size(), 1);
+        QCOMPARE(parsed[0].windowId, QStringLiteral("w"));
+        QCOMPARE(parsed[0].virtualDesktop, 0);
+    }
+
+    void test_deserializeZoneAssignments_malformedJson()
+    {
+        QString errorString;
+        QVERIFY(GeometryUtils::deserializeZoneAssignments(QStringLiteral("not json"), &errorString).isEmpty());
+        QVERIFY(!errorString.isEmpty());
+
+        // A non-array payload is also rejected with a diagnostic.
+        QVERIFY(
+            GeometryUtils::deserializeZoneAssignments(QStringLiteral("{\"windowId\":\"w\"}"), &errorString).isEmpty());
+        QVERIFY(!errorString.isEmpty());
+
+        // An empty array is a legitimate empty batch, not an error.
+        QVERIFY(GeometryUtils::deserializeZoneAssignments(QStringLiteral("[]"), &errorString).isEmpty());
+        QVERIFY(errorString.isEmpty());
+    }
+
     void test_rectToJson_roundTrip()
     {
         QRect original(123, 456, 789, 1011);

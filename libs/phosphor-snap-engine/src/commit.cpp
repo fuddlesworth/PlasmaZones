@@ -45,9 +45,12 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     // placements pin their destination desktop, and resnap batch entries pin each
     // window's recorded desktop (ZoneAssignmentEntry::virtualDesktop) so a
     // cross-desktop batch never re-stamps an off-desktop window. Unpinned (0)
-    // commits record on the window's current desktop. Tracking the right desktop
-    // keeps zone occupancy, snap-assist, and empty-zone detection correct on both
-    // the source and destination desktops.
+    // commits record on the window's current desktop — which means a window whose
+    // RECORDED desktop was 0 (all-desktops) re-records on the current desktop when
+    // a resnap batch re-commits it; desktop-0 stickiness is not round-tripped here
+    // (sticky visibility itself is separate WTS state), matching the pre-batch
+    // behaviour. Tracking the right desktop keeps zone occupancy, snap-assist,
+    // and empty-zone detection correct on both the source and destination desktops.
     const int assignmentDesktop = virtualDesktop >= 1 ? virtualDesktop : currentVirtualDesktopForScreen(screenId);
     if (zoneIds.size() > 1) {
         m_windowTracker->assignWindowToZones(windowId, zoneIds, screenId, assignmentDesktop);

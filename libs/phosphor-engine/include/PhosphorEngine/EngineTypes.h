@@ -111,7 +111,10 @@ struct SnapResult
 
     static SnapResult noSnap()
     {
-        return SnapResult{false, QRect(), QString(), QStringList(), QString()};
+        // Value-initialize so every field takes its in-class default; a
+        // positional initializer here would silently stop covering fields
+        // added to the struct later.
+        return SnapResult{};
     }
 };
 
