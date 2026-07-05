@@ -339,10 +339,38 @@ QQuickItem* findShaderAnchorRecursive(QQuickItem* root)
     QStack<QQuickItem*> stack;
     stack.push(root);
     QQuickItem* firstMatch = nullptr;
+    QQuickItem* firstOverride = nullptr;
     bool warnedDuplicate = false;
+    bool warnedDuplicateOverride = false;
     while (!stack.isEmpty()) {
         QQuickItem* item = stack.pop();
         if (!item) {
+            continue;
+        }
+        // A decorated-output anchor (`shaderAnchorOverride: true`, set by the
+        // SurfaceDecoration host on its composed shader item) ALWAYS wins over
+        // a plain `shaderAnchor` tag. The host demotes the raw card's plain
+        // tag when its decoration activates, but that demote/promote pair is
+        // two independent property writes racing this walk — resolving the
+        // raw card here draws the decoration statically at final geometry
+        // while the shader animates the bare card. The override tag makes the
+        // preference structural instead of ordering-dependent.
+        //
+        // Do NOT early-return: keep scanning so a SECOND override is caught
+        // and warned. Two live overrides mean a host bug (e.g. a released-
+        // but-not-yet-deleted delegate re-tagging itself against the
+        // successor chain) — anchoring the corpse animates a frozen capture
+        // while the real surface draws statically.
+        if (item->property("shaderAnchorOverride").toBool()) {
+            if (!firstOverride) {
+                firstOverride = item;
+            } else if (!warnedDuplicateOverride) {
+                qCWarning(lcSurfaceAnimator).nospace()
+                    << "multiple shaderAnchorOverride tags found under " << root << " — using first match "
+                    << firstOverride << " ignoring " << item
+                    << " (a released delegate may have re-tagged itself; check the host's detag-on-release path)";
+                warnedDuplicateOverride = true;
+            }
             continue;
         }
         if (item->property("shaderAnchor").toBool()) {
@@ -369,7 +397,7 @@ QQuickItem* findShaderAnchorRecursive(QQuickItem* root)
             stack.push(child);
         }
     }
-    return firstMatch;
+    return firstOverride ? firstOverride : firstMatch;
 }
 
 /// Resolve a Profile path through the registry, falling back to a
@@ -434,6 +462,16 @@ QList<QPointer<QQuickItem>> hideAnchorSiblings(QQuickItem* shaderAnchor, QQuickI
     const auto siblings = shaderAnchor->parentItem()->childItems();
     for (QQuickItem* sibling : siblings) {
         if (sibling == shaderAnchor || sibling == shaderItem || sibling == shaderSource) {
+            continue;
+        }
+        // Never hide capture plumbing. A QQuickShaderEffectSource sibling
+        // (e.g. the decoration host's card snapshot feeding the anchor's
+        // uTexture0) is parked off-screen and draws nothing user-visible,
+        // but setVisible(false) suppresses its updatePaintNode and therefore
+        // its FBO render — the anchor would then sample a frozen (or, on a
+        // fresh show, empty) texture for the whole leg. Hiding it also buys
+        // nothing: it is not a decorator drawing a second visible copy.
+        if (qobject_cast<QQuickShaderEffectSource*>(sibling)) {
             continue;
         }
         if (sibling->isVisible()) {
