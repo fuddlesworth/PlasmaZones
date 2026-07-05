@@ -226,6 +226,9 @@ uniform int iHasOldWindow;
 // displacement since the grab, logical px.
 uniform vec2 iMoveVelocity;
 uniform vec2 iMoveOffset;
+// Second, looser spring over the same motion: lags iMoveVelocity and rings
+// longer after release. Blend by distance from the grip for phase spread.
+uniform vec2 iMoveVelocity2;
 // The animated surface's [0,1] sub-rect within uSurfaceLayer's canvas — the
 // layer analogue of iAnchorRectInTexture. The compositor pads the layer canvas
 // by the decoration chain's outer margin (glow reach), so the layer cannot be

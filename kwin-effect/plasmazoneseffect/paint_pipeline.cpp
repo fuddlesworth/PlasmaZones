@@ -1010,6 +1010,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                             transition.springVel +=
                                 ((inst - transition.springLag) * kSpring - transition.springVel * kDamp) * dt;
                             transition.springLag += transition.springVel * dt;
+                            // Loose sibling: lower stiffness, lighter damping
+                            // (zeta ~0.5) — trails the tight spring and rings
+                            // longer, the phase-spread source for jelly packs.
+                            constexpr qreal kSpring2 = 30.0;
+                            constexpr qreal kDamp2 = 5.5;
+                            transition.springVel2 +=
+                                ((inst - transition.springLag2) * kSpring2 - transition.springVel2 * kDamp2) * dt;
+                            transition.springLag2 += transition.springVel2 * dt;
                         }
                     }
                     transition.lastMovePos = pos;
@@ -1020,6 +1028,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     shader->setUniform(cached->iMoveVelocityLoc,
                                        QVector2D(static_cast<float>(transition.springLag.x()),
                                                  static_cast<float>(transition.springLag.y())));
+                }
+                if (cached->iMoveVelocity2Loc >= 0) {
+                    shader->setUniform(cached->iMoveVelocity2Loc,
+                                       QVector2D(static_cast<float>(transition.springLag2.x()),
+                                                 static_cast<float>(transition.springLag2.y())));
                 }
                 if (cached->iMoveOffsetLoc >= 0) {
                     const QPointF off = transition.holdUntilRelease

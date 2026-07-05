@@ -374,6 +374,13 @@ inline constexpr const char* kIMoveVelocity = "iMoveVelocity";
 /// window's frame origin since the interactive grab, logical px. Zero for
 /// non-held transitions and on the daemon path.
 inline constexpr const char* kIMoveOffset = "iMoveOffset";
+/// `vec2 iMoveVelocity2` — COMPOSITOR PATH ONLY. A second, LOOSER spring
+/// over the same frame velocity (lower stiffness, lighter damping), so it
+/// lags iMoveVelocity and rings longer after release. Blending between the
+/// two by distance from the grip point gives a jelly deformation whose far
+/// regions move out of phase with the grip — the KDE-wobbly billow —
+/// without any per-vertex state in the shader.
+inline constexpr const char* kIMoveVelocity2 = "iMoveVelocity2";
 /// Card/anchor-space [0,1] sub-rect of the animated surface WITHIN
 /// uSurfaceLayer's canvas (xy offset, zw scale) — the layer analogue of
 /// iAnchorRectInTexture. The compositor pads the layer canvas by the

@@ -1,7 +1,7 @@
 {
     "id": "wobble",
     "name": "Wobbly Move",
-    "description": "Drag transition where the window turns soft and trails behind the pointer, wobbling like jelly and settling with a spring when you let go. The grip area follows the pointer tightly while the far edge lags. Softness, grip and maximum bend are this pack's own parameters.",
+    "description": "Drag transition where the window turns to jelly around the pointer, in the spirit of the classic wobbly windows. The area under the cursor follows tightly while the far corners trail on a looser spring and shimmy to rest when you let go. Softness, reach and maximum bend are this pack's own parameters.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Geometry",
@@ -17,27 +17,27 @@
             "id": "softness",
             "name": "Softness",
             "type": "float",
-            "default": 90.0,
+            "default": 110.0,
             "min": 20.0,
             "max": 250.0,
             "description": "How far the body trails behind the motion, in milliseconds of lag"
         },
         {
-            "id": "grip",
-            "name": "Grip",
-            "type": "float",
-            "default": 0.3,
-            "min": 0.0,
-            "max": 0.9,
-            "description": "How tightly the grabbed edge follows the pointer, where higher values keep the top stiffer"
+            "id": "reach",
+            "name": "Reach",
+            "type": "int",
+            "default": 380,
+            "min": 80,
+            "max": 1200,
+            "description": "How far from the pointer the jelly zone extends (px), smaller values make a stiffer window"
         },
         {
             "id": "maxBend",
             "name": "Maximum bend",
             "type": "int",
-            "default": 72,
+            "default": 96,
             "min": 16,
-            "max": 160,
+            "max": 200,
             "description": "Cap on how far any part of the window may trail (px)"
         }
     ]

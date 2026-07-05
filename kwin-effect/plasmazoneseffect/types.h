@@ -113,7 +113,6 @@ struct CompiledSurfacePack
     int uFocusedLoc = -1; ///< uSurfaceFocused — 1.0 focused / 0.0 unfocused
     int uOpacityLoc = -1; ///< uSurfaceOpacity — rule-resolved window opacity (handlesOpacity packs)
     int uTimeLoc = -1; ///< iTime — continuous seconds; -1 ⟺ static pack (drives the repaint gate)
-    int uMoveVelocityLoc = -1; ///< uSurfaceMoveVelocity — elastic-halo motion (drives the repaint gate while ringing)
     /// uTexture0 — the input-surface sampler (unit 0). On the single-pack path
     /// OffscreenData::paint binds the redirected surface to unit 0 automatically,
     /// so this is unused there; the multi-pack composite (renderSurfaceChainComposite)
@@ -251,20 +250,6 @@ struct SurfaceMultipassState
 /// the per-window hide-titlebar choice; the appearance lives with the pack.
 struct WindowDecoration
 {
-    /// ── Elastic-ambience motion spring ──
-    /// Underdamped spring tracking the window's frame velocity, integrated
-    /// on every chain fold (renderSurfaceChainComposite) and published to
-    /// the packs as uSurfaceMoveVelocity. Lives HERE, not on the shader
-    /// transition, so elastic halos work with no move animation assigned.
-    /// moveSpringActive keeps windowSurfaceAnimates driving repaints while
-    /// the spring still carries energy after the drag stops, so the halo
-    /// settles instead of freezing mid-lag.
-    QPointF moveSpringLag;
-    QPointF moveSpringVel;
-    QPointF moveLastPos;
-    qint64 moveLastSampleMs = -1;
-    bool moveSpringActive = false;
-
     /// True when THIS border owns the window's OffscreenEffect redirect +
     /// border shader slot. False while an animation transition has taken over
     /// the slot (the animation path's begin/end coordinates the handover) —
@@ -459,6 +444,7 @@ struct CachedShader
     /// Interactive-move motion uniforms (held move/resize transitions).
     int iMoveVelocityLoc = -1;
     int iMoveOffsetLoc = -1;
+    int iMoveVelocity2Loc = -1;
     /// Surface-layer-stack uniforms (compositor path). `uSurfaceLayer` is the
     /// pre-composited layered surface (border / rounded corners, ...) sampled in
     /// place of the live `uTexture0` while a layered window animates;
@@ -664,6 +650,11 @@ struct ShaderTransition
     /// settle for free. Integrated per paint in the transition branch.
     QPointF springLag;
     QPointF springVel;
+    /// Second, looser spring over the same motion (iMoveVelocity2): lower
+    /// stiffness and lighter damping so it trails springLag and rings
+    /// longer — the phase-spread source for jelly deformations.
+    QPointF springLag2;
+    QPointF springVel2;
     QPointF lastMovePos;
     qint64 lastMoveSampleMs = -1;
     /// Snapshot of the window's OLD content, bound as `uOldWindow` so the

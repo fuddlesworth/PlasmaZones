@@ -779,15 +779,6 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     if (pack.uTimeLoc >= 0) {
         shader->setUniform(pack.uTimeLoc, surfaceShaderTimeSeconds());
     }
-    // Elastic-ambience velocity (spring-smoothed, integrated by the fold).
-    // -1 for packs that never read it; zero at rest, so a rigid chain pays
-    // one uniform push at most.
-    if (pack.uMoveVelocityLoc >= 0) {
-        shader->setUniform(
-            pack.uMoveVelocityLoc,
-            QVector2D(static_cast<float>(wb.moveSpringLag.x()), static_cast<float>(wb.moveSpringLag.y())));
-    }
-
     // Pack-declared parameters (customParams / customColors). Seed from THIS
     // window's resolved values (updateWindowDecoration fills packParamValues from
     // the window's own DecorationProfile), falling back to the compiled pack's
