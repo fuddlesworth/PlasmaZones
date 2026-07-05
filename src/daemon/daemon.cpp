@@ -1482,7 +1482,7 @@ bool Daemon::init()
     // window's CURRENT screen mode. This replaces the old single shared
     // m_floatingWindows + m_snapState bit that both engines read/wrote.
     //
-    // Mode resolution: the window's tracked screen (WTS screenAssignments, with
+    // Mode resolution: the window's tracked screen (WTS screenForWindow, with
     // the autotile engine's own tracked screen as the fallback for windows snap
     // never saw) → LayoutRegistry::modeForScreen → the owning engine.
     {

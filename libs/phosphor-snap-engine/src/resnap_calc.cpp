@@ -154,8 +154,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
             : PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(screen, screenFilter);
     };
 
-    // Iterate the engine's own per-context stores directly — the autotile mirror
-    // (engine methods read engine state). Each window's screen and desktop come
+    // Iterate the engine's own per-context stores directly (the engine's own
+    // state, not a WTS union view). Each window's screen and desktop come
     // from the store that OWNS it, so this resnap (gap reflow, VS reconfigure)
     // preserves every window's recorded desktop through the commit by
     // construction — see the matching stamp in calculateResnapFromPreviousLayout.
@@ -446,9 +446,9 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
 
     // Group snapped windows by screen so each screen rotates independently
     // using its own per-screen layout (not the global active layout).
-    // Iterate the engine's own per-context stores (the autotile mirror) and
-    // capture each window's recorded desktop from its OWNING store at collection
-    // time, so the entry stamp below needs no per-window reverse-map lookup.
+    // Iterate the engine's own per-context stores and capture each window's
+    // recorded desktop from its OWNING store at collection time, so the entry
+    // stamp below needs no per-window reverse-map lookup.
     struct RotationCandidate
     {
         QString windowId;
