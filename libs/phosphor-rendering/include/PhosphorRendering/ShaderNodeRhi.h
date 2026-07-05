@@ -145,6 +145,15 @@ public:
     void prepare() override;
     void render(const RenderState* state) override;
     void releaseResources() override;
+    /// Stock-parity dependency pull (mirrors QSGRhiShaderEffectNode): bring
+    /// the source provider's layer texture current before this node renders.
+    /// Without it, a ShaderEffectSource this node samples only re-grabs when
+    /// its OWN subtree is dirtied — a dependency the scene graph cannot see
+    /// through a raw provider pointer — so a node captured into an enclosing
+    /// layer (SurfaceAnimator's transition capture) can freeze on an empty
+    /// first grab for a whole animation leg. Enabled via UsePreprocess in
+    /// the constructor.
+    void preprocess() override;
 
     // ── Uniform Extension ──────────────────────────────────────────────
     void setUniformExtension(std::shared_ptr<PhosphorShaders::IUniformExtension> extension);
@@ -577,6 +586,15 @@ private:
     // (FBO recreation on resize / device-loss) we drop the SRB so the
     // next rebuild picks up the new pointer.
     QPointer<QSGTextureProvider> m_sourceTextureProvider;
+    /// textureChanged → markDirty(DirtyMaterial) bridge for the provider
+    /// above. The scene graph cannot see a dependency held as a raw
+    /// provider pointer, so without this an enclosing QSGLayer (an item
+    /// capturing THIS node's item, e.g. the SurfaceAnimator's transition
+    /// capture) never re-grabs when the sampled layer re-renders — the
+    /// capture freezes on its creation-time grab (empty on a fresh show)
+    /// for the whole leg. Disconnected on provider swap and in the dtor;
+    /// provider destruction auto-disconnects (sender-owned).
+    QMetaObject::Connection m_sourceTextureChangedConn;
     std::unique_ptr<QRhiSampler> m_sourceSampler;
     QRhiTexture* m_lastSourceRhiTexture = nullptr;
     /// Latch — once we've created a sampler-creation failure for the source

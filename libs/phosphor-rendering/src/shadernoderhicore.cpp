@@ -189,11 +189,35 @@ ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::
     // 1x1 transparent fallback for when textures are disabled
     m_transparentFallbackImage = QImage(1, 1, QImage::Format_RGBA8888);
     m_transparentFallbackImage.fill(Qt::transparent);
+
+    // preprocess() pulls the source provider's layer current before this
+    // node renders (see the override's doc in the header). Without the
+    // flag the scene graph never calls it.
+    setFlag(QSGNode::UsePreprocess, true);
 }
 
 ShaderNodeRhi::~ShaderNodeRhi()
 {
+    QObject::disconnect(m_sourceTextureChangedConn);
     releaseRhiResources();
+}
+
+void ShaderNodeRhi::preprocess()
+{
+    // Stock-parity dependency pull (QSGRhiShaderEffectNode does the same
+    // for its sampled sources): if the source is a dynamic texture (a
+    // ShaderEffectSource layer), bring it current NOW — during the
+    // preprocess phase of WHICHEVER renderer owns this node, main pass or
+    // an enclosing QSGLayer. This gives deterministic same-frame
+    // convergence through nested capture chains (card snapshot → stage →
+    // tap → stage → transition capture): each consumer pulls its upstream
+    // layer before rendering, instead of racing undefined layer-grab
+    // ordering. updateTexture() is a cheap no-op on a clean layer.
+    if (QSGTextureProvider* provider = m_sourceTextureProvider.data()) {
+        if (auto* dynamicTex = qobject_cast<QSGDynamicTexture*>(provider->texture())) {
+            dynamicTex->updateTexture();
+        }
+    }
 }
 
 void ShaderNodeRhi::invalidateItem()

@@ -329,7 +329,23 @@ void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
     if (m_sourceTextureProvider.data() == provider) {
         return;
     }
+    // Re-wire the textureChanged → dirty bridge to the new provider. The
+    // scene graph cannot see a dependency held as a raw provider pointer:
+    // when the sampled ShaderEffectSource layer re-renders, nothing marks
+    // THIS node dirty, so an enclosing QSGLayer capturing this node's item
+    // (SurfaceAnimator's transition capture) never re-grabs and freezes on
+    // its creation-time — possibly empty — grab for a whole animation leg.
+    // The connection is context-less, so delivery is direct on the emitting
+    // (render) thread, where this node lives; markDirty from the render
+    // thread is the stock QSGRhiShaderEffectNode pattern. Disconnected here
+    // on swap and in the destructor; provider destruction auto-disconnects.
+    QObject::disconnect(m_sourceTextureChangedConn);
     m_sourceTextureProvider = provider;
+    if (provider) {
+        m_sourceTextureChangedConn = QObject::connect(provider, &QSGTextureProvider::textureChanged, [this]() {
+            markDirty(QSGNode::DirtyMaterial);
+        });
+    }
     // Clear the cached binding-7 texture pointer so the SRB build sees
     // a "different texture" on the next prepare() and rebuilds bindings.
     // The asymmetric "only on provider→null" reset that lived here briefly
