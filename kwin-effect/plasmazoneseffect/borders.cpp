@@ -160,6 +160,14 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId, KWin::Effect
         if (!aliveW) {
             aliveW = windowHint;
         }
+        if (!aliveW) {
+            // Hint-less callers (bulk clears, D-Bus-driven purges) cannot
+            // resolve a deleted window through findWindowById; the frozen
+            // reverse mapping still can while a close transition holds it
+            // alive, and that is exactly the window whose composite the
+            // animation is sampling.
+            aliveW = m_windowIdReverse.value(windowId);
+        }
         if (aliveW && m_shaderManager.findTransition(aliveW)) {
             return;
         }
@@ -169,8 +177,26 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId, KWin::Effect
 
 void PlasmaZonesEffect::clearAllBorders()
 {
-    while (!m_windowBorders.isEmpty()) {
-        removeWindowBorder(m_windowBorders.begin().key());
+    // Skip entries whose window is riding a live shader transition — the
+    // close path DELIBERATELY keeps the closing window's border + multipass
+    // entries alive so renderSurfaceChain can composite the decoration under
+    // the close animation, and this bulk clear runs within milliseconds of
+    // every close (focus shift → updateAllBorders, autotile re-layout).
+    // Removing them here nuked the kept state before the first close frame:
+    // findWindowById refuses deleted windows and the bulk path has no window
+    // hint, so removeWindowBorder's own mid-transition guard could never
+    // engage. The frozen reverse mapping (kept alive through the transition
+    // by slotWindowClosed) resolves the deleted window here; the skipped
+    // entry is erased by endShaderTransition's teardown or the windowDeleted
+    // backstop.
+    const QStringList ids = m_windowBorders.keys();
+    for (const QString& windowId : ids) {
+        if (KWin::EffectWindow* w = m_windowIdReverse.value(windowId)) {
+            if (m_shaderManager.findTransition(w)) {
+                continue;
+            }
+        }
+        removeWindowBorder(windowId);
     }
 }
 
