@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorEngine/GeometryUtils.h>
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/JsonKeys.h>
 
 #include <QJsonArray>

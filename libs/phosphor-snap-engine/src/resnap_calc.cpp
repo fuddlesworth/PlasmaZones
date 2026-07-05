@@ -318,6 +318,11 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
             if (validZoneIds.size() > 1)
                 entry.targetZoneIds = validZoneIds;
             entry.targetGeometry = geo;
+            // Stamp the authoritative target screen (every entry in this
+            // producer is for the single screenId parameter) so the commit
+            // side skips the racy geometry.center() re-derivation — symmetric
+            // with the other three batch producers.
+            entry.targetScreenId = screenId;
             result.append(entry);
             placedWindowIds.insert(windowId);
             for (int idx : validZoneIndices)
@@ -359,6 +364,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
             entry.sourceZoneId = QString();
             entry.targetZoneId = targetZone->id().toString();
             entry.targetGeometry = geo;
+            // Same authoritative-screen stamp as the first pass above.
+            entry.targetScreenId = screenId;
             result.append(entry);
             claimedZoneIndices.insert(zoneIdx);
         }

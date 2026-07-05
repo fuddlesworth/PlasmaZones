@@ -764,7 +764,7 @@ void WindowTrackingService::onLayoutChanged()
         qCDebug(lcPlacement) << "onLayoutChanged: newLayout="
                              << (newLayout ? newLayout->name() : QStringLiteral("null"))
                              << "prevLayout=" << prevLayout->name() << "switched=" << layoutSwitched
-                             << "windowAssignments=" << snappedWindows().size();
+                             << "snappedWindows=" << snappedWindows().size();
     } else {
         qCDebug(lcPlacement) << "onLayoutChanged: no previous layout (first launch); skipping resnap-buffer "
                                 "build, running stale-assignment cleanup only";
