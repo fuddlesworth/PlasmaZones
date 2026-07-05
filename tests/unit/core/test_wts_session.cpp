@@ -462,6 +462,40 @@ private Q_SLOTS:
         QFAIL("window missing from resnap entries");
     }
 
+    // Rotation sibling of the resnap desktop filter: rotating must act on the
+    // screen's CURRENT desktop only — windows snapped on another desktop must
+    // not be pulled through the viewing desktop's layout. Sticky desktop-0
+    // windows still rotate.
+    void testCalculateRotation_scopedToScreenCurrentDesktop()
+    {
+        const QString screen = QStringLiteral("DP-1");
+
+        PhosphorWorkspaces::VirtualDesktopManager vdm;
+        vdm.updateScreenDesktop(screen, 2); // DP-1 is viewing desktop 2
+
+        SnapEngine engine(m_layoutManager, m_service, m_zoneDetector, &vdm);
+        engine.setEngineSettings(m_settings);
+
+        const QString winDesk2 = QStringLiteral("app1|111");
+        const QString winDesk1 = QStringLiteral("app2|222");
+        const QString winSticky = QStringLiteral("app3|333");
+        engine.snapState()->assignWindowToZone(winDesk2, m_zoneIds[0], screen, 2);
+        engine.snapState()->assignWindowToZone(winDesk1, m_zoneIds[1], screen, 1);
+        engine.snapState()->assignWindowToZone(winSticky, m_zoneIds[2], screen, 0);
+
+        const QVector<ZoneAssignmentEntry> cw = engine.calculateRotation(true);
+        if (cw.isEmpty()) {
+            QSKIP("rotation produced no geometry in headless harness — screen unavailable");
+        }
+        QSet<QString> ids;
+        for (const ZoneAssignmentEntry& e : cw) {
+            ids.insert(e.windowId);
+        }
+        QVERIFY2(ids.contains(winDesk2), "the window on DP-1's current desktop must rotate");
+        QVERIFY2(ids.contains(winSticky), "sticky (desktop 0) windows rotate regardless of the filter");
+        QVERIFY2(!ids.contains(winDesk1), "a window snapped on another desktop must not rotate");
+    }
+
     void testCalculateRotation_clockwiseAndCounterClockwise()
     {
         QString window1 = QStringLiteral("app1|111");

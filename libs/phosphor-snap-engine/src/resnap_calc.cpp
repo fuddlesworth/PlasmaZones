@@ -456,6 +456,16 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
         int desktop = 0;
     };
     QHash<QString, QVector<RotationCandidate>> windowsByScreen; // screenId -> candidates
+    // Scope rotation to each screen's CURRENT desktop: rotation acts on what
+    // the user is looking at, and pulling another desktop's windows through the
+    // viewing desktop's layout is the same cross-desktop mixing the resnap
+    // desktop filter prevents (see populateResnapBufferForAllScreens'
+    // addCandidate). desktop==0 (sticky/unknown) stays included; a screen whose
+    // current desktop is unknown (<= 0, e.g. no VDM wired) is not filtered
+    // rather than losing every non-sticky window on it. Memo: one VDM lookup
+    // per screen, not one per candidate (-1 = not yet cached, 0 is a valid
+    // cached "unknown").
+    QHash<QString, int> screenDesktopMemo;
     forEachSnapAssignment(
         [&](const QString& windowId, const QStringList& zoneIdList, const QString& screenId, int desktop) {
             if (zoneIdList.isEmpty()) {
@@ -465,6 +475,17 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
             // When a screen filter is set, only include windows on that screen
             if (!screenFilter.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(screenId, screenFilter)) {
                 return;
+            }
+
+            if (desktop != 0) {
+                int screenDesktop = screenDesktopMemo.value(screenId, -1);
+                if (screenDesktop < 0) {
+                    screenDesktop = currentVirtualDesktopForScreen(screenId);
+                    screenDesktopMemo.insert(screenId, screenDesktop);
+                }
+                if (screenDesktop > 0 && desktop != screenDesktop) {
+                    return;
+                }
             }
 
             windowsByScreen[screenId].append({windowId, zoneIdList.first(), desktop});
@@ -549,10 +570,12 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
                 entry.sourceZoneId = sourceZone->id().toString();
                 entry.targetZoneId = targetZone->id().toString();
                 entry.targetGeometry = geo;
-                // Rotation spans every desktop's snap store; preserve each
-                // window's recorded desktop (captured from its owning store at
-                // collection time) through the commit — see the matching stamp
-                // in calculateResnapFromPreviousLayout.
+                // Preserve each window's recorded desktop (captured from its
+                // owning store at collection time) through the commit: sticky
+                // windows (desktop 0) and windows on a screen whose current
+                // desktop is unknown pass the collection filter above without
+                // matching the current desktop — see the matching stamp in
+                // calculateResnapFromPreviousLayout.
                 entry.virtualDesktop = pair.first.desktop;
                 result.append(entry);
             }

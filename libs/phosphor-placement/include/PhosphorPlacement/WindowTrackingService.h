@@ -743,10 +743,13 @@ public:
      * @param excludeScreens Screens to skip (e.g. autotile screens handled separately)
      * @param includeScreens When non-empty, only process windows on these screens.
      *        Restricts resnap to screens whose layout actually changed.
-     * @param desktopFilter When > 0, only include windows whose virtualDesktop
-     *        matches this value (or are sticky/unknown with virtualDesktop==0).
-     *        Restricts resnap to a single virtual desktop so per-desktop
-     *        layout changes don't reposition windows on other desktops.
+     * @param desktopFilter When > 0, restrict the resnap to a single virtual
+     *        desktop so per-desktop layout changes don't reposition windows on
+     *        other desktops. Each window is compared against ITS screen's
+     *        current desktop (Plasma 6.7 per-output virtual desktops); the
+     *        passed value is the comparison fallback when no VDM is wired or
+     *        the VDM doesn't know the screen's desktop. Sticky/unknown windows
+     *        (virtualDesktop==0) always pass.
      */
     void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {},
                                            const QSet<QString>& includeScreens = {}, int desktopFilter = 0);
@@ -1170,6 +1173,9 @@ private:
     /// engine's reverse map is authoritative), so each window is visited exactly
     /// once and its context can never be paired with another store's values.
     /// @p fn must not mutate the snap stores — collect first, mutate after.
+    /// Body kept in lockstep with the engine-side sibling
+    /// SnapEngine::forEachSnapAssignment (same contract; this one reaches the
+    /// stores via the injected resolver, the engine iterates its own states).
     void forEachZoneAssignedWindow(const std::function<void(const QString& windowId, const QStringList& zoneIds,
                                                             const QString& screenId, int desktop)>& fn) const;
 
