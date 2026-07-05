@@ -481,7 +481,7 @@ bool SnapEngine::isWindowTracked(const QString& windowId) const
     // All three arms must resolve a class-mutated window (issue #628).
     // isWindowSnapped/isFloating canonicalize the id internally; the screen arm
     // goes through screenForWindow (which canonicalizes) instead of a raw
-    // screenAssignments().contains() on the canonical-keyed map. A screen
+    // map lookup on the canonical-keyed store. A screen
     // assignment is never empty, so a non-empty result means "present".
     const SnapState* state = stateForWindow(windowId);
     return (state

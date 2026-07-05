@@ -378,8 +378,7 @@ public:
     QString screenForWindow(const QString& windowId) const override;
 
     /// Same, but returns @p defaultScreen when the window has no screen
-    /// assignment — the canonicalizing replacement for
-    /// `screenAssignments().value(windowId, defaultScreen)`.
+    /// assignment — the canonicalizing with-default variant.
     QString screenForWindow(const QString& windowId, const QString& defaultScreen) const override;
 
     /**
@@ -783,7 +782,7 @@ public:
      * @brief Migrate window screen assignments from physical to virtual screen IDs
      *
      * Windows snapped before virtual screens were configured have physical screen IDs
-     * in the snap stores' screen assignments (screenAssignments()). When
+     * in the snap stores' screen assignments. When
      * virtual screens are active, all per-screen
      * lookups use virtual IDs, so these windows become invisible to zone occupancy
      * checks, snap assist, float/unfloat, etc.
@@ -900,28 +899,18 @@ public:
     void onLayoutChanged();
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // State Access (for adaptor persistence via KConfig)
+    // State Access
     // ═══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Get all zone assignments for persistence
-     * @return Map of windowId -> zoneIds (list of zone UUIDs)
-     */
-    const QHash<QString, QStringList>& zoneAssignments() const override;
 
     /// Live snap zones if present, else the durable placement-record snap slot.
     /// See IWindowTrackingService::recordedSnapZones.
     QStringList recordedSnapZones(const QString& windowId) const override;
 
-    /**
-     * @brief Get all screen assignments for persistence
-     */
-    const QHash<QString, QString>& screenAssignments() const override;
-
-    /**
-     * @brief Get all desktop assignments for persistence
-     */
-    const QHash<QString, int>& desktopAssignments() const;
+    /// The virtual desktop a window's snap assignment is recorded on, read from
+    /// the store that owns the window (0 = sticky / untracked), canonicalizing
+    /// the id. Point accessor — whole-map consumers iterate per state via
+    /// forEachZoneAssignedWindow instead of a flat union.
+    int desktopForWindow(const QString& windowId) const;
 
     using PendingRestore = PhosphorEngine::PendingRestore;
     using ResnapEntry = PhosphorEngine::ResnapEntry;
@@ -969,22 +958,6 @@ public:
     {
         m_floatingWindows = windows;
     }
-
-    /**
-     * @brief Get pre-float zone assignments for persistence
-     *
-     * Delegates to SnapState (authoritative store).
-     */
-    const QHash<QString, QStringList>& preFloatZoneAssignments() const;
-    const QHash<QString, QString>& preFloatScreenAssignments() const;
-
-    /**
-     * @brief Set pre-float zone assignments (loaded from KConfig by adaptor)
-     *
-     * Delegates to SnapState (authoritative store).
-     */
-    void setPreFloatZoneAssignments(const QHash<QString, QStringList>& assignments);
-    void setPreFloatScreenAssignments(const QHash<QString, QString>& assignments);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Dirty field tracking (Phase 3 of refactor/dbus-performance)
@@ -1196,26 +1169,20 @@ private:
     {
         return static_cast<bool>(m_snapResolver.globals);
     }
+    /// Invoke @p fn once per zone-assigned window, with its zones, screen, and
+    /// desktop read from the store that OWNS the window. The per-state replacement
+    /// for the removed flat zoneAssignments()/screenAssignments()/
+    /// desktopAssignments() unions: a window lives in exactly one store (the
+    /// engine's reverse map is authoritative), so each window is visited exactly
+    /// once and its context can never be paired with another store's values.
+    /// @p fn must not mutate the snap stores — collect first, mutate after.
+    void forEachZoneAssignedWindow(const std::function<void(const QString& windowId, const QStringList& zoneIds,
+                                                            const QString& screenId, int desktop)>& fn) const;
 
     // Dependencies
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorZones::IZoneDetector* m_zoneDetector;
     SnapStateResolver m_snapResolver;
-    // Rebuilt-on-read materialisations of the aggregate flat-map views so the
-    // const-ref facade getters keep their signatures while the underlying stores
-    // are per-screen. For the windowId-keyed maps (zone/screen/desktop) each window
-    // lives in exactly one store, so the union carries no key collisions and equals
-    // the former single store's flat map. The pre-float maps are ALSO keyed by appId
-    // aliases, and the same alias can live in two stores (two windows sharing an appId
-    // floated on different monitors); those unions collapse such collisions
-    // last-write-wins, which also matches the former single store. mutable: the const
-    // getters refresh them; the returned reference is valid until the SAME getter is
-    // called again (separate members so cross-field reads coexist).
-    mutable QHash<QString, QStringList> m_aggZoneAssignments;
-    mutable QHash<QString, QString> m_aggScreenAssignments;
-    mutable QHash<QString, int> m_aggDesktopAssignments;
-    mutable QHash<QString, QStringList> m_aggPreFloatZoneAssignments;
-    mutable QHash<QString, QString> m_aggPreFloatScreenAssignments;
     PhosphorEngine::WindowPlacementStore m_placementStore;
     IGeometryResolver* m_geometryResolver;
     PlacementConfig m_config;

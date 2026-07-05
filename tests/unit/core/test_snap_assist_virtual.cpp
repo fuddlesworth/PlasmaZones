@@ -318,11 +318,11 @@ private Q_SLOTS:
         QString windowId = QStringLiteral("konsole|multi-vs");
 
         m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
-        QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
+        QCOMPARE(m_service->screenForWindow(windowId), vs0);
 
         // Reassign to a different zone on a different virtual screen
         m_service->assignWindowToZone(windowId, m_zoneIds[1], vs1, 1);
-        QCOMPARE(m_service->screenAssignments().value(windowId), vs1);
+        QCOMPARE(m_service->screenForWindow(windowId), vs1);
 
         // buildOccupiedZoneSet for vs1 should show zone 1 occupied
         QSet<QUuid> occupiedVs1 = m_service->buildOccupiedZoneSet(vs1);
@@ -360,8 +360,8 @@ private Q_SLOTS:
         QVERIFY(m_service->isWindowSnapped(win2));
         QVERIFY(!m_service->isWindowSnapped(win3));
         // Screen and desktop assignments should also be gone
-        QVERIFY(!m_service->screenAssignments().contains(win3));
-        QVERIFY(!m_service->desktopAssignments().contains(win3));
+        QVERIFY(m_service->screenForWindow(win3).isEmpty());
+        QCOMPARE(m_service->desktopForWindow(win3), 0);
     }
 
     void testPruneStaleAssignments_preservesAliveWindows()

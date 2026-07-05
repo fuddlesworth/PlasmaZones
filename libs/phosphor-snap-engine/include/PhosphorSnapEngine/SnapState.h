@@ -121,14 +121,6 @@ public:
         m_windowScreenAssignments = s;
         Q_EMIT stateChanged();
     }
-    void setDesktopAssignments(const QHash<QString, int>& d)
-    {
-        if (m_windowDesktopAssignments == d) {
-            return;
-        }
-        m_windowDesktopAssignments = d;
-        Q_EMIT stateChanged();
-    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating State
@@ -286,31 +278,6 @@ public:
     const QHash<QString, QStringList>& zoneAssignments() const
     {
         return m_windowZoneAssignments;
-    }
-
-    void setZoneAssignments(const QHash<QString, QStringList>& zones)
-    {
-        if (m_windowZoneAssignments == zones) {
-            return;
-        }
-        m_windowZoneAssignments = zones;
-        Q_EMIT stateChanged();
-    }
-    void setFloatingWindows(const QSet<QString>& windows)
-    {
-        if (m_floatingWindows == windows) {
-            return;
-        }
-        m_floatingWindows = windows;
-        Q_EMIT stateChanged();
-    }
-    void setPreFloatZoneAssignments(const QHash<QString, QStringList>& a)
-    {
-        if (m_preFloatZoneAssignments == a) {
-            return;
-        }
-        m_preFloatZoneAssignments = a;
-        Q_EMIT stateChanged();
     }
 
 Q_SIGNALS:

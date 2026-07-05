@@ -39,9 +39,9 @@ PhosphorProtocol::WindowStateList WindowTrackingAdaptor::getAllWindowStates()
     QSet<QString> allWindowIds;
 
     // Add snapped windows
-    const auto& zoneAssignments = m_service->zoneAssignments();
-    for (auto it = zoneAssignments.constBegin(); it != zoneAssignments.constEnd(); ++it) {
-        allWindowIds.insert(it.key());
+    const QStringList snappedWindows = m_service->snappedWindows();
+    for (const QString& windowId : snappedWindows) {
+        allWindowIds.insert(windowId);
     }
 
     // Add floating windows

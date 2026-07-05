@@ -171,8 +171,8 @@ private Q_SLOTS:
         QString windowId = QStringLiteral("app:window:12345");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("HDMI-1"), 2);
 
-        QCOMPARE(m_service->screenAssignments().value(windowId), QStringLiteral("HDMI-1"));
-        QCOMPARE(m_service->desktopAssignments().value(windowId), 2);
+        QCOMPARE(m_service->screenForWindow(windowId), QStringLiteral("HDMI-1"));
+        QCOMPARE(m_service->desktopForWindow(windowId), 2);
     }
 
     void testUnassignWindow_emitsSignal()

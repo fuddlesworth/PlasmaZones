@@ -53,10 +53,6 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     const QHash<QString, int> globalZoneIdToPosition =
         PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts());
 
-    const QHash<QString, QStringList>& snapZones = zoneAssignments();
-    const QHash<QString, QString>& snapScreens = screenAssignments();
-    const QHash<QString, int>& snapDesktops = desktopAssignments();
-
     // Per-window candidate processing, shared by the live and durable passes below.
     const auto addCandidate = [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                   int virtualDesktop) {
@@ -102,9 +98,12 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
 
     // 1. Live snap assignments — this session's snaps (retained while a window is
     // autotiled, which is why the non-restart autotile→snap swap finds them here).
-    for (auto it = snapZones.constBegin(); it != snapZones.constEnd(); ++it) {
-        addCandidate(it.key(), it.value(), snapScreens.value(it.key()), snapDesktops.value(it.key(), 0));
-    }
+    // Per-state visitation: each window's screen/desktop come from the store that
+    // owns it, never from a cross-store flat-map join.
+    forEachZoneAssignedWindow(
+        [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId, int desktop) {
+            addCandidate(windowId, zoneIds, screenId, desktop);
+        });
 
     // 2. Restart-robustness: a window snapped in a PRIOR session and then autotiled
     // has its snap zones only in the durable WindowPlacement record — the live
@@ -150,9 +149,6 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     // Collect (zoneNumber, insertionIndex, windowId) for windows on this screen.
     // Screen assignments may store connector names or EDID-based screen IDs
     // depending on the code path. Use screensMatch() for format-agnostic comparison.
-    const QHash<QString, QString>& snapScreens = screenAssignments();
-    const QHash<QString, QStringList>& snapZones = zoneAssignments();
-    const QHash<QString, int>& snapDesktops = desktopAssignments();
 
     // This list SEEDS the autotile state for (screenId, CURRENT virtual desktop).
     // Snap assignments are screen-keyed but desktop-agnostic, so the same screen
@@ -168,34 +164,32 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
 
     int insertionIdx = 0;
     QVector<std::tuple<int, int, QString>> windowsByZone; // (zoneNum, insertionIdx, windowId)
-    for (auto it = snapScreens.constBegin(); it != snapScreens.constEnd(); ++it) {
-        if (!PhosphorScreens::ScreenIdentity::screensMatch(it.value(), screenId)) {
-            continue;
-        }
-        const QString& windowId = it.key();
-        const int windowDesktop = snapDesktops.value(windowId, 0);
-        if (currentDesktop > 0 && windowDesktop != 0 && windowDesktop != currentDesktop) {
-            continue;
-        }
-        // Skip floating windows — they should not participate in zone-ordered
-        // transitions (the user's manual-mode float choice should be preserved).
-        if (isWindowFloating(windowId)) {
-            continue;
-        }
-        const QStringList& zoneIds = snapZones.value(windowId);
-        if (zoneIds.isEmpty()) {
-            continue;
-        }
+    forEachZoneAssignedWindow(
+        [&](const QString& windowId, const QStringList& zoneIds, const QString& windowScreen, int windowDesktop) {
+            if (!PhosphorScreens::ScreenIdentity::screensMatch(windowScreen, screenId)) {
+                return;
+            }
+            if (!desktopMatchesFilter(windowDesktop, currentDesktop)) {
+                return;
+            }
+            // Skip floating windows — they should not participate in zone-ordered
+            // transitions (the user's manual-mode float choice should be preserved).
+            if (isWindowFloating(windowId)) {
+                return;
+            }
+            if (zoneIds.isEmpty()) {
+                return;
+            }
 
-        // Use primary zone's zone number
-        auto numIt = zoneNumberMap.constFind(zoneIds.first());
-        if (numIt != zoneNumberMap.constEnd()) {
-            windowsByZone.append({numIt.value(), insertionIdx++, windowId});
-        } else {
-            qCWarning(lcPlacement) << "buildZoneOrderedWindowList: zone UUID" << zoneIds.first() << "for window"
-                                   << windowId << "not found in layout - skipping";
-        }
-    }
+            // Use primary zone's zone number
+            auto numIt = zoneNumberMap.constFind(zoneIds.first());
+            if (numIt != zoneNumberMap.constEnd()) {
+                windowsByZone.append({numIt.value(), insertionIdx++, windowId});
+            } else {
+                qCWarning(lcPlacement) << "buildZoneOrderedWindowList: zone UUID" << zoneIds.first() << "for window"
+                                       << windowId << "not found in layout - skipping";
+            }
+        });
 
     // Sort by zone number ascending, preserving iteration order as tie-breaker
     std::stable_sort(windowsByZone.begin(), windowsByZone.end(), [](const auto& a, const auto& b) {
@@ -228,22 +222,16 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
         return result;
     }
 
-    const QHash<QString, QStringList>& uwgZones = zoneAssignments();
-    const QHash<QString, QString>& uwgScreens = screenAssignments();
-
-    for (auto it = uwgZones.constBegin(); it != uwgZones.constEnd(); ++it) {
-        QString windowId = it.key();
-        const QStringList& zoneIds = it.value();
-        if (zoneIds.isEmpty()) {
-            continue;
-        }
-        QString screenId = uwgScreens.value(windowId);
-
-        QRect geo = resolveZoneGeometry(zoneIds, screenId);
-        if (geo.isValid()) {
-            result[windowId] = geo;
-        }
-    }
+    forEachZoneAssignedWindow(
+        [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId, int /*desktop*/) {
+            if (zoneIds.isEmpty()) {
+                return;
+            }
+            QRect geo = resolveZoneGeometry(zoneIds, screenId);
+            if (geo.isValid()) {
+                result[windowId] = geo;
+            }
+        });
 
     return result;
 }
@@ -289,8 +277,8 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
             continue;
         }
 
-        // Validate desktop context.
-        if (p.virtualDesktop > 0 && currentDesktop > 0 && p.virtualDesktop != currentDesktop) {
+        // Validate desktop context (sticky-0 windows pass; unknown current passes).
+        if (!desktopMatchesFilter(p.virtualDesktop, currentDesktop)) {
             continue;
         }
 

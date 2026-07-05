@@ -208,10 +208,12 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     // unchanged (per-window lookups key off the screen value + the reverse map, so
     // a now-stale store key is benign and self-heals on the next genuine
     // cross-monitor migration). Pushing the aggregated union onto the global holder
-    // instead would strand duplicate stale entries in every other store.
-    const QHash<QString, QStringList> zoneAssigns = zoneAssignments();
+    // instead would strand duplicate stale entries in every other store. The zone
+    // lookup reads the SAME store's zone map — a window's zones live alongside its
+    // screen entry, so no cross-store union is needed.
     for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
         QHash<QString, QString> assigns = state->screenAssignments();
+        const QHash<QString, QStringList>& stateZones = state->zoneAssignments();
         bool storeChanged = false;
         for (auto it = assigns.begin(); it != assigns.end(); ++it) {
             if (it.value() != physicalScreenId && !it.value().startsWith(prefix)) {
@@ -222,7 +224,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             if (PhosphorIdentity::VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
                 continue;
             }
-            it.value() = resolveVirtualScreen(zoneAssigns.value(it.key()), it.value());
+            it.value() = resolveVirtualScreen(stateZones.value(it.key()), it.value());
             storeChanged = true;
             migrated++;
         }
@@ -231,10 +233,16 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
     }
 
-    // Also migrate pre-float screen assignments (owned by SnapState).
-    {
-        QHash<QString, QString> preFloatScreens = preFloatScreenAssignments();
-        const QHash<QString, QStringList>& preFloatZones = preFloatZoneAssignments();
+    // Also migrate pre-float screen assignments (owned by SnapState). Rewritten
+    // per store, in place, like the live-screen map above — the former
+    // union-then-redistribute round-trip re-homed appId-alias entries with no
+    // live window onto the global holder as a side effect; the per-state rewrite
+    // leaves every entry in the store it lives in. The pre-float zone lookup
+    // reads the same store: the zone and screen halves of a pre-float entry are
+    // written together into the window's owning store.
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        QHash<QString, QString> preFloatScreens = state->preFloatScreenAssignments();
+        const QHash<QString, QStringList>& preFloatZones = state->preFloatZoneAssignments();
         bool preFloatMigrated = false;
         for (auto it = preFloatScreens.begin(); it != preFloatScreens.end(); ++it) {
             if (it.value() != physicalScreenId && !it.value().startsWith(prefix)) {
@@ -253,7 +261,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             preFloatMigrated = true;
         }
         if (preFloatMigrated) {
-            setPreFloatScreenAssignments(preFloatScreens);
+            state->setPreFloatScreenAssignments(preFloatScreens);
             anyStateMigrated = true;
         }
     }
@@ -314,7 +322,9 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     // float-back store; rewrite its per-screen keys in place.
     {
         const int changed = m_placementStore.transform([&](PhosphorEngine::WindowPlacement& p) {
-            const QStringList ptZoneIds = zoneAssigns.value(p.windowId);
+            // Point lookup against the window's OWNING store (canonicalizing),
+            // replacing the former flat-union copy.
+            const QStringList ptZoneIds = zonesForWindow(p.windowId);
             if (ptZoneIds.isEmpty()) {
                 return false; // No zone info — keep physical ID, don't guess VS
             }
@@ -350,21 +360,19 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     // their float state must survive a VS reconfigure.
     if (m_layoutManager) {
         QStringList windowsToRemove;
-        const QHash<QString, QStringList>& zoneAssignsV = zoneAssignments();
-        const QHash<QString, QString>& screenAssignsV = screenAssignments();
-        for (auto it = zoneAssignsV.constBegin(); it != zoneAssignsV.constEnd(); ++it) {
-            const QString& winScreen = screenAssignsV.value(it.key());
-            if (!virtualScreenIds.contains(winScreen)) {
-                continue;
-            }
-            if (isWindowFloating(it.key())) {
-                continue;
-            }
-            PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(winScreen);
-            if (vsLayout && !allZonesExistInLayout(it.value(), vsLayout)) {
-                windowsToRemove.append(it.key());
-            }
-        }
+        forEachZoneAssignedWindow(
+            [&](const QString& windowId, const QStringList& zoneIds, const QString& winScreen, int /*desktop*/) {
+                if (!virtualScreenIds.contains(winScreen)) {
+                    return;
+                }
+                if (isWindowFloating(windowId)) {
+                    return;
+                }
+                PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(winScreen);
+                if (vsLayout && !allZonesExistInLayout(zoneIds, vsLayout)) {
+                    windowsToRemove.append(windowId);
+                }
+            });
         bool lastUsedCleared = false;
         for (const QString& wId : windowsToRemove) {
             if (PhosphorSnapEngine::SnapState* store = snapForWindow(wId)) {
@@ -421,9 +429,12 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         }
     }
 
-    // Also migrate pre-float screen assignments (owned by SnapState).
-    {
-        QHash<QString, QString> preFloatScreens = preFloatScreenAssignments();
+    // Also migrate pre-float screen assignments (owned by SnapState). Per-state
+    // in-place rewrite, mirroring the live-screen fold above — see the sibling
+    // migrateScreenAssignmentsToVirtual for why this must not round-trip through
+    // a union-and-redistribute.
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        QHash<QString, QString> preFloatScreens = state->preFloatScreenAssignments();
         bool preFloatMigrated = false;
         for (auto it = preFloatScreens.begin(); it != preFloatScreens.end(); ++it) {
             if (it.value().startsWith(prefix)) {
@@ -432,7 +443,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             }
         }
         if (preFloatMigrated) {
-            setPreFloatScreenAssignments(preFloatScreens);
+            state->setPreFloatScreenAssignments(preFloatScreens);
             anyStateMigrated = true;
         }
     }
@@ -500,22 +511,21 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         m_layoutManager ? m_layoutManager->resolveLayoutForScreen(physicalScreenId) : nullptr;
     if (physLayout) {
         QStringList windowsToRemove;
-        const QHash<QString, QStringList>& zoneAssigns2 = zoneAssignments();
-        const QHash<QString, QString>& screenAssigns2 = screenAssignments();
-        for (auto it = zoneAssigns2.constBegin(); it != zoneAssigns2.constEnd(); ++it) {
-            if (screenAssigns2.value(it.key()) != physicalScreenId) {
-                continue;
-            }
-            // Preserve floating windows — clearing float state here would make
-            // previously floating windows eligible for auto-snap again, which is
-            // a user-visible behavior change.
-            if (isWindowFloating(it.key())) {
-                continue;
-            }
-            if (!allZonesExistInLayout(it.value(), physLayout)) {
-                windowsToRemove.append(it.key());
-            }
-        }
+        forEachZoneAssignedWindow(
+            [&](const QString& windowId, const QStringList& zoneIds, const QString& winScreen, int /*desktop*/) {
+                if (winScreen != physicalScreenId) {
+                    return;
+                }
+                // Preserve floating windows — clearing float state here would make
+                // previously floating windows eligible for auto-snap again, which is
+                // a user-visible behavior change.
+                if (isWindowFloating(windowId)) {
+                    return;
+                }
+                if (!allZonesExistInLayout(zoneIds, physLayout)) {
+                    windowsToRemove.append(windowId);
+                }
+            });
         bool lastUsedCleared = false;
         for (const QString& wId : windowsToRemove) {
             if (PhosphorSnapEngine::SnapState* store = snapForWindow(wId)) {
@@ -559,13 +569,15 @@ WindowTrackingService::physicalScreensWithStaleVirtualAssignments(const QSet<QSt
     };
 
     if (hasSnapState()) {
-        const QHash<QString, QString>& assigns = screenAssignments();
-        for (auto it = assigns.constBegin(); it != assigns.constEnd(); ++it) {
-            check(it.value());
-        }
-        const QHash<QString, QString>& preFloat = preFloatScreenAssignments();
-        for (auto it = preFloat.constBegin(); it != preFloat.constEnd(); ++it) {
-            check(it.value());
+        for (const PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+            const QHash<QString, QString>& assigns = state->screenAssignments();
+            for (auto it = assigns.constBegin(); it != assigns.constEnd(); ++it) {
+                check(it.value());
+            }
+            const QHash<QString, QString>& preFloat = state->preFloatScreenAssignments();
+            for (auto it = preFloat.constBegin(); it != preFloat.constEnd(); ++it) {
+                check(it.value());
+            }
         }
     }
     for (auto qit = m_pendingRestoreQueues.constBegin(); qit != m_pendingRestoreQueues.constEnd(); ++qit) {
@@ -752,7 +764,7 @@ void WindowTrackingService::onLayoutChanged()
         qCDebug(lcPlacement) << "onLayoutChanged: newLayout="
                              << (newLayout ? newLayout->name() : QStringLiteral("null"))
                              << "prevLayout=" << prevLayout->name() << "switched=" << layoutSwitched
-                             << "windowAssignments=" << zoneAssignments().size();
+                             << "windowAssignments=" << snappedWindows().size();
     } else {
         qCDebug(lcPlacement) << "onLayoutChanged: no previous layout (first launch); skipping resnap-buffer "
                                 "build, running stale-assignment cleanup only";
@@ -848,21 +860,17 @@ void WindowTrackingService::onLayoutChanged()
             return newLayout;
         };
 
-        const QHash<QString, QStringList>& snapZones = zoneAssignments();
-        const QHash<QString, QString>& snapScreens = screenAssignments();
-        const QHash<QString, int>& snapDesktops = desktopAssignments();
-
         if (layoutSwitched) {
             // User switched layouts: capture assignments to zones from the OLD layout (not in new)
             // 1. Live assignments (windows we've tracked via windowSnapped)
-            for (auto it = snapZones.constBegin(); it != snapZones.constEnd(); ++it) {
-                QString windowScreen = snapScreens.value(it.key());
-                PhosphorZones::Layout* effectiveLayout = resolveNewLayoutForScreen(windowScreen);
-                if (anyZoneExistsInLayout(it.value(), effectiveLayout)) {
-                    continue;
-                }
-                addToBuffer(it.key(), it.value(), windowScreen, snapDesktops.value(it.key(), 0));
-            }
+            forEachZoneAssignedWindow(
+                [&](const QString& windowId, const QStringList& zoneIds, const QString& windowScreen, int desktop) {
+                    PhosphorZones::Layout* effectiveLayout = resolveNewLayoutForScreen(windowScreen);
+                    if (anyZoneExistsInLayout(zoneIds, effectiveLayout)) {
+                        return;
+                    }
+                    addToBuffer(windowId, zoneIds, windowScreen, desktop);
+                });
 
             // 2. Pending assignments (session-restored windows)
             for (auto it = m_pendingRestoreQueues.constBegin(); it != m_pendingRestoreQueues.constEnd(); ++it) {
@@ -885,14 +893,14 @@ void WindowTrackingService::onLayoutChanged()
             // effective layout. This lets resnap re-apply zone geometries for both
             // global and per-screen layout windows.
             // 1. Live assignments — check each window against its own screen's layout
-            for (auto it = snapZones.constBegin(); it != snapZones.constEnd(); ++it) {
-                const QString windowScreen = snapScreens.value(it.key());
-                PhosphorZones::Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
-                if (!anyZoneExistsInLayout(it.value(), effectiveLayout)) {
-                    continue;
-                }
-                addToBuffer(it.key(), it.value(), windowScreen, snapDesktops.value(it.key(), 0));
-            }
+            forEachZoneAssignedWindow(
+                [&](const QString& windowId, const QStringList& zoneIds, const QString& windowScreen, int desktop) {
+                    PhosphorZones::Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
+                    if (!anyZoneExistsInLayout(zoneIds, effectiveLayout)) {
+                        return;
+                    }
+                    addToBuffer(windowId, zoneIds, windowScreen, desktop);
+                });
 
             // 2. Pending assignments — check against each entry's screen's layout
             for (auto it = m_pendingRestoreQueues.constBegin(); it != m_pendingRestoreQueues.constEnd(); ++it) {
@@ -932,89 +940,93 @@ void WindowTrackingService::onLayoutChanged()
     // Cache autotile status per screen to avoid redundant lookups (O(screens) instead of O(windows))
     QHash<QString, bool> screenIsAutotile;
 
-    const QHash<QString, QStringList>& lcZones = zoneAssignments();
-    const QHash<QString, QString>& lcScreens = screenAssignments();
-    const QHash<QString, int>& lcDesktops = desktopAssignments();
-
     QStringList toRemove;
     // Multi-zone windows where SOME zones survived the layout change: we
     // keep the window, but rewrite the assignment to drop the dangling zone
     // ids. Without this, multiZoneGeometry / zonesForWindow downstream would
     // keep seeing invalid uuids and either return zero rects for them or
     // (worse) fold them into geometry queries that silently no-op.
-    QHash<QString, QPair<QStringList, QString>> toRewrite; // windowId → (validZones, screenId)
-    for (auto it = lcZones.constBegin(); it != lcZones.constEnd(); ++it) {
-        const QStringList& zoneIdList = it.value();
-        if (zoneIdList.isEmpty()) {
-            toRemove.append(it.key());
-            continue;
-        }
-
-        // Preserve zone assignments for windows on other desktops. Desktop 0
-        // means "all desktops" (pinned window) — always process those.
-        //
-        // Ordering note: this desktop gate is BEFORE the autotile-screen gate
-        // below. Both gates ultimately preserve the assignment (by continuing),
-        // so order is observationally irrelevant — but the intent is "windows
-        // on other desktops are preserved categorically, autotile preservation
-        // is a separate axis that only matters for windows whose desktop is
-        // current." Don't reorder these without checking that the new ordering
-        // still preserves the union {other-desktop OR autotile-screen}.
-        const QString windowScreen = lcScreens.value(it.key());
-        // Per-output virtual desktops (#648): "other desktop" is relative to the
-        // window's OWN screen's current desktop, not the global current.
-        const int currentDesktop = m_layoutManager->currentVirtualDesktopForScreen(windowScreen);
-
-        const int windowDesktop = lcDesktops.value(it.key(), 0);
-        if (windowDesktop != 0 && windowDesktop != currentDesktop) {
-            continue;
-        }
-
-        // If this screen's assignment is autotile, preserve zone assignments for resnap
-        auto cached = screenIsAutotile.constFind(windowScreen);
-        if (cached == screenIsAutotile.constEnd()) {
-            QString assignmentId =
-                m_layoutManager->assignmentIdForScreen(windowScreen, currentDesktop, currentActivity);
-            cached = screenIsAutotile.insert(windowScreen, PhosphorLayout::LayoutId::isAutotile(assignmentId));
-        }
-        if (*cached) {
-            continue;
-        }
-
-        PhosphorZones::Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
-        if (!effectiveLayout) {
-            toRemove.append(it.key());
-            continue;
-        }
-        if (allZonesExistInLayout(zoneIdList, effectiveLayout)) {
-            continue; // fully valid, nothing to do
-        }
-        // Partial or full invalidity: rebuild the surviving subset. Empty
-        // result means the whole window lost its zones → mark for unassign.
-        QStringList survivingZones;
-        survivingZones.reserve(zoneIdList.size());
-        for (const QString& zid : zoneIdList) {
-            const auto uuid = parseUuid(zid);
-            if (uuid && effectiveLayout->zoneById(*uuid)) {
-                survivingZones.append(zid);
+    struct RewriteTarget
+    {
+        QStringList zones;
+        QString screenId;
+        int desktop = 0;
+    };
+    QHash<QString, RewriteTarget> toRewrite;
+    // Collect-then-mutate: forEachZoneAssignedWindow iterates the live stores, so
+    // the unassign / re-assign below runs after the visitation completes. The
+    // desktop is captured per window here so the rewrite pass needs no second
+    // lookup against state that the removal pass may have already changed.
+    forEachZoneAssignedWindow(
+        [&](const QString& windowId, const QStringList& zoneIdList, const QString& windowScreen, int windowDesktop) {
+            if (zoneIdList.isEmpty()) {
+                toRemove.append(windowId);
+                return;
             }
-        }
-        if (survivingZones.isEmpty()) {
-            toRemove.append(it.key());
-        } else {
-            toRewrite.insert(it.key(), {survivingZones, windowScreen});
-        }
-    }
+
+            // Preserve zone assignments for windows on other desktops. Desktop 0
+            // means "all desktops" (pinned window) — always process those.
+            //
+            // Ordering note: this desktop gate is BEFORE the autotile-screen gate
+            // below. Both gates ultimately preserve the assignment (by returning),
+            // so order is observationally irrelevant — but the intent is "windows
+            // on other desktops are preserved categorically, autotile preservation
+            // is a separate axis that only matters for windows whose desktop is
+            // current." Don't reorder these without checking that the new ordering
+            // still preserves the union {other-desktop OR autotile-screen}.
+            //
+            // Per-output virtual desktops (#648): "other desktop" is relative to the
+            // window's OWN screen's current desktop, not the global current. NOT the
+            // shared desktopMatchesFilter helper: this gate must also preserve when
+            // the screen's current desktop is unknown (0), where the helper's
+            // filter-disabled semantics would process the window instead.
+            const int currentDesktop = m_layoutManager->currentVirtualDesktopForScreen(windowScreen);
+            if (windowDesktop != 0 && windowDesktop != currentDesktop) {
+                return;
+            }
+
+            // If this screen's assignment is autotile, preserve zone assignments for resnap
+            auto cached = screenIsAutotile.constFind(windowScreen);
+            if (cached == screenIsAutotile.constEnd()) {
+                QString assignmentId =
+                    m_layoutManager->assignmentIdForScreen(windowScreen, currentDesktop, currentActivity);
+                cached = screenIsAutotile.insert(windowScreen, PhosphorLayout::LayoutId::isAutotile(assignmentId));
+            }
+            if (*cached) {
+                return;
+            }
+
+            PhosphorZones::Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
+            if (!effectiveLayout) {
+                toRemove.append(windowId);
+                return;
+            }
+            if (allZonesExistInLayout(zoneIdList, effectiveLayout)) {
+                return; // fully valid, nothing to do
+            }
+            // Partial or full invalidity: rebuild the surviving subset. Empty
+            // result means the whole window lost its zones → mark for unassign.
+            QStringList survivingZones;
+            survivingZones.reserve(zoneIdList.size());
+            for (const QString& zid : zoneIdList) {
+                const auto uuid = parseUuid(zid);
+                if (uuid && effectiveLayout->zoneById(*uuid)) {
+                    survivingZones.append(zid);
+                }
+            }
+            if (survivingZones.isEmpty()) {
+                toRemove.append(windowId);
+            } else {
+                toRewrite.insert(windowId, {survivingZones, windowScreen, windowDesktop});
+            }
+        });
 
     for (const QString& windowId : toRemove) {
         unassignWindow(windowId);
     }
     for (auto it = toRewrite.constBegin(); it != toRewrite.constEnd(); ++it) {
-        const QString& windowId = it.key();
-        const QStringList& survivingZones = it.value().first;
-        const QString& windowScreen = it.value().second;
-        const int windowDesktop = lcDesktops.value(windowId, 0);
-        assignWindowToZones(windowId, survivingZones, windowScreen, windowDesktop);
+        const RewriteTarget& target = it.value();
+        assignWindowToZones(it.key(), target.zones, target.screenId, target.desktop);
     }
 }
 
