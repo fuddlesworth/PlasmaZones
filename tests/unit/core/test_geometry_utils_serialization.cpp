@@ -275,6 +275,7 @@ private Q_SLOTS:
         pinned.targetZoneId = QStringLiteral("tgt-A");
         pinned.targetZoneIds = {QStringLiteral("tgt-A"), QStringLiteral("tgt-B")};
         pinned.targetGeometry = QRect(10, 20, 300, 400);
+        pinned.targetScreenId = QStringLiteral("DP-1");
         pinned.virtualDesktop = 2;
 
         ZoneAssignmentEntry unpinned;
@@ -293,8 +294,11 @@ private Q_SLOTS:
         QCOMPARE(parsed[0].targetZoneId, pinned.targetZoneId);
         QCOMPARE(parsed[0].targetZoneIds, pinned.targetZoneIds);
         QCOMPARE(parsed[0].targetGeometry, pinned.targetGeometry);
+        QCOMPARE(parsed[0].targetScreenId, pinned.targetScreenId);
         QCOMPARE(parsed[0].virtualDesktop, 2);
-        // Unpinned entry: the key is omitted on the wire and parses back to 0.
+        // Unpinned entry: both optional keys are omitted on the wire and parse
+        // back to their defaults (no screen stamp, current desktop).
+        QCOMPARE(parsed[1].targetScreenId, QString());
         QCOMPARE(parsed[1].virtualDesktop, 0);
         QCOMPARE(parsed[1].targetGeometry, unpinned.targetGeometry);
     }

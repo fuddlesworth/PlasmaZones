@@ -179,6 +179,11 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
 
     int insertionIdx = 0;
     QVector<std::tuple<int, int, QString>> windowsByZone; // (zoneNum, insertionIdx, windowId)
+    // Per-window dedup, mirroring populateResnapBufferForAllScreens' addedIds:
+    // the single-owning-store invariant makes duplicates impossible today, but
+    // a duplicate here would double-seed the autotile order (double-tile), so
+    // the guard keeps the two whole-store consumers symmetric and robust.
+    QSet<QString> seenWindowIds;
     forEachZoneAssignedWindow(
         [&](const QString& windowId, const QStringList& zoneIds, const QString& windowScreen, int windowDesktop) {
             if (!PhosphorScreens::ScreenIdentity::screensMatch(windowScreen, screenId)) {
@@ -187,6 +192,10 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
             if (!desktopMatchesFilter(windowDesktop, currentDesktop)) {
                 return;
             }
+            if (seenWindowIds.contains(windowId)) {
+                return;
+            }
+            seenWindowIds.insert(windowId);
             // Skip floating windows — they should not participate in zone-ordered
             // transitions (the user's manual-mode float choice should be preserved).
             if (isWindowFloating(windowId)) {

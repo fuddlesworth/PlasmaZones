@@ -106,6 +106,11 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
             assignEntry.sourceZoneId = QString();
             assignEntry.targetZoneId = targetZone->id().toString();
             assignEntry.targetGeometry = geo;
+            // Stamp the authoritative target screen (the entries-by-screen group
+            // key the layout above was resolved for) so the receive side skips
+            // the racy geometry.center() re-derivation — symmetric with the
+            // stamp in calculateResnapFromCurrentAssignments.
+            assignEntry.targetScreenId = screenId;
             // Preserve the window's recorded desktop through the commit so a
             // resnap batch never re-stamps a window onto the desktop the user
             // happens to be viewing (0 = sticky/unknown keeps the historical

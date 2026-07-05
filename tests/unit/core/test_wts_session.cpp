@@ -322,6 +322,10 @@ private Q_SLOTS:
             PhosphorEngine::GeometryUtils::deserializeZoneAssignments(wire, &parseError);
         QVERIFY(parseError.isEmpty());
         QCOMPARE(parsed.size(), 1);
+        // The producer's authoritative screen stamp must survive the wire —
+        // without it the receive side re-derives the screen from the geometry
+        // center, which races with virtual-screen swap/rotate.
+        QCOMPARE(parsed[0].targetScreenId, QStringLiteral("DP-1"));
 
         const auto geometries =
             m_engine->applyBatchAssignments(parsed, PhosphorEngine::SnapIntent::UserInitiated, nullptr);
