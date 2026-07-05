@@ -102,16 +102,8 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
     // funnel runs at drag start (the daemon floats the grabbed window), and a
     // bare removeWindowDecoration here blanked EVERY pack — interior blur
     // included — until some later push happened to rebuild the entry
-    // mid-drag. updateWindowDecoration removes-then-recreates in the same
-    // turn under the window's new placement state, so the swap is invisible.
-    // Exact-id re-check like the windowDecorationRestored path: the fuzzy
-    // appId fallback must not decorate a same-app sibling under a dead id.
-    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-    if (w && m_effect->getWindowId(w) == windowId && w->isOnCurrentDesktop()) {
-        m_effect->updateWindowDecoration(windowId, w);
-    } else {
-        m_effect->removeWindowDecoration(windowId);
-    }
+    // mid-drag. The shared funnel swaps update-or-remove in the same turn.
+    m_effect->reconcileDecorationOnPlacementFlip(windowId);
 }
 
 void SnapHandler::clearSnapTracking()

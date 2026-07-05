@@ -816,6 +816,13 @@ private:
     /// redirected with a shader whose samplers reference textures this very
     /// function destroys (unbound sampler = opaque black flash on close).
     void removeWindowDecoration(const QString& windowId, KWin::EffectWindow* windowHint = nullptr);
+    /// SHARED placement-flip funnel: re-resolve a window's decoration
+    /// update-or-remove in the SAME turn after its snapped / tiled /
+    /// floating state flipped. Both engines route through this (snap's
+    /// clearWindowSnapped, autotile's applyFloatCleanup) so neither can
+    /// regress into the teardown-now-rebuild-later shape that blanked
+    /// every pack at drag start. Callers flip their engine facts first.
+    void reconcileDecorationOnPlacementFlip(const QString& windowId);
     void updateAllDecorations();
     void clearAllDecorations();
 

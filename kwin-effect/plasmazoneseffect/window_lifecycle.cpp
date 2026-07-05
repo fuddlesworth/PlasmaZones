@@ -722,6 +722,21 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                                    window->isUserResize() ? PhosphorAnimation::ProfilePaths::WindowResize
                                                           : PhosphorAnimation::ProfilePaths::WindowMove,
                                    animationDurationMs());
+            // Genuine old-content capture for cross-fade shaders: a
+            // move/resize begins with the window ALIVE and its pre-drag
+            // content still current, so a shader that declares uOldWindow
+            // (ripple-snap, window-morph, ...) gets a real decorated
+            // snapshot to fade FROM — matching the drag-snap morph path —
+            // instead of leaning on the iHasOldWindow fallback (which
+            // collapses the old side to the live content). Especially
+            // material for resizes, where the old content re-lays. The
+            // !oldSnapshot guard preserves an existing capture on a
+            // retargeted transition, mirroring drag_snap; a failed capture
+            // clears needsSnapshot and the shader-side fallback covers it.
+            if (auto* st = m_shaderManager.findTransition(window);
+                st && st->cached && st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
+                st->needsSnapshot = true;
+            }
         }
     });
     connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {

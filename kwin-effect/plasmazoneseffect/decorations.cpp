@@ -175,6 +175,29 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
     m_surfaceMultipass.erase(windowId);
 }
 
+void PlasmaZonesEffect::reconcileDecorationOnPlacementFlip(const QString& windowId)
+{
+    // SHARED placement-flip funnel — the one way BOTH engines re-decorate a
+    // window whose snapped / tiled / floating state just changed. History:
+    // snapping tore the decoration down here and rebuilt it a deferred turn
+    // later (the drag-start blackout), while autotile removed it and relied
+    // on its caller's bulk updateAllDecorations, which only one call path
+    // performed. Re-resolving update-or-remove in the SAME turn under the
+    // window's new placement state is the only correct shape: the swap is
+    // invisible for a chain that resolves identically across states (the
+    // root-authored case), and a state-scoped chain correctly appears or
+    // drops. Callers flip their engine facts (zone cache, tiled set,
+    // floating flag) BEFORE calling, so the resolve sees the new state.
+    // Exact-id re-check like the windowDecorationRestored path: the fuzzy
+    // appId fallback must not decorate a same-app sibling under a dead id.
+    KWin::EffectWindow* w = findWindowById(windowId);
+    if (w && getWindowId(w) == windowId && w->isOnCurrentDesktop()) {
+        updateWindowDecoration(windowId, w);
+    } else {
+        removeWindowDecoration(windowId, w);
+    }
+}
+
 void PlasmaZonesEffect::clearAllDecorations()
 {
     // Skip entries whose window is riding a live shader transition — the
