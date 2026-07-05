@@ -756,7 +756,16 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                         qCWarning(lcEffect) << "Failed to expand vertex shader includes for" << effectId << ":"
                                             << vertIncErr << "— falling back to KWin default vertex stage";
                     } else {
-                        vertWithKwinDefine = injectKwinDefineAfterVersion(expandedVert);
+                        // Same named-param preamble as the fragment stage: a
+                        // vertex-driven pack (wobble's velocity lag, the
+                        // pendulum swing) reads its `p_<id>` params in the
+                        // VERT, and the daemon bake already splices the
+                        // preamble into both stages — without this the GL
+                        // compile failed on the undefined identifiers and
+                        // the transition silently never installed.
+                        const QString vertWithParams = PhosphorShaders::spliceAfterVersion(
+                            expandedVert, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
+                        vertWithKwinDefine = injectKwinDefineAfterVersion(vertWithParams);
                     }
                 }
             }
