@@ -1,16 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Wobbly-move vertex shader — cursor-anchored jelly on the tessellated
-// grid, in the spirit of KDE's wobbly windows. Two motion springs drive
-// it (both integrated host-side, no per-vertex state): iMoveVelocity
-// tracks the drag tightly, iMoveVelocity2 is deliberately looser and
-// rings longer. Each vertex blends between them by its distance from the
-// GRIP POINT (the cursor, via iMouse), so the region under the pointer
-// follows near-rigidly while far corners trail on the loose spring —
-// out of phase with the grip, which is what makes it read as jelly
-// rather than a bending sheet. After release both springs ring through
-// zero at different rates and the body shimmies to rest.
+// Wobbly-move vertex shader — delayed path-following jelly, entirely in
+// the shader. What a spring mesh (KDE's wobbly windows) visually does is
+// simple to state: the region under the pointer follows the drag NOW,
+// and regions farther away follow the path the window took a moment AGO,
+// smoothed and with a little ring after release. iMoveTrail hands this
+// stage exactly that — the window's origin up to 240 ms into the past,
+// relative to its current origin — so each vertex just samples the trail
+// at a delay proportional to its distance from the grip (iMouse). Drag
+// in an arc and the body sweeps through the arc behind the pointer;
+// stop, and the trail drains toward zero so the body glides back in.
+// iMoveVelocity2 (the deliberately underdamped host spring) adds the
+// overshoot ring on release. No per-vertex state anywhere.
 
 #version 450
 
@@ -24,6 +26,17 @@ layout(location = 0) out vec2 vTexCoord;
 #ifdef PLASMAZONES_KWIN
 uniform mat4 modelViewProjectionMatrix;
 uniform vec4 iToRect;
+
+// Trail sample at a continuous delay in ms (linear blend between the two
+// bracketing 15 ms slots; slot "-1" is the present = zero offset).
+vec2 trailAt(float delayMs) {
+    float fi = clamp(delayMs / 15.0, 0.0, 15.999);
+    int i1 = int(fi);
+    float f = fi - float(i1);
+    vec2 s0 = (i1 == 0) ? vec2(0.0) : iMoveTrail[i1 - 1];
+    vec2 s1 = iMoveTrail[i1];
+    return mix(s0, s1, f);
+}
 #endif
 
 void main() {
@@ -32,22 +45,20 @@ void main() {
     // convention is Y-flipped on upload): y = 0 at the window's top.
     vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
 
-    // Grip point: the cursor in card space (iMouse.zw is the normalized
-    // window-local position, pushed per frame). Clamped so a pointer that
+    // Grip point: the cursor in card space, clamped so a pointer that
     // slips outside the frame mid-drag keeps a sane anchor at the edge.
     vec2 grip = clamp(iMouse.zw, 0.0, 1.0);
 
-    // Distance from the grip in logical px (iToRect carries the live frame
-    // rect for held transitions), so the falloff is round on any aspect.
+    // Per-vertex delay: zero at the grip (follows the pointer rigidly),
+    // rising to p_lag ms at p_reach px away — the far side of the window
+    // replays the drag path late, which IS the wobble.
     vec2 dpx = (cuv - grip) * iToRect.zw;
-    float dist = length(dpx);
-    float w = smoothstep(0.0, max(p_reach, 40.0), dist);
+    float w = smoothstep(0.0, max(p_reach, 40.0), length(dpx));
+    vec2 lag = trailAt(w * clamp(p_lag, 0.0, 235.0));
 
-    // Near the grip: the tight spring (follows the pointer). Far away: the
-    // loose spring (trails and rings longer). The phase difference between
-    // the two across the body IS the wobble.
-    vec2 v = mix(iMoveVelocity, iMoveVelocity2, w);
-    vec2 lag = -v * (p_softness / 1000.0) * (0.12 + 0.88 * w);
+    // Release ring: the underdamped host spring crosses zero after the
+    // pointer stops, so the body overshoots once and settles.
+    lag += -iMoveVelocity2 * (p_ring / 1000.0) * w;
 
     // Cap the deflection so a violent fling cannot fold the window over
     // itself; the clamp preserves direction.

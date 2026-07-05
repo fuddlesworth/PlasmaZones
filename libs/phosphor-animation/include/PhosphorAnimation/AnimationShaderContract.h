@@ -381,6 +381,15 @@ inline constexpr const char* kIMoveOffset = "iMoveOffset";
 /// regions move out of phase with the grip — the KDE-wobbly billow —
 /// without any per-vertex state in the shader.
 inline constexpr const char* kIMoveVelocity2 = "iMoveVelocity2";
+/// `vec2 iMoveTrail[16]` — COMPOSITOR PATH ONLY. Short motion history for
+/// HELD move/resize transitions: slot k holds the window origin as it was
+/// k*15 ms in the past, RELATIVE to the current origin (so a static window
+/// publishes all zeros). 16 slots = 240 ms of path. The host merely records
+/// positions — all deformation logic stays in the shader, which samples the
+/// trail at a per-vertex delay to follow the drag PATH (delayed-follow is
+/// what a spring mesh visually does), typically weighted by distance from
+/// the grip point (iMouse).
+inline constexpr const char* kIMoveTrail = "iMoveTrail";
 /// Card/anchor-space [0,1] sub-rect of the animated surface WITHIN
 /// uSurfaceLayer's canvas (xy offset, zw scale) — the layer analogue of
 /// iAnchorRectInTexture. The compositor pads the layer canvas by the

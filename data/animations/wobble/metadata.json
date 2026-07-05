@@ -1,7 +1,7 @@
 {
     "id": "wobble",
     "name": "Wobbly Move",
-    "description": "Drag transition where the window turns to jelly around the pointer, in the spirit of the classic wobbly windows. The area under the cursor follows tightly while the far corners trail on a looser spring and shimmy to rest when you let go. Softness, reach and maximum bend are this pack's own parameters.",
+    "description": "Drag transition where the window turns to jelly around the pointer, in the spirit of the classic wobbly windows. The area under the cursor follows the pointer while the rest of the window replays the drag path a moment late, sweeping through curves behind it and ringing softly to rest when you let go. Reach, lag, ring and maximum bend are this pack's own parameters.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Geometry",
@@ -14,15 +14,6 @@
     "geometryGrid": 32,
     "parameters": [
         {
-            "id": "softness",
-            "name": "Softness",
-            "type": "float",
-            "default": 110.0,
-            "min": 20.0,
-            "max": 250.0,
-            "description": "How far the body trails behind the motion, in milliseconds of lag"
-        },
-        {
             "id": "reach",
             "name": "Reach",
             "type": "int",
@@ -30,6 +21,24 @@
             "min": 80,
             "max": 1200,
             "description": "How far from the pointer the jelly zone extends (px), smaller values make a stiffer window"
+        },
+        {
+            "id": "lag",
+            "name": "Lag",
+            "type": "float",
+            "default": 150.0,
+            "min": 30.0,
+            "max": 235.0,
+            "description": "How far behind the drag path the far side of the window trails (ms)"
+        },
+        {
+            "id": "ring",
+            "name": "Ring",
+            "type": "float",
+            "default": 45.0,
+            "min": 0.0,
+            "max": 120.0,
+            "description": "Strength of the spring-back overshoot after release, where 0 stops dead"
         },
         {
             "id": "maxBend",

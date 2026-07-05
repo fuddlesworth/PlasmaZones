@@ -1023,6 +1023,27 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     transition.lastMovePos = pos;
                     transition.lastMoveSampleMs = nowMs;
                     transition.toGeometry = w->frameGeometry();
+                    // Motion-history ring (iMoveTrail): record the origin on a
+                    // fixed cadence so the shader can sample the drag PATH at a
+                    // per-vertex delay. Pure bookkeeping — a paint stall longer
+                    // than the whole ring just refills it with the current
+                    // position (the window's past is unknown, and "no motion"
+                    // is the artifact-free guess).
+                    if (transition.trailLastMs < 0
+                        || nowMs - transition.trailLastMs
+                            >= qint64(ShaderTransition::kTrailStepMs * ShaderTransition::kTrailSlots)) {
+                        for (int k = 0; k < ShaderTransition::kTrailSlots; ++k) {
+                            transition.moveTrail[k] = pos;
+                        }
+                        transition.trailLastMs = nowMs;
+                    }
+                    while (nowMs - transition.trailLastMs >= qint64(ShaderTransition::kTrailStepMs)) {
+                        for (int k = ShaderTransition::kTrailSlots - 1; k > 0; --k) {
+                            transition.moveTrail[k] = transition.moveTrail[k - 1];
+                        }
+                        transition.moveTrail[0] = pos;
+                        transition.trailLastMs += qint64(ShaderTransition::kTrailStepMs);
+                    }
                 }
                 if (cached->iMoveVelocityLoc >= 0) {
                     shader->setUniform(cached->iMoveVelocityLoc,
@@ -1033,6 +1054,20 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     shader->setUniform(cached->iMoveVelocity2Loc,
                                        QVector2D(static_cast<float>(transition.springLag2.x()),
                                                  static_cast<float>(transition.springLag2.y())));
+                }
+                if (cached->iMoveTrailLoc >= 0) {
+                    // Upload relative to the CURRENT origin: slot k = where the
+                    // window was ~k*15 ms ago, as an offset from where it is
+                    // now. All zeros at rest and for non-held transitions.
+                    GLfloat trail[ShaderTransition::kTrailSlots * 2] = {};
+                    if (transition.holdUntilRelease && transition.trailLastMs >= 0) {
+                        const QPointF cur = w->frameGeometry().topLeft();
+                        for (int k = 0; k < ShaderTransition::kTrailSlots; ++k) {
+                            trail[2 * k] = static_cast<GLfloat>(transition.moveTrail[k].x() - cur.x());
+                            trail[2 * k + 1] = static_cast<GLfloat>(transition.moveTrail[k].y() - cur.y());
+                        }
+                    }
+                    glUniform2fv(cached->iMoveTrailLoc, ShaderTransition::kTrailSlots, trail);
                 }
                 if (cached->iMoveOffsetLoc >= 0) {
                     const QPointF off = transition.holdUntilRelease

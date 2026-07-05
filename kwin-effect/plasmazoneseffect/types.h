@@ -445,6 +445,7 @@ struct CachedShader
     int iMoveVelocityLoc = -1;
     int iMoveOffsetLoc = -1;
     int iMoveVelocity2Loc = -1;
+    int iMoveTrailLoc = -1;
     /// Surface-layer-stack uniforms (compositor path). `uSurfaceLayer` is the
     /// pre-composited layered surface (border / rounded corners, ...) sampled in
     /// place of the live `uTexture0` while a layered window animates;
@@ -657,6 +658,14 @@ struct ShaderTransition
     QPointF springVel2;
     QPointF lastMovePos;
     qint64 lastMoveSampleMs = -1;
+    /// Motion-history ring for iMoveTrail: absolute frame origins recorded
+    /// every kTrailStepMs while held; uploaded relative to the current
+    /// origin. Index 0 is the newest sample. Dumb data — every deformation
+    /// decision lives in the pack's shader.
+    static constexpr int kTrailSlots = 16;
+    static constexpr qreal kTrailStepMs = 15.0;
+    QPointF moveTrail[kTrailSlots];
+    qint64 trailLastMs = -1;
     /// Snapshot of the window's OLD content, bound as `uOldWindow` so the
     /// shader can cross-fade the old content out while the live new content
     /// fades in. Captured on the first morph paint AFTER the instant

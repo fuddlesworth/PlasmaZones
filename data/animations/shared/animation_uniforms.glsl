@@ -229,6 +229,10 @@ uniform vec2 iMoveOffset;
 // Second, looser spring over the same motion: lags iMoveVelocity and rings
 // longer after release. Blend by distance from the grip for phase spread.
 uniform vec2 iMoveVelocity2;
+// Motion history for held move/resize transitions: slot k = the window
+// origin k*15 ms ago, relative to now (all zeros at rest). Sample at a
+// per-vertex delay for delayed path-following deformations.
+uniform vec2 iMoveTrail[16];
 // The animated surface's [0,1] sub-rect within uSurfaceLayer's canvas — the
 // layer analogue of iAnchorRectInTexture. The compositor pads the layer canvas
 // by the decoration chain's outer margin (glow reach), so the layer cannot be
