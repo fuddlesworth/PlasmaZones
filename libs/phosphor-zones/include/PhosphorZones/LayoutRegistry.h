@@ -432,25 +432,38 @@ public:
     /// context slot (assignment / gap / lock / overlay) is being resolved.
     /// Orientation is geometry-derived and layout-independent, so this is safe to
     /// call from the assignment cascade (no recursion, unlike an active-layout read).
-    void stampScreenOrientation(PhosphorRules::WindowQuery& query, const QString& screenId) const
+    /// The screen-orientation token from @ref m_screenOrientationProvider ("portrait"
+    /// / "landscape"), or an empty string when the provider is unset or returns
+    /// nullopt. Shared by @ref stampScreenOrientation (the query value) and the
+    /// cache-key fold (see @ref contextCacheKeyToken) so both read the same source.
+    QString screenOrientationToken(const QString& screenId) const
     {
         if (m_screenOrientationProvider) {
             if (const auto token = m_screenOrientationProvider(screenId)) {
-                query.screenOrientation = *token;
+                return *token;
             }
         }
+        return QString();
+    }
+
+    void stampScreenOrientation(PhosphorRules::WindowQuery& query, const QString& screenId) const
+    {
+        query.screenOrientation = screenOrientationToken(screenId);
     }
 
     /// Compose the extra cache-key token a daemon-facing context resolver (gap /
-    /// lock / overlay) passes to @ref resolveCachedContext, folding in the placement
-    /// @p modeToken (empty for the non-gap resolvers) and the @p activeLayoutId.
-    /// The active layout is a NON-rule-set input — it can change via the external
-    /// global-default provider without a rule-set revision bump — so, exactly like
-    /// the tiledWindowCount "twc:" token, it must ride the cache KEY rather than the
-    /// value, or a layout change would return a stale hit. See resolveCachedContext.
-    static QString contextCacheKeyToken(const QString& modeToken, const QString& activeLayoutId)
+    /// lock / overlay / default-assignment) passes to @ref resolveCachedContext,
+    /// folding in the placement @p modeToken (empty for the non-gap resolvers), the
+    /// @p activeLayoutId, and the @p orientationToken. Both the active layout AND
+    /// the screen orientation are NON-rule-set inputs — each can change without a
+    /// rule-set revision bump (the layout via the external global-default provider,
+    /// the orientation via a live monitor rotation) — so, exactly like the
+    /// tiledWindowCount "twc:" token, they must ride the cache KEY rather than the
+    /// value, or the change would return a stale hit. See resolveCachedContext.
+    static QString contextCacheKeyToken(const QString& modeToken, const QString& activeLayoutId,
+                                        const QString& orientationToken)
     {
-        return modeToken + QLatin1String("|al:") + activeLayoutId;
+        return modeToken + QLatin1String("|al:") + activeLayoutId + QLatin1String("|or:") + orientationToken;
     }
 
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,

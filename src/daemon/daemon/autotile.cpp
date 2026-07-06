@@ -204,8 +204,15 @@ void Daemon::updateAutotileScreens()
             // algorithm is this screen's effective algorithm — the daemon knows
             // both, so the algorithm guard lives here. The engine's hasCustomParam
             // filter is a second guard for the current algo's declared params.
-            if (!tilingParams.algorithmParamTarget.isEmpty() && screenAlgorithms.contains(screenId)
-                && tilingParams.algorithmParamTarget == screenAlgorithms.value(screenId)) {
+            //
+            // A bare-autotile screen (mode on, no concrete assigned algorithm) is
+            // absent from screenAlgorithms yet still runs the global-default
+            // algorithm (m_autotileEngine->algorithmId(), the same value the engine's
+            // effectiveAlgorithm resolves), so fall back to it rather than gating on
+            // contains() — otherwise a rule targeting the default algorithm is
+            // silently dropped on those screens.
+            const QString effectiveAlgo = screenAlgorithms.value(screenId, m_autotileEngine->algorithmId());
+            if (!tilingParams.algorithmParamTarget.isEmpty() && tilingParams.algorithmParamTarget == effectiveAlgo) {
                 overrides[PerScreenKeys::CustomParams] = tilingParams.algorithmParams;
             }
 

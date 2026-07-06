@@ -111,17 +111,17 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
     if (!slot) {
         return;
     }
-    const bool showNumbers =
-        (m_settings ? m_settings->showZoneNumbers() : true) && (!screenLayout || screenLayout->showZoneNumbers());
     const LabelFontSettings lfs = extractLabelFontSettings(m_settings);
     // Slot is anchors.fill: parent on the shell window, so its size
     // matches the shell - which has been sized to the per-screen rect.
     const QSize size(qMax(1, static_cast<int>(slot->width())), qMax(1, static_cast<int>(slot->height())));
 
     PerScreenOverlayState* state = nullptr;
+    QString screenId;
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
         if (it.value().mainOverlaySlot() == slot) {
             state = &it.value();
+            screenId = it.key();
             break;
         }
     }
@@ -129,6 +129,15 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
         qCWarning(lcOverlay) << "updateLabelsTextureForWindow: slot not tracked in m_screenStates - "
                                 "labels-texture cache bypassed";
     }
+
+    // A SetOverlayShowZoneNumbers context rule overrides the global setting for this
+    // screen, matching the QML `showNumbers` property set in updateOverlayWindow so
+    // both the property and the label-texture path agree. An empty screenId (slot
+    // untracked) resolves to no override, i.e. the global setting. The per-layout
+    // hide still wins (a layout that hides numbers keeps them hidden).
+    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
+    const bool showNumbers = overlayOverride.showZoneNumbers.value_or(m_settings ? m_settings->showZoneNumbers() : true)
+        && (!screenLayout || screenLayout->showZoneNumbers());
 
     const quint64 newHash = hashLabelsTextureInputs(patched, size, showNumbers, lfs);
     if (state && state->labelsTextureHash == newHash) {

@@ -104,6 +104,10 @@ constexpr double kMaxOverlayBorderRadius = 50.0;
 // hand-edited payloads.
 constexpr double kMaxTiledWindows = 12.0;
 constexpr double kMaxMasterCount = 5.0;
+// Split-ratio wire bounds ([0.1, 0.9]); the percent-editor schema derives its
+// display range from these (× 100) so the two never drift.
+constexpr double kMinSplitRatio = 0.1;
+constexpr double kMaxSplitRatio = 0.9;
 
 } // namespace
 
@@ -544,7 +548,7 @@ void ActionRegistry::registerBuiltins()
         // No tags: SnapToZone is daemon-placement only (consumed by the SnapEngine
         // open path), not an Effect / Border / Animation / Overlay action.
         .category = QStringLiteral("windowManagement"),
-        .displayOrder = 0,
+        .displayOrder = 2,
     });
 
     // ── open-routing: send a matched window to a target monitor / desktop ──
@@ -568,7 +572,7 @@ void ActionRegistry::registerBuiltins()
         // No tags: RouteToScreen is daemon open-path routing only, not an
         // Effect / Border / Animation / Overlay / Gap action.
         .category = QStringLiteral("windowManagement"),
-        .displayOrder = 1,
+        .displayOrder = 3,
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::RouteToDesktop),
@@ -596,7 +600,7 @@ void ActionRegistry::registerBuiltins()
                      .min = 1.0,
                      .max = static_cast<double>(MaxVirtualDesktopOrdinal)}},
         .category = QStringLiteral("windowManagement"),
-        .displayOrder = 2,
+        .displayOrder = 4,
     });
 
     // ── animation slots — event-scoped: "anim-shader:<event>" ──
@@ -918,7 +922,7 @@ void ActionRegistry::registerBuiltins()
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
         .category = QStringLiteral("windowManagement"),
-        .displayOrder = 2,
+        .displayOrder = 5,
     });
 
     // Two more per-window restore-policy overrides, same shape as RestorePosition
@@ -932,8 +936,8 @@ void ActionRegistry::registerBuiltins()
         int order;
     };
     for (const RestorePolicy& rp : {
-             RestorePolicy{ActionType::SetRestoreToZoneOnLogin, ActionSlot::RestoreToZoneOnLogin, 3},
-             RestorePolicy{ActionType::SetRestoreSizeOnUnsnap, ActionSlot::RestoreSizeOnUnsnap, 4},
+             RestorePolicy{ActionType::SetRestoreToZoneOnLogin, ActionSlot::RestoreToZoneOnLogin, 6},
+             RestorePolicy{ActionType::SetRestoreSizeOnUnsnap, ActionSlot::RestoreSizeOnUnsnap, 7},
          }) {
         const QString slot = QString(rp.slot);
         registerAction(ActionDescriptor{
@@ -1173,8 +1177,9 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::MaxWindows),
         .validate =
             [](const QJsonObject& p) {
-                // 1..12; the consumer clamps to AutotileDefaults, so the lower
-                // bound is not enforced here (0 is rejected as grossly malformed).
+                // 1..12; the consumer re-clamps to AutotileDefaults, so this only
+                // enforces a sanity floor of 1 (0 and negatives are rejected as
+                // grossly malformed) and the upper bound.
                 const QJsonValue v = p.value(ActionParam::Value);
                 if (!v.isDouble()) {
                     return false;
@@ -1192,31 +1197,33 @@ void ActionRegistry::registerBuiltins()
                      .defaultDisplay = 5.0}},
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 10,
+        .tags = {QString(Tag::LayoutEngine)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetSplitRatio),
         .slotFor = constantSlot(ActionSlot::SplitRatio),
         .validate =
             [](const QJsonObject& p) {
-                // Wire is the [0.1, 0.9] ratio; edited as a percent (10-90%).
+                // Wire is the [kMinSplitRatio, kMaxSplitRatio] ratio; edited as a percent.
                 const QJsonValue v = p.value(ActionParam::Value);
                 if (!v.isDouble()) {
                     return false;
                 }
                 const double d = v.toDouble();
-                return d >= 0.1 && d <= 0.9;
+                return d >= kMinSplitRatio && d <= kMaxSplitRatio;
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("percent"),
-                     .min = 10.0,
-                     .max = 90.0,
+                     .min = kMinSplitRatio * 100.0,
+                     .max = kMaxSplitRatio * 100.0,
                      .scale = 0.01,
                      .defaultDisplay = 50.0}},
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 11,
+        .tags = {QString(Tag::LayoutEngine)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetMasterCount),
@@ -1240,6 +1247,7 @@ void ActionRegistry::registerBuiltins()
                      .defaultDisplay = 1.0}},
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 12,
+        .tags = {QString(Tag::LayoutEngine)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetInsertPosition),
@@ -1259,6 +1267,7 @@ void ActionRegistry::registerBuiltins()
                                         QString(InsertPositionToken::AsMaster)}}},
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 13,
+        .tags = {QString(Tag::LayoutEngine)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetOverflowBehavior),
@@ -1277,6 +1286,7 @@ void ActionRegistry::registerBuiltins()
             .enumWireValues = {QString(OverflowBehaviorToken::Float), QString(OverflowBehaviorToken::Unlimited)}}},
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 14,
+        .tags = {QString(Tag::LayoutEngine)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetDragBehavior),
@@ -1294,6 +1304,7 @@ void ActionRegistry::registerBuiltins()
                      .enumWireValues = {QString(DragBehaviorToken::Float), QString(DragBehaviorToken::Reorder)}}},
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 15,
+        .tags = {QString(Tag::LayoutEngine)},
     });
     // SetAlgorithmParam mirrors OverrideOverlayShader: a picker param (the target
     // algorithm) plus a free-form `params` blob (the custom-parameter values,
@@ -1312,6 +1323,7 @@ void ActionRegistry::registerBuiltins()
         .params = {P{.key = QString(ActionParam::Algorithm), .kind = QStringLiteral("tilingAlgorithm")}},
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 16,
+        .tags = {QString(Tag::LayoutEngine)},
     });
 }
 

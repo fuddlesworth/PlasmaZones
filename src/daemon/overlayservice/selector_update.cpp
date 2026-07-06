@@ -47,14 +47,17 @@ void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, Q
 
     // Compute scaled zone appearance values. Zone padding honors per-monitor gap
     // RULES (cascade: context-rule override → global → default) via the layout
-    // registry's current context. This preview passes no layout, so the
-    // per-layout tier does not apply here; border width/radius are global-only
-    // settings (no per-screen key exists).
+    // registry's current context. This preview passes no layout, so the per-layout
+    // tier does not apply here; border width/radius honor a SetOverlayBorderWidth /
+    // SetOverlayBorderRadius context rule over the global setting, matching the
+    // zoneBorderWidth/Radius written for the same window in updateZoneSelectorWindow.
     if (settings) {
+        const PhosphorZones::ContextOverlayOverride overlayOverride =
+            overlayOverrideForScreen(layoutRegistry, virtualScreenId);
         const int zonePadding = GeometryUtils::getEffectiveInnerGap(
             nullptr, settings, GeometryUtils::currentContextGapOverride(layoutRegistry, settings, virtualScreenId));
-        const int zoneBorderWidth = settings->borderWidth();
-        const int zoneBorderRadius = settings->borderRadius();
+        const int zoneBorderWidth = overlayOverride.borderWidth.value_or(settings->borderWidth());
+        const int zoneBorderRadius = overlayOverride.borderRadius.value_or(settings->borderRadius());
 
         const int scaledPadding = std::max(1, qRound(zonePadding * previewScale));
         const int scaledBorderWidth = std::max(1, qRound(zoneBorderWidth * previewScale * 2));

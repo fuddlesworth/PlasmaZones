@@ -159,7 +159,12 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // OSD per cursor-move, where the count is steady) keep hitting the cache.
     const std::optional<int> tiledCount =
         m_tiledWindowCountProvider ? m_tiledWindowCountProvider(screenId, virtualDesktop, activity) : std::nullopt;
-    const QString countCacheKey = tiledCount ? (QLatin1String("twc:") + QString::number(*tiledCount)) : QString();
+    // Both the tiled count and the screen orientation are non-rule-set inputs the
+    // stamped query depends on, so both must ride the cache KEY (the assignment
+    // resolver stamps orientation but not activeLayout, so no "al:" component here).
+    const QString orientationToken = screenOrientationToken(screenId);
+    const QString countCacheKey = (tiledCount ? (QLatin1String("twc:") + QString::number(*tiledCount)) : QString())
+        + QLatin1String("|or:") + orientationToken;
 
     const std::optional<RuleSlotResolution> rules = resolveCachedContext(
         m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop, activity, countCacheKey,
@@ -259,19 +264,20 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
         return ContextGapOverride{};
     }
 
-    // The active layout is folded into the cache key (see contextCacheKeyToken)
-    // so a Field::ActiveLayout gap rule refreshes when the layout changes; it is
-    // stamped onto the query below. Safe from recursion: assignmentIdForScreen
-    // routes through resolveAssignmentEntry, which never calls back into the gap
-    // resolver.
+    // The active layout AND the screen orientation are folded into the cache key
+    // (see contextCacheKeyToken) so a Field::ActiveLayout / Field::ScreenOrientation
+    // gap rule refreshes when either changes; both are stamped onto the query below.
+    // Safe from recursion: assignmentIdForScreen routes through resolveAssignmentEntry,
+    // which never calls back into the gap resolver.
     const QString activeLayoutId = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    const QString orientationToken = screenOrientationToken(screenId);
 
     // Hot-path cache via the shared revision-invalidated memoizer: the geometry
     // path resolves the same context twice per op (zone padding + outer gaps)
     // and N× inside a multi-zone snap, all with identical arguments.
     return resolveCachedContext(
         m_contextGapCache, m_contextGapCacheRevision, screenId, virtualDesktop, activity,
-        contextCacheKeyToken(mode, activeLayoutId), [&]() -> ContextGapOverride {
+        contextCacheKeyToken(mode, activeLayoutId, orientationToken), [&]() -> ContextGapOverride {
             ContextGapOverride gaps;
             // Thread the placement mode into the query so a per-mode `Mode
             // Equals "snapping"/"tiling"` gap rule resolves for the asking
@@ -380,15 +386,17 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
         return false;
     }
 
-    // Active layout folded into the cache key + stamped onto the query, so a
-    // Field::ActiveLayout lock rule works and refreshes on a layout change.
+    // Active layout + orientation folded into the cache key + stamped onto the
+    // query, so a Field::ActiveLayout / ScreenOrientation lock rule works and
+    // refreshes when either changes.
     const QString activeLayoutId = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    const QString orientationToken = screenOrientationToken(screenId);
 
     // Hot-path cache via the shared revision-invalidated memoizer: the lock
     // check runs per cursor-move while a selector is open and on every
     // layout-switch attempt.
     return resolveCachedContext(m_contextLockCache, m_contextLockCacheRevision, screenId, virtualDesktop, activity,
-                                contextCacheKeyToken(QString(), activeLayoutId), [&]() -> bool {
+                                contextCacheKeyToken(QString(), activeLayoutId, orientationToken), [&]() -> bool {
                                     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
                                     stampScreenOrientation(query, screenId);
                                     query.activeLayout = activeLayoutId;
@@ -415,21 +423,25 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
         return std::nullopt;
     }
 
-    return resolveCachedContext(m_contextDefaultAssignmentCache, m_contextDefaultAssignmentCacheRevision, screenId,
-                                virtualDesktop, activity, QString(), [&]() -> std::optional<bool> {
-                                    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-                                    stampScreenOrientation(query, screenId);
-                                    // Field::ActiveLayout NOT stamped here: this resolver is part of the
-                                    // assignment cascade (assignmentIdForScreen reaches it via
-                                    // resolveDefaultAssignmentEntryForContext), so stamping the active
-                                    // layout here would recurse. See resolveAssignmentEntry.
-                                    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
-                                    if (const auto action =
-                                            resolved.slot(QString(PWR::ActionSlot::DefaultAssignment))) {
-                                        return action->params.value(PWR::ActionParam::Value).toBool();
-                                    }
-                                    return std::nullopt;
-                                });
+    // Orientation folded into the cache key so a Field::ScreenOrientation
+    // default-assignment rule refreshes on rotation (activeLayout is deliberately
+    // NOT stamped/folded here — see the recursion note in the lambda below).
+    const QString orientationToken = screenOrientationToken(screenId);
+    return resolveCachedContext(
+        m_contextDefaultAssignmentCache, m_contextDefaultAssignmentCacheRevision, screenId, virtualDesktop, activity,
+        contextCacheKeyToken(QString(), QString(), orientationToken), [&]() -> std::optional<bool> {
+            PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            stampScreenOrientation(query, screenId);
+            // Field::ActiveLayout NOT stamped here: this resolver is part of the
+            // assignment cascade (assignmentIdForScreen reaches it via
+            // resolveDefaultAssignmentEntryForContext), so stamping the active
+            // layout here would recurse. See resolveAssignmentEntry.
+            const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+            if (const auto action = resolved.slot(QString(PWR::ActionSlot::DefaultAssignment))) {
+                return action->params.value(PWR::ActionParam::Value).toBool();
+            }
+            return std::nullopt;
+        });
 }
 
 AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,
@@ -459,13 +471,15 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
         return ContextOverlayOverride{};
     }
 
-    // Active layout folded into the cache key + stamped onto the query, so a
-    // Field::ActiveLayout overlay rule works and refreshes on a layout change.
+    // Active layout + orientation folded into the cache key + stamped onto the
+    // query, so a Field::ActiveLayout / ScreenOrientation overlay rule works and
+    // refreshes when either changes.
     const QString activeLayoutId = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    const QString orientationToken = screenOrientationToken(screenId);
 
     return resolveCachedContext(
         m_contextOverlayCache, m_contextOverlayCacheRevision, screenId, virtualDesktop, activity,
-        contextCacheKeyToken(QString(), activeLayoutId), [&]() -> ContextOverlayOverride {
+        contextCacheKeyToken(QString(), activeLayoutId, orientationToken), [&]() -> ContextOverlayOverride {
             ContextOverlayOverride overlay;
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
             stampScreenOrientation(query, screenId);
@@ -495,21 +509,31 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
             // Appearance overrides — each fills its own optional so an unset
             // property falls through to the global config value at the consumer.
             // Colours are parsed from the `#AARRGGBB` wire hex; QColor reads a
-            // 9-digit hex alpha-first, matching the picker's toHexArgb output.
+            // 9-digit hex alpha-first, matching the picker's toHexArgb output. The
+            // descriptor validators reject malformed values at load; the isValid /
+            // clamp guards here are defense in depth so a hand-edited rules.json that
+            // slipped a bad value can only fall through to config, never apply an
+            // invalid colour or an out-of-range opacity as an override.
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayHighlightColor))) {
-                overlay.highlightColor = QColor(action->params.value(PWR::ActionParam::Value).toString());
+                if (const QColor c(action->params.value(PWR::ActionParam::Value).toString()); c.isValid()) {
+                    overlay.highlightColor = c;
+                }
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayInactiveColor))) {
-                overlay.inactiveColor = QColor(action->params.value(PWR::ActionParam::Value).toString());
+                if (const QColor c(action->params.value(PWR::ActionParam::Value).toString()); c.isValid()) {
+                    overlay.inactiveColor = c;
+                }
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayBorderColor))) {
-                overlay.borderColor = QColor(action->params.value(PWR::ActionParam::Value).toString());
+                if (const QColor c(action->params.value(PWR::ActionParam::Value).toString()); c.isValid()) {
+                    overlay.borderColor = c;
+                }
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayActiveOpacity))) {
-                overlay.activeOpacity = action->params.value(PWR::ActionParam::Value).toDouble();
+                overlay.activeOpacity = qBound(0.0, action->params.value(PWR::ActionParam::Value).toDouble(), 1.0);
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayInactiveOpacity))) {
-                overlay.inactiveOpacity = action->params.value(PWR::ActionParam::Value).toDouble();
+                overlay.inactiveOpacity = qBound(0.0, action->params.value(PWR::ActionParam::Value).toDouble(), 1.0);
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayBorderWidth))) {
                 overlay.borderWidth = action->params.value(PWR::ActionParam::Value).toInt();

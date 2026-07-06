@@ -82,9 +82,10 @@ ColumnLayout {
         return opWire;
     }
 
-    /// Wire→valueKind helper for `_valueLabel`. Returns the controller-side
-    /// kind string ("string" / "number" / "bool" / "screen" / "activity") or
-    /// "string" for unknown fields — the safest default since `String(value)`
+    /// Wire→valueKind helper for `_valueLabel`. Returns the field's controller-side
+    /// kind string (any of the kinds MatchLeafEditor dispatches on: string, number,
+    /// bool, screen, activity, windowType, virtualDesktop, mode, orientation, layout)
+    /// or "string" for unknown fields — the safest default since `String(value)`
     /// is what a plain-string render would do anyway.
     function _valueKind(wire) {
         for (var i = 0; i < root.matchFieldOptions.length; ++i) {
@@ -99,6 +100,9 @@ ColumnLayout {
     ///   - bool → "On" / "Off" (i18n'd)
     ///   - screen → `appSettings.screens.displayLabel` for the matching name
     ///   - activity → `appSettings.activities.name` for the matching id
+    ///   - windowType → the enum option's label from the field entry
+    ///   - layout → `appSettings.layouts.displayName` for the matching id
+    ///   - mode / orientation → the token's option label from the field entry
     ///   - everything else (string, number) → `String(value)`
     /// Falls back to the raw wire value when a lookup misses (e.g. the
     /// rule references an unplugged monitor or removed activity), matching

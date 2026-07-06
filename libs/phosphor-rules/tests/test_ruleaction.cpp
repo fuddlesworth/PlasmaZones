@@ -496,6 +496,54 @@ private Q_SLOTS:
         }
     }
 
+    void testOverlayDimensionActions_range()
+    {
+        // Overlay border width (0-10) and radius (0-50) carry a number; reject
+        // out-of-range and non-numeric, accept in-range.
+        struct DimCase
+        {
+            QLatin1StringView type;
+            double over;
+        };
+        for (const DimCase& c :
+             {DimCase{ActionType::SetOverlayBorderWidth, 11.0}, DimCase{ActionType::SetOverlayBorderRadius, 51.0}}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(c.type));
+            o.insert(QStringLiteral("value"), c.over); // above max rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), c.type.data());
+            o.insert(QStringLiteral("value"), -1.0); // negative rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), c.type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("2")); // non-numeric rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), c.type.data());
+            o.insert(QStringLiteral("value"), 4); // in range accepted
+            QVERIFY2(RuleAction::fromJson(o).has_value(), c.type.data());
+        }
+        // SetOverlayShowZoneNumbers requires a JSON bool.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetOverlayShowZoneNumbers));
+            o.insert(QStringLiteral("value"), 1); // number rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), true);
+            QVERIFY(RuleAction::fromJson(o).has_value());
+        }
+    }
+
+    void testRestorePolicyActions_requireBool()
+    {
+        // The per-window restore-policy actions carry a JSON bool; a non-bool
+        // payload is rejected at load, a bool accepted.
+        for (const QLatin1StringView type : {ActionType::SetRestoreToZoneOnLogin, ActionType::SetRestoreSizeOnUnsnap}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data()); // missing value
+            o.insert(QStringLiteral("value"), 1); // number rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), false);
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+        }
+    }
+
     // ── autotile parameter actions (context-domain) ──
 
     void testTilingParamActions_range()

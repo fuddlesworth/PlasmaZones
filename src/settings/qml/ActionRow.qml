@@ -129,7 +129,8 @@ ColumnLayout {
     /// selected algorithm — drives the inline algorithm-params editor below the
     /// row (the autotile analogue of _activeShaderParamSchema). Returns the
     /// Luau-declared param descriptors ({name, type, value, defaultValue,
-    /// minValue, maxValue, enumOptions}); empty until an algorithm is picked.
+    /// minValue, maxValue, enumOptions, description}); empty until an algorithm
+    /// is picked.
     readonly property var _activeAlgorithmParamSchema: {
         if (row.action.type === "setAlgorithmParam" && row.action.algorithm && row.appSettings && row.appSettings.tilingAlgorithmPage)
             return row.appSettings.tilingAlgorithmPage.customParamsForAlgorithm(row.action.algorithm);
