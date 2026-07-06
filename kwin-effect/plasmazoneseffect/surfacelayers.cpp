@@ -699,6 +699,13 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
     if (it == m_windowDecorations.constEnd()) {
         return false;
     }
+    // A focus ramp in flight (value strictly between 0 and 1) needs continuous
+    // repaints so uSurfaceFocused reaches its target; the ramp clamps to 0/1
+    // at the ends, so this self-terminates.
+    if (const auto fit = m_focusFade.constFind(windowId);
+        fit != m_focusFade.constEnd() && fit->value > 0.001f && fit->value < 0.999f) {
+        return true;
+    }
     // Resolve the decoration profile LAZILY: compiledPack only reads it on a
     // compile-cache miss, and this runs in the per-frame idle-repaint loop for
     // every shader-applied window — in the common case (all packs compiled,

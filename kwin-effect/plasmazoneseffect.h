@@ -682,6 +682,25 @@ private:
 
     QHash<QString, WindowDecoration> m_windowDecorations; // windowId → border
 
+    // Smoothed focus value per window, so uSurfaceFocused RAMPS between 0 and
+    // 1 on a focus change instead of snapping — every focus-tracking pack
+    // (glow dim, border dim, focus-fade) then transitions softly. Kept in its
+    // OWN map, NOT on WindowDecoration, because slotWindowActivated rebuilds
+    // every WindowDecoration via updateAllDecorations on each focus change,
+    // which would reset an in-flight ramp. `value < 0` is the uninitialised
+    // sentinel (first decorate snaps to the current state, no fade on
+    // appearance); `lastMs` dedupes the per-frame advance across the chain's
+    // packs. windowSurfaceAnimates keeps the window repainting while a value
+    // is strictly between 0 and 1, so the ramp runs to completion.
+    struct FocusFadeState
+    {
+        float value = -1.0f;
+        qint64 lastMs = -1;
+    };
+    QHash<QString, FocusFadeState> m_focusFade;
+    // Focus ramp duration (ms) — a soft cross-focus fade without lag.
+    static constexpr qreal kFocusFadeMs = 160.0;
+
     // Live system colours that a `BorderColorToken::Accent` sentinel in a
     // border-colour rule resolves to. The sentinel tracks the system colour
     // scheme per focus state: the focused (active) slot adopts the accent /

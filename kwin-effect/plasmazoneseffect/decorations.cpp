@@ -756,10 +756,30 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     if (pack.uScaleLoc >= 0) {
         shader->setUniform(pack.uScaleLoc, static_cast<float>(scale));
     }
-    // Focus flag: the pack mixes its active/inactive appearance params on this.
+    // Focus flag: the pack mixes its active/inactive appearance params on
+    // this. SMOOTHED — ramp toward the hard 0/1 target over kFocusFadeMs so a
+    // focus change fades rather than snaps (see m_focusFade). The advance is
+    // deduped per frame by the ms clock, so the chain's other packs (all
+    // calling this with the same windowId in the same frame) don't over-step
+    // the ramp. windowSurfaceAnimates keeps the window painting while the
+    // value is mid-ramp.
     if (pack.uFocusedLoc >= 0) {
-        const float focused = (KWin::effects && w == KWin::effects->activeWindow()) ? 1.0f : 0.0f;
-        shader->setUniform(pack.uFocusedLoc, focused);
+        const QString wid = getWindowId(w);
+        const float target = (KWin::effects && w == KWin::effects->activeWindow()) ? 1.0f : 0.0f;
+        FocusFadeState& fs = m_focusFade[wid];
+        const qint64 now = ShaderInternal::shaderClockNowMs();
+        if (fs.value < 0.0f) {
+            fs.value = target; // first decorate: snap, no fade on appearance
+        } else if (fs.lastMs >= 0 && now > fs.lastMs) {
+            const float step = static_cast<float>(now - fs.lastMs) / static_cast<float>(kFocusFadeMs);
+            if (fs.value < target) {
+                fs.value = qMin(target, fs.value + step);
+            } else if (fs.value > target) {
+                fs.value = qMax(target, fs.value - step);
+            }
+        }
+        fs.lastMs = now;
+        shader->setUniform(pack.uFocusedLoc, fs.value);
     }
     // Rule-resolved window opacity, for handlesOpacity packs (frost dims its
     // content sample; the present pass skips its final modulation for such

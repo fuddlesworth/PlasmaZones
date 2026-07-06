@@ -391,6 +391,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // cleanup keeps the pending-batch in lockstep with the live
     // window set.
     m_pendingFrameGeometry.remove(closedWindowId);
+    m_focusFade.remove(closedWindowId);
     // Symmetric with the `windowDeleted` lambda in `lifecycle.cpp`
     // (which removes the same key from `m_frameOpacityCache` after the
     // close-grab unref). Close shaders held via `holdCloseGrab=true`
