@@ -872,15 +872,6 @@ private:
     /// not pack+params-keyed — see CompiledSurfacePack).
     CompiledSurfacePack* compiledPack(const QString& packId, const PhosphorSurfaceShaders::DecorationProfile& profile);
 
-    /// Resolve the CompiledSurfacePack for the window @p windowId's stored base
-    /// pack id (WindowDecoration::basePackId), re-resolving its DecorationProfile from
-    /// the window's surface path to feed the pack's parameter overrides. Returns
-    /// nullptr when the window has no border entry, no GL context, or the pack's
-    /// compile failed (compileFailed latch / null shader) — the caller then
-    /// renders nothing for it. The single render-path lookup shared by
-    /// reconcileDecorationShader / drawWindow / renderSurfaceChain /
-    /// the composite fold, replacing the old single m_borderShader.
-
     /// Populate the surface-shader registry's search paths (the bundled
     /// ${XDG_DATA_DIRS}/plasmazones/surface dirs + the user override) on first
     /// use. One-shot: the registry's live-reload watcher then tracks pack edits.

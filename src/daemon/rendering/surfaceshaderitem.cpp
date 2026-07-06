@@ -59,10 +59,10 @@ SurfaceShaderItem::SurfaceShaderItem(QQuickItem* parent)
     // fading the decoration (the "host can fade the decoration" contract below)
     // actually re-uploads the new value instead of going stale.
     connect(this, &QQuickItem::opacityChanged, this, &QQuickItem::update);
-    // A new audio spectrum must reach the node — repaint so updatePaintNode
-    // pushes it. The base ShaderEffect does not repaint on this by itself
-    // because this item overrides updatePaintNode.
-    connect(this, &PhosphorRendering::ShaderEffect::audioSpectrumChanged, this, &QQuickItem::update);
+    // No audioSpectrumChanged→update() connection is needed: the base
+    // ShaderEffect's setAudioSpectrum / setAudioSpectrumVariant already call
+    // update() on a value change, and update() schedules this item's
+    // updatePaintNode whether or not the override is present.
 }
 
 SurfaceShaderItem::~SurfaceShaderItem()

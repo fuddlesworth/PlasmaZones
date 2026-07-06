@@ -75,7 +75,7 @@ void main() {
         // grained, vignetted.
         vec4 blurred = texture(iChannel1, vTexCoord);
         vec3 color = mix(blurred.rgb, grad * blurred.a, gradStrength);
-        color = clamp(color + vec3(variation) * blurred.a, 0.0, 1.0 * max(blurred.a, 0.0001));
+        color = clamp(color + vec3(variation) * blurred.a, 0.0, max(blurred.a, 0.0001));
         color *= vignette;
         pane = vec4(color, blurred.a) * mask;
     } else {

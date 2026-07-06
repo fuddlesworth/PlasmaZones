@@ -1,7 +1,7 @@
 {
     "id": "frosted-glass",
     "name": "Frosted Glass",
-    "description": "The phosphor-shell frosted panel look over a real blur. The scene behind the surface is blurred and tinted by a slowly turning two-colour gradient, textured with a drifting crystalline grain, and framed by a soft vignette. Where no scene exists behind the surface (OSDs and popups) it falls back to the original translucent gradient slab.",
+    "description": "The phosphor-shell frosted panel look over a real blur. The scene behind the surface is blurred and tinted by a slowly turning two-colour gradient. A drifting crystalline grain and a soft vignette sit on top. Where no scene exists behind the surface (OSDs and popups) it falls back to the original translucent gradient slab.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Blur",

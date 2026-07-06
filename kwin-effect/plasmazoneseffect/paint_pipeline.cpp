@@ -1328,8 +1328,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             }
             // Same hygiene for the surface-layer unit (uSurfaceLayer), bound one
             // unit past the old-snapshot slot — don't leave the layered surface
-            // dangling on its unit for the next effect in the chain.
-            if (surfaceLayerTex && cached->uSurfaceLayerLoc >= 0) {
+            // dangling on its unit for the next effect in the chain. Match the
+            // bind guard above, which also binds this unit on the retargetUTexture0
+            // path (a raw-uTexture0 pack whose linker dropped uSurfaceLayer, so
+            // uSurfaceLayerLoc < 0). The unit is dedicated to the surface layer, so
+            // clearing it when it was never bound is a harmless no-op.
+            if (surfaceLayerTex) {
                 constexpr int kSurfaceLayerUnit =
                     2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
                 glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnit);

@@ -522,6 +522,13 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             b = QDir(packDir).filePath(b);
         }
     }
+    // fromJson leaves an explicit `vertexShader` path relative too (the registry's
+    // parseEffect resolves it, surfaceshaderregistry.cpp); resolve here against the
+    // pack dir so the vertex stage below finds a custom vertex shader instead of
+    // probing it against the CWD, missing it, and passing a malformed stage.
+    if (!eff.vertexShaderPath.isEmpty()) {
+        eff.vertexShaderPath = QDir(packDir).filePath(eff.vertexShaderPath);
+    }
     if (!eff.isValid()) {
         out << name << "\n  metadata      ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
         return 1;
@@ -602,6 +609,14 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     }
     if (!QFile::exists(eff.fragmentShaderPath)) {
         lints << QStringLiteral("fragment shader missing: %1").arg(fragLabel);
+    }
+    // An explicit per-pack `vertexShader` was resolved to absolute above; if the
+    // author typo'd the path the vertex stage below silently skips it (the
+    // exists() guard bows out with no diagnostic), so lint it here the same way
+    // the fragment stage is linted. An empty vertexShaderPath is the normal
+    // shared-surface.vert case and is not an error.
+    if (!eff.vertexShaderPath.isEmpty() && !QFile::exists(eff.vertexShaderPath)) {
+        lints << QStringLiteral("vertex shader missing: %1").arg(QFileInfo(eff.vertexShaderPath).fileName());
     }
 
     if (lints.isEmpty()) {

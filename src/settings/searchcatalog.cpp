@@ -128,6 +128,23 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("animations-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect")});
 
+    // Decorations
+    search->setPageKeywords(QStringLiteral("decorations-windows"),
+                            {PhosphorI18n::tr("window"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("border"),
+                             PhosphorI18n::tr("surface"), PhosphorI18n::tr("appearance")});
+    search->setPageKeywords(
+        QStringLiteral("decorations-osds"),
+        {PhosphorI18n::tr("osd"), PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("decoration")});
+    search->setPageKeywords(QStringLiteral("decorations-popups"),
+                            {PhosphorI18n::tr("popup"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("tooltip")});
+    search->setPageKeywords(QStringLiteral("decorations-sets"),
+                            {PhosphorI18n::tr("decoration set"), PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"),
+                             PhosphorI18n::tr("profile"), PhosphorI18n::tr("pack")});
+    search->setPageKeywords(QStringLiteral("decorations-shaders"),
+                            {PhosphorI18n::tr("shader"), PhosphorI18n::tr("surface"), PhosphorI18n::tr("pack"),
+                             PhosphorI18n::tr("border"), PhosphorI18n::tr("glass"), PhosphorI18n::tr("glow"),
+                             PhosphorI18n::tr("blur")});
+
     // Top-level + tools
     search->setPageKeywords(QStringLiteral("window-appearance"),
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("border"), PhosphorI18n::tr("color"),
