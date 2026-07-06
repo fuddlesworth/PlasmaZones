@@ -180,7 +180,9 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             // Orientation is layout-independent, so it is stamped on EVERY context
             // query (unlike tiledWindowCount / activeLayout) — an orientation rule
             // can drive the assignment itself (portrait monitor → different layout).
-            stampScreenOrientation(query, screenId);
+            // Reuse the token already captured for the cache key (mirrors the
+            // gap/lock/overlay lambdas) rather than re-reading the provider.
+            query.screenOrientation = orientationToken;
             // Field::ActiveLayout is deliberately NOT stamped here: the active
             // layout IS this resolver's output, and reading it (assignmentIdForScreen
             // → resolveAssignmentEntry) would recurse. So an ActiveLayout rule cannot
@@ -431,7 +433,7 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
         m_contextDefaultAssignmentCache, m_contextDefaultAssignmentCacheRevision, screenId, virtualDesktop, activity,
         contextCacheKeyToken(QString(), QString(), orientationToken), [&]() -> std::optional<bool> {
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-            stampScreenOrientation(query, screenId);
+            query.screenOrientation = orientationToken; // reuse the cache-key token
             // Field::ActiveLayout NOT stamped here: this resolver is part of the
             // assignment cascade (assignmentIdForScreen reaches it via
             // resolveDefaultAssignmentEntryForContext), so stamping the active
@@ -556,10 +558,10 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     }
     // Per-slot read (mirrors resolveContextGaps), but NOT cached: this runs on
     // screen / layout changes via the daemon's updateAutotileScreens, not the hot
-    // per-cursor path. Being uncached lets us stamp the active layout onto the
-    // query without folding it into a cache key (no cached entry to go stale).
-    // Safe from recursion: assignmentIdForScreen routes through
-    // resolveAssignmentEntry, which never calls this resolver.
+    // per-cursor path. Being uncached lets us stamp the active layout AND the
+    // screen orientation onto the query without folding either into a cache key
+    // (no cached entry to go stale). Safe from recursion: assignmentIdForScreen
+    // routes through resolveAssignmentEntry, which never calls this resolver.
     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
     stampScreenOrientation(query, screenId);
     query.activeLayout = assignmentIdForScreen(screenId, virtualDesktop, activity);

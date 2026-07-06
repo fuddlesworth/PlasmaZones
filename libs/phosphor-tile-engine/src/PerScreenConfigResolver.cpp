@@ -287,7 +287,8 @@ PerScreenConfigResolver::effectiveOverflowBehavior(const QString& screenId) cons
 {
     // Per-screen override (config store OR a folded-in context rule) → global config.
     if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::OverflowBehavior))) {
-        const int clamped = qBound(0, v->toInt(), 1);
+        const int clamped = qBound(PhosphorTiles::AutotileDefaults::MinOverflowBehavior, v->toInt(),
+                                   PhosphorTiles::AutotileDefaults::MaxOverflowBehavior);
         return static_cast<PhosphorTiles::AutotileOverflowBehavior>(clamped);
     }
     return m_engine->config()->overflowBehavior;

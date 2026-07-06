@@ -83,6 +83,11 @@ constexpr int MinMetadataWindows = 1;
 constexpr int MaxMetadataWindows = 100;
 constexpr int MinInsertPosition = 0;
 constexpr int MaxInsertPosition = 2;
+// Bounds for AutotileOverflowBehavior (Float=0 .. Unlimited=1), defined below.
+// Kept in lockstep with that enum so a per-screen override clamp has a named
+// range like MinInsertPosition/MaxInsertPosition rather than a bare literal.
+constexpr int MinOverflowBehavior = 0;
+constexpr int MaxOverflowBehavior = 1;
 // Animation duration + stagger limits previously lived here for
 // historical reasons but are NOT autotile-specific — they bound every
 // animation in the system. Moved to

@@ -212,9 +212,12 @@ void Daemon::updateAutotileScreens()
             // than gating on contains() — otherwise a rule targeting the default
             // algorithm is silently dropped on those screens. During a mid-cycle
             // applyEntry this runs before setAlgorithm() updates the global id, so a
-            // bare screen may see the prior algorithm for one pass; it self-corrects
-            // on the next updateAutotileScreens (window open, desktop switch, cycle),
-            // mirroring the MaxWindows staleness noted above.
+            // bare screen may see the prior algorithm for one pass. Unlike the
+            // MaxWindows staleness above (which the engine re-derives at retile time
+            // via effectiveMaxWindows), the engine has no retile-time re-resolution
+            // for custom params, so a dropped CustomParams override persists until the
+            // next updateAutotileScreens (window open, desktop switch, cycle) rather
+            // than healing at the next retile.
             const QString effectiveAlgo = screenAlgorithms.value(screenId, m_autotileEngine->algorithmId());
             if (!tilingParams.algorithmParamTarget.isEmpty() && tilingParams.algorithmParamTarget == effectiveAlgo) {
                 overrides[PerScreenKeys::CustomParams] = tilingParams.algorithmParams;
