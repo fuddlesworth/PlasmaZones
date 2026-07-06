@@ -593,6 +593,13 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         {QStringLiteral("general"),
          {
              {CD::renderingGroup(), CD::backendKey()},
+             // Shader Effects moved here from snapping-overlay-appearance: frame
+             // rate + audio spectrum drive EVERY shader category (overlay,
+             // animation, surface decoration), not just snapping overlays.
+             {CD::shadersGroup(), CD::enabledKey()},
+             {CD::shadersGroup(), CD::frameRateKey()},
+             {CD::shadersGroup(), CD::audioVisualizerKey()},
+             {CD::shadersGroup(), CD::audioSpectrumBarCountKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::suppressDefaultLayoutAssignmentKey()},
              {CD::exclusionsGroup(), CD::transientWindowsKey()},
              {CD::exclusionsGroup(), CD::minimumWindowWidthKey()},
@@ -627,10 +634,6 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingEffectsGroup(), CD::blurKey()},
              {CD::snappingEffectsGroup(), CD::showNumbersKey()},
              {CD::snappingEffectsGroup(), CD::flashOnSwitchKey()},
-             {CD::shadersGroup(), CD::enabledKey()},
-             {CD::shadersGroup(), CD::frameRateKey()},
-             {CD::shadersGroup(), CD::audioVisualizerKey()},
-             {CD::shadersGroup(), CD::audioSpectrumBarCountKey()},
          }},
         {QStringLiteral("snapping-zoneselector"),
          {
