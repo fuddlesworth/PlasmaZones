@@ -15,7 +15,7 @@
 // canvas boundary. Static (no iTime).
 
 #version 450
-#include <surface_uniforms.glsl>
+#include <surface_lib.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -25,7 +25,7 @@ void main() {
 
     // Degenerate frame guard — mirrors glow/effect.frag: an unwired frame
     // rect would bleed shadow over the whole surface for a transient frame.
-    if (uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0) {
+    if (surfaceFrameDegenerate()) {
         fragColor = base;
         return;
     }
@@ -35,12 +35,8 @@ void main() {
     // shadow body down/right, the classic dropped look.
     vec2 offset = vec2(p_offsetX, p_offsetY) * uSurfaceScale;
     vec2 p = surfacePixel(vTexCoord) - offset;
-    float radius = p_cornerRadius * uSurfaceScale;
-    vec2 halfSz = 0.5 * uSurfaceFrameSize;
-    vec2 cen = uSurfaceFrameTopLeft + halfSz;
-    float r = clamp(radius, 0.0, min(halfSz.x, halfSz.y));
-    vec2 q = abs(p - cen) - halfSz + r;
-    float d = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+    FrameSDF fs = frameSdf(p, p_cornerRadius * uSurfaceScale);
+    float d = fs.d;
 
     // Gaussian-profile falloff outward from the (shifted) edge — same
     // exp(-4t²) profile as the glow pack, brightest against the window and
@@ -61,11 +57,11 @@ void main() {
     // and the AA rim pass through untouched. Mild focus softening — a real
     // shadow persists on unfocused windows, it just lightens a little.
     body *= (1.0 - base.a);
-    body *= p_shadowStrength * mix(0.65, 1.0, clamp(uSurfaceFocused, 0.0, 1.0));
+    body *= p_shadowStrength * focusDim(0.65);
 
     // Premultiplied over: the dark veil fills the margin under its own
     // alpha; with the default black colour the rgb term contributes nothing
     // and the shadow reads as pure darkening of whatever is behind.
     float sa = clamp(body * p_shadowColor.a, 0.0, 1.0);
-    fragColor = vec4(base.rgb + p_shadowColor.rgb * sa, clamp(base.a + sa, 0.0, 1.0));
+    fragColor = marginComposite(base, p_shadowColor.rgb, sa);
 }

@@ -15,24 +15,18 @@
 // uniform itself and repaints the window continuously while decorated.
 
 #version 450
-#include <surface_uniforms.glsl>
+#include <surface_lib.glsl>
+#include <surface_noise.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-const float kTau = 6.28318530718;
 const int kMaxFlies = 16;
-
-// Per-spark scalar hash — cheap, decorrelated across the small index range.
-float hash1(float n) {
-    return fract(sin(n * 127.1 + 311.7) * 43758.5453);
-}
 
 void main() {
     vec4 window = surfaceTexel(vTexCoord);
 
-    // Identity-decoration guard — mirrors border/effect.frag.
-    if (uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0) {
+    if (surfaceFrameDegenerate()) {
         fragColor = window;
         return;
     }
@@ -52,23 +46,23 @@ void main() {
         if (float(i) >= count) {
             break;
         }
-        float h1 = hash1(float(i) + 0.13);
-        float h2 = hash1(float(i) + 7.71);
-        float h3 = hash1(float(i) + 42.9);
+        float h1 = hashSin1(float(i) + 0.13);
+        float h2 = hashSin1(float(i) + 7.71);
+        float h3 = hashSin1(float(i) + 42.9);
 
         // Slow orbit around the frame, direction and rate per spark, with
         // the radial distance breathing between the frame edge and the
         // margin's reach so paths interleave instead of forming a ring.
         float dir = h3 > 0.5 ? 1.0 : -1.0;
-        float ang = kTau * fract(h1 + dir * t * (0.02 + 0.035 * h2));
-        float off = reach * (0.25 + 0.6 * (0.5 + 0.5 * sin(t * (0.5 + 0.8 * h2) + h1 * kTau)));
+        float ang = TAU * fract(h1 + dir * t * (0.02 + 0.035 * h2));
+        float off = reach * (0.25 + 0.6 * (0.5 + 0.5 * sin(t * (0.5 + 0.8 * h2) + h1 * TAU)));
         vec2 pos = cen + vec2(cos(ang) * (halfSz.x + off), sin(ang) * (halfSz.y + off));
 
         // Soft gaussian body with a per-spark blink (cubed sine reads as a
         // firefly's pulse: mostly dim with bright peaks).
         float dist = length(px - pos);
         float body = exp(-dist * dist / (2.0 * size * size));
-        float blinkWave = 0.5 + 0.5 * sin(t * (1.2 + 2.0 * h1) + h2 * kTau);
+        float blinkWave = 0.5 + 0.5 * sin(t * (1.2 + 2.0 * h1) + h2 * TAU);
         float blink = 0.25 + 0.75 * blinkWave * blinkWave * blinkWave;
 
         vec4 col = mix(p_colorA, p_colorB, h3);
@@ -78,10 +72,10 @@ void main() {
     alpha = clamp(alpha, 0.0, 1.0);
 
     // Focus cue: the swarm dims on unfocused surfaces, like the border family.
-    float focusDim = mix(0.55, 1.0, clamp(uSurfaceFocused, 0.0, 1.0));
-    vec4 pane = vec4(glow * focusDim, alpha * focusDim);
+    float dim = focusDim(0.55);
+    vec4 pane = vec4(glow * dim, alpha * dim);
 
     // Behind-the-window composite: sparks light only the transparent
     // margin (and any translucency), never crossing the content.
-    fragColor = window + pane * (1.0 - window.a);
+    fragColor = slabComposite(window, pane);
 }

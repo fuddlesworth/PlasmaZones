@@ -27,7 +27,7 @@
 // otherwise. Static (no iTime).
 
 #version 450
-#include <surface_uniforms.glsl>
+#include <surface_lib.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -39,7 +39,7 @@ void main() {
     // below would collapse to the top-left point and bleed halo over the
     // whole surface for that transient, so pass the content through untouched
     // until a real frame arrives. Mirrors border/effect.frag's guard.
-    if (uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0) {
+    if (surfaceFrameDegenerate()) {
         fragColor = base;
         return;
     }
@@ -47,12 +47,8 @@ void main() {
     // Rounded-rect SDF over the frame rect (same construction as the border
     // pack). d > 0 outside the frame — the region the halo lives in.
     vec2 p = surfacePixel(vTexCoord);
-    float radius = p_cornerRadius * uSurfaceScale;
-    vec2 halfSz = 0.5 * uSurfaceFrameSize;
-    vec2 cen = uSurfaceFrameTopLeft + halfSz;
-    float r = clamp(radius, 0.0, min(halfSz.x, halfSz.y));
-    vec2 q = abs(p - cen) - halfSz + r;
-    float d = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+    FrameSDF fs = frameSdf(p, p_cornerRadius * uSurfaceScale);
+    float d = fs.d;
 
     // Gaussian-profile falloff outward from the edge: brightest right against
     // the window, effectively zero by d == reach. exp(-4t²) reads as a soft
@@ -72,10 +68,10 @@ void main() {
     // content is passed through byte-for-byte and the AA rim blends. Focus
     // tracking dims the unfocused surface, like Oxygen's active-window cue.
     halo *= (1.0 - base.a);
-    halo *= p_glowStrength * mix(0.30, 1.0, clamp(uSurfaceFocused, 0.0, 1.0));
+    halo *= p_glowStrength * focusDim(0.30);
 
     // Premultiplied additive-over: the halo lights the margin under its own
     // alpha; the content term is untouched.
     float haloA = clamp(halo * p_glowColor.a, 0.0, 1.0);
-    fragColor = vec4(base.rgb + p_glowColor.rgb * haloA, clamp(base.a + haloA, 0.0, 1.0));
+    fragColor = marginComposite(base, p_glowColor.rgb, haloA);
 }

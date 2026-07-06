@@ -15,30 +15,17 @@
 // the pack renders a still tint slab with the same corner rounding.
 
 #version 450
-#include <surface_uniforms.glsl>
+#include <surface_lib.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
-
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
-
-// px-space (top-down) vector -> canvas UV offset (vTexCoord is Y-up).
-vec2 pxToUv(vec2 v) {
-    return vec2(v.x, -v.y) / max(uSurfaceSize, vec2(1.0));
-}
 
 void main() {
     vec4 window = surfaceTexel(vTexCoord) * uSurfaceOpacity;
 
     vec2 px = surfacePixel(vTexCoord);
-    vec2 halfSz = 0.5 * uSurfaceFrameSize;
-    vec2 center = uSurfaceFrameTopLeft + halfSz;
-    float radius = clamp(p_cornerRadius * uSurfaceScale, 0.0, min(halfSz.x, halfSz.y));
-    float d = sdRoundedBox(px - center, halfSz, radius);
-    float mask = 1.0 - smoothstep(-1.0, 1.0, d);
+    FrameSDF fs = frameSdf(px, p_cornerRadius * uSurfaceScale);
+    float mask = frameMask(fs.d);
 
     vec4 pane;
     if (uHasBackdrop >= 0.5) {
@@ -56,5 +43,5 @@ void main() {
         pane = vec4(p_tintColor.rgb, 1.0) * 0.4 * mask;
     }
 
-    fragColor = window + pane * (1.0 - window.a);
+    fragColor = slabComposite(window, pane);
 }
