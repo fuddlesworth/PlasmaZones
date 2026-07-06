@@ -43,6 +43,7 @@ PhosphorShaders::UboFrameState makeFixedState()
         s.channelResolution[i][0] = static_cast<float>(100 + i);
         s.channelResolution[i][1] = static_cast<float>(50 + i);
     }
+    s.audioSpectrumSize = 12;
     return s;
 }
 
@@ -83,6 +84,7 @@ SurfaceUniforms makeReference(const PhosphorShaders::UboFrameState& s)
         u.iChannelResolution[i][2] = 0.0f;
         u.iChannelResolution[i][3] = 0.0f;
     }
+    u.iAudioSpectrumSize = s.audioSpectrumSize;
     return u;
 }
 
@@ -93,11 +95,11 @@ class TestSurfaceUniformProfile : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    void baseSize_is_560()
+    void baseSize_is_576()
     {
         SurfaceUniformProfile profile;
         QCOMPARE(profile.baseSize(), static_cast<int>(sizeof(SurfaceUniforms)));
-        QCOMPARE(profile.baseSize(), 560);
+        QCOMPARE(profile.baseSize(), 576);
     }
 
     void golden_bytes_match_reference()

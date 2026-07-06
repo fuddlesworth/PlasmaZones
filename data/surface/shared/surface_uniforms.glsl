@@ -67,6 +67,12 @@ uniform float uSurfaceFocused;
 // never reference iTime is not driven to repaint, so static decoration is free.
 uniform float iTime;
 
+// Audio spectrum bar count (CAVA). Daemon-only in practice — the compositor
+// wires no audio texture, so this stays 0 and surface_audio.glsl's helpers
+// no-op for window decorations. The uAudioSpectrum sampler is declared in
+// surface_audio.glsl, which packs #include to opt in.
+uniform int iAudioSpectrumSize;
+
 // Pack-specific tweakable parameters (declared in metadata.json, addressed by
 // `#define p_<id> customParamsN_x` / `customColorN` preambles the registry
 // generates — identical to the animation/overlay categories).
@@ -126,7 +132,8 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
     vec4 customParams[8];        // offset 112 (128)
     vec4 customColors[16];       // offset 240 (256)
     vec4 iChannelResolution[4];  // offset 496 (64) — multipass buffer sizes (.xy)
-};                               // total 560 bytes
+    int iAudioSpectrumSize;      // offset 560 (4) — CAVA bar count (0 = audio off)
+};                               // total 576 bytes (std140 rounds the block up from 564)
 
 layout(binding = 7) uniform sampler2D uTexture0;
 

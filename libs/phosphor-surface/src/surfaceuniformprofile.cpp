@@ -83,6 +83,11 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
         m_u.iChannelResolution[i][2] = 0.0f;
         m_u.iChannelResolution[i][3] = 0.0f;
     }
+
+    // Audio spectrum bar count (0 when CAVA is off). The node uploads the
+    // spectrum texture (binding 6) via setAudioSpectrum; only the size crosses
+    // into the UBO. The trailing pad stays zero from the m_u{} value-init.
+    m_u.iAudioSpectrumSize = state.audioSpectrumSize;
 }
 
 PhosphorShaders::UboUploadRegionList

@@ -63,9 +63,17 @@ struct alignas(16) SurfaceUniforms
 
     // Multipass: iChannelResolution[i] = buffer-pass output texture size (.xy).
     float iChannelResolution[4][4]; // vec4[4]: 64 bytes at offset 496
-}; // total 560 bytes
 
-static_assert(sizeof(SurfaceUniforms) == 560, "SurfaceUniforms must be exactly 560 bytes (surface UBO contract)");
+    // Audio spectrum bar count (0 when audio is disabled, and ALWAYS 0 on the
+    // compositor — window decorations have no audio path). The uAudioSpectrum
+    // sampler (binding 6) lives in surface_audio.glsl, not the UBO; only the
+    // size is a UBO member. The daemon pushes it to every surface item when
+    // CAVA is on; a pack reads it via surface_audio.glsl (audioBar / getBass).
+    int iAudioSpectrumSize; // int: 4 bytes at offset 560
+    int _pad_after_audioSpectrum[3]; // pad the std140 block to a 16-byte multiple
+}; // total 576 bytes
+
+static_assert(sizeof(SurfaceUniforms) == 576, "SurfaceUniforms must be exactly 576 bytes (surface UBO contract)");
 
 static_assert(offsetof(SurfaceUniforms, qt_Matrix) == 0, "SurfaceUniforms::qt_Matrix must remain at std140 offset 0");
 static_assert(offsetof(SurfaceUniforms, qt_Opacity) == 64,
@@ -91,5 +99,7 @@ static_assert(offsetof(SurfaceUniforms, customColors) == 240,
               "SurfaceUniforms::customColors must remain at std140 offset 240");
 static_assert(offsetof(SurfaceUniforms, iChannelResolution) == 496,
               "SurfaceUniforms::iChannelResolution must remain at std140 offset 496");
+static_assert(offsetof(SurfaceUniforms, iAudioSpectrumSize) == 560,
+              "SurfaceUniforms::iAudioSpectrumSize must remain at std140 offset 560");
 
 } // namespace PhosphorSurfaceShaders
