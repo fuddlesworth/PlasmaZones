@@ -283,7 +283,7 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
             // Equals "snapping"/"tiling"` gap rule resolves for the asking
             // engine and stays inert for the other.
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, mode);
-            stampScreenOrientation(query, screenId);
+            query.screenOrientation = orientationToken;
             query.activeLayout = activeLayoutId;
 
             // Resolve each gap slot from the highest-priority matching rule that
@@ -398,7 +398,7 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
     return resolveCachedContext(m_contextLockCache, m_contextLockCacheRevision, screenId, virtualDesktop, activity,
                                 contextCacheKeyToken(QString(), activeLayoutId, orientationToken), [&]() -> bool {
                                     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-                                    stampScreenOrientation(query, screenId);
+                                    query.screenOrientation = orientationToken;
                                     query.activeLayout = activeLayoutId;
                                     const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
                                     if (const auto action = resolved.slot(QString(PWR::ActionSlot::Locked))) {
@@ -482,7 +482,7 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
         contextCacheKeyToken(QString(), activeLayoutId, orientationToken), [&]() -> ContextOverlayOverride {
             ContextOverlayOverride overlay;
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-            stampScreenOrientation(query, screenId);
+            query.screenOrientation = orientationToken;
             query.activeLayout = activeLayoutId;
             const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
 

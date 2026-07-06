@@ -101,10 +101,11 @@ private Q_SLOTS:
 
     void testFieldIsContext()
     {
-        // Exactly the five context fields are context (screen / desktop /
-        // activity, the placement Mode, and the tiled-window count) — everything
-        // else is a window property. Action/match compatibility hinges on this
-        // split, so pin it down explicitly rather than re-deriving it from
+        // Exactly the seven context fields are context (screen / desktop /
+        // activity, the placement Mode, the tiled-window count, the screen
+        // orientation, and the active layout) — everything else is a window
+        // property. Action/match compatibility hinges on this split, so pin it
+        // down explicitly rather than re-deriving it from
         // fieldIsString/fieldIsBool/fieldIsNumeric.
         QVERIFY(fieldIsContext(Field::ScreenId));
         QVERIFY(fieldIsContext(Field::VirtualDesktop));
@@ -118,7 +119,16 @@ private Q_SLOTS:
         // on it during windowless context resolution.
         QVERIFY(fieldIsContext(Field::TiledWindowCount));
         QVERIFY(fieldIsNumeric(Field::TiledWindowCount));
+        // ScreenOrientation and ActiveLayout are geometry/layout context fields,
+        // stamped during windowless context resolution so an orientation- or
+        // layout-keyed gap/overlay/assignment rule participates in the cascade.
+        QVERIFY(fieldIsContext(Field::ScreenOrientation));
+        QVERIFY(fieldIsContext(Field::ActiveLayout));
 
+        // The capability fields added alongside them are window properties, not
+        // context, so a rule keying on them is a per-window match.
+        QVERIFY(!fieldIsContext(Field::IsMovable));
+        QVERIFY(!fieldIsContext(Field::IsMaximizable));
         QVERIFY(!fieldIsContext(Field::AppId));
         QVERIFY(!fieldIsContext(Field::WindowClass));
         QVERIFY(!fieldIsContext(Field::DesktopFile));

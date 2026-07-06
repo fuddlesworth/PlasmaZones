@@ -268,8 +268,8 @@ public:
      * (so an orientation predicate stays inert there).
      *
      * The token is stamped onto every windowless context WindowQuery this
-     * registry builds (assignment, gap, lock, overlay, default-assignment), so an
-     * orientation rule can drive any context slot — for example a different
+     * registry builds (assignment, gap, lock, overlay, default-assignment,
+     * tiling-params), so an orientation rule can drive any context slot — for example a different
      * tiling algorithm on a rotated (portrait) monitor. Orientation derives from
      * screen geometry alone, independent of the resolved layout, so it carries no
      * recursion risk (unlike an active-layout query). The daemon wires this to
@@ -749,9 +749,10 @@ private:
     /// the caller's (layoutForScreen) retry loop.
     ///
     /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
-    /// by (screenId, virtualDesktop, activity) plus a "twc:N" tiled-window-count
-    /// token (empty when the count is unknown), so a count change yields a fresh
-    /// entry rather than a stale hit while count-steady callers keep hitting the
+    /// by (screenId, virtualDesktop, activity) plus a "twc:N|or:<token>"
+    /// composite of the tiled-window-count and screen-orientation tokens (each
+    /// empty when unknown), so a count or rotation change yields a fresh entry
+    /// rather than a stale hit while steady callers keep hitting the
     /// cache. The cache is invalidated
     /// lazily by comparing the bound rule set's monotonic
     /// @c RuleSet::revision() against the snapshot taken on the last
@@ -882,16 +883,20 @@ private:
         QString screenId;
         int virtualDesktop = 0;
         QString activity;
-        // A free-form fourth key dimension, used by two resolvers that share the
-        // ContextResolveKey type but never the same cache container. For the gap
-        // cascade it carries the placement-mode wire token, because the SAME
-        // (screen, desktop, activity) resolves DIFFERENT gaps per mode and
-        // caching without it would return the snapping result for a subsequent
-        // tiling query. For the assignment resolver it carries a "twc:N"
-        // tiled-window-count token (empty when the count is unknown), so a count
-        // change yields a fresh entry rather than a stale hit. The lock,
-        // default-assignment, and overlay resolvers leave it empty. Each resolver
-        // owns its own cache hash, so the two token vocabularies never collide.
+        // A free-form fourth key dimension, used by the context resolvers that
+        // share the ContextResolveKey type but never the same cache container. It
+        // folds in every non-rule-set input the resolved value depends on, so a
+        // change in one yields a fresh entry rather than a stale hit:
+        //   - gap cascade: contextCacheKeyToken(mode, activeLayout, orientation) —
+        //     the SAME (screen, desktop, activity) resolves DIFFERENT gaps per
+        //     placement mode, active layout, and screen orientation.
+        //   - lock / default-assignment / overlay: contextCacheKeyToken with an
+        //     empty mode (they are mode-agnostic) plus activeLayout (except
+        //     default-assignment, which omits it to avoid recursion) and orientation.
+        //   - assignment resolver: "twc:N|or:<token>" — the tiled-window-count and
+        //     the screen orientation (it does not read the active layout).
+        // Each resolver owns its own cache hash, so the token vocabularies never
+        // collide.
         QString mode;
         bool operator==(const ContextResolveKey& other) const noexcept
         {
@@ -951,9 +956,10 @@ private:
     /// Holds ONLY what the rule set produced for each of the three independent
     /// slots. Given a fixed cache key the value is a pure function of the rule
     /// set (the cache's revision-invalidation contract). The live tiled-window
-    /// count is the one non-rule-set input that affects the result; rather than
-    /// break that contract it participates in the cache KEY (the "twc:N" token),
-    /// so each count resolves its own entry. The global default — an external
+    /// count and the screen orientation are the non-rule-set inputs that affect
+    /// the result; rather than break that contract they participate in the cache
+    /// KEY (the "twc:N" and "|or:<token>" components), so each combination resolves
+    /// its own entry. The global default — an external
     /// provider, not part of the rule set and not revision-tracked — is folded
     /// in AFTER the cache returns, so a default-setting change is reflected
     /// immediately without a rule-set revision bump (a settings edit produces

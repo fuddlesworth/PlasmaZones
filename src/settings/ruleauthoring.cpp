@@ -945,10 +945,12 @@ QVariantList operatorsForField(int fieldValue)
     }
     const Field field = static_cast<Field>(fieldValue);
     QList<Operator> ops;
-    if (field == Field::Mode) {
-        // Mode is string-valued but its vocabulary is a closed dropdown — only
-        // an exact-token Equals is meaningful (a substring / regex against a
-        // three-token set is a footgun). Mirrors the WindowType enum treatment.
+    if (field == Field::Mode || field == Field::ScreenOrientation || field == Field::ActiveLayout) {
+        // These are string-valued but their vocabulary is a closed single-select
+        // dropdown (placement mode, portrait/landscape, a concrete layout id) — only
+        // an exact-token Equals is meaningful. A substring / regex against a closed
+        // token set (or a layout UUID) is a footgun the picker cannot author
+        // sensibly. Mirrors the WindowType enum treatment.
         ops = {Operator::Equals};
     } else if (PhosphorRules::fieldIsString(field)) {
         ops = {Operator::Equals, Operator::Contains, Operator::StartsWith, Operator::EndsWith, Operator::Regex};

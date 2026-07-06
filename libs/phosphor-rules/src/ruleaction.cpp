@@ -104,10 +104,13 @@ constexpr double kMaxOverlayBorderRadius = 50.0;
 // hand-edited payloads.
 constexpr double kMaxTiledWindows = 12.0;
 constexpr double kMaxMasterCount = 5.0;
-// Split-ratio wire bounds ([0.1, 0.9]); the percent-editor schema derives its
-// display range from these (× 100) so the two never drift.
-constexpr double kMinSplitRatio = 0.1;
-constexpr double kMaxSplitRatio = 0.9;
+// Split-ratio bounds. The percent-editor display range is the exact primary pair
+// ([10, 90] %); the wire ratio is derived (÷ 100) so the two never drift and the
+// display bounds stay exact (0.1 * 100.0 is not exactly 10.0 in IEEE-754).
+constexpr double kMinSplitPercent = 10.0;
+constexpr double kMaxSplitPercent = 90.0;
+constexpr double kMinSplitRatio = kMinSplitPercent / 100.0;
+constexpr double kMaxSplitRatio = kMaxSplitPercent / 100.0;
 
 } // namespace
 
@@ -1217,8 +1220,8 @@ void ActionRegistry::registerBuiltins()
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("percent"),
-                     .min = kMinSplitRatio * 100.0,
-                     .max = kMaxSplitRatio * 100.0,
+                     .min = kMinSplitPercent,
+                     .max = kMaxSplitPercent,
                      .scale = 0.01,
                      .defaultDisplay = 50.0}},
         .category = QStringLiteral("layoutEngine"),
