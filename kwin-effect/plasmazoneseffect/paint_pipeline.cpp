@@ -169,7 +169,15 @@ void PlasmaZonesEffect::postPaintScreen()
                 // Use `effects->addRepaint(output)` — screen-level
                 // damage with no per-window clip — to mark the whole
                 // output as dirty every frame the transition is live.
-                if ((timeBasedActive || transition.durationMs == 0) && KWin::effects) {
+                // Held move/resize transitions live past their nominal
+                // duration (timeBasedActive goes false), and a soft-body
+                // lattice keeps ringing AFTER release when the window emits
+                // no damage of its own — so drive repaints off the hold flag
+                // and the lattice's settle state too, or the wobble would
+                // freeze mid-air the instant the pointer stops moving.
+                const bool heldActive =
+                    transition.holdUntilRelease || (transition.meshSim.initialized && !transition.meshSim.settled);
+                if ((timeBasedActive || transition.durationMs == 0 || heldActive) && KWin::effects) {
                     if (const auto* output = w->screen()) {
                         KWin::effects->addRepaint(output->geometry());
                     } else {
@@ -604,11 +612,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (elapsed >= 0 && elapsed <= transition.durationMs) {
                 progress = qreal(elapsed) / qreal(transition.durationMs);
                 active = true;
-            } else if (transition.holdUntilRelease && elapsed > transition.durationMs) {
+            } else if ((transition.holdUntilRelease || !transition.meshSim.settled)
+                       && elapsed > transition.durationMs) {
                 // HELD move/resize: the drag outlives the nominal duration
                 // by design. Stay active with progress pinned at 1 — the
-                // motion uniforms (iMoveVelocity / iMoveOffset), not the
-                // clock, drive the shader from here.
+                // motion uniforms (iMoveVelocity / iMoveOffset / iMoveMesh),
+                // not the clock, drive the shader from here. After release
+                // (holdUntilRelease cleared) a mesh-driven transition stays
+                // active until its lattice settles, so the wobble rings out
+                // instead of being cut off at the release frame.
                 progress = 1.0;
                 active = true;
             }
@@ -1044,6 +1056,29 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                         transition.moveTrail[0] = pos;
                         transition.trailLastMs += qint64(ShaderTransition::kTrailStepMs);
                     }
+                }
+                // Advance the soft-body lattice every active frame (held AND
+                // settling-after-release), so it integrates and eventually
+                // reports settled to release the transition. Outside the
+                // hold block above because that block stops running the
+                // instant the drag ends.
+                if (transition.meshSim.initialized) {
+                    const qint64 mdt = (transition.meshLastMs < 0) ? 0 : (nowMs - transition.meshLastMs);
+                    transition.meshLastMs = nowMs;
+                    ShaderInternal::stepMeshSim(transition.meshSim, w->frameGeometry(), static_cast<qreal>(mdt));
+                }
+                if (cached->iMoveMeshLoc >= 0) {
+                    // Publish node deflections from ideal grid position, px.
+                    // Zero for a lattice that never ran (non-held / uninit).
+                    GLfloat mesh[MeshSim::kCount * 2] = {};
+                    if (transition.meshSim.initialized) {
+                        for (int n = 0; n < MeshSim::kCount; ++n) {
+                            const QPointF d = transition.meshSim.position[n] - transition.meshSim.origin[n];
+                            mesh[2 * n] = static_cast<GLfloat>(d.x());
+                            mesh[2 * n + 1] = static_cast<GLfloat>(d.y());
+                        }
+                    }
+                    glUniform2fv(cached->iMoveMeshLoc, MeshSim::kCount, mesh);
                 }
                 if (cached->iMoveVelocityLoc >= 0) {
                     shader->setUniform(cached->iMoveVelocityLoc,
@@ -1800,31 +1835,55 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
         // Destination frame rect == iToRect. The window already jumped
         // there via moveResize, so the live frameGeometry is a safe
         // fallback if a transition somehow lacks a recorded destination.
-        QRectF dst = st->toGeometry;
-        if (!dst.isValid() || dst.isEmpty()) {
-            dst = window->frameGeometry();
+        QRectF frameRect = st->toGeometry;
+        if (!frameRect.isValid() || frameRect.isEmpty()) {
+            frameRect = window->frameGeometry();
         }
-        if (dst.isEmpty()) {
+        if (frameRect.isEmpty()) {
             return;
+        }
+        // COVER THE PADDED DECORATION CANVAS, not just the frame. An outer
+        // ambience pack (glow / drop shadow / fireflies) paints its halo in
+        // the margin OUTSIDE the frame, folded into the multipass composite
+        // over a padded canvas. A grid confined to the frame samples only
+        // texcoords [0,1] = the frame region of that canvas, so the halo was
+        // clipped to the frame edge during the deform. Build the grid over
+        // the recorded composite canvas instead, with texcoords kept
+        // FRAME-relative — so cuv runs past [0,1] into the halo band, which
+        // surfaceColor()'s iLayerRectInTexture remap (also frame-anchored)
+        // resolves into the composite's margin. With no decoration the
+        // canvas equals the frame and this reduces to the old behaviour.
+        QRectF gridRect = frameRect;
+        if (const auto lsIt = m_surfaceMultipass.find(getWindowId(window));
+            lsIt != m_surfaceMultipass.end() && lsIt->second.canvasGeo.isValid() && !lsIt->second.canvasGeo.isEmpty()) {
+            gridRect = lsIt->second.canvasGeo;
         }
         // quad-space <-> screen-space is a pure translation at 1:1 logical
         // scale; qLeft/qTop is the captured texture's top-left in quad
         // space and textureGeo its top-left in screen space.
         const double qOffX = qLeft - textureGeo.x();
         const double qOffY = qTop - textureGeo.y();
+        const double fx = frameRect.x();
+        const double fy = frameRect.y();
+        const double fw = frameRect.width();
+        const double fh = frameRect.height();
         const int n = st->gridSubdivisions;
         quads.clear();
         quads.reserve(n * n);
         for (int gy = 0; gy < n; ++gy) {
-            const double v0 = static_cast<double>(gy) / n;
-            const double v1 = static_cast<double>(gy + 1) / n;
-            const double y0 = dst.y() + v0 * dst.height() + qOffY;
-            const double y1 = dst.y() + v1 * dst.height() + qOffY;
+            const double sy0 = gridRect.y() + (static_cast<double>(gy) / n) * gridRect.height();
+            const double sy1 = gridRect.y() + (static_cast<double>(gy + 1) / n) * gridRect.height();
+            const double v0 = (sy0 - fy) / fh; // frame-relative: past [0,1] in the halo band
+            const double v1 = (sy1 - fy) / fh;
+            const double y0 = sy0 + qOffY;
+            const double y1 = sy1 + qOffY;
             for (int gx = 0; gx < n; ++gx) {
-                const double u0 = static_cast<double>(gx) / n;
-                const double u1 = static_cast<double>(gx + 1) / n;
-                const double x0 = dst.x() + u0 * dst.width() + qOffX;
-                const double x1 = dst.x() + u1 * dst.width() + qOffX;
+                const double sx0 = gridRect.x() + (static_cast<double>(gx) / n) * gridRect.width();
+                const double sx1 = gridRect.x() + (static_cast<double>(gx + 1) / n) * gridRect.width();
+                const double u0 = (sx0 - fx) / fw;
+                const double u1 = (sx1 - fx) / fw;
+                const double x0 = sx0 + qOffX;
+                const double x1 = sx1 + qOffX;
                 KWin::WindowQuad cell;
                 cell[0] = KWin::WindowVertex(x0, y0, u0, v0);
                 cell[1] = KWin::WindowVertex(x1, y0, u1, v0);

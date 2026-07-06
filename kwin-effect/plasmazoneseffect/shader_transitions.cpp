@@ -841,6 +841,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         cached.iMoveVelocity2Loc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveVelocity2);
         cached.iMoveTrailLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveTrail);
+        cached.iMoveMeshLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveMesh);
         cached.iLayerRectInTextureLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kILayerRectInTexture);
         // uTexture0 — for the transition-time composite retarget (see
@@ -974,6 +975,26 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // quad so the vertex shader has interior vertices to displace. Only
     // meaningful for surface-extent shaders, mirroring `apply()`'s guard.
     transition.gridSubdivisions = transition.surfaceExtent ? eff.geometryGridSubdivisions : 0;
+
+    // Soft-body lattice constants (iMoveMesh consumers): read the pack's
+    // named params so a mesh pack can tune the physics live in the settings
+    // UI without a rebuild. Each falls back to the generic default when the
+    // pack doesn't declare it, so a non-mesh pack costs nothing. The same
+    // named values also reach the shader as p_<name> customParams, so the
+    // pack can expose them as ordinary sliders.
+    {
+        const QVariantMap np = profile.effectiveParameters();
+        auto readParam = [&](const char* name, qreal& out) {
+            const auto it = np.constFind(QLatin1String(name));
+            if (it != np.constEnd() && it->canConvert<double>()) {
+                out = it->toDouble();
+            }
+        };
+        readParam("sheetStiffness", transition.meshParams.stiffness);
+        readParam("gripStiffness", transition.meshParams.gripStiffness);
+        readParam("springiness", transition.meshParams.drag);
+        readParam("moveFactor", transition.meshParams.moveFactor);
+    }
 
     // Translate the friendly parameter map (e.g. {"direction": 1,
     // "parallax": 0.2}) to slot keys, then pack each

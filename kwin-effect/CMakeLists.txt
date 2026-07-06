@@ -60,6 +60,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/daemon_apply.cpp
     plasmazoneseffect/drag_snap.cpp
     plasmazoneseffect/drag_end.cpp
+    plasmazoneseffect/mesh_sim.cpp
     plasmazoneseffect/paint_pipeline.cpp
     plasmazoneseffect/shader_transitions.cpp
     plasmazoneseffect/surface_compile.cpp

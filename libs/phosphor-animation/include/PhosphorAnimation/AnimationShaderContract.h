@@ -390,6 +390,16 @@ inline constexpr const char* kIMoveVelocity2 = "iMoveVelocity2";
 /// what a spring mesh visually does), typically weighted by distance from
 /// the grip point (iMouse).
 inline constexpr const char* kIMoveTrail = "iMoveTrail";
+/// `vec2 iMoveMesh[16]` — COMPOSITOR PATH ONLY. The solved displacements of
+/// a 4x4 neighbour-coupled soft-body control lattice for HELD move/resize
+/// transitions: slot i+4*j is node (i,j)'s deflection from its ideal grid
+/// position on the current frame, logical px, row 0 at the top. The host
+/// runs the spring simulation (grip-constrained, wave-propagating); a pack
+/// interpolates the lattice across its render mesh (bilinear or bicubic
+/// Bezier) to deform WITH real physics. All zeros at rest / non-held /
+/// daemon. Generic: wobble is the first consumer, but any geometry pack
+/// can read the same lattice.
+inline constexpr const char* kIMoveMesh = "iMoveMesh";
 /// Card/anchor-space [0,1] sub-rect of the animated surface WITHIN
 /// uSurfaceLayer's canvas (xy offset, zw scale) — the layer analogue of
 /// iAnchorRectInTexture. The compositor pads the layer canvas by the

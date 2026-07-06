@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "mesh_sim.h"
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 
@@ -446,6 +447,7 @@ struct CachedShader
     int iMoveOffsetLoc = -1;
     int iMoveVelocity2Loc = -1;
     int iMoveTrailLoc = -1;
+    int iMoveMeshLoc = -1;
     /// Surface-layer-stack uniforms (compositor path). `uSurfaceLayer` is the
     /// pre-composited layered surface (border / rounded corners, ...) sampled in
     /// place of the live `uTexture0` while a layered window animates;
@@ -666,6 +668,11 @@ struct ShaderTransition
     static constexpr qreal kTrailStepMs = 15.0;
     QPointF moveTrail[kTrailSlots];
     qint64 trailLastMs = -1;
+    /// Generic soft-body control lattice (iMoveMesh). Simulated by the host
+    /// each held frame; its displacements feed any mesh-consuming pack.
+    MeshSim meshSim;
+    MeshSimParams meshParams;
+    qint64 meshLastMs = -1;
     /// Snapshot of the window's OLD content, bound as `uOldWindow` so the
     /// shader can cross-fade the old content out while the live new content
     /// fades in. Captured on the first morph paint AFTER the instant

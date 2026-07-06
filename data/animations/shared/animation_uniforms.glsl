@@ -233,6 +233,12 @@ uniform vec2 iMoveVelocity2;
 // origin k*15 ms ago, relative to now (all zeros at rest). Sample at a
 // per-vertex delay for delayed path-following deformations.
 uniform vec2 iMoveTrail[16];
+// Solved 4x4 soft-body control lattice for held move/resize transitions:
+// node (i,j) = iMoveMesh[i + 4*j], deflection from its ideal grid spot on
+// the current frame in logical px (row 0 top). All zeros at rest. Sample
+// via bilinear or bicubic Bezier across the render mesh for physics-driven
+// deformation.
+uniform vec2 iMoveMesh[16];
 // The animated surface's [0,1] sub-rect within uSurfaceLayer's canvas — the
 // layer analogue of iAnchorRectInTexture. The compositor pads the layer canvas
 // by the decoration chain's outer margin (glow reach), so the layer cannot be

@@ -747,6 +747,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 st->grabOrigin = window->frameGeometry().topLeft();
                 st->lastMovePos = st->grabOrigin;
                 st->lastMoveSampleMs = -1;
+                // Seed the generic soft-body lattice (iMoveMesh) so a
+                // mesh-consuming pack (wobble, ...) gets neighbour-coupled
+                // physics from the first frame. The grip is the node
+                // nearest the cursor at grab; physics constants use KWin's
+                // middle preset (per-pack tuning can layer on later).
+                if (st->cached->iMoveMeshLoc >= 0 && KWin::effects) {
+                    ShaderInternal::initMeshSim(st->meshSim, window->frameGeometry(), KWin::effects->cursorPos(),
+                                                st->meshParams);
+                }
             }
         }
     });
@@ -760,15 +769,37 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (auto* st = m_shaderManager.findTransition(window); st && st->holdUntilRelease) {
                 const quint64 myGeneration = st->generation;
                 QPointer<KWin::EffectWindow> safeWindow(window);
-                QTimer::singleShot(animationDurationMs(), this, [this, safeWindow, myGeneration]() {
-                    if (!safeWindow) {
-                        return;
-                    }
-                    if (const auto* live = m_shaderManager.findTransition(safeWindow);
-                        live && live->generation == myGeneration) {
-                        endShaderTransition(safeWindow);
-                    }
-                });
+                if (st->meshSim.initialized) {
+                    // Soft-body lattice: hand teardown to the settle gate.
+                    // Clearing holdUntilRelease drops the transition into
+                    // "active while the lattice still has energy" mode (see
+                    // the paint pipeline), so the wobble rings out for as
+                    // long as it physically takes rather than a fixed tail.
+                    // The timer is only a generous SAFETY cap in case the
+                    // sim never reaches its settle threshold.
+                    st->holdUntilRelease = false;
+                    QTimer::singleShot(4000, this, [this, safeWindow, myGeneration]() {
+                        if (!safeWindow) {
+                            return;
+                        }
+                        if (const auto* live = m_shaderManager.findTransition(safeWindow);
+                            live && live->generation == myGeneration) {
+                            endShaderTransition(safeWindow);
+                        }
+                    });
+                } else {
+                    // Velocity / trail packs: the springLag decays over the
+                    // next fraction of a second, so keep the fixed tail.
+                    QTimer::singleShot(animationDurationMs(), this, [this, safeWindow, myGeneration]() {
+                        if (!safeWindow) {
+                            return;
+                        }
+                        if (const auto* live = m_shaderManager.findTransition(safeWindow);
+                            live && live->generation == myGeneration) {
+                            endShaderTransition(safeWindow);
+                        }
+                    });
+                }
             }
         }
         const bool wasResize = (window && m_resizingWindow == window);
