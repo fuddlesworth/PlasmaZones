@@ -15,7 +15,7 @@
 // background, so a translucent border blends with what is behind the surface.
 
 #version 450
-#include <surface_uniforms.glsl>
+#include <surface_lib.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -27,7 +27,7 @@ void main() {
     // rect is degenerate (uSurfaceFrameSize == 0). The SDF below would collapse
     // to "edge everywhere" and paint a border over the whole surface, so pass
     // the captured content through untouched until a real frame arrives.
-    if (uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0) {
+    if (surfaceFrameDegenerate()) {
         fragColor = tex;
         return;
     }
@@ -43,15 +43,9 @@ void main() {
     // content corner ends one band-width in, at p_cornerRadius.
     float radius = (p_cornerRadius + p_borderWidth) * uSurfaceScale;
 
-    vec2 halfSz = 0.5 * uSurfaceFrameSize;
-    vec2 cen = uSurfaceFrameTopLeft + halfSz;
-    float r = clamp(radius, 0.0, min(halfSz.x, halfSz.y));
-
-    vec2 q = abs(p - cen) - halfSz + r;
-    float d = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-
-    float insideMask = 1.0 - smoothstep(-aa, aa, d);
-    float edge = smoothstep(-width - aa, -width + aa, d);
+    FrameSDF fs = frameSdf(p, radius);
+    float insideMask = 1.0 - smoothstep(-aa, aa, fs.d);
+    float edge = smoothstep(-width - aa, -width + aa, fs.d);
 
     // Focus-mixed border colour (the shader picks active vs inactive).
     vec4 outlineColor = mix(p_inactiveColor, p_activeColor, clamp(uSurfaceFocused, 0.0, 1.0));
@@ -59,7 +53,5 @@ void main() {
     // Clip content to the inner rounded rect; lay the band over transparency,
     // premultiplied. width <= 0 (no border in the chain's params) leaves the
     // content rounded with no band.
-    float ba = edge * insideMask * outlineColor.a;
-    vec4 contentPx = tex * (1.0 - edge);
-    fragColor = vec4(outlineColor.rgb * ba, ba) + contentPx * (1.0 - ba);
+    fragColor = borderComposite(tex, outlineColor, edge, insideMask);
 }
