@@ -271,6 +271,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetInsertPosition && key == ActionParam::Value) {
         return PhosphorI18n::tr("Insert position");
     }
+    if (type == ActionType::SetOverflowBehavior && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Overflow behavior");
+    }
     if (type == ActionType::DisableEngine && key == ActionParam::Mode) {
         return PhosphorI18n::tr("Engine to disable");
     }
@@ -458,6 +461,14 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("As master");
         }
     }
+    if (type == ActionType::SetOverflowBehavior && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::OverflowBehaviorToken::Float) {
+            return PhosphorI18n::tr("Float overflow windows");
+        }
+        if (wireValue == PhosphorRules::OverflowBehaviorToken::Unlimited) {
+            return PhosphorI18n::tr("Unlimited (no cap)");
+        }
+    }
     return wireValue;
 }
 
@@ -550,6 +561,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetInsertPosition) {
         return PhosphorI18n::tr("Set insert position");
+    }
+    if (type == ActionType::SetOverflowBehavior) {
+        return PhosphorI18n::tr("Set overflow behavior");
     }
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");

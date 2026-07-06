@@ -563,6 +563,15 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
             params.insertPosition = 2;
         }
     }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverflowBehavior))) {
+        // Wire token → AutotileOverflowBehavior int (Float 0 / Unlimited 1).
+        const QString token = action->params.value(PWR::ActionParam::Value).toString();
+        if (token == PWR::OverflowBehaviorToken::Float) {
+            params.overflowBehavior = 0;
+        } else if (token == PWR::OverflowBehaviorToken::Unlimited) {
+            params.overflowBehavior = 1;
+        }
+    }
     return params;
 }
 

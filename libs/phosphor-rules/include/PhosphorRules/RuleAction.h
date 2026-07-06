@@ -441,6 +441,10 @@ inline constexpr QLatin1StringView SetMasterCount{"setMasterCount"};
 /// closed enum token (`ActionParam::Value`, InsertPositionToken). Context domain;
 /// layered onto the per-screen override map like the other tiling params.
 inline constexpr QLatin1StringView SetInsertPosition{"setInsertPosition"};
+/// How the autotile stack handles windows beyond the max: float the overflow, or
+/// go unlimited (ignore the cap). Closed enum token (OverflowBehaviorToken).
+/// Context domain; layered onto the per-screen override map like the other params.
+inline constexpr QLatin1StringView SetOverflowBehavior{"setOverflowBehavior"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -519,6 +523,13 @@ inline constexpr QLatin1StringView AfterFocused{"afterFocused"}; ///< AfterFocus
 inline constexpr QLatin1StringView AsMaster{"asMaster"}; ///< AsMaster (2)
 } // namespace InsertPositionToken
 
+/// Wire tokens for SetOverflowBehavior's `value` param. Ints match
+/// PhosphorTiles::AutotileOverflowBehavior (Float 0 / Unlimited 1).
+namespace OverflowBehaviorToken {
+inline constexpr QLatin1StringView Float{"float"}; ///< AutotileOverflowBehavior::Float (0)
+inline constexpr QLatin1StringView Unlimited{"unlimited"}; ///< Unlimited (1)
+} // namespace OverflowBehaviorToken
+
 /// Sentinel value a `SetBorderColorActive` / `SetBorderColorInactive` `value`
 /// param may carry instead of a hex string, meaning "track the live system
 /// accent colour". The
@@ -587,6 +598,7 @@ inline constexpr QLatin1StringView MaxWindows{"max-windows"};
 inline constexpr QLatin1StringView SplitRatio{"split-ratio"};
 inline constexpr QLatin1StringView MasterCount{"master-count"};
 inline constexpr QLatin1StringView InsertPosition{"insert-position"};
+inline constexpr QLatin1StringView OverflowBehavior{"overflow-behavior"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader

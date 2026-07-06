@@ -121,8 +121,18 @@ Consequences:
   effectiveInsertPosition(screenForWindow(windowId)) — which ALSO makes the previously-dead per-screen
   InsertPosition config live (latent-bug fix). Daemon injects into the override map. No QML change (enum
   kind). Tests: domain canary, enum validation, resolver mapping asMaster→2. 251/251 green.
-- Remaining: Tier 1 tiling Seam B (SetOverflowBehavior/SetDragBehavior via context-provider closure) →
-  SetAlgorithmParam → deferred tail (ColorScheme, OSD, UnfloatFallbackToZone).
+- **Tier 1 tiling Seam B OverflowBehavior: DONE** (committed). SetOverflowBehavior Context action (enum
+  float/unlimited via OverflowBehaviorToken → AutotileOverflowBehavior int 0/1). Reused the SAME
+  override-map path as Seam A (NOT a context-provider closure — the earlier trace suggested one, but the
+  override map reaches the tile-engine consumer cleanly and is consistent): ContextTilingParams gained
+  overflowBehavior; resolveContextTilingParams reads the slot; new PerScreenKeys::OverflowBehavior; daemon
+  injects; new PerScreenConfigResolver::effectiveOverflowBehavior; effectiveMaxWindows now checks
+  effectiveOverflowBehavior(screenId) instead of the global config (also revives per-screen overflow
+  config). No QML change (enum). 251/251 green.
+- Remaining: Tier 1 tiling Seam B SetDragBehavior (consumer is the STATIC WindowDragAdaptor::computeDragPolicy,
+  2 callers at drag_protocol.cpp:143/539 — resolve effective drag behavior at the caller via m_layoutManager
+  and thread it into computeDragPolicy) → SetAlgorithmParam → deferred tail (ColorScheme, OSD,
+  UnfloatFallbackToZone).
 
 ## Tier 1 — Overlay appearance Context actions  ★ START HERE
 

@@ -261,10 +261,12 @@ struct ContextTilingParams
     /// the resolver maps the wire token to this int so the daemon stores the same
     /// value the per-screen config store uses.
     std::optional<int> insertPosition;
+    /// The AutotileOverflowBehavior int (0 = Float, 1 = Unlimited).
+    std::optional<int> overflowBehavior;
 
     bool isEmpty() const
     {
-        return !maxWindows && !splitRatio && !masterCount && !insertPosition;
+        return !maxWindows && !splitRatio && !masterCount && !insertPosition && !overflowBehavior;
     }
 };
 

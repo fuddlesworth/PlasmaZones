@@ -28,6 +28,7 @@ inline constexpr QLatin1String RespectMinimumSize{"RespectMinimumSize"};
 inline constexpr QLatin1String AnimationsEnabled{"AnimationsEnabled"};
 inline constexpr QLatin1String AnimationDuration{"AnimationDuration"};
 inline constexpr QLatin1String AnimationEasingCurve{"AnimationEasingCurve"};
+inline constexpr QLatin1String OverflowBehavior{"OverflowBehavior"};
 
 } // namespace PerScreenKeys
 } // namespace PhosphorEngine

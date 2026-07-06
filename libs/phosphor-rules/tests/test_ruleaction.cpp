@@ -69,6 +69,7 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetSplitRatio,
     ActionType::SetMasterCount,
     ActionType::SetInsertPosition,
+    ActionType::SetOverflowBehavior,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -540,6 +541,17 @@ private Q_SLOTS:
             QVERIFY(!RuleAction::fromJson(o).has_value());
             for (const QLatin1StringView token :
                  {InsertPositionToken::End, InsertPositionToken::AfterFocused, InsertPositionToken::AsMaster}) {
+                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
+                QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
+            }
+        }
+        // SetOverflowBehavior: closed enum vocabulary.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetOverflowBehavior));
+            o.insert(QStringLiteral("value"), QStringLiteral("cap")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (const QLatin1StringView token : {OverflowBehaviorToken::Float, OverflowBehaviorToken::Unlimited}) {
                 o.insert(QStringLiteral("value"), QString::fromLatin1(token));
                 QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
             }

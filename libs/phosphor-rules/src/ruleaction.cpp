@@ -1260,6 +1260,24 @@ void ActionRegistry::registerBuiltins()
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 13,
     });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOverflowBehavior),
+        .slotFor = constantSlot(ActionSlot::OverflowBehavior),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == OverflowBehaviorToken::Float || v == OverflowBehaviorToken::Unlimited;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{
+            .key = QString(ActionParam::Value),
+            .kind = QStringLiteral("enum"),
+            .enumWireValues = {QString(OverflowBehaviorToken::Float), QString(OverflowBehaviorToken::Unlimited)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 14,
+    });
 }
 
 } // namespace PhosphorRules

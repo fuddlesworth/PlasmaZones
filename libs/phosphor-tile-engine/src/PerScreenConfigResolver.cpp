@@ -274,6 +274,17 @@ bool PerScreenConfigResolver::effectiveSmartGaps(const QString& screenId) const
     return m_engine->config()->smartGaps;
 }
 
+PhosphorTiles::AutotileOverflowBehavior
+PerScreenConfigResolver::effectiveOverflowBehavior(const QString& screenId) const
+{
+    // Per-screen override (config store OR a folded-in context rule) → global config.
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::OverflowBehavior))) {
+        const int clamped = qBound(0, v->toInt(), 1);
+        return static_cast<PhosphorTiles::AutotileOverflowBehavior>(clamped);
+    }
+    return m_engine->config()->overflowBehavior;
+}
+
 PhosphorTiles::AutotileInsertPosition PerScreenConfigResolver::effectiveInsertPosition(const QString& screenId) const
 {
     // Per-screen override (config store OR a folded-in tiling rule) → global config.
@@ -303,11 +314,12 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
         return qBound(PhosphorTiles::AutotileDefaults::MinMaxWindows, v->toInt(),
                       PhosphorTiles::AutotileDefaults::MaxMaxWindows);
 
-    // 2. Global Unlimited: Krohnkite-style "no cap". The sentinel
-    //    (PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel) is passed to std::min
-    //    in recalculateLayout, making the clamp idempotent. Also opens
-    //    onWindowAdded's gate (tiledWindowCount >= maxWin is never true).
-    if (m_engine->config()->overflowBehavior == PhosphorTiles::AutotileOverflowBehavior::Unlimited) {
+    // 2. Unlimited: Krohnkite-style "no cap". Per-screen (a context
+    //    SetOverflowBehavior rule or per-screen config override else global). The
+    //    sentinel (PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel) is
+    //    passed to std::min in recalculateLayout, making the clamp idempotent. Also
+    //    opens onWindowAdded's gate (tiledWindowCount >= maxWin is never true).
+    if (effectiveOverflowBehavior(screenId) == PhosphorTiles::AutotileOverflowBehavior::Unlimited) {
         return PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel;
     }
 
