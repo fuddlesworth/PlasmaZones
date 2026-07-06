@@ -222,12 +222,11 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     node->setSurfaceFrameSize(static_cast<float>(m_surfaceFrameSize.width()),
                               static_cast<float>(m_surfaceFrameSize.height()));
 
-    // Audio spectrum (CAVA), inherited from the base ShaderEffect's
-    // audioSpectrum Q_PROPERTY (the daemon writes it via OverlayService when the
-    // visualizer is on). The node uploads it to binding 6 and fills the UBO's
-    // iAudioSpectrumSize; a pack reads it through surface_audio.glsl. Empty when
-    // audio is off — a no-op the base node deduplicates.
-    node->setAudioSpectrum(audioSpectrumVariant().value<QVector<float>>());
+    // NB: the audio spectrum (CAVA, binding 6 + the UBO's iAudioSpectrumSize) is
+    // pushed by syncBasePropertiesToNode above — the daemon writes the inherited
+    // audioSpectrum Q_PROPERTY via OverlayService, and a pack reads it through
+    // surface_audio.glsl. The audioSpectrumChanged -> update() connection in the
+    // constructor is what re-runs this node sync on a new spectrum.
 
     // ── Sync shader source ───────────────────────────────────────────
     // Reload only on an actual dirty flag (runtime setShaderSource /
