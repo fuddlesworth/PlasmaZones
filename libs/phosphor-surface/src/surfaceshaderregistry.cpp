@@ -717,4 +717,32 @@ QString SurfaceShaderRegistry::paramPreamble(const SurfaceShaderEffect& effect)
     return PhosphorShaders::buildParamPreamble(params);
 }
 
+QString SurfaceShaderRegistry::surfaceEntryPrologue()
+{
+    // `#version` first (GLSL requires it); surface_lib.glsl pulls in the uniform
+    // contract plus the shared geometry / composite / focus helpers a pSurface
+    // body relies on; then the vertex texcoord in and the fragColor out an
+    // entry-only pack no longer declares by hand. A pack needing the noise or
+    // colour modules still `#include`s those in its own body (appended after
+    // this prologue, before include expansion).
+    return QStringLiteral(
+        "#version 450\n"
+        "#include <surface_lib.glsl>\n"
+        "layout(location = 0) in vec2 vTexCoord;\n"
+        "layout(location = 0) out vec4 fragColor;\n");
+}
+
+QList<PhosphorShaders::EntryCandidate> SurfaceShaderRegistry::surfaceEntryCandidates()
+{
+    // pSurface: the whole-fragment entry. The body returns the final
+    // premultiplied colour for the fragment at `uv` (the vertex texcoord); the
+    // generated main() just writes it to fragColor. Single candidate — surface
+    // packs have no per-element loop (that is the overlay category's pZone).
+    static const QString surfaceMain = QStringLiteral(
+        "void main() {\n"
+        "    fragColor = pSurface(vTexCoord);\n"
+        "}\n");
+    return {PhosphorShaders::EntryCandidate{QStringLiteral("pSurface"), surfaceMain}};
+}
+
 } // namespace PhosphorSurfaceShaders

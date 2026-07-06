@@ -10,6 +10,8 @@
 #include <PhosphorRegistry/MetadataPackLoader.h>
 #include <PhosphorRegistry/Registry.h>
 
+#include <PhosphorShaders/ShaderEntryPoint.h>
+
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -183,6 +185,19 @@ public:
     /// `#version` line (via `PhosphorShaders::spliceAfterVersion`). Returns an
     /// empty string when the effect declares no parameters.
     static QString paramPreamble(const SurfaceShaderEffect& effect);
+
+    /// Entry-point scaffold, matching the overlay (`pZone`/`pImage`) and
+    /// animation (`pTransition`/`pIn`+`pOut`) categories. A pack may define
+    /// `vec4 pSurface(vec2 uv)` and omit `main()`; the harness generates
+    /// `void main() { fragColor = pSurface(vTexCoord); }` and prepends the
+    /// prologue (`#version`, `#include <surface_lib.glsl>`, the vertex-in /
+    /// fragColor-out declarations). A pack that writes its own `main()` is
+    /// passed through unchanged. Shared by the daemon (via
+    /// ShaderEffect::setEntryScaffold) and the kwin-effect / validator paths
+    /// (via PhosphorShaders::assembleEntryPoint) so all three compile the
+    /// identical source.
+    static QString surfaceEntryPrologue();
+    static QList<PhosphorShaders::EntryCandidate> surfaceEntryCandidates();
 
 Q_SIGNALS:
     void effectsChanged();

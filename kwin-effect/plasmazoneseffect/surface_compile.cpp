@@ -11,6 +11,7 @@
 #include "../plasmazoneseffect.h"
 #include "shader_internal.h"
 
+#include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
@@ -207,8 +208,16 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     }
     const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
     QString includeError;
-    QString expanded =
-        PhosphorShaders::ShaderIncludeResolver::expandIncludes(rawSource, currentDir, includePaths, &includeError);
+    // Assemble an entry-only pack (a `vec4 pSurface(vec2 uv)` body with no
+    // main()) into a full translation unit BEFORE include expansion — identical
+    // to the daemon bake layer and the animation compile path — so the
+    // prologue's `#include` resolves and the generated main() calls pSurface. A
+    // pack that writes its own main() is returned unchanged.
+    const QString assembledSource = PhosphorShaders::assembleEntryPoint(
+        rawSource, PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryPrologue(),
+        PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryCandidates());
+    QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembledSource, currentDir, includePaths,
+                                                                              &includeError);
     if (expanded.isEmpty()) {
         qCWarning(lcEffect) << "Failed to expand surface shader includes for" << eff.id << ":" << includeError;
         return &packState;

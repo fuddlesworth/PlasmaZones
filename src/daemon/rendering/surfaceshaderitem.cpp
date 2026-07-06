@@ -8,6 +8,7 @@
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorRendering/ShaderNodeRhi.h>
 
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorSurface/SurfaceUniformProfile.h>
 
 #include <QDir>
@@ -265,6 +266,12 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             }
 
             node->setShaderIncludePaths(shaderIncludePaths());
+            // Entry-point scaffold: a pack may define `vec4 pSurface(vec2 uv)`
+            // and omit main(); loadFragmentShader assembles the generated main()
+            // + prologue before include expansion, identical to the kwin-effect
+            // path. A traditional main() pack is passed through unchanged.
+            node->setEntryScaffold(PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryPrologue(),
+                                   PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryCandidates());
             // Push the generated `#define p_<id> ...` preamble (set on this item
             // via the paramPreamble Q_PROPERTY by the host) so loadFragmentShader
             // splices it and keys the bake cache on it. Empty when the pack

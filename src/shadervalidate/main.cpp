@@ -623,8 +623,14 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString raw = QString::fromUtf8(frag.readAll());
             const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
             QString err;
-            const QString expanded =
-                ShaderCompiler::expandSource(raw, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
+            // Assemble an entry-only pack (a `vec4 pSurface(vec2 uv)` body, no
+            // main()) into a full TU before expansion, identical to the daemon /
+            // kwin paths, so `pSurface` packs validate. A main() pack passes
+            // through unchanged.
+            const QString assembled = PhosphorShaders::assembleEntryPoint(
+                raw, SurfaceShaderRegistry::surfaceEntryPrologue(), SurfaceShaderRegistry::surfaceEntryCandidates());
+            const QString expanded = ShaderCompiler::expandSource(
+                assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
             if (expanded.isEmpty()) {
                 out << "  " << fragLabel.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;

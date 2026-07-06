@@ -13,28 +13,26 @@
 // One analytic rounded-rect SDF over the content/frame rect both clips the
 // content to the inner rounded rect and lays the border band over the
 // background, so a translucent border blends with what is behind the surface.
+//
+// Written against the pSurface entry scaffold: this pack defines only
+// `vec4 pSurface(vec2 uv)` and the harness generates the main() + the
+// #version / #include <surface_lib.glsl> / layout prologue (see
+// SurfaceShaderRegistry::surfaceEntryPrologue).
 
-#version 450
-#include <surface_lib.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
-    vec4 tex = surfaceTexel(vTexCoord);
+vec4 pSurface(vec2 uv) {
+    vec4 tex = surfaceTexel(uv);
 
     // Identity-decoration state: before a host wires real geometry the frame
     // rect is degenerate (uSurfaceFrameSize == 0). The SDF below would collapse
     // to "edge everywhere" and paint a border over the whole surface, so pass
     // the captured content through untouched until a real frame arrives.
     if (surfaceFrameDegenerate()) {
-        fragColor = tex;
-        return;
+        return tex;
     }
 
     // Fragment's top-down device pixel; the content rect sits at
     // uSurfaceFrameTopLeft..+uSurfaceFrameSize (device px).
-    vec2 p = surfacePixel(vTexCoord);
+    vec2 p = surfacePixel(uv);
     const float aa = 0.7;
 
     // Pack params are logical px — scale to the device-px geometry space.
@@ -53,5 +51,5 @@ void main() {
     // Clip content to the inner rounded rect; lay the band over transparency,
     // premultiplied. width <= 0 (no border in the chain's params) leaves the
     // content rounded with no band.
-    fragColor = borderComposite(tex, outlineColor, edge, insideMask);
+    return borderComposite(tex, outlineColor, edge, insideMask);
 }
