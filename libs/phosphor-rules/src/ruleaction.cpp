@@ -1295,6 +1295,24 @@ void ActionRegistry::registerBuiltins()
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 15,
     });
+    // SetAlgorithmParam mirrors OverrideOverlayShader: a picker param (the target
+    // algorithm) plus a free-form `params` blob (the custom-parameter values,
+    // validated against the algorithm's declared schema at apply time via
+    // hasCustomParam — so the wire validator only requires the algorithm token).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetAlgorithmParam),
+        .slotFor = constantSlot(ActionSlot::AlgorithmParams),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, ActionParam::Algorithm);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Algorithm), QString(ActionParam::Params)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Algorithm), .kind = QStringLiteral("tilingAlgorithm")}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 16,
+    });
 }
 
 } // namespace PhosphorRules

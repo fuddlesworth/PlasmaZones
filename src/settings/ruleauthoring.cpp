@@ -259,6 +259,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetTilingAlgorithm && key == ActionParam::Algorithm) {
         return PhosphorI18n::tr("Tiling algorithm");
     }
+    if (type == ActionType::SetAlgorithmParam && key == ActionParam::Algorithm) {
+        return PhosphorI18n::tr("Algorithm");
+    }
     if (type == ActionType::SetMaxWindows && key == ActionParam::Value) {
         return PhosphorI18n::tr("Max tiled windows");
     }
@@ -578,6 +581,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetDragBehavior) {
         return PhosphorI18n::tr("Set drag behavior");
+    }
+    if (type == ActionType::SetAlgorithmParam) {
+        return PhosphorI18n::tr("Set algorithm parameter");
     }
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");

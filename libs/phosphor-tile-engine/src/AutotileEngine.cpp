@@ -3397,6 +3397,18 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
             // else: algorithm doesn't support custom params — don't pass any
         }
     }
+    // Layer a per-context SetAlgorithmParam rule override on top of the config
+    // (rule wins per-param). The daemon injected these only when the rule's target
+    // algorithm is this screen's effective algorithm; the hasCustomParam filter is
+    // a second guard so a stale key for another algorithm is dropped.
+    if (m_configResolver && algo->supportsCustomParams()) {
+        const QVariantMap ruleParams = m_configResolver->effectiveCustomParamsOverride(screenId);
+        for (auto pit = ruleParams.constBegin(); pit != ruleParams.constEnd(); ++pit) {
+            if (algo->hasCustomParam(pit.key())) {
+                customParams[pit.key()] = pit.value();
+            }
+        }
+    }
 
     // Let memory-based algorithms prepare their state (e.g., lazily create a PhosphorTiles::SplitTree)
     // before calculateZones(). Virtual dispatch avoids concrete type casts here.

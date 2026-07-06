@@ -121,6 +121,11 @@ public:
     int effectiveMaxWindows(const QString& screenId) const;
     PhosphorTiles::AutotileOverflowBehavior effectiveOverflowBehavior(const QString& screenId) const;
     PhosphorTiles::AutotileInsertPosition effectiveInsertPosition(const QString& screenId) const;
+    /// The per-screen custom-parameter override map (a SetAlgorithmParam rule the
+    /// daemon injected), or an empty map when none. Layered over the global
+    /// per-algorithm config by the engine; the daemon has already gated it on the
+    /// screen's effective algorithm.
+    QVariantMap effectiveCustomParamsOverride(const QString& screenId) const;
     qreal effectiveSplitRatioStep(const QString& screenId) const;
     QString effectiveAlgorithmId(const QString& screenId) const;
     PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;

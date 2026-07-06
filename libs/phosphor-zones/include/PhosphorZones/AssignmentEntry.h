@@ -266,10 +266,17 @@ struct ContextTilingParams
     /// The AutotileDragBehavior int (0 = Float, 1 = Reorder). Consumed by the drag
     /// adaptor (not the tile-engine override map) unlike the other params.
     std::optional<int> dragBehavior;
+    /// A SetAlgorithmParam override: the target algorithm id and the custom-param
+    /// values to layer over that algorithm's config. Empty target = no override.
+    /// The daemon applies @c algorithmParams only when @c algorithmParamTarget is
+    /// the screen's effective algorithm.
+    QString algorithmParamTarget;
+    QVariantMap algorithmParams;
 
     bool isEmpty() const
     {
-        return !maxWindows && !splitRatio && !masterCount && !insertPosition && !overflowBehavior && !dragBehavior;
+        return !maxWindows && !splitRatio && !masterCount && !insertPosition && !overflowBehavior && !dragBehavior
+            && algorithmParamTarget.isEmpty();
     }
 };
 

@@ -137,7 +137,24 @@ Consequences:
   drag_protocol.cpp resolve+pass effectiveReorderMode); the member-method site (:181) calls it directly.
   test_drag_policy call sites updated to pass reorderMode. No QML change (enum). 251/251 green.
   **Tier 1 tiling COMPLETE** (all of Seam A + Seam B).
-- Remaining: SetAlgorithmParam → deferred tail (ColorScheme, OSD, UnfloatFallbackToZone).
+- **SetAlgorithmParam: DONE** (committed). Context action mirroring OverrideOverlayShader: carries the
+  target algorithm token (ActionParam::Algorithm, kind "tilingAlgorithm" picker) + a free-form params
+  blob (ActionParam::Params, allowed-but-undeclared). resolveContextTilingParams reads algorithmParamTarget
+  + algorithmParams into ContextTilingParams. Daemon injects overrides[PerScreenKeys::CustomParams] ONLY
+  when the target == the screen's effective algorithm (guard lives daemon-side where both are known); the
+  engine (AutotileEngine recalculateLayout) layers the per-screen override map over config customParams via
+  new PerScreenConfigResolver::effectiveCustomParamsOverride, filtered again by algo->hasCustomParam. QML:
+  dedicated inline `_algorithmParamsEditor` in ActionRow.qml (a Repeater over
+  tilingAlgorithmPage.customParamsForAlgorithm(algorithm) rendering SettingsSlider/SettingsSwitch/
+  WideComboBox per number/bool/enum, writing to action.params via _writeAlgorithmParam) — a dedicated
+  editor NOT the shader one (schema field names name/minValue/maxValue + number/bool/enum vocab differ);
+  tilingAlgorithmPage exposed in RulesPage.qml _editorAppSettings. Tests: domain canary, validation
+  (algorithm required, params free-form, strict allowedKeys), resolver mapping (target=bsp, ratio=0.7).
+  251/251 green; QML compiles (qmlcachegen). NOT runtime-verified in-app.
+  **ADDITIVE RULE EXPANSION COMPLETE** — all planned actions/fields shipped.
+- Deferred tail (each needs a net-new seam, revisit if wanted): OSD suppression (SuppressOsd — no rule
+  seam, daemon gates read Settings directly), ColorScheme match field (no source in the pipeline; needs a
+  system-scheme watcher), UnfloatFallbackToZone (engine-internal via ISnapSettings, no daemon evaluator seam).
 
 ## Tier 1 — Overlay appearance Context actions  ★ START HERE
 

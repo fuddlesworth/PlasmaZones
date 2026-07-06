@@ -1007,7 +1007,15 @@ private Q_SLOTS:
         const PWR::Rule db =
             tilingRule(QStringLiteral("db"), 25, QStringLiteral("DP-1"),
                        {valueAction(PWR::ActionType::SetDragBehavior, QString(PWR::DragBehaviorToken::Reorder))});
-        QVERIFY(f.store->setAllRules({mw, sr, mc, ip, ob, db}));
+        // SetAlgorithmParam carries a target algorithm token + a free-form params blob.
+        PWR::RuleAction apAction;
+        apAction.type = QString(PWR::ActionType::SetAlgorithmParam);
+        apAction.params.insert(QString(PWR::ActionParam::Algorithm), QStringLiteral("bsp"));
+        QJsonObject apParams;
+        apParams.insert(QStringLiteral("ratio"), 0.7);
+        apAction.params.insert(QString(PWR::ActionParam::Params), apParams);
+        const PWR::Rule ap = tilingRule(QStringLiteral("ap"), 10, QStringLiteral("DP-1"), {apAction});
+        QVERIFY(f.store->setAllRules({mw, sr, mc, ip, ob, db, ap}));
 
         const PhosphorZones::ContextTilingParams p =
             f.registry->resolveContextTilingParams(QStringLiteral("DP-1"), 0, QString());
@@ -1023,6 +1031,8 @@ private Q_SLOTS:
         QCOMPARE(*p.overflowBehavior, 1); // "unlimited" → AutotileOverflowBehavior::Unlimited (1)
         QVERIFY(p.dragBehavior.has_value());
         QCOMPARE(*p.dragBehavior, 1); // "reorder" → AutotileDragBehavior::Reorder (1)
+        QCOMPARE(p.algorithmParamTarget, QStringLiteral("bsp"));
+        QCOMPARE(p.algorithmParams.value(QStringLiteral("ratio")).toDouble(), 0.7);
 
         // A screen the rules do not pin → all-unset (the daemon then leaves the
         // config-derived override map untouched for that screen).

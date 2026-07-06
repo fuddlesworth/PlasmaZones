@@ -71,6 +71,7 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetInsertPosition,
     ActionType::SetOverflowBehavior,
     ActionType::SetDragBehavior,
+    ActionType::SetAlgorithmParam,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -567,6 +568,28 @@ private Q_SLOTS:
                 o.insert(QStringLiteral("value"), QString::fromLatin1(token));
                 QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
             }
+        }
+        // SetAlgorithmParam: requires a non-empty algorithm token; the params blob
+        // is free-form (validated against the algorithm schema at apply time).
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetAlgorithmParam));
+            QVERIFY(!RuleAction::fromJson(o).has_value()); // no algorithm → rejected
+            o.insert(QStringLiteral("algorithm"), QString()); // empty → rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("algorithm"), QStringLiteral("bsp"));
+            QVERIFY(RuleAction::fromJson(o).has_value()); // algorithm alone → accepted
+            QJsonObject blob;
+            blob.insert(QStringLiteral("ratio"), 0.7);
+            o.insert(QStringLiteral("params"), blob); // params allowed alongside
+            const auto reloaded = RuleAction::fromJson(o);
+            QVERIFY(reloaded.has_value());
+            QCOMPARE(
+                reloaded->params.value(QStringLiteral("params")).toObject().value(QStringLiteral("ratio")).toDouble(),
+                0.7);
+            // An unexpected key is still rejected (strict allowedKeys = {algorithm, params}).
+            o.insert(QStringLiteral("bogus"), 1);
+            QVERIFY(!RuleAction::fromJson(o).has_value());
         }
     }
 

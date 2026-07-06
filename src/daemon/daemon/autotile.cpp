@@ -200,6 +200,14 @@ void Daemon::updateAutotileScreens()
             if (tilingParams.overflowBehavior) {
                 overrides[PerScreenKeys::OverflowBehavior] = *tilingParams.overflowBehavior;
             }
+            // Custom-parameter override applies only when the rule's target
+            // algorithm is this screen's effective algorithm — the daemon knows
+            // both, so the algorithm guard lives here. The engine's hasCustomParam
+            // filter is a second guard for the current algo's declared params.
+            if (!tilingParams.algorithmParamTarget.isEmpty() && screenAlgorithms.contains(screenId)
+                && tilingParams.algorithmParamTarget == screenAlgorithms.value(screenId)) {
+                overrides[PerScreenKeys::CustomParams] = tilingParams.algorithmParams;
+            }
 
             // Compare against currently applied overrides to avoid redundant retiles
             QVariantMap current = m_autotileEngine->perScreenOverrides(screenId);

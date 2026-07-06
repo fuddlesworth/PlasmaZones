@@ -581,6 +581,13 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
             params.dragBehavior = 1;
         }
     }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::AlgorithmParams))) {
+        // Target algorithm token + free-form custom-param blob (mirrors the
+        // overlay shader-uniform override). The daemon applies the params only
+        // when the target matches the screen's effective algorithm.
+        params.algorithmParamTarget = action->params.value(PWR::ActionParam::Algorithm).toString();
+        params.algorithmParams = action->params.value(PWR::ActionParam::Params).toObject().toVariantMap();
+    }
     return params;
 }
 

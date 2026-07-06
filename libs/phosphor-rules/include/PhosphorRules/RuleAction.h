@@ -450,6 +450,13 @@ inline constexpr QLatin1StringView SetOverflowBehavior{"setOverflowBehavior"};
 /// Context domain; consumed by the drag adaptor (NOT the tile-engine override
 /// map) — it resolves the effective behavior for the drag's screen.
 inline constexpr QLatin1StringView SetDragBehavior{"setDragBehavior"};
+/// Override an autotile algorithm's custom (Luau-declared) parameters for the
+/// matched context. Carries the target algorithm token (`ActionParam::Algorithm`)
+/// and a free-form nested `params` object (`ActionParam::Params`) of the custom
+/// parameter values — the same shape OverrideOverlayShader uses for shader
+/// uniforms. Applied only when the target algorithm is the screen's effective
+/// algorithm; layered over the global per-algorithm config. Context domain.
+inline constexpr QLatin1StringView SetAlgorithmParam{"setAlgorithmParam"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -612,6 +619,7 @@ inline constexpr QLatin1StringView MasterCount{"master-count"};
 inline constexpr QLatin1StringView InsertPosition{"insert-position"};
 inline constexpr QLatin1StringView OverflowBehavior{"overflow-behavior"};
 inline constexpr QLatin1StringView DragBehavior{"drag-behavior"};
+inline constexpr QLatin1StringView AlgorithmParams{"algorithm-params"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader

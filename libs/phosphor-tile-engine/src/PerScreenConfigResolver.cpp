@@ -274,6 +274,14 @@ bool PerScreenConfigResolver::effectiveSmartGaps(const QString& screenId) const
     return m_engine->config()->smartGaps;
 }
 
+QVariantMap PerScreenConfigResolver::effectiveCustomParamsOverride(const QString& screenId) const
+{
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::CustomParams))) {
+        return v->toMap();
+    }
+    return {};
+}
+
 PhosphorTiles::AutotileOverflowBehavior
 PerScreenConfigResolver::effectiveOverflowBehavior(const QString& screenId) const
 {
