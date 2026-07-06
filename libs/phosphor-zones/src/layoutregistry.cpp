@@ -86,6 +86,12 @@ void LayoutRegistry::setTiledWindowCountProvider(
     m_tiledWindowCountProvider = std::move(provider);
 }
 
+void LayoutRegistry::setScreenOrientationProvider(
+    std::function<std::optional<QString>(const QString& screenId)> provider)
+{
+    m_screenOrientationProvider = std::move(provider);
+}
+
 void LayoutRegistry::setSnappingPreferredProvider(std::function<bool()> provider)
 {
     m_snappingPreferredProvider = std::move(provider);

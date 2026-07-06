@@ -313,28 +313,38 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     map[NormalizedWidth] = overlayGeom.width() / ow;
     map[NormalizedHeight] = overlayGeom.height() / oh;
 
-    // Fill color (RGBA premultiplied alpha) for shader
-    QColor fillColor = zone->useCustomColors() ? zone->highlightColor()
-                                               : (m_settings ? m_settings->highlightColor() : QColor(Qt::blue));
-    qreal alpha = zone->useCustomColors() ? zone->activeOpacity() : (m_settings ? m_settings->activeOpacity() : 0.5);
+    // Fill / border reads cascade zone-custom → context rule → global config.
+    // A per-zone custom value wins outright; otherwise the context overlay rule
+    // (overlayOverride, resolved above) overrides the global setting. Only the
+    // fill RGB is used (premultiplied by the separate opacity), so the colour's
+    // own alpha is stripped here — no double-apply.
+    QColor fillColor = zone->useCustomColors()
+        ? zone->highlightColor()
+        : overlayOverride.highlightColor.value_or(m_settings ? m_settings->highlightColor() : QColor(Qt::blue));
+    qreal alpha = zone->useCustomColors()
+        ? zone->activeOpacity()
+        : overlayOverride.activeOpacity.value_or(m_settings ? m_settings->activeOpacity() : 0.5);
     map[FillR] = fillColor.redF() * alpha;
     map[FillG] = fillColor.greenF() * alpha;
     map[FillB] = fillColor.blueF() * alpha;
     map[FillA] = alpha;
 
     // Border color (RGBA) for shader
-    QColor borderClr =
-        zone->useCustomColors() ? zone->borderColor() : (m_settings ? m_settings->borderColor() : QColor(Qt::white));
+    QColor borderClr = zone->useCustomColors()
+        ? zone->borderColor()
+        : overlayOverride.borderColor.value_or(m_settings ? m_settings->borderColor() : QColor(Qt::white));
     map[BorderR] = borderClr.redF();
     map[BorderG] = borderClr.greenF();
     map[BorderB] = borderClr.blueF();
     map[BorderA] = borderClr.alphaF();
 
-    // Shader params: borderRadius, borderWidth (from zone or settings)
-    map[ShaderBorderRadius] =
-        zone->useCustomColors() ? zone->borderRadius() : (m_settings ? m_settings->borderRadius() : 8);
-    map[ShaderBorderWidth] =
-        zone->useCustomColors() ? zone->borderWidth() : (m_settings ? m_settings->borderWidth() : 2);
+    // Shader params: borderRadius, borderWidth (zone → context rule → global)
+    map[ShaderBorderRadius] = zone->useCustomColors()
+        ? zone->borderRadius()
+        : overlayOverride.borderRadius.value_or(m_settings ? m_settings->borderRadius() : 8);
+    map[ShaderBorderWidth] = zone->useCustomColors()
+        ? zone->borderWidth()
+        : overlayOverride.borderWidth.value_or(m_settings ? m_settings->borderWidth() : 2);
 
     return map;
 }

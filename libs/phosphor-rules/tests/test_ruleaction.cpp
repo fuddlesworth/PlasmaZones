@@ -52,6 +52,17 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     // never per-window.
     ActionType::OverrideOverlayShader,
     ActionType::OverrideOverlayStyle,
+    // Overlay-APPEARANCE overrides (colours / opacities / border dimensions /
+    // zone-number visibility) are context-domain too — resolved in the same
+    // resolveContextOverlay pass, layered over the global Snapping.Zones.* config.
+    ActionType::SetOverlayHighlightColor,
+    ActionType::SetOverlayInactiveColor,
+    ActionType::SetOverlayBorderColor,
+    ActionType::SetOverlayActiveOpacity,
+    ActionType::SetOverlayInactiveOpacity,
+    ActionType::SetOverlayBorderWidth,
+    ActionType::SetOverlayBorderRadius,
+    ActionType::SetOverlayShowZoneNumbers,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -423,6 +434,52 @@ private Q_SLOTS:
             const auto roundTripped = RuleAction::fromJson(reloaded->toJson());
             QVERIFY2(roundTripped.has_value(), type.data());
             QCOMPARE(*roundTripped, *reloaded);
+        }
+    }
+
+    // ── overlay-appearance actions (context-domain) ──
+
+    void testOverlayColorActions_hexOnlyNoAccent()
+    {
+        // The overlay colour actions require a concrete hex — unlike the border
+        // colour actions they REJECT the accent sentinel (their consumer resolves
+        // no token). This is the load-time guard behind that contract.
+        for (const QLatin1StringView type : {ActionType::SetOverlayHighlightColor, ActionType::SetOverlayInactiveColor,
+                                             ActionType::SetOverlayBorderColor}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            // Missing value — rejected.
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            // The accent sentinel is rejected here (accepted only for border colours).
+            o.insert(QStringLiteral("value"), QString(BorderColorToken::Accent));
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("red")); // named colour rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            // Standard QColor hex shapes accepted.
+            for (const QString& good :
+                 {QStringLiteral("#abc"), QStringLiteral("#FF0000"), QStringLiteral("#80FF0000")}) {
+                o.insert(QStringLiteral("value"), good);
+                QVERIFY2(RuleAction::fromJson(o).has_value(), qPrintable(good));
+            }
+        }
+    }
+
+    void testOverlayOpacityActions_range()
+    {
+        // Active / inactive overlay opacity carry a [0, 1] double, same shape as
+        // SetOpacity — reject out-of-range and non-numeric payloads.
+        for (const QLatin1StringView type :
+             {ActionType::SetOverlayActiveOpacity, ActionType::SetOverlayInactiveOpacity}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), 1.5); // > 1 rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), -0.1); // < 0 rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("0.5")); // non-numeric rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 0.5); // in range accepted
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
         }
     }
 

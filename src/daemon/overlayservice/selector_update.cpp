@@ -150,18 +150,24 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
 
     // Update settings-based properties
     if (m_settings) {
-        writeColorSettings(window, m_settings);
+        // Context overlay-appearance overrides layer over config for this
+        // screen's live context, matching the main zone overlay.
+        const PhosphorZones::ContextOverlayOverride overlayOverride =
+            overlayOverrideForScreen(m_layoutManager, screenId);
+        writeColorSettings(window, m_settings, &overlayOverride);
         // PhosphorZones::Zone appearance for the scaled preview. Zone padding
         // honors per-monitor gap RULES (context-rule override → global → default)
         // via the layout registry's current context. This preview passes no
         // layout, so the per-layout tier does not apply here; border width/radius
-        // are global-only (no per-screen key exists).
+        // layer the context overlay rule over the global config value.
         writeQmlProperty(
             window, QStringLiteral("zonePadding"),
             GeometryUtils::getEffectiveInnerGap(
                 nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, m_settings, screenId)));
-        writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
-        writeQmlProperty(window, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
+        writeQmlProperty(window, QStringLiteral("zoneBorderWidth"),
+                         overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
+        writeQmlProperty(window, QStringLiteral("zoneBorderRadius"),
+                         overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
         // Font settings for zone number labels
         writeFontProperties(window, m_settings);
     }

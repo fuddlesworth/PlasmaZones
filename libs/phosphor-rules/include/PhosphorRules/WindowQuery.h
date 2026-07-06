@@ -55,6 +55,8 @@ struct WindowQuery
     std::optional<bool> isModal; ///< modal dialog
     std::optional<bool> hasDecoration; ///< has a server-side title-bar / border
     std::optional<bool> isResizable; ///< window can be resized
+    std::optional<bool> isMovable; ///< window can be moved
+    std::optional<bool> isMaximizable; ///< window can be maximized
     std::optional<int> positionX; ///< frame left edge X in px
     std::optional<int> positionY; ///< frame top edge Y in px
     std::optional<QString> captionNormal; ///< title without the WM-added app-name suffix
@@ -68,6 +70,8 @@ struct WindowQuery
     int virtualDesktop = 0; ///< 0 = all desktops
     QString activity; ///< empty = all activities
     QString mode; ///< current placement mode wire token ("snapping" / "tiling"); a floating window has no mode (empty)
+    QString
+        screenOrientation; ///< "portrait" / "landscape" of the resolving screen; empty = unknown (no geometry provider)
 
     /// Tiled-window count for the screen + desktop being resolved. Optional
     /// rather than defaulted because 0 is a meaningful value (an empty tiled
@@ -130,6 +134,8 @@ struct WindowQuery
             return std::optional<QVariant>(activity);
         case Field::Mode:
             return std::optional<QVariant>(mode);
+        case Field::ScreenOrientation:
+            return std::optional<QVariant>(screenOrientation);
         case Field::TiledWindowCount:
             return tiledWindowCount ? std::optional<QVariant>(*tiledWindowCount) : std::nullopt;
         case Field::IsMaximized:
@@ -160,6 +166,10 @@ struct WindowQuery
             return hasDecoration ? std::optional<QVariant>(*hasDecoration) : std::nullopt;
         case Field::IsResizable:
             return isResizable ? std::optional<QVariant>(*isResizable) : std::nullopt;
+        case Field::IsMovable:
+            return isMovable ? std::optional<QVariant>(*isMovable) : std::nullopt;
+        case Field::IsMaximizable:
+            return isMaximizable ? std::optional<QVariant>(*isMaximizable) : std::nullopt;
         case Field::PositionX:
             return positionX ? std::optional<QVariant>(*positionX) : std::nullopt;
         case Field::PositionY:

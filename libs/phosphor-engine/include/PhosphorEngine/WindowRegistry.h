@@ -53,6 +53,8 @@ struct WindowMetadata
     std::optional<bool> isModal{};
     std::optional<bool> hasDecoration{}; ///< server-side title-bar / border
     std::optional<bool> isResizable{};
+    std::optional<bool> isMovable{}; ///< window can be moved
+    std::optional<bool> isMaximizable{}; ///< window can be maximized
     std::optional<int> width{}; ///< frame width in px
     std::optional<int> height{}; ///< frame height in px
     std::optional<int> positionX{}; ///< frame left edge X in px
@@ -69,8 +71,9 @@ struct WindowMetadata
             && isNotification == other.isNotification && keepAbove == other.keepAbove && keepBelow == other.keepBelow
             && skipTaskbar == other.skipTaskbar && skipPager == other.skipPager && skipSwitcher == other.skipSwitcher
             && isModal == other.isModal && hasDecoration == other.hasDecoration && isResizable == other.isResizable
-            && width == other.width && height == other.height && positionX == other.positionX
-            && positionY == other.positionY && captionNormal == other.captionNormal;
+            && isMovable == other.isMovable && isMaximizable == other.isMaximizable && width == other.width
+            && height == other.height && positionX == other.positionX && positionY == other.positionY
+            && captionNormal == other.captionNormal;
     }
     bool operator!=(const WindowMetadata& other) const
     {

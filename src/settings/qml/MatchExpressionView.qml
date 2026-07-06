@@ -151,6 +151,22 @@ ColumnLayout {
                 break;
             }
         }
+        // Closed string-token dropdowns (Mode, Screen orientation) — resolve the
+        // token to its friendly label from the field entry's options, the same way
+        // windowType does, so the tree shows "Portrait" not the raw "portrait".
+        if (kind === "mode" || kind === "orientation") {
+            for (var m = 0; m < root.matchFieldOptions.length; ++m) {
+                var modeEntry = root.matchFieldOptions[m];
+                if (modeEntry.wire !== fieldWire)
+                    continue;
+                var modeOpts = modeEntry.options || [];
+                for (var mo = 0; mo < modeOpts.length; ++mo) {
+                    if (modeOpts[mo].value === value)
+                        return modeOpts[mo].label || String(value);
+                }
+                break;
+            }
+        }
         return String(value);
     }
 

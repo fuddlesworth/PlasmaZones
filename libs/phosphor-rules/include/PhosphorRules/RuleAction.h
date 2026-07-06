@@ -341,6 +341,27 @@ inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
 /// zone overlay. Resolved daemon-side via `LayoutRegistry::resolveContextOverlay`.
 inline constexpr QLatin1StringView OverrideOverlayShader{"overrideOverlayShader"};
 inline constexpr QLatin1StringView OverrideOverlayStyle{"overrideOverlayStyle"};
+/// Context-domain overrides of the active layout's zone-overlay APPEARANCE —
+/// the colours, opacities, border dimensions and zone-number visibility that
+/// the global `Snapping.Zones.*` config sets. Each is its own slot so
+/// independent rules cascade per-property, mirroring the per-window border
+/// family. A matched context rule (screen / desktop / activity) overrides the
+/// corresponding global setting for that context's overlay; an unset property
+/// falls through to the global config value (config stays authoritative — these
+/// only layer on top). Resolved daemon-side via
+/// `LayoutRegistry::resolveContextOverlay` and consumed by the overlay service.
+/// Colours carry a `#AARRGGBB` hex (`ActionParam::Value`); opacities a [0,1]
+/// double; widths/radii a number; show-zone-numbers a bool. Unlike the border
+/// colour actions there is NO accent sentinel — the overlay consumer resolves
+/// no token, so the value is always a concrete hex.
+inline constexpr QLatin1StringView SetOverlayHighlightColor{"setOverlayHighlightColor"};
+inline constexpr QLatin1StringView SetOverlayInactiveColor{"setOverlayInactiveColor"};
+inline constexpr QLatin1StringView SetOverlayBorderColor{"setOverlayBorderColor"};
+inline constexpr QLatin1StringView SetOverlayActiveOpacity{"setOverlayActiveOpacity"};
+inline constexpr QLatin1StringView SetOverlayInactiveOpacity{"setOverlayInactiveOpacity"};
+inline constexpr QLatin1StringView SetOverlayBorderWidth{"setOverlayBorderWidth"};
+inline constexpr QLatin1StringView SetOverlayBorderRadius{"setOverlayBorderRadius"};
+inline constexpr QLatin1StringView SetOverlayShowZoneNumbers{"setOverlayShowZoneNumbers"};
 /// Disable every animation override on a matched window. The opposite of
 /// the OverrideAnimation* family — the effect's shouldAnimateWindow gate
 /// surfaces this as "no animation for this window, regardless of other
@@ -523,6 +544,17 @@ inline constexpr QLatin1StringView OuterGapRight{"outer-gap-right"};
 // (ActionParam::Value).
 inline constexpr QLatin1StringView OverlayShader{"overlay-shader"};
 inline constexpr QLatin1StringView OverlayStyle{"overlay-style"};
+// Per-context overlay-APPEARANCE slots (one per property so independent rules
+// cascade per-property). Filled by the SetOverlay* appearance context actions,
+// read by `LayoutRegistry::resolveContextOverlay` into ContextOverlayOverride.
+inline constexpr QLatin1StringView OverlayHighlightColor{"overlay-highlight-color"};
+inline constexpr QLatin1StringView OverlayInactiveColor{"overlay-inactive-color"};
+inline constexpr QLatin1StringView OverlayBorderColor{"overlay-border-color"};
+inline constexpr QLatin1StringView OverlayActiveOpacity{"overlay-active-opacity"};
+inline constexpr QLatin1StringView OverlayInactiveOpacity{"overlay-inactive-opacity"};
+inline constexpr QLatin1StringView OverlayBorderWidth{"overlay-border-width"};
+inline constexpr QLatin1StringView OverlayBorderRadius{"overlay-border-radius"};
+inline constexpr QLatin1StringView OverlayShowZoneNumbers{"overlay-show-zone-numbers"};
 // Animation slots are event-scoped: "anim-shader:<event>" / "anim-timing:<event>"
 // / "anim-curve:<event>". Curve and timing are split so they can be overridden
 // independently per event — `resolveAnimationMotionProfile` reads the curve

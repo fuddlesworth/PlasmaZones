@@ -875,6 +875,50 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 
+    // ─── ScreenOrientation is stamped onto context queries and gates rules ────
+    // The orientation provider feeds "portrait" / "landscape" per screen; a rule
+    // matching Field::ScreenOrientation must fire only on the screens the provider
+    // reports that orientation for, proving the stamp reaches a non-assignment
+    // (gap) resolver.
+    void testContextOrientation_stampedAndGatesRule()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // DP-1 is portrait, DP-2 is landscape; DP-3 has unknown geometry (nullopt).
+        f.registry->setScreenOrientationProvider([](const QString& screenId) -> std::optional<QString> {
+            if (screenId == QLatin1String("DP-1")) {
+                return QStringLiteral("portrait");
+            }
+            if (screenId == QLatin1String("DP-2")) {
+                return QStringLiteral("landscape");
+            }
+            return std::nullopt;
+        });
+
+        PWR::RuleAction gapAction;
+        gapAction.type = QString(PWR::ActionType::SetInnerGap);
+        gapAction.params.insert(QString(PWR::ActionParam::Value), 20);
+        PWR::Rule r;
+        r.id = QUuid::createUuid();
+        r.name = QStringLiteral("portrait gap");
+        r.enabled = true;
+        r.priority = 400;
+        r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenOrientation, PWR::Operator::Equals,
+                                                 QStringLiteral("portrait"));
+        r.actions = {gapAction};
+        QVERIFY(f.store->setAllRules({r}));
+
+        // Portrait screen → the orientation stamp matches → gap applies.
+        const PhosphorZones::ContextGapOverride portrait =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(portrait.innerGap.has_value());
+        QCOMPARE(*portrait.innerGap, 20);
+
+        // Landscape screen → orientation token differs → rule inert.
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+        // Unknown geometry → orientation empty → rule inert (no false match).
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-3"), 0, QString()).isEmpty());
+    }
+
     // ─── Per-monitor gap rule overrides the baseline for that screen only ────
     // A per-monitor gap override is authored by the Appearance page as a NORMAL
     // (non-managed) screen-scoped rule: match `ScreenId == screen`, carrying the
@@ -1017,6 +1061,62 @@ private Q_SLOTS:
         QVERIFY(r3.shaderId.has_value());
         QCOMPARE(*r3.shaderId, QStringLiteral("plasma-glow"));
         QCOMPARE(r3.shaderParams.value(QStringLiteral("intensity")).toDouble(), 0.5);
+    }
+
+    // ─── Context overlay-APPEARANCE resolution (SetOverlay* colours / opacities
+    //     / border dimensions / zone-number visibility) ────────────────────────
+    // The appearance actions layer over the global Snapping.Zones.* config: each
+    // fills its own optional on ContextOverlayOverride, and an unmatched context
+    // leaves them all unset so the consumer falls through to config.
+    void testContextOverlay_appearanceOverrides()
+    {
+        const auto valueAction = [](QLatin1StringView type, const QVariant& value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), QJsonValue::fromVariant(value));
+            return a;
+        };
+        PWR::Rule r;
+        r.id = QUuid::createUuid();
+        r.name = QStringLiteral("overlay appearance");
+        r.enabled = true;
+        r.priority = 400;
+        r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
+        r.actions = {
+            valueAction(PWR::ActionType::SetOverlayHighlightColor, QStringLiteral("#FF112233")),
+            valueAction(PWR::ActionType::SetOverlayInactiveColor, QStringLiteral("#80445566")),
+            valueAction(PWR::ActionType::SetOverlayBorderColor, QStringLiteral("#FFEEDDCC")),
+            valueAction(PWR::ActionType::SetOverlayActiveOpacity, 0.5),
+            valueAction(PWR::ActionType::SetOverlayInactiveOpacity, 0.25),
+            valueAction(PWR::ActionType::SetOverlayBorderWidth, 3),
+            valueAction(PWR::ActionType::SetOverlayBorderRadius, 12),
+            valueAction(PWR::ActionType::SetOverlayShowZoneNumbers, false),
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        QVERIFY(f.store->setAllRules({r}));
+
+        const PhosphorZones::ContextOverlayOverride resolved =
+            f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(resolved.highlightColor.has_value());
+        QCOMPARE(*resolved.highlightColor, QColor(QStringLiteral("#FF112233")));
+        QVERIFY(resolved.inactiveColor.has_value());
+        QCOMPARE(*resolved.inactiveColor, QColor(QStringLiteral("#80445566")));
+        QVERIFY(resolved.borderColor.has_value());
+        QCOMPARE(*resolved.borderColor, QColor(QStringLiteral("#FFEEDDCC")));
+        QVERIFY(resolved.activeOpacity.has_value());
+        QCOMPARE(*resolved.activeOpacity, 0.5);
+        QVERIFY(resolved.inactiveOpacity.has_value());
+        QCOMPARE(*resolved.inactiveOpacity, 0.25);
+        QVERIFY(resolved.borderWidth.has_value());
+        QCOMPARE(*resolved.borderWidth, 3);
+        QVERIFY(resolved.borderRadius.has_value());
+        QCOMPARE(*resolved.borderRadius, 12);
+        QVERIFY(resolved.showZoneNumbers.has_value());
+        QCOMPARE(*resolved.showZoneNumbers, false);
+
+        // An unpinned context leaves every appearance field unset (config wins).
+        QVERIFY(f.registry->resolveContextOverlay(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 
     // ─── Context lock resolution (ActionSlot::Locked) ─────────────────────

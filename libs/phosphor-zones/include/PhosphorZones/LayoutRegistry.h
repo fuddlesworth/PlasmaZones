@@ -263,6 +263,22 @@ public:
             provider);
 
     /**
+     * @brief Inject a callback that returns a screen's orientation token
+     * ("portrait" / "landscape"), or std::nullopt when the geometry is unknown
+     * (so an orientation predicate stays inert there).
+     *
+     * The token is stamped onto every windowless context WindowQuery this
+     * registry builds (assignment, gap, lock, overlay, default-assignment), so an
+     * orientation rule can drive any context slot — for example a different
+     * tiling algorithm on a rotated (portrait) monitor. Orientation derives from
+     * screen geometry alone, independent of the resolved layout, so it carries no
+     * recursion risk (unlike an active-layout query). The daemon wires this to
+     * @c ScreenManager::screenGeometry. Same threading contract as
+     * @ref setTiledWindowCountProvider.
+     */
+    void setScreenOrientationProvider(std::function<std::optional<QString>(const QString& screenId)> provider);
+
+    /**
      * @brief Inject a callback that returns true when Snapping is the
      * user's preferred default mode (regardless of whether a default
      * snapping layout id is configured).
@@ -397,6 +413,22 @@ public:
     /// registry.
     ContextOverlayOverride resolveContextOverlay(const QString& screenId, int virtualDesktop,
                                                  const QString& activity) const override;
+
+    /// Stamp the screen-orientation token onto @p query from
+    /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
+    /// returns nullopt). Called at every windowless-context query build site so a
+    /// @c Field::ScreenOrientation predicate can match regardless of which
+    /// context slot (assignment / gap / lock / overlay) is being resolved.
+    /// Orientation is geometry-derived and layout-independent, so this is safe to
+    /// call from the assignment cascade (no recursion, unlike an active-layout read).
+    void stampScreenOrientation(PhosphorRules::WindowQuery& query, const QString& screenId) const
+    {
+        if (m_screenOrientationProvider) {
+            if (const auto token = m_screenOrientationProvider(screenId)) {
+                query.screenOrientation = *token;
+            }
+        }
+    }
 
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());
@@ -960,6 +992,11 @@ private:
     /// can match @c Field::TiledWindowCount. See @ref setTiledWindowCountProvider.
     std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)>
         m_tiledWindowCountProvider;
+    /// Empty = provider unset. Returns a screen's orientation token
+    /// ("portrait" / "landscape"), or nullopt when geometry is unknown. Stamped
+    /// onto every windowless context query so a Field::ScreenOrientation predicate
+    /// can match. See @ref setScreenOrientationProvider.
+    std::function<std::optional<QString>(const QString& screenId)> m_screenOrientationProvider;
     /// Empty = provider unset (legacy behaviour). Returns true when
     /// the user has snapping mode enabled in settings, regardless of
     /// whether a global default snap layout id is configured. See

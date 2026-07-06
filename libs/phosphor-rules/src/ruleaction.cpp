@@ -95,6 +95,10 @@ bool hasHexColorOrAccent(const QJsonObject& params, QLatin1StringView key)
 constexpr double kMaxBorderWidth = 10.0;
 constexpr double kMaxBorderRadius = 20.0;
 constexpr double kMaxGap = 500.0;
+// Zone-overlay border dimensions have their own bounds mirroring the global
+// `Snapping.Zones.Border` config ranges (width 0-10, radius 0-50) — the overlay
+// radius goes wider than the per-window `kMaxBorderRadius` (20).
+constexpr double kMaxOverlayBorderRadius = 50.0;
 
 } // namespace
 
@@ -747,6 +751,147 @@ void ActionRegistry::registerBuiltins()
                      .enumWireValues = {QString(OverlayStyleToken::Rectangles), QString(OverlayStyleToken::Preview)}}},
         .category = QStringLiteral("overlay"),
         .displayOrder = 1,
+        .tags = {QString(Tag::Overlay)},
+    });
+
+    // ── per-context overlay-APPEARANCE slots (domain Context) ──
+    // Colours / opacities / border dimensions / zone-number visibility that
+    // override the global Snapping.Zones.* config for a matched context. One
+    // slot per property so independent rules cascade. Resolved daemon-side by
+    // LayoutRegistry::resolveContextOverlay; an unset property falls through to
+    // the global config value (config stays authoritative). No Tag::Effect —
+    // these are overlay-service reads, not KWin-effect window appearance.
+    //
+    // The three colour actions share a shape, so a small table keeps type and
+    // slot in lockstep per row (mirroring the per-side gap loop). Colours use
+    // the plain hex validator — NO accent sentinel, since the overlay consumer
+    // resolves no token.
+    struct OverlayColor
+    {
+        QLatin1StringView type;
+        QLatin1StringView slot;
+        int order;
+    };
+    for (const OverlayColor& c : {
+             OverlayColor{ActionType::SetOverlayHighlightColor, ActionSlot::OverlayHighlightColor, 2},
+             OverlayColor{ActionType::SetOverlayInactiveColor, ActionSlot::OverlayInactiveColor, 3},
+             OverlayColor{ActionType::SetOverlayBorderColor, ActionSlot::OverlayBorderColor, 4},
+         }) {
+        const QString slot = QString(c.slot);
+        registerAction(ActionDescriptor{
+            .type = QString(c.type),
+            .slotFor =
+                [slot](const QJsonObject&) {
+                    return slot;
+                },
+            .validate =
+                [](const QJsonObject& p) {
+                    return hasHexColor(p, ActionParam::Value);
+                },
+            .terminal = false,
+            .allowedKeys = {QString(ActionParam::Value)},
+            .domain = ActionDomain::Context,
+            .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+            .category = QStringLiteral("overlay"),
+            .displayOrder = c.order,
+            .tags = {QString(Tag::Overlay)},
+        });
+    }
+    // Active / inactive overlay opacity — [0, 1] double on the wire, edited as a
+    // percent (scale 0.01), mirroring SetOpacity. Defaults match the global
+    // config (activeOpacity 0.5, inactiveOpacity 0.3).
+    struct OverlayOpacity
+    {
+        QLatin1StringView type;
+        QLatin1StringView slot;
+        double defaultDisplay;
+        int order;
+    };
+    for (const OverlayOpacity& o : {
+             OverlayOpacity{ActionType::SetOverlayActiveOpacity, ActionSlot::OverlayActiveOpacity, 50.0, 5},
+             OverlayOpacity{ActionType::SetOverlayInactiveOpacity, ActionSlot::OverlayInactiveOpacity, 30.0, 6},
+         }) {
+        const QString slot = QString(o.slot);
+        registerAction(ActionDescriptor{
+            .type = QString(o.type),
+            .slotFor =
+                [slot](const QJsonObject&) {
+                    return slot;
+                },
+            .validate =
+                [](const QJsonObject& p) {
+                    const QJsonValue v = p.value(ActionParam::Value);
+                    if (!v.isDouble()) {
+                        return false;
+                    }
+                    const double d = v.toDouble();
+                    return d >= 0.0 && d <= 1.0;
+                },
+            .terminal = false,
+            .allowedKeys = {QString(ActionParam::Value)},
+            .domain = ActionDomain::Context,
+            .params = {P{.key = QString(ActionParam::Value),
+                         .kind = QStringLiteral("percent"),
+                         .min = 0.0,
+                         .max = 100.0,
+                         .scale = 0.01,
+                         .defaultDisplay = o.defaultDisplay}},
+            .category = QStringLiteral("overlay"),
+            .displayOrder = o.order,
+            .tags = {QString(Tag::Overlay)},
+        });
+    }
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOverlayBorderWidth),
+        .slotFor = constantSlot(ActionSlot::OverlayBorderWidth),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, kMaxBorderWidth);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 0.0,
+                     .max = kMaxBorderWidth,
+                     .defaultDisplay = 2.0}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 7,
+        .tags = {QString(Tag::Overlay)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOverlayBorderRadius),
+        .slotFor = constantSlot(ActionSlot::OverlayBorderRadius),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, kMaxOverlayBorderRadius);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 0.0,
+                     .max = kMaxOverlayBorderRadius,
+                     .defaultDisplay = 8.0}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 8,
+        .tags = {QString(Tag::Overlay)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOverlayShowZoneNumbers),
+        .slotFor = constantSlot(ActionSlot::OverlayShowZoneNumbers),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 9,
         .tags = {QString(Tag::Overlay)},
     });
 

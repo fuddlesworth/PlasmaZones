@@ -811,6 +811,20 @@ bool Daemon::init()
             }
             return state->tiledWindowCount();
         });
+    // Orientation provider — derives "portrait" / "landscape" from the screen's
+    // geometry so a Field::ScreenOrientation rule can drive any context slot on a
+    // rotated monitor. Returns nullopt for an unknown / invalid geometry (the
+    // predicate then stays inert). A square screen is treated as landscape.
+    m_layoutManager->setScreenOrientationProvider([this](const QString& screenId) -> std::optional<QString> {
+        if (!m_screenManager) {
+            return std::nullopt;
+        }
+        const QRect geom = m_screenManager->screenGeometry(screenId);
+        if (!geom.isValid()) {
+            return std::nullopt;
+        }
+        return geom.height() > geom.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+    });
     // Snapping-preferred provider — separate from defaultLayoutIdProvider
     // because the user can have snapping enabled WITHOUT a global default
     // snap layout id (per-screen assignments cover everything). Without
@@ -2106,6 +2120,7 @@ void Daemon::stop()
         m_layoutManager->setDefaultLayoutIdProvider({});
         m_layoutManager->setDefaultAutotileAlgorithmProvider({});
         m_layoutManager->setTiledWindowCountProvider({});
+        m_layoutManager->setScreenOrientationProvider({});
         m_layoutManager->setSnappingPreferredProvider({});
         m_layoutManager->setDefaultAssignmentSuppressedProvider({});
     }

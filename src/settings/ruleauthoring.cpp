@@ -74,6 +74,8 @@ PickerCategory fieldCategory(Field f)
     case Field::IsSticky:
     case Field::HasDecoration:
     case Field::IsResizable:
+    case Field::IsMovable:
+    case Field::IsMaximizable:
         return {PhosphorI18n::tr("State"), 3};
     // NETWM "skip" hints — whether the window opts out of the taskbar, pager,
     // or Alt+Tab switcher.
@@ -97,6 +99,7 @@ PickerCategory fieldCategory(Field f)
     case Field::Activity:
     case Field::Mode:
     case Field::TiledWindowCount:
+    case Field::ScreenOrientation:
         return {PhosphorI18n::tr("Context"), 0};
     }
     return {PhosphorI18n::tr("Other"), 99};
@@ -157,6 +160,10 @@ QString fieldDescription(Field f)
         return PhosphorI18n::tr("Whether the window has a server-side title-bar and border.");
     case Field::IsResizable:
         return PhosphorI18n::tr("Whether the window can be resized.");
+    case Field::IsMovable:
+        return PhosphorI18n::tr("Whether the window can be moved.");
+    case Field::IsMaximizable:
+        return PhosphorI18n::tr("Whether the window can be maximized.");
     case Field::PositionX:
         return PhosphorI18n::tr("The window's left-edge X position in pixels.");
     case Field::PositionY:
@@ -185,6 +192,10 @@ QString fieldDescription(Field f)
             "How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as "
             "windows open and close, for example a centered single-window layout that gives way once a second window "
             "opens.");
+    case Field::ScreenOrientation:
+        return PhosphorI18n::tr(
+            "Whether the monitor is in portrait or landscape orientation. Lets a rule pick a different layout or "
+            "algorithm on a rotated screen.");
     }
     return QString();
 }
@@ -324,6 +335,31 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
         return PhosphorI18n::tr("Overlay style");
+    }
+    // Context overlay-appearance overrides (all single-value, keyed ActionParam::Value).
+    if (type == ActionType::SetOverlayHighlightColor && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Highlight color");
+    }
+    if (type == ActionType::SetOverlayInactiveColor && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Inactive zone color");
+    }
+    if (type == ActionType::SetOverlayBorderColor && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Border color");
+    }
+    if (type == ActionType::SetOverlayActiveOpacity && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Active opacity (%)");
+    }
+    if (type == ActionType::SetOverlayInactiveOpacity && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Inactive opacity (%)");
+    }
+    if (type == ActionType::SetOverlayBorderWidth && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Border width (px)");
+    }
+    if (type == ActionType::SetOverlayBorderRadius && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Corner radius (px)");
+    }
+    if (type == ActionType::SetOverlayShowZoneNumbers && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Show zone numbers (off = hide)");
     }
     if (type == ActionType::RouteToScreen && key == ActionParam::TargetScreenId) {
         return PhosphorI18n::tr("Monitor");
@@ -508,6 +544,30 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::OverrideOverlayStyle) {
         return PhosphorI18n::tr("Set overlay style");
     }
+    if (type == ActionType::SetOverlayHighlightColor) {
+        return PhosphorI18n::tr("Set overlay highlight color");
+    }
+    if (type == ActionType::SetOverlayInactiveColor) {
+        return PhosphorI18n::tr("Set overlay inactive color");
+    }
+    if (type == ActionType::SetOverlayBorderColor) {
+        return PhosphorI18n::tr("Set overlay border color");
+    }
+    if (type == ActionType::SetOverlayActiveOpacity) {
+        return PhosphorI18n::tr("Set overlay active opacity");
+    }
+    if (type == ActionType::SetOverlayInactiveOpacity) {
+        return PhosphorI18n::tr("Set overlay inactive opacity");
+    }
+    if (type == ActionType::SetOverlayBorderWidth) {
+        return PhosphorI18n::tr("Set overlay border width");
+    }
+    if (type == ActionType::SetOverlayBorderRadius) {
+        return PhosphorI18n::tr("Set overlay corner radius");
+    }
+    if (type == ActionType::SetOverlayShowZoneNumbers) {
+        return PhosphorI18n::tr("Show zone numbers");
+    }
     if (type == ActionType::ExcludeAnimations) {
         return PhosphorI18n::tr("Exclude from animations");
     }
@@ -612,6 +672,9 @@ QString boolActionStateLabel(const QString& type, bool on)
     }
     if (type == ActionType::SetUsePerSideOuterGap) {
         return on ? PhosphorI18n::tr("Per-side outer gaps") : PhosphorI18n::tr("Uniform outer gap");
+    }
+    if (type == ActionType::SetOverlayShowZoneNumbers) {
+        return on ? PhosphorI18n::tr("Show zone numbers") : PhosphorI18n::tr("Hide zone numbers");
     }
     return QString();
 }
@@ -736,6 +799,30 @@ QVariantList matchFields()
                 {QLatin1StringView("tiling"), PhosphorI18n::tr("Tiling")},
             });
             for (const auto& opt : kModes) {
+                QVariantMap option;
+                const QString wire = QString(opt.wire);
+                option[QStringLiteral("value")] = wire;
+                option[QStringLiteral("wire")] = wire;
+                option[QStringLiteral("label")] = opt.label;
+                options.append(option);
+            }
+            entry[QStringLiteral("options")] = options;
+        } else if (f == Field::ScreenOrientation) {
+            // String-valued on the wire (the orientation token), closed vocabulary
+            // — a dropdown of the friendly tokens, same shape as Mode. The value IS
+            // the wire token ("portrait" / "landscape").
+            kind = QStringLiteral("orientation");
+            QVariantList options;
+            struct OrientationEntry
+            {
+                QLatin1StringView wire;
+                QString label;
+            };
+            const std::array kOrientations = std::to_array<OrientationEntry>({
+                {QLatin1StringView("landscape"), PhosphorI18n::tr("Landscape")},
+                {QLatin1StringView("portrait"), PhosphorI18n::tr("Portrait")},
+            });
+            for (const auto& opt : kOrientations) {
                 QVariantMap option;
                 const QString wire = QString(opt.wire);
                 option[QStringLiteral("value")] = wire;
@@ -947,11 +1034,16 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             payload[key] = defaultDisplay.isValid() ? QVariant(defaultDisplay.toBool()) : QVariant(false);
         } else if (kind == QLatin1String("color")) {
             // Colour kind has no numeric `defaultDisplay` (that field is a
-            // double); seed the accent sentinel so a fresh border-colour rule
-            // (SetBorderColorActive / SetBorderColorInactive) passes the
-            // validator and follows the system accent until the user picks a
-            // concrete colour.
-            payload[key] = QString(PhosphorRules::BorderColorToken::Accent);
+            // double). The border-colour actions seed the accent sentinel so a
+            // fresh rule follows the system accent until the user picks a colour.
+            // The overlay-colour actions have NO accent concept (their consumer
+            // resolves no token — validator is plain hex), so seed a concrete
+            // hex (the Plasma default blue, matching the colour picker's own
+            // empty-value fallback) that passes `hasHexColor`.
+            const bool isBorderColor = typeWire == QString(PhosphorRules::ActionType::SetBorderColorActive)
+                || typeWire == QString(PhosphorRules::ActionType::SetBorderColorInactive);
+            payload[key] =
+                isBorderColor ? QString(PhosphorRules::BorderColorToken::Accent) : QStringLiteral("#FF3DAEE9");
         } else if (kind == QLatin1String("zoneOrdinals")) {
             // Seed a valid single-zone default ([1]) so a fresh SnapToZone rule
             // passes the validator (non-empty array of positive ordinals) before

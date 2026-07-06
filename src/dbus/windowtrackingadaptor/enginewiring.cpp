@@ -431,6 +431,8 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     query.isModal = meta->isModal;
     query.hasDecoration = meta->hasDecoration;
     query.isResizable = meta->isResizable;
+    query.isMovable = meta->isMovable;
+    query.isMaximizable = meta->isMaximizable;
     query.width = meta->width;
     query.height = meta->height;
     query.positionX = meta->positionX;

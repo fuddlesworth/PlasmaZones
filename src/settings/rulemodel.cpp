@@ -162,6 +162,19 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
         return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field), label);
     }
 
+    // Screen orientation is a closed wire-token vocabulary too — render the
+    // friendly label ("Screen orientation: Portrait") like Mode above.
+    if (predicate.field == Field::ScreenOrientation) {
+        const QString token = predicate.value.toString();
+        QString label = token;
+        if (token == QLatin1String("portrait")) {
+            label = PhosphorI18n::tr("Portrait");
+        } else if (token == QLatin1String("landscape")) {
+            label = PhosphorI18n::tr("Landscape");
+        }
+        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field), label);
+    }
+
     // Boolean fields (Maximized, Keep above, Skip taskbar, …) render their
     // value as On / Off instead of the raw JSON "true" / "false" the generic
     // toString() fallback would emit, matching the editor toggle and the
@@ -760,6 +773,10 @@ QString RuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Decorated");
     case Field::IsResizable:
         return PhosphorI18n::tr("Resizable");
+    case Field::IsMovable:
+        return PhosphorI18n::tr("Movable");
+    case Field::IsMaximizable:
+        return PhosphorI18n::tr("Maximizable");
     case Field::PositionX:
         return PhosphorI18n::tr("Position X");
     case Field::PositionY:
@@ -778,6 +795,8 @@ QString RuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Mode");
     case Field::TiledWindowCount:
         return PhosphorI18n::tr("Tiled window count");
+    case Field::ScreenOrientation:
+        return PhosphorI18n::tr("Screen orientation");
     }
     return QString();
 }

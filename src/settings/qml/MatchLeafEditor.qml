@@ -320,6 +320,9 @@ RowLayout {
             if (leaf._valueKind === "mode")
                 return modeValueEditor;
 
+            if (leaf._valueKind === "orientation")
+                return orientationValueEditor;
+
             return stringValueEditor;
         }
     }
@@ -644,6 +647,42 @@ RowLayout {
                 return String(v);
             }
             Accessible.name: i18n("Placement mode")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
+        }
+    }
+
+    Component {
+        id: orientationValueEditor
+
+        WideComboBox {
+            // Screen orientation is a string field whose value IS the wire token
+            // ("portrait" / "landscape"); the options carry {value, wire, label}
+            // triples, same shape as the mode editor above.
+            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+
+            model: _options
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = leaf.node.value;
+                for (var i = 0; i < _options.length; ++i) {
+                    if (_options[i].value === target)
+                        return i;
+                }
+                return -1;
+            }
+            displayText: {
+                if (currentIndex >= 0)
+                    return currentText;
+                var v = leaf.node.value;
+                if (v === undefined || v === null || v === "")
+                    return i18n("Choose an orientation…");
+                return String(v);
+            }
+            Accessible.name: i18n("Screen orientation")
             onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);

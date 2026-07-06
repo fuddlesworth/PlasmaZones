@@ -58,12 +58,17 @@ enum class Field : int {
     Mode = 34, ///< context — current placement mode (snapping / tiling)
     // ── Context tiling-environment field [35] ────────────────────────────
     TiledWindowCount = 35, ///< context — tiled windows on this screen + desktop
+    // ── Window capability fields [36, 37] ────────────────────────────────
+    IsMovable = 36, ///< window can be moved
+    IsMaximizable = 37, ///< window can be maximized
+    // ── Context screen-orientation field [38] ────────────────────────────
+    ScreenOrientation = 38, ///< context — "portrait" / "landscape" of the resolving screen
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::TiledWindowCount) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::ScreenOrientation) + 1;
 
 // ── Field descriptor table ──────────────────────────────────────────────────
 // Single source of truth for every field's wire string, value-kind, and
@@ -147,6 +152,16 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     // tiling-algorithm slot of the assignment cascade. Absent (predicate
     // false) when the resolving screen is not actively tiling.
     {Field::TiledWindowCount, QLatin1StringView("tiledWindowCount"), FieldType::Int, FieldSource::Context},
+    // [36, 37] — Window capability flags (can the window be moved / maximized).
+    // Window-sourced like IsResizable, so inert during windowless context queries.
+    {Field::IsMovable, QLatin1StringView("isMovable"), FieldType::Bool, FieldSource::Window},
+    {Field::IsMaximizable, QLatin1StringView("isMaximizable"), FieldType::Bool, FieldSource::Window},
+    // [38] — Screen orientation ("portrait" / "landscape") of the screen being
+    // resolved. String-valued (Equals against the token) and Context-sourced so
+    // it is present during windowless context resolution — which lets an
+    // orientation rule drive the layout/algorithm assignment for a rotated
+    // monitor. Empty (predicate false) when no geometry provider is wired.
+    {Field::ScreenOrientation, QLatin1StringView("screenOrientation"), FieldType::String, FieldSource::Context},
 };
 static_assert(sizeof(kFieldTable) / sizeof(kFieldTable[0]) == static_cast<unsigned>(FieldCount),
               "kFieldTable must have one entry per Field");

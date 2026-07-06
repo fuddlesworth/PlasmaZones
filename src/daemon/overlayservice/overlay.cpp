@@ -737,12 +737,22 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
 
     PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
 
+    // Per-context overlay overrides (shader / style + appearance) resolved once
+    // for this screen's live context; layered over config below and reused by
+    // the shader block further down.
+    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
+
     if (m_settings) {
-        writeColorSettings(slot, m_settings);
-        writeQmlProperty(slot, QStringLiteral("borderWidth"), m_settings->borderWidth());
-        writeQmlProperty(slot, QStringLiteral("borderRadius"), m_settings->borderRadius());
+        writeColorSettings(slot, m_settings, &overlayOverride);
+        writeQmlProperty(slot, QStringLiteral("borderWidth"),
+                         overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
+        writeQmlProperty(slot, QStringLiteral("borderRadius"),
+                         overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
         writeQmlProperty(slot, QStringLiteral("enableBlur"), m_settings->enableBlur());
-        bool showNumbers = m_settings->showZoneNumbers() && (!screenLayout || screenLayout->showZoneNumbers());
+        // The rule overrides the global show-numbers setting; the per-layout
+        // gate still wins (a layout that hides numbers keeps them hidden).
+        bool showNumbers = overlayOverride.showZoneNumbers.value_or(m_settings->showZoneNumbers())
+            && (!screenLayout || screenLayout->showZoneNumbers());
         writeQmlProperty(slot, QStringLiteral("showNumbers"), showNumbers);
         writeFontProperties(slot, m_settings);
     }
@@ -752,8 +762,6 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     if (windowIsShader && screenUsesShader && screenLayout) {
         auto* registry = m_shaderRegistry;
         if (registry) {
-            const PhosphorZones::ContextOverlayOverride overlayOverride =
-                overlayOverrideForScreen(m_layoutManager, screenId);
             const QString shaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
             const QVariantMap rawParams =
                 overlayOverride.shaderId ? overlayOverride.shaderParams : screenLayout->shaderParams();

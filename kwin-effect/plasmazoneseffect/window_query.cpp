@@ -98,6 +98,16 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     // virtualDesktop / activity are derived here, mirroring the daemon-side
     // setWindowMetadata derivation in window_identity.cpp (0 / "" = all/unknown).
     query.screenId = screenId;
+    // Orientation of the window's screen ("portrait" when taller than wide), so a
+    // window rule can match ScreenOrientation the same way a context rule does.
+    // Left empty (inert) when the output or its geometry is unavailable; a square
+    // screen counts as landscape, matching the daemon-side orientation provider.
+    if (const auto* output = w->screen()) {
+        const QRect g = output->geometry();
+        if (g.isValid()) {
+            query.screenOrientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+        }
+    }
     // `WindowQuery` fields are `std::optional` — leaving a field disengaged
     // makes a predicate over it inert (returns false). Engaging it with an
     // empty string instead would silently match `Equals ""` and `Regex "^$"`,
@@ -170,6 +180,8 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
         query.skipTaskbar = kw->skipTaskbar();
         query.skipPager = kw->skipPager();
         query.isResizable = kw->isResizable();
+        query.isMovable = kw->isMovable();
+        query.isMaximizable = kw->isMaximizable();
         // captionNormal is the raw WM_NAME without the WM-added " — App" suffix
         // that caption() (used for Title above) includes. Gate non-empty like
         // the other string fields so a disengaged optional stays a non-match.

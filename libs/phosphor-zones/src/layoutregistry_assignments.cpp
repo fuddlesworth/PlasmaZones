@@ -172,6 +172,10 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             // on a rule carrying one of those actions stays inert (the field is
             // absent there) by design.
             query.tiledWindowCount = tiledCount;
+            // Orientation is layout-independent, so it is stamped on EVERY context
+            // query (unlike tiledWindowCount / activeLayout) — an orientation rule
+            // can drive the assignment itself (portrait monitor → different layout).
+            stampScreenOrientation(query, screenId);
 
             // Highest-priority matching rule per slot wins (ties by list order).
             const auto slotMatch = [&](bool (*carriesSlot)(const PWR::Rule&)) -> const PWR::Rule* {
@@ -260,7 +264,8 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
             // Thread the placement mode into the query so a per-mode `Mode
             // Equals "snapping"/"tiling"` gap rule resolves for the asking
             // engine and stays inert for the other.
-            const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, mode);
+            PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, mode);
+            stampScreenOrientation(query, screenId);
 
             // Resolve each gap slot from the highest-priority matching rule that
             // carries that slot's action. The CATCH-ALL managed baseline rule is
@@ -367,7 +372,8 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
     // layout-switch attempt.
     return resolveCachedContext(m_contextLockCache, m_contextLockCacheRevision, screenId, virtualDesktop, activity,
                                 QString(), [&]() -> bool {
-                                    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+                                    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+                                    stampScreenOrientation(query, screenId);
                                     const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
                                     if (const auto action = resolved.slot(QString(PWR::ActionSlot::Locked))) {
                                         return action->params.value(PWR::ActionParam::Value).toBool();
@@ -393,7 +399,8 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
 
     return resolveCachedContext(m_contextDefaultAssignmentCache, m_contextDefaultAssignmentCacheRevision, screenId,
                                 virtualDesktop, activity, QString(), [&]() -> std::optional<bool> {
-                                    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+                                    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+                                    stampScreenOrientation(query, screenId);
                                     const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
                                     if (const auto action =
                                             resolved.slot(QString(PWR::ActionSlot::DefaultAssignment))) {
@@ -434,7 +441,8 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
         m_contextOverlayCache, m_contextOverlayCacheRevision, screenId, virtualDesktop, activity, QString(),
         [&]() -> ContextOverlayOverride {
             ContextOverlayOverride overlay;
-            const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            stampScreenOrientation(query, screenId);
             const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
 
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayShader))) {
@@ -456,6 +464,34 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
                 } else if (token == PWR::OverlayStyleToken::Preview) {
                     overlay.style = 1;
                 }
+            }
+            // Appearance overrides — each fills its own optional so an unset
+            // property falls through to the global config value at the consumer.
+            // Colours are parsed from the `#AARRGGBB` wire hex; QColor reads a
+            // 9-digit hex alpha-first, matching the picker's toHexArgb output.
+            if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayHighlightColor))) {
+                overlay.highlightColor = QColor(action->params.value(PWR::ActionParam::Value).toString());
+            }
+            if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayInactiveColor))) {
+                overlay.inactiveColor = QColor(action->params.value(PWR::ActionParam::Value).toString());
+            }
+            if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayBorderColor))) {
+                overlay.borderColor = QColor(action->params.value(PWR::ActionParam::Value).toString());
+            }
+            if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayActiveOpacity))) {
+                overlay.activeOpacity = action->params.value(PWR::ActionParam::Value).toDouble();
+            }
+            if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayInactiveOpacity))) {
+                overlay.inactiveOpacity = action->params.value(PWR::ActionParam::Value).toDouble();
+            }
+            if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayBorderWidth))) {
+                overlay.borderWidth = action->params.value(PWR::ActionParam::Value).toInt();
+            }
+            if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayBorderRadius))) {
+                overlay.borderRadius = action->params.value(PWR::ActionParam::Value).toInt();
+            }
+            if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayShowZoneNumbers))) {
+                overlay.showZoneNumbers = action->params.value(PWR::ActionParam::Value).toBool();
             }
             return overlay;
         });
