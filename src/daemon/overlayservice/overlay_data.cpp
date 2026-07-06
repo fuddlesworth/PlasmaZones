@@ -212,29 +212,6 @@ QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* ph
     return zonesList;
 }
 
-QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, QScreen* screen,
-                                             PhosphorZones::Layout* layout) const
-{
-    // Physical screen overload: delegates to screenId overload.
-    // Defensive check: if virtual screens are configured for this physical screen,
-    // screen center disambiguation always resolves to the same VS. Callers must
-    // use the QString overload instead.
-    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-    auto* mgr = m_screenManager;
-    if (mgr && mgr->hasVirtualScreens(physId)) {
-        qCWarning(lcOverlay) << "zoneToVariantMap(Zone*, QScreen*, Layout*): physical screen" << physId
-                             << "has virtual screens configured - caller should use QString overload.";
-    }
-
-    const QPoint screenCenter = screen->geometry().center();
-    QString screenId = Utils::effectiveScreenIdAt(m_screenManager, screenCenter, screen);
-    QRect overlayGeom = (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayGeometry.isValid()
-                             ? m_screenStates[screenId].overlayGeometry
-                             : screen->geometry());
-    return zoneToVariantMap(zone, screenId, screen, overlayGeom, layout,
-                            overlayOverrideForScreen(m_layoutManager, screenId));
-}
-
 QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QString& screenId, QScreen* physScreen,
                                              const QRect& overlayGeometry, PhosphorZones::Layout* layout,
                                              const PhosphorZones::ContextOverlayOverride& overlayOverride) const

@@ -338,10 +338,10 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
     if (m_draggedWindowId.isEmpty() && m_pendingSnapDragWindowId == windowId) {
         // A pending drag is always on the SNAP path: beginDrag's snap path sets
         // m_currentDragPolicy.bypassReason == None, and the only mutator of that field
-        // afterwards (the policy-flip in updateDragCursor) runs solely when
-        // m_draggedWindowId == windowId (line ~535 guard) — i.e. never while the drag
-        // is still pending. So there is no bypass to promote here; a pending
-        // never-activated drag can only unsnap-and-NoOp.
+        // afterwards (the policy-flip in updateDragCursor) runs solely after the early
+        // `windowId != m_draggedWindowId` return there, i.e. only when m_draggedWindowId
+        // is non-empty — never while the drag is still pending. So there is no bypass to
+        // promote here; a pending never-activated drag can only unsnap-and-NoOp.
         const bool wasSnapped = m_pendingSnapDragWasSnapped;
         qCInfo(lcDbusWindow) << "endDrag: pending snap drag never activated" << windowId << "wasSnapped=" << wasSnapped
                              << "cancelled=" << cancelled;
@@ -598,13 +598,12 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
 
     // Snap path: forward to legacy dragMoved so overlay/zone-detection
     // state stays current. Bypass paths still run dragMoved because it
-    // also drives the autotile drag-insert preview block (drag.cpp
-    // ~501-564). beginDrag's bypass branch (line ~145) DOES set
-    // m_draggedWindowId, so dragMoved's `windowId != m_draggedWindowId`
-    // guard would NOT early-return. The snap-side overlay branches
-    // inside dragMoved instead become no-ops because `prepareHandlerContext`
-    // (drag.cpp:166,180) suppresses the overlay path when the cursor
-    // screen is in autotile mode or context-disabled — the same gate
+    // also drives the autotile drag-insert preview block in dragMoved.
+    // beginDrag's bypass branch DOES set m_draggedWindowId, so dragMoved's
+    // `windowId != m_draggedWindowId` guard would NOT early-return. The
+    // snap-side overlay branches inside dragMoved instead become no-ops
+    // because `prepareHandlerContext` suppresses the overlay path when the
+    // cursor screen is in autotile mode or context-disabled — the same gate
     // that decided the bypass branch at beginDrag.
     dragMoved(windowId, cursorX, cursorY, modifiers, mouseButtons);
 }

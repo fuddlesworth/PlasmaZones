@@ -107,7 +107,7 @@ ColumnLayout {
     /// Falls back to the raw wire value when a lookup misses (e.g. the
     /// rule references an unplugged monitor or removed activity), matching
     /// the editor's dangling-pin fallback.
-    function _valueLabel(value, fieldWire) {
+    function _valueLabel(value, fieldWire, opWire) {
         if (value === undefined || value === null)
             return "";
 
@@ -183,8 +183,10 @@ ColumnLayout {
         // Virtual desktop — resolve the 1-based number to its name via
         // `appSettings.virtualDesktopNames` (0-indexed) so the tree shows "Work"
         // rather than the bare number, matching the editor picker and the collapsed
-        // rule-list summary. An out-of-range / unnamed desktop keeps the number.
-        if (kind === "virtualDesktop" && root.appSettings) {
+        // rule-list summary. Only for `equals` — under greaterThan/lessThan the value
+        // is a numeric threshold where a name reads as nonsense, so those keep the
+        // number. An out-of-range / unnamed desktop also keeps the number.
+        if (kind === "virtualDesktop" && opWire === "equals" && root.appSettings) {
             var names = root.appSettings.virtualDesktopNames || [];
             var idx = parseInt(value, 10) - 1;
             if (idx >= 0 && idx < names.length && names[idx])
@@ -594,7 +596,7 @@ ColumnLayout {
                             id: valueLabel
 
                             anchors.centerIn: parent
-                            text: root._valueLabel(delegate.value, delegate.fieldWire)
+                            text: root._valueLabel(delegate.value, delegate.fieldWire, delegate.opWire)
                             font.family: Kirigami.Theme.smallFont.family
                         }
                     }

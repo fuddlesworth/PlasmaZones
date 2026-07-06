@@ -141,9 +141,12 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
         lookup = &activityLookup;
     } else if (predicate.field == Field::Zone) {
         lookup = &zoneLookup;
-    } else if (predicate.field == Field::VirtualDesktop) {
+    } else if (predicate.field == Field::VirtualDesktop && predicate.op == Operator::Equals) {
         // Resolves the desktop number to its name ("2" → "Work"); an unnamed or
-        // unknown desktop falls back to the bare number via resolveOne below.
+        // unknown desktop falls back to the bare number via resolveOne below. Only
+        // for Equals — under GreaterThan/LessThan the value is a numeric threshold,
+        // where a name ("greater than Work") would read as nonsense, so those keep
+        // the bare number.
         lookup = &virtualDesktopLookup;
     }
     const auto resolveOne = [lookup](const QString& raw) {
@@ -155,30 +158,18 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
     };
 
     // Mode is a closed wire-token vocabulary — render the friendly label
-    // ("Mode: Snapping") rather than the raw token. An unknown token (a
-    // hand-edited rule) round-trips verbatim.
+    // ("Mode: Snapping") via the same single-source table the editor dropdown uses,
+    // rather than a second hardcoded copy. An unknown token round-trips verbatim.
     if (predicate.field == Field::Mode) {
-        const QString token = predicate.value.toString();
-        QString label = token;
-        if (token == QLatin1String("snapping")) {
-            label = PhosphorI18n::tr("Snapping");
-        } else if (token == QLatin1String("tiling")) {
-            label = PhosphorI18n::tr("Tiling");
-        }
-        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field), label);
+        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
+                                              RuleAuthoring::modeLabel(predicate.value.toString()));
     }
 
-    // Screen orientation is a closed wire-token vocabulary too — render the
-    // friendly label ("Screen orientation: Portrait") like Mode above.
+    // Screen orientation is a closed wire-token vocabulary too — resolve via the
+    // shared orientationLabel() table like Mode above.
     if (predicate.field == Field::ScreenOrientation) {
-        const QString token = predicate.value.toString();
-        QString label = token;
-        if (token == QLatin1String("portrait")) {
-            label = PhosphorI18n::tr("Portrait");
-        } else if (token == QLatin1String("landscape")) {
-            label = PhosphorI18n::tr("Landscape");
-        }
-        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field), label);
+        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
+                                              RuleAuthoring::orientationLabel(predicate.value.toString()));
     }
 
     // Window type is the int underlying the WindowType enum — resolve it to the

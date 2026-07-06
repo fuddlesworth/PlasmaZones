@@ -813,6 +813,7 @@ void TestRuleController::authoringMetadata()
     bool sawModeKind = false;
     bool sawOrientationKind = false;
     bool sawLayoutKind = false;
+    bool sawVirtualDesktopKind = false;
     for (const QVariant& v : fields) {
         const QVariantMap f = v.toMap();
         QVERIFY(f.contains(QStringLiteral("value")));
@@ -831,6 +832,9 @@ void TestRuleController::authoringMetadata()
         }
         if (kind == QLatin1String("layout")) {
             sawLayoutKind = true;
+        }
+        if (kind == QLatin1String("virtualDesktop")) {
+            sawVirtualDesktopKind = true;
         }
         // Closed-vocab dropdown fields must carry an `options` array of {value, wire,
         // label} triples so the editor can render the dropdown. ScreenOrientation
@@ -864,6 +868,9 @@ void TestRuleController::authoringMetadata()
     // regression reverting either to "string" would silently break the editor.
     QVERIFY(sawOrientationKind);
     QVERIFY(sawLayoutKind);
+    // VirtualDesktop keeps its dedicated "virtualDesktop" kind, which drives the
+    // desktop-name picker in the editor and the name resolution in the summaries.
+    QVERIFY(sawVirtualDesktopKind);
 
     // Picker categories drive the fly-out submenu grouping. Every field carries
     // a non-empty category label + a categoryOrder int. The Field enum

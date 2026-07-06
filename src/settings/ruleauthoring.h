@@ -61,6 +61,13 @@ QString enumOptionLabel(const QString& typeWire, const QString& key, const QStri
 /// so the two never drift. Returns the raw int as a string for an unknown value.
 QString windowTypeLabel(int windowTypeValue);
 
+/// Translated label for a Mode / ScreenOrientation match token (e.g. "tiling" →
+/// "Tiling", "portrait" → "Portrait"). Single source shared by the editor dropdown
+/// (matchFields) and the collapsed rule-list summary (RuleModel) so they never drift.
+/// An unknown token round-trips verbatim.
+QString modeLabel(const QString& modeToken);
+QString orientationLabel(const QString& orientationToken);
+
 /// A complete, default-seeded action payload for @p typeWire — a JSON map of
 /// the form `{ type: <typeWire>, ...defaults }` ready to drop into a rule's
 /// `actions` list. See `RuleController::defaultPayloadFor` for the

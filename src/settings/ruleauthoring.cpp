@@ -723,6 +723,36 @@ QList<WindowTypeOption> windowTypeOptions()
     return out;
 }
 
+/// Single source for the closed Mode / ScreenOrientation token vocabularies (the
+/// stored value IS the wire token), shared by matchFields() (the editor dropdown
+/// options) and modeLabel() / orientationLabel() (the collapsed rule-list summary),
+/// so the picker and the summary can never drift.
+struct ClosedTokenOption
+{
+    QString wire;
+    QString label;
+};
+QList<ClosedTokenOption> modeOptions()
+{
+    return {{QStringLiteral("snapping"), PhosphorI18n::tr("Snapping")},
+            {QStringLiteral("tiling"), PhosphorI18n::tr("Tiling")}};
+}
+QList<ClosedTokenOption> orientationOptions()
+{
+    return {{QStringLiteral("landscape"), PhosphorI18n::tr("Landscape")},
+            {QStringLiteral("portrait"), PhosphorI18n::tr("Portrait")}};
+}
+QString closedTokenLabel(const QList<ClosedTokenOption>& opts, const QString& token)
+{
+    for (const ClosedTokenOption& o : opts) {
+        if (o.wire == token) {
+            return o.label;
+        }
+    }
+    // Unknown token (hand-edited rule): round-trip verbatim.
+    return token;
+}
+
 } // namespace
 
 QString windowTypeLabel(int windowTypeValue)
@@ -734,6 +764,16 @@ QString windowTypeLabel(int windowTypeValue)
     }
     // Unknown value (hand-edited rule): show the raw int rather than a blank.
     return QString::number(windowTypeValue);
+}
+
+QString modeLabel(const QString& modeToken)
+{
+    return closedTokenLabel(modeOptions(), modeToken);
+}
+
+QString orientationLabel(const QString& orientationToken)
+{
+    return closedTokenLabel(orientationOptions(), orientationToken);
 }
 
 QString enumOptionLabel(const QString& type, const QString& key, const QString& wireValue)
@@ -861,12 +901,6 @@ QVariantList matchFields()
         QString kind = QStringLiteral("string");
         if (f == Field::WindowType) {
             // WindowType is stored as the int underlying the
-            // PhosphorProtocol::WindowType enum on the wire. Rendering it
-            // as a plain "number" SpinBox left users with no idea what
-            // each value meant ("2" — Dialog? Utility?). Surface the
-            // friendly token instead via a dedicated kind that the
-            // editor renders as a dropdown.
-            // WindowType is stored as the int underlying the
             // PhosphorProtocol::WindowType enum on the wire. A plain "number" SpinBox
             // left users with no idea what each value meant ("2" — Dialog? Utility?),
             // so a dedicated kind renders a dropdown. Options come from the single-source
@@ -910,20 +944,10 @@ QVariantList matchFields()
             // verbatim).
             kind = QStringLiteral("mode");
             QVariantList options;
-            struct ModeEntry
-            {
-                QLatin1StringView wire;
-                QString label;
-            };
-            const std::array kModes = std::to_array<ModeEntry>({
-                {QLatin1StringView("snapping"), PhosphorI18n::tr("Snapping")},
-                {QLatin1StringView("tiling"), PhosphorI18n::tr("Tiling")},
-            });
-            for (const auto& opt : kModes) {
+            for (const ClosedTokenOption& opt : modeOptions()) {
                 QVariantMap option;
-                const QString wire = QString(opt.wire);
-                option[QStringLiteral("value")] = wire;
-                option[QStringLiteral("wire")] = wire;
+                option[QStringLiteral("value")] = opt.wire;
+                option[QStringLiteral("wire")] = opt.wire;
                 option[QStringLiteral("label")] = opt.label;
                 options.append(option);
             }
@@ -931,23 +955,14 @@ QVariantList matchFields()
         } else if (f == Field::ScreenOrientation) {
             // String-valued on the wire (the orientation token), closed vocabulary
             // — a dropdown of the friendly tokens, same shape as Mode. The value IS
-            // the wire token ("portrait" / "landscape").
+            // the wire token ("portrait" / "landscape"). Options come from the
+            // single-source orientationOptions() table (also used by the summary).
             kind = QStringLiteral("orientation");
             QVariantList options;
-            struct OrientationEntry
-            {
-                QLatin1StringView wire;
-                QString label;
-            };
-            const std::array kOrientations = std::to_array<OrientationEntry>({
-                {QLatin1StringView("landscape"), PhosphorI18n::tr("Landscape")},
-                {QLatin1StringView("portrait"), PhosphorI18n::tr("Portrait")},
-            });
-            for (const auto& opt : kOrientations) {
+            for (const ClosedTokenOption& opt : orientationOptions()) {
                 QVariantMap option;
-                const QString wire = QString(opt.wire);
-                option[QStringLiteral("value")] = wire;
-                option[QStringLiteral("wire")] = wire;
+                option[QStringLiteral("value")] = opt.wire;
+                option[QStringLiteral("wire")] = opt.wire;
                 option[QStringLiteral("label")] = opt.label;
                 options.append(option);
             }

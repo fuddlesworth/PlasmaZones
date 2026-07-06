@@ -90,8 +90,8 @@ enum class FieldType : int {
 enum class FieldSource : int {
     Window, ///< absent during windowless context queries
     Context, ///< resolvable during a windowless context query (screen / desktop /
-             ///< activity / mode are always set; tiledWindowCount is optional and
-             ///< absent when the count is unknown)
+             ///< activity / mode / screen orientation / active layout are always set;
+             ///< tiledWindowCount is optional and absent when the count is unknown)
 };
 
 /// Compile-time descriptor for one Field.
@@ -231,8 +231,8 @@ inline bool fieldIsBool(Field field)
 }
 
 /// True if @p field describes the **context** a window appears in
-/// (screen / virtual desktop / activity / placement mode / tiled-window count)
-/// rather than a property of the window itself.
+/// (screen / virtual desktop / activity / placement mode / tiled-window count /
+/// screen orientation / active layout) rather than a property of the window itself.
 inline bool fieldIsContext(Field field)
 {
     const int idx = static_cast<int>(field);
