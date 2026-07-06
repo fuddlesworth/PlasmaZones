@@ -135,6 +135,15 @@ ColumnLayout {
                 }
             }
         }
+        if (kind === "layout" && root.appSettings) {
+            var layouts = root.appSettings.layouts;
+            if (layouts) {
+                for (var L = 0; L < layouts.length; ++L) {
+                    if (layouts[L].id === value)
+                        return layouts[L].displayName || String(value);
+                }
+            }
+        }
         if (kind === "windowType") {
             // The field entry's `options` carry the {value, label} pairs the
             // editor surfaces; reuse them so the read-only summary shows

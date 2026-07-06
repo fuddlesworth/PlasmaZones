@@ -919,6 +919,50 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-3"), 0, QString()).isEmpty());
     }
 
+    // ─── ActiveLayout is stamped onto the non-assignment resolvers, gates rules,
+    //     and does NOT recurse ──────────────────────────────────────────────────
+    // The gap/lock/overlay resolvers stamp the screen's resolved active-layout id
+    // (via assignmentIdForScreen). A rule matching Field::ActiveLayout must fire
+    // only when that id matches — and the resolver must NOT recurse (reaching
+    // assignmentIdForScreen must never re-enter the gap resolver). The test
+    // completing at all proves the no-recursion contract.
+    void testContextActiveLayout_stampedAndGatesRule()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // No per-screen assignment rule; the active layout comes from the global
+        // default provider (exercising the non-rule-set input path that the cache
+        // key must fold in).
+        const QString layoutId = QStringLiteral("{11111111-1111-1111-1111-111111111111}");
+        f.registry->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+
+        const auto gapRuleForLayout = [](const QString& id) {
+            PWR::RuleAction gapAction;
+            gapAction.type = QString(PWR::ActionType::SetInnerGap);
+            gapAction.params.insert(QString(PWR::ActionParam::Value), 15);
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = QStringLiteral("active-layout gap");
+            r.enabled = true;
+            r.priority = 400;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ActiveLayout, PWR::Operator::Equals, id);
+            r.actions = {gapAction};
+            return r;
+        };
+
+        // The screen's active layout (from the default provider) matches → gap fires.
+        QVERIFY(f.store->setAllRules({gapRuleForLayout(layoutId)}));
+        const PhosphorZones::ContextGapOverride resolved =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(resolved.innerGap.has_value());
+        QCOMPARE(*resolved.innerGap, 15);
+
+        // A rule pinned to a DIFFERENT layout id is inert on this screen.
+        QVERIFY(f.store->setAllRules({gapRuleForLayout(QStringLiteral("{22222222-2222-2222-2222-222222222222}"))}));
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).isEmpty());
+    }
+
     // ─── Per-monitor gap rule overrides the baseline for that screen only ────
     // A per-monitor gap override is authored by the Appearance page as a NORMAL
     // (non-managed) screen-scoped rule: match `ScreenId == screen`, carrying the

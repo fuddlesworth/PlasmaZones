@@ -79,16 +79,22 @@ Consequences:
   MatchExpressionView. Tests: FieldCount 38→39, valueForField context, rule_controller kind whitelist,
   and `testContextOrientation_stampedAndGatesRule` (provider→stamp→gap-rule match, portrait fires /
   landscape+unknown inert). 251/251 green. NOT runtime-verified; NOT committed.
-- **Tier 3 ActiveLayout: pending — decision refined.** User chose "full context + picker + caveat", but
-  the recursion is REAL not just oscillation: the assignment cascade (assignmentEntryForScreen, the
-  makeContextQuery site at layoutregistry_assignments.cpp:167) is what `layoutForScreen` calls, so
-  reading active-layout there via layoutForScreen infinitely recurses. Safe design = stamp activeLayout
-  at the 4 NON-assignment sites (overlay/gap/lock/default, which run post-resolution) via
-  `layoutForScreen`, and EXCLUDE the assignment site (documented like tiledWindowCount's inverse). Still
-  needs a match-side layout picker (new `layout` valueKind + editor + `settingsController.layouts`
-  source). This is the "caveat": ActiveLayout can gate overlay/gap/lock/per-window, but cannot drive the
-  layout assignment itself (circular). `ColorScheme` still deferred (no source in pipeline).
-- Remaining: Tier 3 ActiveLayout → Tier 2 restore → Tier 1 tiling → deferred tail.
+- **Tier 3 ActiveLayout: DONE** (committed). Field 39 (Context/String; snap UUID or "autotile:<algo>").
+  Stamped in the 3 daemon-facing NON-assignment resolvers only — resolveContextGaps/Locked/Overlay —
+  via `assignmentIdForScreen` (accurate for snap+autotile incl. global-default fallback; safe from
+  these resolvers, which are not in its call chain). EXCLUDED from resolveAssignmentEntry and
+  resolveContextDefaultAssignment (both in the assignmentIdForScreen chain → would recurse; documented
+  inline). The active layout is a NON-rule-set input (global default can change without a rule-set
+  revision bump), so it is folded into each resolver's cache KEY via `contextCacheKeyToken` (mirrors the
+  tiledWindowCount "twc:" token) to avoid stale hits. Match-side layout picker: new `layout` valueKind →
+  `layoutValueEditor` over `appSettings.layouts` (MatchLeafEditor), expanded-tree + collapsed-summary
+  resolution (MatchExpressionView; rulemodel leafLabel threads m_snappingLayoutLookup, autotile ids show
+  raw). Tests: FieldCount 39→40, valueForField, rule_controller `layout` kind, and
+  `testContextActiveLayout_stampedAndGatesRule` (default-provider layout id gates a gap rule; proves
+  no recursion by completing). 251/251 green. NOT runtime-verified.
+  The caveat holds: ActiveLayout gates gaps/lock/overlay, but cannot drive the layout assignment itself.
+- `ColorScheme` still deferred (no source in pipeline).
+- Remaining: Tier 2 restore → Tier 1 tiling → deferred tail (ColorScheme, OSD, UnfloatFallbackToZone).
 
 ## Tier 1 — Overlay appearance Context actions  ★ START HERE
 

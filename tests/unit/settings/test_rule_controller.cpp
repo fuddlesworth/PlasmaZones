@@ -819,7 +819,8 @@ void TestRuleController::authoringMetadata()
         QVERIFY(kind == QLatin1String("string") || kind == QLatin1String("number") || kind == QLatin1String("bool")
                 || kind == QLatin1String("screen") || kind == QLatin1String("activity")
                 || kind == QLatin1String("windowType") || kind == QLatin1String("virtualDesktop")
-                || kind == QLatin1String("mode") || kind == QLatin1String("orientation"));
+                || kind == QLatin1String("mode") || kind == QLatin1String("orientation")
+                || kind == QLatin1String("layout"));
         if (kind == QLatin1String("screen")) {
             sawScreenKind = true;
         }

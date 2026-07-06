@@ -37,12 +37,14 @@ private Q_SLOTS:
         q.virtualDesktop = 3;
         q.activity = QStringLiteral("{act}");
         q.screenOrientation = QStringLiteral("portrait");
+        q.activeLayout = QStringLiteral("autotile:bsp");
 
         QCOMPARE(q.valueForField(Field::ScreenId)->toString(), QStringLiteral("DP-1"));
         QCOMPARE(q.valueForField(Field::VirtualDesktop)->toInt(), 3);
         QCOMPARE(q.valueForField(Field::Activity)->toString(), QStringLiteral("{act}"));
-        // Context field, always present — empty when no geometry provider stamped it.
+        // Context fields, always present — empty when unpopulated by a resolver.
         QCOMPARE(q.valueForField(Field::ScreenOrientation)->toString(), QStringLiteral("portrait"));
+        QCOMPARE(q.valueForField(Field::ActiveLayout)->toString(), QStringLiteral("autotile:bsp"));
         // A windowless query carrying only context fields is still not a window.
         QVERIFY(!q.hasWindow());
     }

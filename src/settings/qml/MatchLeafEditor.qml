@@ -323,6 +323,9 @@ RowLayout {
             if (leaf._valueKind === "orientation")
                 return orientationValueEditor;
 
+            if (leaf._valueKind === "layout")
+                return layoutValueEditor;
+
             return stringValueEditor;
         }
     }
@@ -683,6 +686,40 @@ RowLayout {
                 return String(v);
             }
             Accessible.name: i18n("Screen orientation")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
+        }
+    }
+
+    Component {
+        id: layoutValueEditor
+
+        WideComboBox {
+            id: layoutCombo
+
+            // Picker over `appSettings.layouts` (snapping layouts and autotile
+            // entries); the wire value stays the layout id (snap UUID or
+            // "autotile:<algo>") so it matches the id the daemon resolves for the
+            // screen. Mirrors the activity picker.
+            readonly property var _layouts: leaf.appSettings ? leaf.appSettings.layouts : []
+
+            model: _layouts
+            textRole: "displayName"
+            valueRole: "id"
+            currentIndex: {
+                var target = leaf.node.value;
+                for (var i = 0; i < layoutCombo._layouts.length; ++i) {
+                    if (layoutCombo._layouts[i].id === target)
+                        return i;
+                }
+                return -1;
+            }
+            // Fall back to the raw id (e.g. a deleted layout) so the rule's pin
+            // stays visible even when no current layout matches.
+            displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose a layout…"))
+            Accessible.name: i18n("Active layout")
             onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);

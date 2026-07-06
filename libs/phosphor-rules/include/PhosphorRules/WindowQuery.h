@@ -72,6 +72,8 @@ struct WindowQuery
     QString mode; ///< current placement mode wire token ("snapping" / "tiling"); a floating window has no mode (empty)
     QString
         screenOrientation; ///< "portrait" / "landscape" of the resolving screen; empty = unknown (no geometry provider)
+    QString
+        activeLayout; ///< layout id resolved for the screen (snap UUID / "autotile:<algo>"); empty where unpopulated
 
     /// Tiled-window count for the screen + desktop being resolved. Optional
     /// rather than defaulted because 0 is a meaningful value (an empty tiled
@@ -136,6 +138,8 @@ struct WindowQuery
             return std::optional<QVariant>(mode);
         case Field::ScreenOrientation:
             return std::optional<QVariant>(screenOrientation);
+        case Field::ActiveLayout:
+            return std::optional<QVariant>(activeLayout);
         case Field::TiledWindowCount:
             return tiledWindowCount ? std::optional<QVariant>(*tiledWindowCount) : std::nullopt;
         case Field::IsMaximized:

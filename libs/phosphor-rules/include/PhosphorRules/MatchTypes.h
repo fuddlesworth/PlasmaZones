@@ -63,12 +63,14 @@ enum class Field : int {
     IsMaximizable = 37, ///< window can be maximized
     // ── Context screen-orientation field [38] ────────────────────────────
     ScreenOrientation = 38, ///< context — "portrait" / "landscape" of the resolving screen
+    // ── Context active-layout field [39] ─────────────────────────────────
+    ActiveLayout = 39, ///< context — the layout id currently resolved for the screen (snap UUID or "autotile:<algo>")
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::ScreenOrientation) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::ActiveLayout) + 1;
 
 // ── Field descriptor table ──────────────────────────────────────────────────
 // Single source of truth for every field's wire string, value-kind, and
@@ -162,6 +164,12 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     // orientation rule drive the layout/algorithm assignment for a rotated
     // monitor. Empty (predicate false) when no geometry provider is wired.
     {Field::ScreenOrientation, QLatin1StringView("screenOrientation"), FieldType::String, FieldSource::Context},
+    // [39] — The layout id currently resolved for the screen (snap UUID or
+    // "autotile:<algo>"). String-valued (Equals against the id) and Context-
+    // sourced. Populated only by the daemon-facing resolvers (gap / lock /
+    // overlay), NOT the assignment cascade — reading the active layout while
+    // resolving it would recurse. Empty (predicate false) where unpopulated.
+    {Field::ActiveLayout, QLatin1StringView("activeLayout"), FieldType::String, FieldSource::Context},
 };
 static_assert(sizeof(kFieldTable) / sizeof(kFieldTable[0]) == static_cast<unsigned>(FieldCount),
               "kFieldTable must have one entry per Field");

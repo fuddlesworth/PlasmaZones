@@ -127,7 +127,8 @@ bool matchIsSimpleConjunction(const MatchExpression& match)
 /// "identity" so the function stays usable in code paths that have not yet
 /// wired the SettingsController-backed resolvers.
 QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::LabelLookup& screenLookup,
-                  const RuleModel::LabelLookup& activityLookup, const RuleModel::LabelLookup& zoneLookup)
+                  const RuleModel::LabelLookup& activityLookup, const RuleModel::LabelLookup& zoneLookup,
+                  const RuleModel::LabelLookup& layoutLookup)
 {
     // Pick the lookup matching the leaf's field. An empty lookup degenerates
     // to identity so this stays usable from code paths that have not yet
@@ -139,6 +140,11 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
         lookup = &activityLookup;
     } else if (predicate.field == Field::Zone) {
         lookup = &zoneLookup;
+    } else if (predicate.field == Field::ActiveLayout) {
+        // Resolve a snap layout id to its friendly name via the same lookup the
+        // SetSnappingLayout action uses. An autotile id ("autotile:<algo>") won't
+        // match and round-trips verbatim, which is still readable.
+        lookup = &layoutLookup;
     }
     const auto resolveOne = [lookup](const QString& raw) {
         if (!lookup || !*lookup) {
@@ -797,6 +803,8 @@ QString RuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Tiled window count");
     case Field::ScreenOrientation:
         return PhosphorI18n::tr("Screen orientation");
+    case Field::ActiveLayout:
+        return PhosphorI18n::tr("Active layout");
     }
     return QString();
 }
@@ -807,14 +815,15 @@ QString RuleModel::matchSummary(const MatchExpression& match) const
         return PhosphorI18n::tr("Any window");
     }
     if (match.isLeaf()) {
-        return leafLabel(match.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup);
+        return leafLabel(match.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup, m_snappingLayoutLookup);
     }
     // A simple AND renders its leaves joined by " · ".
     if (match.kind() == MatchExpression::Kind::All) {
         QStringList parts;
         for (const MatchExpression& child : match.children()) {
             if (child.isLeaf()) {
-                parts.append(leafLabel(child.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup));
+                parts.append(leafLabel(child.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup,
+                                       m_snappingLayoutLookup));
             } else {
                 parts.append(PhosphorI18n::tr("(condition group)"));
             }

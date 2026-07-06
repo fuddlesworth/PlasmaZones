@@ -100,6 +100,7 @@ PickerCategory fieldCategory(Field f)
     case Field::Mode:
     case Field::TiledWindowCount:
     case Field::ScreenOrientation:
+    case Field::ActiveLayout:
         return {PhosphorI18n::tr("Context"), 0};
     }
     return {PhosphorI18n::tr("Other"), 99};
@@ -196,6 +197,10 @@ QString fieldDescription(Field f)
         return PhosphorI18n::tr(
             "Whether the monitor is in portrait or landscape orientation. Lets a rule pick a different layout or "
             "algorithm on a rotated screen.");
+    case Field::ActiveLayout:
+        return PhosphorI18n::tr(
+            "The layout currently active on the monitor. Lets a rule change gaps, the overlay or the lock state for "
+            "the screen showing a given layout. It cannot change which layout is assigned (that would be circular).");
     }
     return QString();
 }
@@ -831,6 +836,12 @@ QVariantList matchFields()
                 options.append(option);
             }
             entry[QStringLiteral("options")] = options;
+        } else if (f == Field::ActiveLayout) {
+            // The value is a layout id (snap UUID or "autotile:<algo>"). The QML
+            // editor swaps this for a layout-picker ComboBox driven by
+            // `settingsController.layouts` (like the screen / activity pickers), so
+            // the user picks a friendly name while the wire value stays the id.
+            kind = QStringLiteral("layout");
         }
         entry[QStringLiteral("valueKind")] = kind;
         out.append(entry);

@@ -430,6 +430,18 @@ public:
         }
     }
 
+    /// Compose the extra cache-key token a daemon-facing context resolver (gap /
+    /// lock / overlay) passes to @ref resolveCachedContext, folding in the placement
+    /// @p modeToken (empty for the non-gap resolvers) and the @p activeLayoutId.
+    /// The active layout is a NON-rule-set input — it can change via the external
+    /// global-default provider without a rule-set revision bump — so, exactly like
+    /// the tiledWindowCount "twc:" token, it must ride the cache KEY rather than the
+    /// value, or a layout change would return a stale hit. See resolveCachedContext.
+    static QString contextCacheKeyToken(const QString& modeToken, const QString& activeLayoutId)
+    {
+        return modeToken + QLatin1String("|al:") + activeLayoutId;
+    }
+
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());
     /// True iff a context-assignment rule whose match is exactly this
