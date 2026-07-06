@@ -48,6 +48,13 @@ QVariantList actionTypes();
 /// string for a non-boolean or unknown action type.
 QString boolActionStateLabel(const QString& typeWire, bool on);
 
+/// Translated label for one enum wire value on action @p typeWire, param @p key.
+/// Structural enum membership lives on the descriptor; the human-facing label is
+/// per `(type, key, wireValue)`. Shared by the action editor's enum options and
+/// the rule-list summary (`RuleModel`) so the picker and the summary never drift.
+/// Returns @p wireValue unchanged for an action/param without a translated vocab.
+QString enumOptionLabel(const QString& typeWire, const QString& key, const QString& wireValue);
+
 /// A complete, default-seeded action payload for @p typeWire — a JSON map of
 /// the form `{ type: <typeWire>, ...defaults }` ready to drop into a rule's
 /// `actions` list. See `RuleController::defaultPayloadFor` for the

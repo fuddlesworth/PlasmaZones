@@ -268,6 +268,110 @@ private Q_SLOTS:
         QVERIFY(!engine.hasPerScreenOverride(screen, QStringLiteral("SplitRatio")));
     }
 
+    // A SetSplitRatio / SetMasterCount rule removed while the override map stays
+    // NON-EMPTY (another override survives) routes through applyPerScreenConfig,
+    // not clearPerScreenConfig. The stateful splitRatio / masterCount must revert
+    // to the config baseline rather than keep the stale removed-rule value.
+    void testPerScreen_removeSplitRatioAndMasterCount_whileMapNonEmpty_revertsToBaseline()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+
+        engine.config()->splitRatio = 0.6;
+        engine.config()->masterCount = 1;
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        state->addWindow(QStringLiteral("win1"));
+        state->addWindow(QStringLiteral("win2"));
+
+        // Include the (unchanged) Algorithm key — concrete-algorithm autotile screens
+        // ALWAYS carry it (the daemon injects it), which is the shape that exposes the
+        // SplitRatio revert bug if it were gated on Algorithm-key presence.
+        QVariantMap overrides;
+        overrides[QStringLiteral("Algorithm")] = QLatin1String("bsp");
+        overrides[QStringLiteral("SplitRatio")] = 0.8;
+        overrides[QStringLiteral("MasterCount")] = 2;
+        overrides[QStringLiteral("MaxWindows")] = 4;
+        engine.applyPerScreenConfig(screen, overrides);
+        QVERIFY(qFuzzyCompare(state->splitRatio(), 0.8));
+        QCOMPARE(state->masterCount(), 2);
+
+        // Drop SplitRatio + MasterCount but keep the (unchanged) Algorithm + MaxWindows
+        // → still non-empty, and the algorithm did NOT change, so both stateful values
+        // must revert to the config baseline (not stay stuck at the removed values).
+        QVariantMap reduced;
+        reduced[QStringLiteral("Algorithm")] = QLatin1String("bsp");
+        reduced[QStringLiteral("MaxWindows")] = 4;
+        engine.applyPerScreenConfig(screen, reduced);
+
+        QVERIFY(qFuzzyCompare(state->splitRatio(), 0.6));
+        QCOMPARE(state->masterCount(), 1);
+    }
+
+    // The revert-on-removal path must NOT clobber a value the user live-adjusted
+    // (drag-to-resize) when that key was NEVER an override: an unrelated override
+    // apply with no prior SplitRatio key leaves the live-tuned split ratio intact.
+    void testPerScreen_liveAdjustedSplitRatio_notClobberedByUnrelatedOverride()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+        engine.config()->splitRatio = 0.6;
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        state->addWindow(QStringLiteral("win1"));
+        state->addWindow(QStringLiteral("win2"));
+        state->setSplitRatio(0.42); // live drag-adjust, no override key involved
+
+        // Apply an unrelated override (MaxWindows only). No prior SplitRatio override
+        // existed, so the guard must leave the live-adjusted value untouched.
+        QVariantMap overrides;
+        overrides[QStringLiteral("MaxWindows")] = 4;
+        engine.applyPerScreenConfig(screen, overrides);
+
+        QVERIFY(qFuzzyCompare(state->splitRatio(), 0.42));
+    }
+
+    // Concrete-algorithm screens ALWAYS carry the injected Algorithm key. An
+    // unrelated tiling-param rule edit re-applies the overrides map with that
+    // (unchanged) key, which must NOT re-fire the algorithm split-ratio reset and
+    // clobber a live drag-tuned ratio — the reset fires only on a genuine algorithm
+    // switch (compared against the previous override map's algorithm).
+    void testPerScreen_liveAdjustedSplitRatio_survivesUnrelatedOverride_concreteAlgorithm()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        state->addWindow(QStringLiteral("win1"));
+        state->addWindow(QStringLiteral("win2"));
+
+        // Non-vacuity precondition: the tuned value must differ from bsp's default,
+        // else "survives" would pass even if the reset wrongly fired.
+        auto* bspAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("bsp"));
+        QVERIFY(bspAlgo);
+        QVERIFY(!qFuzzyCompare(bspAlgo->defaultSplitRatio(), 0.42));
+
+        // Establish the concrete algorithm. The first apply legitimately resets to
+        // the algo default (previous map had no algorithm → genuine switch).
+        QVariantMap first;
+        first[QStringLiteral("Algorithm")] = QLatin1String("bsp");
+        engine.applyPerScreenConfig(screen, first);
+
+        // User live-adjusts the split ratio (drag-resize) — no SplitRatio override.
+        state->setSplitRatio(0.42);
+
+        // Unrelated rule edit re-applies with the SAME (unchanged) Algorithm key.
+        QVariantMap second;
+        second[QStringLiteral("Algorithm")] = QLatin1String("bsp");
+        second[QStringLiteral("MaxWindows")] = 4;
+        engine.applyPerScreenConfig(screen, second);
+
+        QVERIFY(qFuzzyCompare(state->splitRatio(), 0.42));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // effectiveOuterGaps — per-side overrides
     // ═══════════════════════════════════════════════════════════════════════════

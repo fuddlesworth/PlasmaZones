@@ -431,61 +431,6 @@ QString paramHint(const QString& type, const QString& key)
     return {};
 }
 
-/// Translated label for one enum wire value on action @p type, param @p key.
-/// Mirrors paramLabel — structural enum membership lives on the descriptor;
-/// the human-facing label is per `(type, key, wireValue)`.
-QString enumOptionLabel(const QString& type, const QString& key, const QString& wireValue)
-{
-    namespace ActionParam = PhosphorRules::ActionParam;
-    if ((type == ActionType::SetEngineMode || type == ActionType::DisableEngine) && key == ActionParam::Mode) {
-        if (wireValue == QLatin1String("snapping")) {
-            return PhosphorI18n::tr("Snapping");
-        }
-        if (wireValue == QLatin1String("autotile")) {
-            return PhosphorI18n::tr("Autotile");
-        }
-        if (wireValue == QLatin1String("scrolling")) {
-            return PhosphorI18n::tr("Scrolling");
-        }
-    }
-    if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
-        if (wireValue == PhosphorRules::OverlayStyleToken::Rectangles) {
-            return PhosphorI18n::tr("Zone rectangles");
-        }
-        if (wireValue == PhosphorRules::OverlayStyleToken::Preview) {
-            return PhosphorI18n::tr("Layout preview");
-        }
-    }
-    if (type == ActionType::SetInsertPosition && key == ActionParam::Value) {
-        if (wireValue == PhosphorRules::InsertPositionToken::End) {
-            return PhosphorI18n::tr("End of stack");
-        }
-        if (wireValue == PhosphorRules::InsertPositionToken::AfterFocused) {
-            return PhosphorI18n::tr("After focused window");
-        }
-        if (wireValue == PhosphorRules::InsertPositionToken::AsMaster) {
-            return PhosphorI18n::tr("As master");
-        }
-    }
-    if (type == ActionType::SetOverflowBehavior && key == ActionParam::Value) {
-        if (wireValue == PhosphorRules::OverflowBehaviorToken::Float) {
-            return PhosphorI18n::tr("Float overflow windows");
-        }
-        if (wireValue == PhosphorRules::OverflowBehaviorToken::Unlimited) {
-            return PhosphorI18n::tr("Unlimited (no cap)");
-        }
-    }
-    if (type == ActionType::SetDragBehavior && key == ActionParam::Value) {
-        if (wireValue == PhosphorRules::DragBehaviorToken::Float) {
-            return PhosphorI18n::tr("Float on drag");
-        }
-        if (wireValue == PhosphorRules::DragBehaviorToken::Reorder) {
-            return PhosphorI18n::tr("Reorder in stack");
-        }
-    }
-    return wireValue;
-}
-
 /// The parameter schema for @p type, derived from the LGPL ActionDescriptor's
 /// structural `params` and supplemented by GPL-side translated labels. The
 /// QML editor's per-param Loader dispatches on `kind`, so the wire shape
@@ -737,6 +682,58 @@ QString operatorLabelImpl(Operator op)
 }
 
 } // namespace
+
+QString enumOptionLabel(const QString& type, const QString& key, const QString& wireValue)
+{
+    namespace ActionParam = PhosphorRules::ActionParam;
+    if ((type == ActionType::SetEngineMode || type == ActionType::DisableEngine) && key == ActionParam::Mode) {
+        if (wireValue == QLatin1String("snapping")) {
+            return PhosphorI18n::tr("Snapping");
+        }
+        if (wireValue == QLatin1String("autotile")) {
+            return PhosphorI18n::tr("Autotile");
+        }
+        if (wireValue == QLatin1String("scrolling")) {
+            return PhosphorI18n::tr("Scrolling");
+        }
+    }
+    if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::OverlayStyleToken::Rectangles) {
+            return PhosphorI18n::tr("Zone rectangles");
+        }
+        if (wireValue == PhosphorRules::OverlayStyleToken::Preview) {
+            return PhosphorI18n::tr("Layout preview");
+        }
+    }
+    if (type == ActionType::SetInsertPosition && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::InsertPositionToken::End) {
+            return PhosphorI18n::tr("End of stack");
+        }
+        if (wireValue == PhosphorRules::InsertPositionToken::AfterFocused) {
+            return PhosphorI18n::tr("After focused window");
+        }
+        if (wireValue == PhosphorRules::InsertPositionToken::AsMaster) {
+            return PhosphorI18n::tr("As master");
+        }
+    }
+    if (type == ActionType::SetOverflowBehavior && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::OverflowBehaviorToken::Float) {
+            return PhosphorI18n::tr("Float overflow windows");
+        }
+        if (wireValue == PhosphorRules::OverflowBehaviorToken::Unlimited) {
+            return PhosphorI18n::tr("Unlimited (no cap)");
+        }
+    }
+    if (type == ActionType::SetDragBehavior && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::DragBehaviorToken::Float) {
+            return PhosphorI18n::tr("Float on drag");
+        }
+        if (wireValue == PhosphorRules::DragBehaviorToken::Reorder) {
+            return PhosphorI18n::tr("Reorder in stack");
+        }
+    }
+    return wireValue;
+}
 
 QString boolActionStateLabel(const QString& type, bool on)
 {

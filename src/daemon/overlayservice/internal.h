@@ -282,15 +282,15 @@ inline bool isAnyModeLocked(ISettings* settings, PhosphorZones::IZoneLayoutRegis
         || settings->isContextLocked(Utils::contextLockKey(1, screenId), desktop, activity);
 }
 
-/// Resolve the per-context overlay-property override (shader / style)
+/// Resolve the per-context overlay-property override (shader / style / appearance)
 /// for @p screenId at that screen's current virtual desktop + activity. A thin
 /// wrapper over IZoneLayoutRegistry::resolveContextOverlay that supplies the live
 /// context, mirroring how @ref isAnyModeLocked routes the lock check. Under
 /// per-output virtual desktops (#648) the desktop is resolved per-screen so the
 /// override matches the desktop actually shown on @p screenId, not the active
 /// monitor's. Returns an empty override when there is no registry or no matching
-/// overlay rule, so the overlay falls through to the active layout's own
-/// shader / display-mode.
+/// overlay rule, so each field falls through to the active layout's own shader /
+/// display-mode or the global appearance config.
 inline PhosphorZones::ContextOverlayOverride
 overlayOverrideForScreen(PhosphorZones::IZoneLayoutRegistry* layoutRegistry, const QString& screenId)
 {
@@ -334,11 +334,12 @@ inline QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName
 // m_screenStates[screenId] fields directly.
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Shared color/opacity settings push for snap assist and layout picker
+// Shared color/opacity settings push for the overlay surfaces
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Write common zone color/opacity appearance settings to a QML window.
-/// Used by snap assist and layout picker to avoid duplicating the 5-7 property writes.
+/// Write the common zone color/opacity appearance settings to a QML window.
+/// Used by the main overlay, zone selector, snap assist, and layout picker to
+/// avoid duplicating the 5 colour/opacity property writes.
 ///
 /// When @p overlayOverride is non-null, each property it fills wins over the
 /// global @p settings value — a context overlay-appearance rule (SetOverlay*)

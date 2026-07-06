@@ -406,6 +406,30 @@ private Q_SLOTS:
                  "an unmatched window falls back to the global restoreWindowsToZonesOnLogin = true");
         QVERIFY2(m_wta->shouldRestoreSizeOnUnsnap(konsoleId),
                  "an unmatched window falls back to the global restoreOriginalSizeOnUnsnap = true");
+
+        // Slot independence: a rule setting ONLY SetRestoreToZoneOnLogin(false) must
+        // leave shouldRestoreSizeOnUnsnap on its own global (true). Both globals are
+        // ON and the dolphin rule above set both actions to the same value, so a
+        // cross-wired resolver (one reading the other's slot) would pass every
+        // assertion so far; this single-action rule is what catches a slot swap.
+        PhosphorRules::Rule zoneOnlyRule;
+        zoneOnlyRule.id = QUuid::createUuid();
+        zoneOnlyRule.name = QStringLiteral("no-zone-restore-gwenview");
+        zoneOnlyRule.enabled = true;
+        zoneOnlyRule.priority = 100;
+        zoneOnlyRule.match = PhosphorRules::MatchExpression::makeLeaf(
+            PhosphorRules::Field::AppId, PhosphorRules::Operator::Equals, QStringLiteral("org.kde.gwenview"));
+        zoneOnlyRule.actions.append(boolAction(PhosphorRules::ActionType::SetRestoreToZoneOnLogin, false));
+        QVERIFY(store.addRule(zoneOnlyRule));
+
+        const QString gwenInstance = QStringLiteral("gwenview-uuid-1");
+        m_registry->upsert(gwenInstance, {QStringLiteral("org.kde.gwenview"), QString(), QString()});
+        const QString gwenId =
+            PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.gwenview"), gwenInstance);
+        QVERIFY2(!m_wta->shouldRestoreToZoneOnLogin(gwenId), "the zone-only rule overrides restore-to-zone to false");
+        QVERIFY2(m_wta->shouldRestoreSizeOnUnsnap(gwenId),
+                 "restore-size-on-unsnap must fall back to its own global (true) with no SizeOnUnsnap "
+                 "action present — proving the two resolvers read distinct slots");
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -537,6 +561,84 @@ private Q_SLOTS:
         // Absent keys → both fields disengaged → predicate inert → no float.
         QVERIFY2(!floatVerdict(QStringLiteral("no-props-1"), QVariantMap()),
                  "with the extended props absent, an IsModal/Width rule stays inert (engage-only-when-known)");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // End-to-end plumb for the IsMovable / IsMaximizable capability match fields:
+    // effect a{sv} → setWindowMetadata unpack → WindowRegistry snapshot →
+    // buildRuleQueryForWindow → evaluation. A dropped key mapping or missing parse
+    // anywhere in that chain would leave the field silently always-disengaged, so
+    // this exercises the same full path as the IsModal/Width test above.
+    // ────────────────────────────────────────────────────────────────────
+    void floatRule_matchesExtendedProperty_isMovableAndMaximizable()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
+
+        // "Float any movable, non-maximizable window" — both new capability fields,
+        // carried only via the extended a{sv}, combined under All.
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("float-movable-nonmaximizable");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorRules::MatchExpression::makeAll(
+            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::IsMovable, PhosphorRules::Operator::Equals,
+                                                      true),
+             PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::IsMaximizable,
+                                                      PhosphorRules::Operator::Equals, false)});
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Float);
+        rule.actions.append(action);
+        QVERIFY(store.addRule(rule));
+
+        m_wta->setRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+        });
+
+        namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
+        const QString appId = QStringLiteral("org.kde.someapp");
+        const int normalType = static_cast<int>(PhosphorProtocol::WindowType::Normal);
+        const auto floatVerdict = [&](const QString& instance, const QVariantMap& extended) {
+            m_wta->setWindowMetadata(instance, appId, QString(), QString(), QString(), 0, 0, QString(), normalType,
+                                     extended);
+            return m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, instance));
+        };
+
+        // Movable + not maximizable → both leaves match → float.
+        QVariantMap movableNonMax;
+        movableNonMax.insert(Key::IsMovable, true);
+        movableNonMax.insert(Key::IsMaximizable, false);
+        QVERIFY2(floatVerdict(QStringLiteral("movable-nonmax-1"), movableNonMax),
+                 "a movable, non-maximizable window must float (both capability props matched end-to-end)");
+
+        // Movable + maximizable → IsMaximizable leaf fails → no float.
+        QVariantMap movableMax;
+        movableMax.insert(Key::IsMovable, true);
+        movableMax.insert(Key::IsMaximizable, true);
+        QVERIFY2(!floatVerdict(QStringLiteral("movable-max-1"), movableMax),
+                 "a maximizable window must not float (IsMaximizable == false fails the All)");
+
+        // Not movable + not maximizable → IsMovable leaf fails → no float.
+        QVariantMap nonMovableNonMax;
+        nonMovableNonMax.insert(Key::IsMovable, false);
+        nonMovableNonMax.insert(Key::IsMaximizable, false);
+        QVERIFY2(!floatVerdict(QStringLiteral("nonmovable-nonmax-1"), nonMovableNonMax),
+                 "a non-movable window must not float (IsMovable == true fails)");
+
+        // Not movable + maximizable → both leaves fail → no float (fourth corner).
+        QVariantMap nonMovableMax;
+        nonMovableMax.insert(Key::IsMovable, false);
+        nonMovableMax.insert(Key::IsMaximizable, true);
+        QVERIFY2(!floatVerdict(QStringLiteral("nonmovable-max-1"), nonMovableMax),
+                 "a non-movable maximizable window must not float (both leaves fail)");
+
+        // Absent keys → both capability fields disengaged → predicate inert → no float.
+        QVERIFY2(
+            !floatVerdict(QStringLiteral("no-caps-1"), QVariantMap()),
+            "with the capability props absent, an IsMovable/IsMaximizable rule stays inert (engage-only-when-known)");
     }
 
     // ────────────────────────────────────────────────────────────────────

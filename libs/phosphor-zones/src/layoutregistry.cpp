@@ -28,7 +28,12 @@ LayoutRegistry::LayoutRegistry(PhosphorRules::RuleStore* ruleStore, QString layo
     if (m_ruleStore == nullptr) {
         qFatal("LayoutRegistry: ruleStore is required — assignment resolution dereferences it");
     }
-    Q_ASSERT_X(!m_layoutSubdirectory.isEmpty(), "LayoutRegistry", "layoutSubdirectory is required");
+    // qFatal, not Q_ASSERT_X: an empty subdirectory concatenates to the bare XDG
+    // data root (a trailing slash), so — like the absolute / ".." checks in
+    // initCommon — it must fail in release too, not compile out.
+    if (m_layoutSubdirectory.isEmpty()) {
+        qFatal("LayoutRegistry: layoutSubdirectory is required");
+    }
     initCommon();
 }
 

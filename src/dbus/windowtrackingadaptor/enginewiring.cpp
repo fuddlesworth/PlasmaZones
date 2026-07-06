@@ -512,8 +512,7 @@ bool WindowTrackingAdaptor::shouldRestoreToZoneOnLogin(const QString& windowId)
 
 bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
 {
-    // Mirror shouldRestoreFloatedPosition for the restore-size-on-unsnap policy: a
-    // matched SetRestoreSizeOnUnsnap rule wins, otherwise the global setting decides.
+    // A matched SetRestoreSizeOnUnsnap rule wins, otherwise the global setting decides.
     const bool globalDefault = m_settings->restoreOriginalSizeOnUnsnap();
     if (!m_ruleStore) {
         return globalDefault;
@@ -525,7 +524,19 @@ bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    // Unlike the open-path resolvers above, this fires MID-SESSION on every unsnap
+    // (drag-out / drop / cursor-left-zones), long after the window opened. A fresh
+    // uncached resolve is required: resolveCached is keyed on (windowId, ruleSet
+    // revision) and returns the OPEN-TIME verdict on a hit, so a rule whose WHEN
+    // references a property the registry refreshes mid-session (VirtualDesktop /
+    // Activity, re-pushed on desktopsChanged / activitiesChanged) would resolve
+    // stale. resolve() honours the freshly built query and does not pollute the
+    // open-path cache. (Properties the effect does not re-push on a dedicated
+    // maximize / geometry change — e.g. IsMaximized / width — are only as fresh as
+    // the registry's last extended push, so resolve() reads that same value either
+    // way: neutral, not stale, for those; a strict improvement for the refreshed
+    // ones.)
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolve(*query);
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestoreSizeOnUnsnap))) {
         return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();

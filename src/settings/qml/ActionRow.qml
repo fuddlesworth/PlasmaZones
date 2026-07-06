@@ -125,15 +125,24 @@ ColumnLayout {
             return row._overlayShaderParamSchema;
         return [];
     }
+    /// The target algorithm id for a SetAlgorithmParam action, or "" otherwise.
+    /// A `string` property so its change signal fires only when the VALUE changes —
+    /// `_withParam` replaces the whole `row.action` object on every nested-param
+    /// write, so a binding reading `row.action.algorithm` directly would re-fire on
+    /// each write; routing the schema through this value-stable id keeps the params
+    /// editor from rebuilding its sliders mid-drag (matching the shader editor,
+    /// whose schema binding returns a cached-identity array).
+    readonly property string _algorithmParamAlgoId: (row.action.type === "setAlgorithmParam" && row.action.algorithm) ? row.action.algorithm : ""
     /// The custom-parameter schema for the SetAlgorithmParam action's currently
     /// selected algorithm — drives the inline algorithm-params editor below the
     /// row (the autotile analogue of _activeShaderParamSchema). Returns the
     /// Luau-declared param descriptors ({name, type, value, defaultValue,
     /// minValue, maxValue, enumOptions, description}); empty until an algorithm
-    /// is picked.
+    /// is picked. Depends only on _algorithmParamAlgoId (not row.action), so it
+    /// re-resolves on algorithm change, not on every param write.
     readonly property var _activeAlgorithmParamSchema: {
-        if (row.action.type === "setAlgorithmParam" && row.action.algorithm && row.appSettings && row.appSettings.tilingAlgorithmPage)
-            return row.appSettings.tilingAlgorithmPage.customParamsForAlgorithm(row.action.algorithm);
+        if (row._algorithmParamAlgoId.length > 0 && row.appSettings && row.appSettings.tilingAlgorithmPage)
+            return row.appSettings.tilingAlgorithmPage.customParamsForAlgorithm(row._algorithmParamAlgoId);
         return [];
     }
     /// Write one custom-param value into the action's nested `params` object
@@ -1112,7 +1121,7 @@ ColumnLayout {
                     SettingsSlider {
                         visible: modelData.type === "number"
                         Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-                        Accessible.name: modelData.name
+                        Accessible.name: modelData.description ? modelData.description : modelData.name
                         from: parent._pMin
                         to: parent._pMax
                         stepSize: parent._pRange <= 1 ? 0.01 : (parent._pRange <= 10 ? 0.1 : 1)
@@ -1129,7 +1138,7 @@ ColumnLayout {
 
                     SettingsSwitch {
                         visible: modelData.type === "bool"
-                        accessibleName: modelData.name
+                        accessibleName: modelData.description ? modelData.description : modelData.name
                         checked: parent._pValue === true
                         onToggled: function (newValue) {
                             row._writeAlgorithmParam(modelData.name, newValue);
@@ -1139,13 +1148,22 @@ ColumnLayout {
                     WideComboBox {
                         visible: modelData.type === "enum"
                         Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-                        Accessible.name: modelData.name
+                        Accessible.name: modelData.description ? modelData.description : modelData.name
                         model: modelData.enumOptions || []
                         currentIndex: {
+                            // -1 (not 0) when the stored value is out of vocabulary
+                            // (e.g. the algorithm's schema changed and dropped an
+                            // option), matching the sibling pickers (screen/activity/
+                            // layout/mode). Falling back to 0 would silently display a
+                            // different option than the rule holds until the user
+                            // touches the control.
                             var opts = modelData.enumOptions || [];
-                            var idx = opts.indexOf(parent._pValue);
-                            return idx >= 0 ? idx : 0;
+                            return opts.indexOf(parent._pValue);
                         }
+                        // On an out-of-vocab miss (currentIndex -1) surface the stored
+                        // raw value rather than a blank combo, matching the sibling
+                        // pickers' dangling-value fallback.
+                        displayText: currentIndex >= 0 ? currentText : (parent._pValue !== undefined ? String(parent._pValue) : "")
                         onActivated: row._writeAlgorithmParam(modelData.name, currentText)
                     }
                 }

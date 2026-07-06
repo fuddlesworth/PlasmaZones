@@ -963,6 +963,125 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).isEmpty());
     }
 
+    // ─── An ActiveLayout-referencing rule must NOT drive the assignment ───────
+    // The assignment resolver leaves Field::ActiveLayout unstamped (it IS the
+    // resolver's output — stamping would recurse). An assignment rule whose match
+    // references ActiveLayout is therefore structurally excluded from the
+    // assignment path. This matters most for a NEGATED predicate: a positive
+    // `ActiveLayout Equals X` leaf never matches the unstamped placeholder, but a
+    // `None{ActiveLayout Equals X}` ("active layout is NOT X") would spuriously
+    // match the empty placeholder and force a wrong assignment without the guard.
+    // The resolve also completing at all proves the no-recursion contract.
+    void testActiveLayoutRuleExcludedFromAssignment()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // Snap default so a leaked autotile assignment is unambiguously visible.
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+
+        // Positive control: an assignment rule pinned by ScreenId DOES drive the
+        // assignment — proving the harness observes assignment-driving, so the
+        // negative assertions below are meaningful (not vacuously always-Snapping).
+        PWR::Rule screenPinned;
+        screenPinned.id = QUuid::createUuid();
+        screenPinned.name = QStringLiteral("screen-pinned-autotile");
+        screenPinned.enabled = true;
+        screenPinned.priority = 500;
+        screenPinned.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
+        screenPinned.actions =
+            CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"));
+        QVERIFY(f.store->setAllRules({screenPinned}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).mode,
+                 PhosphorZones::AssignmentEntry::Autotile);
+
+        // Build the same autotile assignment rule but match on ActiveLayout, once
+        // positively and once negated. Neither may drive the assignment: the
+        // resolver must fall through to the Snapping gated default.
+        const QString someLayout = QStringLiteral("{11111111-1111-1111-1111-111111111111}");
+        const auto activeLayoutAssignmentRule = [&](const PWR::MatchExpression& match) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = QStringLiteral("active-layout assignment");
+            r.enabled = true;
+            r.priority = 500;
+            r.match = match;
+            r.actions = CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"));
+            return r;
+        };
+
+        // Positive ActiveLayout leaf — excluded (also never matched the placeholder).
+        QVERIFY(f.store->setAllRules({activeLayoutAssignmentRule(
+            PWR::MatchExpression::makeLeaf(PWR::Field::ActiveLayout, PWR::Operator::Equals, someLayout))}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).mode,
+                 PhosphorZones::AssignmentEntry::Snapping);
+
+        // Negated ActiveLayout predicate — the regression case. Without the
+        // referencesAnyField guard this None{} matches the empty placeholder and
+        // forces Autotile; with it, the rule is excluded and Snapping stands.
+        QVERIFY(f.store->setAllRules({activeLayoutAssignmentRule(PWR::MatchExpression::makeNone(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::ActiveLayout, PWR::Operator::Equals, someLayout)}))}));
+        const PhosphorZones::AssignmentEntry negatedEntry =
+            f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString());
+        QCOMPARE(negatedEntry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(negatedEntry.snappingLayout, QStringLiteral("{provider-snap-default}"));
+    }
+
+    // ─── ActiveLayout exclusion on the SECOND no-stamp resolver ──────────────
+    // resolveContextDefaultAssignment is the other assignment-cascade resolver
+    // that leaves ActiveLayout unstamped, so it applies the same referencesAnyField
+    // exclusion. A DefaultLayoutAssignment rule matched by None{ActiveLayout Equals
+    // X} would, without the guard, match the empty placeholder and force the default
+    // through (defeating the global suppress); with the guard it is excluded.
+    void testActiveLayoutRuleExcludedFromDefaultAssignment()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // Global default: suppress the synthesized default assignment everywhere.
+        f.registry->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+
+        const auto defaultAssignmentRule = [](const PWR::MatchExpression& match, bool allow) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = QStringLiteral("default-assignment");
+            r.enabled = true;
+            r.priority = 500;
+            r.match = match;
+            PWR::RuleAction action;
+            action.type = QString(PWR::ActionType::DefaultLayoutAssignment);
+            action.params.insert(QString(PWR::ActionParam::Value), allow);
+            r.actions.append(action);
+            return r;
+        };
+
+        // Positive control: a ScreenId-pinned allow rule DOES override the global
+        // suppress (proves the harness observes default-assignment overrides, so the
+        // negatives below are meaningful rather than vacuously always-suppressed).
+        QVERIFY(f.store->setAllRules({defaultAssignmentRule(
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1")),
+            true)}));
+        QVERIFY(!f.registry->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 0, QString()));
+
+        const QString someLayout = QStringLiteral("{11111111-1111-1111-1111-111111111111}");
+
+        // Negated ActiveLayout predicate — the regression case. Without the guard the
+        // None{} matches the empty placeholder and forces the default through
+        // (isSuppressed → false); with it, the rule is excluded and the global
+        // suppress stands (isSuppressed → true).
+        QVERIFY(f.store->setAllRules(
+            {defaultAssignmentRule(PWR::MatchExpression::makeNone({PWR::MatchExpression::makeLeaf(
+                                       PWR::Field::ActiveLayout, PWR::Operator::Equals, someLayout)}),
+                                   true)}));
+        QVERIFY(f.registry->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 0, QString()));
+
+        // Positive ActiveLayout leaf — also excluded (and never matched the placeholder).
+        QVERIFY(f.store->setAllRules({defaultAssignmentRule(
+            PWR::MatchExpression::makeLeaf(PWR::Field::ActiveLayout, PWR::Operator::Equals, someLayout), true)}));
+        QVERIFY(f.registry->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 0, QString()));
+    }
+
     // ─── Context autotile-parameter resolution (max / split / master) ────────
     // resolveContextTilingParams is a per-slot read: independent
     // SetMaxWindows / SetSplitRatio / SetMasterCount rules compose, and an

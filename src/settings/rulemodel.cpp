@@ -295,6 +295,10 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     if (action.type == ActionType::Exclude) {
         return PhosphorI18n::tr("Excluded");
     }
+    if (action.type == ActionType::ExcludeAnimations) {
+        // Terminal, no Value param — like Exclude, its presence IS the effect.
+        return PhosphorI18n::tr("No animations");
+    }
     if (action.type == ActionType::Float) {
         return PhosphorI18n::tr("Float");
     }
@@ -375,6 +379,13 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         }
         return PhosphorI18n::tr("Overlay style");
     }
+    if (action.type == ActionType::SetAlgorithmParam) {
+        // Keyed on ActionParam::Algorithm (the target algorithm token), not Value;
+        // the free-form params blob is summarized by naming the algorithm it tunes.
+        const QString algo = action.params.value(PhosphorRules::ActionParam::Algorithm).toString();
+        return algo.isEmpty() ? PhosphorI18n::tr("Algorithm parameter")
+                              : PhosphorI18n::tr("Algorithm: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
+    }
     // ── single-value actions keyed on ActionParam::Value (restore-position,
     //    border / title-bar overrides, per-context gap overrides) ──
     {
@@ -403,6 +414,52 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                 return PhosphorI18n::tr("Focused border: %1").arg(shown);
             }
             return PhosphorI18n::tr("Unfocused border: %1").arg(shown);
+        }
+        // ── autotile parameter overrides ──
+        if (action.type == ActionType::SetMaxWindows) {
+            return PhosphorI18n::tr("Max tiled windows: %1").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetMasterCount) {
+            return PhosphorI18n::tr("Master count: %1").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetSplitRatio) {
+            // Wire value is the [0,1] ratio; shown as a percent to match the editor.
+            return PhosphorI18n::tr("Split ratio: %1%").arg(qRound(raw.toDouble() * 100.0));
+        }
+        if (action.type == ActionType::SetInsertPosition) {
+            return PhosphorI18n::tr("Insert: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
+        if (action.type == ActionType::SetOverflowBehavior) {
+            return PhosphorI18n::tr("Overflow: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
+        if (action.type == ActionType::SetDragBehavior) {
+            return PhosphorI18n::tr("Drag: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
+        // ── overlay-appearance overrides (colours upper-cased hex; opacities
+        //    are [0,1] on the wire, shown as a percent to match the editor) ──
+        if (action.type == ActionType::SetOverlayHighlightColor) {
+            return PhosphorI18n::tr("Highlight color: %1").arg(raw.toString().toUpper());
+        }
+        if (action.type == ActionType::SetOverlayInactiveColor) {
+            return PhosphorI18n::tr("Inactive zone color: %1").arg(raw.toString().toUpper());
+        }
+        if (action.type == ActionType::SetOverlayBorderColor) {
+            return PhosphorI18n::tr("Overlay border color: %1").arg(raw.toString().toUpper());
+        }
+        if (action.type == ActionType::SetOverlayActiveOpacity) {
+            return PhosphorI18n::tr("Active opacity: %1%").arg(qRound(raw.toDouble() * 100.0));
+        }
+        if (action.type == ActionType::SetOverlayInactiveOpacity) {
+            return PhosphorI18n::tr("Inactive opacity: %1%").arg(qRound(raw.toDouble() * 100.0));
+        }
+        if (action.type == ActionType::SetOverlayBorderWidth) {
+            return PhosphorI18n::tr("Overlay border width: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetOverlayBorderRadius) {
+            return PhosphorI18n::tr("Overlay corner radius: %1 px").arg(raw.toInt());
         }
         // ── per-context gap overrides ──
         if (action.type == ActionType::SetInnerGap) {

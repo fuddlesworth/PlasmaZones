@@ -153,10 +153,11 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // Live tiled-window count for this context (nullopt when not actively
     // tiling). It is NOT part of the rule set, so it cannot ride the cache's
     // revision-invalidation contract like the global default does. Instead it
-    // is folded into the cache KEY (via the `mode` slot of this cache, which is
-    // otherwise always empty for the assignment resolver) so a count change yields a fresh
-    // entry rather than a stale hit, while count-independent callers (overlay /
-    // OSD per cursor-move, where the count is steady) keep hitting the cache.
+    // is folded into the cache KEY (the `mode` slot of this cache, which for the
+    // assignment resolver carries only the count + orientation composite below) so a
+    // count change yields a fresh entry rather than a stale hit, while
+    // count-independent callers (overlay / OSD per cursor-move, where the count is
+    // steady) keep hitting the cache.
     const std::optional<int> tiledCount =
         m_tiledWindowCountProvider ? m_tiledWindowCountProvider(screenId, virtualDesktop, activity) : std::nullopt;
     // Both the tiled count and the screen orientation are non-rule-set inputs the
@@ -190,9 +191,17 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             // by the post-assignment resolvers (gap / lock / overlay).
 
             // Highest-priority matching rule per slot wins (ties by list order).
+            // A rule that REFERENCES Field::ActiveLayout is structurally excluded from
+            // the assignment path: activeLayout is left unstamped above, so such a
+            // rule evaluates against a placeholder empty value. A positive leaf
+            // (ActiveLayout Equals X) never matches that placeholder, but a negated
+            // predicate (None{ActiveLayout Equals X}) WOULD spuriously match and force
+            // a wrong assignment. Dropping any ActiveLayout-referencing rule here keeps
+            // ActiveLayout a strictly post-assignment field regardless of predicate
+            // polarity, not merely by relying on the empty-value coincidence.
             const auto slotMatch = [&](bool (*carriesSlot)(const PWR::Rule&)) -> const PWR::Rule* {
                 return m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::Rule& rule) {
-                    return carriesSlot(rule);
+                    return carriesSlot(rule) && !rule.match.referencesAnyField({PWR::Field::ActiveLayout});
                 });
             };
 
@@ -438,9 +447,30 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
             // assignment cascade (assignmentIdForScreen reaches it via
             // resolveDefaultAssignmentEntryForContext), so stamping the active
             // layout here would recurse. See resolveAssignmentEntry.
-            const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
-            if (const auto action = resolved.slot(QString(PWR::ActionSlot::DefaultAssignment))) {
-                return action->params.value(PWR::ActionParam::Value).toBool();
+            //
+            // Because activeLayout is unstamped, an ActiveLayout-referencing rule
+            // must be structurally excluded from this no-stamp resolver too (the
+            // exact symmetry resolveAssignmentEntry's slotMatch enforces): a negated
+            // None{ActiveLayout Equals X} predicate would otherwise spuriously match
+            // the empty placeholder and wrongly force/suppress the default. Use a
+            // filtered highestPriorityMatch rather than the unfiltered resolve().
+            const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, [](const PWR::Rule& r) {
+                if (r.match.referencesAnyField({PWR::Field::ActiveLayout})) {
+                    return false;
+                }
+                for (const PWR::RuleAction& action : r.actions) {
+                    if (action.type == QLatin1String(PWR::ActionType::DefaultLayoutAssignment)) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            if (rule != nullptr) {
+                for (const PWR::RuleAction& action : rule->actions) {
+                    if (action.type == QLatin1String(PWR::ActionType::DefaultLayoutAssignment)) {
+                        return action.params.value(PWR::ActionParam::Value).toBool();
+                    }
+                }
             }
             return std::nullopt;
         });
@@ -512,10 +542,12 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
             // property falls through to the global config value at the consumer.
             // Colours are parsed from the `#AARRGGBB` wire hex; QColor reads a
             // 9-digit hex alpha-first, matching the picker's toHexArgb output. The
-            // descriptor validators reject malformed values at load; the isValid /
-            // clamp guards here are defense in depth so a hand-edited rules.json that
-            // slipped a bad value can only fall through to config, never apply an
-            // invalid colour or an out-of-range opacity as an override.
+            // descriptor validators reject malformed values at load; the guards here
+            // are defense in depth so a hand-edited rules.json that slipped a bad value
+            // can only fall through to config or a sane bound, never apply a broken
+            // override: colours are validity-checked, opacities clamped to [0, 1], and
+            // border width / radius floored at 0 (negatives are nonsensical; the load
+            // validator enforces the upper bounds, which the shared constants own).
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayHighlightColor))) {
                 if (const QColor c(action->params.value(PWR::ActionParam::Value).toString()); c.isValid()) {
                     overlay.highlightColor = c;
@@ -538,10 +570,10 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
                 overlay.inactiveOpacity = qBound(0.0, action->params.value(PWR::ActionParam::Value).toDouble(), 1.0);
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayBorderWidth))) {
-                overlay.borderWidth = action->params.value(PWR::ActionParam::Value).toInt();
+                overlay.borderWidth = std::max(0, action->params.value(PWR::ActionParam::Value).toInt());
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayBorderRadius))) {
-                overlay.borderRadius = action->params.value(PWR::ActionParam::Value).toInt();
+                overlay.borderRadius = std::max(0, action->params.value(PWR::ActionParam::Value).toInt());
             }
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayShowZoneNumbers))) {
                 overlay.showZoneNumbers = action->params.value(PWR::ActionParam::Value).toBool();

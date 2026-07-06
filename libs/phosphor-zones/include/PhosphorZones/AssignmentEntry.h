@@ -247,10 +247,12 @@ struct ContextOverlayOverride
  * @brief Per-context autotile parameter overrides resolved from context rules.
  *
  * Each field is set only when a matching context rule fills the corresponding
- * slot (SetMaxWindows / SetSplitRatio / SetMasterCount); an unset field means
- * "use the config value". Consumed daemon-side: the values are layered onto the
- * per-screen autotile override map (config stays the base, the rule wins where
- * present). Resolved by @c LayoutRegistry::resolveContextTilingParams.
+ * slot (SetMaxWindows / SetSplitRatio / SetMasterCount / SetInsertPosition /
+ * SetOverflowBehavior / SetDragBehavior / SetAlgorithmParam); an unset field
+ * means "use the config value". Consumed daemon-side: the values are layered onto
+ * the per-screen autotile override map (config stays the base, the rule wins where
+ * present). @c dragBehavior is consumed by the drag adaptor rather than the
+ * override map. Resolved by @c LayoutRegistry::resolveContextTilingParams.
  */
 struct ContextTilingParams
 {

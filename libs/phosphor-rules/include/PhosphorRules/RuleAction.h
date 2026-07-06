@@ -610,9 +610,11 @@ inline constexpr QLatin1StringView OuterGapBottom{"outer-gap-bottom"};
 inline constexpr QLatin1StringView OuterGapLeft{"outer-gap-left"};
 inline constexpr QLatin1StringView OuterGapRight{"outer-gap-right"};
 // Per-context autotile parameter slots (one per param). Filled by
-// SetMaxWindows / SetSplitRatio / SetMasterCount, read by
+// SetMaxWindows / SetSplitRatio / SetMasterCount / SetInsertPosition /
+// SetOverflowBehavior / SetDragBehavior / SetAlgorithmParam, read by
 // LayoutRegistry::resolveContextTilingParams and layered onto the per-screen
-// autotile override map daemon-side.
+// autotile override map daemon-side (drag behavior via the drag adaptor;
+// AlgorithmParams carries a target algorithm token plus a free-form params blob).
 inline constexpr QLatin1StringView MaxWindows{"max-windows"};
 inline constexpr QLatin1StringView SplitRatio{"split-ratio"};
 inline constexpr QLatin1StringView MasterCount{"master-count"};
