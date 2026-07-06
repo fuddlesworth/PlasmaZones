@@ -15,6 +15,16 @@ namespace PhosphorPlacement {
 
 inline constexpr QLatin1String kZoneSelectorIdPrefix{"zone-selector:"};
 
+/// The KWin desktop-filter rule shared by every desktop-scoped placement query:
+/// a filter of 0 (or negative) disables filtering entirely, and a window desktop
+/// of 0 means "on all desktops" (sticky) and passes every filter; otherwise the
+/// window's desktop must equal the filter. Centralised so the sticky-0 semantics
+/// are spelled exactly once instead of re-derived at each query site.
+inline bool desktopMatchesFilter(int windowDesktop, int desktopFilter)
+{
+    return desktopFilter <= 0 || windowDesktop == 0 || windowDesktop == desktopFilter;
+}
+
 inline std::optional<QUuid> parseUuid(const QString& str)
 {
     if (str.isEmpty()) {

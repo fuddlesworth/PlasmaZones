@@ -187,6 +187,10 @@ void Daemon::initializeAutotile()
                                     entry.targetZoneIds = snapSlot.zoneIds;
                                     entry.targetGeometry = geo;
                                     entry.targetScreenId = restoreScreen;
+                                    // The durable record knows which desktop this snap
+                                    // belongs to; carry it so the batch commit doesn't
+                                    // re-stamp the window onto the current desktop.
+                                    entry.virtualDesktop = rec->virtualDesktop;
                                     m_pendingSnapFloatRestores.append(entry);
                                 } else {
                                     qCWarning(lcDaemon) << "windowsReleased: snap-zone restore for" << windowId

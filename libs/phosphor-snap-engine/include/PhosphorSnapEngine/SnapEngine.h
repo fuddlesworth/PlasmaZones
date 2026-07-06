@@ -634,8 +634,9 @@ public:
 
     /// @p virtualDesktop pins the assignment to a specific 1-based desktop; 0
     /// (default) records it on the window's current desktop. Non-zero is used by
-    /// the RouteToDesktop placement path so the zone assignment is tracked on the
-    /// desktop the window is being moved to.
+    /// the RouteToDesktop placement path (track the assignment on the destination
+    /// desktop) and by batch resnap entries that preserve a window's recorded
+    /// desktop through the commit (see ZoneAssignmentEntry::virtualDesktop).
     void commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId,
                     PhosphorEngine::SnapIntent intent = PhosphorEngine::SnapIntent::UserInitiated,
                     int virtualDesktop = 0);
@@ -864,6 +865,16 @@ private:
     /// resolves to the global holder; a non-empty key creates a per-screen store on
     /// first use, seeding it with the shared window registry.
     SnapState* ensureStateForKey(const PhosphorEngine::PlacementStateKey& key);
+
+    /// Invoke @p fn once per zone-assigned window across every snap store, with
+    /// the window's zones, screen, and desktop read from the store that OWNS it —
+    /// the engine-side sibling of WindowTrackingService::forEachZoneAssignedWindow,
+    /// shared by the resnap / rotation producers so their per-store walks stay in
+    /// lockstep. A window lives in exactly one store (the reverse map is
+    /// authoritative), so each window is visited exactly once. @p fn must not
+    /// mutate the snap stores.
+    void forEachSnapAssignment(const std::function<void(const QString& windowId, const QStringList& zoneIds,
+                                                        const QString& screenId, int desktop)>& fn) const;
 
     /// Clear the last-used zone on every store (per-screen + the global holder)
     /// that currently points at one of @p removedZones. Last-used is per-key now, so

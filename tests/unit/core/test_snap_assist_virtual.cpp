@@ -37,16 +37,14 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include <PhosphorScreens/ScreenIdentity.h>
+
 #include "../helpers/LayoutRegistryTestHelpers.h"
-#include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-
-// Type alias — shared StubSettings with snap assist enabled for this test file
-using StubSettingsSnapAssist = StubSettings;
 
 // =========================================================================
 // Test Class
@@ -61,9 +59,6 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
-        m_settings = new StubSettingsSnapAssist(nullptr);
-        m_settings->setSnapAssistFeatureEnabled(true);
-        m_settings->setSnapAssistEnabled(true);
         m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
@@ -88,8 +83,6 @@ private Q_SLOTS:
         m_service = nullptr;
         delete m_zoneDetector;
         m_zoneDetector = nullptr;
-        delete m_settings;
-        m_settings = nullptr;
         delete m_layoutManager;
         m_layoutManager = nullptr;
         m_testLayout = nullptr;
@@ -188,6 +181,11 @@ private Q_SLOTS:
         QSet<QUuid> occupied = m_service->buildOccupiedZoneSet(vs1);
         QUuid zoneUuid = m_testLayout->zones().at(0)->id();
         QVERIFY2(!occupied.contains(zoneUuid), "Zone should NOT be occupied when querying different virtual screen");
+
+        // Positive control: the SAME query on the owning virtual screen must
+        // report the zone occupied, so the exclusion above can't pass vacuously.
+        QSet<QUuid> occupiedOnVs0 = m_service->buildOccupiedZoneSet(vs0);
+        QVERIFY2(occupiedOnVs0.contains(zoneUuid), "Zone snapped on vs:0 must appear occupied when querying vs:0");
     }
 
     void testBuildOccupiedZoneSet_physicalQueryVirtualWindow_excludesWindow()
@@ -258,19 +256,37 @@ private Q_SLOTS:
 
     void testGetEmptyZones_virtualScreen_returnsValidList()
     {
-        // getEmptyZones with virtual screen ID should return a list
-        // (may be empty in headless mode since there's no QScreen, but must not crash)
+        // getEmptyZones with a virtual screen ID: every returned entry must be
+        // structurally sound (non-empty, unique zone ids). Skip rather than
+        // pass vacuously when the headless harness resolves no screen geometry
+        // and the list is legitimately empty.
         QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
-        PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(vsId);
-        // Just verify it doesn't crash and returns a valid (possibly empty) list
-        Q_UNUSED(result);
+        const PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(vsId);
+        if (result.isEmpty()) {
+            QSKIP("getEmptyZones returned no entries in headless harness — screen geometry unavailable");
+        }
+        QSet<QString> seenZoneIds;
+        for (const auto& zone : result) {
+            QVERIFY2(!zone.zoneId.isEmpty(), "an empty-zone entry must carry a zone id");
+            QVERIFY2(!seenZoneIds.contains(zone.zoneId), "a zone must not be listed empty twice");
+            seenZoneIds.insert(zone.zoneId);
+        }
     }
 
     void testGetEmptyZones_emptyScreenId_returnsValidList()
     {
-        // Empty screen ID fallback should not crash
-        PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(QString());
-        Q_UNUSED(result);
+        // Empty screen ID fallback: same structural invariants and skip
+        // semantics as the virtual-screen variant above.
+        const PhosphorProtocol::EmptyZoneList result = m_service->getEmptyZones(QString());
+        if (result.isEmpty()) {
+            QSKIP("getEmptyZones returned no entries in headless harness — screen geometry unavailable");
+        }
+        QSet<QString> seenZoneIds;
+        for (const auto& zone : result) {
+            QVERIFY2(!zone.zoneId.isEmpty(), "an empty-zone entry must carry a zone id");
+            QVERIFY2(!seenZoneIds.contains(zone.zoneId), "a zone must not be listed empty twice");
+            seenZoneIds.insert(zone.zoneId);
+        }
     }
 
     // =====================================================================
@@ -318,11 +334,11 @@ private Q_SLOTS:
         QString windowId = QStringLiteral("konsole|multi-vs");
 
         m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
-        QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
+        QCOMPARE(m_service->screenForWindow(windowId), vs0);
 
         // Reassign to a different zone on a different virtual screen
         m_service->assignWindowToZone(windowId, m_zoneIds[1], vs1, 1);
-        QCOMPARE(m_service->screenAssignments().value(windowId), vs1);
+        QCOMPARE(m_service->screenForWindow(windowId), vs1);
 
         // buildOccupiedZoneSet for vs1 should show zone 1 occupied
         QSet<QUuid> occupiedVs1 = m_service->buildOccupiedZoneSet(vs1);
@@ -351,7 +367,9 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
         m_service->assignWindowToZone(win3, m_zoneIds[2], vsId, 1);
 
-        // Only win1 and win2 are alive
+        // Only win1 and win2 are alive. The return value counts pruned store
+        // ITEMS, not windows (see testPruneStaleAssignments_cleansFloatingState);
+        // win3 holds only its zone assignment, so one item.
         QSet<QString> alive{win1, win2};
         int pruned = m_service->pruneStaleAssignments(alive);
 
@@ -360,8 +378,8 @@ private Q_SLOTS:
         QVERIFY(m_service->isWindowSnapped(win2));
         QVERIFY(!m_service->isWindowSnapped(win3));
         // Screen and desktop assignments should also be gone
-        QVERIFY(!m_service->screenAssignments().contains(win3));
-        QVERIFY(!m_service->desktopAssignments().contains(win3));
+        QVERIFY(m_service->screenForWindow(win3).isEmpty());
+        QCOMPARE(m_snapState->desktopForWindow(win3), 0);
     }
 
     void testPruneStaleAssignments_preservesAliveWindows()
@@ -392,7 +410,8 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
         m_service->assignWindowToZone(win3, m_zoneIds[2], vsId, 1);
 
-        // Only win1 is alive — 2 should be pruned
+        // Only win1 is alive. The return counts pruned store items: win2 and
+        // win3 each hold only a zone assignment, so two items.
         QSet<QString> alive{win1};
         int pruned = m_service->pruneStaleAssignments(alive);
 
@@ -411,7 +430,8 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win1, m_zoneIds[0], vsId, 1);
         m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
 
-        // Empty alive set — all windows should be pruned
+        // Empty alive set — all windows should be pruned. Two store items:
+        // one zone assignment per window, nothing floating.
         QSet<QString> alive;
         int pruned = m_service->pruneStaleAssignments(alive);
 
@@ -420,7 +440,7 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowSnapped(win2));
     }
 
-    void testPruneStaleAssignments_cleansFloatingAndAutotileFloated()
+    void testPruneStaleAssignments_cleansFloatingState()
     {
         QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
         QString win1 = QStringLiteral("app1|aaa");
@@ -430,61 +450,29 @@ private Q_SLOTS:
         m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
         m_service->setWindowFloating(win1, true);
 
-        // Only win2 is alive — win1 should be fully cleaned
+        // Only win2 is alive — win1's assignment AND floating state must be
+        // fully cleaned; win2 must be untouched. The return value counts
+        // pruned ITEMS across the stores, not windows: win1 contributes its
+        // zone assignment (snap store) plus its floating entry (WTS set).
         QSet<QString> alive{win2};
         int pruned = m_service->pruneStaleAssignments(alive);
 
-        QVERIFY(pruned >= 1);
+        QCOMPARE(pruned, 2);
         QVERIFY(!m_service->isWindowFloating(win1));
+        QVERIFY(!m_service->isWindowSnapped(win1));
+        QVERIFY(m_service->isWindowSnapped(win2));
     }
 
-    void testScreensMatch_virtualScreenIdsAreDistinct()
-    {
-        // Verify that virtual screen IDs with different indices are never
-        // considered matching, and that physical vs virtual IDs don't match.
-        QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
-        QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
-
-        // Both are virtual, different index -> should be false (correct behavior)
-        QVERIFY(!PhosphorScreens::ScreenIdentity::screensMatch(vs0, vs1));
-
-        // Physical parent vs virtual child -> should be false (correct behavior for
-        // the "virtual screens are separate screens" model)
-        QString physId = QStringLiteral("Dell:U2722D:115107");
-        QVERIFY(!PhosphorScreens::ScreenIdentity::screensMatch(physId, vs0));
-    }
-
-    // =====================================================================
-    // Cross-virtual-screen occupancy isolation
-    // =====================================================================
-
-    void testCrossVirtualScreenIsolation()
-    {
-        // A window snapped on vs:0 must NOT appear occupied when querying vs:1.
-        // This verifies that buildOccupiedZoneSet isolates per virtual screen.
-        QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
-        QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
-        QString windowId = QStringLiteral("konsole|cross-iso-test");
-
-        // Assign window to zone 0 on vs:0
-        m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
-        QVERIFY(m_service->isWindowSnapped(windowId));
-
-        // Query occupied zones for vs:1 — should NOT contain zone 0
-        QSet<QUuid> occupiedOnVs1 = m_service->buildOccupiedZoneSet(vs1);
-        QUuid zone0Uuid = m_testLayout->zones().at(0)->id();
-        QVERIFY2(!occupiedOnVs1.contains(zone0Uuid),
-                 "Zone snapped on vs:0 must NOT appear occupied when querying vs:1");
-
-        // Sanity: querying vs:0 SHOULD contain zone 0
-        QSet<QUuid> occupiedOnVs0 = m_service->buildOccupiedZoneSet(vs0);
-        QVERIFY2(occupiedOnVs0.contains(zone0Uuid), "Zone snapped on vs:0 must appear occupied when querying vs:0");
-    }
+    // (The former testScreensMatch_virtualScreenIdsAreDistinct and
+    // testCrossVirtualScreenIsolation were removed as exact duplicates of
+    // testScreensMatch_differentVirtualIndexes_returnsFalse,
+    // testScreensMatch_physicalVsVirtual_returnsFalse, and
+    // testBuildOccupiedZoneSet_differentVirtualScreen_excludesWindow — the
+    // one unique positive check they carried lives in that occupancy test.)
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    StubSettingsSnapAssist* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;
@@ -494,4 +482,3 @@ private:
 
 QTEST_MAIN(TestSnapAssistVirtual)
 #include "test_snap_assist_virtual.moc"
-#include <PhosphorScreens/ScreenIdentity.h>
