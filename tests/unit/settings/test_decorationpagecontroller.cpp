@@ -218,6 +218,81 @@ private Q_SLOTS:
         QVERIFY2(params.contains(QStringLiteral("border")), "retained pack's parameters must survive");
     }
 
+    /// setChain also prunes the disabledPacks entry of a dropped pack, the
+    /// parallel of the parameters prune above — a re-added pack starts enabled
+    /// rather than resurrecting a stale disabled flag.
+    void setChain_prunesDisabledPacksOfDroppedPacks()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("border"), QStringLiteral("glow")});
+        c.setChainLayerEnabled(path, QStringLiteral("glow"), false);
+        QVERIFY2(c.disabledPacksAt(path).contains(QStringLiteral("glow")), "glow should be disabled after the toggle");
+
+        // Drop glow from the chain — its disabled flag must be pruned too.
+        c.setChain(path, QStringList{QStringLiteral("border")});
+        QVERIFY2(!c.disabledPacksAt(path).contains(QStringLiteral("glow")),
+                 "dropped pack's disabledPacks entry must be pruned");
+    }
+
+    /// setChainLayerEnabled toggles a layer's disabled state, and its first
+    /// direct edit at a leaf SEEDS from the resolved (inherited) disabled set
+    /// so an inherited-off layer is preserved rather than silently re-enabled.
+    void setChainLayerEnabled_togglesAndSeedsFromResolved()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        // Parent chain with two packs; disable glow at the parent.
+        c.setChain(QStringLiteral("window"), QStringList{QStringLiteral("border"), QStringLiteral("glow")});
+        c.setChainLayerEnabled(QStringLiteral("window"), QStringLiteral("glow"), false);
+        QVERIFY(c.disabledPacksAt(QStringLiteral("window")).contains(QStringLiteral("glow")));
+
+        // The child leaf has no own disabledPacks override yet; it inherits
+        // glow-off from the parent.
+        QVERIFY(c.disabledPacksAt(QStringLiteral("window.tiled")).contains(QStringLiteral("glow")));
+
+        // First direct edit at the child: disable border. The seed-from-resolved
+        // branch must PRESERVE the inherited glow-off rather than dropping it.
+        c.setChainLayerEnabled(QStringLiteral("window.tiled"), QStringLiteral("border"), false);
+        const QStringList disabled = c.disabledPacksAt(QStringLiteral("window.tiled"));
+        QVERIFY2(disabled.contains(QStringLiteral("border")), "the just-disabled layer must be off");
+        QVERIFY2(disabled.contains(QStringLiteral("glow")), "the inherited-off layer must be preserved on first edit");
+
+        // Re-enabling border clears only it.
+        c.setChainLayerEnabled(QStringLiteral("window.tiled"), QStringLiteral("border"), true);
+        QVERIFY(!c.disabledPacksAt(QStringLiteral("window.tiled")).contains(QStringLiteral("border")));
+    }
+
+    /// disabledPacksAt resolves through inheritance like chainAt does — a leaf
+    /// with no own disabledPacks override reports its ancestor's disabled set.
+    void disabledPacksAt_resolvesThroughInheritance()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        c.setChain(QString(), QStringList{QStringLiteral("border"), QStringLiteral("glow")});
+        c.setChainLayerEnabled(QString(), QStringLiteral("glow"), false);
+        // A leaf with no own override inherits the baseline's disabled set.
+        QVERIFY(c.disabledPacksAt(QStringLiteral("window.floating")).contains(QStringLiteral("glow")));
+    }
+
+    /// The window.floating leaf resolves its overlay like the other leaves — a
+    /// direct override wins over the inherited baseline chain.
+    void windowFloating_resolvesOverlayOverBaseline()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        c.setChain(QString(), QStringList{QStringLiteral("border")});
+        c.setChain(QStringLiteral("window.floating"), QStringList{QStringLiteral("glow")});
+        QCOMPARE(c.chainAt(QStringLiteral("window.floating")), (QStringList{QStringLiteral("glow")}));
+        // A sibling with no own override still inherits the baseline.
+        QCOMPARE(c.chainAt(QStringLiteral("window.snapped")), (QStringList{QStringLiteral("border")}));
+    }
+
     /// setChain with the EMPTY path edits the baseline chain itself (the
     /// "All Windows"-style root card's edit path) — the empty path skips the
     /// supported-path guard by design and lands on the tree's baseline.

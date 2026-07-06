@@ -654,7 +654,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 pk->shader->setUniform(pk->uHasBackdropLoc, backdropAvailable ? 1.0f : 0.0f);
             }
             // Contract uniforms + pack params (shared with the OffscreenData path).
-            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, pad);
+            // windowId threaded in so the focus-fade ramp doesn't recompute
+            // getWindowId(w) per pack.
+            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, pad, windowId);
             drawFullscreenQuad();
         }
         for (int i = 0; i < qMin(static_cast<int>(passCount), 4); ++i) {

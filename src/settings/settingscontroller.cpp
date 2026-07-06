@@ -153,6 +153,11 @@ SettingsController::~SettingsController()
         // The overlay-shader resolver reaches m_overlayShaderRegistry — clear it
         // too for the same symmetry.
         m_rulesPage->setOverlayShaderLookup({});
+        // The decoration-pack resolver captures `this` and dereferences
+        // m_surfaceShaderRegistry (a QObject child of this, destroyed during
+        // ~QObject teardown); clear it too so a deferred dataChanged during
+        // teardown can't run the lookup against the dangling registry.
+        m_rulesPage->setDecorationPackLookup({});
         // Drain any in-flight `dataChanged` emissions queued against
         // the cleared lookups before the model captures the now-
         // empty resolvers. refreshLabels walks every row once and

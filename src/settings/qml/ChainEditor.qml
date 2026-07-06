@@ -295,18 +295,26 @@ ColumnLayout {
     // selection: selecting a pack appends it to the chain, so currentId stays
     // empty and the button always shows its placeholder.
     SettingsRow {
+        id: addPackRow
         Layout.fillWidth: true
         visible: root.showAddRow
         title: i18n("Add decoration pack")
-        description: root._addableEffects().length > 0 ? i18n("Stack another pack onto this surface's chain") : i18n("All installed packs are already in the chain")
+        // Hoisted: the add-pack candidate list is scanned once per change of
+        // chain/availableShaders instead of three times per re-evaluation
+        // (description, enabled, items each rebuilt the filtered list).
+        // Referenced by explicit id, not `parent`, because SettingsRow may
+        // reparent the button into its own content layout.
+        readonly property var _addable: root._addableEffects()
+        description: _addable.length > 0 ? i18n("Stack another pack onto this surface's chain") : i18n("All installed packs are already in the chain")
 
         PZCommon.CategoryMenuButton {
             Layout.fillWidth: true
-            enabled: root._addableEffects().length > 0
-            items: root._addableEffects()
+            enabled: addPackRow._addable.length > 0
+            items: addPackRow._addable
             currentId: ""
             includeNoneEntry: false
             placeholderText: i18nc("@action:button", "Add a pack…")
+            Accessible.description: i18n("Add a decoration pack to this surface's chain")
             onSelected: function (id) {
                 if (id && id.length > 0)
                     root.chainChangeRequested(root._withAppended(id));

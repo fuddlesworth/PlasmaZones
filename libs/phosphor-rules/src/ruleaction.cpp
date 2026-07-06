@@ -92,8 +92,8 @@ bool hasHexColorOrAccent(const QJsonObject& params, QLatin1StringView key)
 // own ConfigDefaults ranges on consumption; these only reject grossly
 // malformed hand-edited payloads. Kept generous so values a user could pick
 // through the global UI are never dropped on load.
-constexpr double kMaxBorderWidth = 10.0;
-constexpr double kMaxBorderRadius = 20.0;
+// Border width/radius upper bounds live in RuleAction.h (MaxBorderWidth /
+// MaxBorderRadius) so the KWin-effect consumer re-validation shares them.
 constexpr double kMaxGap = 500.0;
 
 } // namespace
@@ -812,7 +812,7 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::BorderWidth),
         .validate =
             [](const QJsonObject& p) {
-                return hasNumberInRange(p, ActionParam::Value, kMaxBorderWidth);
+                return hasNumberInRange(p, ActionParam::Value, MaxBorderWidth);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -820,7 +820,7 @@ void ActionRegistry::registerBuiltins()
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("number"),
                      .min = 0.0,
-                     .max = kMaxBorderWidth,
+                     .max = MaxBorderWidth,
                      .defaultDisplay = 2.0}},
         .category = QStringLiteral("borderAppearance"),
         .displayOrder = 2,
@@ -831,7 +831,7 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::BorderRadius),
         .validate =
             [](const QJsonObject& p) {
-                return hasNumberInRange(p, ActionParam::Value, kMaxBorderRadius);
+                return hasNumberInRange(p, ActionParam::Value, MaxBorderRadius);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -839,7 +839,7 @@ void ActionRegistry::registerBuiltins()
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("number"),
                      .min = 0.0,
-                     .max = kMaxBorderRadius,
+                     .max = MaxBorderRadius,
                      .defaultDisplay = 8.0}},
         .category = QStringLiteral("borderAppearance"),
         .displayOrder = 3,

@@ -80,7 +80,8 @@ public:
     /// just churn the closures without changing behaviour.
     ///
     /// All lookups (screen, activity, zone, snappingLayout, tilingAlgorithm,
-    /// shaderEffect, overlayShader) must be wired for the model to render rich
+    /// shaderEffect, overlayShader, decorationPack, curve) must be wired for the
+    /// model to render rich
     /// `matchSummary` / `actionSummary` cells — a missing lookup falls
     /// back to printing the raw id/UUID. SettingsController is the
     /// single intended caller and installs all of them during page

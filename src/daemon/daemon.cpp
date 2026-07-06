@@ -833,7 +833,7 @@ bool Daemon::init()
                 // carries the shipped one — packs themselves ship no vert, so
                 // both sides land on the shared vert today). The overlay host
                 // satisfies the matching side of this contract: applyDecoration
-                // writes decorationVertexShaderSource from the pack's declared
+                // writes each chain stage's vertexSource from the pack's declared
                 // vertexShaderPath (and the registry preamble), so a pack that
                 // ships its own vert keys the same vert on both the warm bake
                 // and the live load.

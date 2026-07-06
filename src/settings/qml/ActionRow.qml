@@ -999,7 +999,10 @@ ColumnLayout {
         ChainEditor {
             availableShaders: row.appSettings && row.appSettings.decorationPage ? row.appSettings.decorationPage.availableShaderEffects() : []
             chain: row.action.chain || []
-            packParameters: row.action.params || ({})
+            // Hoisted stable-empty identity (same as _shaderParamsEditor's
+            // currentValues) rather than an inline `({})` that churns a new
+            // object per binding evaluation.
+            packParameters: row.action.params || row._emptyShaderParams
             showLayerToggles: false
             showAddRow: false
             onChainChangeRequested: function (newChain) {

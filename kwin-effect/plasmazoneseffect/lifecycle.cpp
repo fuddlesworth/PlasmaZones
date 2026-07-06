@@ -67,7 +67,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     PhosphorProtocol::registerWireTypes();
 
     // Decoration-manager wiring (veto + signal connections) lives with the
-    // rest of the border/decoration code in borders.cpp.
+    // rest of the border/decoration code in decorations.cpp.
     setupDecorationManager();
 
     // Seed the decoration profile tree with the empty/neutral default so the
@@ -588,6 +588,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             // appId|uuid) which is the same key the pending map
             // uses on the push side.
             m_pendingFrameGeometry.remove(cachedId);
+            // Same belt-and-suspenders as m_frameOpacityCache below: a closing
+            // decorated window keeps painting under its close animation, and
+            // pushBorderUniforms re-creates the m_focusFade entry via operator[]
+            // on every such frame AFTER slotWindowClosed already scrubbed it. So
+            // the slotWindowClosed removal alone is not enough; drop it here too
+            // (keyed by the frozen cachedId) or the entry leaks for the session.
+            m_focusFade.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);

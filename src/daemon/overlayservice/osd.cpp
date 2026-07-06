@@ -379,7 +379,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
 
         // Outer-margin request (the pack's declared paddingParam, e.g. glow's
         // glowSize): the per-surface override wins, else the param's declared
-        // default — the same resolution the compositor's updateWindowBorder
+        // default — the same resolution the compositor's updateWindowDecoration
         // applies, with the chain's LARGEST request padding the shared canvas.
         // The QML host inflates the capture + shader items by this logical-px
         // margin so an outer effect gets real transparent room; 0 (a

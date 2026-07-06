@@ -889,8 +889,8 @@ private:
     /// "popup.layoutPicker") and push it onto @p slot's decoration properties
     /// (Stage d). Shared by every OSD show path (all modes: layout / locked /
     /// disabled / navigation) and the three transient popup show paths. Clears
-    /// the slot's decorationShaderSource when no pack resolves so a stale
-    /// decoration never renders.
+    /// the slot's decorationChain (and decorationOuterPadding) when no pack
+    /// resolves so a stale decoration never renders.
     void applyDecoration(QObject* slot, const QString& surfacePath);
 
     void destroyIfTypeMismatch(const QString& screenId);

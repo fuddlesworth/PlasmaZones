@@ -12,6 +12,14 @@ namespace PhosphorSurfaceShaders {
 
 namespace {
 
+// Tree serialization keys, hoisted so toJson / fromJson share one source of
+// truth (mirroring DecorationProfile::JsonField*) — a future rename touches
+// one place instead of two unguarded literals that must be kept in lockstep.
+constexpr auto kJsonFieldBaseline = "baseline";
+constexpr auto kJsonFieldOverrides = "overrides";
+constexpr auto kJsonFieldPath = "path";
+constexpr auto kJsonFieldProfile = "profile";
+
 /// Walk @p path up one level ("window.tiled" -> "window" -> "").
 ///
 /// Local to this translation unit so phosphor-surface need not link
@@ -109,7 +117,7 @@ void DecorationProfileTree::setBaseline(const DecorationProfile& profile)
 QJsonObject DecorationProfileTree::toJson() const
 {
     QJsonObject root;
-    root.insert(QLatin1String("baseline"), m_baseline.toJson());
+    root.insert(QLatin1String(kJsonFieldBaseline), m_baseline.toJson());
 
     QJsonArray overrides;
     for (const QString& path : m_insertionOrder) {
@@ -117,11 +125,11 @@ QJsonObject DecorationProfileTree::toJson() const
         if (it == m_overrides.constEnd())
             continue;
         QJsonObject entry;
-        entry.insert(QLatin1String("path"), path);
-        entry.insert(QLatin1String("profile"), it.value().toJson());
+        entry.insert(QLatin1String(kJsonFieldPath), path);
+        entry.insert(QLatin1String(kJsonFieldProfile), it.value().toJson());
         overrides.append(entry);
     }
-    root.insert(QLatin1String("overrides"), overrides);
+    root.insert(QLatin1String(kJsonFieldOverrides), overrides);
 
     return root;
 }
@@ -130,13 +138,13 @@ DecorationProfileTree DecorationProfileTree::fromJson(const QJsonObject& obj)
 {
     DecorationProfileTree tree;
 
-    if (obj.contains(QLatin1String("baseline")))
-        tree.m_baseline = DecorationProfile::fromJson(obj.value(QLatin1String("baseline")).toObject());
+    if (obj.contains(QLatin1String(kJsonFieldBaseline)))
+        tree.m_baseline = DecorationProfile::fromJson(obj.value(QLatin1String(kJsonFieldBaseline)).toObject());
 
-    const QJsonArray arr = obj.value(QLatin1String("overrides")).toArray();
+    const QJsonArray arr = obj.value(QLatin1String(kJsonFieldOverrides)).toArray();
     for (const QJsonValue& v : arr) {
         const QJsonObject entry = v.toObject();
-        const QString path = entry.value(QLatin1String("path")).toString();
+        const QString path = entry.value(QLatin1String(kJsonFieldPath)).toString();
         if (path.isEmpty())
             continue;
         // Defence-in-depth at the persistence boundary: drop overrides for paths
@@ -151,7 +159,7 @@ DecorationProfileTree DecorationProfileTree::fromJson(const QJsonObject& obj)
         // setOverride de-dups: a malformed file with duplicate entries for the
         // same path resolves to last-value-wins (keeping the first-seen position),
         // and the next save() normalises it back to a single entry.
-        tree.setOverride(path, DecorationProfile::fromJson(entry.value(QLatin1String("profile")).toObject()));
+        tree.setOverride(path, DecorationProfile::fromJson(entry.value(QLatin1String(kJsonFieldProfile)).toObject()));
     }
 
     return tree;

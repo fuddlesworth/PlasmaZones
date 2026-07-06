@@ -76,7 +76,7 @@ const Settings::ConfigKeyList& animationConfigKeys()
 
 // Every decoration leaf edits the single shared DecorationProfileTree settings
 // key (one JSON blob covering windows + OSDs + popups), so
-// pageGroupChildren("decoration") — the canonical leaf set — identifies them
+// pageGroupChildren("decorations") — the canonical leaf set — identifies them
 // all and Reset/Discard act on the whole tree, mirroring the animation shared
 // domain above.
 bool isDecorationPage(const QString& page)
@@ -403,6 +403,29 @@ void SettingsController::reconcileRuleBackedDirty()
 
 void SettingsController::resetPage(const QString& page)
 {
+    // Manifest-owned pages FIRST, mirroring isPageDirty and discardPage. A page
+    // can belong to a shared-domain GROUP (animations / decorations) yet own its
+    // own config keys: window-appearance is a decorations-group child, so
+    // isDecorationPage(page) is true, but its Windows.* / Gaps.* keys live in
+    // the manifest. Checking the shared-domain branches first would reset the
+    // whole DecorationProfileTree instead of the page's own keys, and since
+    // isPageDirty and discardPage both route window-appearance through its
+    // manifest, Reset must too or the three disagree.
+    {
+        const auto& manifest = pageOwnedConfigKeys();
+        const auto ownedIt = manifest.constFind(page);
+        if (ownedIt != manifest.constEnd()) {
+            // Suppress onSettingsPropertyChanged for the reset's NOTIFY storm;
+            // reconcile `page`'s dirty state explicitly below.
+            {
+                const LoadingScope loadingScope(m_loading);
+                m_settings.resetKeys(*ownedIt);
+            }
+            reconcilePageDirty(page);
+            return;
+        }
+    }
+
     // Animation pages (whole tree, shared domain): reset to defaults =
     // clear every per-event override file AND reset the animation config keys
     // (Profile, ShaderProfileTree, WindowFiltering, Enabled, Backend) to their
@@ -508,23 +531,10 @@ void SettingsController::resetPage(const QString& page)
         return;
     }
 
-    const auto& manifest = pageOwnedConfigKeys();
-    const auto it = manifest.constFind(page);
-    if (it == manifest.constEnd()) {
-        qCWarning(PlasmaZones::lcCore) << "resetPage: no config manifest for page" << page;
-        return;
-    }
-    // Suppress onSettingsPropertyChanged for the reset's NOTIFY storm — it
-    // would otherwise mark the ACTIVE page dirty (which may differ from the
-    // page being reset). We reconcile `page`'s dirty state explicitly below.
-    {
-        const LoadingScope loadingScope(m_loading);
-        m_settings.resetKeys(*it);
-    }
-    // Resetting to defaults usually diverges from the saved baseline, so the
-    // page normally becomes dirty (stage → Save/Discard). If the defaults
-    // already matched the baseline it stays clean — reconcile handles both.
-    reconcilePageDirty(page);
+    // Manifest-owned pages were handled at the top of this function; anything
+    // reaching here matched no manifest entry and no shared-domain / ordering /
+    // shortcut / virtual-screen branch, so there is nothing to reset.
+    qCWarning(PlasmaZones::lcCore) << "resetPage: no config manifest for page" << page;
 }
 
 void SettingsController::discardPage(const QString& page)

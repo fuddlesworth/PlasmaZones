@@ -91,6 +91,27 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
         return;
     }
     WindowDecoration& wb = it.value();
+    // Resolve the EXACT window this decoration belongs to, once, for both the
+    // GL teardown and the multipass-guard below. findWindowById's fuzzy appId
+    // fallback can return a same-app SIBLING for a dead windowId, and tearing
+    // down the sibling's redirect / erasing its FBO would be wrong — the
+    // callers (reconcileDecorationOnPlacementFlip, the windowDecorationRestored
+    // handler) re-check getWindowId(w) == windowId precisely to avoid this, but
+    // this internal re-resolution must too. Preference order: an exact-id live
+    // match; else the frozen reverse mapping (resolves a deleted window under
+    // its exact id, and survives a close transition); else the caller's hint
+    // (the close path passes the corpse, whose getWindowId no longer
+    // re-derives to windowId, so it can't be exact-checked here).
+    KWin::EffectWindow* target = findWindowById(windowId);
+    if (target && getWindowId(target) != windowId) {
+        target = nullptr;
+    }
+    if (!target) {
+        target = m_windowIdReverse.value(windowId);
+    }
+    if (!target) {
+        target = windowHint;
+    }
     // Release the offscreen redirect + border shader slot IF this border owns
     // it. When an animation transition currently owns the slot (shaderApplied
     // is false — the transition's begin took it over), we must NOT touch
@@ -100,21 +121,15 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
     // border shader when the border still exists, so dropping the entry here
     // (after this guarded release) is the correct teardown.
     if (wb.shaderApplied) {
-        // findWindowById cannot resolve a window that is already deleted (the
-        // close path calls this AFTER KWin marks it deleted), so fall back to
-        // the caller-supplied pointer. Skipping the release there left the
-        // corpse redirected with the present shader still bound while the
+        // setShader / unredirect on the deleted-but-still-painted window are
+        // safe: KWin keys both on the redirected-windows map, and the redirect
+        // stays live until the window is discarded. Skipping the release left
+        // the corpse redirected with the present shader still bound while the
         // multipass erase below destroyed the composite textures its sampler
         // uniforms referenced — GL auto-unbinds a deleted texture, an unbound
         // sampler reads opaque black, and the next paint of the Deleted drew
-        // the whole expanded quad black (the close flash). setShader /
-        // unredirect on the deleted-but-still-painted window are safe: KWin
-        // keys both on the redirected-windows map, and the redirect stays
-        // live until the window is discarded.
-        KWin::EffectWindow* w = findWindowById(windowId);
-        if (!w) {
-            w = windowHint;
-        }
+        // the whole expanded quad black (the close flash).
+        KWin::EffectWindow* w = target;
         if (w) {
             // Only clear when no transition raced in to own the slot between
             // this border being applied and now — reconcileDecorationShader would
@@ -155,22 +170,11 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
     // transition keeps the state; its own teardown (endShaderTransition →
     // removeWindowDecoration, by then with no live transition) or the
     // windowDeleted backstop erases it.
-    {
-        KWin::EffectWindow* aliveW = findWindowById(windowId);
-        if (!aliveW) {
-            aliveW = windowHint;
-        }
-        if (!aliveW) {
-            // Hint-less callers (bulk clears, D-Bus-driven purges) cannot
-            // resolve a deleted window through findWindowById; the frozen
-            // reverse mapping still can while a close transition holds it
-            // alive, and that is exactly the window whose composite the
-            // animation is sampling.
-            aliveW = m_windowIdReverse.value(windowId);
-        }
-        if (aliveW && m_shaderManager.findTransition(aliveW)) {
-            return;
-        }
+    // Reuses the exact `target` resolved at the top (exact-id live match, else
+    // the frozen reverse mapping, else the hint) — a fuzzy sibling here would
+    // early-return on the SIBLING's transition and leak this window's FBO.
+    if (target && m_shaderManager.findTransition(target)) {
+        return;
     }
     m_surfaceMultipass.erase(windowId);
 }
@@ -695,14 +699,46 @@ void PlasmaZonesEffect::reconcileDecorationShader(const QString& windowId, KWin:
     // through removeWindowDecoration, which clears the shader and unredirects.
 }
 
-void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
-                                           const CompiledSurfacePack& pack, qreal scale, qreal texturePaddingLogical)
+float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
 {
-    // Every caller (drawWindow's idle blit, renderSurfaceChain's transition
-    // capture, renderSurfaceChainComposite's per-pack fold) has already resolved
-    // @p pack and @p wb, confirmed the border is applied, ruled out a transition
-    // owning the slot, and bound pack.shader, so this just computes and writes
-    // the uniforms onto the bound program. The border APPEARANCE is not a
+    // Ramp the smoothed focus value toward the hard 0/1 target over
+    // kFocusFadeMs so a focus change fades rather than snaps. Called from
+    // pushBorderUniforms only for a pack that reads focus, with @p windowId
+    // threaded from the fold so getWindowId(w) is not recomputed per pack.
+    // Uses the PINNED per-frame clock: a second call within the same frame (a
+    // chain with several focus-reading packs) reads now == lastMs and is an
+    // exact no-op, so the ramp advances at most once per frame and the step
+    // can never partially double-advance (the live wall clock could straddle a
+    // millisecond boundary mid-frame).
+    FocusFadeState& fs = m_focusFade[windowId];
+    const float target = focused ? 1.0f : 0.0f;
+    qint64 now = m_shaderManager.currentFrameClockMs();
+    if (now < 0) {
+        now = ShaderInternal::shaderClockNowMs();
+    }
+    if (fs.value < 0.0f) {
+        fs.value = target; // first decorate: snap, no fade on appearance
+    } else if (fs.lastMs >= 0 && now > fs.lastMs) {
+        const float step = static_cast<float>(now - fs.lastMs) / static_cast<float>(kFocusFadeMs);
+        if (fs.value < target) {
+            fs.value = qMin(target, fs.value + step);
+        } else if (fs.value > target) {
+            fs.value = qMax(target, fs.value - step);
+        }
+    }
+    fs.lastMs = now;
+    return fs.value;
+}
+
+void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
+                                           const CompiledSurfacePack& pack, qreal scale, qreal texturePaddingLogical,
+                                           const QString& windowId)
+{
+    // The caller (renderSurfaceChainComposite's per-pack fold) has already
+    // resolved @p pack and @p wb, confirmed the border is applied, ruled out a
+    // transition owning the slot, and bound pack.shader, so this just computes
+    // and writes the uniforms onto the bound program. The border APPEARANCE is
+    // not a
     // parameter here — it rides the pack's baked customParams/customColors,
     // pushed below (with @p wb's per-window rule override when set).
     KWin::GLShader* shader = pack.shader.get();
@@ -756,30 +792,19 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     if (pack.uScaleLoc >= 0) {
         shader->setUniform(pack.uScaleLoc, static_cast<float>(scale));
     }
-    // Focus flag: the pack mixes its active/inactive appearance params on
-    // this. SMOOTHED — ramp toward the hard 0/1 target over kFocusFadeMs so a
-    // focus change fades rather than snaps (see m_focusFade). The advance is
-    // deduped per frame by the ms clock, so the chain's other packs (all
-    // calling this with the same windowId in the same frame) don't over-step
-    // the ramp. windowSurfaceAnimates keeps the window painting while the
-    // value is mid-ramp.
+    // Focus flag: the pack mixes its active/inactive appearance params on this.
+    // SMOOTHED — advanceFocusFade ramps toward the hard 0/1 target so a focus
+    // change fades rather than snaps. Advanced ONLY for a pack that actually
+    // reads focus (uFocusedLoc >= 0), so a decorated window with no
+    // focus-tracking pack never gets an m_focusFade entry and is never dragged
+    // into ramp-driven repaints by windowSurfaceAnimates. The pinned per-frame
+    // clock inside advanceFocusFade makes repeated same-frame calls (a chain
+    // with several focus-reading packs) exact no-ops, so the ramp advances at
+    // most once per frame. @p windowId is threaded from the fold so this hot
+    // path does not recompute getWindowId(w) per pack.
     if (pack.uFocusedLoc >= 0) {
-        const QString wid = getWindowId(w);
-        const float target = (KWin::effects && w == KWin::effects->activeWindow()) ? 1.0f : 0.0f;
-        FocusFadeState& fs = m_focusFade[wid];
-        const qint64 now = ShaderInternal::shaderClockNowMs();
-        if (fs.value < 0.0f) {
-            fs.value = target; // first decorate: snap, no fade on appearance
-        } else if (fs.lastMs >= 0 && now > fs.lastMs) {
-            const float step = static_cast<float>(now - fs.lastMs) / static_cast<float>(kFocusFadeMs);
-            if (fs.value < target) {
-                fs.value = qMin(target, fs.value + step);
-            } else if (fs.value > target) {
-                fs.value = qMax(target, fs.value - step);
-            }
-        }
-        fs.lastMs = now;
-        shader->setUniform(pack.uFocusedLoc, fs.value);
+        const bool focused = KWin::effects && w == KWin::effects->activeWindow();
+        shader->setUniform(pack.uFocusedLoc, advanceFocusFade(windowId, focused));
     }
     // Rule-resolved window opacity, for handlesOpacity packs (frost dims its
     // content sample; the present pass skips its final modulation for such

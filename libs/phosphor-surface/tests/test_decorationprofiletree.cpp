@@ -281,6 +281,10 @@ private Q_SLOTS:
         QVERIFY(resolved.chain->isEmpty());
         QVERIFY(resolved.parameters.has_value());
         QVERIFY(resolved.parameters->isEmpty());
+        // disabledPacks reaches the same engaged-empty parity as chain /
+        // parameters (withDefaults engages all three), so pin the third leg.
+        QVERIFY(resolved.disabledPacks.has_value());
+        QVERIFY(resolved.disabledPacks->isEmpty());
     }
 
     // ── Mutation / lookup API ────────────────────────────────────────────

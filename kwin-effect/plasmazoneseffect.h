@@ -137,12 +137,12 @@ public:
     void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data) override;
     // paintScreen override removed — per-window borders are rendered by routing
     // the redirected window through the offscreen border MapTexture shader (see
-    // the drawWindow override below + borders.cpp); no separate paintScreen-level
+    // the drawWindow override below + decorations.cpp); no separate paintScreen-level
     // GL drawing is needed.
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                      KWin::WindowPaintData& data) override;
-    // Border render path (implemented in borders.cpp). A static bordered window
+    // Border render path (implemented in decorations.cpp). A static bordered window
     // is rendered through the offscreen border shader PASSIVELY here: we bind the
     // border shader + push its uniforms, then let OffscreenEffect::drawWindow
     // re-blit the redirected FBO through it on EVERY composite (idle included),
@@ -813,7 +813,7 @@ private:
     QTimer m_animationRulesRefreshDebounce;
 
     /// Wire the DecorationManager into the effect: the windowDecorationRestored
-    /// connection. Defined in borders.cpp with the rest of the decoration code;
+    /// connection. Defined in decorations.cpp with the rest of the decoration code;
     /// called once from the constructor.
     void setupDecorationManager();
 
@@ -855,7 +855,7 @@ private:
     // windows; it clips the COMPOSITED texture, never the client surface, so the
     // window's own BorderRadius is left untouched (setting it inset the corner and
     // clipped the inner surface). Coordinated with the per-window animation
-    // transition on the SAME OffscreenEffect setShader() slot — see borders.cpp.
+    // transition on the SAME OffscreenEffect setShader() slot — see decorations.cpp.
 
     /// Compile-on-first-use + cache the surface shader pack @p packId (window
     /// border / rounded corners / glow / …) from data/surface via the
@@ -914,7 +914,16 @@ private:
     /// TARGET texture's canvas — non-zero only on the padded composite path,
     /// where the geometry uniforms must describe the inflated space.
     void pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
-                            const CompiledSurfacePack& pack, qreal scale, qreal texturePaddingLogical = 0.0);
+                            const CompiledSurfacePack& pack, qreal scale, qreal texturePaddingLogical = 0.0,
+                            const QString& windowId = {});
+
+    /// Advance the per-window smoothed focus value (m_focusFade) toward the
+    /// hard 0/1 target and return it, so focus changes cross-fade instead of
+    /// snapping. Called by pushBorderUniforms only for a pack that reads focus.
+    /// Uses the pinned per-frame clock, so repeated same-frame calls (a chain
+    /// with several focus-reading packs) are exact no-ops — the ramp advances
+    /// at most once per frame.
+    float advanceFocusFade(const QString& windowId, bool focused);
 
     /// Render the window's active surface-layer stack into @p transition's
     /// ping-pong FBO chain and return the texture holding the final composited

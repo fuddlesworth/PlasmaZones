@@ -335,7 +335,7 @@ inline constexpr QLatin1StringView OverrideAnimationShader{"overrideAnimationSha
 /// chain for matched windows — the decoration analogue of
 /// OverrideAnimationShader's empty effectId. The reserved rule-owned
 /// "border" pack id is ignored if present (SetBorderVisible governs it).
-/// Effect-consumed in updateWindowBorder, replacing the
+/// Effect-consumed in updateWindowDecoration, replacing the
 /// DecorationProfileTree user packs; one un-scoped slot, so the highest
 /// priority matching rule wins outright. Domain Window.
 inline constexpr QLatin1StringView OverrideDecorationChain{"overrideDecorationChain"};
@@ -385,7 +385,7 @@ inline constexpr QLatin1StringView SetBorderRadius{"setBorderRadius"};
 // Two single-colour border actions, one per focus state, each its own slot so
 // independent rules cascade per-state. Each carries a single colour param
 // (`ActionParam::Value`): a hex string OR the `BorderColorToken::Accent`
-// sentinel. The effect's updateWindowBorder reads the focused colour from
+// sentinel. The effect's updateWindowDecoration reads the focused colour from
 // SetBorderColorActive and the unfocused colour from SetBorderColorInactive;
 // when the inactive action is absent the active colour is mirrored. The
 // internal active/inactive naming matches KWin and the effect's
@@ -457,6 +457,15 @@ inline constexpr QLatin1StringView Chain{"chain"};
 /// an out-of-range double to int (which is UB). Shared by the descriptor validator
 /// (ruleaction.cpp) and the v3→v4 migration so the two stay in lockstep.
 inline constexpr int MaxZoneOrdinal = 64;
+
+/// Upper bounds for the per-window border appearance overrides
+/// (`SetBorderWidth` / `SetBorderRadius`), in logical px. Shared so the
+/// load-time descriptor validators (ruleaction.cpp) and the KWin-effect
+/// consumer re-validation (shader_resolve.cpp) stay in lockstep — a
+/// programmatically-built or hand-edited payload out of this range is
+/// rejected at both boundaries rather than drawn.
+inline constexpr double MaxBorderWidth = 10.0;
+inline constexpr double MaxBorderRadius = 20.0;
 
 /// Upper bound for a `RouteToDesktop` 1-based virtual-desktop number. KWin tops
 /// out far below this in practice; the cap exists only to reject a grossly
@@ -550,7 +559,7 @@ inline constexpr QLatin1StringView AnimCurvePrefix{"anim-curve:"};
 // Window-scoped decoration-chain override. Un-scoped (no event dimension —
 // decoration is persistent state), so the highest-priority matching
 // OverrideDecorationChain rule wins the whole slot. Read by the effect's
-// updateWindowBorder in place of the DecorationProfileTree user packs.
+// updateWindowDecoration in place of the DecorationProfileTree user packs.
 inline constexpr QLatin1StringView DecorationChain{"decoration-chain"};
 /// Window-scoped, event-agnostic. Declared for ActionDescriptor
 /// completeness — ExcludeAnimations carries `.slotFor =

@@ -324,6 +324,12 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                 names.append(resolveWith(id, decorationPackLookup));
             }
         }
+        // A non-empty array of only empty-string ids (hand-edited / malformed
+        // rule) leaves `names` empty; fall back to the "Block decoration" label
+        // rather than render a bare "Decoration: " with a trailing separator.
+        if (names.isEmpty()) {
+            return PhosphorI18n::tr("Block decoration");
+        }
         return PhosphorI18n::tr("Decoration: %1").arg(names.join(QStringLiteral(", ")));
     }
     if (action.type == ActionType::OverrideAnimationTiming) {
