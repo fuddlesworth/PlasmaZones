@@ -85,6 +85,10 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::SetBorderRadius,
     ActionType::SetBorderColorActive,
     ActionType::SetBorderColorInactive,
+    // Per-window restore-policy overrides — window-domain, resolved daemon-side
+    // (managed-restore predicate / drag-out unsnap paths), like RestorePosition.
+    ActionType::SetRestoreToZoneOnLogin,
+    ActionType::SetRestoreSizeOnUnsnap,
 };
 } // namespace
 

@@ -382,6 +382,21 @@ inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 /// Window (matches window properties).
 inline constexpr QLatin1StringView RestorePosition{"restorePosition"};
 
+/// Per-window override for the "restore snapped windows to their zone on login"
+/// setting. A boolean `value`: false suppresses zone restore for the matched
+/// window (it reopens wherever the session put it), true forces it on even when
+/// the global `restoreWindowsToZonesOnLogin` setting is off. Resolved by the
+/// daemon-injected managed-restore predicate. Domain Window. The snapped-to-zone
+/// analogue of RestorePosition (which covers FLOATED windows).
+inline constexpr QLatin1StringView SetRestoreToZoneOnLogin{"setRestoreToZoneOnLogin"};
+
+/// Per-window override for the "restore original size when unsnapped" setting. A
+/// boolean `value`: false suppresses the pre-snap size restore for the matched
+/// window (it keeps the zone size after unsnap), true forces it on even when the
+/// global `restoreOriginalSizeOnUnsnap` setting is off. Consulted daemon-side on
+/// the drag-out / drop / cursor-left-zones unsnap paths. Domain Window.
+inline constexpr QLatin1StringView SetRestoreSizeOnUnsnap{"setRestoreSizeOnUnsnap"};
+
 // ── Per-window border / title-bar appearance overrides (domain Window) ──
 // Effect-side per-window overrides of the global snap appearance. Each is its
 // own slot so independent rules cascade per-property (a width rule and a
@@ -521,6 +536,10 @@ inline constexpr QLatin1StringView RouteScreen{"route-screen"};
 inline constexpr QLatin1StringView RouteDesktop{"route-desktop"};
 inline constexpr QLatin1StringView Opacity{"opacity"};
 inline constexpr QLatin1StringView RestorePosition{"restore-position"};
+// Per-window restore-policy overrides (one slot each). Filled by
+// SetRestoreToZoneOnLogin / SetRestoreSizeOnUnsnap, read daemon-side.
+inline constexpr QLatin1StringView RestoreToZoneOnLogin{"restore-to-zone-on-login"};
+inline constexpr QLatin1StringView RestoreSizeOnUnsnap{"restore-size-on-unsnap"};
 // Per-window border / title-bar appearance slots (one per property so
 // independent rules cascade per-property).
 inline constexpr QLatin1StringView HideTitleBar{"hide-title-bar"};

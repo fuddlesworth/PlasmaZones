@@ -275,6 +275,12 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::RestorePosition && key == ActionParam::Value) {
         return PhosphorI18n::tr("Restore position on login (off = don't restore)");
     }
+    if (type == ActionType::SetRestoreToZoneOnLogin && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Restore to zone on login (off = don't restore)");
+    }
+    if (type == ActionType::SetRestoreSizeOnUnsnap && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Restore size on unsnap (off = keep zone size)");
+    }
     // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
     // SetHideTitleBar is tri-state at the effect: rule absent = mode decides,
     // ON = hide, OFF = force the title bar visible even where the mode hides
@@ -531,6 +537,12 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::RestorePosition) {
         return PhosphorI18n::tr("Restore position on login");
     }
+    if (type == ActionType::SetRestoreToZoneOnLogin) {
+        return PhosphorI18n::tr("Restore to zone on login");
+    }
+    if (type == ActionType::SetRestoreSizeOnUnsnap) {
+        return PhosphorI18n::tr("Restore size on unsnap");
+    }
     if (type == ActionType::OverrideAnimationShader) {
         return PhosphorI18n::tr("Override animation shader");
     }
@@ -662,6 +674,12 @@ QString boolActionStateLabel(const QString& type, bool on)
     namespace ActionType = PhosphorRules::ActionType;
     if (type == ActionType::RestorePosition) {
         return on ? PhosphorI18n::tr("Restore position on login") : PhosphorI18n::tr("Don't restore position on login");
+    }
+    if (type == ActionType::SetRestoreToZoneOnLogin) {
+        return on ? PhosphorI18n::tr("Restore to zone on login") : PhosphorI18n::tr("Don't restore to zone on login");
+    }
+    if (type == ActionType::SetRestoreSizeOnUnsnap) {
+        return on ? PhosphorI18n::tr("Restore size on unsnap") : PhosphorI18n::tr("Keep zone size on unsnap");
     }
     if (type == ActionType::SetHideTitleBar) {
         return on ? PhosphorI18n::tr("Hide title bars") : PhosphorI18n::tr("Show title bars");

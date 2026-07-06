@@ -916,6 +916,40 @@ void ActionRegistry::registerBuiltins()
         .displayOrder = 2,
     });
 
+    // Two more per-window restore-policy overrides, same shape as RestorePosition
+    // (bool, seeds FALSE because both governing settings default ON — the only
+    // meaningful fresh-rule value is "opt this window OUT"). Consumed daemon-side
+    // (the managed-restore predicate / the drag-out unsnap paths), not the effect.
+    struct RestorePolicy
+    {
+        QLatin1StringView type;
+        QLatin1StringView slot;
+        int order;
+    };
+    for (const RestorePolicy& rp : {
+             RestorePolicy{ActionType::SetRestoreToZoneOnLogin, ActionSlot::RestoreToZoneOnLogin, 3},
+             RestorePolicy{ActionType::SetRestoreSizeOnUnsnap, ActionSlot::RestoreSizeOnUnsnap, 4},
+         }) {
+        const QString slot = QString(rp.slot);
+        registerAction(ActionDescriptor{
+            .type = QString(rp.type),
+            .slotFor =
+                [slot](const QJsonObject&) {
+                    return slot;
+                },
+            .validate =
+                [](const QJsonObject& p) {
+                    return hasBool(p, ActionParam::Value);
+                },
+            .terminal = false,
+            .allowedKeys = {QString(ActionParam::Value)},
+            .domain = ActionDomain::Window,
+            .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+            .category = QStringLiteral("windowManagement"),
+            .displayOrder = rp.order,
+        });
+    }
+
     // ── per-window border / title-bar appearance slots (domain Window) ──
     // One slot per property so independent rules cascade per-property. The
     // effect (resolveWindowAppearance) reads these slots and merges them over

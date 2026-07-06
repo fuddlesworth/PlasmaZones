@@ -353,6 +353,62 @@ private Q_SLOTS:
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // SetRestoreToZoneOnLogin / SetRestoreSizeOnUnsnap rules override their
+    // respective global settings per window, mirroring RestorePosition. An
+    // unmatched window falls back to the global setting.
+    // ────────────────────────────────────────────────────────────────────
+    void restoreToZoneAndUnsnapSizeRules_overrideGlobalSettings()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
+
+        const auto boolAction = [](QLatin1StringView type, bool value) {
+            PhosphorRules::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PhosphorRules::ActionParam::Value), value);
+            return a;
+        };
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("no-restore-dolphin");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(
+            PhosphorRules::Field::AppId, PhosphorRules::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        rule.actions.append(boolAction(PhosphorRules::ActionType::SetRestoreToZoneOnLogin, false));
+        rule.actions.append(boolAction(PhosphorRules::ActionType::SetRestoreSizeOnUnsnap, false));
+        QVERIFY(store.addRule(rule));
+
+        m_wta->setRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+        });
+        m_settings->setRestoreWindowsToZonesOnLogin(true); // global default ON
+        m_settings->setRestoreOriginalSizeOnUnsnap(true); // global default ON
+
+        const QString dolphinInstance = QStringLiteral("dolphin-uuid-1");
+        m_registry->upsert(dolphinInstance, {QStringLiteral("org.kde.dolphin"), QString(), QString()});
+        const QString dolphinId =
+            PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance);
+
+        QVERIFY2(!m_wta->shouldRestoreToZoneOnLogin(dolphinId),
+                 "a matched SetRestoreToZoneOnLogin(false) rule must override the global ON setting");
+        QVERIFY2(!m_wta->shouldRestoreSizeOnUnsnap(dolphinId),
+                 "a matched SetRestoreSizeOnUnsnap(false) rule must override the global ON setting");
+
+        // An unmatched window falls back to the global settings (ON).
+        const QString konsoleInstance = QStringLiteral("konsole-uuid-1");
+        m_registry->upsert(konsoleInstance, {QStringLiteral("org.kde.konsole"), QString(), QString()});
+        const QString konsoleId =
+            PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.konsole"), konsoleInstance);
+        QVERIFY2(m_wta->shouldRestoreToZoneOnLogin(konsoleId),
+                 "an unmatched window falls back to the global restoreWindowsToZonesOnLogin = true");
+        QVERIFY2(m_wta->shouldRestoreSizeOnUnsnap(konsoleId),
+                 "an unmatched window falls back to the global restoreOriginalSizeOnUnsnap = true");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // Float rule resolves through the composite windowId. shouldFloatByRule is
     // purely rule-driven (no global default): the verdict is the presence of a
     // matched Float slot, resolved through the same bare-instance-id extraction

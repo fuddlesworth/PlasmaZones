@@ -173,12 +173,11 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // Managed (snapped-to-zone) restore gate. The snapped-to-zone analogue of
         // the floated-position predicate above: when the user disables
         // `restoreWindowsToZonesOnLogin`, a window that was snapped at logout is
-        // not auto-restored to its recorded zone on reopen. Settings-gated, so the
-        // engine stays settings-agnostic. windowId is unused today (the policy is a
-        // single global toggle) but keeps the signature aligned with the floated
-        // predicate for a future per-window override.
-        snap->setManagedRestorePredicate([this](const QString& /*windowId*/) -> bool {
-            return m_settings->restoreWindowsToZonesOnLogin();
+        // not auto-restored to its recorded zone on reopen. A matched
+        // SetRestoreToZoneOnLogin rule overrides that per window; otherwise the
+        // global setting decides. Engine stays settings-agnostic.
+        snap->setManagedRestorePredicate([this](const QString& windowId) -> bool {
+            return shouldRestoreToZoneOnLogin(windowId);
         });
 
         // Full-query exclusion provider. The snap engine owns the Exclude rule
@@ -474,6 +473,52 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestorePosition))) {
         // A matched RestorePosition rule overrides the global setting.
+        return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
+    }
+    return globalDefault;
+}
+
+bool WindowTrackingAdaptor::shouldRestoreToZoneOnLogin(const QString& windowId)
+{
+    // Mirror shouldRestoreFloatedPosition for the snapped-to-zone policy: a matched
+    // SetRestoreToZoneOnLogin rule wins, otherwise the global setting decides.
+    const bool globalDefault = m_settings->restoreWindowsToZonesOnLogin();
+    if (!m_ruleStore) {
+        return globalDefault;
+    }
+    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return globalDefault;
+    }
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    }
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    if (const std::optional<PhosphorRules::RuleAction> action =
+            resolved.slot(QString(PhosphorRules::ActionSlot::RestoreToZoneOnLogin))) {
+        return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
+    }
+    return globalDefault;
+}
+
+bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
+{
+    // Mirror shouldRestoreFloatedPosition for the restore-size-on-unsnap policy: a
+    // matched SetRestoreSizeOnUnsnap rule wins, otherwise the global setting decides.
+    const bool globalDefault = m_settings->restoreOriginalSizeOnUnsnap();
+    if (!m_ruleStore) {
+        return globalDefault;
+    }
+    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return globalDefault;
+    }
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    }
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    if (const std::optional<PhosphorRules::RuleAction> action =
+            resolved.slot(QString(PhosphorRules::ActionSlot::RestoreSizeOnUnsnap))) {
         return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
     }
     return globalDefault;

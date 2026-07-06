@@ -94,7 +94,16 @@ Consequences:
   no recursion by completing). 251/251 green. NOT runtime-verified.
   The caveat holds: ActiveLayout gates gaps/lock/overlay, but cannot drive the layout assignment itself.
 - `ColorScheme` still deferred (no source in pipeline).
-- Remaining: Tier 2 restore → Tier 1 tiling → deferred tail (ColorScheme, OSD, UnfloatFallbackToZone).
+- **Tier 2 restore actions: DONE** (committed). Two Window-domain bool actions mirroring RestorePosition:
+  `SetRestoreToZoneOnLogin` and `SetRestoreSizeOnUnsnap` (both seed FALSE = opt-out, since the governing
+  settings default ON). New resolvers `shouldRestoreToZoneOnLogin` / `shouldRestoreSizeOnUnsnap` on
+  WindowTrackingAdaptor (public; clone shouldRestoreFloatedPosition, resolve slot ?? global getter).
+  Consumers: ManagedRestorePredicate (enginewiring) now calls shouldRestoreToZoneOnLogin;
+  restore-size at float.cpp (direct), drop.cpp + drag.cpp (through m_windowTracking). No QML change
+  (bool kind); labels + boolActionStateLabel in ruleauthoring. Tests: kWindowDomainTypes canary + a
+  wta resolution test (rule(false) overrides global ON; unmatched falls back). 251/251 green.
+  `UnfloatFallbackToZone` stays deferred (engine-internal via ISnapSettings, no daemon evaluator seam).
+- Remaining: Tier 1 tiling → deferred tail (ColorScheme, OSD, UnfloatFallbackToZone).
 
 ## Tier 1 — Overlay appearance Context actions  ★ START HERE
 
