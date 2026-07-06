@@ -63,6 +63,11 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetOverlayBorderWidth,
     ActionType::SetOverlayBorderRadius,
     ActionType::SetOverlayShowZoneNumbers,
+    // Autotile parameter overrides are context-domain — resolved per
+    // screen/desktop/activity and layered onto the per-screen override map.
+    ActionType::SetMaxWindows,
+    ActionType::SetSplitRatio,
+    ActionType::SetMasterCount,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -484,6 +489,47 @@ private Q_SLOTS:
             QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
             o.insert(QStringLiteral("value"), 0.5); // in range accepted
             QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+        }
+    }
+
+    // ── autotile parameter actions (context-domain) ──
+
+    void testTilingParamActions_range()
+    {
+        // SetMaxWindows: 1..12, integer count.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetMaxWindows));
+            o.insert(QStringLiteral("value"), 0); // below 1 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 13); // above 12 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 4); // in range accepted
+            QVERIFY(RuleAction::fromJson(o).has_value());
+        }
+        // SetSplitRatio: wire is the [0.1, 0.9] ratio.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetSplitRatio));
+            o.insert(QStringLiteral("value"), 0.05); // below 0.1 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 0.95); // above 0.9 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), QStringLiteral("0.5")); // non-numeric rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 0.6); // in range accepted
+            QVERIFY(RuleAction::fromJson(o).has_value());
+        }
+        // SetMasterCount: 1..5, integer count.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetMasterCount));
+            o.insert(QStringLiteral("value"), 0); // below 1 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 6); // above 5 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 2); // in range accepted
+            QVERIFY(RuleAction::fromJson(o).has_value());
         }
     }
 

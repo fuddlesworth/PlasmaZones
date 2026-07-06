@@ -176,6 +176,25 @@ void Daemon::updateAutotileScreens()
                     }
                 }
             }
+            // Layer per-context tiling-parameter RULES on top of the config-derived
+            // override map (config stays the base; a matched SetMaxWindows /
+            // SetSplitRatio / SetMasterCount rule wins, and also overrides the
+            // algorithm-default MaxWindows injected above). Resolved for the
+            // screen's current context.
+            const int ctxDesktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+            const QString ctxActivity = m_layoutManager->currentActivity();
+            const PhosphorZones::ContextTilingParams tilingParams =
+                m_layoutManager->resolveContextTilingParams(screenId, ctxDesktop, ctxActivity);
+            if (tilingParams.maxWindows) {
+                overrides[PerScreenKeys::MaxWindows] = *tilingParams.maxWindows;
+            }
+            if (tilingParams.splitRatio) {
+                overrides[PerScreenKeys::SplitRatio] = *tilingParams.splitRatio;
+            }
+            if (tilingParams.masterCount) {
+                overrides[PerScreenKeys::MasterCount] = *tilingParams.masterCount;
+            }
+
             // Compare against currently applied overrides to avoid redundant retiles
             QVariantMap current = m_autotileEngine->perScreenOverrides(screenId);
             if (overrides != current) {

@@ -963,6 +963,54 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).isEmpty());
     }
 
+    // ─── Context autotile-parameter resolution (max / split / master) ────────
+    // resolveContextTilingParams is a per-slot read: independent
+    // SetMaxWindows / SetSplitRatio / SetMasterCount rules compose, and an
+    // unpinned screen resolves to an all-unset (empty) params struct.
+    void testContextTilingParams_perSlotComposition()
+    {
+        const auto valueAction = [](QLatin1StringView type, const QVariant& value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), QJsonValue::fromVariant(value));
+            return a;
+        };
+        const auto tilingRule = [&](const QString& name, int priority, const QString& screenId,
+                                    const QList<PWR::RuleAction>& actions) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = actions;
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // Separate rules fill separate slots — all compose (per-slot read).
+        const PWR::Rule mw = tilingRule(QStringLiteral("mw"), 400, QStringLiteral("DP-1"),
+                                        {valueAction(PWR::ActionType::SetMaxWindows, 3)});
+        const PWR::Rule sr = tilingRule(QStringLiteral("sr"), 300, QStringLiteral("DP-1"),
+                                        {valueAction(PWR::ActionType::SetSplitRatio, 0.6)});
+        const PWR::Rule mc = tilingRule(QStringLiteral("mc"), 200, QStringLiteral("DP-1"),
+                                        {valueAction(PWR::ActionType::SetMasterCount, 2)});
+        QVERIFY(f.store->setAllRules({mw, sr, mc}));
+
+        const PhosphorZones::ContextTilingParams p =
+            f.registry->resolveContextTilingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(p.maxWindows.has_value());
+        QCOMPARE(*p.maxWindows, 3);
+        QVERIFY(p.splitRatio.has_value());
+        QCOMPARE(*p.splitRatio, 0.6);
+        QVERIFY(p.masterCount.has_value());
+        QCOMPARE(*p.masterCount, 2);
+
+        // A screen the rules do not pin → all-unset (the daemon then leaves the
+        // config-derived override map untouched for that screen).
+        QVERIFY(f.registry->resolveContextTilingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+    }
+
     // ─── Per-monitor gap rule overrides the baseline for that screen only ────
     // A per-monitor gap override is authored by the Appearance page as a NORMAL
     // (non-managed) screen-scoped rule: match `ScreenId == screen`, carrying the

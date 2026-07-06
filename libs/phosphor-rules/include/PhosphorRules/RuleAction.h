@@ -428,6 +428,15 @@ inline constexpr QLatin1StringView SetOuterGapTop{"setOuterGapTop"};
 inline constexpr QLatin1StringView SetOuterGapBottom{"setOuterGapBottom"};
 inline constexpr QLatin1StringView SetOuterGapLeft{"setOuterGapLeft"};
 inline constexpr QLatin1StringView SetOuterGapRight{"setOuterGapRight"};
+
+// ── Per-context autotile parameter overrides (domain Context) ──
+// Override the global (or per-screen config) tiling parameters for the matched
+// screen / desktop / activity. Layered ON TOP of config by the daemon when it
+// builds the per-screen autotile override map (config stays authoritative; the
+// rule wins where present). Each carries a single numeric `value`.
+inline constexpr QLatin1StringView SetMaxWindows{"setMaxWindows"};
+inline constexpr QLatin1StringView SetSplitRatio{"setSplitRatio"};
+inline constexpr QLatin1StringView SetMasterCount{"setMasterCount"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -556,6 +565,13 @@ inline constexpr QLatin1StringView OuterGapTop{"outer-gap-top"};
 inline constexpr QLatin1StringView OuterGapBottom{"outer-gap-bottom"};
 inline constexpr QLatin1StringView OuterGapLeft{"outer-gap-left"};
 inline constexpr QLatin1StringView OuterGapRight{"outer-gap-right"};
+// Per-context autotile parameter slots (one per param). Filled by
+// SetMaxWindows / SetSplitRatio / SetMasterCount, read by
+// LayoutRegistry::resolveContextTilingParams and layered onto the per-screen
+// autotile override map daemon-side.
+inline constexpr QLatin1StringView MaxWindows{"max-windows"};
+inline constexpr QLatin1StringView SplitRatio{"split-ratio"};
+inline constexpr QLatin1StringView MasterCount{"master-count"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader

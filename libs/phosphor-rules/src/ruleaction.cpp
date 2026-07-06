@@ -99,6 +99,11 @@ constexpr double kMaxGap = 500.0;
 // `Snapping.Zones.Border` config ranges (width 0-10, radius 0-50) — the overlay
 // radius goes wider than the per-window `kMaxBorderRadius` (20).
 constexpr double kMaxOverlayBorderRadius = 50.0;
+// Autotile parameter bounds (display units), mirroring the AutotileDefaults
+// clamps the engine applies on consumption. These only reject grossly malformed
+// hand-edited payloads.
+constexpr double kMaxTiledWindows = 12.0;
+constexpr double kMaxMasterCount = 5.0;
 
 } // namespace
 
@@ -1157,6 +1162,85 @@ void ActionRegistry::registerBuiltins()
             .tags = {QString(Tag::Gap)},
         });
     }
+
+    // ── per-context autotile parameter slots (domain Context) ──
+    // Resolved daemon-side by LayoutRegistry::resolveContextTilingParams and
+    // layered onto the per-screen autotile override map (config stays the base;
+    // the rule wins where present). Category "layoutEngine" — these configure the
+    // tiling engine for the matched context.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetMaxWindows),
+        .slotFor = constantSlot(ActionSlot::MaxWindows),
+        .validate =
+            [](const QJsonObject& p) {
+                // 1..12; the consumer clamps to AutotileDefaults, so the lower
+                // bound is not enforced here (0 is rejected as grossly malformed).
+                const QJsonValue v = p.value(ActionParam::Value);
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                return d >= 1.0 && d <= kMaxTiledWindows;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 1.0,
+                     .max = kMaxTiledWindows,
+                     .defaultDisplay = 5.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 10,
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetSplitRatio),
+        .slotFor = constantSlot(ActionSlot::SplitRatio),
+        .validate =
+            [](const QJsonObject& p) {
+                // Wire is the [0.1, 0.9] ratio; edited as a percent (10-90%).
+                const QJsonValue v = p.value(ActionParam::Value);
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                return d >= 0.1 && d <= 0.9;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = 10.0,
+                     .max = 90.0,
+                     .scale = 0.01,
+                     .defaultDisplay = 50.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 11,
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetMasterCount),
+        .slotFor = constantSlot(ActionSlot::MasterCount),
+        .validate =
+            [](const QJsonObject& p) {
+                const QJsonValue v = p.value(ActionParam::Value);
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                return d >= 1.0 && d <= kMaxMasterCount;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 1.0,
+                     .max = kMaxMasterCount,
+                     .defaultDisplay = 1.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 12,
+    });
 }
 
 } // namespace PhosphorRules

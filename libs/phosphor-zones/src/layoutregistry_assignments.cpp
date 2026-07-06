@@ -524,6 +524,36 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
         });
 }
 
+ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& screenId, int virtualDesktop,
+                                                               const QString& activity) const
+{
+    if (!m_evaluator) {
+        return {};
+    }
+    // Per-slot read (mirrors resolveContextGaps), but NOT cached: this runs on
+    // screen / layout changes via the daemon's updateAutotileScreens, not the hot
+    // per-cursor path. Being uncached lets us stamp the active layout onto the
+    // query without folding it into a cache key (no cached entry to go stale).
+    // Safe from recursion: assignmentIdForScreen routes through
+    // resolveAssignmentEntry, which never calls this resolver.
+    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+    stampScreenOrientation(query, screenId);
+    query.activeLayout = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+
+    ContextTilingParams params;
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::MaxWindows))) {
+        params.maxWindows = action->params.value(PWR::ActionParam::Value).toInt();
+    }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::SplitRatio))) {
+        params.splitRatio = action->params.value(PWR::ActionParam::Value).toDouble();
+    }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::MasterCount))) {
+        params.masterCount = action->params.value(PWR::ActionParam::Value).toInt();
+    }
+    return params;
+}
+
 bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
     return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;

@@ -244,6 +244,27 @@ struct ContextOverlayOverride
 };
 
 /**
+ * @brief Per-context autotile parameter overrides resolved from context rules.
+ *
+ * Each field is set only when a matching context rule fills the corresponding
+ * slot (SetMaxWindows / SetSplitRatio / SetMasterCount); an unset field means
+ * "use the config value". Consumed daemon-side: the values are layered onto the
+ * per-screen autotile override map (config stays the base, the rule wins where
+ * present). Resolved by @c LayoutRegistry::resolveContextTilingParams.
+ */
+struct ContextTilingParams
+{
+    std::optional<int> maxWindows;
+    std::optional<double> splitRatio;
+    std::optional<int> masterCount;
+
+    bool isEmpty() const
+    {
+        return !maxWindows && !splitRatio && !masterCount;
+    }
+};
+
+/**
  * @brief Canonical wire-string for an @ref AssignmentEntry::Mode.
  *
  * The wire vocabulary lives next to the enum so every persister/consumer

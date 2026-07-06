@@ -414,6 +414,17 @@ public:
     ContextOverlayOverride resolveContextOverlay(const QString& screenId, int virtualDesktop,
                                                  const QString& activity) const override;
 
+    /// Resolve the per-context autotile parameter overrides (max windows / split
+    /// ratio / master count) for (screen, desktop, activity) — a per-slot read
+    /// like @ref resolveContextGaps. The daemon layers the returned values onto
+    /// the per-screen autotile override map (config stays the base; the rule wins
+    /// where present). NOT cached: called on screen / layout changes, not the hot
+    /// per-cursor path — which also lets it stamp the active layout onto the query
+    /// without a cache-key fold (there is no cache entry to go stale). Concrete
+    /// (not on the interface): the daemon holds a concrete LayoutRegistry.
+    ContextTilingParams resolveContextTilingParams(const QString& screenId, int virtualDesktop,
+                                                   const QString& activity) const;
+
     /// Stamp the screen-orientation token onto @p query from
     /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
     /// returns nullopt). Called at every windowless-context query build site so a

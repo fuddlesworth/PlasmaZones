@@ -259,6 +259,15 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetTilingAlgorithm && key == ActionParam::Algorithm) {
         return PhosphorI18n::tr("Tiling algorithm");
     }
+    if (type == ActionType::SetMaxWindows && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Max tiled windows");
+    }
+    if (type == ActionType::SetSplitRatio && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Split ratio (%)");
+    }
+    if (type == ActionType::SetMasterCount && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Master count");
+    }
     if (type == ActionType::DisableEngine && key == ActionParam::Mode) {
         return PhosphorI18n::tr("Engine to disable");
     }
@@ -515,6 +524,15 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetTilingAlgorithm) {
         return PhosphorI18n::tr("Set tiling algorithm");
+    }
+    if (type == ActionType::SetMaxWindows) {
+        return PhosphorI18n::tr("Set max tiled windows");
+    }
+    if (type == ActionType::SetSplitRatio) {
+        return PhosphorI18n::tr("Set split ratio");
+    }
+    if (type == ActionType::SetMasterCount) {
+        return PhosphorI18n::tr("Set master count");
     }
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");

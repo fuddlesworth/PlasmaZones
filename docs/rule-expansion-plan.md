@@ -103,7 +103,19 @@ Consequences:
   (bool kind); labels + boolActionStateLabel in ruleauthoring. Tests: kWindowDomainTypes canary + a
   wta resolution test (rule(false) overrides global ON; unmatched falls back). 251/251 green.
   `UnfloatFallbackToZone` stays deferred (engine-internal via ISnapSettings, no daemon evaluator seam).
-- Remaining: Tier 1 tiling → deferred tail (ColorScheme, OSD, UnfloatFallbackToZone).
+- **Tier 1 tiling Seam A (max/split/master): DONE** (committed). Three Context actions SetMaxWindows
+  (number 1-12), SetSplitRatio (percent, wire [0.1,0.9]), SetMasterCount (number 1-5), category
+  "layoutEngine". New `ContextTilingParams` struct + `LayoutRegistry::resolveContextTilingParams`
+  (concrete, NOT on interface since the daemon holds a concrete LayoutRegistry; NON-cached since it runs
+  on screen/layout changes not per-cursor — which also lets it stamp activeLayout with no cache-key
+  fold). Daemon updateAutotileScreens (autotile.cpp) layers the resolved values onto the config-derived
+  per-screen override map AFTER the algorithm block (rule wins over config + algo-default MaxWindows).
+  These 3 work inject-only: applyPerScreenConfig pushes split/master to TilingState, effectiveMaxWindows
+  reads the map. No QML change (number/percent kinds). Tests: kContextDomainTypes canary, validation
+  ranges, resolveContextTilingParams per-slot composition. 251/251 green.
+- Remaining: Tier 1 tiling Seam A InsertPosition (needs effectiveInsertPosition resolver +
+  AutotileEngine consumer switch + an enum picker) → Seam B (SetOverflowBehavior/SetDragBehavior) →
+  SetAlgorithmParam → deferred tail (ColorScheme, OSD, UnfloatFallbackToZone).
 
 ## Tier 1 — Overlay appearance Context actions  ★ START HERE
 
