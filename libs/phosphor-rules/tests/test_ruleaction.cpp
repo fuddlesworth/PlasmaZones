@@ -70,6 +70,7 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetMasterCount,
     ActionType::SetInsertPosition,
     ActionType::SetOverflowBehavior,
+    ActionType::SetDragBehavior,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -552,6 +553,17 @@ private Q_SLOTS:
             o.insert(QStringLiteral("value"), QStringLiteral("cap")); // unknown token rejected
             QVERIFY(!RuleAction::fromJson(o).has_value());
             for (const QLatin1StringView token : {OverflowBehaviorToken::Float, OverflowBehaviorToken::Unlimited}) {
+                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
+                QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
+            }
+        }
+        // SetDragBehavior: closed enum vocabulary.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetDragBehavior));
+            o.insert(QStringLiteral("value"), QStringLiteral("swap")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (const QLatin1StringView token : {DragBehaviorToken::Float, DragBehaviorToken::Reorder}) {
                 o.insert(QStringLiteral("value"), QString::fromLatin1(token));
                 QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
             }

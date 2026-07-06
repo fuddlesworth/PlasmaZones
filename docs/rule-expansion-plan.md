@@ -129,10 +129,15 @@ Consequences:
   injects; new PerScreenConfigResolver::effectiveOverflowBehavior; effectiveMaxWindows now checks
   effectiveOverflowBehavior(screenId) instead of the global config (also revives per-screen overflow
   config). No QML change (enum). 251/251 green.
-- Remaining: Tier 1 tiling Seam B SetDragBehavior (consumer is the STATIC WindowDragAdaptor::computeDragPolicy,
-  2 callers at drag_protocol.cpp:143/539 — resolve effective drag behavior at the caller via m_layoutManager
-  and thread it into computeDragPolicy) → SetAlgorithmParam → deferred tail (ColorScheme, OSD,
-  UnfloatFallbackToZone).
+- **Tier 1 tiling Seam B SetDragBehavior: DONE** (committed). SetDragBehavior Context action (enum
+  float/reorder via DragBehaviorToken → AutotileDragBehavior int 0/1). ContextTilingParams gained
+  dragBehavior; resolveContextTilingParams reads the slot. Consumer is the drag adaptor, NOT the tile
+  engine: new WindowDragAdaptor::effectiveReorderMode(screenId) resolves via m_layoutManager (rule else
+  global setting). The static computeDragPolicy gained a `bool reorderMode` param (its 2 callers at
+  drag_protocol.cpp resolve+pass effectiveReorderMode); the member-method site (:181) calls it directly.
+  test_drag_policy call sites updated to pass reorderMode. No QML change (enum). 251/251 green.
+  **Tier 1 tiling COMPLETE** (all of Seam A + Seam B).
+- Remaining: SetAlgorithmParam → deferred tail (ColorScheme, OSD, UnfloatFallbackToZone).
 
 ## Tier 1 — Overlay appearance Context actions  ★ START HERE
 

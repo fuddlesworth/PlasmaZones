@@ -1003,7 +1003,11 @@ private Q_SLOTS:
         const PWR::Rule ob = tilingRule(
             QStringLiteral("ob"), 50, QStringLiteral("DP-1"),
             {valueAction(PWR::ActionType::SetOverflowBehavior, QString(PWR::OverflowBehaviorToken::Unlimited))});
-        QVERIFY(f.store->setAllRules({mw, sr, mc, ip, ob}));
+        // Drag behavior carries a wire token → AutotileDragBehavior int.
+        const PWR::Rule db =
+            tilingRule(QStringLiteral("db"), 25, QStringLiteral("DP-1"),
+                       {valueAction(PWR::ActionType::SetDragBehavior, QString(PWR::DragBehaviorToken::Reorder))});
+        QVERIFY(f.store->setAllRules({mw, sr, mc, ip, ob, db}));
 
         const PhosphorZones::ContextTilingParams p =
             f.registry->resolveContextTilingParams(QStringLiteral("DP-1"), 0, QString());
@@ -1017,6 +1021,8 @@ private Q_SLOTS:
         QCOMPARE(*p.insertPosition, 2); // "asMaster" → AutotileInsertPosition::AsMaster (2)
         QVERIFY(p.overflowBehavior.has_value());
         QCOMPARE(*p.overflowBehavior, 1); // "unlimited" → AutotileOverflowBehavior::Unlimited (1)
+        QVERIFY(p.dragBehavior.has_value());
+        QCOMPARE(*p.dragBehavior, 1); // "reorder" → AutotileDragBehavior::Reorder (1)
 
         // A screen the rules do not pin → all-unset (the daemon then leaves the
         // config-derived override map untouched for that screen).

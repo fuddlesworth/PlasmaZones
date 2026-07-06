@@ -263,10 +263,13 @@ struct ContextTilingParams
     std::optional<int> insertPosition;
     /// The AutotileOverflowBehavior int (0 = Float, 1 = Unlimited).
     std::optional<int> overflowBehavior;
+    /// The AutotileDragBehavior int (0 = Float, 1 = Reorder). Consumed by the drag
+    /// adaptor (not the tile-engine override map) unlike the other params.
+    std::optional<int> dragBehavior;
 
     bool isEmpty() const
     {
-        return !maxWindows && !splitRatio && !masterCount && !insertPosition && !overflowBehavior;
+        return !maxWindows && !splitRatio && !masterCount && !insertPosition && !overflowBehavior && !dragBehavior;
     }
 };
 

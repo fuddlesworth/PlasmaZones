@@ -445,6 +445,11 @@ inline constexpr QLatin1StringView SetInsertPosition{"setInsertPosition"};
 /// go unlimited (ignore the cap). Closed enum token (OverflowBehaviorToken).
 /// Context domain; layered onto the per-screen override map like the other params.
 inline constexpr QLatin1StringView SetOverflowBehavior{"setOverflowBehavior"};
+/// How dragging a tiled window behaves: float it out, or reorder it within the
+/// stack (Krohnkite-style drag-to-swap). Closed enum token (DragBehaviorToken).
+/// Context domain; consumed by the drag adaptor (NOT the tile-engine override
+/// map) — it resolves the effective behavior for the drag's screen.
+inline constexpr QLatin1StringView SetDragBehavior{"setDragBehavior"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -530,6 +535,13 @@ inline constexpr QLatin1StringView Float{"float"}; ///< AutotileOverflowBehavior
 inline constexpr QLatin1StringView Unlimited{"unlimited"}; ///< Unlimited (1)
 } // namespace OverflowBehaviorToken
 
+/// Wire tokens for SetDragBehavior's `value` param. Ints match
+/// PhosphorTiles::AutotileDragBehavior (Float 0 / Reorder 1).
+namespace DragBehaviorToken {
+inline constexpr QLatin1StringView Float{"float"}; ///< AutotileDragBehavior::Float (0)
+inline constexpr QLatin1StringView Reorder{"reorder"}; ///< Reorder (1)
+} // namespace DragBehaviorToken
+
 /// Sentinel value a `SetBorderColorActive` / `SetBorderColorInactive` `value`
 /// param may carry instead of a hex string, meaning "track the live system
 /// accent colour". The
@@ -599,6 +611,7 @@ inline constexpr QLatin1StringView SplitRatio{"split-ratio"};
 inline constexpr QLatin1StringView MasterCount{"master-count"};
 inline constexpr QLatin1StringView InsertPosition{"insert-position"};
 inline constexpr QLatin1StringView OverflowBehavior{"overflow-behavior"};
+inline constexpr QLatin1StringView DragBehavior{"drag-behavior"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader

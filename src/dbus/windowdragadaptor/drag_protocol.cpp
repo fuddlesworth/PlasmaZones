@@ -26,7 +26,7 @@ namespace PlasmaZones {
 PhosphorProtocol::DragPolicy
 WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEngine::IPlacementEngine* autotileEngine,
                                      const QString& windowId, const QString& screenId,
-                                     const PhosphorContext::IContextResolver* resolver)
+                                     const PhosphorContext::IContextResolver* resolver, bool reorderMode)
 {
     PhosphorProtocol::DragPolicy policy;
     policy.screenId = screenId;
@@ -63,7 +63,8 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
     if (autotileEngine && !screenId.isEmpty() && autotileEngine->isActiveOnScreen(screenId)) {
         policy.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
         policy.captureGeometry = true; // preserve pre-autotile size for unfloat restore
-        const bool reorderMode = settings && settings->autotileDragBehavior() == AutotileDragBehavior::Reorder;
+        // reorderMode is resolved by the caller (effectiveReorderMode): a matched
+        // context SetDragBehavior rule wins over the global setting for this screen.
         if (!windowId.isEmpty() && !reorderMode) {
             policy.immediateFloatOnStart = autotileEngine->isWindowTracked(windowId);
         }
@@ -88,6 +89,22 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
     policy.captureGeometry = true;
     policy.bypassReason = PhosphorProtocol::DragBypassReason::None;
     return policy;
+}
+
+bool WindowDragAdaptor::effectiveReorderMode(const QString& screenId) const
+{
+    // A matched context SetDragBehavior rule wins over the global setting for this
+    // screen; resolved through the layout registry (which the static
+    // computeDragPolicy can't reach, so it takes the result as a param).
+    if (m_layoutManager && !screenId.isEmpty()) {
+        const int vd = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+        const PhosphorZones::ContextTilingParams params =
+            m_layoutManager->resolveContextTilingParams(screenId, vd, m_layoutManager->currentActivity());
+        if (params.dragBehavior) {
+            return static_cast<AutotileDragBehavior>(*params.dragBehavior) == AutotileDragBehavior::Reorder;
+        }
+    }
+    return m_settings && m_settings->autotileDragBehavior() == AutotileDragBehavior::Reorder;
 }
 
 PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int frameY,
@@ -139,8 +156,8 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
     }
 
-    const PhosphorProtocol::DragPolicy policy =
-        computeDragPolicy(m_settings, m_autotileEngine, windowId, startScreenId, m_contextResolver);
+    const PhosphorProtocol::DragPolicy policy = computeDragPolicy(
+        m_settings, m_autotileEngine, windowId, startScreenId, m_contextResolver, effectiveReorderMode(startScreenId));
 
     // Reusable mutable copy — the reorder fallback path below may need to
     // restore immediateFloatOnStart that computeDragPolicy proactively cleared.
@@ -178,8 +195,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         // legacy float-on-start behavior here so the UX matches the Float
         // mode default for the rest of this drag.
         if (effectivePolicy.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen && m_autotileEngine
-            && m_settings && m_settings->autotileDragBehavior() == AutotileDragBehavior::Reorder
-            && m_autotileEngine->isWindowTiled(windowId)) {
+            && effectiveReorderMode(startScreenId) && m_autotileEngine->isWindowTiled(windowId)) {
             if (m_autotileEngine->beginDragInsertPreview(windowId, startScreenId)) {
                 m_dragReorderActive = true;
             } else {
@@ -536,7 +552,8 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
     const QString cursorScreenId = resolved.screenId;
     if (!cursorScreenId.isEmpty()) {
         const PhosphorProtocol::DragPolicy candidate =
-            computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, m_contextResolver);
+            computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, m_contextResolver,
+                              effectiveReorderMode(cursorScreenId));
         if (candidate != m_currentDragPolicy) {
             // Log both bypass reason and screenId on each side so same-reason
             // flips (snap→snap or autotile→autotile cross-VS) aren't opaque in

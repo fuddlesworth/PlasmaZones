@@ -274,6 +274,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetOverflowBehavior && key == ActionParam::Value) {
         return PhosphorI18n::tr("Overflow behavior");
     }
+    if (type == ActionType::SetDragBehavior && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Drag behavior");
+    }
     if (type == ActionType::DisableEngine && key == ActionParam::Mode) {
         return PhosphorI18n::tr("Engine to disable");
     }
@@ -469,6 +472,14 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Unlimited (no cap)");
         }
     }
+    if (type == ActionType::SetDragBehavior && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::DragBehaviorToken::Float) {
+            return PhosphorI18n::tr("Float on drag");
+        }
+        if (wireValue == PhosphorRules::DragBehaviorToken::Reorder) {
+            return PhosphorI18n::tr("Reorder in stack");
+        }
+    }
     return wireValue;
 }
 
@@ -564,6 +575,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetOverflowBehavior) {
         return PhosphorI18n::tr("Set overflow behavior");
+    }
+    if (type == ActionType::SetDragBehavior) {
+        return PhosphorI18n::tr("Set drag behavior");
     }
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");

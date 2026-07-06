@@ -396,9 +396,16 @@ public:
     static PhosphorProtocol::DragPolicy computeDragPolicy(const ISettings* settings,
                                                           const PhosphorEngine::IPlacementEngine* autotileEngine,
                                                           const QString& windowId, const QString& screenId,
-                                                          const PhosphorContext::IContextResolver* resolver);
+                                                          const PhosphorContext::IContextResolver* resolver,
+                                                          bool reorderMode);
 
 private:
+    /// Whether reorder (drag-to-swap) mode is effective for @p screenId: a matched
+    /// context SetDragBehavior rule wins, otherwise the global
+    /// `autotileDragBehavior` setting. Resolves through m_layoutManager (which the
+    /// static computeDragPolicy can't reach), so callers pass the result in.
+    bool effectiveReorderMode(const QString& screenId) const;
+
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
 

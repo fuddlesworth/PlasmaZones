@@ -1278,6 +1278,23 @@ void ActionRegistry::registerBuiltins()
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 14,
     });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetDragBehavior),
+        .slotFor = constantSlot(ActionSlot::DragBehavior),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == DragBehaviorToken::Float || v == DragBehaviorToken::Reorder;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(DragBehaviorToken::Float), QString(DragBehaviorToken::Reorder)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 15,
+    });
 }
 
 } // namespace PhosphorRules
