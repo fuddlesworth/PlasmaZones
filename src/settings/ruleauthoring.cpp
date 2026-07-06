@@ -681,7 +681,60 @@ QString operatorLabelImpl(Operator op)
     return PhosphorRules::operatorToString(op);
 }
 
+/// Single source of truth for WindowType → { int value, wire token, display label },
+/// shared by matchFields() (the editor dropdown options) and windowTypeLabel() (the
+/// collapsed rule-list summary). Order mirrors WindowTypeEnum.h — Unknown first as
+/// the safe default, then Normal as the most common authoring choice.
+struct WindowTypeOption
+{
+    int value;
+    QString wire;
+    QString label;
+};
+QList<WindowTypeOption> windowTypeOptions()
+{
+    struct Entry
+    {
+        PhosphorProtocol::WindowType type;
+        QString label;
+    };
+    // CTAD deduces the array size from the brace-list, so a new enum value can't
+    // silently drop the trailing entry by mismatching a hardcoded size.
+    const std::array entries = std::to_array<Entry>({
+        {PhosphorProtocol::WindowType::Unknown, PhosphorI18n::tr("Unknown")},
+        {PhosphorProtocol::WindowType::Normal, PhosphorI18n::tr("Normal window")},
+        {PhosphorProtocol::WindowType::Dialog, PhosphorI18n::tr("Dialog")},
+        {PhosphorProtocol::WindowType::Utility, PhosphorI18n::tr("Utility")},
+        {PhosphorProtocol::WindowType::Toolbar, PhosphorI18n::tr("Toolbar")},
+        {PhosphorProtocol::WindowType::Splash, PhosphorI18n::tr("Splash screen")},
+        {PhosphorProtocol::WindowType::Menu, PhosphorI18n::tr("Menu")},
+        {PhosphorProtocol::WindowType::Tooltip, PhosphorI18n::tr("Tooltip")},
+        {PhosphorProtocol::WindowType::Notification, PhosphorI18n::tr("Notification")},
+        {PhosphorProtocol::WindowType::Dock, PhosphorI18n::tr("Dock / panel")},
+        {PhosphorProtocol::WindowType::Desktop, PhosphorI18n::tr("Desktop")},
+        {PhosphorProtocol::WindowType::OnScreenDisplay, PhosphorI18n::tr("On-screen display")},
+        {PhosphorProtocol::WindowType::Popup, PhosphorI18n::tr("Popup")},
+    });
+    QList<WindowTypeOption> out;
+    out.reserve(static_cast<int>(entries.size()));
+    for (const auto& e : entries) {
+        out.append({static_cast<int>(e.type), PhosphorProtocol::windowTypeToString(e.type), e.label});
+    }
+    return out;
+}
+
 } // namespace
+
+QString windowTypeLabel(int windowTypeValue)
+{
+    for (const WindowTypeOption& opt : windowTypeOptions()) {
+        if (opt.value == windowTypeValue) {
+            return opt.label;
+        }
+    }
+    // Unknown value (hand-edited rule): show the raw int rather than a blank.
+    return QString::number(windowTypeValue);
+}
 
 QString enumOptionLabel(const QString& type, const QString& key, const QString& wireValue)
 {
@@ -813,38 +866,17 @@ QVariantList matchFields()
             // each value meant ("2" — Dialog? Utility?). Surface the
             // friendly token instead via a dedicated kind that the
             // editor renders as a dropdown.
+            // WindowType is stored as the int underlying the
+            // PhosphorProtocol::WindowType enum on the wire. A plain "number" SpinBox
+            // left users with no idea what each value meant ("2" — Dialog? Utility?),
+            // so a dedicated kind renders a dropdown. Options come from the single-source
+            // windowTypeOptions() table (also used by the collapsed-summary label).
             kind = QStringLiteral("windowType");
             QVariantList options;
-            // Order mirrors the enum declaration in WindowTypeEnum.h —
-            // Unknown first as the safe default, then Normal as the
-            // most common authoring choice.
-            struct WindowTypeEntry
-            {
-                PhosphorProtocol::WindowType type;
-                QString label;
-            };
-            // Use CTAD so the array size is deduced from the brace-list
-            // — adding a new WindowType enum value here can't silently
-            // drop the trailing entry by mismatching a hardcoded size.
-            const std::array kWindowTypes = std::to_array<WindowTypeEntry>({
-                {PhosphorProtocol::WindowType::Unknown, PhosphorI18n::tr("Unknown")},
-                {PhosphorProtocol::WindowType::Normal, PhosphorI18n::tr("Normal window")},
-                {PhosphorProtocol::WindowType::Dialog, PhosphorI18n::tr("Dialog")},
-                {PhosphorProtocol::WindowType::Utility, PhosphorI18n::tr("Utility")},
-                {PhosphorProtocol::WindowType::Toolbar, PhosphorI18n::tr("Toolbar")},
-                {PhosphorProtocol::WindowType::Splash, PhosphorI18n::tr("Splash screen")},
-                {PhosphorProtocol::WindowType::Menu, PhosphorI18n::tr("Menu")},
-                {PhosphorProtocol::WindowType::Tooltip, PhosphorI18n::tr("Tooltip")},
-                {PhosphorProtocol::WindowType::Notification, PhosphorI18n::tr("Notification")},
-                {PhosphorProtocol::WindowType::Dock, PhosphorI18n::tr("Dock / panel")},
-                {PhosphorProtocol::WindowType::Desktop, PhosphorI18n::tr("Desktop")},
-                {PhosphorProtocol::WindowType::OnScreenDisplay, PhosphorI18n::tr("On-screen display")},
-                {PhosphorProtocol::WindowType::Popup, PhosphorI18n::tr("Popup")},
-            });
-            for (const auto& opt : kWindowTypes) {
+            for (const WindowTypeOption& opt : windowTypeOptions()) {
                 QVariantMap option;
-                option[QStringLiteral("value")] = static_cast<int>(opt.type);
-                option[QStringLiteral("wire")] = PhosphorProtocol::windowTypeToString(opt.type);
+                option[QStringLiteral("value")] = opt.value;
+                option[QStringLiteral("wire")] = opt.wire;
                 option[QStringLiteral("label")] = opt.label;
                 options.append(option);
             }

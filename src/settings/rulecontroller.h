@@ -89,6 +89,8 @@ public:
     void setActivityLookup(RuleModel::LabelLookup fn);
     /// zone UUID → zone-name resolver for `Zone` match-leaf labels.
     void setZoneLookup(RuleModel::LabelLookup fn);
+    /// desktop number → name resolver for `VirtualDesktop` match-leaf labels.
+    void setVirtualDesktopLookup(RuleModel::LabelLookup fn);
     /// layoutId UUID → display label resolver for SetSnappingLayout actions.
     void setSnappingLayoutLookup(RuleModel::LabelLookup fn);
     /// Algorithm token ("bsp", …) → display label resolver for SetTilingAlgorithm actions.

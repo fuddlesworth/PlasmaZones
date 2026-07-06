@@ -128,7 +128,8 @@ bool matchIsSimpleConjunction(const MatchExpression& match)
 /// wired the SettingsController-backed resolvers.
 QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::LabelLookup& screenLookup,
                   const RuleModel::LabelLookup& activityLookup, const RuleModel::LabelLookup& zoneLookup,
-                  const RuleModel::LabelLookup& layoutLookup, const RuleModel::LabelLookup& tilingAlgorithmLookup)
+                  const RuleModel::LabelLookup& layoutLookup, const RuleModel::LabelLookup& tilingAlgorithmLookup,
+                  const RuleModel::LabelLookup& virtualDesktopLookup)
 {
     // Pick the lookup matching the leaf's field. An empty lookup degenerates
     // to identity so this stays usable from code paths that have not yet
@@ -140,6 +141,10 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
         lookup = &activityLookup;
     } else if (predicate.field == Field::Zone) {
         lookup = &zoneLookup;
+    } else if (predicate.field == Field::VirtualDesktop) {
+        // Resolves the desktop number to its name ("2" → "Work"); an unnamed or
+        // unknown desktop falls back to the bare number via resolveOne below.
+        lookup = &virtualDesktopLookup;
     }
     const auto resolveOne = [lookup](const QString& raw) {
         if (!lookup || !*lookup) {
@@ -174,6 +179,14 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
             label = PhosphorI18n::tr("Landscape");
         }
         return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field), label);
+    }
+
+    // Window type is the int underlying the WindowType enum — resolve it to the
+    // friendly label ("Window type: Dialog") via the same single-source table the
+    // editor dropdown uses, rather than showing the bare int.
+    if (predicate.field == Field::WindowType) {
+        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
+                                              RuleAuthoring::windowTypeLabel(predicate.value.toInt()));
     }
 
     // Active layout: a snap layout id resolves via the SetSnappingLayout lookup;
@@ -371,13 +384,14 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     }
     if (action.type == ActionType::OverrideOverlayStyle) {
         const QString v = action.params.value(PhosphorRules::ActionParam::Value).toString();
-        if (v == PhosphorRules::OverlayStyleToken::Rectangles) {
-            return PhosphorI18n::tr("Overlay style: Zone rectangles");
+        if (v.isEmpty()) {
+            return PhosphorI18n::tr("Overlay style");
         }
-        if (v == PhosphorRules::OverlayStyleToken::Preview) {
-            return PhosphorI18n::tr("Overlay style: Layout preview");
-        }
-        return PhosphorI18n::tr("Overlay style");
+        // Delegate the token→label to the shared enumOptionLabel (the same source the
+        // editor uses) instead of re-hardcoding the vocabulary here, like the sibling
+        // SetInsertPosition / SetOverflowBehavior / SetDragBehavior cases below.
+        return PhosphorI18n::tr("Overlay style: %1")
+            .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, v));
     }
     if (action.type == ActionType::SetAlgorithmParam) {
         // Keyed on ActionParam::Algorithm (the target algorithm token), not Value;
@@ -894,7 +908,7 @@ QString RuleModel::matchSummary(const MatchExpression& match) const
     }
     if (match.isLeaf()) {
         return leafLabel(match.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup, m_snappingLayoutLookup,
-                         m_tilingAlgorithmLookup);
+                         m_tilingAlgorithmLookup, m_virtualDesktopLookup);
     }
     // A simple AND renders its leaves joined by " · ".
     if (match.kind() == MatchExpression::Kind::All) {
@@ -902,7 +916,7 @@ QString RuleModel::matchSummary(const MatchExpression& match) const
         for (const MatchExpression& child : match.children()) {
             if (child.isLeaf()) {
                 parts.append(leafLabel(child.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup,
-                                       m_snappingLayoutLookup, m_tilingAlgorithmLookup));
+                                       m_snappingLayoutLookup, m_tilingAlgorithmLookup, m_virtualDesktopLookup));
             } else {
                 parts.append(PhosphorI18n::tr("(condition group)"));
             }
@@ -968,6 +982,11 @@ void RuleModel::setActivityLabelLookup(LabelLookup fn)
 void RuleModel::setZoneLabelLookup(LabelLookup fn)
 {
     m_zoneLookup = std::move(fn);
+}
+
+void RuleModel::setVirtualDesktopLabelLookup(LabelLookup fn)
+{
+    m_virtualDesktopLookup = std::move(fn);
 }
 
 void RuleModel::setSnappingLayoutLabelLookup(LabelLookup fn)

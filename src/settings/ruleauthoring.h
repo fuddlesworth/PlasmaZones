@@ -55,6 +55,12 @@ QString boolActionStateLabel(const QString& typeWire, bool on);
 /// Returns @p wireValue unchanged for an action/param without a translated vocab.
 QString enumOptionLabel(const QString& typeWire, const QString& key, const QString& wireValue);
 
+/// Translated label for a WindowType match value (the int underlying the
+/// PhosphorProtocol::WindowType enum) — e.g. 2 → "Dialog". Single source shared by
+/// the editor dropdown (matchFields) and the collapsed rule-list summary (RuleModel)
+/// so the two never drift. Returns the raw int as a string for an unknown value.
+QString windowTypeLabel(int windowTypeValue);
+
 /// A complete, default-seeded action payload for @p typeWire — a JSON map of
 /// the form `{ type: <typeWire>, ...defaults }` ready to drop into a rule's
 /// `actions` list. See `RuleController::defaultPayloadFor` for the

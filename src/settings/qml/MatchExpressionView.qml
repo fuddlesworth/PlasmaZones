@@ -180,6 +180,16 @@ ColumnLayout {
                 break;
             }
         }
+        // Virtual desktop — resolve the 1-based number to its name via
+        // `appSettings.virtualDesktopNames` (0-indexed) so the tree shows "Work"
+        // rather than the bare number, matching the editor picker and the collapsed
+        // rule-list summary. An out-of-range / unnamed desktop keeps the number.
+        if (kind === "virtualDesktop" && root.appSettings) {
+            var names = root.appSettings.virtualDesktopNames || [];
+            var idx = parseInt(value, 10) - 1;
+            if (idx >= 0 && idx < names.length && names[idx])
+                return names[idx];
+        }
         return String(value);
     }
 

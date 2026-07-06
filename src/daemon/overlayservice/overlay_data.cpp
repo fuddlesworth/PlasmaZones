@@ -200,9 +200,12 @@ QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* ph
     qCDebug(lcOverlay) << "buildZonesList: screenId=" << screenId << "overlayGeom=" << overlayGeom
                        << "layout=" << screenLayout->name() << "zones=" << screenLayout->zones().size();
 
+    // Resolve the per-context overlay override ONCE for the screen (it is invariant
+    // across the screen's zones) and thread it into each zoneToVariantMap call.
+    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
     for (auto* zone : screenLayout->zones()) {
         if (zone) {
-            zonesList.append(zoneToVariantMap(zone, screenId, physScreen, overlayGeom, screenLayout));
+            zonesList.append(zoneToVariantMap(zone, screenId, physScreen, overlayGeom, screenLayout, overlayOverride));
         }
     }
 
@@ -228,11 +231,13 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, QScreen*
     QRect overlayGeom = (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayGeometry.isValid()
                              ? m_screenStates[screenId].overlayGeometry
                              : screen->geometry());
-    return zoneToVariantMap(zone, screenId, screen, overlayGeom, layout);
+    return zoneToVariantMap(zone, screenId, screen, overlayGeom, layout,
+                            overlayOverrideForScreen(m_layoutManager, screenId));
 }
 
 QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QString& screenId, QScreen* physScreen,
-                                             const QRect& overlayGeometry, PhosphorZones::Layout* layout) const
+                                             const QRect& overlayGeometry, PhosphorZones::Layout* layout,
+                                             const PhosphorZones::ContextOverlayOverride& overlayOverride) const
 {
     QVariantMap map;
 
@@ -284,8 +289,9 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Overlay display mode cascade: zone → context rule → layout → global
     // ═══════════════════════════════════════════════════════════════════════════════
     // A context overlay-style rule slots between the per-zone override and the
-    // layout value, mirroring the precedence useShaderForScreen applies.
-    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
+    // layout value, mirroring the precedence useShaderForScreen applies. The override
+    // is screen-invariant across zones, so the caller resolves it once and passes it
+    // in rather than re-resolving (and re-deriving the cache key) per zone.
     int resolvedDisplayMode = 0; // default: ZoneRectangles
     if (zone->overlayDisplayMode() >= 0) {
         resolvedDisplayMode = zone->overlayDisplayMode();
@@ -329,10 +335,12 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // own alpha is stripped here — no double-apply.
     QColor fillColor = zone->useCustomColors()
         ? zone->highlightColor()
-        : overlayOverride.highlightColor.value_or(m_settings ? m_settings->highlightColor() : QColor(Qt::blue));
+        : overlayOverride.highlightColor.value_or(m_settings ? m_settings->highlightColor()
+                                                             : ConfigDefaults::highlightColor());
     qreal alpha = zone->useCustomColors()
         ? zone->activeOpacity()
-        : overlayOverride.activeOpacity.value_or(m_settings ? m_settings->activeOpacity() : 0.5);
+        : overlayOverride.activeOpacity.value_or(m_settings ? m_settings->activeOpacity()
+                                                            : ConfigDefaults::activeOpacity());
     map[FillR] = fillColor.redF() * alpha;
     map[FillG] = fillColor.greenF() * alpha;
     map[FillB] = fillColor.blueF() * alpha;
@@ -341,7 +349,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Border color (RGBA) for shader
     QColor borderClr = zone->useCustomColors()
         ? zone->borderColor()
-        : overlayOverride.borderColor.value_or(m_settings ? m_settings->borderColor() : QColor(Qt::white));
+        : overlayOverride.borderColor.value_or(m_settings ? m_settings->borderColor() : ConfigDefaults::borderColor());
     map[BorderR] = borderClr.redF();
     map[BorderG] = borderClr.greenF();
     map[BorderB] = borderClr.blueF();
@@ -350,10 +358,11 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Shader params: borderRadius, borderWidth (zone → context rule → global)
     map[ShaderBorderRadius] = zone->useCustomColors()
         ? zone->borderRadius()
-        : overlayOverride.borderRadius.value_or(m_settings ? m_settings->borderRadius() : 8);
+        : overlayOverride.borderRadius.value_or(m_settings ? m_settings->borderRadius()
+                                                           : ConfigDefaults::borderRadius());
     map[ShaderBorderWidth] = zone->useCustomColors()
         ? zone->borderWidth()
-        : overlayOverride.borderWidth.value_or(m_settings ? m_settings->borderWidth() : 2);
+        : overlayOverride.borderWidth.value_or(m_settings ? m_settings->borderWidth() : ConfigDefaults::borderWidth());
 
     return map;
 }

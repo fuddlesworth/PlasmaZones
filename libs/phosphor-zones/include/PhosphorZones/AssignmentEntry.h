@@ -238,8 +238,10 @@ struct ContextOverlayOverride
 
     bool isEmpty() const
     {
-        return !shaderId && !style && !highlightColor && !inactiveColor && !borderColor && !activeOpacity
-            && !inactiveOpacity && !borderWidth && !borderRadius && !showZoneNumbers;
+        // shaderParams is only ever populated alongside shaderId, but check it too so
+        // isEmpty() stays honest if a future writer sets the map without the gate.
+        return !shaderId && shaderParams.isEmpty() && !style && !highlightColor && !inactiveColor && !borderColor
+            && !activeOpacity && !inactiveOpacity && !borderWidth && !borderRadius && !showZoneNumbers;
     }
 };
 
@@ -277,8 +279,11 @@ struct ContextTilingParams
 
     bool isEmpty() const
     {
+        // algorithmParams is only ever populated alongside algorithmParamTarget, but
+        // check it too so isEmpty() stays honest if a future writer sets it without the
+        // target.
         return !maxWindows && !splitRatio && !masterCount && !insertPosition && !overflowBehavior && !dragBehavior
-            && algorithmParamTarget.isEmpty();
+            && algorithmParamTarget.isEmpty() && algorithmParams.isEmpty();
     }
 };
 

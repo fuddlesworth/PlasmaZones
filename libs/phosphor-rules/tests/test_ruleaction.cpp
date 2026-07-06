@@ -556,6 +556,8 @@ private Q_SLOTS:
             QVERIFY(!RuleAction::fromJson(o).has_value());
             o.insert(QStringLiteral("value"), 13); // above 12 rejected
             QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 4.5); // non-integral rejected (not truncated)
+            QVERIFY(!RuleAction::fromJson(o).has_value());
             o.insert(QStringLiteral("value"), 4); // in range accepted
             QVERIFY(RuleAction::fromJson(o).has_value());
         }
@@ -579,6 +581,8 @@ private Q_SLOTS:
             o.insert(QStringLiteral("value"), 0); // below 1 rejected
             QVERIFY(!RuleAction::fromJson(o).has_value());
             o.insert(QStringLiteral("value"), 6); // above 5 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 2.5); // non-integral rejected (not truncated)
             QVERIFY(!RuleAction::fromJson(o).has_value());
             o.insert(QStringLiteral("value"), 2); // in range accepted
             QVERIFY(RuleAction::fromJson(o).has_value());

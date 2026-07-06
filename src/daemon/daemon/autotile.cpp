@@ -264,26 +264,25 @@ void Daemon::updateAutotileScreens()
     // any already created by applyPerScreenConfig above) and retiles them.
     // Because per-screen overrides are set first, retileAfterOperation inside
     // setActiveScreens uses effectiveAlgorithm() with the correct per-screen algo.
-    const bool setChanged = (m_autotileEngine->activeScreens() != autotileScreens);
     m_autotileEngine->setActiveScreens(autotileScreens);
 
-    // When the autotile set didn't change (e.g., VS inherited autotile from
-    // the physical screen's cascade before the explicit assignment was written),
-    // setActiveScreens early-returns without retiling. Force a retile for every
-    // screen in the set so mode-swap toggles always take effect AND so a rule edit
-    // that changes tiling GEOMETRY without changing the per-screen overrides map is
-    // still applied live. That second case is load-bearing for GAP rules
-    // (SetInnerGap / SetOuterGap*): they resolve through the context-gap PROVIDER at
-    // retile time, not the overrides map, so `overrides != current` above never sees
-    // them — only a retile pulls the fresh gaps (via the provider's authoritative
-    // "tiling"-mode context). Diffing gaps here to skip the retile on truly-unrelated
-    // edits (appearance/lock/exclude) would have to replicate that exact provider
-    // context and risk silently dropping gap application; the blanket retile is the
-    // simple correct choice. Cost is bounded: rulesChanged fires only on a user rule
-    // save, the retile is deferred + coalesced, and it produces identical geometry
-    // (no window movement) when nothing actually changed.
-    if (!setChanged) {
-        for (const QString& screenId : autotileScreens) {
+    // setActiveScreens only retiles screens that were newly ADDED to the set; a
+    // screen that was already active gets no retile from it. Force a retile for
+    // every ALREADY-ACTIVE screen so (1) a mode-swap toggle with a stable set takes
+    // effect, and (2) a rule edit that changes tiling GEOMETRY without changing the
+    // per-screen overrides map is still applied live. Case (2) is load-bearing for
+    // GAP rules (SetInnerGap / SetOuterGap*): they resolve through the context-gap
+    // PROVIDER at retile time, not the overrides map, so `overrides != current` above
+    // never sees them — only a retile pulls the fresh gaps (via the provider's
+    // authoritative "tiling"-mode context). Skipping the added screens avoids
+    // retiling them twice (setActiveScreens already did). Diffing gaps here to skip
+    // the retile on truly-unrelated edits (appearance/lock/exclude) would have to
+    // replicate that exact provider context and risk silently dropping gap
+    // application; the blanket retile is the simple correct choice. Cost is bounded:
+    // rulesChanged fires only on a user rule save, the retile is deferred + coalesced,
+    // and it produces identical geometry (no window movement) when nothing changed.
+    for (const QString& screenId : autotileScreens) {
+        if (!addedScreens.contains(screenId)) {
             m_autotileEngine->scheduleRetileForScreen(screenId);
         }
     }

@@ -1180,15 +1180,20 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::MaxWindows),
         .validate =
             [](const QJsonObject& p) {
-                // 1..12; the consumer re-clamps to AutotileDefaults, so this only
-                // enforces a sanity floor of 1 (0 and negatives are rejected as
-                // grossly malformed) and the upper bound.
+                // 1..12, integral; the consumer re-clamps to AutotileDefaults, so
+                // this only enforces a sanity floor of 1 (0 and negatives are rejected
+                // as grossly malformed) and the upper bound. Reject non-integral like
+                // the sibling count validators (SnapToZone / RouteToDesktop) rather
+                // than silently truncating a hand-edited fractional count.
                 const QJsonValue v = p.value(ActionParam::Value);
                 if (!v.isDouble()) {
                     return false;
                 }
                 const double d = v.toDouble();
-                return d >= 1.0 && d <= kMaxTiledWindows;
+                if (d < 1.0 || d > kMaxTiledWindows) {
+                    return false;
+                }
+                return static_cast<double>(static_cast<int>(d)) == d;
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -1233,12 +1238,16 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::MasterCount),
         .validate =
             [](const QJsonObject& p) {
+                // 1..kMaxMasterCount, integral (mirrors SetMaxWindows / SnapToZone).
                 const QJsonValue v = p.value(ActionParam::Value);
                 if (!v.isDouble()) {
                     return false;
                 }
                 const double d = v.toDouble();
-                return d >= 1.0 && d <= kMaxMasterCount;
+                if (d < 1.0 || d > kMaxMasterCount) {
+                    return false;
+                }
+                return static_cast<double>(static_cast<int>(d)) == d;
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},

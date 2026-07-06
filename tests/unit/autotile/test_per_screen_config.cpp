@@ -171,6 +171,38 @@ private Q_SLOTS:
         QCOMPARE(engine.effectiveMaxWindows(screenB), engine.config()->maxWindows);
     }
 
+    // A per-screen InsertPosition override wins over the global config value, and an
+    // out-of-range stored value is clamped. Exercises the resolver's per-screen
+    // override + qBound branch (effectiveInsertPosition), the same override-then-clamp
+    // shape effectiveOverflowBehavior uses, which the effectiveMaxWindows tests above
+    // don't reach.
+    void testPerScreen_effectiveInsertPosition_perScreenOverrideAndClamp()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenA = QStringLiteral("eDP-1");
+        const QString screenB = QStringLiteral("HDMI-1");
+        engine.setAutotileScreens({screenA, screenB});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+
+        engine.config()->insertPosition = PhosphorTiles::AutotileInsertPosition::End;
+
+        // Screen A overrides to AsMaster; screen B inherits the global End.
+        QVariantMap overrides;
+        overrides[QStringLiteral("InsertPosition")] = static_cast<int>(PhosphorTiles::AutotileInsertPosition::AsMaster);
+        engine.applyPerScreenConfig(screenA, overrides);
+        QCOMPARE(engine.effectiveInsertPosition(screenA), PhosphorTiles::AutotileInsertPosition::AsMaster);
+        QCOMPARE(engine.effectiveInsertPosition(screenB), PhosphorTiles::AutotileInsertPosition::End);
+
+        // An out-of-range stored int clamps into the valid enum range rather than
+        // producing an invalid enumerator.
+        QVariantMap bogus;
+        bogus[QStringLiteral("InsertPosition")] = 999;
+        engine.applyPerScreenConfig(screenA, bogus);
+        const int clamped = static_cast<int>(engine.effectiveInsertPosition(screenA));
+        QVERIFY(clamped >= PhosphorTiles::AutotileDefaults::MinInsertPosition);
+        QVERIFY(clamped <= PhosphorTiles::AutotileDefaults::MaxInsertPosition);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // applyOverrides
     // ═══════════════════════════════════════════════════════════════════════════

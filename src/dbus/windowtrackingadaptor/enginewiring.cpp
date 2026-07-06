@@ -397,7 +397,14 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
         return std::nullopt;
     }
     PhosphorRules::WindowQuery query;
-    query.appId = meta->appId;
+    // Engage appId only when known, matching the effect-side builder (window_query.cpp)
+    // and the sibling string fields below. Engaging an empty appId here would make a
+    // degenerate `AppId Equals ""` / negated-appId predicate resolve differently on the
+    // daemon open-path than on the effect live-path (WindowQuery::appId is optional, so
+    // an unknown appId must stay disengaged per the engage-only-when-known contract).
+    if (!meta->appId.isEmpty()) {
+        query.appId = meta->appId;
+    }
     if (!meta->title.isEmpty()) {
         query.title = meta->title;
     }
