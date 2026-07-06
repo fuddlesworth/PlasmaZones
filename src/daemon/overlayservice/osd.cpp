@@ -428,8 +428,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         clearDecoration();
         return;
     }
-    // Same defensive cap as the compositor's wb.outerPadding.
-    outerPadding = qBound(0.0, outerPadding, 128.0);
+    // Same defensive cap as the compositor's wb.outerPadding, shared so the two
+    // decoration composers cannot drift.
+    outerPadding = qBound(0.0, outerPadding, static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
 
     // Padding BEFORE the chain: the chain write is the load trigger, and the
     // single list write hands every stage's source + params to QML atomically,

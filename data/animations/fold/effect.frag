@@ -11,29 +11,14 @@
 // crease shade to sell the fold, and masks the window's [0, 1] card rect.
 
 #ifdef PLASMAZONES_KWIN
-uniform sampler2D uOldWindow;
 // .xy = sampling card uv, .z = crease shade, .w = old->new cross-fade.
 layout(location = 1) in vec4 vFold;
 #endif
 
 #include <anchor_remap.glsl>
 
-#ifdef PLASMAZONES_KWIN
-// Sample the captured OLD content at card-space uv, mirroring
-// surfaceColor's anchor fold + KWin Y-up flip + window-rule opacity.
-vec4 oldColor(vec2 uv) {
-    // No captured old frame (snapshot-less lifecycle transitions, e.g.
-    // window.move at drag start): fall back to the live decorated surface so
-    // the cross-fade runs decorated-to-decorated. Sampling the unit-0 alias
-    // here would show the RAW window and blank every decoration pack until
-    // the fade completes.
-    if (iHasOldWindow == 0) {
-        return surfaceColor(uv);
-    }
-    vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
-    return texture(uOldWindow, vec2(t.x, 1.0 - t.y)) * iWindowOpacity;
-}
-#endif
+// uOldWindow + oldColor(): the shared captured-old-frame sampler.
+#include <old_content.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN

@@ -147,7 +147,9 @@ private Q_SLOTS:
         QSignalSpy statusSpy(&item, &SurfaceShaderItem::statusChanged);
         item.setShaderSource(QUrl::fromLocalFile(QStringLiteral("/nonexistent/effect.frag")));
         QCOMPARE(item.status(), SurfaceShaderItem::Status::Loading);
-        QVERIFY(statusSpy.count() >= 1);
+        // Exactly one Null -> Loading transition; headless, updatePaintNode never
+        // runs so no further Ready/Error/Null change can follow to inflate this.
+        QCOMPARE(statusSpy.count(), 1);
     }
 
     void testSurfaceShaderItem_unsupportedUrlSchemeSetsError()

@@ -36,7 +36,7 @@ void main() {
     vec2 cen = uSurfaceFrameTopLeft + halfSz;
 
     float reach = max(p_flyRange, 4.0) * uSurfaceScale;
-    float size = max(p_flySize, 0.5) * uSurfaceScale;
+    float size = max(p_flySize, 0.5) * max(uSurfaceScale, 0.001);
     float t = iTime * max(p_driftSpeed, 0.0);
     float count = clamp(p_flyCount, 1.0, float(kMaxFlies));
 

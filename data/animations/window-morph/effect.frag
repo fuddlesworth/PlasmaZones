@@ -26,33 +26,17 @@
 // it correctly, exactly as it does for the live uTexture0.
 
 #ifdef PLASMAZONES_KWIN
-// Geometry-morph endpoints (logical-screen px, x/y/w/h) + old-content
-// snapshot. Default-block uniforms pushed by the kwin-effect paint pipeline.
+// Geometry-morph endpoints (logical-screen px, x/y/w/h). Default-block
+// uniforms pushed by the kwin-effect paint pipeline. The old-content snapshot
+// (uOldWindow) comes from the shared old_content.glsl include below.
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
-uniform sampler2D uOldWindow;
 #endif
 
 #include <anchor_remap.glsl>
 
-#ifdef PLASMAZONES_KWIN
-// Sample the captured OLD content at card-space uv, mirroring surfaceColor's
-// iAnchorRectInTexture fold + KWin Y-up flip + iWindowOpacity multiply so old
-// and new align AND a SetOpacity rule dims both equally through the
-// morph (surfaceColor folds iWindowOpacity for the new content; match it here).
-vec4 oldColor(vec2 uv) {
-    // No captured old frame (snapshot-less lifecycle transitions, e.g.
-    // window.move at drag start): fall back to the live decorated surface so
-    // the cross-fade runs decorated-to-decorated. Sampling the unit-0 alias
-    // here would show the RAW window and blank every decoration pack until
-    // the fade completes.
-    if (iHasOldWindow == 0) {
-        return surfaceColor(uv);
-    }
-    vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
-    return texture(uOldWindow, vec2(t.x, 1.0 - t.y)) * iWindowOpacity;
-}
-#endif
+// uOldWindow + oldColor(): the shared captured-old-frame sampler.
+#include <old_content.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN

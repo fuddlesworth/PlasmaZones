@@ -342,7 +342,7 @@ void effectContentSignature(QCryptographicHash& hasher, const SurfaceShaderEffec
     // isUser is set from the user-path classification, NOT from file content —
     // it can flip (setUserPath after addSearchPaths) with no file change, so
     // mix it in or the reconcile would keep the stale-classification entry.
-    hasher.addData(e.isUserEffect ? "u" : "s");
+    hasher.addData(e.isUserEffect ? QByteArrayLiteral("u") : QByteArrayLiteral("s"));
 }
 
 } // namespace

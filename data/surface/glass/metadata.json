@@ -145,7 +145,7 @@
             "id": "tintColor",
             "name": "Tint colour",
             "type": "color",
-            "default": "#ffffff",
+            "default": "#ffffffff",
             "description": "Colour mixed over the glass",
             "group": "Tint"
         },
@@ -153,7 +153,7 @@
             "id": "rimColor",
             "name": "Rim colour",
             "type": "color",
-            "default": "#ffffff",
+            "default": "#ffffffff",
             "description": "Colour of the rim light",
             "group": "Lighting"
         }

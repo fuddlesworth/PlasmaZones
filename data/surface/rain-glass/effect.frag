@@ -103,7 +103,12 @@ void main() {
     vec2 toMicro = microF - (mn.xy - 0.5) * 0.7;
     float micro = smoothstep(0.06, 0.035, length(toMicro)) * step(mn.z, 0.35 * amount);
 
-    // Combined refraction offset in device px (layer offsets are st units).
+    // Combined refraction offset in device px. layer1/layer2 offsets are in st
+    // units, so ×cellPx maps them to px. toMicro lives in the 6×-denser micro-bead
+    // grid, so the same ×cellPx intentionally over-scales the micro term by ~6×;
+    // that exaggerated push, gated to a subtle secondary lens by the *0.3, is what
+    // makes the tiny fixed beads catch the light. Do not "correct" the scale
+    // without checking the look.
     vec2 offsetPx = (layer1.xy + layer2.xy - toMicro * micro * 0.3) * cellPx;
     float wet = clamp(layer1.z + layer2.z + micro, 0.0, 1.0);
 

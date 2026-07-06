@@ -451,7 +451,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         }
     }
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
-    wb.outerPadding = qBound(0, outerPadding, 128);
+    wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
     wb.chainHandlesOpacity = handlesOpacity;
 

@@ -100,7 +100,7 @@
             "id": "tintColor",
             "name": "Tint colour",
             "type": "color",
-            "default": "#ffffff",
+            "default": "#ffffffff",
             "description": "Colour mixed over the glass",
             "group": "Tint"
         }

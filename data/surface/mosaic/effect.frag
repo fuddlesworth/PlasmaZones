@@ -33,7 +33,7 @@ void main() {
         // Quantise the fragment to its cell centre in device px (anchored to
         // the frame corner so the grid doesn't crawl when the window moves a
         // sub-cell amount), then sample the raw backdrop there.
-        float cell = max(p_cellSize, 2.0) * uSurfaceScale;
+        float cell = max(p_cellSize, 2.0) * max(uSurfaceScale, 0.001);
         vec2 local = px - uSurfaceFrameTopLeft;
         vec2 snapped = (floor(local / cell) + 0.5) * cell;
         vec4 b = backdropTexel(vTexCoord + pxToUv(snapped - local));

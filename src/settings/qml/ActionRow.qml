@@ -129,6 +129,13 @@ ColumnLayout {
     /// `currentValues` binding — using `({})` inline would allocate a new
     /// object identity per binding evaluation and churn the editor.
     readonly property var _emptyShaderParams: ({})
+    // The OverrideDecorationChain action payload has a fixed two-key schema: the
+    // ordered pack list under "chain", the per-pack overrides under "params".
+    // The inline add-picker and the below-row list editor live in different
+    // scopes (the list editor's Loader has no param descriptor), so naming the
+    // keys once here keeps the two halves from drifting onto different literals.
+    readonly property string _decorationChainKey: "chain"
+    readonly property string _decorationParamsKey: "params"
     // Param-editor Components — the `modelData` they reference is the
     // **Loader**'s `modelData` (set by Repeater), reached via `parent.modelData`
     // since each loaded item is parented to the Loader. A `required property
@@ -960,7 +967,7 @@ ColumnLayout {
         // splits from its inline effect picker.
         PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
-            readonly property var _chain: row.action[_param.key] || []
+            readonly property var _chain: row.action[row._decorationChainKey] || []
             // Packs not already in the chain; re-evaluates as the chain grows.
             readonly property var _addable: {
                 var all = row.appSettings && row.appSettings.decorationPage ? row.appSettings.decorationPage.availableShaderEffects() : [];
@@ -983,7 +990,7 @@ ColumnLayout {
                     return;
                 var next = _chain.slice();
                 next.push(id);
-                row.actionEdited(row._withParam(_param.key, next));
+                row.actionEdited(row._withParam(row._decorationChainKey, next));
             }
         }
     }
@@ -998,29 +1005,29 @@ ColumnLayout {
         // empty chain is the valid "no decoration" sentinel.
         ChainEditor {
             availableShaders: row.appSettings && row.appSettings.decorationPage ? row.appSettings.decorationPage.availableShaderEffects() : []
-            chain: row.action.chain || []
+            chain: row.action[row._decorationChainKey] || []
             // Hoisted stable-empty identity (same as _shaderParamsEditor's
             // currentValues) rather than an inline `({})` that churns a new
             // object per binding evaluation.
-            packParameters: row.action.params || row._emptyShaderParams
+            packParameters: row.action[row._decorationParamsKey] || row._emptyShaderParams
             showLayerToggles: false
             showAddRow: false
             onChainChangeRequested: function (newChain) {
                 // Prune params of removed packs, mirroring
                 // DecorationPageController.setChain: re-adding a pack starts
                 // from its defaults rather than resurrecting old overrides.
-                var cur = row.action.params || {};
+                var cur = row.action[row._decorationParamsKey] || {};
                 var pruned = {};
                 for (var pid in cur) {
                     if (newChain.indexOf(pid) >= 0)
                         pruned[pid] = cur[pid];
                 }
-                var next = row._withParam("chain", newChain);
-                next.params = pruned;
+                var next = row._withParam(row._decorationChainKey, newChain);
+                next[row._decorationParamsKey] = pruned;
                 row.actionEdited(next);
             }
             onParamChangeRequested: function (packId, paramId, value) {
-                var cur = row.action.params || {};
+                var cur = row.action[row._decorationParamsKey] || {};
                 var params = {};
                 for (var pid in cur)
                     params[pid] = cur[pid];
@@ -1030,10 +1037,10 @@ ColumnLayout {
                     packParams[k] = curPack[k];
                 packParams[paramId] = value;
                 params[packId] = packParams;
-                row.actionEdited(row._withParam("params", params));
+                row.actionEdited(row._withParam(row._decorationParamsKey, params));
             }
             onParamsRandomizeRequested: function (packId, rolled) {
-                var cur = row.action.params || {};
+                var cur = row.action[row._decorationParamsKey] || {};
                 var params = {};
                 for (var pid in cur)
                     params[pid] = cur[pid];
@@ -1044,7 +1051,7 @@ ColumnLayout {
                 for (var r in rolled)
                     packParams[r] = rolled[r];
                 params[packId] = packParams;
-                row.actionEdited(row._withParam("params", params));
+                row.actionEdited(row._withParam(row._decorationParamsKey, params));
             }
         }
     }

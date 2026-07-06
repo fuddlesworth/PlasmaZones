@@ -110,7 +110,7 @@
             "id": "colorA",
             "name": "First colour",
             "type": "color",
-            "default": "#cba6f7",
+            "default": "#ffcba6f7",
             "group": "Gradient",
             "description": "Gradient start colour"
         },
@@ -118,7 +118,7 @@
             "id": "colorB",
             "name": "Second colour",
             "type": "color",
-            "default": "#89dceb",
+            "default": "#ff89dceb",
             "group": "Gradient",
             "description": "Gradient end colour"
         }

@@ -45,6 +45,12 @@ constexpr QLatin1String kOverridesKey{"overrides"};
 constexpr QLatin1String kPathKey{"path"};
 constexpr QLatin1String kProfileKey{"profile"};
 
+// Current on-disk decoration-set format. saveCurrentAsDecorationSet stamps it;
+// applyDecorationSet refuses a newer version so a set written by a future build
+// (with fields this build can't understand) fails cleanly instead of applying a
+// silently truncated look. A missing/older version parses as the legacy v1 shape.
+constexpr int kSetFormatVersion = 1;
+
 } // namespace
 
 QString DecorationPageController::decorationSetsDirectoryPath() const
@@ -115,6 +121,16 @@ bool DecorationPageController::applyDecorationSet(const QString& name)
     }
     const QJsonObject root = doc.object();
 
+    // A set written by a newer build may carry fields this build drops on parse,
+    // so applying it would commit a silently truncated look. Refuse it. A
+    // missing version (legacy files) reads as the current format.
+    const int version = root.value(kVersionKey).toInt(kSetFormatVersion);
+    if (version > kSetFormatVersion) {
+        qCWarning(lcConfig) << "applyDecorationSet: set version" << version << "in" << filePath
+                            << "is newer than this build understands (" << kSetFormatVersion << ") — refusing";
+        return false;
+    }
+
     // Validate every entry up-front — reject the whole set on any malformed
     // entry rather than committing partial state (same staging discipline as
     // MotionSetStore::applyMotionSet). Path membership in the supported
@@ -180,7 +196,7 @@ bool DecorationPageController::saveCurrentAsDecorationSet(const QString& name, c
     if (!description.isEmpty()) {
         rootObj.insert(kDescriptionKey, description);
     }
-    rootObj.insert(kVersionKey, 1);
+    rootObj.insert(kVersionKey, kSetFormatVersion);
     // The baseline is part of the look — capture it when it carries any
     // engaged field (an empty profile serialises to an empty object).
     const QJsonObject baselineJson = tree.baseline().toJson();
