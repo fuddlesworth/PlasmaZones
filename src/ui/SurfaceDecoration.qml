@@ -89,6 +89,11 @@ Item {
     ///                               padded capture canvas. 0 for margin-less
     ///                               chains keeps the classic 1:1 geometry.
     property var decorationChain: []
+    // Live CAVA audio spectrum, forwarded to every stage's SurfaceShaderItem so
+    // an audio-reactive pack (one that includes surface_audio.glsl) reacts.
+    // Empty when the audio visualizer is off. The daemon writes it via
+    // OverlayService while a decoration host is displaying and audio is enabled.
+    property var audioSpectrum: []
     property real decorationOuterPadding: 0
 
     /// Sanitised device-independent margin. The capture's sourceRect and every
@@ -266,6 +271,10 @@ Item {
 
             SurfaceShaderItem {
                 id: stageItem
+
+                // Forward the host's live audio spectrum so an audio-reactive
+                // pack (surface_audio.glsl) sees it. Inherited from ShaderEffect.
+                audioSpectrum: root.audioSpectrum
 
                 // Anchor rect mapped into the host's coordinate space (the
                 // delegate fills the host, so its coordinates coincide). The

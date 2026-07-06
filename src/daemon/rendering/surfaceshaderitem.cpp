@@ -59,6 +59,10 @@ SurfaceShaderItem::SurfaceShaderItem(QQuickItem* parent)
     // fading the decoration (the "host can fade the decoration" contract below)
     // actually re-uploads the new value instead of going stale.
     connect(this, &QQuickItem::opacityChanged, this, &QQuickItem::update);
+    // A new audio spectrum must reach the node — repaint so updatePaintNode
+    // pushes it. The base ShaderEffect does not repaint on this by itself
+    // because this item overrides updatePaintNode.
+    connect(this, &PhosphorRendering::ShaderEffect::audioSpectrumChanged, this, &QQuickItem::update);
 }
 
 SurfaceShaderItem::~SurfaceShaderItem()
@@ -217,6 +221,13 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
                                  static_cast<float>(m_surfaceFrameTopLeft.y()));
     node->setSurfaceFrameSize(static_cast<float>(m_surfaceFrameSize.width()),
                               static_cast<float>(m_surfaceFrameSize.height()));
+
+    // Audio spectrum (CAVA), inherited from the base ShaderEffect's
+    // audioSpectrum Q_PROPERTY (the daemon writes it via OverlayService when the
+    // visualizer is on). The node uploads it to binding 6 and fills the UBO's
+    // iAudioSpectrumSize; a pack reads it through surface_audio.glsl. Empty when
+    // audio is off — a no-op the base node deduplicates.
+    node->setAudioSpectrum(audioSpectrumVariant().value<QVector<float>>());
 
     // ── Sync shader source ───────────────────────────────────────────
     // Reload only on an actual dirty flag (runtime setShaderSource /
