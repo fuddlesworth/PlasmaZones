@@ -296,10 +296,10 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
     // Drop the wasSnapped latch after dragStarted has re-derived live
     // m_wasSnapped from the tracking state — its single consumer (the
     // endDrag pending-never-activated branch) is now unreachable for
-    // this drag. Leaving the latch set would bleed across the NEXT
-    // bypass beginDrag (which doesn't overwrite the field) and a
-    // later endDrag's pending-branch could read a stale-true value
-    // for a window that wasn't actually snapped at start.
+    // this drag. This is defensive: the next beginDrag re-clears the
+    // field via clearPendingSnapDragState() regardless, so a stale-true
+    // value can't actually bleed into a later drag; the reset just keeps
+    // the field honest for the remainder of this now-activated drag.
     m_pendingSnapDragWasSnapped = false;
     return !m_draggedWindowId.isEmpty();
 }

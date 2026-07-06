@@ -810,7 +810,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
         writeQmlProperty(slot, QStringLiteral("highlightedCount"), highlightedCount);
         updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout);
         // Note: zoneDataVersion is bumped and broadcast to all windows in
-        // updateGeometries() after all per-screen updates complete. Do not
+        // updateZonesForAllWindows() after all per-screen updates complete. Do not
         // write it here - updateOverlayWindow() is called per-screen, and
         // writing the version mid-loop would cause inconsistent state across
         // windows (some see the new version, others the old one).
