@@ -11,7 +11,7 @@
 namespace PhosphorSurfaceShaders {
 
 /// IUboProfile implementation for the surface-decoration runtime — the leaner
-/// 560-byte SurfaceUniforms layout.
+/// 576-byte SurfaceUniforms layout.
 ///
 /// Reuses the shared PhosphorRendering::ShaderNodeRhi engine with the surface
 /// UBO. The surface binding map (UBO@0, iChannel0-3@2-5, uTexture0@7) is a

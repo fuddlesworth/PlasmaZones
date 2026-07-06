@@ -130,7 +130,7 @@ private Q_SLOTS:
         // No flags → no regions.
         QVERIFY(profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{}).empty());
 
-        // Any flag → matrix {0,64} + scene {64, 560-64}.
+        // Any flag → matrix {0,64} + scene {64, 576-64}.
         auto r = profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{false, false, true, false});
         QCOMPARE(static_cast<int>(r.size()), 2);
         QCOMPARE(r[0].offset, 0);

@@ -481,9 +481,10 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
 }
 
 // Validate one SURFACE pack directory (data/surface/*). Reproduces the surface
-// runtime's fragment assembly on the daemon (Qt-RHI) path — include expansion +
-// the generated p_<id> preamble (surface packs ship a plain main(), no entry
-// scaffold) — then bakes through headless glslang. Returns the error count.
+// runtime's fragment assembly on the daemon (Qt-RHI) path — the pSurface entry
+// scaffold (an entry-only pack gets a generated main(); a pack with its own
+// main() passes through unchanged) + include expansion + the generated p_<id>
+// preamble — then bakes through headless glslang. Returns the error count.
 //
 // As with animation packs, the kwin-effect classic-GL branch
 // (`#define PLASMAZONES_KWIN`, default-block uniforms) is NOT baked here:
@@ -678,8 +679,9 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // ── vertex stage ──
     // Mirror the daemon runtime (SurfaceShaderItem::updatePaintNode): an explicit
     // per-pack `vertexShader` wins, else a per-pack `surface.vert` beside the
-    // fragment, else a shared `surface.vert` from the include paths. No scaffold,
-    // no param preamble (surface packs ship their own main()). Without this a
+    // fragment, else a shared `surface.vert` from the include paths. The vertex
+    // stage gets no scaffold and no param preamble — it ships its own main() (the
+    // fragment stage's pSurface scaffold does not apply here). Without this a
     // malformed vertex stage passes the validator and only fails at the live
     // daemon — the sibling zone path (validatePack) already bakes the vertex
     // stage, so surface validation must too.

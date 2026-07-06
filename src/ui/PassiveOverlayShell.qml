@@ -181,6 +181,12 @@ Window {
         // observes — the decoration would never update.
         property var decorationChain: []
         property real decorationOuterPadding: 0
+        // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
+        // Same declare-and-forward contract as decorationChain: C++ writes it
+        // with setProperty, so an undeclared name would silently become a dead
+        // dynamic property no binding observes and audio would never reach the
+        // decoration shader.
+        property var audioSpectrum: []
 
         /// Restart the loaded OSD content's auto-dismiss timer. C++
         /// invokes this after every OSD show via QMetaObject::invokeMethod.
@@ -293,6 +299,7 @@ Window {
             contentItem: osdLoader.item
             decorationChain: osdSlot.decorationChain
             decorationOuterPadding: osdSlot.decorationOuterPadding
+            audioSpectrum: osdSlot.audioSpectrum
         }
     }
 
@@ -331,6 +338,12 @@ Window {
         // observes — the decoration would never update.
         property var decorationChain: []
         property real decorationOuterPadding: 0
+        // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
+        // Same declare-and-forward contract as decorationChain: C++ writes it
+        // with setProperty, so an undeclared name would silently become a dead
+        // dynamic property no binding observes and audio would never reach the
+        // decoration shader.
+        property var audioSpectrum: []
 
         anchors.fill: parent
         // Popup tier — modal pickers paint above the zone selector and
@@ -390,6 +403,7 @@ Window {
             contentItem: snapAssistLoader.item
             decorationChain: snapAssistSlot.decorationChain
             decorationOuterPadding: snapAssistSlot.decorationOuterPadding
+            audioSpectrum: snapAssistSlot.audioSpectrum
         }
     }
 
@@ -435,6 +449,12 @@ Window {
         // observes — the decoration would never update.
         property var decorationChain: []
         property real decorationOuterPadding: 0
+        // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
+        // Same declare-and-forward contract as decorationChain: C++ writes it
+        // with setProperty, so an undeclared name would silently become a dead
+        // dynamic property no binding observes and audio would never reach the
+        // decoration shader.
+        property var audioSpectrum: []
 
         // Forwards to LayoutPickerContent.moveSelection / confirmSelection
         // — invoked by C++ on global-accel callbacks since the shell is
@@ -515,6 +535,7 @@ Window {
             contentItem: layoutPickerLoader.item
             decorationChain: layoutPickerSlot.decorationChain
             decorationOuterPadding: layoutPickerSlot.decorationOuterPadding
+            audioSpectrum: layoutPickerSlot.audioSpectrum
         }
     }
 
@@ -604,6 +625,12 @@ Window {
         // observes — the decoration would never update.
         property var decorationChain: []
         property real decorationOuterPadding: 0
+        // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
+        // Same declare-and-forward contract as decorationChain: C++ writes it
+        // with setProperty, so an undeclared name would silently become a dead
+        // dynamic property no binding observes and audio would never reach the
+        // decoration shader.
+        property var audioSpectrum: []
 
         function applyScrollDelta(angleDeltaY) {
             if (zoneSelectorLoader.item)
@@ -723,6 +750,7 @@ Window {
             contentItem: zoneSelectorLoader.item
             decorationChain: zoneSelectorSlot.decorationChain
             decorationOuterPadding: zoneSelectorSlot.decorationOuterPadding
+            audioSpectrum: zoneSelectorSlot.audioSpectrum
         }
     }
 

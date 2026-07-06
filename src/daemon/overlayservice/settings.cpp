@@ -413,8 +413,10 @@ void OverlayService::scheduleIdleQuiesce()
             // window both cancels this timer and resumes, but guard anyway. The
             // overlay's QQuickWindows are intentionally left alive (NVIDIA
             // teardown-deadlock avoidance); we only pause the 60 Hz shader
-            // render loop and the CAVA capture.
-            if (isOverlayDisplaying()) {
+            // render loop and the CAVA capture. Mirror syncCavaState's wantRun
+            // predicate: a visible audio decoration also keeps CAVA alive, so it
+            // must veto the quiesce too.
+            if (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty()) {
                 return;
             }
             stopShaderAnimation();

@@ -20,6 +20,7 @@
 #include <PhosphorLayer/Surface.h>
 #include "phosphor_roles.h"
 #include "phosphor_slot_keys.h"
+#include "qml_property_names.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 #include <PhosphorAnimation/SurfaceAnimator.h>
@@ -323,7 +324,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         // No decoration -> no audio need on this slot; let CAVA wind down if it
         // was only kept alive for an audio decoration here.
         if (auto* item = qobject_cast<QQuickItem*>(slot)) {
-            item->setProperty("_wantsAudioDecoration", false);
+            item->setProperty(OverlayQmlPropertyNames::WantsAudioDecoration.data(), false);
         }
         syncCavaState();
     };
@@ -442,7 +443,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // CAVA: a newly-decorated audio surface may need audio capture started, or a
     // change from audio to non-audio may let it wind down.
     if (auto* item = qobject_cast<QQuickItem*>(slot)) {
-        item->setProperty("_wantsAudioDecoration", chainWantsAudio);
+        item->setProperty(OverlayQmlPropertyNames::WantsAudioDecoration.data(), chainWantsAudio);
         // Decoration is often applied while the slot is still hidden (popups
         // apply-then-show), so re-run syncCavaState whenever it shows/hides —
         // that starts CAVA once an audio surface becomes visible and stops it on
