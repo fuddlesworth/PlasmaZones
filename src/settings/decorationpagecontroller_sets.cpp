@@ -199,6 +199,12 @@ bool DecorationPageController::saveCurrentAsDecorationSet(const QString& name, c
         entry.insert(kProfileKey, tree.directOverride(p).toJson());
         overrides.append(entry);
     }
+    // An empty tree (no baseline, no overrides) would save a set that
+    // applyDecorationSet then silently rejects (nothing to stage). Refuse the
+    // save so the user isn't left with a do-nothing set on disk.
+    if (baselineJson.isEmpty() && overrides.isEmpty()) {
+        return false;
+    }
     rootObj.insert(kOverridesKey, overrides);
 
     QSaveFile file(filePath);

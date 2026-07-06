@@ -635,7 +635,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     // inactive colour loaders above). Re-fetched on every settingsChanged, so a
     // Window Appearance page edit takes effect without a relog. Guarded on an
     // actual value change to avoid a redundant full border rebuild per fetch.
-    loadSettingAsync(QStringLiteral("showWindowDecoration"), [this](const QVariant& v) {
+    loadSettingAsync(QStringLiteral("showWindowBorder"), [this](const QVariant& v) {
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.showBorder != b) {
             m_windowAppearanceDefault.showBorder = b;

@@ -205,9 +205,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // the next paint to reallocate against the new pass count. The next
     // compiledPack() call recompiles lazily per pack id.
     connect(&m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, [this]() {
+        // This fires from the registry's file watcher between frames, where the
+        // compositor's GL context is NOT current. m_compiledPacks owns GLShaders
+        // and m_surfaceMultipass owns GLTextures, so their destruction issues
+        // glDelete* calls that need a current context (the same discipline
+        // compiledPack()/surfacePresentShader() apply for off-paint callers).
+        // Make it current before clearing so the GL objects release cleanly.
+        const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
         m_compiledPacks.clear();
         m_surfaceMultipass.clear();
-        if (KWin::effects) {
+        if (haveContext) {
             KWin::effects->addRepaintFull();
         }
     });

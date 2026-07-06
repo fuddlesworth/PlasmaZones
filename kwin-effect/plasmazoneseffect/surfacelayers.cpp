@@ -75,10 +75,10 @@ void drawFullscreenQuad()
 // unpadded blit (which silently dropped every pack after the base and clipped
 // the outer margin for the whole animation). The animation samples the result
 // as uSurfaceLayer through surfaceColor(), whose iLayerRectInTexture remap
-// addresses the padded canvas; force=true because mid-animation there is no
-// OffscreenData blit to fall back on even for a single unpadded pack, and the
-// capture hands the OffscreenEffect slot back to the ANIMATION shader (not the
-// rest path's present passthrough).
+// addresses the padded canvas. renderSurfaceChainComposite always folds the
+// full chain here: mid-animation there is no OffscreenData blit to fall back on
+// even for a single unpadded pack, and the capture hands the OffscreenEffect
+// slot back to the ANIMATION shader (not the rest path's present passthrough).
 KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transition, KWin::EffectWindow* w, qreal scale)
 {
     if (!w || !transition.cached) {
@@ -108,7 +108,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
         }
         return nullptr;
     }
-    return renderSurfaceChainComposite(w, scale, transition.cached->shader.get(), /*force=*/true);
+    return renderSurfaceChainComposite(w, scale, transition.cached->shader.get());
 }
 
 // Lazily compile the passthrough present shader. It samples a bound texture
@@ -329,7 +329,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
 }
 
 KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
-                                                                KWin::GLShader* captureRestoreShader, bool force)
+                                                                KWin::GLShader* captureRestoreShader)
 {
     if (!w) {
         return nullptr;
@@ -474,10 +474,13 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     }
 
     // ── Step 2: fold each pack over the running composite ────────────────────
-    // Invariant: each pk is consumed entirely within its own iteration. Never
-    // hoist a pk across iterations — compiledPack() may insert into the
-    // m_compiledPacks unordered_map and rehash, invalidating any pointer a
-    // prior iteration returned.
+    // Invariant: each pk is consumed entirely within its own iteration and
+    // re-fetched from compiledPack() every pass. std::unordered_map keeps
+    // element pointers/references stable across insert/rehash (only iterators
+    // are invalidated), so the per-iteration re-fetch is a cheap defensive
+    // habit rather than a strict requirement here — but it would become
+    // load-bearing if m_compiledPacks were ever swapped for a node-relocating
+    // container, so keep it.
     int src = 0;
     for (int k = 0; k < chain.size(); ++k) {
         CompiledSurfacePack* const pk = compiledPack(chain.at(k), profile);

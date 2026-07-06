@@ -637,7 +637,7 @@ ColumnLayout {
             // word for the label rather than letting QColor("accent") fall to black.
             readonly property bool _isAccent: _hex === "accent"
             // The accent sentinel follows the system colour scheme per focus state,
-            // the same split updateWindowBorder applies: the focused (active) slot
+            // the same split updateWindowDecoration applies: the focused (active) slot
             // adopts the highlight colour, the unfocused (inactive) slot the inactive
             // colour. Preview the matching system colour WITH its alpha so the swatch
             // shows what the border will actually draw instead of one opaque accent

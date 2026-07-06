@@ -163,20 +163,26 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
         }
     }
 
-    // Resolve directory-relative paths via QDir::filePath, which returns
-    // absolute inputs unchanged — keeps schema tolerance symmetric with
-    // PhosphorShaders::ShaderRegistry's parser. Naive string concat
-    // would mangle absolute paths from a metadata.json into invalid
-    // double-rooted forms.
+    // Resolve directory-relative paths and confine them to the effect dir
+    // with the SAME `..`-traversal / symlink-escape guard the texture list
+    // uses below (validateTexturePathWithinEffectDir returns absolute inputs
+    // unchanged, so schema tolerance stays symmetric with
+    // PhosphorShaders::ShaderRegistry's parser, and naive-concat double-root
+    // mangling is avoided). A relative frag/vert/preview that escapes the
+    // pack dir is cleared, which fail-closes the pack (an empty frag path
+    // compiles nothing) rather than reading source from outside the pack.
     const QDir dir(effectDir);
     if (!e.fragmentShaderPath.isEmpty()) {
-        e.fragmentShaderPath = dir.filePath(e.fragmentShaderPath);
+        const auto validated = validateTexturePathWithinEffectDir(e.fragmentShaderPath, effectDir, e.id);
+        e.fragmentShaderPath = validated.value_or(QString());
     }
     if (!e.vertexShaderPath.isEmpty()) {
-        e.vertexShaderPath = dir.filePath(e.vertexShaderPath);
+        const auto validated = validateTexturePathWithinEffectDir(e.vertexShaderPath, effectDir, e.id);
+        e.vertexShaderPath = validated.value_or(QString());
     }
     if (!e.previewPath.isEmpty()) {
-        e.previewPath = dir.filePath(e.previewPath);
+        const auto validated = validateTexturePathWithinEffectDir(e.previewPath, effectDir, e.id);
+        e.previewPath = validated.value_or(QString());
     }
 
     // Resolve user-texture paths to absolute form once at scan time —
@@ -229,11 +235,15 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
             QStringList resolved;
             QStringList missing;
             for (const QString& bufPath : e.bufferShaderPaths) {
-                const QString abs = dir.filePath(bufPath);
-                if (QFile::exists(abs)) {
-                    resolved.append(abs);
+                // Confine buffer shaders to the pack dir with the same guard as
+                // frag/vert/textures; a `..`-traversal path (nullopt) or a
+                // missing file both funnel to the fail-closed single-pass
+                // fallback below rather than reading source outside the pack.
+                const auto validated = validateTexturePathWithinEffectDir(bufPath, effectDir, e.id);
+                if (validated && QFile::exists(*validated)) {
+                    resolved.append(*validated);
                 } else {
-                    missing.append(abs);
+                    missing.append(validated.value_or(dir.filePath(bufPath)));
                 }
             }
             if (missing.isEmpty()) {
@@ -252,14 +262,21 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
         }
     }
     // A single-pass pack (multipass never declared, declared-but-empty, or
-    // fail-closed above) must not carry orphan per-buffer override arrays:
-    // they claim positional alignment with a bufferShaderPaths that is empty,
-    // survive toJson, and participate in operator==. Clear them so the parsed
-    // struct is internally coherent regardless of which branch produced the
-    // single-pass state.
+    // fail-closed above) must not carry orphan buffer-only fields: the
+    // per-buffer override arrays claim positional alignment with a
+    // bufferShaderPaths that is empty, and the scalar buffer-only fields
+    // (wrap/filter/feedback/depth/scale) are meaningless without buffer
+    // passes. All of them survive toJson and participate in operator==, so
+    // clear/reset every one to its default and keep the parsed struct
+    // internally coherent regardless of which branch produced single-pass.
     if (!e.isMultipass) {
         e.bufferWraps.clear();
         e.bufferFilters.clear();
+        e.bufferWrap.clear();
+        e.bufferFilter.clear();
+        e.bufferFeedback = false;
+        e.useDepthBuffer = false;
+        e.bufferScale = 1.0;
     }
 
     return e;

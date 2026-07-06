@@ -9,6 +9,7 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ProfileTree.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
@@ -739,7 +740,10 @@ void SettingsAdaptor::initializeRegistry()
         QJsonDocument doc;
         if (!validProfileTreeBlob(v, &doc))
             return false;
-        m_settings->setDecorationProfileTreeJson(v.toString());
+        // Reuse the doc validProfileTreeBlob already parsed instead of
+        // re-parsing the same UTF-8 through the JSON facade (mirrors the
+        // ShaderProfileTree setter above).
+        m_settings->setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
         return true;
     };
     m_schemas[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] = QStringLiteral("string");

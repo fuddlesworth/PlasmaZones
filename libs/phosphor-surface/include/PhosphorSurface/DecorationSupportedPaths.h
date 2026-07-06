@@ -18,7 +18,7 @@ namespace PhosphorSurfaceShaders {
 /// When a future surface gains a decoration leg, append its leaf path here in
 /// lockstep.
 ///
-/// Mirror of `PlasmaZones::shaderConsumedLeafEventPaths()` for the
+/// Surface-state analogue of `PlasmaZones::shaderConsumedLeafEventPaths()` for the
 /// decoration concern: the SSOT for "which surfaces can carry a
 /// DecorationProfile override".
 inline QStringList decorationLeafSurfacePaths()
@@ -45,7 +45,7 @@ inline QStringList decorationLeafSurfacePaths()
 /// overlay merge), so e.g. `window` styles every window placement and
 /// `window.floating` overrides only the floating state.
 ///
-/// Mirror of `PlasmaZones::shaderSupportedEventPaths()`: leaves + ancestors,
+/// Surface-state analogue of `PlasmaZones::shaderSupportedEventPaths()`: leaves + ancestors,
 /// insertion-ordered, de-duplicated.
 inline QStringList decorationSupportedSurfacePaths()
 {
@@ -69,7 +69,7 @@ inline QStringList decorationSupportedSurfacePaths()
 /// Convenience predicate: does @p path name a surface that can carry a
 /// decoration profile (a leaf or an ancestor of one)?
 ///
-/// Mirror of `PlasmaZones::eventPathSupportsShaderLeg()`.
+/// Surface-state analogue of `PlasmaZones::eventPathSupportsShaderLeg()`.
 inline bool decorationSurfaceSupported(const QString& path)
 {
     static const QSet<QString> kSupported = []() {

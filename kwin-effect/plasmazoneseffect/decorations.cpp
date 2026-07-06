@@ -345,7 +345,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = m_decorationTree.resolve(surfacePath);
     const QStringList treeChain = resolvedProfile.enabledChain();
     for (const QString& pack : treeChain) {
-        if (pack != QStringLiteral("border")) {
+        if (pack != QLatin1String("border")) {
             userPacks.append(pack);
         }
     }

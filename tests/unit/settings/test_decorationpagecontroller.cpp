@@ -31,9 +31,17 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QStandardPaths>
+
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
+#include "config/configdefaults.h"
 #include "settings/decorationpagecontroller.h"
 #include "../helpers/StubSettings.h"
 
@@ -86,11 +94,39 @@ void seedBaselinePlusLeaf(TreeStubSettings& settings)
 
 } // namespace
 
+/// Absolute path to the decoration-sets directory the controller writes to,
+/// recomputed the same way DecorationPageController::decorationSetsDirectoryPath
+/// does. Valid only under QStandardPaths test mode (see initTestCase), which
+/// redirects GenericDataLocation to an isolated per-user test tree.
+QString decorationSetsDir()
+{
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    return QDir::cleanPath(base + ConfigDefaults::userDecorationSetsSubdir());
+}
+
 class TestDecorationPageController : public QObject
 {
     Q_OBJECT
 
 private Q_SLOTS:
+
+    /// Redirect GenericDataLocation to an isolated test tree so the
+    /// decoration-set CRUD tests never touch the real ~/.local/share.
+    void initTestCase()
+    {
+        QStandardPaths::setTestModeEnabled(true);
+    }
+
+    /// Each test starts from an empty sets directory.
+    void init()
+    {
+        QDir(decorationSetsDir()).removeRecursively();
+    }
+
+    void cleanupTestCase()
+    {
+        QDir(decorationSetsDir()).removeRecursively();
+    }
 
     // ─── Readers ──────────────────────────────────────────────────────────
 
@@ -418,6 +454,126 @@ private Q_SLOTS:
         other.setBaseline(baseline);
         settings.setDecorationProfileTree(other);
         QVERIFY2(spy.count() > before, "an external tree swap must re-fire profilesChanged");
+    }
+
+    // ─── Decoration sets (save / list / apply / remove) ─────────────────────
+
+    /// A decoration set snapshots the baseline + per-surface overrides to a
+    /// JSON file, and applying it merges those overrides back into the current
+    /// tree. Full round-trip: save a look, mutate the tree, apply, and confirm
+    /// the saved chains are restored; then remove and confirm the listing empties.
+    void decorationSets_saveListApplyRemoveRoundTrips()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        // Author a look: baseline "border", window.tiled → "glow".
+        c.setChain(QString(), QStringList{QStringLiteral("border")});
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
+
+        QSignalSpy setsSpy(&c, &DecorationPageController::decorationSetsChanged);
+        QVERIFY(c.saveCurrentAsDecorationSet(QStringLiteral("My Look"), QStringLiteral("a test look")));
+        QCOMPARE(setsSpy.count(), 1);
+
+        // The set appears in the listing with the expected summary (baseline
+        // counts as one covered surface, plus the single window.tiled override).
+        const QVariantList sets = c.availableDecorationSets();
+        QCOMPARE(sets.size(), 1);
+        const QVariantMap set = sets.first().toMap();
+        QCOMPARE(set.value(QStringLiteral("name")).toString(), QStringLiteral("My Look"));
+        QCOMPARE(set.value(QStringLiteral("description")).toString(), QStringLiteral("a test look"));
+        QCOMPARE(set.value(QStringLiteral("overrideCount")).toInt(), 2);
+
+        // Mutate the live tree away from the saved look.
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border")});
+        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("border")}));
+
+        // Apply restores the saved baseline + override.
+        QVERIFY(c.applyDecorationSet(QStringLiteral("My Look")));
+        QCOMPARE(c.chainAt(QString()), (QStringList{QStringLiteral("border")}));
+        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("glow")}));
+
+        // Remove empties the listing and fires the change signal.
+        QSignalSpy removeSpy(&c, &DecorationPageController::decorationSetsChanged);
+        QVERIFY(c.removeDecorationSet(QStringLiteral("My Look")));
+        QCOMPARE(removeSpy.count(), 1);
+        QVERIFY(c.availableDecorationSets().isEmpty());
+    }
+
+    /// Saving with an empty tree (no baseline, no overrides) is refused: the
+    /// resulting set would be a no-op that applyDecorationSet then rejects, so
+    /// it must never reach disk.
+    void saveDecorationSet_emptyTreeRejected()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        QSignalSpy setsSpy(&c, &DecorationPageController::decorationSetsChanged);
+        QVERIFY2(!c.saveCurrentAsDecorationSet(QStringLiteral("Nothing"), QString()),
+                 "saving an empty decoration tree must be refused");
+        QCOMPARE(setsSpy.count(), 0);
+        QVERIFY(c.availableDecorationSets().isEmpty());
+    }
+
+    /// saveCurrentAsDecorationSet rejects an empty name (would slugify to an
+    /// empty filename).
+    void saveDecorationSet_emptyNameRejected()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        c.setChain(QString(), QStringList{QStringLiteral("border")});
+        QVERIFY(!c.saveCurrentAsDecorationSet(QString(), QString()));
+    }
+
+    /// applyDecorationSet validates every entry up-front and rejects the whole
+    /// set on any unknown surface path, leaving the current tree untouched
+    /// (atomic apply — no partial write).
+    void applyDecorationSet_unknownPathRejectsWholeSetAtomically()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border")});
+
+        // Hand-craft a set file mixing a valid and an unknown-path entry.
+        QVERIFY(QDir().mkpath(decorationSetsDir()));
+        QJsonObject validProfile;
+        validProfile.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("glow")});
+        QJsonObject validEntry;
+        validEntry.insert(QStringLiteral("path"), QStringLiteral("window.snapped"));
+        validEntry.insert(QStringLiteral("profile"), validProfile);
+        QJsonObject badEntry;
+        badEntry.insert(QStringLiteral("path"), QStringLiteral("../etc/passwd"));
+        badEntry.insert(QStringLiteral("profile"), QJsonObject{});
+
+        QJsonObject root;
+        root.insert(QStringLiteral("name"), QStringLiteral("bad-set"));
+        root.insert(QStringLiteral("version"), 1);
+        root.insert(QStringLiteral("overrides"), QJsonArray{validEntry, badEntry});
+
+        QFile f(decorationSetsDir() + QStringLiteral("/bad-set.json"));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QJsonDocument(root).toJson());
+        f.close();
+
+        QVERIFY2(!c.applyDecorationSet(QStringLiteral("bad-set")), "a set with an unknown path must be rejected");
+        // The valid entry must NOT have been applied — atomic all-or-nothing.
+        QVERIFY2(!c.hasOverride(QStringLiteral("window.snapped")),
+                 "applyDecorationSet wrote partial state from a malformed set");
+        // The pre-existing override is untouched.
+        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("border")}));
+    }
+
+    /// applyDecorationSet / removeDecorationSet on a name with no file report
+    /// failure rather than crashing or emitting a spurious change.
+    void decorationSets_unknownNameReturnsFalse()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        QSignalSpy setsSpy(&c, &DecorationPageController::decorationSetsChanged);
+        QVERIFY(!c.applyDecorationSet(QStringLiteral("nonexistent")));
+        QVERIFY(!c.removeDecorationSet(QStringLiteral("nonexistent")));
+        QCOMPARE(setsSpy.count(), 0);
     }
 };
 

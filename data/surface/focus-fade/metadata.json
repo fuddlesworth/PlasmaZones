@@ -1,7 +1,7 @@
 {
     "id": "focus-fade",
     "name": "Focus Fade",
-    "description": "Washes out the window itself while it is unfocused, so the focused window stands out at a glance. Unfocused windows lose saturation, darken slightly and can take an optional tint; the focused window passes through untouched. Desaturation, dimming, tint strength and the tint colour are this pack's own parameters.",
+    "description": "Washes out the window itself while it is unfocused, so the focused window stands out at a glance. Unfocused windows lose saturation, darken slightly and can take an optional tint. The focused window passes through untouched. Desaturation, dimming, tint strength and the tint colour are this pack's own parameters.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Focus",

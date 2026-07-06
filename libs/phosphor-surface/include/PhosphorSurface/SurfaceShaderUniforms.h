@@ -27,10 +27,10 @@ namespace PhosphorSurfaceShaders {
 /// slot positions via `#define p_<id>` preambles) MUST be updated to match.
 ///
 /// std140 note: the three trailing geometry vec2s (uSurfaceSize /
-/// uSurfaceFrameTopLeft / uSurfaceFrameSize) leave an 8-byte hole at offset
-/// 104 before customParams (a vec4 array, 16-byte-aligned). `_pad0` makes that
-/// hole explicit so customParams lands at offset 112 exactly as the GLSL
-/// compiler places it.
+/// uSurfaceFrameTopLeft / uSurfaceFrameSize) end at offset 104. The two floats
+/// uHasBackdrop (104) and uSurfaceOpacity (108) fill what would otherwise be an
+/// 8-byte hole before customParams (a vec4 array, 16-byte-aligned), which lands
+/// at offset 112 exactly as the GLSL compiler places it.
 struct alignas(16) SurfaceUniforms
 {
     // Transform + opacity from the Qt scene graph (same lead as BaseUniforms).

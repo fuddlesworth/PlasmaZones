@@ -255,7 +255,11 @@ void PlasmaZonesEffect::postPaintScreen()
                 continue;
             }
             KWin::EffectWindow* const sw = findWindowById(it.key());
-            if (!sw || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
+            // Exact-id discipline (mirrors reconcileDecorationOnPlacementFlip and
+            // the teardown paths): findWindowById's fuzzy appId fallback can
+            // return a same-app sibling for a stale id, and repainting the
+            // sibling would be wrong. Skip unless it re-derives to this exact id.
+            if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
                 continue;
             }
             // needsBackdrop chains are repainted for backdrop changes that

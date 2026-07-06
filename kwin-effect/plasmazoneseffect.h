@@ -990,7 +990,7 @@ private:
                                KWin::EffectWindow* w, const WindowDecoration& wb,
                                const QRectF& animatedFrame = QRectF());
     KWin::GLTexture* renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
-                                                 KWin::GLShader* captureRestoreShader = nullptr, bool force = false);
+                                                 KWin::GLShader* captureRestoreShader = nullptr);
 
     /// Lazily-compiled passthrough shader that samples a bound texture (uFinal)
     /// at vTexCoord and writes it verbatim. Used as the redirect shader for a

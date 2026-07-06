@@ -341,7 +341,6 @@ QQuickItem* findShaderAnchorRecursive(QQuickItem* root)
     QQuickItem* firstMatch = nullptr;
     QQuickItem* firstOverride = nullptr;
     bool warnedDuplicate = false;
-    bool warnedDuplicateOverride = false;
     while (!stack.isEmpty()) {
         QQuickItem* item = stack.pop();
         if (!item) {
@@ -356,20 +355,30 @@ QQuickItem* findShaderAnchorRecursive(QQuickItem* root)
         // while the shader animates the bare card. The override tag makes the
         // preference structural instead of ordering-dependent.
         //
-        // Do NOT early-return: keep scanning so a SECOND override is caught
-        // and warned. Two live overrides mean a host bug (e.g. a released-
-        // but-not-yet-deleted delegate re-tagging itself against the
-        // successor chain) — anchoring the corpse animates a frozen capture
-        // while the real surface draws statically.
+        // Do NOT early-return: keep scanning so a SECOND override elsewhere in
+        // the tree is caught and warned (a descendant of the first override is
+        // NOT — this branch `continue`s without pushing the first override's
+        // subtree, so only siblings/cousins outside it are seen). Two live
+        // overrides mean a host bug (e.g. a released-but-not-yet-deleted
+        // delegate re-tagging itself against the successor chain) — anchoring
+        // the corpse animates a frozen capture while the real surface draws
+        // statically.
         if (item->property("shaderAnchorOverride").toBool()) {
             if (!firstOverride) {
                 firstOverride = item;
-            } else if (!warnedDuplicateOverride) {
-                qCWarning(lcSurfaceAnimator).nospace()
-                    << "multiple shaderAnchorOverride tags found under " << root << " — using first match "
-                    << firstOverride << " ignoring " << item
-                    << " (a released delegate may have re-tagged itself; check the host's detag-on-release path)";
-                warnedDuplicateOverride = true;
+            } else {
+                // Latch on a root property, like the shaderAnchor dupe warning
+                // below, so this fires at most once per scene over the animator's
+                // lifetime — runLeg runs on every show/hide and would otherwise
+                // spam an identical message into the journal at each leg.
+                static const char* kOverrideDupeWarnedProperty = "_phosphorShaderOverrideDupeWarned";
+                if (!root->property(kOverrideDupeWarnedProperty).toBool()) {
+                    qCWarning(lcSurfaceAnimator).nospace()
+                        << "multiple shaderAnchorOverride tags found under " << root << " — using first match "
+                        << firstOverride << " ignoring " << item
+                        << " (a released delegate may have re-tagged itself; check the host's detag-on-release path)";
+                    root->setProperty(kOverrideDupeWarnedProperty, true);
+                }
             }
             continue;
         }

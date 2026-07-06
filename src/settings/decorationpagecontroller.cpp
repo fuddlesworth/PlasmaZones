@@ -15,6 +15,8 @@
 
 #include <QLatin1String>
 
+#include <algorithm>
+
 namespace PlasmaZones {
 
 using namespace decoration_controller_detail;
@@ -269,6 +271,11 @@ bool DecorationPageController::clearOverride(const QString& path)
     // The baseline can't be "inherited away" — reject the empty path. QML
     // disables the reset affordance for the global card, but guard here too.
     if (!m_settings || path.isEmpty())
+        return false;
+    // Reject unsupported paths for parity with the chain mutators (setChain /
+    // setChainParam / setChainLayerEnabled) — an unsupported path has no
+    // override to clear anyway, so this only tightens the contract.
+    if (!PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return false;
     DecorationProfileTree tree = readTree(m_settings);
     if (!tree.clearOverride(path))

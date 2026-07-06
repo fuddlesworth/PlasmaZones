@@ -167,13 +167,6 @@ inline constexpr const char* kUSurfaceFocused = "uSurfaceFocused";
 /// static decoration costs nothing.
 inline constexpr const char* kITime = "iTime";
 
-/// `sampler2D uBackdrop` — COMPOSITOR-ONLY. The scene BEHIND the window,
-/// captured over the same (padded) canvas as `uTexture0` each frame for
-/// packs that declare `"needsBackdrop": true` (frost / glass). Texel-aligned
-/// with the composite canvas, so a pack samples both with the same uv (via
-/// the `backdropTexel()` helper). The daemon branch declares no such
-/// sampler; packs MUST sample through `backdropTexel()`, which compiles to
-/// transparent there.
 /// `float uSurfaceOpacity` — the window's rule-resolved opacity (1.0 when
 /// no SetOpacity rule applies; ALWAYS 1.0 on the daemon, whose surfaces
 /// carry qt_Opacity instead). Hosts apply a KWin-style final modulation by
@@ -183,6 +176,13 @@ inline constexpr const char* kITime = "iTime";
 /// the frost slab stays solid). Per-frame-dynamic.
 inline constexpr const char* kUSurfaceOpacity = "uSurfaceOpacity";
 
+/// `sampler2D uBackdrop` — COMPOSITOR-ONLY. The scene BEHIND the window,
+/// captured over the same (padded) canvas as `uTexture0` each frame for
+/// packs that declare `"needsBackdrop": true` (frost / glass). Texel-aligned
+/// with the composite canvas, so a pack samples both with the same uv (via
+/// the `backdropTexel()` helper). The daemon branch declares no such
+/// sampler; packs MUST sample through `backdropTexel()`, which compiles to
+/// transparent there.
 inline constexpr const char* kUBackdrop = "uBackdrop";
 
 /// `vec4 uBackdropRect` — COMPOSITOR-ONLY. The VALID sub-rect of the
