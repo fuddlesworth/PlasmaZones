@@ -14,25 +14,17 @@
 // same corner rounding.
 
 #version 450
-#include <surface_uniforms.glsl>
+#include <surface_lib.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
-
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
 
 void main() {
     vec4 window = surfaceTexel(vTexCoord) * uSurfaceOpacity;
 
     vec2 px = surfacePixel(vTexCoord);
-    vec2 halfSz = 0.5 * uSurfaceFrameSize;
-    vec2 center = uSurfaceFrameTopLeft + halfSz;
-    float radius = clamp(p_cornerRadius * uSurfaceScale, 0.0, min(halfSz.x, halfSz.y));
-    float d = sdRoundedBox(px - center, halfSz, radius);
-    float mask = 1.0 - smoothstep(-1.0, 1.0, d);
+    FrameSDF fs = frameSdf(px, p_cornerRadius * uSurfaceScale);
+    float mask = frameMask(fs.d);
 
     vec4 pane;
     if (uHasBackdrop >= 0.5) {
@@ -47,10 +39,10 @@ void main() {
     } else {
         // Original pseudo look for daemon surfaces: a vertical
         // shadow-to-highlight gradient slab at modest alpha.
-        vec2 fuv = (px - uSurfaceFrameTopLeft) / max(uSurfaceFrameSize, vec2(1.0));
+        vec2 fuv = frameUv(px);
         vec3 grad = mix(p_colorA.rgb, p_colorB.rgb, smoothstep(0.0, 1.0, 1.0 - fuv.y));
         pane = vec4(grad, 1.0) * 0.4 * mask;
     }
 
-    fragColor = window + pane * (1.0 - window.a);
+    fragColor = slabComposite(window, pane);
 }

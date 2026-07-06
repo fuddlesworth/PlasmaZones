@@ -17,62 +17,11 @@
 // the pane stays solid and translucency reveals the frosted backdrop.
 
 #version 450
-#include <surface_uniforms.glsl>
+#include <surface_lib.glsl>
+#include <surface_noise.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
-
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
-
-// ── Grain stack, ported verbatim from the shell shader ──────────────────────
-
-// High-quality hash, avoids directional artifacts.
-float hash(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-}
-
-// Smooth value noise with quintic interpolation.
-float vnoise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-    float a = hash(i);
-    float b = hash(i + vec2(1.0, 0.0));
-    float c = hash(i + vec2(0.0, 1.0));
-    float d = hash(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
-// Crystalline Voronoi noise: edge distance between the two nearest cell
-// points gives frost-crystal boundaries.
-float voronoi(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    float minDist = 1.0;
-    float secondMin = 1.0;
-    for (int y = -1; y <= 1; y++) {
-        for (int x = -1; x <= 1; x++) {
-            vec2 neighbor = vec2(float(x), float(y));
-            vec2 cellId = i + neighbor;
-            float h1 = hash(cellId);
-            float h2 = hash(cellId + vec2(127.1, 311.7));
-            vec2 diff = neighbor + vec2(h1, h2) - f;
-            float dist = dot(diff, diff);
-            if (dist < minDist) {
-                secondMin = minDist;
-                minDist = dist;
-            } else if (dist < secondMin) {
-                secondMin = dist;
-            }
-        }
-    }
-    return sqrt(secondMin) - sqrt(minDist);
-}
 
 // Animated two-colour gradient, ported from the shell's gradient.frag
 // computeGradient(): the direction turns continuously with time and the
@@ -101,15 +50,12 @@ void main() {
     vec4 window = surfaceTexel(vTexCoord) * uSurfaceOpacity;
 
     vec2 px = surfacePixel(vTexCoord);
-    vec2 halfSz = 0.5 * uSurfaceFrameSize;
-    vec2 center = uSurfaceFrameTopLeft + halfSz;
-    float radius = clamp(p_cornerRadius * uSurfaceScale, 0.0, min(halfSz.x, halfSz.y));
-    float d = sdRoundedBox(px - center, halfSz, radius);
-    float mask = 1.0 - smoothstep(-1.0, 1.0, d);
+    FrameSDF fs = frameSdf(px, p_cornerRadius * uSurfaceScale);
+    float mask = frameMask(fs.d);
 
     // Frame-normalized coordinate for the grain and vignette, so the look
     // scales with the pane like the original's uv did with the panel.
-    vec2 fuv = (px - uSurfaceFrameTopLeft) / max(uSurfaceFrameSize, vec2(1.0));
+    vec2 fuv = frameUv(px);
 
     // Crystalline frost variation, centered around zero (both directions —
     // one-sided clamping made the grain read as dark speckles only).
@@ -138,5 +84,5 @@ void main() {
         pane = vec4(color, 1.0) * slabAlpha * mask;
     }
 
-    fragColor = window + pane * (1.0 - window.a);
+    fragColor = slabComposite(window, pane);
 }

@@ -31,74 +31,24 @@
 // the pane degrades to a faint tint slab with the same corner rounding.
 
 #version 450
-#include <surface_uniforms.glsl>
+#include <surface_lib.glsl>
+#include <surface_noise.glsl>
+#include <surface_color.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
-
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
-
-// px-space (top-down) vector -> canvas UV offset (vTexCoord is Y-up).
-vec2 pxToUv(vec2 v) {
-    return vec2(v.x, -v.y) / max(uSurfaceSize, vec2(1.0));
-}
-
-// ── OKLab saturation (reference oklab.glsl, verbatim matrices) ──────────────
-vec3 srgbToLinear(vec3 c) {
-    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
-}
-vec3 linearToSrgb(vec3 c) {
-    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
-}
-vec3 linearToOklab(vec3 c) {
-    float l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
-    float m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
-    float s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
-    float l_ = pow(max(l, 0.0), 1.0 / 3.0);
-    float m_ = pow(max(m, 0.0), 1.0 / 3.0);
-    float s_ = pow(max(s, 0.0), 1.0 / 3.0);
-    return vec3(0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
-                1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
-                0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_);
-}
-vec3 oklabToLinear(vec3 c) {
-    float l_ = c.r + 0.3963377774 * c.g + 0.2158037573 * c.b;
-    float m_ = c.r - 0.1055613458 * c.g - 0.0638541728 * c.b;
-    float s_ = c.r - 0.0894841775 * c.g - 1.2914855480 * c.b;
-    float l = l_ * l_ * l_;
-    float m = m_ * m_ * m_;
-    float s = s_ * s_ * s_;
-    return vec3(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-                -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-                -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
-}
-vec3 oklabSaturate(vec3 srgb, float saturation) {
-    if (abs(saturation - 1.0) < 0.001) {
-        return srgb;
-    }
-    vec3 lab = linearToOklab(srgbToLinear(clamp(srgb, 0.0, 1.0)));
-    lab.gb *= saturation;
-    return linearToSrgb(clamp(oklabToLinear(lab), 0.0, 1.0));
-}
-
-float hashNoise(vec2 p) {
-    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-}
 
 void main() {
     vec4 window = surfaceTexel(vTexCoord) * uSurfaceOpacity;
 
     vec2 px = surfacePixel(vTexCoord);
-    vec2 halfSz = 0.5 * uSurfaceFrameSize;
-    vec2 center = uSurfaceFrameTopLeft + halfSz;
-    vec2 pos = px - center; // pane-centered, top-down device px
+    FrameSDF fs = frameSdf(px, p_cornerRadius * uSurfaceScale);
+    vec2 halfSz = fs.halfSize;
+    vec2 pos = px - fs.center; // pane-centered, top-down device px
     float minHalf = min(halfSz.x, halfSz.y);
-    float radius = clamp(p_cornerRadius * uSurfaceScale, 0.0, minHalf);
-    float d = sdRoundedBox(pos, halfSz, radius);
-    float mask = 1.0 - smoothstep(-1.0, 1.0, d);
+    float radius = fs.radius;
+    float d = fs.d;
+    float mask = frameMask(d);
 
     vec3 tint = p_tintColor.rgb;
     float tintStrength = clamp(p_tintStrength, 0.0, 1.0);
@@ -167,8 +117,8 @@ void main() {
         }
 
         // Rim glow + optional edge lighting (reference glassOutline).
-        float focusDim = mix(0.55, 1.0, clamp(uSurfaceFocused, 0.0, 1.0));
-        float rimStrength = clamp(p_rimStrength, 0.0, 1.0) * focusDim;
+        float dim = focusDim(0.55);
+        float rimStrength = clamp(p_rimStrength, 0.0, 1.0) * dim;
         float rimMask = clamp(0.25 * concave, 0.0, rimStrength);
         vec3 glow = mix(lit, p_rimColor.rgb, rimMask);
         if (p_edgeLighting >= 0.5) {
@@ -196,12 +146,12 @@ void main() {
         float tintAdj = tintStrength * clamp(abs(dot(lit, grayW) - dot(tint, grayW)), 0.0, 1.0);
         lit = mix(lit, tint * pane.a, tintAdj);
         lit = oklabSaturate(lit, clamp(p_saturation, 0.0, 2.0));
-        lit += (hashNoise(px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2);
+        lit += (hashSin(px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2);
 
         pane = vec4(lit, pane.a) * mask;
     } else {
         pane = vec4(tint, 1.0) * (0.35 * tintStrength) * mask;
     }
 
-    fragColor = window + pane * (1.0 - window.a);
+    fragColor = slabComposite(window, pane);
 }

@@ -21,35 +21,11 @@
 // uniform itself and repaints the window continuously while decorated.
 
 #version 450
-#include <surface_uniforms.glsl>
+#include <surface_lib.glsl>
+#include <surface_noise.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
-
-const float kTau = 6.28318530718;
-
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
-
-// px-space (top-down) vector -> canvas UV offset (vTexCoord is Y-up).
-vec2 pxToUv(vec2 v) {
-    return vec2(v.x, -v.y) / max(uSurfaceSize, vec2(1.0));
-}
-
-// High-quality hashes (same base as frosted-glass).
-float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-}
-
-vec3 hash32(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xxy + p3.yzz) * p3.zyx);
-}
 
 // One layer of falling droplets on a tall cell grid. `st` is glass-space
 // (device px / cell size, y down). Returns (offset.xy, wetness): offset
@@ -69,16 +45,16 @@ vec3 dropLayer(vec2 st, float t) {
     vec2 grid = st / cellDim;
     vec2 id = floor(grid);
     vec2 f = fract(grid); // 0..1 in-cell, y = 0 at the top
-    vec3 n = hash32(id);
+    vec3 n = hash23(id);
 
     // Per-cell fall cycle: phase-shifted so neighbours never sync. Judder
     // (small stick-slip along the run) sells surface tension.
     float ti = fract(t + n.z);
-    float fall = ti + 0.06 * sin(ti * 34.0 + n.y * kTau) * ti * (1.0 - ti);
+    float fall = ti + 0.06 * sin(ti * 34.0 + n.y * TAU) * ti * (1.0 - ti);
     float dropY = mix(0.06, 0.94, clamp(fall, 0.0, 1.0));
 
     // X: parked off-centre per cell, wiggling as the drop falls.
-    float x = 0.5 + (n.x - 0.5) * 0.5 + sin(fall * kTau * 2.0 + n.y * kTau) * 0.08;
+    float x = 0.5 + (n.x - 0.5) * 0.5 + sin(fall * TAU * 2.0 + n.y * TAU) * 0.08;
 
     // Droplet body — distances back in st units so drops stay round.
     vec2 toDrop = (f - vec2(x, dropY)) * cellDim;
@@ -100,11 +76,8 @@ void main() {
     vec4 window = surfaceTexel(vTexCoord) * uSurfaceOpacity;
 
     vec2 px = surfacePixel(vTexCoord);
-    vec2 halfSz = 0.5 * uSurfaceFrameSize;
-    vec2 center = uSurfaceFrameTopLeft + halfSz;
-    float radius = clamp(p_cornerRadius * uSurfaceScale, 0.0, min(halfSz.x, halfSz.y));
-    float d = sdRoundedBox(px - center, halfSz, radius);
-    float mask = 1.0 - smoothstep(-1.0, 1.0, d);
+    FrameSDF fs = frameSdf(px, p_cornerRadius * uSurfaceScale);
+    float mask = frameMask(fs.d);
 
     // Glass space: device px scaled so dropletScale 1.0 gives ~90 px cells.
     float cellPx = 90.0 * clamp(p_dropletScale, 0.25, 4.0) * uSurfaceScale;
@@ -117,13 +90,13 @@ void main() {
     float amount = clamp(p_rainAmount, 0.0, 1.0);
     vec3 layer1 = dropLayer(st, t);
     vec3 layer2 = dropLayer(st * 1.6 + 4.3, t * 1.35);
-    layer1 *= step(1.0 - amount, hash12(floor(st / kCellDim) + 2.7));
-    layer2 *= step(1.0 - amount, hash12(floor(st * 1.6 / kCellDim) + 8.1));
+    layer1 *= step(1.0 - amount, hash13(floor(st / kCellDim) + 2.7));
+    layer2 *= step(1.0 - amount, hash13(floor(st * 1.6 / kCellDim) + 8.1));
 
     // Static micro-beads: tiny fixed droplets that never move, filling the
     // pane so dry stretches still read as wet glass.
     vec2 microId = floor(st * 6.0);
-    vec3 mn = hash32(microId);
+    vec3 mn = hash23(microId);
     vec2 microF = fract(st * 6.0) - 0.5;
     vec2 toMicro = microF - (mn.xy - 0.5) * 0.7;
     float micro = smoothstep(0.06, 0.035, length(toMicro)) * step(mn.z, 0.35 * amount);
@@ -150,5 +123,5 @@ void main() {
         pane = vec4(slab, 1.0) * 0.5 * mask;
     }
 
-    fragColor = window + pane * (1.0 - window.a);
+    fragColor = slabComposite(window, pane);
 }
