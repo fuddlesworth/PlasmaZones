@@ -16,42 +16,18 @@
 // uniform itself and repaints the window continuously while decorated.
 
 #version 450
-#include <surface_uniforms.glsl>
+#include <surface_lib.glsl>
+#include <surface_noise.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
 
-const float kTau = 6.28318530718;
 const int kMaxPulses = 6;
-
-// High-quality hash, avoids directional artifacts (same as frosted-glass).
-float hash(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-}
-
-// Hex helpers: distance to the cell centre in hex metric (0 centre ..
-// ~0.5 wall) and the cell-local offset for a point in hex-grid space.
-float hexDist(vec2 p) {
-    p = abs(p);
-    return max(p.x * 0.866025 + p.y * 0.5, p.y);
-}
-
-vec2 hexLocal(vec2 uv) {
-    vec2 r = vec2(1.0, 1.732);
-    vec2 h = r * 0.5;
-    vec2 a = mod(uv, r) - h;
-    vec2 b = mod(uv - h, r) - h;
-    return dot(a, a) < dot(b, b) ? a : b;
-}
 
 void main() {
     vec4 tex = surfaceTexel(vTexCoord);
 
-    // Identity-decoration guard — mirrors border/effect.frag: a degenerate
-    // frame rect would collapse the SDF to "edge everywhere".
-    if (uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0) {
+    if (surfaceFrameDegenerate()) {
         fragColor = tex;
         return;
     }
@@ -62,15 +38,9 @@ void main() {
     float width = p_borderWidth * uSurfaceScale;
     float radius = (p_cornerRadius + p_borderWidth) * uSurfaceScale;
 
-    vec2 halfSz = 0.5 * uSurfaceFrameSize;
-    vec2 cen = uSurfaceFrameTopLeft + halfSz;
-    float r = clamp(radius, 0.0, min(halfSz.x, halfSz.y));
-
-    vec2 q = abs(p - cen) - halfSz + r;
-    float d = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-
-    float insideMask = 1.0 - smoothstep(-aa, aa, d);
-    float edge = smoothstep(-width - aa, -width + aa, d);
+    FrameSDF fs = frameSdf(p, radius);
+    float insideMask = 1.0 - smoothstep(-aa, aa, fs.d);
+    float edge = smoothstep(-width - aa, -width + aa, fs.d);
 
     // ── Hex circuit texture in device px, so cells stay square-ish at any
     // window size and DPI. Walls carry the grid colour; interiors stay
@@ -80,12 +50,11 @@ void main() {
     float hd = hexDist(hex);
     vec2 cellId = floor((scaled - hex) / vec2(1.0, 1.732));
     float wall = smoothstep(0.34, 0.48, hd);
-    float flick = 0.8 + 0.2 * hash(cellId + floor(iTime * 2.0));
+    float flick = 0.8 + 0.2 * hash13(cellId + floor(iTime * 2.0));
 
     // ── Perimeter pulses: evenly-phased bright points orbiting the band,
     // each a tight falloff along the perimeter coordinate.
-    vec2 rel = (p - cen) / max(halfSz, vec2(1.0));
-    float u = atan(rel.y, rel.x) / kTau; // -0.5 .. 0.5
+    float u = framePerimeter(p, fs.center, fs.halfSize); // -0.5 .. 0.5
     float count = clamp(p_pulseCount, 1.0, float(kMaxPulses));
     float pulse = 0.0;
     for (int i = 0; i < kMaxPulses; ++i) {
@@ -107,11 +76,7 @@ void main() {
     band.a = clamp(gridA + pulse * p_colorB.a * mix(0.6, 1.0, wall), 0.0, 1.0);
 
     // Focus cue: full-strength circuit on the focused surface, dimmed otherwise.
-    band.a *= mix(0.55, 1.0, clamp(uSurfaceFocused, 0.0, 1.0));
+    band.a *= focusDim(0.55);
 
-    // Clip content to the inner rounded rect; lay the band over transparency,
-    // premultiplied — identical composite to the border pack.
-    float ba = edge * insideMask * band.a;
-    vec4 contentPx = tex * (1.0 - edge);
-    fragColor = vec4(band.rgb * ba, ba) + contentPx * (1.0 - ba);
+    fragColor = borderComposite(tex, band, edge, insideMask);
 }

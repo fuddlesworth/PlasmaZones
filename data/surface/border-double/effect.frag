@@ -11,7 +11,7 @@
 // matching the family's focus cue.
 
 #version 450
-#include <surface_uniforms.glsl>
+#include <surface_lib.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;
@@ -19,9 +19,7 @@ layout(location = 0) out vec4 fragColor;
 void main() {
     vec4 tex = surfaceTexel(vTexCoord);
 
-    // Identity-decoration guard — mirrors border/effect.frag: a degenerate
-    // frame rect would collapse the SDF to "edge everywhere".
-    if (uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0) {
+    if (surfaceFrameDegenerate()) {
         fragColor = tex;
         return;
     }
@@ -37,12 +35,8 @@ void main() {
     // gap sit inside it and the content corner ends at p_cornerRadius.
     float radius = p_cornerRadius * uSurfaceScale + total;
 
-    vec2 halfSz = 0.5 * uSurfaceFrameSize;
-    vec2 cen = uSurfaceFrameTopLeft + halfSz;
-    float r = clamp(radius, 0.0, min(halfSz.x, halfSz.y));
-
-    vec2 q = abs(p - cen) - halfSz + r;
-    float d = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+    FrameSDF fs = frameSdf(p, radius);
+    float d = fs.d;
 
     float insideMask = 1.0 - smoothstep(-aa, aa, d);
     // Outer line: [-wOuter, 0]. Inner line: [-(total), -(wOuter + wGap)].
@@ -54,11 +48,11 @@ void main() {
     float stackEdge = smoothstep(-total - aa, -total + aa, d);
 
     // Focus cue: full-strength lines on the focused surface, dimmed otherwise.
-    float focusDim = mix(0.55, 1.0, clamp(uSurfaceFocused, 0.0, 1.0));
+    float dim = focusDim(0.55);
     vec4 outerCol = p_colorA;
     vec4 innerCol = p_colorB;
-    outerCol.a *= focusDim;
-    innerCol.a *= focusDim;
+    outerCol.a *= dim;
+    innerCol.a *= dim;
 
     // Composite premultiplied: content inside the stack, then the two lines
     // over transparency — the gap band stays clear like the border pack's
