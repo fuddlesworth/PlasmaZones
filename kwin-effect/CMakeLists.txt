@@ -48,6 +48,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
     plasmazoneseffect/decorations.cpp
+    plasmazoneseffect/decoration_render.cpp
     plasmazoneseffect/surfacelayers.cpp
     plasmazoneseffect/window_identity.cpp
     plasmazoneseffect/mouse_drag.cpp

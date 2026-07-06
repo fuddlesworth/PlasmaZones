@@ -24,11 +24,6 @@ layout(location = 0) out vec4 fragColor;
 const float kTau = 6.28318530718;
 const int kMaxPulses = 6;
 
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
-
 // High-quality hash, avoids directional artifacts (same as frosted-glass).
 float hash(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
@@ -80,7 +75,7 @@ void main() {
     // ── Hex circuit texture in device px, so cells stay square-ish at any
     // window size and DPI. Walls carry the grid colour; interiors stay
     // darker, and each cell flickers faintly on a slow hashed clock.
-    vec2 scaled = p / (max(p_hexSize, 2.0) * uSurfaceScale);
+    vec2 scaled = p / (max(p_hexSize, 2.0) * max(uSurfaceScale, 0.001));
     vec2 hex = hexLocal(scaled);
     float hd = hexDist(hex);
     vec2 cellId = floor((scaled - hex) / vec2(1.0, 1.732));

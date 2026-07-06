@@ -270,6 +270,12 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
     // clear/reset every one to its default and keep the parsed struct
     // internally coherent regardless of which branch produced single-pass.
     if (!e.isMultipass) {
+        // bufferShaderPaths first: a pack that declared `bufferShaders` WITHOUT
+        // `multipass: true` never entered the resolve-to-absolute branch above,
+        // so it still holds RAW RELATIVE names. Left set, they survive toJson /
+        // operator== and feed the file watcher + content signature CWD-relative
+        // (bogus) paths. Clearing it is the whole point of this coherence block.
+        e.bufferShaderPaths.clear();
         e.bufferWraps.clear();
         e.bufferFilters.clear();
         e.bufferWrap.clear();

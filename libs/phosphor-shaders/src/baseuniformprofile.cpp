@@ -6,6 +6,7 @@
 #include <QDateTime>
 
 #include <cstring>
+#include <type_traits>
 
 namespace PhosphorShaders {
 
@@ -78,6 +79,8 @@ void BaseUniformProfile::fill(const UboFrameState& state)
     // appField0/appField1: left as-is (set by setAppField0/1 or extension)
 
     // Custom params
+    static_assert(std::extent_v<decltype(BaseUniforms::customParams)> == 8,
+                  "customParams extent changed — update this fill loop bound");
     for (int i = 0; i < 8; ++i) {
         m_u.customParams[i][0] = state.customParams[i][0];
         m_u.customParams[i][1] = state.customParams[i][1];
@@ -86,6 +89,8 @@ void BaseUniformProfile::fill(const UboFrameState& state)
     }
 
     // Custom colors
+    static_assert(std::extent_v<decltype(BaseUniforms::customColors)> == 16,
+                  "customColors extent changed — update this fill loop bound");
     for (int i = 0; i < 16; ++i) {
         m_u.customColors[i][0] = state.customColors[i][0];
         m_u.customColors[i][1] = state.customColors[i][1];

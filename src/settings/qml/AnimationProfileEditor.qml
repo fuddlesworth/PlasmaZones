@@ -86,7 +86,7 @@ ColumnLayout {
     /// so the editor doesn't reach a global context for it.
     property var shaderParamSchema: []
     // ── Shader-param editor feature toggles ─────────────────────────
-    /// Locking is per-event-card-only — App Rules don't need it.
+    /// Locking is per-event-card-only — the global-defaults page doesn't need it.
     property bool enableLocking: false
     /// Randomize same.
     property bool enableRandomize: false
@@ -109,8 +109,8 @@ ColumnLayout {
     /// `shaderParamWriteRequested` signals instead, so consumers can
     /// distinguish a curve edit from a shader switch (which carries
     /// side-effects like dropping the previous effect's params).
-    /// Per-event card connects this to its imperative commit path;
-    /// App Rules leaves it disconnected (commits on Add click).
+    /// The per-event card and the global-defaults page (AnimationsGeneralPage)
+    /// each connect this to their own commit path.
     signal valueChanged
     /// Emitted when the user activates a shader from the picker.
     /// Distinct from `valueChanged` so the consumer can persist a
@@ -126,8 +126,8 @@ ColumnLayout {
     /// Lock toolbar affordances. The editor self-updates
     /// `lockedShaderParams` before emitting these — consumers only need
     /// to subscribe if they want to persist the lock state somewhere
-    /// (the per-event card writes to controller; App Rules holds it in
-    /// the working set). Both signals fire AFTER the editor's own
+    /// (the per-event card writes to controller; the global-defaults page
+    /// leaves locking off). Both signals fire AFTER the editor's own
     /// state mutation, so a consumer reading `lockedShaderParams` in
     /// the handler sees the post-toggle map.
     signal lockToggleRequested(string paramId, bool locked)
@@ -137,8 +137,8 @@ ColumnLayout {
     /// and assigns it to `shaderParams` BEFORE emitting. The signal
     /// payload carries the rolled map so a consumer that wants to
     /// persist (per-event card → controller) doesn't have to re-read
-    /// the editor's state — staging-only consumers (App Rules) can
-    /// ignore the signal entirely.
+    /// the editor's state — a consumer with randomize disabled (the
+    /// global-defaults page) never emits it.
     signal randomizeRequested(var rolled)
 
     // ── Helpers ─────────────────────────────────────────────────────

@@ -210,7 +210,6 @@ SettingsFlickable {
                     // The Global default has no shader leg in this UI — shader
                     // overrides live on the per-event and Rules layers.
                     shaderLegSupported: false
-                    showShaderSection: false
                     eventLabel: i18n("Global animation defaults")
                     onValueChanged: page._commitEditor()
                 }

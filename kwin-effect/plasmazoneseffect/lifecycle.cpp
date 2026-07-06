@@ -208,9 +208,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // This fires from the registry's file watcher between frames, where the
         // compositor's GL context is NOT current. m_compiledPacks owns GLShaders
         // and m_surfaceMultipass owns GLTextures, so their destruction issues
-        // glDelete* calls that need a current context (the same discipline
+        // glDelete* calls that want a current context (the same discipline
         // compiledPack()/surfacePresentShader() apply for off-paint callers).
-        // Make it current before clearing so the GL objects release cleanly.
+        // Best-effort make-current on the normal path; the only false case is
+        // compositor teardown (!KWin::effects), where GL is being torn down and
+        // the driver reclaims the objects regardless, so the clears are safe
+        // either way.
         const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
         m_compiledPacks.clear();
         m_surfaceMultipass.clear();

@@ -173,9 +173,6 @@ bool DecorationPageController::saveCurrentAsDecorationSet(const QString& name, c
     if (filePath.isEmpty()) {
         return false;
     }
-    if (!QDir().mkpath(decorationSetsDirectoryPath())) {
-        return false;
-    }
     const DecorationProfileTree tree = m_settings->decorationProfileTree();
 
     QJsonObject rootObj;
@@ -201,12 +198,16 @@ bool DecorationPageController::saveCurrentAsDecorationSet(const QString& name, c
     }
     // An empty tree (no baseline, no overrides) would save a set that
     // applyDecorationSet then silently rejects (nothing to stage). Refuse the
-    // save so the user isn't left with a do-nothing set on disk.
+    // save so the user isn't left with a do-nothing set on disk. Checked before
+    // mkpath so a rejected save leaves no empty directory behind.
     if (baselineJson.isEmpty() && overrides.isEmpty()) {
         return false;
     }
     rootObj.insert(kOverridesKey, overrides);
 
+    if (!QDir().mkpath(decorationSetsDirectoryPath())) {
+        return false;
+    }
     QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         return false;

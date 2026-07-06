@@ -363,6 +363,39 @@ private Q_SLOTS:
         QVERIFY2(e.bufferFilters.isEmpty(), "single-pass pack must not carry orphan bufferFilters");
     }
 
+    void parseEffect_clears_bufferShaderPaths_when_multipass_flag_absent()
+    {
+        // A pack that declares `bufferShaders` but omits `multipass: true` never
+        // enters the resolve-to-absolute branch, so without the coherence clear
+        // it would carry RAW RELATIVE buffer names out of the scan — they
+        // survive toJson / operator== and feed the file watcher CWD-relative
+        // (bogus) paths. The single-pass coherence block must clear them.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("buffers-no-multipass"));
+        meta.insert(QLatin1String("name"), QStringLiteral("Buffers No Multipass"));
+        meta.insert(QLatin1String("description"), QStringLiteral("Declares bufferShaders but not multipass."));
+        meta.insert(QLatin1String("category"), QStringLiteral("Decoration"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray buffers;
+        buffers.append(QStringLiteral("buffer0.frag"));
+        meta.insert(QLatin1String("bufferShaders"), buffers);
+        // Deliberately NO "multipass": true.
+        QVERIFY(writePack(tmp.path(), QStringLiteral("buffers-no-multipass"), meta,
+                          {QStringLiteral("effect.frag"), QStringLiteral("buffer0.frag")}));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const SurfaceShaderEffect e = registry.effect(QStringLiteral("buffers-no-multipass"));
+        QVERIFY(e.isValid());
+        QVERIFY(!e.isMultipass);
+        QVERIFY2(e.bufferShaderPaths.isEmpty(),
+                 "single-pass pack must not carry orphan (unresolved relative) bufferShaderPaths");
+    }
+
     void fromJson_leaves_multipass_flag_raw_without_normalizing()
     {
         // fromJson itself does NOT fail closed on multipass-with-no-buffers —

@@ -575,6 +575,51 @@ private Q_SLOTS:
         QVERIFY(!c.removeDecorationSet(QStringLiteral("nonexistent")));
         QCOMPARE(setsSpy.count(), 0);
     }
+
+    // ─── Effect-usage query + param guard ───────────────────────────────────
+
+    /// shaderEffectUsages lists exactly the DIRECT overrides whose chain
+    /// contains the effect, sorted by label, and ignores the baseline / chains
+    /// that don't use it. Registry-independent (a pure tree query).
+    void shaderEffectUsages_listsDirectOverridesUsingTheEffect()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        c.setChain(QString(), QStringList{QStringLiteral("glow")}); // baseline uses glow but is not an override
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border"), QStringLiteral("glow")});
+        c.setChain(QStringLiteral("osd"), QStringList{QStringLiteral("glow")});
+        c.setChain(QStringLiteral("window.snapped"), QStringList{QStringLiteral("border")}); // no glow
+
+        const QVariantList usages = c.shaderEffectUsages(QStringLiteral("glow"));
+        QStringList paths;
+        for (const QVariant& v : usages)
+            paths << v.toMap().value(QStringLiteral("path")).toString();
+        QCOMPARE(paths.size(), 2);
+        QVERIFY2(paths.contains(QStringLiteral("window.tiled")), "the tiled override uses glow");
+        QVERIFY2(paths.contains(QStringLiteral("osd")), "the osd override uses glow");
+        QVERIFY2(!paths.contains(QStringLiteral("window.snapped")), "the snapped override does not use glow");
+        QVERIFY2(!paths.contains(QString()), "the baseline is not reported as an override usage");
+
+        // An effect nobody uses, and the empty id, both yield nothing.
+        QVERIFY(c.shaderEffectUsages(QStringLiteral("nonexistent")).isEmpty());
+        QVERIFY(c.shaderEffectUsages(QString()).isEmpty());
+    }
+
+    /// setChainParam / setChainParams reject an unsupported surface path (the
+    /// same guard setChain has), leaving no override and firing no change.
+    void setChainParam_rejectsUnsupportedPath()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+
+        QSignalSpy spy(&c, &DecorationPageController::profilesChanged);
+        c.setChainParam(QStringLiteral("not.a.surface"), QStringLiteral("border"), QStringLiteral("width"), 3);
+        c.setChainParams(QStringLiteral("not.a.surface"), QStringLiteral("border"),
+                         QVariantMap{{QStringLiteral("width"), 3}});
+        QCOMPARE(spy.count(), 0);
+        QVERIFY(!c.hasOverride(QStringLiteral("not.a.surface")));
+    }
 };
 
 QTEST_MAIN(TestDecorationPageController)

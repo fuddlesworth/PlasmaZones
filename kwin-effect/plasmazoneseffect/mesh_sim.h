@@ -13,11 +13,12 @@
 // flag / jello / drape pack would read the same lattice.
 //
 // The model: 16 nodes on a 4x4 grid whose rest positions (origins) track
-// the LIVE window frame. The node nearest the cursor at grab is the grip
-// (constrained → springs onto its origin, i.e. chases the frame), the four
-// interior nodes are pinned while dragging (the body follows), and the
-// edge nodes are free — coupled only to their NEIGHBOURS at ideal spacing,
-// so a drag propagates node to node as a wave. Integrated in fixed <=10 ms
+// the LIVE window frame. ONLY the node nearest the cursor at grab is the grip
+// (constrained → springs onto its origin, i.e. chases the frame); every other
+// node (interior and edge alike) is free, coupled only to its NEIGHBOURS at
+// ideal spacing, so a drag propagates node to node as a wave. No interior
+// pinning — a rigid centre with wiggling edges read as a jiggling blob.
+// Integrated in fixed <=10 ms
 // substeps with KWin's ring-mean smoothing; a generic caller need only
 // init, feed the live rect each frame, and read displacements.
 

@@ -85,7 +85,7 @@ bool isDecorationPage(const QString& page)
 }
 
 // The decoration "value" surface: one Store-backed key. It cannot ride the
-// pageOwnedConfigKeys manifest — all three decoration leaves would own the
+// pageOwnedConfigKeys manifest — every decoration leaf would own the
 // same key, violating the manifest's one-owner invariant — so the decoration
 // branches in isPageDirty/resetPage/discardPage dispatch through this list
 // instead. Unlike the animation domain there are no side files: reset/discard
