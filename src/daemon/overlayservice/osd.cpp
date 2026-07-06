@@ -317,9 +317,15 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
 
     // Helper to leave the slot undecorated: clear the chain so the QML
     // SurfaceDecoration stays inert and the card draws its native chrome.
-    const auto clearDecoration = [slot]() {
+    const auto clearDecoration = [this, slot]() {
         writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(QVariantList()));
         writeQmlProperty(slot, QStringLiteral("decorationOuterPadding"), 0.0);
+        // No decoration -> no audio need on this slot; let CAVA wind down if it
+        // was only kept alive for an audio decoration here.
+        if (auto* item = qobject_cast<QQuickItem*>(slot)) {
+            item->setProperty("_wantsAudioDecoration", false);
+        }
+        syncCavaState();
     };
 
     if (!m_settings || !m_surfaceShaderRegistry) {
@@ -362,6 +368,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     const QVariantMap allPackParams = profile.effectiveParameters();
     QVariantList stages;
     double outerPadding = 0.0;
+    bool chainWantsAudio = false;
     for (const QString& packId : chain) {
         if (!m_surfaceShaderRegistry->hasEffect(packId)) {
             qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
@@ -375,6 +382,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
                                  << "has no valid fragment shader — skipping this chain stage";
             continue;
         }
+        // Audio-reactive pack in the chain -> this decoration slot wants the
+        // live CAVA spectrum (gated below so a plain border never starts audio).
+        chainWantsAudio = chainWantsAudio || effect.audio;
         const QVariantMap friendlyParams = allPackParams.value(packId).toMap();
 
         // Outer-margin request (the pack's declared paddingParam, e.g. glow's
@@ -427,6 +437,19 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // same guarantee).
     writeQmlProperty(slot, QStringLiteral("decorationOuterPadding"), outerPadding);
     writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(stages));
+
+    // Record whether this slot now carries an audio-reactive pack, then reconcile
+    // CAVA: a newly-decorated audio surface may need audio capture started, or a
+    // change from audio to non-audio may let it wind down.
+    if (auto* item = qobject_cast<QQuickItem*>(slot)) {
+        item->setProperty("_wantsAudioDecoration", chainWantsAudio);
+        // Decoration is often applied while the slot is still hidden (popups
+        // apply-then-show), so re-run syncCavaState whenever it shows/hides —
+        // that starts CAVA once an audio surface becomes visible and stops it on
+        // hide. UniqueConnection keeps re-decoration from stacking duplicates.
+        connect(item, &QQuickItem::visibleChanged, this, &OverlayService::syncCavaState, Qt::UniqueConnection);
+    }
+    syncCavaState();
 }
 
 void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)

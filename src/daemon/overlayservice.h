@@ -471,6 +471,11 @@ private:
     // whether the overlay is actually displaying content — CAVA runs only while
     // the overlay (un-idled) or shader preview is on screen.
     void syncCavaState();
+    // Decoration slots (OSD / popups, across screens) that are visible AND carry
+    // an audio-reactive surface pack right now. Drives CAVA gating + the
+    // per-frame audio-spectrum push for daemon-surface decoration audio; empty
+    // for the common case (no audio decoration), so it adds nothing then.
+    QList<QQuickItem*> visibleAudioDecorationSlots() const;
     // Whether the overlay is actively displaying content right now: visible and
     // not in the warm-idled drag-pause/drag-end state (or the shader preview is
     // up). The overlay QQuickWindows are kept alive across drags to dodge an

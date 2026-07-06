@@ -349,8 +349,12 @@ void OverlayService::syncCavaState()
     // CAVA is a continuous audio-capture + FFT child process feeding a per-frame
     // spectrum; running it while nothing is displayed burns CPU on capture AND
     // on per-frame overlay repaints. Run it only while audio-viz is enabled AND
-    // the overlay (un-idled) or the editor's shader preview is actually shown.
-    const bool wantRun = m_settings->enableAudioVisualizer() && isOverlayDisplaying();
+    // something that reacts to audio is on screen: the overlay (un-idled), the
+    // editor's shader preview, or a decoration surface (OSD / popup) carrying an
+    // audio-reactive pack. A plain decoration never starts audio (it declares no
+    // `audio` flag, so visibleAudioDecorationSlots() ignores it).
+    const bool wantRun =
+        m_settings->enableAudioVisualizer() && (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty());
 
     if (wantRun) {
         if (m_idleQuiesceTimer) {
