@@ -79,29 +79,18 @@ uniform int iAudioSpectrumSize;
 uniform vec4 customParams[8];
 uniform vec4 customColors[16];
 
-// Multipass buffer-pass outputs. A multipass surface pack (one that declares
-// `bufferShaders` in metadata.json) runs each buffer pass into an FBO; the
-// pass output is bound here as iChannelN for downstream passes and for the main
-// effect, exactly like the overlay/animation categories. Single-pass packs (the
-// border) never reference these — the linker drops them. iChannelResolution[N].xy
-// is the pixel size of iChannelN.
-uniform sampler2D iChannel0;
-uniform sampler2D iChannel1;
-uniform sampler2D iChannel2;
-uniform sampler2D iChannel3;
+// Multipass buffer-pass output SIZES: iChannelResolution[N].xy is the pixel
+// size of iChannelN. The iChannelN samplers themselves live in the opt-in
+// surface_multipass.glsl module — a single-pass pack (the border) declares
+// neither. This resolution array stays in the core contract because it is a
+// pinned std140 UBO member on the daemon.
 uniform vec4 iChannelResolution[4];
 
-// Backdrop capture — the scene BEHIND the window over the same (padded)
-// canvas as uTexture0, captured by the compositor each frame for packs that
-// declare `"needsBackdrop": true` (frost / glass). uBackdropRect is the
-// VALID sub-rect of the capture in TOP-DOWN normalized coords (xy = min,
-// zw = size): canvas parts that fall off the output are never blitted, so
-// backdropTexel() clamps samples into this rect. uHasBackdrop is 1.0 when
-// the capture exists this frame, else 0.0. Packs sample ONLY through
-// backdropTexel() — the daemon branch declares no uBackdrop sampler, so a
-// raw texture(uBackdrop, …) reference fails the daemon compile by design.
-uniform sampler2D uBackdrop;
-uniform vec4 uBackdropRect;
+// Backdrop capture GATE: 1.0 when the compositor captured the scene behind the
+// window this frame (packs that declare `"needsBackdrop": true`), else 0.0, and
+// always 0.0 on the daemon (no scene behind a surface). The capture sampler +
+// backdropTexel() live in the opt-in surface_backdrop.glsl module; this gate
+// stays here so a pack can branch on it without pulling in the sampler.
 uniform float uHasBackdrop;
 
 // The window's rule-resolved opacity (1.0 when no SetOpacity rule applies).
@@ -137,13 +126,9 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
 
 layout(binding = 7) uniform sampler2D uTexture0;
 
-// Multipass buffer-pass outputs (bindings 2-5, matching the overlay category's
-// shared/multipass.glsl convention so surface and overlay packs speak the same
-// iChannel binding dialect). See the KWin branch above for semantics.
-layout(binding = 2) uniform sampler2D iChannel0;
-layout(binding = 3) uniform sampler2D iChannel1;
-layout(binding = 4) uniform sampler2D iChannel2;
-layout(binding = 5) uniform sampler2D iChannel3;
+// The multipass iChannel sampler bindings (2-5) live in surface_multipass.glsl,
+// which a multipass pack includes; the border and other single-pass packs bind
+// only uTexture0.
 
 #endif // PLASMAZONES_KWIN
 
@@ -173,19 +158,7 @@ vec4 surfaceTexel(vec2 uv) {
     return texture(uTexture0, uv);
 }
 
-// The scene texel BEHIND the surface at `uv` (the same uv space surfaceTexel
-// takes), clamped into the capture's valid sub-rect (uBackdropRect) so edge
-// windows never smear the cleared off-output margin. Compositor-only: the
-// daemon has no scene behind a surface, so this returns transparent there —
-// gate styling on uHasBackdrop for an explicit fallback.
-vec4 backdropTexel(vec2 uv) {
-#ifdef PLASMAZONES_KWIN
-    vec2 td = vec2(uv.x, 1.0 - uv.y); // top-down normalized, like surfacePixel
-    td = clamp(td, uBackdropRect.xy, uBackdropRect.xy + uBackdropRect.zw);
-    return texture(uBackdrop, vec2(td.x, 1.0 - td.y));
-#else
-    return vec4(0.0);
-#endif
-}
+// backdropTexel() (the scene behind the surface) moved to the opt-in
+// surface_backdrop.glsl module — a pack that samples the backdrop includes it.
 
 #endif // PLASMAZONES_SURFACE_UNIFORMS_GLSL

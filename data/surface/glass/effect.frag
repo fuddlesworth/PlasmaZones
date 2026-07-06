@@ -32,6 +32,8 @@
 
 #version 450
 #include <surface_lib.glsl>
+#include <surface_backdrop.glsl>
+#include <surface_multipass.glsl>
 #include <surface_noise.glsl>
 #include <surface_color.glsl>
 

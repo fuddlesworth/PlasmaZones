@@ -15,6 +15,8 @@
 
 #version 450
 #include <surface_lib.glsl>
+#include <surface_backdrop.glsl>
+#include <surface_multipass.glsl>
 
 layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 fragColor;

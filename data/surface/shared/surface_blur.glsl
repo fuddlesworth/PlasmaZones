@@ -19,6 +19,11 @@
 #define PLASMAZONES_SURFACE_BLUR_GLSL
 
 #include <surface_uniforms.glsl>
+// This kernel samples the backdrop (pass 0) and iChannel0 (pass 1), so it pulls
+// in both opt-in modules — a buffer pass that includes surface_blur.glsl gets
+// them transitively and needs no include of its own.
+#include <surface_backdrop.glsl>
+#include <surface_multipass.glsl>
 
 // 9-tap Gaussian weights (sigma ~ radius/3), summing to ~1.
 const float kSurfaceGaussW0 = 0.227027;
