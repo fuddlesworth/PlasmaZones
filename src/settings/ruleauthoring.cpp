@@ -268,6 +268,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetMasterCount && key == ActionParam::Value) {
         return PhosphorI18n::tr("Master count");
     }
+    if (type == ActionType::SetInsertPosition && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Insert position");
+    }
     if (type == ActionType::DisableEngine && key == ActionParam::Mode) {
         return PhosphorI18n::tr("Engine to disable");
     }
@@ -444,6 +447,17 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Layout preview");
         }
     }
+    if (type == ActionType::SetInsertPosition && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::InsertPositionToken::End) {
+            return PhosphorI18n::tr("End of stack");
+        }
+        if (wireValue == PhosphorRules::InsertPositionToken::AfterFocused) {
+            return PhosphorI18n::tr("After focused window");
+        }
+        if (wireValue == PhosphorRules::InsertPositionToken::AsMaster) {
+            return PhosphorI18n::tr("As master");
+        }
+    }
     return wireValue;
 }
 
@@ -533,6 +547,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetMasterCount) {
         return PhosphorI18n::tr("Set master count");
+    }
+    if (type == ActionType::SetInsertPosition) {
+        return PhosphorI18n::tr("Set insert position");
     }
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");

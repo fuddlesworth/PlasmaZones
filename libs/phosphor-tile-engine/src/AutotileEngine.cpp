@@ -1464,6 +1464,11 @@ int AutotileEngine::effectiveMaxWindows(const QString& screenId) const
     return m_configResolver->effectiveMaxWindows(screenId);
 }
 
+PhosphorTiles::AutotileInsertPosition AutotileEngine::effectiveInsertPosition(const QString& screenId) const
+{
+    return m_configResolver->effectiveInsertPosition(screenId);
+}
+
 qreal AutotileEngine::effectiveSplitRatioStep(const QString& screenId) const
 {
     return m_configResolver->effectiveSplitRatioStep(screenId);
@@ -3222,7 +3227,9 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
 
 void AutotileEngine::insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId)
 {
-    switch (m_config->insertPosition) {
+    // Per-screen resolution: a per-screen config override or a context
+    // SetInsertPosition rule wins over the global config for this window's screen.
+    switch (effectiveInsertPosition(screenForWindow(windowId))) {
     case AutotileConfig::InsertPosition::End:
         state->addWindow(windowId);
         break;

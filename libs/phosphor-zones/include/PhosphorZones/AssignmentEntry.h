@@ -257,10 +257,14 @@ struct ContextTilingParams
     std::optional<int> maxWindows;
     std::optional<double> splitRatio;
     std::optional<int> masterCount;
+    /// The AutotileInsertPosition int (0 = End, 1 = AfterFocused, 2 = AsMaster);
+    /// the resolver maps the wire token to this int so the daemon stores the same
+    /// value the per-screen config store uses.
+    std::optional<int> insertPosition;
 
     bool isEmpty() const
     {
-        return !maxWindows && !splitRatio && !masterCount;
+        return !maxWindows && !splitRatio && !masterCount && !insertPosition;
     }
 };
 

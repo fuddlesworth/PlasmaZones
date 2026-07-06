@@ -194,6 +194,9 @@ void Daemon::updateAutotileScreens()
             if (tilingParams.masterCount) {
                 overrides[PerScreenKeys::MasterCount] = *tilingParams.masterCount;
             }
+            if (tilingParams.insertPosition) {
+                overrides[PerScreenKeys::InsertPosition] = *tilingParams.insertPosition;
+            }
 
             // Compare against currently applied overrides to avoid redundant retiles
             QVariantMap current = m_autotileEngine->perScreenOverrides(screenId);

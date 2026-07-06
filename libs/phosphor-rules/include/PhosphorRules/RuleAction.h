@@ -437,6 +437,10 @@ inline constexpr QLatin1StringView SetOuterGapRight{"setOuterGapRight"};
 inline constexpr QLatin1StringView SetMaxWindows{"setMaxWindows"};
 inline constexpr QLatin1StringView SetSplitRatio{"setSplitRatio"};
 inline constexpr QLatin1StringView SetMasterCount{"setMasterCount"};
+/// Where a newly-opened window is inserted into the autotile stack. Carries a
+/// closed enum token (`ActionParam::Value`, InsertPositionToken). Context domain;
+/// layered onto the per-screen override map like the other tiling params.
+inline constexpr QLatin1StringView SetInsertPosition{"setInsertPosition"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -505,6 +509,16 @@ inline constexpr QLatin1StringView Rectangles{"rectangles"}; ///< OverlayDisplay
 inline constexpr QLatin1StringView Preview{"preview"}; ///< OverlayDisplayMode::LayoutPreview (1)
 } // namespace OverlayStyleToken
 
+/// Wire tokens for SetInsertPosition's `value` param — the closed vocabulary the
+/// descriptor validator, the daemon consumer (LayoutRegistry::resolveContextTilingParams
+/// maps token → the AutotileInsertPosition int), and the settings label layers all
+/// read from this single source. Ints match PhosphorTiles::AutotileInsertPosition.
+namespace InsertPositionToken {
+inline constexpr QLatin1StringView End{"end"}; ///< AutotileInsertPosition::End (0)
+inline constexpr QLatin1StringView AfterFocused{"afterFocused"}; ///< AfterFocused (1)
+inline constexpr QLatin1StringView AsMaster{"asMaster"}; ///< AsMaster (2)
+} // namespace InsertPositionToken
+
 /// Sentinel value a `SetBorderColorActive` / `SetBorderColorInactive` `value`
 /// param may carry instead of a hex string, meaning "track the live system
 /// accent colour". The
@@ -572,6 +586,7 @@ inline constexpr QLatin1StringView OuterGapRight{"outer-gap-right"};
 inline constexpr QLatin1StringView MaxWindows{"max-windows"};
 inline constexpr QLatin1StringView SplitRatio{"split-ratio"};
 inline constexpr QLatin1StringView MasterCount{"master-count"};
+inline constexpr QLatin1StringView InsertPosition{"insert-position"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader

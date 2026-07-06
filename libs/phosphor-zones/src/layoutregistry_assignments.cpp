@@ -551,6 +551,18 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     if (const auto action = resolved.slot(QString(PWR::ActionSlot::MasterCount))) {
         params.masterCount = action->params.value(PWR::ActionParam::Value).toInt();
     }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::InsertPosition))) {
+        // Wire token → AutotileInsertPosition int (End 0 / AfterFocused 1 / AsMaster 2),
+        // the same value the per-screen config store holds.
+        const QString token = action->params.value(PWR::ActionParam::Value).toString();
+        if (token == PWR::InsertPositionToken::End) {
+            params.insertPosition = 0;
+        } else if (token == PWR::InsertPositionToken::AfterFocused) {
+            params.insertPosition = 1;
+        } else if (token == PWR::InsertPositionToken::AsMaster) {
+            params.insertPosition = 2;
+        }
+    }
     return params;
 }
 

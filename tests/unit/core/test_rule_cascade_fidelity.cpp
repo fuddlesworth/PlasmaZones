@@ -995,7 +995,11 @@ private Q_SLOTS:
                                         {valueAction(PWR::ActionType::SetSplitRatio, 0.6)});
         const PWR::Rule mc = tilingRule(QStringLiteral("mc"), 200, QStringLiteral("DP-1"),
                                         {valueAction(PWR::ActionType::SetMasterCount, 2)});
-        QVERIFY(f.store->setAllRules({mw, sr, mc}));
+        // Insert position carries a wire token → resolves to the AutotileInsertPosition int.
+        const PWR::Rule ip =
+            tilingRule(QStringLiteral("ip"), 100, QStringLiteral("DP-1"),
+                       {valueAction(PWR::ActionType::SetInsertPosition, QString(PWR::InsertPositionToken::AsMaster))});
+        QVERIFY(f.store->setAllRules({mw, sr, mc, ip}));
 
         const PhosphorZones::ContextTilingParams p =
             f.registry->resolveContextTilingParams(QStringLiteral("DP-1"), 0, QString());
@@ -1005,6 +1009,8 @@ private Q_SLOTS:
         QCOMPARE(*p.splitRatio, 0.6);
         QVERIFY(p.masterCount.has_value());
         QCOMPARE(*p.masterCount, 2);
+        QVERIFY(p.insertPosition.has_value());
+        QCOMPARE(*p.insertPosition, 2); // "asMaster" → AutotileInsertPosition::AsMaster (2)
 
         // A screen the rules do not pin → all-unset (the daemon then leaves the
         // config-derived override map untouched for that screen).

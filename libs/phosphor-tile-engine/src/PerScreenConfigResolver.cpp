@@ -274,6 +274,18 @@ bool PerScreenConfigResolver::effectiveSmartGaps(const QString& screenId) const
     return m_engine->config()->smartGaps;
 }
 
+PhosphorTiles::AutotileInsertPosition PerScreenConfigResolver::effectiveInsertPosition(const QString& screenId) const
+{
+    // Per-screen override (config store OR a folded-in tiling rule) → global config.
+    // The stored value is the enum's underlying int, clamped to the valid range.
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::InsertPosition))) {
+        const int clamped = qBound(PhosphorTiles::AutotileDefaults::MinInsertPosition, v->toInt(),
+                                   PhosphorTiles::AutotileDefaults::MaxInsertPosition);
+        return static_cast<PhosphorTiles::AutotileInsertPosition>(clamped);
+    }
+    return m_engine->config()->insertPosition;
+}
+
 bool PerScreenConfigResolver::effectiveRespectMinimumSize(const QString& screenId) const
 {
     if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::RespectMinimumSize)))

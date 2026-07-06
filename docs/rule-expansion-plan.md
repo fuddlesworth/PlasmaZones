@@ -113,8 +113,15 @@ Consequences:
   These 3 work inject-only: applyPerScreenConfig pushes split/master to TilingState, effectiveMaxWindows
   reads the map. No QML change (number/percent kinds). Tests: kContextDomainTypes canary, validation
   ranges, resolveContextTilingParams per-slot composition. 251/251 green.
-- Remaining: Tier 1 tiling Seam A InsertPosition (needs effectiveInsertPosition resolver +
-  AutotileEngine consumer switch + an enum picker) → Seam B (SetOverflowBehavior/SetDragBehavior) →
+- **Tier 1 tiling Seam A InsertPosition: DONE** (committed). SetInsertPosition Context action (enum,
+  tokens end/afterFocused/asMaster via InsertPositionToken, mapped to AutotileInsertPosition int 0/1/2 in
+  resolveContextTilingParams → ContextTilingParams.insertPosition). New PerScreenConfigResolver::
+  effectiveInsertPosition + AutotileEngine::effectiveInsertPosition delegating; consumer
+  insertWindowByConfigOrder switched from m_config->insertPosition to
+  effectiveInsertPosition(screenForWindow(windowId)) — which ALSO makes the previously-dead per-screen
+  InsertPosition config live (latent-bug fix). Daemon injects into the override map. No QML change (enum
+  kind). Tests: domain canary, enum validation, resolver mapping asMaster→2. 251/251 green.
+- Remaining: Tier 1 tiling Seam B (SetOverflowBehavior/SetDragBehavior via context-provider closure) →
   SetAlgorithmParam → deferred tail (ColorScheme, OSD, UnfloatFallbackToZone).
 
 ## Tier 1 — Overlay appearance Context actions  ★ START HERE

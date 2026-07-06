@@ -557,6 +557,7 @@ public:
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
     int effectiveMaxWindows(const QString& screenId) const;
+    PhosphorTiles::AutotileInsertPosition effectiveInsertPosition(const QString& screenId) const;
     qreal effectiveSplitRatioStep(const QString& screenId) const override;
     int runtimeMaxWindows() const override;
     QString effectiveAlgorithmId(const QString& screenId) const;

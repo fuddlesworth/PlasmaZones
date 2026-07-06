@@ -68,6 +68,7 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetMaxWindows,
     ActionType::SetSplitRatio,
     ActionType::SetMasterCount,
+    ActionType::SetInsertPosition,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -530,6 +531,18 @@ private Q_SLOTS:
             QVERIFY(!RuleAction::fromJson(o).has_value());
             o.insert(QStringLiteral("value"), 2); // in range accepted
             QVERIFY(RuleAction::fromJson(o).has_value());
+        }
+        // SetInsertPosition: closed enum vocabulary.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetInsertPosition));
+            o.insert(QStringLiteral("value"), QStringLiteral("middle")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (const QLatin1StringView token :
+                 {InsertPositionToken::End, InsertPositionToken::AfterFocused, InsertPositionToken::AsMaster}) {
+                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
+                QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
+            }
         }
     }
 
