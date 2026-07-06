@@ -378,12 +378,21 @@ void OverlayService::syncCavaState()
         if (m_audioProvider->isRunning()) {
             m_audioProvider->stop();
             for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-                if (!it_.value().overlayPhysScreen) {
-                    continue;
+                const auto& st = it_.value();
+                if (st.overlayPhysScreen) {
+                    if (auto* slot = st.mainOverlaySlot()) {
+                        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                    }
                 }
-                auto* slot = it_.value().mainOverlaySlot();
-                if (slot) {
-                    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                // Decoration slots (OSD / popups) carry their own audioSpectrum,
+                // so an audio-reactive border must settle to silence too rather
+                // than freeze on the last pushed frame. Independent of the zone
+                // overlay, so cleared regardless of overlayPhysScreen.
+                for (QQuickItem* deco :
+                     {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(), st.zoneSelectorSlot()}) {
+                    if (deco) {
+                        writeQmlProperty(deco, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                    }
                 }
             }
             if (m_shaderPreviewWindow) {

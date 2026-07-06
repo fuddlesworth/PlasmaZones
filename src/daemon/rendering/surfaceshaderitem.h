@@ -34,7 +34,7 @@ namespace PlasmaZones {
  * consumer escape-hatch int slots. The ONLY thing that differs from the base
  * render path is the UBO: the node is created with a
  * PhosphorSurfaceShaders::SurfaceUniformProfile so it uploads the leaner
- * 560-byte surface UBO instead of the overlay UBO. createShaderNode() supplies
+ * 576-byte surface UBO instead of the overlay UBO. createShaderNode() supplies
  * that profile to a stock PhosphorRendering::ShaderNodeRhi — there is no
  * SurfaceShaderItem-specific node subclass.
  *
@@ -130,7 +130,7 @@ protected:
      *
      * Returns a stock PhosphorRendering::ShaderNodeRhi constructed with a
      * PhosphorSurfaceShaders::SurfaceUniformProfile, so the shared render engine
-     * uploads the 560-byte surface UBO. No node subclass — the profile is the
+     * uploads the 576-byte surface UBO. No node subclass — the profile is the
      * only difference from the base/overlay path.
      */
     PhosphorRendering::ShaderNodeRhi* createShaderNode() override;

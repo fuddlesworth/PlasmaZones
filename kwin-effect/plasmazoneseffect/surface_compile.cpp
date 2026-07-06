@@ -394,8 +394,15 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
                 allCompiled = false;
                 break;
             }
-            bufExpanded = PhosphorShaders::spliceAfterVersion(
-                bufExpanded, PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(eff));
+            // Buffer passes are param-free by contract: bakeBufferShaders on the
+            // daemon and validateSurfacePack both skip the p_<id> preamble, and a
+            // buffer source reads parameters by their raw customParams slot (see
+            // surface_blur.glsl). Splicing the preamble HERE would let a buffer
+            // pass reference a p_<id> name on the compositor while the same pack
+            // fails to compile on the daemon and the validator — so skip it too,
+            // keeping all three buffer-pass compile paths identical. The raw
+            // customParams/customColors locations are still cached below because
+            // buffer passes read those uniforms directly.
             const QByteArray bufFrag = injectKwinDefineAfterVersion(bufExpanded);
             auto bufShader =
                 KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, bufVert, bufFrag);
