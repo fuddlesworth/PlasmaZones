@@ -226,6 +226,12 @@ public:
     /// @ref refreshLabels.
     void setZoneLabelLookup(LabelLookup fn);
 
+    /// Inject the virtual-desktop-number → name resolver used when rendering a
+    /// `VirtualDesktop` leaf predicate, so the collapsed and expanded summaries show
+    /// "Work" rather than the bare number "2" (matching the editor's desktop picker).
+    /// Install-once setter; read live on every `data()`. Unknown numbers round-trip.
+    void setVirtualDesktopLabelLookup(LabelLookup fn);
+
     /// Inject the layoutId / algorithm-token → display-name resolvers used by
     /// the action summary so `SetSnappingLayout` and `SetTilingAlgorithm`
     /// render "Binary Split" rather than the wire token / UUID. Split into a
@@ -290,6 +296,7 @@ private:
     LabelLookup m_screenLookup;
     LabelLookup m_activityLookup;
     LabelLookup m_zoneLookup;
+    LabelLookup m_virtualDesktopLookup;
     // Split so a SetSnappingLayout action whose layoutId happens to
     // tokenise (e.g. matches an algorithm token by coincidence) and a
     // SetTilingAlgorithm action with a UUID-shaped algorithm name

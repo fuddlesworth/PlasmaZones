@@ -875,6 +875,289 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 
+    // ─── ScreenOrientation is stamped onto context queries and gates rules ────
+    // The orientation provider feeds "portrait" / "landscape" per screen; a rule
+    // matching Field::ScreenOrientation must fire only on the screens the provider
+    // reports that orientation for, proving the stamp reaches a non-assignment
+    // (gap) resolver.
+    void testContextOrientation_stampedAndGatesRule()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // DP-1 is portrait, DP-2 is landscape; DP-3 has unknown geometry (nullopt).
+        f.registry->setScreenOrientationProvider([](const QString& screenId) -> std::optional<QString> {
+            if (screenId == QLatin1String("DP-1")) {
+                return QStringLiteral("portrait");
+            }
+            if (screenId == QLatin1String("DP-2")) {
+                return QStringLiteral("landscape");
+            }
+            return std::nullopt;
+        });
+
+        PWR::RuleAction gapAction;
+        gapAction.type = QString(PWR::ActionType::SetInnerGap);
+        gapAction.params.insert(QString(PWR::ActionParam::Value), 20);
+        PWR::Rule r;
+        r.id = QUuid::createUuid();
+        r.name = QStringLiteral("portrait gap");
+        r.enabled = true;
+        r.priority = 400;
+        r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenOrientation, PWR::Operator::Equals,
+                                                 QStringLiteral("portrait"));
+        r.actions = {gapAction};
+        QVERIFY(f.store->setAllRules({r}));
+
+        // Portrait screen → the orientation stamp matches → gap applies.
+        const PhosphorZones::ContextGapOverride portrait =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(portrait.innerGap.has_value());
+        QCOMPARE(*portrait.innerGap, 20);
+
+        // Landscape screen → orientation token differs → rule inert.
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+        // Unknown geometry → orientation empty → rule inert (no false match).
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-3"), 0, QString()).isEmpty());
+    }
+
+    // ─── ActiveLayout is stamped onto the non-assignment resolvers, gates rules,
+    //     and does NOT recurse ──────────────────────────────────────────────────
+    // The gap/lock/overlay resolvers stamp the screen's resolved active-layout id
+    // (via assignmentIdForScreen). A rule matching Field::ActiveLayout must fire
+    // only when that id matches — and the resolver must NOT recurse (reaching
+    // assignmentIdForScreen must never re-enter the gap resolver). The test
+    // completing at all proves the no-recursion contract.
+    void testContextActiveLayout_stampedAndGatesRule()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // No per-screen assignment rule; the active layout comes from the global
+        // default provider (exercising the non-rule-set input path that the cache
+        // key must fold in).
+        const QString layoutId = QStringLiteral("{11111111-1111-1111-1111-111111111111}");
+        f.registry->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+
+        const auto gapRuleForLayout = [](const QString& id) {
+            PWR::RuleAction gapAction;
+            gapAction.type = QString(PWR::ActionType::SetInnerGap);
+            gapAction.params.insert(QString(PWR::ActionParam::Value), 15);
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = QStringLiteral("active-layout gap");
+            r.enabled = true;
+            r.priority = 400;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ActiveLayout, PWR::Operator::Equals, id);
+            r.actions = {gapAction};
+            return r;
+        };
+
+        // The screen's active layout (from the default provider) matches → gap fires.
+        QVERIFY(f.store->setAllRules({gapRuleForLayout(layoutId)}));
+        const PhosphorZones::ContextGapOverride resolved =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(resolved.innerGap.has_value());
+        QCOMPARE(*resolved.innerGap, 15);
+
+        // A rule pinned to a DIFFERENT layout id is inert on this screen.
+        QVERIFY(f.store->setAllRules({gapRuleForLayout(QStringLiteral("{22222222-2222-2222-2222-222222222222}"))}));
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).isEmpty());
+    }
+
+    // ─── An ActiveLayout-referencing rule must NOT drive the assignment ───────
+    // The assignment resolver leaves Field::ActiveLayout unstamped (it IS the
+    // resolver's output — stamping would recurse). An assignment rule whose match
+    // references ActiveLayout is therefore structurally excluded from the
+    // assignment path. This matters most for a NEGATED predicate: a positive
+    // `ActiveLayout Equals X` leaf never matches the unstamped placeholder, but a
+    // `None{ActiveLayout Equals X}` ("active layout is NOT X") would spuriously
+    // match the empty placeholder and force a wrong assignment without the guard.
+    // The resolve also completing at all proves the no-recursion contract.
+    void testActiveLayoutRuleExcludedFromAssignment()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // Snap default so a leaked autotile assignment is unambiguously visible.
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+
+        // Positive control: an assignment rule pinned by ScreenId DOES drive the
+        // assignment — proving the harness observes assignment-driving, so the
+        // negative assertions below are meaningful (not vacuously always-Snapping).
+        PWR::Rule screenPinned;
+        screenPinned.id = QUuid::createUuid();
+        screenPinned.name = QStringLiteral("screen-pinned-autotile");
+        screenPinned.enabled = true;
+        screenPinned.priority = 500;
+        screenPinned.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
+        screenPinned.actions =
+            CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"));
+        QVERIFY(f.store->setAllRules({screenPinned}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).mode,
+                 PhosphorZones::AssignmentEntry::Autotile);
+
+        // Build the same autotile assignment rule but match on ActiveLayout, once
+        // positively and once negated. Neither may drive the assignment: the
+        // resolver must fall through to the Snapping gated default.
+        const QString someLayout = QStringLiteral("{11111111-1111-1111-1111-111111111111}");
+        const auto activeLayoutAssignmentRule = [&](const PWR::MatchExpression& match) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = QStringLiteral("active-layout assignment");
+            r.enabled = true;
+            r.priority = 500;
+            r.match = match;
+            r.actions = CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"));
+            return r;
+        };
+
+        // Positive ActiveLayout leaf — excluded (also never matched the placeholder).
+        QVERIFY(f.store->setAllRules({activeLayoutAssignmentRule(
+            PWR::MatchExpression::makeLeaf(PWR::Field::ActiveLayout, PWR::Operator::Equals, someLayout))}));
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).mode,
+                 PhosphorZones::AssignmentEntry::Snapping);
+
+        // Negated ActiveLayout predicate — the regression case. Without the
+        // referencesAnyField guard this None{} matches the empty placeholder and
+        // forces Autotile; with it, the rule is excluded and Snapping stands.
+        QVERIFY(f.store->setAllRules({activeLayoutAssignmentRule(PWR::MatchExpression::makeNone(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::ActiveLayout, PWR::Operator::Equals, someLayout)}))}));
+        const PhosphorZones::AssignmentEntry negatedEntry =
+            f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString());
+        QCOMPARE(negatedEntry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(negatedEntry.snappingLayout, QStringLiteral("{provider-snap-default}"));
+    }
+
+    // ─── ActiveLayout exclusion on the SECOND no-stamp resolver ──────────────
+    // resolveContextDefaultAssignment is the other assignment-cascade resolver
+    // that leaves ActiveLayout unstamped, so it applies the same referencesAnyField
+    // exclusion. A DefaultLayoutAssignment rule matched by None{ActiveLayout Equals
+    // X} would, without the guard, match the empty placeholder and force the default
+    // through (defeating the global suppress); with the guard it is excluded.
+    void testActiveLayoutRuleExcludedFromDefaultAssignment()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // Global default: suppress the synthesized default assignment everywhere.
+        f.registry->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+
+        const auto defaultAssignmentRule = [](const PWR::MatchExpression& match, bool allow) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = QStringLiteral("default-assignment");
+            r.enabled = true;
+            r.priority = 500;
+            r.match = match;
+            PWR::RuleAction action;
+            action.type = QString(PWR::ActionType::DefaultLayoutAssignment);
+            action.params.insert(QString(PWR::ActionParam::Value), allow);
+            r.actions.append(action);
+            return r;
+        };
+
+        // Positive control: a ScreenId-pinned allow rule DOES override the global
+        // suppress (proves the harness observes default-assignment overrides, so the
+        // negatives below are meaningful rather than vacuously always-suppressed).
+        QVERIFY(f.store->setAllRules({defaultAssignmentRule(
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1")),
+            true)}));
+        QVERIFY(!f.registry->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 0, QString()));
+
+        const QString someLayout = QStringLiteral("{11111111-1111-1111-1111-111111111111}");
+
+        // Negated ActiveLayout predicate — the regression case. Without the guard the
+        // None{} matches the empty placeholder and forces the default through
+        // (isSuppressed → false); with it, the rule is excluded and the global
+        // suppress stands (isSuppressed → true).
+        QVERIFY(f.store->setAllRules(
+            {defaultAssignmentRule(PWR::MatchExpression::makeNone({PWR::MatchExpression::makeLeaf(
+                                       PWR::Field::ActiveLayout, PWR::Operator::Equals, someLayout)}),
+                                   true)}));
+        QVERIFY(f.registry->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 0, QString()));
+
+        // Positive ActiveLayout leaf — also excluded (and never matched the placeholder).
+        QVERIFY(f.store->setAllRules({defaultAssignmentRule(
+            PWR::MatchExpression::makeLeaf(PWR::Field::ActiveLayout, PWR::Operator::Equals, someLayout), true)}));
+        QVERIFY(f.registry->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 0, QString()));
+    }
+
+    // ─── Context autotile-parameter resolution (max / split / master) ────────
+    // resolveContextTilingParams is a per-slot read: independent
+    // SetMaxWindows / SetSplitRatio / SetMasterCount rules compose, and an
+    // unpinned screen resolves to an all-unset (empty) params struct.
+    void testContextTilingParams_perSlotComposition()
+    {
+        const auto valueAction = [](QLatin1StringView type, const QVariant& value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), QJsonValue::fromVariant(value));
+            return a;
+        };
+        const auto tilingRule = [&](const QString& name, int priority, const QString& screenId,
+                                    const QList<PWR::RuleAction>& actions) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = actions;
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // Separate rules fill separate slots — all compose (per-slot read).
+        const PWR::Rule mw = tilingRule(QStringLiteral("mw"), 400, QStringLiteral("DP-1"),
+                                        {valueAction(PWR::ActionType::SetMaxWindows, 3)});
+        const PWR::Rule sr = tilingRule(QStringLiteral("sr"), 300, QStringLiteral("DP-1"),
+                                        {valueAction(PWR::ActionType::SetSplitRatio, 0.6)});
+        const PWR::Rule mc = tilingRule(QStringLiteral("mc"), 200, QStringLiteral("DP-1"),
+                                        {valueAction(PWR::ActionType::SetMasterCount, 2)});
+        // Insert position carries a wire token → resolves to the AutotileInsertPosition int.
+        const PWR::Rule ip =
+            tilingRule(QStringLiteral("ip"), 100, QStringLiteral("DP-1"),
+                       {valueAction(PWR::ActionType::SetInsertPosition, QString(PWR::InsertPositionToken::AsMaster))});
+        // Overflow behavior carries a wire token → AutotileOverflowBehavior int.
+        const PWR::Rule ob = tilingRule(
+            QStringLiteral("ob"), 50, QStringLiteral("DP-1"),
+            {valueAction(PWR::ActionType::SetOverflowBehavior, QString(PWR::OverflowBehaviorToken::Unlimited))});
+        // Drag behavior carries a wire token → AutotileDragBehavior int.
+        const PWR::Rule db =
+            tilingRule(QStringLiteral("db"), 25, QStringLiteral("DP-1"),
+                       {valueAction(PWR::ActionType::SetDragBehavior, QString(PWR::DragBehaviorToken::Reorder))});
+        // SetAlgorithmParam carries a target algorithm token + a free-form params blob.
+        PWR::RuleAction apAction;
+        apAction.type = QString(PWR::ActionType::SetAlgorithmParam);
+        apAction.params.insert(QString(PWR::ActionParam::Algorithm), QStringLiteral("bsp"));
+        QJsonObject apParams;
+        apParams.insert(QStringLiteral("ratio"), 0.7);
+        apAction.params.insert(QString(PWR::ActionParam::Params), apParams);
+        const PWR::Rule ap = tilingRule(QStringLiteral("ap"), 10, QStringLiteral("DP-1"), {apAction});
+        QVERIFY(f.store->setAllRules({mw, sr, mc, ip, ob, db, ap}));
+
+        const PhosphorZones::ContextTilingParams p =
+            f.registry->resolveContextTilingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(p.maxWindows.has_value());
+        QCOMPARE(*p.maxWindows, 3);
+        QVERIFY(p.splitRatio.has_value());
+        QCOMPARE(*p.splitRatio, 0.6);
+        QVERIFY(p.masterCount.has_value());
+        QCOMPARE(*p.masterCount, 2);
+        QVERIFY(p.insertPosition.has_value());
+        QCOMPARE(*p.insertPosition, 2); // "asMaster" → AutotileInsertPosition::AsMaster (2)
+        QVERIFY(p.overflowBehavior.has_value());
+        QCOMPARE(*p.overflowBehavior, 1); // "unlimited" → AutotileOverflowBehavior::Unlimited (1)
+        QVERIFY(p.dragBehavior.has_value());
+        QCOMPARE(*p.dragBehavior, 1); // "reorder" → AutotileDragBehavior::Reorder (1)
+        QCOMPARE(p.algorithmParamTarget, QStringLiteral("bsp"));
+        QCOMPARE(p.algorithmParams.value(QStringLiteral("ratio")).toDouble(), 0.7);
+
+        // A screen the rules do not pin → all-unset (the daemon then leaves the
+        // config-derived override map untouched for that screen).
+        QVERIFY(f.registry->resolveContextTilingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+    }
+
     // ─── Per-monitor gap rule overrides the baseline for that screen only ────
     // A per-monitor gap override is authored by the Appearance page as a NORMAL
     // (non-managed) screen-scoped rule: match `ScreenId == screen`, carrying the
@@ -1017,6 +1300,62 @@ private Q_SLOTS:
         QVERIFY(r3.shaderId.has_value());
         QCOMPARE(*r3.shaderId, QStringLiteral("plasma-glow"));
         QCOMPARE(r3.shaderParams.value(QStringLiteral("intensity")).toDouble(), 0.5);
+    }
+
+    // ─── Context overlay-APPEARANCE resolution (SetOverlay* colours / opacities
+    //     / border dimensions / zone-number visibility) ────────────────────────
+    // The appearance actions layer over the global Snapping.Zones.* config: each
+    // fills its own optional on ContextOverlayOverride, and an unmatched context
+    // leaves them all unset so the consumer falls through to config.
+    void testContextOverlay_appearanceOverrides()
+    {
+        const auto valueAction = [](QLatin1StringView type, const QVariant& value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), QJsonValue::fromVariant(value));
+            return a;
+        };
+        PWR::Rule r;
+        r.id = QUuid::createUuid();
+        r.name = QStringLiteral("overlay appearance");
+        r.enabled = true;
+        r.priority = 400;
+        r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
+        r.actions = {
+            valueAction(PWR::ActionType::SetOverlayHighlightColor, QStringLiteral("#FF112233")),
+            valueAction(PWR::ActionType::SetOverlayInactiveColor, QStringLiteral("#80445566")),
+            valueAction(PWR::ActionType::SetOverlayBorderColor, QStringLiteral("#FFEEDDCC")),
+            valueAction(PWR::ActionType::SetOverlayActiveOpacity, 0.5),
+            valueAction(PWR::ActionType::SetOverlayInactiveOpacity, 0.25),
+            valueAction(PWR::ActionType::SetOverlayBorderWidth, 3),
+            valueAction(PWR::ActionType::SetOverlayBorderRadius, 12),
+            valueAction(PWR::ActionType::SetOverlayShowZoneNumbers, false),
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        QVERIFY(f.store->setAllRules({r}));
+
+        const PhosphorZones::ContextOverlayOverride resolved =
+            f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(resolved.highlightColor.has_value());
+        QCOMPARE(*resolved.highlightColor, QColor(QStringLiteral("#FF112233")));
+        QVERIFY(resolved.inactiveColor.has_value());
+        QCOMPARE(*resolved.inactiveColor, QColor(QStringLiteral("#80445566")));
+        QVERIFY(resolved.borderColor.has_value());
+        QCOMPARE(*resolved.borderColor, QColor(QStringLiteral("#FFEEDDCC")));
+        QVERIFY(resolved.activeOpacity.has_value());
+        QCOMPARE(*resolved.activeOpacity, 0.5);
+        QVERIFY(resolved.inactiveOpacity.has_value());
+        QCOMPARE(*resolved.inactiveOpacity, 0.25);
+        QVERIFY(resolved.borderWidth.has_value());
+        QCOMPARE(*resolved.borderWidth, 3);
+        QVERIFY(resolved.borderRadius.has_value());
+        QCOMPARE(*resolved.borderRadius, 12);
+        QVERIFY(resolved.showZoneNumbers.has_value());
+        QCOMPARE(*resolved.showZoneNumbers, false);
+
+        // An unpinned context leaves every appearance field unset (config wins).
+        QVERIFY(f.registry->resolveContextOverlay(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 
     // ─── Context lock resolution (ActionSlot::Locked) ─────────────────────

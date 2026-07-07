@@ -95,6 +95,22 @@ bool hasHexColorOrAccent(const QJsonObject& params, QLatin1StringView key)
 constexpr double kMaxBorderWidth = 10.0;
 constexpr double kMaxBorderRadius = 20.0;
 constexpr double kMaxGap = 500.0;
+// Zone-overlay border dimensions have their own bounds mirroring the global
+// `Snapping.Zones.Border` config ranges (width 0-10, radius 0-50) — the overlay
+// radius goes wider than the per-window `kMaxBorderRadius` (20).
+constexpr double kMaxOverlayBorderRadius = 50.0;
+// Autotile parameter bounds (display units), mirroring the AutotileDefaults
+// clamps the engine applies on consumption. These only reject grossly malformed
+// hand-edited payloads.
+constexpr double kMaxTiledWindows = 12.0;
+constexpr double kMaxMasterCount = 5.0;
+// Split-ratio bounds. The percent-editor display range is the exact primary pair
+// ([10, 90] %); the wire ratio is derived (÷ 100) so the two never drift and the
+// display bounds stay exact (0.1 * 100.0 is not exactly 10.0 in IEEE-754).
+constexpr double kMinSplitPercent = 10.0;
+constexpr double kMaxSplitPercent = 90.0;
+constexpr double kMinSplitRatio = kMinSplitPercent / 100.0;
+constexpr double kMaxSplitRatio = kMaxSplitPercent / 100.0;
 
 } // namespace
 
@@ -535,7 +551,7 @@ void ActionRegistry::registerBuiltins()
         // No tags: SnapToZone is daemon-placement only (consumed by the SnapEngine
         // open path), not an Effect / Border / Animation / Overlay action.
         .category = QStringLiteral("windowManagement"),
-        .displayOrder = 0,
+        .displayOrder = 2,
     });
 
     // ── open-routing: send a matched window to a target monitor / desktop ──
@@ -559,7 +575,7 @@ void ActionRegistry::registerBuiltins()
         // No tags: RouteToScreen is daemon open-path routing only, not an
         // Effect / Border / Animation / Overlay / Gap action.
         .category = QStringLiteral("windowManagement"),
-        .displayOrder = 1,
+        .displayOrder = 3,
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::RouteToDesktop),
@@ -587,7 +603,7 @@ void ActionRegistry::registerBuiltins()
                      .min = 1.0,
                      .max = static_cast<double>(MaxVirtualDesktopOrdinal)}},
         .category = QStringLiteral("windowManagement"),
-        .displayOrder = 2,
+        .displayOrder = 4,
     });
 
     // ── animation slots — event-scoped: "anim-shader:<event>" ──
@@ -750,6 +766,147 @@ void ActionRegistry::registerBuiltins()
         .tags = {QString(Tag::Overlay)},
     });
 
+    // ── per-context overlay-APPEARANCE slots (domain Context) ──
+    // Colours / opacities / border dimensions / zone-number visibility that
+    // override the global Snapping.Zones.* config for a matched context. One
+    // slot per property so independent rules cascade. Resolved daemon-side by
+    // LayoutRegistry::resolveContextOverlay; an unset property falls through to
+    // the global config value (config stays authoritative). No Tag::Effect —
+    // these are overlay-service reads, not KWin-effect window appearance.
+    //
+    // The three colour actions share a shape, so a small table keeps type and
+    // slot in lockstep per row (mirroring the per-side gap loop). Colours use
+    // the plain hex validator — NO accent sentinel, since the overlay consumer
+    // resolves no token.
+    struct OverlayColor
+    {
+        QLatin1StringView type;
+        QLatin1StringView slot;
+        int order;
+    };
+    for (const OverlayColor& c : {
+             OverlayColor{ActionType::SetOverlayHighlightColor, ActionSlot::OverlayHighlightColor, 2},
+             OverlayColor{ActionType::SetOverlayInactiveColor, ActionSlot::OverlayInactiveColor, 3},
+             OverlayColor{ActionType::SetOverlayBorderColor, ActionSlot::OverlayBorderColor, 4},
+         }) {
+        const QString slot = QString(c.slot);
+        registerAction(ActionDescriptor{
+            .type = QString(c.type),
+            .slotFor =
+                [slot](const QJsonObject&) {
+                    return slot;
+                },
+            .validate =
+                [](const QJsonObject& p) {
+                    return hasHexColor(p, ActionParam::Value);
+                },
+            .terminal = false,
+            .allowedKeys = {QString(ActionParam::Value)},
+            .domain = ActionDomain::Context,
+            .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+            .category = QStringLiteral("overlay"),
+            .displayOrder = c.order,
+            .tags = {QString(Tag::Overlay)},
+        });
+    }
+    // Active / inactive overlay opacity — [0, 1] double on the wire, edited as a
+    // percent (scale 0.01), mirroring SetOpacity. Defaults match the global
+    // config (activeOpacity 0.5, inactiveOpacity 0.3).
+    struct OverlayOpacity
+    {
+        QLatin1StringView type;
+        QLatin1StringView slot;
+        double defaultDisplay;
+        int order;
+    };
+    for (const OverlayOpacity& o : {
+             OverlayOpacity{ActionType::SetOverlayActiveOpacity, ActionSlot::OverlayActiveOpacity, 50.0, 5},
+             OverlayOpacity{ActionType::SetOverlayInactiveOpacity, ActionSlot::OverlayInactiveOpacity, 30.0, 6},
+         }) {
+        const QString slot = QString(o.slot);
+        registerAction(ActionDescriptor{
+            .type = QString(o.type),
+            .slotFor =
+                [slot](const QJsonObject&) {
+                    return slot;
+                },
+            .validate =
+                [](const QJsonObject& p) {
+                    const QJsonValue v = p.value(ActionParam::Value);
+                    if (!v.isDouble()) {
+                        return false;
+                    }
+                    const double d = v.toDouble();
+                    return d >= 0.0 && d <= 1.0;
+                },
+            .terminal = false,
+            .allowedKeys = {QString(ActionParam::Value)},
+            .domain = ActionDomain::Context,
+            .params = {P{.key = QString(ActionParam::Value),
+                         .kind = QStringLiteral("percent"),
+                         .min = 0.0,
+                         .max = 100.0,
+                         .scale = 0.01,
+                         .defaultDisplay = o.defaultDisplay}},
+            .category = QStringLiteral("overlay"),
+            .displayOrder = o.order,
+            .tags = {QString(Tag::Overlay)},
+        });
+    }
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOverlayBorderWidth),
+        .slotFor = constantSlot(ActionSlot::OverlayBorderWidth),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, kMaxBorderWidth);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 0.0,
+                     .max = kMaxBorderWidth,
+                     .defaultDisplay = 2.0}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 7,
+        .tags = {QString(Tag::Overlay)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOverlayBorderRadius),
+        .slotFor = constantSlot(ActionSlot::OverlayBorderRadius),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, kMaxOverlayBorderRadius);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 0.0,
+                     .max = kMaxOverlayBorderRadius,
+                     .defaultDisplay = 8.0}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 8,
+        .tags = {QString(Tag::Overlay)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOverlayShowZoneNumbers),
+        .slotFor = constantSlot(ActionSlot::OverlayShowZoneNumbers),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 9,
+        .tags = {QString(Tag::Overlay)},
+    });
+
     // RestorePosition is window-domain but NOT a border/appearance slot — it is
     // consumed daemon-side (both engines' restore-position predicate), not by the
     // effect. Unlike the border bools below it seeds FALSE: the per-engine
@@ -768,8 +925,42 @@ void ActionRegistry::registerBuiltins()
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
         .category = QStringLiteral("windowManagement"),
-        .displayOrder = 2,
+        .displayOrder = 5,
     });
+
+    // Two more per-window restore-policy overrides, same shape as RestorePosition
+    // (bool, seeds FALSE because both governing settings default ON — the only
+    // meaningful fresh-rule value is "opt this window OUT"). Consumed daemon-side
+    // (the managed-restore predicate / the drag-out unsnap paths), not the effect.
+    struct RestorePolicy
+    {
+        QLatin1StringView type;
+        QLatin1StringView slot;
+        int order;
+    };
+    for (const RestorePolicy& rp : {
+             RestorePolicy{ActionType::SetRestoreToZoneOnLogin, ActionSlot::RestoreToZoneOnLogin, 6},
+             RestorePolicy{ActionType::SetRestoreSizeOnUnsnap, ActionSlot::RestoreSizeOnUnsnap, 7},
+         }) {
+        const QString slot = QString(rp.slot);
+        registerAction(ActionDescriptor{
+            .type = QString(rp.type),
+            .slotFor =
+                [slot](const QJsonObject&) {
+                    return slot;
+                },
+            .validate =
+                [](const QJsonObject& p) {
+                    return hasBool(p, ActionParam::Value);
+                },
+            .terminal = false,
+            .allowedKeys = {QString(ActionParam::Value)},
+            .domain = ActionDomain::Window,
+            .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+            .category = QStringLiteral("windowManagement"),
+            .displayOrder = rp.order,
+        });
+    }
 
     // ── per-window border / title-bar appearance slots (domain Window) ──
     // One slot per property so independent rules cascade per-property. The
@@ -978,6 +1169,174 @@ void ActionRegistry::registerBuiltins()
             .tags = {QString(Tag::Gap)},
         });
     }
+
+    // ── per-context autotile parameter slots (domain Context) ──
+    // Resolved daemon-side by LayoutRegistry::resolveContextTilingParams and
+    // layered onto the per-screen autotile override map (config stays the base;
+    // the rule wins where present). Category "layoutEngine" — these configure the
+    // tiling engine for the matched context.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetMaxWindows),
+        .slotFor = constantSlot(ActionSlot::MaxWindows),
+        .validate =
+            [](const QJsonObject& p) {
+                // 1..12, integral; the consumer re-clamps to AutotileDefaults, so
+                // this only enforces a sanity floor of 1 (0 and negatives are rejected
+                // as grossly malformed) and the upper bound. Reject non-integral like
+                // the sibling count validators (SnapToZone / RouteToDesktop) rather
+                // than silently truncating a hand-edited fractional count.
+                const QJsonValue v = p.value(ActionParam::Value);
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                if (d < 1.0 || d > kMaxTiledWindows) {
+                    return false;
+                }
+                return static_cast<double>(static_cast<int>(d)) == d;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 1.0,
+                     .max = kMaxTiledWindows,
+                     .defaultDisplay = 5.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 10,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetSplitRatio),
+        .slotFor = constantSlot(ActionSlot::SplitRatio),
+        .validate =
+            [](const QJsonObject& p) {
+                // Wire is the [kMinSplitRatio, kMaxSplitRatio] ratio; edited as a percent.
+                const QJsonValue v = p.value(ActionParam::Value);
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                return d >= kMinSplitRatio && d <= kMaxSplitRatio;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinSplitPercent,
+                     .max = kMaxSplitPercent,
+                     .scale = 0.01,
+                     .defaultDisplay = 50.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 11,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetMasterCount),
+        .slotFor = constantSlot(ActionSlot::MasterCount),
+        .validate =
+            [](const QJsonObject& p) {
+                // 1..kMaxMasterCount, integral (mirrors SetMaxWindows / SnapToZone).
+                const QJsonValue v = p.value(ActionParam::Value);
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                if (d < 1.0 || d > kMaxMasterCount) {
+                    return false;
+                }
+                return static_cast<double>(static_cast<int>(d)) == d;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 1.0,
+                     .max = kMaxMasterCount,
+                     .defaultDisplay = 1.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 12,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetInsertPosition),
+        .slotFor = constantSlot(ActionSlot::InsertPosition),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == InsertPositionToken::End || v == InsertPositionToken::AfterFocused
+                    || v == InsertPositionToken::AsMaster;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(InsertPositionToken::End), QString(InsertPositionToken::AfterFocused),
+                                        QString(InsertPositionToken::AsMaster)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 13,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOverflowBehavior),
+        .slotFor = constantSlot(ActionSlot::OverflowBehavior),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == OverflowBehaviorToken::Float || v == OverflowBehaviorToken::Unlimited;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{
+            .key = QString(ActionParam::Value),
+            .kind = QStringLiteral("enum"),
+            .enumWireValues = {QString(OverflowBehaviorToken::Float), QString(OverflowBehaviorToken::Unlimited)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 14,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetDragBehavior),
+        .slotFor = constantSlot(ActionSlot::DragBehavior),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == DragBehaviorToken::Float || v == DragBehaviorToken::Reorder;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(DragBehaviorToken::Float), QString(DragBehaviorToken::Reorder)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 15,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    // SetAlgorithmParam mirrors OverrideOverlayShader: a picker param (the target
+    // algorithm) plus a free-form `params` blob (the custom-parameter values,
+    // validated against the algorithm's declared schema at apply time via
+    // hasCustomParam — so the wire validator only requires the algorithm token).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetAlgorithmParam),
+        .slotFor = constantSlot(ActionSlot::AlgorithmParams),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, ActionParam::Algorithm);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Algorithm), QString(ActionParam::Params)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Algorithm), .kind = QStringLiteral("tilingAlgorithm")}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 16,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
 }
 
 } // namespace PhosphorRules

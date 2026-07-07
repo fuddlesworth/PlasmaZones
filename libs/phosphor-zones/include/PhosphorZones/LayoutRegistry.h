@@ -263,6 +263,22 @@ public:
             provider);
 
     /**
+     * @brief Inject a callback that returns a screen's orientation token
+     * ("portrait" / "landscape"), or std::nullopt when the geometry is unknown
+     * (so an orientation predicate stays inert there).
+     *
+     * The token is stamped onto every windowless context WindowQuery this
+     * registry builds (assignment, gap, lock, overlay, default-assignment,
+     * tiling-params), so an orientation rule can drive any context slot — for example a different
+     * tiling algorithm on a rotated (portrait) monitor. Orientation derives from
+     * screen geometry alone, independent of the resolved layout, so it carries no
+     * recursion risk (unlike an active-layout query). The daemon wires this to
+     * @c ScreenManager::screenGeometry. Same threading contract as
+     * @ref setTiledWindowCountProvider.
+     */
+    void setScreenOrientationProvider(std::function<std::optional<QString>(const QString& screenId)> provider);
+
+    /**
      * @brief Inject a callback that returns true when Snapping is the
      * user's preferred default mode (regardless of whether a default
      * snapping layout id is configured).
@@ -397,6 +413,58 @@ public:
     /// registry.
     ContextOverlayOverride resolveContextOverlay(const QString& screenId, int virtualDesktop,
                                                  const QString& activity) const override;
+
+    /// Resolve the per-context autotile parameter overrides (max windows / split
+    /// ratio / master count) for (screen, desktop, activity) — a per-slot read
+    /// like @ref resolveContextGaps. The daemon layers the returned values onto
+    /// the per-screen autotile override map (config stays the base; the rule wins
+    /// where present). NOT cached: called on screen / layout changes, not the hot
+    /// per-cursor path — which also lets it stamp the active layout onto the query
+    /// without a cache-key fold (there is no cache entry to go stale). Concrete
+    /// (not on the interface): the daemon holds a concrete LayoutRegistry.
+    ContextTilingParams resolveContextTilingParams(const QString& screenId, int virtualDesktop,
+                                                   const QString& activity) const;
+
+    /// Stamp the screen-orientation token onto @p query from
+    /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
+    /// returns nullopt). Called at every windowless-context query build site so a
+    /// @c Field::ScreenOrientation predicate can match regardless of which
+    /// context slot (assignment / gap / lock / overlay) is being resolved.
+    /// Orientation is geometry-derived and layout-independent, so this is safe to
+    /// call from the assignment cascade (no recursion, unlike an active-layout read).
+    /// The screen-orientation token from @ref m_screenOrientationProvider ("portrait"
+    /// / "landscape"), or an empty string when the provider is unset or returns
+    /// nullopt. Shared by @ref stampScreenOrientation (the query value) and the
+    /// cache-key fold (see @ref contextCacheKeyToken) so both read the same source.
+    QString screenOrientationToken(const QString& screenId) const
+    {
+        if (m_screenOrientationProvider) {
+            if (const auto token = m_screenOrientationProvider(screenId)) {
+                return *token;
+            }
+        }
+        return QString();
+    }
+
+    void stampScreenOrientation(PhosphorRules::WindowQuery& query, const QString& screenId) const
+    {
+        query.screenOrientation = screenOrientationToken(screenId);
+    }
+
+    /// Compose the extra cache-key token a daemon-facing context resolver (gap /
+    /// lock / overlay / default-assignment) passes to @ref resolveCachedContext,
+    /// folding in the placement @p modeToken (empty for the non-gap resolvers), the
+    /// @p activeLayoutId, and the @p orientationToken. Both the active layout AND
+    /// the screen orientation are NON-rule-set inputs — each can change without a
+    /// rule-set revision bump (the layout via the external global-default provider,
+    /// the orientation via a live monitor rotation) — so, exactly like the
+    /// tiledWindowCount "twc:" token, they must ride the cache KEY rather than the
+    /// value, or the change would return a stale hit. See resolveCachedContext.
+    static QString contextCacheKeyToken(const QString& modeToken, const QString& activeLayoutId,
+                                        const QString& orientationToken)
+    {
+        return modeToken + QLatin1String("|al:") + activeLayoutId + QLatin1String("|or:") + orientationToken;
+    }
 
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());
@@ -681,9 +749,10 @@ private:
     /// the caller's (layoutForScreen) retry loop.
     ///
     /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
-    /// by (screenId, virtualDesktop, activity) plus a "twc:N" tiled-window-count
-    /// token (empty when the count is unknown), so a count change yields a fresh
-    /// entry rather than a stale hit while count-steady callers keep hitting the
+    /// by (screenId, virtualDesktop, activity) plus a "twc:N|or:<token>"
+    /// composite of the tiled-window-count and screen-orientation tokens (each
+    /// empty when unknown), so a count or rotation change yields a fresh entry
+    /// rather than a stale hit while steady callers keep hitting the
     /// cache. The cache is invalidated
     /// lazily by comparing the bound rule set's monotonic
     /// @c RuleSet::revision() against the snapshot taken on the last
@@ -814,16 +883,20 @@ private:
         QString screenId;
         int virtualDesktop = 0;
         QString activity;
-        // A free-form fourth key dimension, used by two resolvers that share the
-        // ContextResolveKey type but never the same cache container. For the gap
-        // cascade it carries the placement-mode wire token, because the SAME
-        // (screen, desktop, activity) resolves DIFFERENT gaps per mode and
-        // caching without it would return the snapping result for a subsequent
-        // tiling query. For the assignment resolver it carries a "twc:N"
-        // tiled-window-count token (empty when the count is unknown), so a count
-        // change yields a fresh entry rather than a stale hit. The lock,
-        // default-assignment, and overlay resolvers leave it empty. Each resolver
-        // owns its own cache hash, so the two token vocabularies never collide.
+        // A free-form fourth key dimension, used by the context resolvers that
+        // share the ContextResolveKey type but never the same cache container. It
+        // folds in every non-rule-set input the resolved value depends on, so a
+        // change in one yields a fresh entry rather than a stale hit:
+        //   - gap cascade: contextCacheKeyToken(mode, activeLayout, orientation) —
+        //     the SAME (screen, desktop, activity) resolves DIFFERENT gaps per
+        //     placement mode, active layout, and screen orientation.
+        //   - lock / default-assignment / overlay: contextCacheKeyToken with an
+        //     empty mode (they are mode-agnostic) plus activeLayout (except
+        //     default-assignment, which omits it to avoid recursion) and orientation.
+        //   - assignment resolver: "twc:N|or:<token>" — the tiled-window-count and
+        //     the screen orientation (it does not read the active layout).
+        // Each resolver owns its own cache hash, so the token vocabularies never
+        // collide.
         QString mode;
         bool operator==(const ContextResolveKey& other) const noexcept
         {
@@ -883,9 +956,10 @@ private:
     /// Holds ONLY what the rule set produced for each of the three independent
     /// slots. Given a fixed cache key the value is a pure function of the rule
     /// set (the cache's revision-invalidation contract). The live tiled-window
-    /// count is the one non-rule-set input that affects the result; rather than
-    /// break that contract it participates in the cache KEY (the "twc:N" token),
-    /// so each count resolves its own entry. The global default — an external
+    /// count and the screen orientation are the non-rule-set inputs that affect
+    /// the result; rather than break that contract they participate in the cache
+    /// KEY (the "twc:N" and "|or:<token>" components), so each combination resolves
+    /// its own entry. The global default — an external
     /// provider, not part of the rule set and not revision-tracked — is folded
     /// in AFTER the cache returns, so a default-setting change is reflected
     /// immediately without a rule-set revision bump (a settings edit produces
@@ -960,6 +1034,11 @@ private:
     /// can match @c Field::TiledWindowCount. See @ref setTiledWindowCountProvider.
     std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)>
         m_tiledWindowCountProvider;
+    /// Empty = provider unset. Returns a screen's orientation token
+    /// ("portrait" / "landscape"), or nullopt when geometry is unknown. Stamped
+    /// onto every windowless context query so a Field::ScreenOrientation predicate
+    /// can match. See @ref setScreenOrientationProvider.
+    std::function<std::optional<QString>(const QString& screenId)> m_screenOrientationProvider;
     /// Empty = provider unset (legacy behaviour). Returns true when
     /// the user has snapping mode enabled in settings, regardless of
     /// whether a global default snap layout id is configured. See

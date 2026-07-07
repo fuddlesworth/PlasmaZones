@@ -255,6 +255,9 @@ void WindowDragAdaptor::cancelSnap()
     m_triggerReleasedAfterCancel = false;
     m_activationToggled = false;
     m_prevTriggerHeld = false;
+    // Clear the reorder latch alongside the other per-drag latches so cancelSnap
+    // is symmetric with resetDragState (it doesn't route through resetDragState).
+    m_dragReorderActive = false;
     m_currentZoneId.clear();
     m_currentZoneGeometry = QRect();
     m_currentAdjacentZoneIds.clear();
@@ -718,6 +721,11 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_activationToggled = false;
     m_prevTriggerHeld = false;
     m_wasSnapped = false;
+    // Per-drag reorder latch: cleared here alongside the sibling latches so the
+    // shared teardown (cancelSnap, clearForCompositorReconnect) leaves no stale
+    // true for the next drag. endDrag also clears it directly before its own
+    // early-return branches that don't route through resetDragState.
+    m_dragReorderActive = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     // m_overlayIdled is intentionally NOT cleared here. Each drag-end

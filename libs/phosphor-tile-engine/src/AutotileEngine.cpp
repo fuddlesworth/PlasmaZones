@@ -1464,6 +1464,11 @@ int AutotileEngine::effectiveMaxWindows(const QString& screenId) const
     return m_configResolver->effectiveMaxWindows(screenId);
 }
 
+PhosphorTiles::AutotileInsertPosition AutotileEngine::effectiveInsertPosition(const QString& screenId) const
+{
+    return m_configResolver->effectiveInsertPosition(screenId);
+}
+
 qreal AutotileEngine::effectiveSplitRatioStep(const QString& screenId) const
 {
     return m_configResolver->effectiveSplitRatioStep(screenId);
@@ -1983,7 +1988,7 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     if (ctx.insertIndex >= 0 && ctx.dropPos.isNull()) {
         state->addWindow(windowId, ctx.insertIndex);
     } else if (ctx.dropPos.isNull()) {
-        insertWindowByConfigOrder(state, windowId);
+        insertWindowByConfigOrder(state, windowId, ctx.toScreenId);
     } else {
         state->addWindow(windowId);
     }
@@ -3198,7 +3203,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
 
     if (!inserted) {
         // Insert based on config preference
-        insertWindowByConfigOrder(state, windowId);
+        insertWindowByConfigOrder(state, windowId, screenId);
     }
 
     // Float restore is handled entirely by the record take() above (a floating
@@ -3220,9 +3225,15 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     return true;
 }
 
-void AutotileEngine::insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId)
+void AutotileEngine::insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId,
+                                               const QString& screenId)
 {
-    switch (m_config->insertPosition) {
+    // Per-screen resolution: a per-screen config override or a context
+    // SetInsertPosition rule wins over the global config for this window's screen.
+    // The screen is passed in (NOT derived via screenForWindow) because the window
+    // is not yet keyed at either call site — screenForWindow would fall back to the
+    // primary screen and both ignore a non-primary override and spam a warning.
+    switch (effectiveInsertPosition(screenId)) {
     case AutotileConfig::InsertPosition::End:
         state->addWindow(windowId);
         break;
@@ -3388,6 +3399,18 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
                 }
             }
             // else: algorithm doesn't support custom params — don't pass any
+        }
+    }
+    // Layer a per-context SetAlgorithmParam rule override on top of the config
+    // (rule wins per-param). The daemon injected these only when the rule's target
+    // algorithm is this screen's effective algorithm; the hasCustomParam filter is
+    // a second guard so a stale key for another algorithm is dropped.
+    if (m_configResolver && algo->supportsCustomParams()) {
+        const QVariantMap ruleParams = m_configResolver->effectiveCustomParamsOverride(screenId);
+        for (auto pit = ruleParams.constBegin(); pit != ruleParams.constEnd(); ++pit) {
+            if (algo->hasCustomParam(pit.key())) {
+                customParams[pit.key()] = pit.value();
+            }
         }
     }
 

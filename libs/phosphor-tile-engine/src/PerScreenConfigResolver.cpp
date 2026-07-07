@@ -36,6 +36,11 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
         return;
     }
 
+    // Capture the previous override map BEFORE overwriting so removed stateful
+    // keys can be reverted below (splitRatio / masterCount live on TilingState,
+    // not re-resolved per retile like maxWindows / insertPosition / overflow).
+    const QVariantMap previous = m_perScreenOverrides.value(screenId);
+
     // Store overrides so effective*() helpers and connectToSettings handlers
     // can resolve per-screen values and skip screens with overrides.
     m_perScreenOverrides[screenId] = overrides;
@@ -45,35 +50,65 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
         return;
     }
 
-    // Apply PhosphorTiles::TilingState-level overrides (splitRatio, masterCount)
+    // Apply PhosphorTiles::TilingState-level overrides (splitRatio, masterCount).
+    // These are STATEFUL: an unset key normally means "leave the state alone" so a
+    // user's live drag-adjusted split / master count survives an unrelated
+    // updateAutotileScreens pass. But if the key was PRESENT in the previous map
+    // and is now gone (a SetSplitRatio / SetMasterCount rule was removed while the
+    // map stayed non-empty), the state would keep the stale rule value — so revert
+    // it to the global config baseline, matching clearPerScreenConfig.
     auto it = overrides.constFind(QString(PerScreenKeys::SplitRatio));
     if (it != overrides.constEnd()) {
         state->setSplitRatio(qBound(PhosphorTiles::AutotileDefaults::MinSplitRatio, it->toDouble(),
                                     PhosphorTiles::AutotileDefaults::MaxSplitRatio));
+    } else if (previous.contains(QString(PerScreenKeys::SplitRatio))) {
+        // Removed (was an override, now gone) → revert to the config baseline. NOT
+        // gated on the Algorithm key: concrete-algorithm screens ALWAYS carry the
+        // injected Algorithm key, so an Algorithm-presence guard would leave the stale
+        // removed-rule ratio on exactly those screens. Branch 3 below runs AFTER this,
+        // so on a GENUINE algorithm change it overwrites this baseline with the new
+        // algo's default (the correct end state); on an unchanged / absent algorithm
+        // this baseline stands. A never-was-an-override live value is untouched (the
+        // previous.contains guard).
+        state->setSplitRatio(m_engine->config()->splitRatio);
     }
 
     it = overrides.constFind(QString(PerScreenKeys::MasterCount));
     if (it != overrides.constEnd()) {
         state->setMasterCount(qBound(PhosphorTiles::AutotileDefaults::MinMasterCount, it->toInt(),
                                      PhosphorTiles::AutotileDefaults::MaxMasterCount));
+    } else if (previous.contains(QString(PerScreenKeys::MasterCount))) {
+        // Removed → revert to the global config baseline (no per-algorithm default).
+        state->setMasterCount(m_engine->config()->masterCount);
     }
 
-    // If algorithm changed and split ratio wasn't explicitly overridden,
-    // reset to the new algorithm's default (matching setAlgorithm() logic).
+    // If the per-screen algorithm ACTUALLY CHANGED and split ratio wasn't
+    // explicitly overridden, reset it to the new algorithm's default — matching
+    // setAlgorithm(), which early-returns when the id is unchanged. The daemon
+    // always injects the Algorithm key for concrete-algorithm autotile screens, so
+    // gating on mere key PRESENCE would reset the split ratio on every unrelated
+    // override change (e.g. a SetMaxWindows rule edit, now that a rule edit rebuilds
+    // the overrides map and re-applies), silently discarding a user's live
+    // drag-tuned ratio. Comparing against the previous override map's algorithm
+    // fires the reset only on a genuine switch, where dropping the tuning is correct
+    // (setAlgorithm clears user tunings on a real change too).
     it = overrides.constFind(QString(PerScreenKeys::Algorithm));
     if (it != overrides.constEnd()) {
-        QString algoId = it->toString();
-        auto* registry = m_engine->algorithmRegistry();
-        PhosphorTiles::TilingAlgorithm* newAlgo = registry->algorithm(algoId);
-        if (newAlgo) {
-            if (!overrides.contains(QString(PerScreenKeys::SplitRatio))) {
+        const QString algoId = it->toString();
+        const QString previousAlgo = previous.value(QString(PerScreenKeys::Algorithm)).toString();
+        if (algoId != previousAlgo && !overrides.contains(QString(PerScreenKeys::SplitRatio))) {
+            if (auto* newAlgo = m_engine->algorithmRegistry()->algorithm(algoId)) {
                 state->setSplitRatio(newAlgo->defaultSplitRatio());
             }
         }
     }
 
-    // Gap overrides (InnerGap, OuterGap, SmartGaps) and RespectMinimumSize are
-    // resolved at retile time via effective*() helpers in recalculateLayout().
+    // The remaining overrides are NOT written to the state here — they are
+    // resolved at retile time via effective*() helpers in recalculateLayout():
+    // gaps (InnerGap, OuterGap, SmartGaps), RespectMinimumSize, MaxWindows,
+    // InsertPosition, OverflowBehavior, and CustomParams. Only SplitRatio and
+    // MasterCount are stateful (handled above), which is why only those two need
+    // an explicit revert-on-removal.
 
     // Schedule a deferred retile so the new config takes effect. Deferred (not
     // immediate) to coalesce with other pending retiles — e.g., when applyEntry()
@@ -274,6 +309,38 @@ bool PerScreenConfigResolver::effectiveSmartGaps(const QString& screenId) const
     return m_engine->config()->smartGaps;
 }
 
+QVariantMap PerScreenConfigResolver::effectiveCustomParamsOverride(const QString& screenId) const
+{
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::CustomParams))) {
+        return v->toMap();
+    }
+    return {};
+}
+
+PhosphorTiles::AutotileOverflowBehavior
+PerScreenConfigResolver::effectiveOverflowBehavior(const QString& screenId) const
+{
+    // Per-screen override (config store OR a folded-in context rule) → global config.
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::OverflowBehavior))) {
+        const int clamped = qBound(PhosphorTiles::AutotileDefaults::MinOverflowBehavior, v->toInt(),
+                                   PhosphorTiles::AutotileDefaults::MaxOverflowBehavior);
+        return static_cast<PhosphorTiles::AutotileOverflowBehavior>(clamped);
+    }
+    return m_engine->config()->overflowBehavior;
+}
+
+PhosphorTiles::AutotileInsertPosition PerScreenConfigResolver::effectiveInsertPosition(const QString& screenId) const
+{
+    // Per-screen override (config store OR a folded-in tiling rule) → global config.
+    // The stored value is the enum's underlying int, clamped to the valid range.
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::InsertPosition))) {
+        const int clamped = qBound(PhosphorTiles::AutotileDefaults::MinInsertPosition, v->toInt(),
+                                   PhosphorTiles::AutotileDefaults::MaxInsertPosition);
+        return static_cast<PhosphorTiles::AutotileInsertPosition>(clamped);
+    }
+    return m_engine->config()->insertPosition;
+}
+
 bool PerScreenConfigResolver::effectiveRespectMinimumSize(const QString& screenId) const
 {
     if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::RespectMinimumSize)))
@@ -287,15 +354,16 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
     //    over global Unlimited mode so users can clamp individual screens
     //    (e.g. keep a secondary monitor at maxWindows=3 while the primary
     //    runs unlimited).
-    if (auto v = perScreenOverride(screenId, PerScreenKeys::MaxWindows))
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::MaxWindows)))
         return qBound(PhosphorTiles::AutotileDefaults::MinMaxWindows, v->toInt(),
                       PhosphorTiles::AutotileDefaults::MaxMaxWindows);
 
-    // 2. Global Unlimited: Krohnkite-style "no cap". The sentinel
-    //    (PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel) is passed to std::min
-    //    in recalculateLayout, making the clamp idempotent. Also opens
-    //    onWindowAdded's gate (tiledWindowCount >= maxWin is never true).
-    if (m_engine->config()->overflowBehavior == PhosphorTiles::AutotileOverflowBehavior::Unlimited) {
+    // 2. Unlimited: Krohnkite-style "no cap". Per-screen (a context
+    //    SetOverflowBehavior rule or per-screen config override else global). The
+    //    sentinel (PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel) is
+    //    passed to std::min in recalculateLayout, making the clamp idempotent. Also
+    //    opens onWindowAdded's gate (tiledWindowCount >= maxWin is never true).
+    if (effectiveOverflowBehavior(screenId) == PhosphorTiles::AutotileOverflowBehavior::Unlimited) {
         return PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel;
     }
 
@@ -328,7 +396,7 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
 
 qreal PerScreenConfigResolver::effectiveSplitRatioStep(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, PerScreenKeys::SplitRatioStep))
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::SplitRatioStep)))
         return qBound(PhosphorTiles::AutotileDefaults::MinSplitRatioStep, v->toDouble(),
                       PhosphorTiles::AutotileDefaults::MaxSplitRatioStep);
     return m_engine->config()->splitRatioStep;
@@ -336,7 +404,7 @@ qreal PerScreenConfigResolver::effectiveSplitRatioStep(const QString& screenId) 
 
 QString PerScreenConfigResolver::effectiveAlgorithmId(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, PerScreenKeys::Algorithm))
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::Algorithm)))
         return v->toString();
     return m_engine->m_algorithmId;
 }

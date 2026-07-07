@@ -52,6 +52,26 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     // never per-window.
     ActionType::OverrideOverlayShader,
     ActionType::OverrideOverlayStyle,
+    // Overlay-APPEARANCE overrides (colours / opacities / border dimensions /
+    // zone-number visibility) are context-domain too — resolved in the same
+    // resolveContextOverlay pass, layered over the global Snapping.Zones.* config.
+    ActionType::SetOverlayHighlightColor,
+    ActionType::SetOverlayInactiveColor,
+    ActionType::SetOverlayBorderColor,
+    ActionType::SetOverlayActiveOpacity,
+    ActionType::SetOverlayInactiveOpacity,
+    ActionType::SetOverlayBorderWidth,
+    ActionType::SetOverlayBorderRadius,
+    ActionType::SetOverlayShowZoneNumbers,
+    // Autotile parameter overrides are context-domain — resolved per
+    // screen/desktop/activity and layered onto the per-screen override map.
+    ActionType::SetMaxWindows,
+    ActionType::SetSplitRatio,
+    ActionType::SetMasterCount,
+    ActionType::SetInsertPosition,
+    ActionType::SetOverflowBehavior,
+    ActionType::SetDragBehavior,
+    ActionType::SetAlgorithmParam,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -74,6 +94,10 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::SetBorderRadius,
     ActionType::SetBorderColorActive,
     ActionType::SetBorderColorInactive,
+    // Per-window restore-policy overrides — window-domain, resolved daemon-side
+    // (managed-restore predicate / drag-out unsnap paths), like RestorePosition.
+    ActionType::SetRestoreToZoneOnLogin,
+    ActionType::SetRestoreSizeOnUnsnap,
 };
 } // namespace
 
@@ -423,6 +447,201 @@ private Q_SLOTS:
             const auto roundTripped = RuleAction::fromJson(reloaded->toJson());
             QVERIFY2(roundTripped.has_value(), type.data());
             QCOMPARE(*roundTripped, *reloaded);
+        }
+    }
+
+    // ── overlay-appearance actions (context-domain) ──
+
+    void testOverlayColorActions_hexOnlyNoAccent()
+    {
+        // The overlay colour actions require a concrete hex — unlike the border
+        // colour actions they REJECT the accent sentinel (their consumer resolves
+        // no token). This is the load-time guard behind that contract.
+        for (const QLatin1StringView type : {ActionType::SetOverlayHighlightColor, ActionType::SetOverlayInactiveColor,
+                                             ActionType::SetOverlayBorderColor}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            // Missing value — rejected.
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            // The accent sentinel is rejected here (accepted only for border colours).
+            o.insert(QStringLiteral("value"), QString(BorderColorToken::Accent));
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("red")); // named colour rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            // Standard QColor hex shapes accepted.
+            for (const QString& good :
+                 {QStringLiteral("#abc"), QStringLiteral("#FF0000"), QStringLiteral("#80FF0000")}) {
+                o.insert(QStringLiteral("value"), good);
+                QVERIFY2(RuleAction::fromJson(o).has_value(), qPrintable(good));
+            }
+        }
+    }
+
+    void testOverlayOpacityActions_range()
+    {
+        // Active / inactive overlay opacity carry a [0, 1] double, same shape as
+        // SetOpacity — reject out-of-range and non-numeric payloads.
+        for (const QLatin1StringView type :
+             {ActionType::SetOverlayActiveOpacity, ActionType::SetOverlayInactiveOpacity}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), 1.5); // > 1 rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), -0.1); // < 0 rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("0.5")); // non-numeric rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 0.5); // in range accepted
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+        }
+    }
+
+    void testOverlayDimensionActions_range()
+    {
+        // Overlay border width (0-10) and radius (0-50) carry a number; reject
+        // out-of-range and non-numeric, accept in-range.
+        struct DimCase
+        {
+            QLatin1StringView type;
+            double over;
+        };
+        for (const DimCase& c :
+             {DimCase{ActionType::SetOverlayBorderWidth, 11.0}, DimCase{ActionType::SetOverlayBorderRadius, 51.0}}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(c.type));
+            o.insert(QStringLiteral("value"), c.over); // above max rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), c.type.data());
+            o.insert(QStringLiteral("value"), -1.0); // negative rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), c.type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("2")); // non-numeric rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), c.type.data());
+            o.insert(QStringLiteral("value"), 4); // in range accepted
+            QVERIFY2(RuleAction::fromJson(o).has_value(), c.type.data());
+        }
+        // SetOverlayShowZoneNumbers requires a JSON bool.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetOverlayShowZoneNumbers));
+            o.insert(QStringLiteral("value"), 1); // number rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), true);
+            QVERIFY(RuleAction::fromJson(o).has_value());
+        }
+    }
+
+    void testRestorePolicyActions_requireBool()
+    {
+        // The per-window restore-policy actions carry a JSON bool; a non-bool
+        // payload is rejected at load, a bool accepted.
+        for (const QLatin1StringView type : {ActionType::SetRestoreToZoneOnLogin, ActionType::SetRestoreSizeOnUnsnap}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data()); // missing value
+            o.insert(QStringLiteral("value"), 1); // number rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), false);
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+        }
+    }
+
+    // ── autotile parameter actions (context-domain) ──
+
+    void testTilingParamActions_range()
+    {
+        // SetMaxWindows: 1..12, integer count.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetMaxWindows));
+            o.insert(QStringLiteral("value"), 0); // below 1 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 13); // above 12 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 4.5); // non-integral rejected (not truncated)
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 4); // in range accepted
+            QVERIFY(RuleAction::fromJson(o).has_value());
+        }
+        // SetSplitRatio: wire is the [0.1, 0.9] ratio.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetSplitRatio));
+            o.insert(QStringLiteral("value"), 0.05); // below 0.1 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 0.95); // above 0.9 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), QStringLiteral("0.5")); // non-numeric rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 0.6); // in range accepted
+            QVERIFY(RuleAction::fromJson(o).has_value());
+        }
+        // SetMasterCount: 1..5, integer count.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetMasterCount));
+            o.insert(QStringLiteral("value"), 0); // below 1 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 6); // above 5 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 2.5); // non-integral rejected (not truncated)
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 2); // in range accepted
+            QVERIFY(RuleAction::fromJson(o).has_value());
+        }
+        // SetInsertPosition: closed enum vocabulary.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetInsertPosition));
+            o.insert(QStringLiteral("value"), QStringLiteral("middle")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (const QLatin1StringView token :
+                 {InsertPositionToken::End, InsertPositionToken::AfterFocused, InsertPositionToken::AsMaster}) {
+                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
+                QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
+            }
+        }
+        // SetOverflowBehavior: closed enum vocabulary.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetOverflowBehavior));
+            o.insert(QStringLiteral("value"), QStringLiteral("cap")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (const QLatin1StringView token : {OverflowBehaviorToken::Float, OverflowBehaviorToken::Unlimited}) {
+                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
+                QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
+            }
+        }
+        // SetDragBehavior: closed enum vocabulary.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetDragBehavior));
+            o.insert(QStringLiteral("value"), QStringLiteral("swap")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (const QLatin1StringView token : {DragBehaviorToken::Float, DragBehaviorToken::Reorder}) {
+                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
+                QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
+            }
+        }
+        // SetAlgorithmParam: requires a non-empty algorithm token; the params blob
+        // is free-form (validated against the algorithm schema at apply time).
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetAlgorithmParam));
+            QVERIFY(!RuleAction::fromJson(o).has_value()); // no algorithm → rejected
+            o.insert(QStringLiteral("algorithm"), QString()); // empty → rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("algorithm"), QStringLiteral("bsp"));
+            QVERIFY(RuleAction::fromJson(o).has_value()); // algorithm alone → accepted
+            QJsonObject blob;
+            blob.insert(QStringLiteral("ratio"), 0.7);
+            o.insert(QStringLiteral("params"), blob); // params allowed alongside
+            const auto reloaded = RuleAction::fromJson(o);
+            QVERIFY(reloaded.has_value());
+            QCOMPARE(
+                reloaded->params.value(QStringLiteral("params")).toObject().value(QStringLiteral("ratio")).toDouble(),
+                0.7);
+            // An unexpected key is still rejected (strict allowedKeys = {algorithm, params}).
+            o.insert(QStringLiteral("bogus"), 1);
+            QVERIFY(!RuleAction::fromJson(o).has_value());
         }
     }
 

@@ -119,6 +119,7 @@ SettingsController::~SettingsController()
         m_rulesPage->setScreenLookup({});
         m_rulesPage->setActivityLookup({});
         m_rulesPage->setZoneLookup({});
+        m_rulesPage->setVirtualDesktopLookup({});
         m_rulesPage->setSnappingLayoutLookup({});
         m_rulesPage->setTilingAlgorithmLookup({});
         // The shader resolver captures `this` and reaches m_animationShaderRegistry;
@@ -561,6 +562,17 @@ SettingsController::SettingsController(QObject* parent)
             }
         }
         return activityId;
+    });
+    m_rulesPage->setVirtualDesktopLookup([this](const QString& desktopNumber) -> QString {
+        // Desktop numbers are 1-based; the names list is 0-indexed. Return the name
+        // for a valid in-range number; an out-of-range / unnamed / unparseable value
+        // returns empty so the summary falls back to the bare number.
+        bool ok = false;
+        const int num = desktopNumber.toInt(&ok);
+        if (ok && num >= 1 && num <= m_virtualDesktopNames.size()) {
+            return m_virtualDesktopNames.at(num - 1);
+        }
+        return QString();
     });
     // Zone (snap-zone UUID) → friendly "<layout> — <zone>" label, walking the
     // local manual layouts for the zone whose id matches. Resolved live so a

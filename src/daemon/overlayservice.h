@@ -45,6 +45,7 @@ class PhosphorProfileRegistry;
 namespace PhosphorZones {
 class IZoneLayoutRegistry;
 class Zone;
+struct ContextOverlayOverride;
 }
 
 namespace PhosphorLayout {
@@ -567,10 +568,11 @@ private:
     /// the keep-visible bar) both go through here so the trigger geometry
     /// matches the rendered popup row count.
     LayoutIncludeFlags resolvePerScreenLayoutInclude(const QString& screenId) const;
-    QVariantMap zoneToVariantMap(PhosphorZones::Zone* zone, QScreen* screen,
-                                 PhosphorZones::Layout* layout = nullptr) const;
+    // overlayOverride is resolved once per screen by the caller (screen-invariant
+    // across zones) and threaded in, rather than re-resolved per zone.
     QVariantMap zoneToVariantMap(PhosphorZones::Zone* zone, const QString& screenId, QScreen* physScreen,
-                                 const QRect& overlayGeometry, PhosphorZones::Layout* layout = nullptr) const;
+                                 const QRect& overlayGeometry, PhosphorZones::Layout* layout,
+                                 const PhosphorZones::ContextOverlayOverride& overlayOverride) const;
 
     /**
      * @brief Resolve the layout for a given screen with fallback chain

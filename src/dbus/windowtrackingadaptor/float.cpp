@@ -40,8 +40,9 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     setWindowFloating(windowId, true);
 
     // Restore pre-snap size (not position — window stays where the user dropped it).
-    // This mirrors the activated-drag path in WindowDragAdaptor::dragStopped.
-    if (m_settings && m_settings->restoreOriginalSizeOnUnsnap()) {
+    // This mirrors the activated-drag path in WindowDragAdaptor::dragStopped. A
+    // matched SetRestoreSizeOnUnsnap rule overrides the global setting per window.
+    if (shouldRestoreSizeOnUnsnap(windowId)) {
         auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
         if (geo) {
             Q_EMIT applyGeometryRequested(windowId, 0, 0, geo->width(), geo->height(), QString(), screenId, true);

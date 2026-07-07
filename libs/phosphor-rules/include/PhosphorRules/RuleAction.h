@@ -341,6 +341,27 @@ inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
 /// zone overlay. Resolved daemon-side via `LayoutRegistry::resolveContextOverlay`.
 inline constexpr QLatin1StringView OverrideOverlayShader{"overrideOverlayShader"};
 inline constexpr QLatin1StringView OverrideOverlayStyle{"overrideOverlayStyle"};
+/// Context-domain overrides of the active layout's zone-overlay APPEARANCE —
+/// the colours, opacities, border dimensions and zone-number visibility that
+/// the global `Snapping.Zones.*` config sets. Each is its own slot so
+/// independent rules cascade per-property, mirroring the per-window border
+/// family. A matched context rule (screen / desktop / activity) overrides the
+/// corresponding global setting for that context's overlay; an unset property
+/// falls through to the global config value (config stays authoritative — these
+/// only layer on top). Resolved daemon-side via
+/// `LayoutRegistry::resolveContextOverlay` and consumed by the overlay service.
+/// Colours carry a `#AARRGGBB` hex (`ActionParam::Value`); opacities a [0,1]
+/// double; widths/radii a number; show-zone-numbers a bool. Unlike the border
+/// colour actions there is NO accent sentinel — the overlay consumer resolves
+/// no token, so the value is always a concrete hex.
+inline constexpr QLatin1StringView SetOverlayHighlightColor{"setOverlayHighlightColor"};
+inline constexpr QLatin1StringView SetOverlayInactiveColor{"setOverlayInactiveColor"};
+inline constexpr QLatin1StringView SetOverlayBorderColor{"setOverlayBorderColor"};
+inline constexpr QLatin1StringView SetOverlayActiveOpacity{"setOverlayActiveOpacity"};
+inline constexpr QLatin1StringView SetOverlayInactiveOpacity{"setOverlayInactiveOpacity"};
+inline constexpr QLatin1StringView SetOverlayBorderWidth{"setOverlayBorderWidth"};
+inline constexpr QLatin1StringView SetOverlayBorderRadius{"setOverlayBorderRadius"};
+inline constexpr QLatin1StringView SetOverlayShowZoneNumbers{"setOverlayShowZoneNumbers"};
 /// Disable every animation override on a matched window. The opposite of
 /// the OverrideAnimation* family — the effect's shouldAnimateWindow gate
 /// surfaces this as "no animation for this window, regardless of other
@@ -360,6 +381,21 @@ inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 /// SnapEngine::resolveWindowRestore and AutotileEngine::insertWindow. Domain
 /// Window (matches window properties).
 inline constexpr QLatin1StringView RestorePosition{"restorePosition"};
+
+/// Per-window override for the "restore snapped windows to their zone on login"
+/// setting. A boolean `value`: false suppresses zone restore for the matched
+/// window (it reopens wherever the session put it), true forces it on even when
+/// the global `restoreWindowsToZonesOnLogin` setting is off. Resolved by the
+/// daemon-injected managed-restore predicate. Domain Window. The snapped-to-zone
+/// analogue of RestorePosition (which covers FLOATED windows).
+inline constexpr QLatin1StringView SetRestoreToZoneOnLogin{"setRestoreToZoneOnLogin"};
+
+/// Per-window override for the "restore original size when unsnapped" setting. A
+/// boolean `value`: false suppresses the pre-snap size restore for the matched
+/// window (it keeps the zone size after unsnap), true forces it on even when the
+/// global `restoreOriginalSizeOnUnsnap` setting is off. Consulted daemon-side on
+/// the drag-out / drop / cursor-left-zones unsnap paths. Domain Window.
+inline constexpr QLatin1StringView SetRestoreSizeOnUnsnap{"setRestoreSizeOnUnsnap"};
 
 // ── Per-window border / title-bar appearance overrides (domain Window) ──
 // Effect-side per-window overrides of the global snap appearance. Each is its
@@ -392,6 +428,35 @@ inline constexpr QLatin1StringView SetOuterGapTop{"setOuterGapTop"};
 inline constexpr QLatin1StringView SetOuterGapBottom{"setOuterGapBottom"};
 inline constexpr QLatin1StringView SetOuterGapLeft{"setOuterGapLeft"};
 inline constexpr QLatin1StringView SetOuterGapRight{"setOuterGapRight"};
+
+// ── Per-context autotile parameter overrides (domain Context) ──
+// Override the global (or per-screen config) tiling parameters for the matched
+// screen / desktop / activity. Layered ON TOP of config by the daemon when it
+// builds the per-screen autotile override map (config stays authoritative; the
+// rule wins where present). Each carries a single numeric `value`.
+inline constexpr QLatin1StringView SetMaxWindows{"setMaxWindows"};
+inline constexpr QLatin1StringView SetSplitRatio{"setSplitRatio"};
+inline constexpr QLatin1StringView SetMasterCount{"setMasterCount"};
+/// Where a newly-opened window is inserted into the autotile stack. Carries a
+/// closed enum token (`ActionParam::Value`, InsertPositionToken). Context domain;
+/// layered onto the per-screen override map like the other tiling params.
+inline constexpr QLatin1StringView SetInsertPosition{"setInsertPosition"};
+/// How the autotile stack handles windows beyond the max: float the overflow, or
+/// go unlimited (ignore the cap). Closed enum token (OverflowBehaviorToken).
+/// Context domain; layered onto the per-screen override map like the other params.
+inline constexpr QLatin1StringView SetOverflowBehavior{"setOverflowBehavior"};
+/// How dragging a tiled window behaves: float it out, or reorder it within the
+/// stack (Krohnkite-style drag-to-swap). Closed enum token (DragBehaviorToken).
+/// Context domain; consumed by the drag adaptor (NOT the tile-engine override
+/// map) — it resolves the effective behavior for the drag's screen.
+inline constexpr QLatin1StringView SetDragBehavior{"setDragBehavior"};
+/// Override an autotile algorithm's custom (Luau-declared) parameters for the
+/// matched context. Carries the target algorithm token (`ActionParam::Algorithm`)
+/// and a free-form nested `params` object (`ActionParam::Params`) of the custom
+/// parameter values — the same shape OverrideOverlayShader uses for shader
+/// uniforms. Applied only when the target algorithm is the screen's effective
+/// algorithm; layered over the global per-algorithm config. Context domain.
+inline constexpr QLatin1StringView SetAlgorithmParam{"setAlgorithmParam"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -460,6 +525,30 @@ inline constexpr QLatin1StringView Rectangles{"rectangles"}; ///< OverlayDisplay
 inline constexpr QLatin1StringView Preview{"preview"}; ///< OverlayDisplayMode::LayoutPreview (1)
 } // namespace OverlayStyleToken
 
+/// Wire tokens for SetInsertPosition's `value` param — the closed vocabulary the
+/// descriptor validator, the daemon consumer (LayoutRegistry::resolveContextTilingParams
+/// maps token → the AutotileInsertPosition int), and the settings label layers all
+/// read from this single source. Ints match PhosphorTiles::AutotileInsertPosition.
+namespace InsertPositionToken {
+inline constexpr QLatin1StringView End{"end"}; ///< AutotileInsertPosition::End (0)
+inline constexpr QLatin1StringView AfterFocused{"afterFocused"}; ///< AfterFocused (1)
+inline constexpr QLatin1StringView AsMaster{"asMaster"}; ///< AsMaster (2)
+} // namespace InsertPositionToken
+
+/// Wire tokens for SetOverflowBehavior's `value` param. Ints match
+/// PhosphorTiles::AutotileOverflowBehavior (Float 0 / Unlimited 1).
+namespace OverflowBehaviorToken {
+inline constexpr QLatin1StringView Float{"float"}; ///< AutotileOverflowBehavior::Float (0)
+inline constexpr QLatin1StringView Unlimited{"unlimited"}; ///< Unlimited (1)
+} // namespace OverflowBehaviorToken
+
+/// Wire tokens for SetDragBehavior's `value` param. Ints match
+/// PhosphorTiles::AutotileDragBehavior (Float 0 / Reorder 1).
+namespace DragBehaviorToken {
+inline constexpr QLatin1StringView Float{"float"}; ///< AutotileDragBehavior::Float (0)
+inline constexpr QLatin1StringView Reorder{"reorder"}; ///< Reorder (1)
+} // namespace DragBehaviorToken
+
 /// Sentinel value a `SetBorderColorActive` / `SetBorderColorInactive` `value`
 /// param may carry instead of a hex string, meaning "track the live system
 /// accent colour". The
@@ -500,6 +589,10 @@ inline constexpr QLatin1StringView RouteScreen{"route-screen"};
 inline constexpr QLatin1StringView RouteDesktop{"route-desktop"};
 inline constexpr QLatin1StringView Opacity{"opacity"};
 inline constexpr QLatin1StringView RestorePosition{"restore-position"};
+// Per-window restore-policy overrides (one slot each). Filled by
+// SetRestoreToZoneOnLogin / SetRestoreSizeOnUnsnap, read daemon-side.
+inline constexpr QLatin1StringView RestoreToZoneOnLogin{"restore-to-zone-on-login"};
+inline constexpr QLatin1StringView RestoreSizeOnUnsnap{"restore-size-on-unsnap"};
 // Per-window border / title-bar appearance slots (one per property so
 // independent rules cascade per-property).
 inline constexpr QLatin1StringView HideTitleBar{"hide-title-bar"};
@@ -516,6 +609,19 @@ inline constexpr QLatin1StringView OuterGapTop{"outer-gap-top"};
 inline constexpr QLatin1StringView OuterGapBottom{"outer-gap-bottom"};
 inline constexpr QLatin1StringView OuterGapLeft{"outer-gap-left"};
 inline constexpr QLatin1StringView OuterGapRight{"outer-gap-right"};
+// Per-context autotile parameter slots (one per param). Filled by
+// SetMaxWindows / SetSplitRatio / SetMasterCount / SetInsertPosition /
+// SetOverflowBehavior / SetDragBehavior / SetAlgorithmParam, read by
+// LayoutRegistry::resolveContextTilingParams and layered onto the per-screen
+// autotile override map daemon-side (drag behavior via the drag adaptor;
+// AlgorithmParams carries a target algorithm token plus a free-form params blob).
+inline constexpr QLatin1StringView MaxWindows{"max-windows"};
+inline constexpr QLatin1StringView SplitRatio{"split-ratio"};
+inline constexpr QLatin1StringView MasterCount{"master-count"};
+inline constexpr QLatin1StringView InsertPosition{"insert-position"};
+inline constexpr QLatin1StringView OverflowBehavior{"overflow-behavior"};
+inline constexpr QLatin1StringView DragBehavior{"drag-behavior"};
+inline constexpr QLatin1StringView AlgorithmParams{"algorithm-params"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader
@@ -523,6 +629,17 @@ inline constexpr QLatin1StringView OuterGapRight{"outer-gap-right"};
 // (ActionParam::Value).
 inline constexpr QLatin1StringView OverlayShader{"overlay-shader"};
 inline constexpr QLatin1StringView OverlayStyle{"overlay-style"};
+// Per-context overlay-APPEARANCE slots (one per property so independent rules
+// cascade per-property). Filled by the SetOverlay* appearance context actions,
+// read by `LayoutRegistry::resolveContextOverlay` into ContextOverlayOverride.
+inline constexpr QLatin1StringView OverlayHighlightColor{"overlay-highlight-color"};
+inline constexpr QLatin1StringView OverlayInactiveColor{"overlay-inactive-color"};
+inline constexpr QLatin1StringView OverlayBorderColor{"overlay-border-color"};
+inline constexpr QLatin1StringView OverlayActiveOpacity{"overlay-active-opacity"};
+inline constexpr QLatin1StringView OverlayInactiveOpacity{"overlay-inactive-opacity"};
+inline constexpr QLatin1StringView OverlayBorderWidth{"overlay-border-width"};
+inline constexpr QLatin1StringView OverlayBorderRadius{"overlay-border-radius"};
+inline constexpr QLatin1StringView OverlayShowZoneNumbers{"overlay-show-zone-numbers"};
 // Animation slots are event-scoped: "anim-shader:<event>" / "anim-timing:<event>"
 // / "anim-curve:<event>". Curve and timing are split so they can be overridden
 // independently per event — `resolveAnimationMotionProfile` reads the curve

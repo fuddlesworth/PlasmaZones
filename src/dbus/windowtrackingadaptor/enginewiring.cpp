@@ -173,12 +173,11 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // Managed (snapped-to-zone) restore gate. The snapped-to-zone analogue of
         // the floated-position predicate above: when the user disables
         // `restoreWindowsToZonesOnLogin`, a window that was snapped at logout is
-        // not auto-restored to its recorded zone on reopen. Settings-gated, so the
-        // engine stays settings-agnostic. windowId is unused today (the policy is a
-        // single global toggle) but keeps the signature aligned with the floated
-        // predicate for a future per-window override.
-        snap->setManagedRestorePredicate([this](const QString& /*windowId*/) -> bool {
-            return m_settings->restoreWindowsToZonesOnLogin();
+        // not auto-restored to its recorded zone on reopen. A matched
+        // SetRestoreToZoneOnLogin rule overrides that per window; otherwise the
+        // global setting decides. Engine stays settings-agnostic.
+        snap->setManagedRestorePredicate([this](const QString& windowId) -> bool {
+            return shouldRestoreToZoneOnLogin(windowId);
         });
 
         // Full-query exclusion provider. The snap engine owns the Exclude rule
@@ -398,7 +397,14 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
         return std::nullopt;
     }
     PhosphorRules::WindowQuery query;
-    query.appId = meta->appId;
+    // Engage appId only when known, matching the effect-side builder (window_query.cpp)
+    // and the sibling string fields below. Engaging an empty appId here would make a
+    // degenerate `AppId Equals ""` / negated-appId predicate resolve differently on the
+    // daemon open-path than on the effect live-path (WindowQuery::appId is optional, so
+    // an unknown appId must stay disengaged per the engage-only-when-known contract).
+    if (!meta->appId.isEmpty()) {
+        query.appId = meta->appId;
+    }
     if (!meta->title.isEmpty()) {
         query.title = meta->title;
     }
@@ -414,6 +420,15 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     query.windowType = meta->windowType;
     query.virtualDesktop = meta->virtualDesktop;
     query.activity = meta->activity;
+    // Screen-derived context fields (ScreenId, Mode, ScreenOrientation, ActiveLayout)
+    // are intentionally NOT stamped here: the window metadata does not carry the
+    // window's screen geometry / active layout, and this daemon-side query feeds the
+    // open-path Float / Restore / placement resolvers only. The effect's live
+    // per-window query (ruleQueryFor) stamps ScreenId / Mode / ScreenOrientation, so
+    // a rule pairing one of those with a window property resolves there but not on
+    // this path. ActiveLayout is populated only by the windowless context cascade
+    // (never by either per-window query), so it is context-scoped in practice —
+    // which is the primary use of all four of these fields anyway.
     // Extended properties — optional→optional copy preserves engagement exactly,
     // so a field the effect could not observe stays disengaged and inert here too.
     query.isMinimized = meta->isMinimized;
@@ -431,6 +446,8 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     query.isModal = meta->isModal;
     query.hasDecoration = meta->hasDecoration;
     query.isResizable = meta->isResizable;
+    query.isMovable = meta->isMovable;
+    query.isMaximizable = meta->isMaximizable;
     query.width = meta->width;
     query.height = meta->height;
     query.positionX = meta->positionX;
@@ -472,6 +489,63 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestorePosition))) {
         // A matched RestorePosition rule overrides the global setting.
+        return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
+    }
+    return globalDefault;
+}
+
+bool WindowTrackingAdaptor::shouldRestoreToZoneOnLogin(const QString& windowId)
+{
+    // Mirror shouldRestoreFloatedPosition for the snapped-to-zone policy: a matched
+    // SetRestoreToZoneOnLogin rule wins, otherwise the global setting decides.
+    const bool globalDefault = m_settings->restoreWindowsToZonesOnLogin();
+    if (!m_ruleStore) {
+        return globalDefault;
+    }
+    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return globalDefault;
+    }
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    }
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    if (const std::optional<PhosphorRules::RuleAction> action =
+            resolved.slot(QString(PhosphorRules::ActionSlot::RestoreToZoneOnLogin))) {
+        return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
+    }
+    return globalDefault;
+}
+
+bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
+{
+    // A matched SetRestoreSizeOnUnsnap rule wins, otherwise the global setting decides.
+    const bool globalDefault = m_settings->restoreOriginalSizeOnUnsnap();
+    if (!m_ruleStore) {
+        return globalDefault;
+    }
+    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return globalDefault;
+    }
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    }
+    // Unlike the open-path resolvers above, this fires MID-SESSION on every unsnap
+    // (drag-out / drop / cursor-left-zones), long after the window opened. A fresh
+    // uncached resolve is required: resolveCached is keyed on (windowId, ruleSet
+    // revision) and returns the OPEN-TIME verdict on a hit, so a rule whose WHEN
+    // references a property the registry refreshes mid-session (VirtualDesktop /
+    // Activity, re-pushed on desktopsChanged / activitiesChanged) would resolve
+    // stale. resolve() honours the freshly built query and does not pollute the
+    // open-path cache. (Properties the effect does not re-push on a dedicated
+    // maximize / geometry change — e.g. IsMaximized / width — are only as fresh as
+    // the registry's last extended push, so resolve() reads that same value either
+    // way: neutral, not stale, for those; a strict improvement for the refreshed
+    // ones.)
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolve(*query);
+    if (const std::optional<PhosphorRules::RuleAction> action =
+            resolved.slot(QString(PhosphorRules::ActionSlot::RestoreSizeOnUnsnap))) {
         return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
     }
     return globalDefault;

@@ -99,6 +99,10 @@ SettingsFlickable {
         // (the overlay/snapping shader catalog) for the overlayShader picker
         // editor (OverrideOverlayShader) and its read-only name resolution.
         readonly property var snappingShadersPage: settingsController.snappingShadersPage
+        // `TilingAlgorithmController` — exposes `customParamsForAlgorithm(id)` (the
+        // Luau-declared custom-param schema) for the SetAlgorithmParam inline
+        // params editor in ActionRow.
+        readonly property var tilingAlgorithmPage: settingsController.tilingAlgorithmPage
         // Reference to the page-level WindowPickerDialog — exposed via the
         // bridge so MatchLeafEditor can open the picker without having to
         // own its own instance. Hosting the picker inside the OverlaySheet
