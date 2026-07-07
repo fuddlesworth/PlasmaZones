@@ -42,21 +42,24 @@
             "default": 1.0,
             "min": 0.25,
             "max": 4.0,
-            "description": "How sharply brightness splits between the two colours, where 1.0 is a linear blend"
+            "description": "How sharply brightness splits between the two colours, where 1.0 is a linear blend",
+            "group": "Colours"
         },
         {
             "id": "colorA",
             "name": "Shadow colour",
             "type": "color",
             "default": "#ff1a1030",
-            "description": "Colour the darkest parts of the scene map to"
+            "description": "Colour the darkest parts of the scene map to",
+            "group": "Colours"
         },
         {
             "id": "colorB",
             "name": "Highlight colour",
             "type": "color",
             "default": "#ff89dceb",
-            "description": "Colour the brightest parts of the scene map to"
+            "description": "Colour the brightest parts of the scene map to",
+            "group": "Colours"
         }
     ]
 }

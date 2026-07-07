@@ -113,7 +113,7 @@ void main() {
             const float h = 1.0;
             vec2 grad = vec2(sdRoundedBox(pos + vec2(h, 0.0), halfSz, rr) - sdRoundedBox(pos - vec2(h, 0.0), halfSz, rr),
                              sdRoundedBox(pos + vec2(0.0, h), halfSz, rr) - sdRoundedBox(pos - vec2(0.0, h), halfSz, rr));
-            vec2 inward = length(grad) > 0.0 ? -normalize(grad) : vec2(0.0, 1.0);
+            vec2 inward = length(grad) > 0.001 ? -normalize(grad) : vec2(0.0, 1.0);
             float strengthUv = min(0.4 * concave * strength, 1.0);
             vec2 dirUv = vec2(inward.x, -inward.y) * strengthUv * (uSurfaceFrameSize / max(uSurfaceSize, vec2(1.0)));
             vec4 g = texture(iChannel1, clamp(vTexCoord + dirUv, 0.0, 1.0));

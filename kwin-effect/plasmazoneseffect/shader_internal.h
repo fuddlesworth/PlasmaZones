@@ -22,8 +22,8 @@ namespace PlasmaZones::ShaderInternal {
 
 /// Save/restore the global GL state the offscreen decoration folds perturb —
 /// blend enable + separate blend funcs, viewport, clear colour, active texture
-/// unit. The folds (renderSurfaceChainComposite / renderSurfaceBufferPasses /
-/// the snapshot captures) run offscreen passes plus a nested
+/// unit. The folds (renderSurfaceChainComposite, which inlines the buffer
+/// passes, plus the snapshot captures) run offscreen passes plus a nested
 /// effects->drawWindow immediately BEFORE KWin's on-screen draw of the same
 /// frame, and KWin's convention is that an effect hands blend/viewport back
 /// the way it found them; without this guard the first frame after a fold
@@ -265,5 +265,13 @@ inline constexpr int kSurfaceChannelBaseUnit =
     3 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
 static_assert(kOldSnapshotUnit < kSurfaceLayerUnit && kSurfaceLayerUnit < kSurfaceChannelBaseUnit,
               "surface decoration units must stay ordered and distinct");
+// Pin the relationship to the audio unit: today kSurfaceChannelBaseUnit == 6 ==
+// kSurfaceAudioUnit (the documented disjoint-phase overlap), while the layer /
+// old-snapshot units sit below it. A kMaxUserTextureSlots bump that pushes
+// kSurfaceLayerUnit onto the audio unit (N=4 → both 6) would silently collide
+// mid-fold, so fail at compile time instead.
+static_assert(kSurfaceLayerUnit != kSurfaceAudioUnit && kSurfaceChannelBaseUnit >= kSurfaceAudioUnit,
+              "surface layer unit must not collide with the audio unit, and the present slot must "
+              "stay at or above it — a kMaxUserTextureSlots bump needs the audio/present unit map revisited");
 
 } // namespace PlasmaZones::ShaderInternal

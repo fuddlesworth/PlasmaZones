@@ -275,7 +275,7 @@ struct WindowDecoration
     QStringList chain;
 
     /// The base pack id to render — chain.value(0), defaulting to "border".
-    /// The render path (drawWindow / pushBorderUniforms / renderSurfaceBufferPasses)
+    /// The render path (drawWindow / pushBorderUniforms / renderSurfaceChainComposite)
     /// looks this up in m_compiledPacks to get the CompiledSurfacePack instead
     /// of the old single global border shader.
     QString basePackId;

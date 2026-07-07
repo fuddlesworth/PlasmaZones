@@ -43,7 +43,8 @@
             "default": 1.0,
             "min": 0.5,
             "max": 2.0,
-            "description": "Overall size of the droplets, larger values mean bigger drops"
+            "description": "Overall size of the droplets, larger values mean bigger drops",
+            "group": "Rain"
         },
         {
             "id": "rainAmount",
@@ -52,7 +53,8 @@
             "default": 0.7,
             "min": 0.1,
             "max": 1.0,
-            "description": "How much of the pane carries droplets"
+            "description": "How much of the pane carries droplets",
+            "group": "Rain"
         },
         {
             "id": "rainSpeed",
@@ -61,7 +63,8 @@
             "default": 0.25,
             "min": 0.05,
             "max": 1.0,
-            "description": "How quickly the droplets run down the pane"
+            "description": "How quickly the droplets run down the pane",
+            "group": "Rain"
         },
         {
             "id": "refraction",
@@ -70,7 +73,8 @@
             "default": 40.0,
             "min": 5.0,
             "max": 100.0,
-            "description": "How strongly droplets bend the scene behind them (px)"
+            "description": "How strongly droplets bend the scene behind them (px)",
+            "group": "Refraction"
         }
     ]
 }

@@ -382,6 +382,9 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     // Unbind the multipass channel units we bound and restore GL_TEXTURE0 —
     // texture hygiene mirroring paint_pipeline.cpp, so a stray bind doesn't leak
     // into the next window's draw. No-op when boundChannels == 0 (single-pass).
+    // The transition-rebind branch above binds the layer / old-snapshot units
+    // (4/5) but intentionally does NOT unbind them here: paint_pipeline.cpp owns
+    // their teardown on its own transition path.
     for (int i = 0; i < boundChannels; ++i) {
         glActiveTexture(GL_TEXTURE0 + kSurfaceChannelBaseUnit + i);
         glBindTexture(GL_TEXTURE_2D, 0);

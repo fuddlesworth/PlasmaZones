@@ -626,7 +626,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (elapsed >= 0 && elapsed <= transition.durationMs) {
                 progress = qreal(elapsed) / qreal(transition.durationMs);
                 active = true;
-            } else if ((transition.holdUntilRelease || !transition.meshSim.settled)
+            } else if ((transition.holdUntilRelease || (transition.meshSim.initialized && !transition.meshSim.settled))
                        && elapsed > transition.durationMs) {
                 // HELD move/resize: the drag outlives the nominal duration
                 // by design. Stay active with progress pinned at 1 — the

@@ -198,13 +198,17 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     }
 
     // Include paths: each search path's /shared dir (resolves
-    // `#include <surface_uniforms.glsl>`), mirroring the animation compile path.
+    // `#include <surface_uniforms.glsl>`) PLUS the search path root itself,
+    // matching the daemon/validator resolution (surfaceshaderitem.cpp
+    // surfaceIncludePaths) so a pack that resolves a root-level include on the
+    // daemon and passes shadervalidate also links on the compositor.
     QStringList includePaths;
     for (const QString& sp : m_surfaceShaderRegistry.searchPaths()) {
         const QString sharedDir = sp + QStringLiteral("/shared");
         if (QDir(sharedDir).exists()) {
             includePaths.append(sharedDir);
         }
+        includePaths.append(sp);
     }
     const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
     QString includeError;

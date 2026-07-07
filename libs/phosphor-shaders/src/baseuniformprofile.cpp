@@ -23,9 +23,11 @@ BaseUniformProfile::BaseUniformProfile()
 }
 
 // ============================================================================
-// fill — verbatim transcription of the legacy syncBaseUniforms() body, with
+// fill — faithful transcription of the legacy syncBaseUniforms() body, with
 // the iFlipBufferY=1 and qt_Matrix Y-flip folded in from uploadDirtyTextures()
 // (both have no QRhi dependency once yUpInNDC is carried in the frame state).
+// The one intentional departure: the iMouse normalized components divide in
+// float (the frame state carries floats) rather than the historical double.
 // ============================================================================
 
 void BaseUniformProfile::fill(const UboFrameState& state)
@@ -45,7 +47,8 @@ void BaseUniformProfile::fill(const UboFrameState& state)
     m_u.qt_Matrix[10] = 1.0f;
     m_u.qt_Matrix[15] = 1.0f;
 
-    // Split full-precision m_time (double) into iTime (wrapped lo) + iTimeHi (wrap offset)
+    // Copy the already-split time: iTime (wrapped lo) + iTimeHi (wrap offset).
+    // The double-precision split itself happens upstream in syncBaseUniforms.
     m_u.iTime = state.time;
     m_u.iTimeHi = state.timeHi;
     m_u.iTimeDelta = state.timeDelta;

@@ -16,7 +16,8 @@
             "default": 14,
             "min": 4,
             "max": 48,
-            "description": "Size of the mosaic cells (px), larger cells hide more"
+            "description": "Size of the mosaic cells (px), larger cells hide more",
+            "group": "Blur"
         },
         {
             "id": "cornerRadius",
@@ -25,7 +26,8 @@
             "default": 8,
             "min": 0,
             "max": 32,
-            "description": "Corner rounding of the pane (px, match the Border pack)"
+            "description": "Corner rounding of the pane (px, match the Border pack)",
+            "group": "Shape"
         },
         {
             "id": "tintStrength",
@@ -34,14 +36,16 @@
             "default": 0.12,
             "min": 0.0,
             "max": 1.0,
-            "description": "How strongly the tint colour washes over the cells"
+            "description": "How strongly the tint colour washes over the cells",
+            "group": "Tint"
         },
         {
             "id": "tintColor",
             "name": "Tint colour",
             "type": "color",
             "default": "#ff1d1d2e",
-            "description": "Colour washed over the mosaic"
+            "description": "Colour washed over the mosaic",
+            "group": "Tint"
         }
     ]
 }

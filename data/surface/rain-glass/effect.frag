@@ -93,7 +93,7 @@ void main() {
     vec3 layer1 = dropLayer(st, t);
     vec3 layer2 = dropLayer(st * 1.6 + 4.3, t * 1.35);
     layer1 *= step(1.0 - amount, hash13(floor(st / kCellDim) + 2.7));
-    layer2 *= step(1.0 - amount, hash13(floor(st * 1.6 / kCellDim) + 8.1));
+    layer2 *= step(1.0 - amount, hash13(floor((st * 1.6 + 4.3) / kCellDim) + 8.1));
 
     // Static micro-beads: tiny fixed droplets that never move, filling the
     // pane so dry stretches still read as wet glass.

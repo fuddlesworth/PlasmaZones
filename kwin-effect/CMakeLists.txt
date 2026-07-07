@@ -50,6 +50,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/decorations.cpp
     plasmazoneseffect/decoration_render.cpp
     plasmazoneseffect/surfacelayers.cpp
+    plasmazoneseffect/surface_backdrop.cpp
     plasmazoneseffect/surface_audio.cpp
     plasmazoneseffect/window_identity.cpp
     plasmazoneseffect/mouse_drag.cpp
