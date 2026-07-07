@@ -5,6 +5,7 @@
 
 #include <PhosphorLayoutApi/LayoutId.h>
 
+#include <QColor>
 #include <QHash>
 #include <QList>
 #include <QString>
@@ -204,9 +205,9 @@ struct ContextGapOverride
  * @brief Per-context overlay-property overrides resolved from window-rule actions.
  *
  * Each field is set only when a matching context rule fills the corresponding
- * overlay slot (OverrideOverlayShader / OverrideOverlayStyle); an unset field falls through to
- * the active layout's own value. Consumed daemon-side by the overlay service —
- * see @c LayoutRegistry::resolveContextOverlay.
+ * overlay slot; an unset field falls through to the active layout's own value
+ * (shader / style) or the global config value (appearance). Consumed daemon-side
+ * by the overlay service — see @c LayoutRegistry::resolveContextOverlay.
  *
  * @c style is the @c OverlayDisplayMode int (0 = ZoneRectangles, 1 =
  * LayoutPreview); the resolver maps the wire token ("rectangles" / "preview")
@@ -214,16 +215,75 @@ struct ContextGapOverride
  * @c shaderParams holds the overridden shader's uniform values (translated by
  * the overlay service); it is only meaningful when @c shaderId is set and is
  * empty when the rule overrides only the shader id (shader defaults apply).
+ *
+ * The appearance fields (colours / opacities / border dimensions / zone-number
+ * visibility) layer over the global @c Snapping.Zones.* config: each is filled
+ * only by its @c SetOverlay* context action, and an unset field means "use the
+ * global config value" — config stays authoritative, the rule only overrides.
+ * Colours are concrete (no accent sentinel). Opacities are [0, 1].
  */
 struct ContextOverlayOverride
 {
     std::optional<QString> shaderId;
     QVariantMap shaderParams;
     std::optional<int> style;
+    std::optional<QColor> highlightColor;
+    std::optional<QColor> inactiveColor;
+    std::optional<QColor> borderColor;
+    std::optional<double> activeOpacity;
+    std::optional<double> inactiveOpacity;
+    std::optional<int> borderWidth;
+    std::optional<int> borderRadius;
+    std::optional<bool> showZoneNumbers;
 
     bool isEmpty() const
     {
-        return !shaderId && !style;
+        // shaderParams is only ever populated alongside shaderId, but check it too so
+        // isEmpty() stays honest if a future writer sets the map without the gate.
+        return !shaderId && shaderParams.isEmpty() && !style && !highlightColor && !inactiveColor && !borderColor
+            && !activeOpacity && !inactiveOpacity && !borderWidth && !borderRadius && !showZoneNumbers;
+    }
+};
+
+/**
+ * @brief Per-context autotile parameter overrides resolved from context rules.
+ *
+ * Each field is set only when a matching context rule fills the corresponding
+ * slot (SetMaxWindows / SetSplitRatio / SetMasterCount / SetInsertPosition /
+ * SetOverflowBehavior / SetDragBehavior / SetAlgorithmParam); an unset field
+ * means "use the config value". Consumed daemon-side: the values are layered onto
+ * the per-screen autotile override map (config stays the base, the rule wins where
+ * present). @c dragBehavior is consumed by the drag adaptor rather than the
+ * override map. Resolved by @c LayoutRegistry::resolveContextTilingParams.
+ */
+struct ContextTilingParams
+{
+    std::optional<int> maxWindows;
+    std::optional<double> splitRatio;
+    std::optional<int> masterCount;
+    /// The AutotileInsertPosition int (0 = End, 1 = AfterFocused, 2 = AsMaster);
+    /// the resolver maps the wire token to this int so the daemon stores the same
+    /// value the per-screen config store uses.
+    std::optional<int> insertPosition;
+    /// The AutotileOverflowBehavior int (0 = Float, 1 = Unlimited).
+    std::optional<int> overflowBehavior;
+    /// The AutotileDragBehavior int (0 = Float, 1 = Reorder). Consumed by the drag
+    /// adaptor (not the tile-engine override map) unlike the other params.
+    std::optional<int> dragBehavior;
+    /// A SetAlgorithmParam override: the target algorithm id and the custom-param
+    /// values to layer over that algorithm's config. Empty target = no override.
+    /// The daemon applies @c algorithmParams only when @c algorithmParamTarget is
+    /// the screen's effective algorithm.
+    QString algorithmParamTarget;
+    QVariantMap algorithmParams;
+
+    bool isEmpty() const
+    {
+        // algorithmParams is only ever populated alongside algorithmParamTarget, but
+        // check it too so isEmpty() stays honest if a future writer sets it without the
+        // target.
+        return !maxWindows && !splitRatio && !masterCount && !insertPosition && !overflowBehavior && !dragBehavior
+            && algorithmParamTarget.isEmpty() && algorithmParams.isEmpty();
     }
 };
 

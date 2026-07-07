@@ -127,7 +127,9 @@ bool matchIsSimpleConjunction(const MatchExpression& match)
 /// "identity" so the function stays usable in code paths that have not yet
 /// wired the SettingsController-backed resolvers.
 QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::LabelLookup& screenLookup,
-                  const RuleModel::LabelLookup& activityLookup, const RuleModel::LabelLookup& zoneLookup)
+                  const RuleModel::LabelLookup& activityLookup, const RuleModel::LabelLookup& zoneLookup,
+                  const RuleModel::LabelLookup& layoutLookup, const RuleModel::LabelLookup& tilingAlgorithmLookup,
+                  const RuleModel::LabelLookup& virtualDesktopLookup)
 {
     // Pick the lookup matching the leaf's field. An empty lookup degenerates
     // to identity so this stays usable from code paths that have not yet
@@ -139,6 +141,13 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
         lookup = &activityLookup;
     } else if (predicate.field == Field::Zone) {
         lookup = &zoneLookup;
+    } else if (predicate.field == Field::VirtualDesktop && predicate.op == Operator::Equals) {
+        // Resolves the desktop number to its name ("2" → "Work"); an unnamed or
+        // unknown desktop falls back to the bare number via resolveOne below. Only
+        // for Equals — under GreaterThan/LessThan the value is a numeric threshold,
+        // where a name ("greater than Work") would read as nonsense, so those keep
+        // the bare number.
+        lookup = &virtualDesktopLookup;
     }
     const auto resolveOne = [lookup](const QString& raw) {
         if (!lookup || !*lookup) {
@@ -149,15 +158,50 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
     };
 
     // Mode is a closed wire-token vocabulary — render the friendly label
-    // ("Mode: Snapping") rather than the raw token. An unknown token (a
-    // hand-edited rule) round-trips verbatim.
+    // ("Mode: Snapping") via the same single-source table the editor dropdown uses,
+    // rather than a second hardcoded copy. An unknown token round-trips verbatim.
     if (predicate.field == Field::Mode) {
-        const QString token = predicate.value.toString();
-        QString label = token;
-        if (token == QLatin1String("snapping")) {
-            label = PhosphorI18n::tr("Snapping");
-        } else if (token == QLatin1String("tiling")) {
-            label = PhosphorI18n::tr("Tiling");
+        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
+                                              RuleAuthoring::modeLabel(predicate.value.toString()));
+    }
+
+    // Screen orientation is a closed wire-token vocabulary too — resolve via the
+    // shared orientationLabel() table like Mode above.
+    if (predicate.field == Field::ScreenOrientation) {
+        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
+                                              RuleAuthoring::orientationLabel(predicate.value.toString()));
+    }
+
+    // Window type is the int underlying the WindowType enum — resolve it to the
+    // friendly label ("Window type: Dialog") via the same single-source table the
+    // editor dropdown uses, rather than showing the bare int.
+    if (predicate.field == Field::WindowType) {
+        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
+                                              RuleAuthoring::windowTypeLabel(predicate.value.toInt()));
+    }
+
+    // Active layout: a snap layout id resolves via the SetSnappingLayout lookup;
+    // an autotile id ("autotile:<algo>") resolves its algorithm via the tiling
+    // lookup after stripping the prefix (mirroring the settings controller's
+    // prefixing), so the collapsed summary matches the expanded tree — which
+    // resolves both id shapes through appSettings.layouts. Unknown ids round-trip
+    // verbatim.
+    if (predicate.field == Field::ActiveLayout) {
+        const QString value = predicate.value.toString();
+        QString label = value;
+        static const QString autotilePrefix = QStringLiteral("autotile:");
+        if (value.startsWith(autotilePrefix)) {
+            if (tilingAlgorithmLookup) {
+                const QString resolved = tilingAlgorithmLookup(value.mid(autotilePrefix.size()));
+                if (!resolved.isEmpty()) {
+                    label = resolved;
+                }
+            }
+        } else if (layoutLookup) {
+            const QString resolved = layoutLookup(value);
+            if (!resolved.isEmpty()) {
+                label = resolved;
+            }
         }
         return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field), label);
     }
@@ -256,6 +300,10 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     if (action.type == ActionType::Exclude) {
         return PhosphorI18n::tr("Excluded");
     }
+    if (action.type == ActionType::ExcludeAnimations) {
+        // Terminal, no Value param — like Exclude, its presence IS the effect.
+        return PhosphorI18n::tr("No animations");
+    }
     if (action.type == ActionType::Float) {
         return PhosphorI18n::tr("Float");
     }
@@ -348,13 +396,21 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     }
     if (action.type == ActionType::OverrideOverlayStyle) {
         const QString v = action.params.value(PhosphorRules::ActionParam::Value).toString();
-        if (v == PhosphorRules::OverlayStyleToken::Rectangles) {
-            return PhosphorI18n::tr("Overlay style: Zone rectangles");
+        if (v.isEmpty()) {
+            return PhosphorI18n::tr("Overlay style");
         }
-        if (v == PhosphorRules::OverlayStyleToken::Preview) {
-            return PhosphorI18n::tr("Overlay style: Layout preview");
-        }
-        return PhosphorI18n::tr("Overlay style");
+        // Delegate the token→label to the shared enumOptionLabel (the same source the
+        // editor uses) instead of re-hardcoding the vocabulary here, like the sibling
+        // SetInsertPosition / SetOverflowBehavior / SetDragBehavior cases below.
+        return PhosphorI18n::tr("Overlay style: %1")
+            .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, v));
+    }
+    if (action.type == ActionType::SetAlgorithmParam) {
+        // Keyed on ActionParam::Algorithm (the target algorithm token), not Value;
+        // the free-form params blob is summarized by naming the algorithm it tunes.
+        const QString algo = action.params.value(PhosphorRules::ActionParam::Algorithm).toString();
+        return algo.isEmpty() ? PhosphorI18n::tr("Algorithm parameter")
+                              : PhosphorI18n::tr("Algorithm: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
     }
     // ── single-value actions keyed on ActionParam::Value (restore-position,
     //    border / title-bar overrides, per-context gap overrides) ──
@@ -384,6 +440,52 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                 return PhosphorI18n::tr("Focused border: %1").arg(shown);
             }
             return PhosphorI18n::tr("Unfocused border: %1").arg(shown);
+        }
+        // ── autotile parameter overrides ──
+        if (action.type == ActionType::SetMaxWindows) {
+            return PhosphorI18n::tr("Max tiled windows: %1").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetMasterCount) {
+            return PhosphorI18n::tr("Master count: %1").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetSplitRatio) {
+            // Wire value is the [0,1] ratio; shown as a percent to match the editor.
+            return PhosphorI18n::tr("Split ratio: %1%").arg(qRound(raw.toDouble() * 100.0));
+        }
+        if (action.type == ActionType::SetInsertPosition) {
+            return PhosphorI18n::tr("Insert: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
+        if (action.type == ActionType::SetOverflowBehavior) {
+            return PhosphorI18n::tr("Overflow: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
+        if (action.type == ActionType::SetDragBehavior) {
+            return PhosphorI18n::tr("Drag: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
+        // ── overlay-appearance overrides (colours upper-cased hex; opacities
+        //    are [0,1] on the wire, shown as a percent to match the editor) ──
+        if (action.type == ActionType::SetOverlayHighlightColor) {
+            return PhosphorI18n::tr("Highlight color: %1").arg(raw.toString().toUpper());
+        }
+        if (action.type == ActionType::SetOverlayInactiveColor) {
+            return PhosphorI18n::tr("Inactive zone color: %1").arg(raw.toString().toUpper());
+        }
+        if (action.type == ActionType::SetOverlayBorderColor) {
+            return PhosphorI18n::tr("Overlay border color: %1").arg(raw.toString().toUpper());
+        }
+        if (action.type == ActionType::SetOverlayActiveOpacity) {
+            return PhosphorI18n::tr("Active opacity: %1%").arg(qRound(raw.toDouble() * 100.0));
+        }
+        if (action.type == ActionType::SetOverlayInactiveOpacity) {
+            return PhosphorI18n::tr("Inactive opacity: %1%").arg(qRound(raw.toDouble() * 100.0));
+        }
+        if (action.type == ActionType::SetOverlayBorderWidth) {
+            return PhosphorI18n::tr("Overlay border width: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetOverlayBorderRadius) {
+            return PhosphorI18n::tr("Overlay corner radius: %1 px").arg(raw.toInt());
         }
         // ── per-context gap overrides ──
         if (action.type == ActionType::SetInnerGap) {
@@ -781,6 +883,10 @@ QString RuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Decorated");
     case Field::IsResizable:
         return PhosphorI18n::tr("Resizable");
+    case Field::IsMovable:
+        return PhosphorI18n::tr("Movable");
+    case Field::IsMaximizable:
+        return PhosphorI18n::tr("Maximizable");
     case Field::PositionX:
         return PhosphorI18n::tr("Position X");
     case Field::PositionY:
@@ -799,6 +905,10 @@ QString RuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Mode");
     case Field::TiledWindowCount:
         return PhosphorI18n::tr("Tiled window count");
+    case Field::ScreenOrientation:
+        return PhosphorI18n::tr("Screen orientation");
+    case Field::ActiveLayout:
+        return PhosphorI18n::tr("Active layout");
     }
     return QString();
 }
@@ -809,14 +919,16 @@ QString RuleModel::matchSummary(const MatchExpression& match) const
         return PhosphorI18n::tr("Any window");
     }
     if (match.isLeaf()) {
-        return leafLabel(match.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup);
+        return leafLabel(match.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup, m_snappingLayoutLookup,
+                         m_tilingAlgorithmLookup, m_virtualDesktopLookup);
     }
     // A simple AND renders its leaves joined by " · ".
     if (match.kind() == MatchExpression::Kind::All) {
         QStringList parts;
         for (const MatchExpression& child : match.children()) {
             if (child.isLeaf()) {
-                parts.append(leafLabel(child.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup));
+                parts.append(leafLabel(child.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup,
+                                       m_snappingLayoutLookup, m_tilingAlgorithmLookup, m_virtualDesktopLookup));
             } else {
                 parts.append(PhosphorI18n::tr("(condition group)"));
             }
@@ -882,6 +994,11 @@ void RuleModel::setActivityLabelLookup(LabelLookup fn)
 void RuleModel::setZoneLabelLookup(LabelLookup fn)
 {
     m_zoneLookup = std::move(fn);
+}
+
+void RuleModel::setVirtualDesktopLabelLookup(LabelLookup fn)
+{
+    m_virtualDesktopLookup = std::move(fn);
 }
 
 void RuleModel::setSnappingLayoutLabelLookup(LabelLookup fn)

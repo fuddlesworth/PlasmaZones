@@ -10,10 +10,11 @@
 namespace PlasmaZones::RuleAuthoring {
 
 /// Match fields suitable for the leaf-editor field dropdown. Each entry:
-/// `{ value: int (Field enum), wire: QString (JSON wire string),
-///    label, valueKind: "string"|"number"|"bool"|"screen"|"activity" }`.
-/// QML keys off `wire` so it never has to reconstruct the enum↔wire-string
-/// table.
+/// `{ value: int (Field enum), wire: QString (JSON wire string), label,
+///    valueKind: "string"|"number"|"bool"|"screen"|"activity"|"windowType"|
+///    "virtualDesktop"|"mode"|"orientation"|"layout" }`. Closed-vocab kinds
+///    (windowType/mode/orientation) also carry an `options` array. QML keys off
+///    `wire` so it never has to reconstruct the enum↔wire-string table.
 QVariantList matchFields();
 
 /// Operators valid for @p fieldValue (a `PhosphorRules::Field` enum int).
@@ -47,6 +48,26 @@ QVariantList actionTypes();
 /// editor toggle caption (`ActionRow`), so the two never drift. Returns an empty
 /// string for a non-boolean or unknown action type.
 QString boolActionStateLabel(const QString& typeWire, bool on);
+
+/// Translated label for one enum wire value on action @p typeWire, param @p key.
+/// Structural enum membership lives on the descriptor; the human-facing label is
+/// per `(type, key, wireValue)`. Shared by the action editor's enum options and
+/// the rule-list summary (`RuleModel`) so the picker and the summary never drift.
+/// Returns @p wireValue unchanged for an action/param without a translated vocab.
+QString enumOptionLabel(const QString& typeWire, const QString& key, const QString& wireValue);
+
+/// Translated label for a WindowType match value (the int underlying the
+/// PhosphorProtocol::WindowType enum) — e.g. 2 → "Dialog". Single source shared by
+/// the editor dropdown (matchFields) and the collapsed rule-list summary (RuleModel)
+/// so the two never drift. Returns the raw int as a string for an unknown value.
+QString windowTypeLabel(int windowTypeValue);
+
+/// Translated label for a Mode / ScreenOrientation match token (e.g. "tiling" →
+/// "Tiling", "portrait" → "Portrait"). Single source shared by the editor dropdown
+/// (matchFields) and the collapsed rule-list summary (RuleModel) so they never drift.
+/// An unknown token round-trips verbatim.
+QString modeLabel(const QString& modeToken);
+QString orientationLabel(const QString& orientationToken);
 
 /// A complete, default-seeded action payload for @p typeWire — a JSON map of
 /// the form `{ type: <typeWire>, ...defaults }` ready to drop into a rule's

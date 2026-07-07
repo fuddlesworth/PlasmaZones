@@ -396,9 +396,16 @@ public:
     static PhosphorProtocol::DragPolicy computeDragPolicy(const ISettings* settings,
                                                           const PhosphorEngine::IPlacementEngine* autotileEngine,
                                                           const QString& windowId, const QString& screenId,
-                                                          const PhosphorContext::IContextResolver* resolver);
+                                                          const PhosphorContext::IContextResolver* resolver,
+                                                          bool reorderMode);
 
 private:
+    /// Whether reorder (drag-to-swap) mode is effective for @p screenId: a matched
+    /// context SetDragBehavior rule wins, otherwise the global
+    /// `autotileDragBehavior` setting. Resolves through m_layoutManager (which the
+    /// static computeDragPolicy can't reach), so callers pass the result in.
+    bool effectiveReorderMode(const QString& screenId) const;
+
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
 
@@ -500,11 +507,18 @@ private:
     bool m_prevAutotileDragInsertHeld = false; // Previous frame's autotile drag-insert trigger state
     bool m_zoneSpanToggled = false; // Current toggle state for zone span (toggle mode)
     bool m_prevZoneSpanTriggerHeld = false; // Previous frame's zone span trigger state for edge detection
-    // Drag-to-reorder mode is active for the current drag: cached at beginDrag
-    // time so per-tick dragMoved work (60+ Hz) doesn't have to re-query the
-    // settings + engine on every cursor update. Requires (a) autotile-bypass
-    // path, (b) AutotileDragBehavior::Reorder, and (c) window was tracked+tiled
-    // at drag-start. Cleared by endDrag / clearPendingSnapDragState.
+    // Drag-to-reorder mode is active for the current autotile screen: cached so
+    // per-tick dragMoved work (60+ Hz) doesn't have to re-query the settings +
+    // engine on every cursor update. Seeded at beginDrag from the start screen
+    // (requires (a) autotile-bypass path, (b) AutotileDragBehavior::Reorder,
+    // (c) window tiled at drag-start) and RE-LATCHED to the cursor's current screen
+    // on each policy flip in updateDragCursor under the SAME conditions (destination
+    // bypassReason == AutotileScreen AND isWindowTiled), so a mid-drag crossing
+    // between screens with divergent per-context SetDragBehavior rules applies the
+    // destination screen's mode without ever adopting a floating window into the
+    // stack or forcing a preview on a context-disabled screen. Cleared by endDrag,
+    // clearPendingSnapDragState, cancelSnap, handleWindowClosed, and the shared
+    // resetDragState teardown.
     bool m_dragReorderActive = false;
     bool m_overlayShown = false;
     // Overlay was blanked mid-drag via IOverlayService::setIdleForDragPause()

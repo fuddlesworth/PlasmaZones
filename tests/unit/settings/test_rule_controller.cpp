@@ -811,6 +811,9 @@ void TestRuleController::authoringMetadata()
     bool sawActivityKind = false;
     bool sawWindowTypeKind = false;
     bool sawModeKind = false;
+    bool sawOrientationKind = false;
+    bool sawLayoutKind = false;
+    bool sawVirtualDesktopKind = false;
     for (const QVariant& v : fields) {
         const QVariantMap f = v.toMap();
         QVERIFY(f.contains(QStringLiteral("value")));
@@ -819,21 +822,33 @@ void TestRuleController::authoringMetadata()
         QVERIFY(kind == QLatin1String("string") || kind == QLatin1String("number") || kind == QLatin1String("bool")
                 || kind == QLatin1String("screen") || kind == QLatin1String("activity")
                 || kind == QLatin1String("windowType") || kind == QLatin1String("virtualDesktop")
-                || kind == QLatin1String("mode"));
+                || kind == QLatin1String("mode") || kind == QLatin1String("orientation")
+                || kind == QLatin1String("layout"));
         if (kind == QLatin1String("screen")) {
             sawScreenKind = true;
         }
         if (kind == QLatin1String("activity")) {
             sawActivityKind = true;
         }
-        if (kind == QLatin1String("windowType") || kind == QLatin1String("mode")) {
+        if (kind == QLatin1String("layout")) {
+            sawLayoutKind = true;
+        }
+        if (kind == QLatin1String("virtualDesktop")) {
+            sawVirtualDesktopKind = true;
+        }
+        // Closed-vocab dropdown fields must carry an `options` array of {value, wire,
+        // label} triples so the editor can render the dropdown. ScreenOrientation
+        // (orientation) is one of these — it mirrors mode — so it is validated here
+        // too, guarding against a regression that reverts it to a bare string field.
+        if (kind == QLatin1String("windowType") || kind == QLatin1String("mode")
+            || kind == QLatin1String("orientation")) {
             if (kind == QLatin1String("windowType")) {
                 sawWindowTypeKind = true;
-            } else {
+            } else if (kind == QLatin1String("mode")) {
                 sawModeKind = true;
+            } else {
+                sawOrientationKind = true;
             }
-            // Enum-style fields must carry an `options` array of {value, wire,
-            // label} triples so the editor can render the dropdown.
             const QVariantList options = f.value(QStringLiteral("options")).toList();
             QVERIFY2(!options.isEmpty(), "enum valueKind must expose options for the dropdown");
             for (const QVariant& opt : options) {
@@ -848,6 +863,14 @@ void TestRuleController::authoringMetadata()
     QVERIFY(sawActivityKind);
     QVERIFY(sawWindowTypeKind);
     QVERIFY(sawModeKind);
+    // The two match fields this expansion adds must keep their editor-driving kinds:
+    // ScreenOrientation → "orientation" dropdown, ActiveLayout → "layout" picker. A
+    // regression reverting either to "string" would silently break the editor.
+    QVERIFY(sawOrientationKind);
+    QVERIFY(sawLayoutKind);
+    // VirtualDesktop keeps its dedicated "virtualDesktop" kind, which drives the
+    // desktop-name picker in the editor and the name resolution in the summaries.
+    QVERIFY(sawVirtualDesktopKind);
 
     // Picker categories drive the fly-out submenu grouping. Every field carries
     // a non-empty category label + a categoryOrder int. The Field enum

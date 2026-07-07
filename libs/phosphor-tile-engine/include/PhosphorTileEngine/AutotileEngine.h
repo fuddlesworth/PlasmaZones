@@ -557,6 +557,7 @@ public:
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
     int effectiveMaxWindows(const QString& screenId) const;
+    PhosphorTiles::AutotileInsertPosition effectiveInsertPosition(const QString& screenId) const;
     qreal effectiveSplitRatioStep(const QString& screenId) const override;
     int runtimeMaxWindows() const override;
     QString effectiveAlgorithmId(const QString& screenId) const;
@@ -1127,7 +1128,7 @@ private:
     /// Add @p windowId to @p state at the position dictated by the
     /// insertion-order setting (End / AfterFocused / AsMaster). Shared by
     /// insertWindow's new-window path and handoffReceive's cross-engine adopt.
-    void insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId);
+    void insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
 
     /// Algorithm lifecycle REMOVE hook + state removal for a tracked window,

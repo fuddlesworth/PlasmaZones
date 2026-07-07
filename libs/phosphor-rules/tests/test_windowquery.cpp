@@ -36,10 +36,17 @@ private Q_SLOTS:
         q.screenId = QStringLiteral("DP-1");
         q.virtualDesktop = 3;
         q.activity = QStringLiteral("{act}");
+        q.screenOrientation = QStringLiteral("portrait");
+        q.activeLayout = QStringLiteral("autotile:bsp");
 
         QCOMPARE(q.valueForField(Field::ScreenId)->toString(), QStringLiteral("DP-1"));
         QCOMPARE(q.valueForField(Field::VirtualDesktop)->toInt(), 3);
         QCOMPARE(q.valueForField(Field::Activity)->toString(), QStringLiteral("{act}"));
+        // Context fields, always present — empty when unpopulated by a resolver.
+        QCOMPARE(q.valueForField(Field::ScreenOrientation)->toString(), QStringLiteral("portrait"));
+        QCOMPARE(q.valueForField(Field::ActiveLayout)->toString(), QStringLiteral("autotile:bsp"));
+        // A windowless query carrying only context fields is still not a window.
+        QVERIFY(!q.hasWindow());
     }
 
     void testValueForField_absentWindowAttribute()
@@ -113,6 +120,8 @@ private Q_SLOTS:
         QVERIFY(!q.valueForField(Field::IsModal).has_value());
         QVERIFY(!q.valueForField(Field::HasDecoration).has_value());
         QVERIFY(!q.valueForField(Field::IsResizable).has_value());
+        QVERIFY(!q.valueForField(Field::IsMovable).has_value());
+        QVERIFY(!q.valueForField(Field::IsMaximizable).has_value());
         QVERIFY(!q.valueForField(Field::PositionX).has_value());
         QVERIFY(!q.valueForField(Field::PositionY).has_value());
         QVERIFY(!q.valueForField(Field::CaptionNormal).has_value());
@@ -126,6 +135,8 @@ private Q_SLOTS:
         q.isModal = false;
         q.hasDecoration = true;
         q.isResizable = false;
+        q.isMovable = true;
+        q.isMaximizable = false;
         q.positionX = -50; // a negative X is valid (window straddling the left edge)
         q.positionY = 100;
         q.captionNormal = QStringLiteral("Firefox");
@@ -140,6 +151,10 @@ private Q_SLOTS:
         QCOMPARE(q.valueForField(Field::IsModal)->toBool(), false);
         QCOMPARE(q.valueForField(Field::HasDecoration)->toBool(), true);
         QCOMPARE(q.valueForField(Field::IsResizable)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::IsMovable)->toBool(), true);
+        // Present even though false (the bool-field contract).
+        QVERIFY(q.valueForField(Field::IsMaximizable).has_value());
+        QCOMPARE(q.valueForField(Field::IsMaximizable)->toBool(), false);
         QCOMPARE(q.valueForField(Field::PositionX)->toInt(), -50);
         QCOMPARE(q.valueForField(Field::PositionY)->toInt(), 100);
         QCOMPARE(q.valueForField(Field::CaptionNormal)->toString(), QStringLiteral("Firefox"));

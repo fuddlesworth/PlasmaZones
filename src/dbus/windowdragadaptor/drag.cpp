@@ -724,8 +724,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         }
     } else {
         // Cursor left all zones: restore pre-snap size immediately if window was snapped
-        if (m_wasSnapped && !m_restoreSizeEmittedDuringDrag && m_settings && m_settings->restoreOriginalSizeOnUnsnap()
-            && m_windowTracking) {
+        if (m_wasSnapped && !m_restoreSizeEmittedDuringDrag && m_windowTracking
+            && m_windowTracking->shouldRestoreSizeOnUnsnap(windowId)) {
             int origX, origY, origW, origH;
             if (m_windowTracking->getValidatedPreTileGeometry(windowId, origX, origY, origW, origH)) {
                 m_restoreSizeEmittedDuringDrag = true;

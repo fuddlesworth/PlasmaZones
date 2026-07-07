@@ -481,13 +481,19 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
         // Zone padding honors per-monitor gap RULES (context-rule override →
         // global → default) via the layout registry's current context. The
         // selector preview passes no layout, so the per-layout tier does not
-        // apply here; border width/radius are global-only (no per-screen key).
+        // apply here; border width/radius layer the context overlay rule over
+        // the global config value, matching updateZoneSelectorWindow (every show
+        // path re-runs the update, so these seed values are consistent with it).
+        const PhosphorZones::ContextOverlayOverride overlayOverride =
+            overlayOverrideForScreen(m_layoutManager, screenId);
         writeQmlProperty(
             slot, QStringLiteral("zonePadding"),
             GeometryUtils::getEffectiveInnerGap(
                 nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, m_settings, screenId)));
-        writeQmlProperty(slot, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
-        writeQmlProperty(slot, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
+        writeQmlProperty(slot, QStringLiteral("zoneBorderWidth"),
+                         overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
+        writeQmlProperty(slot, QStringLiteral("zoneBorderRadius"),
+                         overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
     }
     const ZoneSelectorConfig config =
         m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();

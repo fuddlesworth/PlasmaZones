@@ -282,15 +282,15 @@ inline bool isAnyModeLocked(ISettings* settings, PhosphorZones::IZoneLayoutRegis
         || settings->isContextLocked(Utils::contextLockKey(1, screenId), desktop, activity);
 }
 
-/// Resolve the per-context overlay-property override (shader / style)
+/// Resolve the per-context overlay-property override (shader / style / appearance)
 /// for @p screenId at that screen's current virtual desktop + activity. A thin
 /// wrapper over IZoneLayoutRegistry::resolveContextOverlay that supplies the live
 /// context, mirroring how @ref isAnyModeLocked routes the lock check. Under
 /// per-output virtual desktops (#648) the desktop is resolved per-screen so the
 /// override matches the desktop actually shown on @p screenId, not the active
 /// monitor's. Returns an empty override when there is no registry or no matching
-/// overlay rule, so the overlay falls through to the active layout's own
-/// shader / display-mode.
+/// overlay rule, so each field falls through to the active layout's own shader /
+/// display-mode or the global appearance config.
 inline PhosphorZones::ContextOverlayOverride
 overlayOverrideForScreen(PhosphorZones::IZoneLayoutRegistry* layoutRegistry, const QString& screenId)
 {
@@ -334,21 +334,34 @@ inline QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName
 // m_screenStates[screenId] fields directly.
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Shared color/opacity settings push for snap assist and layout picker
+// Shared color/opacity settings push for the overlay surfaces
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Write common zone color/opacity appearance settings to a QML window.
-/// Used by snap assist and layout picker to avoid duplicating the 5-7 property writes.
-inline void writeColorSettings(QObject* window, const IZoneVisualizationSettings* settings)
+/// Write the common zone color/opacity appearance settings to a QML window.
+/// Used by the main overlay, zone selector, snap assist, and layout picker to
+/// avoid duplicating the 5 colour/opacity property writes.
+///
+/// When @p overlayOverride is non-null, each property it fills wins over the
+/// global @p settings value — a context overlay-appearance rule (SetOverlay*)
+/// layering on top of config. An unset override field falls through to the
+/// global setting, so config stays authoritative.
+inline void writeColorSettings(QObject* window, const IZoneVisualizationSettings* settings,
+                               const PhosphorZones::ContextOverlayOverride* overlayOverride = nullptr)
 {
     if (!window || !settings) {
         return;
     }
-    writeQmlProperty(window, QStringLiteral("highlightColor"), settings->highlightColor());
-    writeQmlProperty(window, QStringLiteral("inactiveColor"), settings->inactiveColor());
-    writeQmlProperty(window, QStringLiteral("borderColor"), settings->borderColor());
-    writeQmlProperty(window, QStringLiteral("activeOpacity"), settings->activeOpacity());
-    writeQmlProperty(window, QStringLiteral("inactiveOpacity"), settings->inactiveOpacity());
+    const auto ov = overlayOverride;
+    writeQmlProperty(window, QStringLiteral("highlightColor"),
+                     ov && ov->highlightColor ? *ov->highlightColor : settings->highlightColor());
+    writeQmlProperty(window, QStringLiteral("inactiveColor"),
+                     ov && ov->inactiveColor ? *ov->inactiveColor : settings->inactiveColor());
+    writeQmlProperty(window, QStringLiteral("borderColor"),
+                     ov && ov->borderColor ? *ov->borderColor : settings->borderColor());
+    writeQmlProperty(window, QStringLiteral("activeOpacity"),
+                     ov && ov->activeOpacity ? *ov->activeOpacity : settings->activeOpacity());
+    writeQmlProperty(window, QStringLiteral("inactiveOpacity"),
+                     ov && ov->inactiveOpacity ? *ov->inactiveOpacity : settings->inactiveOpacity());
 }
 
 // patchZonesWithHighlight, parseZonesJson, ensureShaderTimerStarted, getAnchorsForPosition

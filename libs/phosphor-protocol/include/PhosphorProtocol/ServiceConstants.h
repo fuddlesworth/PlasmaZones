@@ -73,6 +73,8 @@ inline constexpr QLatin1String SkipSwitcher("skipSwitcher");
 inline constexpr QLatin1String IsModal("isModal");
 inline constexpr QLatin1String HasDecoration("hasDecoration");
 inline constexpr QLatin1String IsResizable("isResizable");
+inline constexpr QLatin1String IsMovable("isMovable");
+inline constexpr QLatin1String IsMaximizable("isMaximizable");
 inline constexpr QLatin1String Width("width");
 inline constexpr QLatin1String Height("height");
 inline constexpr QLatin1String PositionX("positionX");

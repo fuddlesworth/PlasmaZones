@@ -90,6 +90,8 @@ public:
     void setActivityLookup(RuleModel::LabelLookup fn);
     /// zone UUID → zone-name resolver for `Zone` match-leaf labels.
     void setZoneLookup(RuleModel::LabelLookup fn);
+    /// desktop number → name resolver for `VirtualDesktop` match-leaf labels.
+    void setVirtualDesktopLookup(RuleModel::LabelLookup fn);
     /// layoutId UUID → display label resolver for SetSnappingLayout actions.
     void setSnappingLayoutLookup(RuleModel::LabelLookup fn);
     /// Algorithm token ("bsp", …) → display label resolver for SetTilingAlgorithm actions.
@@ -300,9 +302,11 @@ public:
 
     /// Match fields suitable for the leaf-editor field dropdown. Each entry:
     /// `{ value: int (Field enum), wire: QString (JSON wire string), label,
-    ///    valueKind: "string"|"number"|"bool"|"windowType"|"screen"|"activity" }`
-    /// (the latter three drive dedicated pickers; "windowType" also carries an
-    /// `options` list). QML keys off `wire` so it never has to reconstruct the
+    ///    valueKind: "string"|"number"|"bool"|"windowType"|"virtualDesktop"|
+    ///    "screen"|"activity"|"mode"|"orientation"|"layout" }`. The screen /
+    /// activity / virtualDesktop / layout kinds drive dedicated pickers; the
+    /// closed-vocab kinds (windowType / mode / orientation) also carry an
+    /// `options` list. QML keys off `wire` so it never has to reconstruct the
     /// enum↔wire-string table.
     Q_INVOKABLE QVariantList matchFields() const;
 
@@ -326,9 +330,13 @@ public:
     /// Registered action types for the action-editor dropdown. Each entry:
     /// `{ value: QString (action type id), label, params: [ ... ],
     ///   domain: "context"|"window" }` where each param descriptor is
-    /// `{ key, kind: "string"|"number"|"enum"|"percent", label }` plus, for
-    /// `kind == "enum"`, an `options` string list, and for `kind == "number"`
-    /// /`"percent"`, `min`/`max`/`scale` (the value stored is `display * scale`).
+    /// `{ key, kind, label }`. `kind` is one of the descriptor kinds the
+    /// ActionRow editor dispatches on (enum, number, percent, bool, color,
+    /// zoneOrdinals, screenId, virtualDesktop, snappingLayout, tilingAlgorithm,
+    /// animationEvent, shaderEffect, overlayShader, curveEditor); for
+    /// `kind == "enum"` there is also an `options` string list, and for
+    /// `kind == "number"`/`"percent"`, `min`/`max`/`scale` (the value stored is
+    /// `display * scale`).
     /// QML drives the per-type editor entirely from this descriptor; the
     /// `domain` field lets the picker disable types incompatible with the
     /// current match expression (a context-domain action against a

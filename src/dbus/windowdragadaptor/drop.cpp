@@ -439,7 +439,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // toggle path passes screenId to validatedUnmanagedGeometry; without it,
         // coordinates captured on another screen may fail the service's on-screen
         // visibility check and not restore).
-        if (m_settings && m_settings->restoreOriginalSizeOnUnsnap() && m_windowTracking) {
+        if (m_windowTracking && m_windowTracking->shouldRestoreSizeOnUnsnap(windowId)) {
             auto* wts = m_windowTracking->service();
             auto geo = wts->validatedUnmanagedGeometry(windowId, releaseScreenId);
             // Require strictly-positive dimensions: a degenerate stored

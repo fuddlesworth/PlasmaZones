@@ -74,6 +74,8 @@ PickerCategory fieldCategory(Field f)
     case Field::IsSticky:
     case Field::HasDecoration:
     case Field::IsResizable:
+    case Field::IsMovable:
+    case Field::IsMaximizable:
         return {PhosphorI18n::tr("State"), 3};
     // NETWM "skip" hints — whether the window opts out of the taskbar, pager,
     // or Alt+Tab switcher.
@@ -97,6 +99,8 @@ PickerCategory fieldCategory(Field f)
     case Field::Activity:
     case Field::Mode:
     case Field::TiledWindowCount:
+    case Field::ScreenOrientation:
+    case Field::ActiveLayout:
         return {PhosphorI18n::tr("Context"), 0};
     }
     return {PhosphorI18n::tr("Other"), 99};
@@ -157,6 +161,10 @@ QString fieldDescription(Field f)
         return PhosphorI18n::tr("Whether the window has a server-side title-bar and border.");
     case Field::IsResizable:
         return PhosphorI18n::tr("Whether the window can be resized.");
+    case Field::IsMovable:
+        return PhosphorI18n::tr("Whether the window can be moved.");
+    case Field::IsMaximizable:
+        return PhosphorI18n::tr("Whether the window can be maximized.");
     case Field::PositionX:
         return PhosphorI18n::tr("The window's left-edge X position in pixels.");
     case Field::PositionY:
@@ -185,6 +193,14 @@ QString fieldDescription(Field f)
             "How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as "
             "windows open and close, for example a centered single-window layout that gives way once a second window "
             "opens.");
+    case Field::ScreenOrientation:
+        return PhosphorI18n::tr(
+            "Whether the monitor is in portrait or landscape orientation. Lets a rule pick a different layout or "
+            "algorithm on a rotated screen.");
+    case Field::ActiveLayout:
+        return PhosphorI18n::tr(
+            "The layout currently active on the monitor. Lets a rule change gaps, the overlay or the lock state for "
+            "the screen showing a given layout. It cannot change which layout is assigned (that would be circular).");
     }
     return QString();
 }
@@ -243,6 +259,27 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetTilingAlgorithm && key == ActionParam::Algorithm) {
         return PhosphorI18n::tr("Tiling algorithm");
     }
+    if (type == ActionType::SetAlgorithmParam && key == ActionParam::Algorithm) {
+        return PhosphorI18n::tr("Algorithm");
+    }
+    if (type == ActionType::SetMaxWindows && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Max tiled windows");
+    }
+    if (type == ActionType::SetSplitRatio && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Split ratio (%)");
+    }
+    if (type == ActionType::SetMasterCount && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Master count");
+    }
+    if (type == ActionType::SetInsertPosition && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Insert position");
+    }
+    if (type == ActionType::SetOverflowBehavior && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Overflow behavior");
+    }
+    if (type == ActionType::SetDragBehavior && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Drag behavior");
+    }
     if (type == ActionType::DisableEngine && key == ActionParam::Mode) {
         return PhosphorI18n::tr("Engine to disable");
     }
@@ -258,6 +295,12 @@ QString paramLabel(const QString& type, const QString& key)
     // is spelled out the same way the other bool actions do.
     if (type == ActionType::RestorePosition && key == ActionParam::Value) {
         return PhosphorI18n::tr("Restore position on login (off = don't restore)");
+    }
+    if (type == ActionType::SetRestoreToZoneOnLogin && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Restore to zone on login (off = don't restore)");
+    }
+    if (type == ActionType::SetRestoreSizeOnUnsnap && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Restore size on unsnap (off = keep zone size)");
     }
     // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
     // SetHideTitleBar is tri-state at the effect: rule absent = mode decides,
@@ -325,6 +368,31 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
         return PhosphorI18n::tr("Overlay style");
     }
+    // Context overlay-appearance overrides (all single-value, keyed ActionParam::Value).
+    if (type == ActionType::SetOverlayHighlightColor && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Highlight color");
+    }
+    if (type == ActionType::SetOverlayInactiveColor && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Inactive zone color");
+    }
+    if (type == ActionType::SetOverlayBorderColor && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Border color");
+    }
+    if (type == ActionType::SetOverlayActiveOpacity && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Active opacity (%)");
+    }
+    if (type == ActionType::SetOverlayInactiveOpacity && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Inactive opacity (%)");
+    }
+    if (type == ActionType::SetOverlayBorderWidth && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Border width (px)");
+    }
+    if (type == ActionType::SetOverlayBorderRadius && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Corner radius (px)");
+    }
+    if (type == ActionType::SetOverlayShowZoneNumbers && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Show zone numbers (off = hide)");
+    }
     if (type == ActionType::RouteToScreen && key == ActionParam::TargetScreenId) {
         return PhosphorI18n::tr("Monitor");
     }
@@ -364,34 +432,6 @@ QString paramHint(const QString& type, const QString& key)
             "Multiple zones snap the window to their combined area.");
     }
     return {};
-}
-
-/// Translated label for one enum wire value on action @p type, param @p key.
-/// Mirrors paramLabel — structural enum membership lives on the descriptor;
-/// the human-facing label is per `(type, key, wireValue)`.
-QString enumOptionLabel(const QString& type, const QString& key, const QString& wireValue)
-{
-    namespace ActionParam = PhosphorRules::ActionParam;
-    if ((type == ActionType::SetEngineMode || type == ActionType::DisableEngine) && key == ActionParam::Mode) {
-        if (wireValue == QLatin1String("snapping")) {
-            return PhosphorI18n::tr("Snapping");
-        }
-        if (wireValue == QLatin1String("autotile")) {
-            return PhosphorI18n::tr("Autotile");
-        }
-        if (wireValue == QLatin1String("scrolling")) {
-            return PhosphorI18n::tr("Scrolling");
-        }
-    }
-    if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
-        if (wireValue == PhosphorRules::OverlayStyleToken::Rectangles) {
-            return PhosphorI18n::tr("Zone rectangles");
-        }
-        if (wireValue == PhosphorRules::OverlayStyleToken::Preview) {
-            return PhosphorI18n::tr("Layout preview");
-        }
-    }
-    return wireValue;
 }
 
 /// The parameter schema for @p type, derived from the LGPL ActionDescriptor's
@@ -472,6 +512,27 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetTilingAlgorithm) {
         return PhosphorI18n::tr("Set tiling algorithm");
     }
+    if (type == ActionType::SetMaxWindows) {
+        return PhosphorI18n::tr("Set max tiled windows");
+    }
+    if (type == ActionType::SetSplitRatio) {
+        return PhosphorI18n::tr("Set split ratio");
+    }
+    if (type == ActionType::SetMasterCount) {
+        return PhosphorI18n::tr("Set master count");
+    }
+    if (type == ActionType::SetInsertPosition) {
+        return PhosphorI18n::tr("Set insert position");
+    }
+    if (type == ActionType::SetOverflowBehavior) {
+        return PhosphorI18n::tr("Set overflow behavior");
+    }
+    if (type == ActionType::SetDragBehavior) {
+        return PhosphorI18n::tr("Set drag behavior");
+    }
+    if (type == ActionType::SetAlgorithmParam) {
+        return PhosphorI18n::tr("Set algorithm parameter");
+    }
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");
     }
@@ -493,6 +554,12 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::RestorePosition) {
         return PhosphorI18n::tr("Restore position on login");
     }
+    if (type == ActionType::SetRestoreToZoneOnLogin) {
+        return PhosphorI18n::tr("Restore to zone on login");
+    }
+    if (type == ActionType::SetRestoreSizeOnUnsnap) {
+        return PhosphorI18n::tr("Restore size on unsnap");
+    }
     if (type == ActionType::OverrideAnimationShader) {
         return PhosphorI18n::tr("Override animation shader");
     }
@@ -513,6 +580,30 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::OverrideOverlayStyle) {
         return PhosphorI18n::tr("Set overlay style");
+    }
+    if (type == ActionType::SetOverlayHighlightColor) {
+        return PhosphorI18n::tr("Set overlay highlight color");
+    }
+    if (type == ActionType::SetOverlayInactiveColor) {
+        return PhosphorI18n::tr("Set overlay inactive color");
+    }
+    if (type == ActionType::SetOverlayBorderColor) {
+        return PhosphorI18n::tr("Set overlay border color");
+    }
+    if (type == ActionType::SetOverlayActiveOpacity) {
+        return PhosphorI18n::tr("Set overlay active opacity");
+    }
+    if (type == ActionType::SetOverlayInactiveOpacity) {
+        return PhosphorI18n::tr("Set overlay inactive opacity");
+    }
+    if (type == ActionType::SetOverlayBorderWidth) {
+        return PhosphorI18n::tr("Set overlay border width");
+    }
+    if (type == ActionType::SetOverlayBorderRadius) {
+        return PhosphorI18n::tr("Set overlay corner radius");
+    }
+    if (type == ActionType::SetOverlayShowZoneNumbers) {
+        return PhosphorI18n::tr("Show zone numbers");
     }
     if (type == ActionType::ExcludeAnimations) {
         return PhosphorI18n::tr("Exclude from animations");
@@ -596,13 +687,164 @@ QString operatorLabelImpl(Operator op)
     return PhosphorRules::operatorToString(op);
 }
 
+/// Single source of truth for WindowType → { int value, wire token, display label },
+/// shared by matchFields() (the editor dropdown options) and windowTypeLabel() (the
+/// collapsed rule-list summary). Order mirrors WindowTypeEnum.h — Unknown first as
+/// the safe default, then Normal as the most common authoring choice.
+struct WindowTypeOption
+{
+    int value;
+    QString wire;
+    QString label;
+};
+QList<WindowTypeOption> windowTypeOptions()
+{
+    struct Entry
+    {
+        PhosphorProtocol::WindowType type;
+        QString label;
+    };
+    // CTAD deduces the array size from the brace-list, so a new enum value can't
+    // silently drop the trailing entry by mismatching a hardcoded size.
+    const std::array entries = std::to_array<Entry>({
+        {PhosphorProtocol::WindowType::Unknown, PhosphorI18n::tr("Unknown")},
+        {PhosphorProtocol::WindowType::Normal, PhosphorI18n::tr("Normal window")},
+        {PhosphorProtocol::WindowType::Dialog, PhosphorI18n::tr("Dialog")},
+        {PhosphorProtocol::WindowType::Utility, PhosphorI18n::tr("Utility")},
+        {PhosphorProtocol::WindowType::Toolbar, PhosphorI18n::tr("Toolbar")},
+        {PhosphorProtocol::WindowType::Splash, PhosphorI18n::tr("Splash screen")},
+        {PhosphorProtocol::WindowType::Menu, PhosphorI18n::tr("Menu")},
+        {PhosphorProtocol::WindowType::Tooltip, PhosphorI18n::tr("Tooltip")},
+        {PhosphorProtocol::WindowType::Notification, PhosphorI18n::tr("Notification")},
+        {PhosphorProtocol::WindowType::Dock, PhosphorI18n::tr("Dock / panel")},
+        {PhosphorProtocol::WindowType::Desktop, PhosphorI18n::tr("Desktop")},
+        {PhosphorProtocol::WindowType::OnScreenDisplay, PhosphorI18n::tr("On-screen display")},
+        {PhosphorProtocol::WindowType::Popup, PhosphorI18n::tr("Popup")},
+    });
+    QList<WindowTypeOption> out;
+    out.reserve(static_cast<int>(entries.size()));
+    for (const auto& e : entries) {
+        out.append({static_cast<int>(e.type), PhosphorProtocol::windowTypeToString(e.type), e.label});
+    }
+    return out;
+}
+
+/// Single source for the closed Mode / ScreenOrientation token vocabularies (the
+/// stored value IS the wire token), shared by matchFields() (the editor dropdown
+/// options) and modeLabel() / orientationLabel() (the collapsed rule-list summary),
+/// so the picker and the summary can never drift.
+struct ClosedTokenOption
+{
+    QString wire;
+    QString label;
+};
+QList<ClosedTokenOption> modeOptions()
+{
+    return {{QStringLiteral("snapping"), PhosphorI18n::tr("Snapping")},
+            {QStringLiteral("tiling"), PhosphorI18n::tr("Tiling")}};
+}
+QList<ClosedTokenOption> orientationOptions()
+{
+    return {{QStringLiteral("landscape"), PhosphorI18n::tr("Landscape")},
+            {QStringLiteral("portrait"), PhosphorI18n::tr("Portrait")}};
+}
+QString closedTokenLabel(const QList<ClosedTokenOption>& opts, const QString& token)
+{
+    for (const ClosedTokenOption& o : opts) {
+        if (o.wire == token) {
+            return o.label;
+        }
+    }
+    // Unknown token (hand-edited rule): round-trip verbatim.
+    return token;
+}
+
 } // namespace
+
+QString windowTypeLabel(int windowTypeValue)
+{
+    for (const WindowTypeOption& opt : windowTypeOptions()) {
+        if (opt.value == windowTypeValue) {
+            return opt.label;
+        }
+    }
+    // Unknown value (hand-edited rule): show the raw int rather than a blank.
+    return QString::number(windowTypeValue);
+}
+
+QString modeLabel(const QString& modeToken)
+{
+    return closedTokenLabel(modeOptions(), modeToken);
+}
+
+QString orientationLabel(const QString& orientationToken)
+{
+    return closedTokenLabel(orientationOptions(), orientationToken);
+}
+
+QString enumOptionLabel(const QString& type, const QString& key, const QString& wireValue)
+{
+    namespace ActionParam = PhosphorRules::ActionParam;
+    if ((type == ActionType::SetEngineMode || type == ActionType::DisableEngine) && key == ActionParam::Mode) {
+        if (wireValue == QLatin1String("snapping")) {
+            return PhosphorI18n::tr("Snapping");
+        }
+        if (wireValue == QLatin1String("autotile")) {
+            return PhosphorI18n::tr("Autotile");
+        }
+        if (wireValue == QLatin1String("scrolling")) {
+            return PhosphorI18n::tr("Scrolling");
+        }
+    }
+    if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::OverlayStyleToken::Rectangles) {
+            return PhosphorI18n::tr("Zone rectangles");
+        }
+        if (wireValue == PhosphorRules::OverlayStyleToken::Preview) {
+            return PhosphorI18n::tr("Layout preview");
+        }
+    }
+    if (type == ActionType::SetInsertPosition && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::InsertPositionToken::End) {
+            return PhosphorI18n::tr("End of stack");
+        }
+        if (wireValue == PhosphorRules::InsertPositionToken::AfterFocused) {
+            return PhosphorI18n::tr("After focused window");
+        }
+        if (wireValue == PhosphorRules::InsertPositionToken::AsMaster) {
+            return PhosphorI18n::tr("As master");
+        }
+    }
+    if (type == ActionType::SetOverflowBehavior && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::OverflowBehaviorToken::Float) {
+            return PhosphorI18n::tr("Float overflow windows");
+        }
+        if (wireValue == PhosphorRules::OverflowBehaviorToken::Unlimited) {
+            return PhosphorI18n::tr("Unlimited (no cap)");
+        }
+    }
+    if (type == ActionType::SetDragBehavior && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::DragBehaviorToken::Float) {
+            return PhosphorI18n::tr("Float on drag");
+        }
+        if (wireValue == PhosphorRules::DragBehaviorToken::Reorder) {
+            return PhosphorI18n::tr("Reorder in stack");
+        }
+    }
+    return wireValue;
+}
 
 QString boolActionStateLabel(const QString& type, bool on)
 {
     namespace ActionType = PhosphorRules::ActionType;
     if (type == ActionType::RestorePosition) {
         return on ? PhosphorI18n::tr("Restore position on login") : PhosphorI18n::tr("Don't restore position on login");
+    }
+    if (type == ActionType::SetRestoreToZoneOnLogin) {
+        return on ? PhosphorI18n::tr("Restore to zone on login") : PhosphorI18n::tr("Don't restore to zone on login");
+    }
+    if (type == ActionType::SetRestoreSizeOnUnsnap) {
+        return on ? PhosphorI18n::tr("Restore size on unsnap") : PhosphorI18n::tr("Keep zone size on unsnap");
     }
     if (type == ActionType::SetHideTitleBar) {
         return on ? PhosphorI18n::tr("Hide title bars") : PhosphorI18n::tr("Show title bars");
@@ -618,6 +860,9 @@ QString boolActionStateLabel(const QString& type, bool on)
     }
     if (type == ActionType::SetUsePerSideOuterGap) {
         return on ? PhosphorI18n::tr("Per-side outer gaps") : PhosphorI18n::tr("Uniform outer gap");
+    }
+    if (type == ActionType::SetOverlayShowZoneNumbers) {
+        return on ? PhosphorI18n::tr("Show zone numbers") : PhosphorI18n::tr("Hide zone numbers");
     }
     return QString();
 }
@@ -662,43 +907,16 @@ QVariantList matchFields()
         QString kind = QStringLiteral("string");
         if (f == Field::WindowType) {
             // WindowType is stored as the int underlying the
-            // PhosphorProtocol::WindowType enum on the wire. Rendering it
-            // as a plain "number" SpinBox left users with no idea what
-            // each value meant ("2" — Dialog? Utility?). Surface the
-            // friendly token instead via a dedicated kind that the
-            // editor renders as a dropdown.
+            // PhosphorProtocol::WindowType enum on the wire. A plain "number" SpinBox
+            // left users with no idea what each value meant ("2" — Dialog? Utility?),
+            // so a dedicated kind renders a dropdown. Options come from the single-source
+            // windowTypeOptions() table (also used by the collapsed-summary label).
             kind = QStringLiteral("windowType");
             QVariantList options;
-            // Order mirrors the enum declaration in WindowTypeEnum.h —
-            // Unknown first as the safe default, then Normal as the
-            // most common authoring choice.
-            struct WindowTypeEntry
-            {
-                PhosphorProtocol::WindowType type;
-                QString label;
-            };
-            // Use CTAD so the array size is deduced from the brace-list
-            // — adding a new WindowType enum value here can't silently
-            // drop the trailing entry by mismatching a hardcoded size.
-            const std::array kWindowTypes = std::to_array<WindowTypeEntry>({
-                {PhosphorProtocol::WindowType::Unknown, PhosphorI18n::tr("Unknown")},
-                {PhosphorProtocol::WindowType::Normal, PhosphorI18n::tr("Normal window")},
-                {PhosphorProtocol::WindowType::Dialog, PhosphorI18n::tr("Dialog")},
-                {PhosphorProtocol::WindowType::Utility, PhosphorI18n::tr("Utility")},
-                {PhosphorProtocol::WindowType::Toolbar, PhosphorI18n::tr("Toolbar")},
-                {PhosphorProtocol::WindowType::Splash, PhosphorI18n::tr("Splash screen")},
-                {PhosphorProtocol::WindowType::Menu, PhosphorI18n::tr("Menu")},
-                {PhosphorProtocol::WindowType::Tooltip, PhosphorI18n::tr("Tooltip")},
-                {PhosphorProtocol::WindowType::Notification, PhosphorI18n::tr("Notification")},
-                {PhosphorProtocol::WindowType::Dock, PhosphorI18n::tr("Dock / panel")},
-                {PhosphorProtocol::WindowType::Desktop, PhosphorI18n::tr("Desktop")},
-                {PhosphorProtocol::WindowType::OnScreenDisplay, PhosphorI18n::tr("On-screen display")},
-                {PhosphorProtocol::WindowType::Popup, PhosphorI18n::tr("Popup")},
-            });
-            for (const auto& opt : kWindowTypes) {
+            for (const WindowTypeOption& opt : windowTypeOptions()) {
                 QVariantMap option;
-                option[QStringLiteral("value")] = static_cast<int>(opt.type);
-                option[QStringLiteral("wire")] = PhosphorProtocol::windowTypeToString(opt.type);
+                option[QStringLiteral("value")] = opt.value;
+                option[QStringLiteral("wire")] = opt.wire;
                 option[QStringLiteral("label")] = opt.label;
                 options.append(option);
             }
@@ -732,24 +950,35 @@ QVariantList matchFields()
             // verbatim).
             kind = QStringLiteral("mode");
             QVariantList options;
-            struct ModeEntry
-            {
-                QLatin1StringView wire;
-                QString label;
-            };
-            const std::array kModes = std::to_array<ModeEntry>({
-                {QLatin1StringView("snapping"), PhosphorI18n::tr("Snapping")},
-                {QLatin1StringView("tiling"), PhosphorI18n::tr("Tiling")},
-            });
-            for (const auto& opt : kModes) {
+            for (const ClosedTokenOption& opt : modeOptions()) {
                 QVariantMap option;
-                const QString wire = QString(opt.wire);
-                option[QStringLiteral("value")] = wire;
-                option[QStringLiteral("wire")] = wire;
+                option[QStringLiteral("value")] = opt.wire;
+                option[QStringLiteral("wire")] = opt.wire;
                 option[QStringLiteral("label")] = opt.label;
                 options.append(option);
             }
             entry[QStringLiteral("options")] = options;
+        } else if (f == Field::ScreenOrientation) {
+            // String-valued on the wire (the orientation token), closed vocabulary
+            // — a dropdown of the friendly tokens, same shape as Mode. The value IS
+            // the wire token ("portrait" / "landscape"). Options come from the
+            // single-source orientationOptions() table (also used by the summary).
+            kind = QStringLiteral("orientation");
+            QVariantList options;
+            for (const ClosedTokenOption& opt : orientationOptions()) {
+                QVariantMap option;
+                option[QStringLiteral("value")] = opt.wire;
+                option[QStringLiteral("wire")] = opt.wire;
+                option[QStringLiteral("label")] = opt.label;
+                options.append(option);
+            }
+            entry[QStringLiteral("options")] = options;
+        } else if (f == Field::ActiveLayout) {
+            // The value is a layout id (snap UUID or "autotile:<algo>"). The QML
+            // editor swaps this for a layout-picker ComboBox driven by
+            // `settingsController.layouts` (like the screen / activity pickers), so
+            // the user picks a friendly name while the wire value stays the id.
+            kind = QStringLiteral("layout");
         }
         entry[QStringLiteral("valueKind")] = kind;
         out.append(entry);
@@ -766,10 +995,12 @@ QVariantList operatorsForField(int fieldValue)
     }
     const Field field = static_cast<Field>(fieldValue);
     QList<Operator> ops;
-    if (field == Field::Mode) {
-        // Mode is string-valued but its vocabulary is a closed dropdown — only
-        // an exact-token Equals is meaningful (a substring / regex against a
-        // three-token set is a footgun). Mirrors the WindowType enum treatment.
+    if (field == Field::Mode || field == Field::ScreenOrientation || field == Field::ActiveLayout) {
+        // These are string-valued but their vocabulary is a closed single-select
+        // dropdown (placement mode, portrait/landscape, a concrete layout id) — only
+        // an exact-token Equals is meaningful. A substring / regex against a closed
+        // token set (or a layout UUID) is a footgun the picker cannot author
+        // sensibly. Mirrors the WindowType enum treatment.
         ops = {Operator::Equals};
     } else if (PhosphorRules::fieldIsString(field)) {
         ops = {Operator::Equals, Operator::Contains, Operator::StartsWith, Operator::EndsWith, Operator::Regex};
@@ -953,11 +1184,16 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             payload[key] = defaultDisplay.isValid() ? QVariant(defaultDisplay.toBool()) : QVariant(false);
         } else if (kind == QLatin1String("color")) {
             // Colour kind has no numeric `defaultDisplay` (that field is a
-            // double); seed the accent sentinel so a fresh border-colour rule
-            // (SetBorderColorActive / SetBorderColorInactive) passes the
-            // validator and follows the system accent until the user picks a
-            // concrete colour.
-            payload[key] = QString(PhosphorRules::BorderColorToken::Accent);
+            // double). The border-colour actions seed the accent sentinel so a
+            // fresh rule follows the system accent until the user picks a colour.
+            // The overlay-colour actions have NO accent concept (their consumer
+            // resolves no token — validator is plain hex), so seed a concrete
+            // hex (the Plasma default blue, matching the colour picker's own
+            // empty-value fallback) that passes `hasHexColor`.
+            const bool isBorderColor = typeWire == QString(PhosphorRules::ActionType::SetBorderColorActive)
+                || typeWire == QString(PhosphorRules::ActionType::SetBorderColorInactive);
+            payload[key] =
+                isBorderColor ? QString(PhosphorRules::BorderColorToken::Accent) : QStringLiteral("#FF3DAEE9");
         } else if (kind == QLatin1String("zoneOrdinals")) {
             // Seed a valid single-zone default ([1]) so a fresh SnapToZone rule
             // passes the validator (non-empty array of positive ordinals) before

@@ -26,6 +26,11 @@ void RuleController::setZoneLookup(RuleModel::LabelLookup fn)
     m_model.setZoneLabelLookup(std::move(fn));
 }
 
+void RuleController::setVirtualDesktopLookup(RuleModel::LabelLookup fn)
+{
+    m_model.setVirtualDesktopLabelLookup(std::move(fn));
+}
+
 void RuleController::setSnappingLayoutLookup(RuleModel::LabelLookup fn)
 {
     m_snappingLayoutLookup = std::move(fn);

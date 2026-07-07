@@ -28,7 +28,12 @@ LayoutRegistry::LayoutRegistry(PhosphorRules::RuleStore* ruleStore, QString layo
     if (m_ruleStore == nullptr) {
         qFatal("LayoutRegistry: ruleStore is required — assignment resolution dereferences it");
     }
-    Q_ASSERT_X(!m_layoutSubdirectory.isEmpty(), "LayoutRegistry", "layoutSubdirectory is required");
+    // qFatal, not Q_ASSERT_X: an empty subdirectory concatenates to the bare XDG
+    // data root (a trailing slash), so — like the absolute / ".." checks in
+    // initCommon — it must fail in release too, not compile out.
+    if (m_layoutSubdirectory.isEmpty()) {
+        qFatal("LayoutRegistry: layoutSubdirectory is required");
+    }
     initCommon();
 }
 
@@ -84,6 +89,12 @@ void LayoutRegistry::setTiledWindowCountProvider(
     std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)> provider)
 {
     m_tiledWindowCountProvider = std::move(provider);
+}
+
+void LayoutRegistry::setScreenOrientationProvider(
+    std::function<std::optional<QString>(const QString& screenId)> provider)
+{
+    m_screenOrientationProvider = std::move(provider);
 }
 
 void LayoutRegistry::setSnappingPreferredProvider(std::function<bool()> provider)

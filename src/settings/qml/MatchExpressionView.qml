@@ -82,9 +82,10 @@ ColumnLayout {
         return opWire;
     }
 
-    /// Wire→valueKind helper for `_valueLabel`. Returns the controller-side
-    /// kind string ("string" / "number" / "bool" / "screen" / "activity") or
-    /// "string" for unknown fields — the safest default since `String(value)`
+    /// Wire→valueKind helper for `_valueLabel`. Returns the field's controller-side
+    /// kind string (any of the kinds MatchLeafEditor dispatches on: string, number,
+    /// bool, screen, activity, windowType, virtualDesktop, mode, orientation, layout)
+    /// or "string" for unknown fields — the safest default since `String(value)`
     /// is what a plain-string render would do anyway.
     function _valueKind(wire) {
         for (var i = 0; i < root.matchFieldOptions.length; ++i) {
@@ -99,11 +100,14 @@ ColumnLayout {
     ///   - bool → "On" / "Off" (i18n'd)
     ///   - screen → `appSettings.screens.displayLabel` for the matching name
     ///   - activity → `appSettings.activities.name` for the matching id
+    ///   - windowType → the enum option's label from the field entry
+    ///   - layout → `appSettings.layouts.displayName` for the matching id
+    ///   - mode / orientation → the token's option label from the field entry
     ///   - everything else (string, number) → `String(value)`
     /// Falls back to the raw wire value when a lookup misses (e.g. the
     /// rule references an unplugged monitor or removed activity), matching
     /// the editor's dangling-pin fallback.
-    function _valueLabel(value, fieldWire) {
+    function _valueLabel(value, fieldWire, opWire) {
         if (value === undefined || value === null)
             return "";
 
@@ -135,6 +139,15 @@ ColumnLayout {
                 }
             }
         }
+        if (kind === "layout" && root.appSettings) {
+            var layouts = root.appSettings.layouts;
+            if (layouts) {
+                for (var L = 0; L < layouts.length; ++L) {
+                    if (layouts[L].id === value)
+                        return layouts[L].displayName || String(value);
+                }
+            }
+        }
         if (kind === "windowType") {
             // The field entry's `options` carry the {value, label} pairs the
             // editor surfaces; reuse them so the read-only summary shows
@@ -150,6 +163,34 @@ ColumnLayout {
                 }
                 break;
             }
+        }
+        // Closed string-token dropdowns (Mode, Screen orientation) — resolve the
+        // token to its friendly label from the field entry's options, the same way
+        // windowType does, so the tree shows "Portrait" not the raw "portrait".
+        if (kind === "mode" || kind === "orientation") {
+            for (var m = 0; m < root.matchFieldOptions.length; ++m) {
+                var modeEntry = root.matchFieldOptions[m];
+                if (modeEntry.wire !== fieldWire)
+                    continue;
+                var modeOpts = modeEntry.options || [];
+                for (var mo = 0; mo < modeOpts.length; ++mo) {
+                    if (modeOpts[mo].value === value)
+                        return modeOpts[mo].label || String(value);
+                }
+                break;
+            }
+        }
+        // Virtual desktop — resolve the 1-based number to its name via
+        // `appSettings.virtualDesktopNames` (0-indexed) so the tree shows "Work"
+        // rather than the bare number, matching the editor picker and the collapsed
+        // rule-list summary. Only for `equals` — under greaterThan/lessThan the value
+        // is a numeric threshold where a name reads as nonsense, so those keep the
+        // number. An out-of-range / unnamed desktop also keeps the number.
+        if (kind === "virtualDesktop" && opWire === "equals" && root.appSettings) {
+            var names = root.appSettings.virtualDesktopNames || [];
+            var idx = parseInt(value, 10) - 1;
+            if (idx >= 0 && idx < names.length && names[idx])
+                return names[idx];
         }
         return String(value);
     }
@@ -555,7 +596,7 @@ ColumnLayout {
                             id: valueLabel
 
                             anchors.centerIn: parent
-                            text: root._valueLabel(delegate.value, delegate.fieldWire)
+                            text: root._valueLabel(delegate.value, delegate.fieldWire, delegate.opWire)
                             font.family: Kirigami.Theme.smallFont.family
                         }
                     }

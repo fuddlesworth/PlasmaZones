@@ -206,10 +206,13 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     writeQmlProperty(slot, QStringLiteral("screenWidth"), screenGeom.width());
     writeQmlProperty(slot, QStringLiteral("screenHeight"), screenGeom.height());
 
-    writeColorSettings(slot, m_settings);
+    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
+    writeColorSettings(slot, m_settings, &overlayOverride);
     if (m_settings) {
-        writeQmlProperty(slot, QStringLiteral("borderWidth"), m_settings->borderWidth());
-        writeQmlProperty(slot, QStringLiteral("borderRadius"), m_settings->borderRadius());
+        writeQmlProperty(slot, QStringLiteral("borderWidth"),
+                         overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
+        writeQmlProperty(slot, QStringLiteral("borderRadius"),
+                         overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
     }
 
     // Stage d: resolve + push the snap-assist surface-shader decoration (same
@@ -575,7 +578,8 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         locked = isAnyModeLocked(m_settings, m_layoutManager, resolvedId, curDesktop, curActivity);
     }
     writeQmlProperty(slot, QStringLiteral("locked"), locked);
-    writeColorSettings(slot, m_settings);
+    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, resolvedId);
+    writeColorSettings(slot, m_settings, &overlayOverride);
 
     // Stage d: resolve + push the layout-picker surface-shader decoration (same
     // SurfaceDecoration host the OSD uses, retargeted to the "popup.layoutPicker"

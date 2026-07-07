@@ -821,6 +821,8 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             meta.isModal = existing->isModal;
             meta.hasDecoration = existing->hasDecoration;
             meta.isResizable = existing->isResizable;
+            meta.isMovable = existing->isMovable;
+            meta.isMaximizable = existing->isMaximizable;
             meta.width = existing->width;
             meta.height = existing->height;
             meta.positionX = existing->positionX;
@@ -856,6 +858,8 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
         meta.isModal = optBool(Key::IsModal);
         meta.hasDecoration = optBool(Key::HasDecoration);
         meta.isResizable = optBool(Key::IsResizable);
+        meta.isMovable = optBool(Key::IsMovable);
+        meta.isMaximizable = optBool(Key::IsMaximizable);
         meta.width = optInt(Key::Width);
         meta.height = optInt(Key::Height);
         meta.positionX = optInt(Key::PositionX);

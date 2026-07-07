@@ -192,6 +192,12 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         if (props.isResizable) {
             extended.insert(Key::IsResizable, *props.isResizable);
         }
+        if (props.isMovable) {
+            extended.insert(Key::IsMovable, *props.isMovable);
+        }
+        if (props.isMaximizable) {
+            extended.insert(Key::IsMaximizable, *props.isMaximizable);
+        }
         if (props.width) {
             extended.insert(Key::Width, *props.width);
         }

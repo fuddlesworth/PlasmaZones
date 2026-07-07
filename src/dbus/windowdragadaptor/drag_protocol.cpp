@@ -26,7 +26,7 @@ namespace PlasmaZones {
 PhosphorProtocol::DragPolicy
 WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEngine::IPlacementEngine* autotileEngine,
                                      const QString& windowId, const QString& screenId,
-                                     const PhosphorContext::IContextResolver* resolver)
+                                     const PhosphorContext::IContextResolver* resolver, bool reorderMode)
 {
     PhosphorProtocol::DragPolicy policy;
     policy.screenId = screenId;
@@ -63,7 +63,8 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
     if (autotileEngine && !screenId.isEmpty() && autotileEngine->isActiveOnScreen(screenId)) {
         policy.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
         policy.captureGeometry = true; // preserve pre-autotile size for unfloat restore
-        const bool reorderMode = settings && settings->autotileDragBehavior() == AutotileDragBehavior::Reorder;
+        // reorderMode is resolved by the caller (effectiveReorderMode): a matched
+        // context SetDragBehavior rule wins over the global setting for this screen.
         if (!windowId.isEmpty() && !reorderMode) {
             policy.immediateFloatOnStart = autotileEngine->isWindowTracked(windowId);
         }
@@ -88,6 +89,22 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
     policy.captureGeometry = true;
     policy.bypassReason = PhosphorProtocol::DragBypassReason::None;
     return policy;
+}
+
+bool WindowDragAdaptor::effectiveReorderMode(const QString& screenId) const
+{
+    // A matched context SetDragBehavior rule wins over the global setting for this
+    // screen; resolved through the layout registry (which the static
+    // computeDragPolicy can't reach, so it takes the result as a param).
+    if (m_layoutManager && !screenId.isEmpty()) {
+        const int vd = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+        const PhosphorZones::ContextTilingParams params =
+            m_layoutManager->resolveContextTilingParams(screenId, vd, m_layoutManager->currentActivity());
+        if (params.dragBehavior) {
+            return static_cast<AutotileDragBehavior>(*params.dragBehavior) == AutotileDragBehavior::Reorder;
+        }
+    }
+    return m_settings && m_settings->autotileDragBehavior() == AutotileDragBehavior::Reorder;
 }
 
 PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int frameY,
@@ -139,8 +156,11 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
     }
 
+    // Resolve once and reuse: effectiveReorderMode runs a full context rule
+    // resolve, and the reorder-fallback branch below needs the same answer.
+    const bool startReorderMode = effectiveReorderMode(startScreenId);
     const PhosphorProtocol::DragPolicy policy =
-        computeDragPolicy(m_settings, m_autotileEngine, windowId, startScreenId, m_contextResolver);
+        computeDragPolicy(m_settings, m_autotileEngine, windowId, startScreenId, m_contextResolver, startReorderMode);
 
     // Reusable mutable copy — the reorder fallback path below may need to
     // restore immediateFloatOnStart that computeDragPolicy proactively cleared.
@@ -178,8 +198,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         // legacy float-on-start behavior here so the UX matches the Float
         // mode default for the rest of this drag.
         if (effectivePolicy.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen && m_autotileEngine
-            && m_settings && m_settings->autotileDragBehavior() == AutotileDragBehavior::Reorder
-            && m_autotileEngine->isWindowTiled(windowId)) {
+            && startReorderMode && m_autotileEngine->isWindowTiled(windowId)) {
             if (m_autotileEngine->beginDragInsertPreview(windowId, startScreenId)) {
                 m_dragReorderActive = true;
             } else {
@@ -277,10 +296,10 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
     // Drop the wasSnapped latch after dragStarted has re-derived live
     // m_wasSnapped from the tracking state — its single consumer (the
     // endDrag pending-never-activated branch) is now unreachable for
-    // this drag. Leaving the latch set would bleed across the NEXT
-    // bypass beginDrag (which doesn't overwrite the field) and a
-    // later endDrag's pending-branch could read a stale-true value
-    // for a window that wasn't actually snapped at start.
+    // this drag. This is defensive: the next beginDrag re-clears the
+    // field via clearPendingSnapDragState() regardless, so a stale-true
+    // value can't actually bleed into a later drag; the reset just keeps
+    // the field honest for the remainder of this now-activated drag.
     m_pendingSnapDragWasSnapped = false;
     return !m_draggedWindowId.isEmpty();
 }
@@ -317,40 +336,25 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
     // on the window-tracking side so the window unsnaps and floats at
     // the drop location — otherwise the stale zone assignment persists.
     if (m_draggedWindowId.isEmpty() && m_pendingSnapDragWindowId == windowId) {
+        // A pending drag is always on the SNAP path: beginDrag's snap path sets
+        // m_currentDragPolicy.bypassReason == None, and the only mutator of that field
+        // afterwards (the policy-flip in updateDragCursor) runs solely after the early
+        // `windowId != m_draggedWindowId` return there, i.e. only when m_draggedWindowId
+        // is non-empty — never while the drag is still pending. So there is no bypass to
+        // promote here; a pending never-activated drag can only unsnap-and-NoOp.
         const bool wasSnapped = m_pendingSnapDragWasSnapped;
-        // Snapshot the bypass reason BEFORE clearing m_currentDragPolicy.
-        // updateDragCursor may have flipped the policy to a non-None
-        // bypassReason (e.g. cursor crossed onto an autotile screen)
-        // while m_draggedWindowId was still empty because activation
-        // never triggered. Treat that exactly like the non-pending bypass
-        // paths below — drop to the dispatch matrix instead of forcing
-        // the unsnap-only NoOp branch.
-        const PhosphorProtocol::DragBypassReason pendingBypass = m_currentDragPolicy.bypassReason;
         qCInfo(lcDbusWindow) << "endDrag: pending snap drag never activated" << windowId << "wasSnapped=" << wasSnapped
-                             << "cancelled=" << cancelled << "bypass=" << pendingBypass;
+                             << "cancelled=" << cancelled;
         clearPendingSnapDragState();
-        if (pendingBypass != PhosphorProtocol::DragBypassReason::None) {
-            // Promote to a bypass drop so the matrix below
-            // (AutotileScreen → ApplyFloat at release cursor;
-            // SnappingDisabled / ContextDisabled → NoOp) decides the
-            // final outcome. Populate m_draggedWindowId so the matrix
-            // branches that check it (e.g. the autotile drag-insert
-            // commit) see a consistent state. The matching clears live
-            // in those branches.
-            m_draggedWindowId = windowId;
-            if (!cancelled && wasSnapped && m_windowTracking) {
-                m_windowTracking->notifyDragOutUnsnap(windowId);
-            }
-            // Fall through — outcome is decided by the bypass dispatch
-            // matrix below.
-        } else {
-            m_currentDragPolicy = {};
-            if (!cancelled && wasSnapped && m_windowTracking) {
-                m_windowTracking->notifyDragOutUnsnap(windowId);
-            }
-            outcome.action = PhosphorProtocol::DragOutcome::NoOp;
-            return outcome;
+        m_currentDragPolicy = {};
+        // If the window was snapped at drag start and dragged without holding the
+        // activation trigger, unsnap it so it floats at the drop location instead of
+        // leaving a stale zone assignment.
+        if (!cancelled && wasSnapped && m_windowTracking) {
+            m_windowTracking->notifyDragOutUnsnap(windowId);
         }
+        outcome.action = PhosphorProtocol::DragOutcome::NoOp;
+        return outcome;
     }
 
     if (m_draggedWindowId != windowId) {
@@ -535,8 +539,15 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
     auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
     const QString cursorScreenId = resolved.screenId;
     if (!cursorScreenId.isEmpty()) {
+        // effectiveReorderMode runs a full context rule resolve; on this ~30 Hz
+        // path its result only matters on autotile screens (computeDragPolicy reads
+        // reorderMode solely in its autotile-screen branch). Gate on the cheap
+        // isActiveOnScreen set-lookup so snap-only drags don't pay a per-motion-event
+        // rule evaluation for a value that would be discarded.
+        const bool reorderMode = m_autotileEngine && m_autotileEngine->isActiveOnScreen(cursorScreenId)
+            && effectiveReorderMode(cursorScreenId);
         const PhosphorProtocol::DragPolicy candidate =
-            computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, m_contextResolver);
+            computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, m_contextResolver, reorderMode);
         if (candidate != m_currentDragPolicy) {
             // Log both bypass reason and screenId on each side so same-reason
             // flips (snap→snap or autotile→autotile cross-VS) aren't opaque in
@@ -545,6 +556,34 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
                                  << m_currentDragPolicy.screenId << "->" << candidate.bypassReason << "@"
                                  << cursorScreenId;
             m_currentDragPolicy = candidate;
+            // Re-latch reorder mode to the CURRENT autotile screen. Per-context
+            // SetDragBehavior means two autotile screens can differ (start Reorder,
+            // destination Float, or vice versa); without this the beginDrag-time
+            // start-screen snapshot would keep forcing the start screen's mode on the
+            // destination (dragMoved reads m_dragReorderActive at drag.cpp). The
+            // per-tick preview lifecycle in dragMoved begins/cancels the drag-insert
+            // preview off this latch, so tracking the current screen restores correct
+            // Reorder-vs-Float behavior across a mid-drag screen crossing.
+            //
+            // The GATE mirrors beginDrag's eager-preview seed (drag_protocol.cpp
+            // ~200-201): (1) the destination policy is the autotile-bypass path —
+            // bypassReason == AutotileScreen excludes a context-DISABLED autotile screen
+            // (computeDragPolicy evaluates ContextDisabled first), so the latch never
+            // forces a preview on a dead/excluded screen; and (2) the window is still
+            // tiled — beginDragInsertPreview would otherwise ADOPT a floating/untracked
+            // window into the stack (fresh-adoption branch), silently tiling a window
+            // dragged onto a Reorder screen with no trigger held, defeating the "floating
+            // windows drag free" invariant. A genuinely tiled window crossing Float→Reorder
+            // is still tiled at the flip, so this stays true for the case that should reorder.
+            //
+            // Unlike the seed, this only sets the latch; it does NOT eagerly call
+            // beginDragInsertPreview or restore a float-on-start fallback. The next
+            // dragMoved tick begins the preview off the latch (drag.cpp), so on a mid-drag
+            // cross to a Reorder screen where that begin fails the window float-drops on
+            // release rather than during the drag — an acceptable degradation for a
+            // transient begin failure (the common case begins successfully).
+            m_dragReorderActive = candidate.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen
+                && reorderMode && m_autotileEngine && m_autotileEngine->isWindowTiled(windowId);
             Q_EMIT dragPolicyChanged(windowId, candidate);
             // After the flip, fall through: if we're now on the snap path
             // we still want to call legacy dragMoved below for overlay
@@ -559,13 +598,12 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
 
     // Snap path: forward to legacy dragMoved so overlay/zone-detection
     // state stays current. Bypass paths still run dragMoved because it
-    // also drives the autotile drag-insert preview block (drag.cpp
-    // ~501-564). beginDrag's bypass branch (line ~145) DOES set
-    // m_draggedWindowId, so dragMoved's `windowId != m_draggedWindowId`
-    // guard would NOT early-return. The snap-side overlay branches
-    // inside dragMoved instead become no-ops because `prepareHandlerContext`
-    // (drag.cpp:166,180) suppresses the overlay path when the cursor
-    // screen is in autotile mode or context-disabled — the same gate
+    // also drives the autotile drag-insert preview block in dragMoved.
+    // beginDrag's bypass branch DOES set m_draggedWindowId, so dragMoved's
+    // `windowId != m_draggedWindowId` guard would NOT early-return. The
+    // snap-side overlay branches inside dragMoved instead become no-ops
+    // because `prepareHandlerContext` suppresses the overlay path when the
+    // cursor screen is in autotile mode or context-disabled — the same gate
     // that decided the bypass branch at beginDrag.
     dragMoved(windowId, cursorX, cursorY, modifiers, mouseButtons);
 }

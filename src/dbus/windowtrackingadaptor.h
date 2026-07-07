@@ -674,6 +674,20 @@ public:
     /// WindowQuery from the window registry metadata.
     bool shouldRestoreFloatedPosition(const QString& windowId, PhosphorZones::AssignmentEntry::Mode mode);
 
+    /// Resolve whether a SNAPPED window should be restored to its zone on login.
+    /// The snapped-to-zone analogue of shouldRestoreFloatedPosition: a matched
+    /// SetRestoreToZoneOnLogin rule wins, otherwise the global
+    /// `restoreWindowsToZonesOnLogin` setting decides. Consulted by the
+    /// managed-restore predicate the daemon injects into the SnapEngine.
+    bool shouldRestoreToZoneOnLogin(const QString& windowId);
+
+    /// Resolve whether a window's ORIGINAL (pre-snap) size should be restored when
+    /// it is unsnapped. A matched SetRestoreSizeOnUnsnap rule wins, otherwise the
+    /// global `restoreOriginalSizeOnUnsnap` setting decides. Consulted on the
+    /// drag-out / drop / cursor-left-zones unsnap paths (the latter two live in
+    /// WindowDragAdaptor and call through here), so this is public.
+    bool shouldRestoreSizeOnUnsnap(const QString& windowId);
+
     /// Resolve whether an opening window should start FLOATING because a "Float
     /// this app" rule matched it. Consulted by the float predicate the
     /// daemon injects into BOTH engines (in-process, not via D-Bus). Unlike
