@@ -657,9 +657,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // iMouse mirror the daemon's SurfaceAnimator semantics so a
             // single shader source observes equivalent state on either
             // runtime. Audio / multipass / texture uniforms are still
-            // unpopulated on the kwin path — those need C++ wiring
-            // (CAVA subscription, FBO chain, texture cache) that is out
-            // of scope for this commit.
+            // unpopulated on the kwin ANIMATION-transition path (window
+            // open/close/move/…) — those need C++ wiring (CAVA subscription,
+            // FBO chain, texture cache) that is out of scope here. NB: the
+            // surface DECORATION path (persistent border packs) DOES wire audio
+            // now via the effect's own CavaSpectrumProvider — see
+            // bindSurfaceAudio in surfacelayers.cpp; this comment is only about
+            // the transition shaders driven from this function.
             //
             // setUniform must run with the shader bound: KWin's
             // `GLShader::setUniform` calls `glUniform*` directly, which

@@ -123,10 +123,25 @@ float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
     if (now < 0) {
         now = ShaderInternal::shaderClockNowMs();
     }
+    // Instant mode: the resolved window.focus duration is 0 (animations
+    // disabled, or a window.focus node set to 0 — see refreshFocusFadeDuration),
+    // so snap to the hard target with no ramp. windowSurfaceAnimates then never
+    // sees an in-flight value and forces no repaints — the switch is immediate.
+    if (m_focusFadeDurationMs <= 0) {
+        fs.value = target;
+        fs.lastMs = now;
+        return fs.value;
+    }
     if (fs.value < 0.0f) {
         fs.value = target; // first decorate: snap, no fade on appearance
     } else if (fs.lastMs >= 0 && now > fs.lastMs) {
-        const float step = static_cast<float>(now - fs.lastMs) / static_cast<float>(kFocusFadeMs);
+        // Cap the delta: a window resting at 0/1 stops repainting (see
+        // windowSurfaceAnimates) so lastMs goes stale, and an uncapped
+        // now - lastMs would jump the whole ramp on the first frame after a
+        // focus change — the instant-snap bug. A live window's real frame delta
+        // is far below the cap, so normal ramps are unaffected.
+        const qint64 dt = qMin(now - fs.lastMs, kFocusFadeMaxStepMs);
+        const float step = static_cast<float>(dt) / static_cast<float>(m_focusFadeDurationMs);
         if (fs.value < target) {
             fs.value = qMin(target, fs.value + step);
         } else if (fs.value > target) {

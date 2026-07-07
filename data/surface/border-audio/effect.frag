@@ -6,10 +6,11 @@
 // mixed active/inactive colour); the bass energy pushes the band toward a pulse
 // colour and lifts its alpha on each beat, gated so a weak signal doesn't jitter.
 //
-// Audio is a DAEMON-SURFACE feature (OSD / popups) — those hosts receive the
-// spectrum when the audio visualizer is enabled. Window decorations have no
-// compositor audio path, so getBassSoft() reads 0 there and the pack renders as
-// a plain static border (a graceful, still-useful fallback).
+// Audio reaches this pack on both runtimes when the audio visualizer is
+// enabled: the daemon feeds the spectrum to its OSD / popup surfaces, and the
+// KWin effect runs its own CAVA provider to feed window borders. When the
+// visualizer is off, getBassSoft() reads 0 and the pack renders as a plain
+// static border (a graceful, still-useful fallback).
 //
 // Demonstrates two of the surface API additions at once: the pSurface entry
 // scaffold (no hand-written main()) and the opt-in surface_audio.glsl module.
@@ -34,8 +35,8 @@ vec4 pSurface(vec2 uv) {
     float edge = smoothstep(-width - aa, -width + aa, fs.d);
 
     // Base focus-mixed border colour, then react to the bass. getBassSoft() is
-    // 0 with no audio (or on the compositor), so the reactive terms vanish and
-    // this reduces to the plain border.
+    // 0 when the audio visualizer is off, so the reactive terms vanish and this
+    // reduces to the plain border.
     vec4 base = mix(p_inactiveColor, p_activeColor, clamp(uSurfaceFocused, 0.0, 1.0));
     float pulse = clamp(getBassSoft() * max(p_reactivity, 0.0), 0.0, 1.0);
     vec4 band = mix(base, p_pulseColor, pulse);

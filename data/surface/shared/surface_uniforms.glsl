@@ -67,10 +67,12 @@ uniform float uSurfaceFocused;
 // never reference iTime is not driven to repaint, so static decoration is free.
 uniform float iTime;
 
-// Audio spectrum bar count (CAVA). Daemon-only in practice — the compositor
-// wires no audio texture, so this stays 0 and surface_audio.glsl's helpers
-// no-op for window decorations. The uAudioSpectrum sampler is declared in
-// surface_audio.glsl, which packs #include to opt in.
+// Audio spectrum bar count (CAVA), 0 when the audio visualizer is off. Both
+// runtimes populate it: the daemon writes the UBO member for its OSD / popup
+// surfaces, and the KWin effect pushes it from its own CAVA provider for window
+// decorations. surface_audio.glsl's helpers no-op while it is 0. The
+// uAudioSpectrum sampler is declared in surface_audio.glsl, which packs #include
+// to opt in.
 uniform int iAudioSpectrumSize;
 
 // Pack-specific tweakable parameters (declared in metadata.json, addressed by

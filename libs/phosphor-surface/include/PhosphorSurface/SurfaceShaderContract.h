@@ -198,6 +198,22 @@ inline constexpr const char* kUBackdropRect = "uBackdropRect";
 /// gate (e.g. a plain translucent tint) instead of assuming the sampler.
 inline constexpr const char* kUHasBackdrop = "uHasBackdrop";
 
+/// `int iAudioSpectrumSize` — number of CAVA spectrum bars, or 0 when audio
+/// is off. Declared in surface_uniforms.glsl (always present) and read by the
+/// surface_audio.glsl helpers to gate every audio read: a pack that never
+/// includes surface_audio.glsl leaves this unreferenced and the linker drops
+/// it. Populated on both runtimes: the daemon writes the UBO member, and the
+/// compositor pushes it as a loose int uniform from its own
+/// CavaSpectrumProvider.
+inline constexpr const char* kIAudioSpectrumSize = "iAudioSpectrumSize";
+
+/// `sampler2D uAudioSpectrum` — the CAVA spectrum as a `bars×1` texture (R =
+/// bar value in 0..1). Lives in surface_audio.glsl, not the UBO: `binding = 6`
+/// on the daemon's RHI pipeline, a loose named sampler on the compositor's
+/// classic-GL pipeline (the `#ifdef PLASMAZONES_KWIN` branch). Only sampled
+/// while `iAudioSpectrumSize > 0`, so an unbound sampler is never read.
+inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";
+
 /// `vec4 customParams[N]` — per-effect declared parameter slots.
 /// Cross-runtime element-name lookup constant: used by the kwin-effect's
 /// `glGetUniformLocation("customParams[N]")` calls and as a

@@ -51,6 +51,12 @@ struct CompiledSurfaceBufferPass
     int uBackdropLoc = -1;
     int uBackdropRectLoc = -1;
     int uHasBackdropLoc = -1;
+    /// Audio-spectrum locations (surface_audio.glsl): the bar-count int and the
+    /// spectrum sampler. -1 for a buffer pass that never reads the CAVA spectrum
+    /// (the linker drops both). A pass with iAudioSpectrumSizeLoc >= 0 is the
+    /// signal that this buffer pass reacts to audio.
+    int iAudioSpectrumSizeLoc = -1;
+    int uAudioSpectrumLoc = -1;
     /// iChannel0..3 sampler locations — prior buffer outputs feeding this pass.
     std::array<int, 4> iChannelLoc{{-1, -1, -1, -1}};
     /// iChannelResolution[0..3] element locations (the .xy pixel size of each).
@@ -126,6 +132,13 @@ struct CompiledSurfacePack
     int uBackdropLoc = -1;
     int uBackdropRectLoc = -1;
     int uHasBackdropLoc = -1;
+    /// Audio-spectrum locations (surface_audio.glsl): iAudioSpectrumSize (bar
+    /// count int) + the uAudioSpectrum sampler. -1 for a pack that never reads
+    /// the CAVA spectrum (the linker drops both — the common case). A pack with
+    /// iAudioSpectrumSizeLoc >= 0 is audio-reactive: it drives the run gate
+    /// (syncEffectAudioState) and the per-frame repaint gate (windowSurfaceAnimates).
+    int iAudioSpectrumSizeLoc = -1;
+    int uAudioSpectrumLoc = -1;
 
     /// MAIN-pass iChannel0..3 sampler + iChannelResolution[0..3] element
     /// locations. -1 when the linker dropped the uniform (single-pass pack).

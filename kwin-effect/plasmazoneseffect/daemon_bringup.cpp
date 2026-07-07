@@ -694,8 +694,29 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
         m_snapAssistHandler->setEnabled(v.toBool());
     });
+    // Audio-reactive surface decorations: the same daemon audio-viz toggle + bar
+    // count that gate the daemon's overlay audio also gate the effect's own cava
+    // instance (syncEffectAudioState ANDs the toggle with an audio decoration
+    // being present). scheduleEffectAudioSync (deferred + coalesced) so these two
+    // independent async replies collapse to ONE sync — otherwise an early
+    // enable-reply could start cava at the default bar count and the later
+    // bar-count reply would immediately restart it.
+    loadSettingAsync(QStringLiteral("enableAudioVisualizer"), [this](const QVariant& v) {
+        m_enableAudioVisualizer = v.toBool();
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioSpectrumBarCount"), [this](const QVariant& v) {
+        // Clamp to the provider's accepted range as defence-in-depth; the daemon
+        // schema already bounds it, but a malformed reply would otherwise reach
+        // setBarCount and be re-clamped there anyway.
+        m_audioSpectrumBarCount = qBound(PhosphorAudio::Defaults::MinBars, v.toInt(), PhosphorAudio::Defaults::MaxBars);
+        scheduleEffectAudioSync();
+    });
     loadSettingAsync(QStringLiteral("animationsEnabled"), [this](const QVariant& v) {
         m_windowAnimator->setEnabled(v.toBool());
+        // The decoration focus fade shares the window.focus timing: animations
+        // off means an instant active/inactive switch (option B).
+        refreshFocusFadeDuration();
     });
     loadSettingAsync(QStringLiteral("animationDuration"), [this](const QVariant& v) {
         // Clamp against the canonical settings-UI bounds. The earlier
@@ -707,6 +728,9 @@ void PlasmaZonesEffect::loadCachedSettings()
                              PhosphorAnimation::Limits::MaxAnimationDurationMs);
         m_windowAnimator->setDuration(d);
         m_cachedAnimationDuration = d;
+        // Keep the focus fade in lockstep with the global animation duration
+        // (unless a window.focus motion-tree node overrides it).
+        refreshFocusFadeDuration();
     });
     loadSettingAsync(QStringLiteral("animationEasingCurve"), [this](const QVariant& v) {
         // Polymorphic curve parse — handles bare bezier, named easing,

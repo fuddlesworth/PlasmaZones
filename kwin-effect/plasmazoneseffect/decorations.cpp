@@ -160,6 +160,15 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
         disconnect(wb.paddedGeoConnection);
     }
     m_windowDecorations.erase(it);
+    // The audio-reactive decoration set may have shrunk — re-evaluate whether the
+    // effect's cava instance is still needed. DEFERRED + coalesced: this runs as
+    // the remove-first step of updateWindowDecoration on every focus/snap/rule
+    // refresh, and a synchronous stop() here would block the compositor thread
+    // (cava terminate + waitForFinished) and then respawn when the decoration is
+    // re-added a step later. scheduleEffectAudioSync collapses the remove+readd
+    // to one net decision at event-loop return. Runs before the transition
+    // early-return below so both exits keep the run gate in sync.
+    scheduleEffectAudioSync();
     // NB: m_focusFade is deliberately NOT scrubbed here. updateWindowDecoration
     // calls removeWindowDecoration as its remove-first step on every refresh
     // (focus change / snap flip / rule edit), so scrubbing here would reset the
@@ -525,6 +534,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // expanded margin arrives transparent), so there is nothing here to reshape.
 
     m_windowDecorations.insert(windowId, wb);
+
+    // A chain carrying an audio-reactive pack (SurfaceShaderEffect::audio) may
+    // have just appeared — start the effect's cava instance if the audio-viz
+    // toggle is on. DEFERRED + coalesced so this collapses with the remove-first
+    // step's schedule above into one net evaluation (no stop-then-start churn).
+    scheduleEffectAudioSync();
 
     // Undecorated→decorated transition: drop any stale focus ramp so
     // advanceFocusFade re-seeds its -1 sentinel and snaps to the current focus

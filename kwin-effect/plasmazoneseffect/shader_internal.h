@@ -231,4 +231,19 @@ static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColor
 static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots == 3,
               "User-texture name arrays must grow to match kMaxUserTextureSlots");
 
+/// Texture unit for the audio-spectrum sampler (uAudioSpectrum) in the surface
+/// composite fold. The fold's main + buffer passes bind unit 0 (uTexture0),
+/// 1..4 (iChannel0..3), and 5 (uBackdrop); unit 6 is the first free unit.
+///
+/// The present passthrough in decoration_render.cpp (`kSurfaceChannelBaseUnit`)
+/// reuses a unit in this same range, but the two never collide: the fold
+/// completes and unbinds unit 6 before drawWindow's present pass runs, so they
+/// occupy their units in disjoint phases regardless of the exact numbers.
+/// Shared here (not file-local) so the fold (surfacelayers.cpp) and the bind
+/// helper (surface_audio.cpp) agree on one value. If audio ever moves into the
+/// present phase, revisit this overlap.
+inline constexpr int kSurfaceAudioUnit = 6;
+static_assert(kSurfaceAudioUnit > 5,
+              "kSurfaceAudioUnit must clear the fold's units 0..5 (uTexture0/iChannel/backdrop)");
+
 } // namespace PlasmaZones::ShaderInternal

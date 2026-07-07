@@ -1614,47 +1614,16 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // over the global default exactly as the daemon's SurfaceAnimator
     // resolves per-event OSD/popup durations from the registry.
     //
-    // Fall back to the caller-supplied global `animationDurationMs()`
-    // when NO node in the path's parent chain carries an override:
-    // an empty tree (D-Bus race / fresh user) must not silently
-    // collapse every event to the library default (150 ms). The
-    // resolved value is then handed to the combined resolver as its
-    // `defaultDurationMs`, so the per-window-class Rule timing
-    // cascade (`OverrideAnimationTiming`) still layers on top (rule
-    // wins → per-event base → global), matching the resolver's
-    // documented contract.
-    int baseDurationMs = durationMs;
-    {
-        const auto& motionTree = m_shaderManager.motionProfileTree();
-        bool hasChainOverride = false;
-        // Hard cap on ancestor-walk iterations as a defensive guard
-        // against a malformed `profilePath` whose `parentPath` returns
-        // the input unchanged (would otherwise loop forever on the
-        // compositor thread). Real profile paths are dot-separated like
-        // `window.open` / `window` / `Global` — three to four segments
-        // at most across the project's path dictionary, so 16 is a
-        // generous ceiling that costs nothing on the happy path.
-        constexpr int kMaxAncestorDepth = 16;
-        QString cursor = profilePath;
-        for (int depth = 0; !cursor.isEmpty() && depth < kMaxAncestorDepth; ++depth) {
-            if (motionTree.hasOverride(cursor)) {
-                hasChainOverride = true;
-                break;
-            }
-            const QString parent = PhosphorAnimation::ProfilePaths::parentPath(cursor);
-            if (parent == cursor) {
-                // parentPath did not advance — malformed input. Bail
-                // rather than spin: the chain-override search is best-
-                // effort, and the caller falls through to `durationMs`
-                // when no override is found.
-                break;
-            }
-            cursor = parent;
-        }
-        if (hasChainOverride) {
-            baseDurationMs = qRound(motionTree.resolve(profilePath).effectiveDuration());
-        }
-    }
+    // Fall back to the caller-supplied global `durationMs` when NO node in the
+    // path's parent chain carries an override: an empty tree (D-Bus race / fresh
+    // user) must not silently collapse every event to the library default
+    // (150 ms). The resolved value is then handed to the combined resolver as its
+    // `defaultDurationMs`, so the per-window-class Rule timing cascade
+    // (`OverrideAnimationTiming`) still layers on top (rule wins → per-event base
+    // → global), matching the resolver's documented contract. The resolve is
+    // shared with refreshFocusFadeDuration so the focus fade tracks the same
+    // per-event timing.
+    const int baseDurationMs = resolveMotionTreeBaseDuration(profilePath, durationMs);
     // Combined cascade: ONE cached evaluator walk feeds BOTH the shader-slot
     // and timing-slot reads. The pre-refactor pair of `resolveAnimationShader
     // Profile` + `resolveAnimationDuration` ran two priority-order walks per
@@ -1917,9 +1886,52 @@ void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
                                 qCDebug(lcEffect) << "loadMotionProfileTreeFromDbus: tree loaded with"
                                                   << tree.overriddenPaths().size()
                                                   << "per-event overrides — paths=" << tree.overriddenPaths();
+                                // A window.focus per-event duration override may have
+                                // changed; keep the decoration focus fade in sync.
+                                refreshFocusFadeDuration();
                             },
                             /*arraySink=*/{});
     });
+}
+
+int PlasmaZonesEffect::resolveMotionTreeBaseDuration(const QString& profilePath, int fallbackMs) const
+{
+    // A motion-tree override anywhere up @p profilePath's ancestor chain replaces
+    // @p fallbackMs with the node's resolved effective duration; otherwise the
+    // fallback stands. The kMaxAncestorDepth cap guards a malformed profilePath
+    // whose parentPath() returns the input unchanged (would spin on the
+    // compositor thread). Real paths are three or four dot-separated segments.
+    const auto& motionTree = m_shaderManager.motionProfileTree();
+    constexpr int kMaxAncestorDepth = 16;
+    QString cursor = profilePath;
+    for (int depth = 0; !cursor.isEmpty() && depth < kMaxAncestorDepth; ++depth) {
+        if (motionTree.hasOverride(cursor)) {
+            return qRound(motionTree.resolve(profilePath).effectiveDuration());
+        }
+        const QString parent = PhosphorAnimation::ProfilePaths::parentPath(cursor);
+        if (parent == cursor) {
+            break;
+        }
+        cursor = parent;
+    }
+    return fallbackMs;
+}
+
+void PlasmaZonesEffect::refreshFocusFadeDuration()
+{
+    // The decoration focus fade (uSurfaceFocused ramp, read by the border colour
+    // mix and the focus-fade content pack) shares the window.focus event's
+    // timing rather than carrying its own clock. Option B: with animations
+    // disabled the fade is instant (0) — "animations off = everything snaps".
+    if (!m_windowAnimator || !m_windowAnimator->isEnabled()) {
+        m_focusFadeDurationMs = 0;
+        return;
+    }
+    // Resolve the window.focus base duration the same way tryBeginShaderForEvent
+    // does (shared helper). Per-window Rule timing overrides are intentionally
+    // NOT applied — the fade tracks the per-event node, not per-window rules.
+    const QString profilePath = PhosphorAnimation::ProfilePaths::WindowFocus;
+    m_focusFadeDurationMs = qMax(0, resolveMotionTreeBaseDuration(profilePath, animationDurationMs()));
 }
 
 void PlasmaZonesEffect::slotMotionProfileTreeChanged()

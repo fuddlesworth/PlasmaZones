@@ -3,6 +3,7 @@
 
 #include "../plasmazoneseffect.h"
 
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -959,6 +960,24 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // alive.
     disconnect(&m_shaderManager.m_animationShaderRegistry, nullptr, this, nullptr);
     disconnect(&m_surfaceShaderRegistry, nullptr, this, nullptr);
+
+    // Stop the audio-spectrum provider (terminates its cava child process) and
+    // sever its signal before teardown, so a late spectrumUpdated can't dispatch
+    // to onEffectAudioSpectrum against half-destroyed members.
+    if (m_audioProvider) {
+        disconnect(m_audioProvider.get(), nullptr, this, nullptr);
+        m_audioProvider->stop();
+    }
+    // Force the audio run gate off BEFORE the posted-event drain below. Teardown
+    // (clearAllDecorations → removeWindowDecoration) posts fresh
+    // scheduleEffectAudioSync MetaCalls, and the QEvent::MetaCall drain would run
+    // syncEffectAudioState while decorations still exist — respawning cava moments
+    // before member destruction kills it again. With the toggle forced off,
+    // wantRun is false so the drained sync takes the harmless not-wanted branch.
+    // Clear the spectrum size too so that branch's `wasLive` is false and it
+    // requests no spurious full repaint during shutdown.
+    m_enableAudioVisualizer = false;
+    m_audioSpectrumSize = 0;
 
     // Drain the texture loader pool before any other teardown. A
     // worker that's mid-rasterise would otherwise post a queued

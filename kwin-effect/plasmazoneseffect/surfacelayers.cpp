@@ -349,6 +349,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     const ShaderInternal::ScopedGlState glStateGuard;
     namespace SC = PhosphorSurfaceShaders::SurfaceShaderContract;
 
+    // Upload the audio spectrum ONCE per fold, up front, before any pass binds
+    // its textures. GLTexture::upload binds the new texture to the active unit,
+    // so doing it mid-pass (inside bindSurfaceAudio) would clobber uTexture0's
+    // binding on unit 0. audioActive() gates the work; the dirty flag makes the
+    // repeat calls this frame (other windows, or the transition path) no-ops.
+    // The ScopedGlState guard above restores the active unit on exit regardless.
+    if (audioActive()) {
+        ensureAudioSpectrumTexture();
+    }
+
     // Size the targets to the window's expanded geometry × screen scale, with the
     // same defensive cap as captureWindowBackdrop / renderSurfaceChain.
     //
@@ -516,6 +526,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // own sampler location being -1 must not zero the gate.
             const bool backdropAvailable = state.backdropTex && state.backdropRect.z() > 0.0f;
             const bool passHasBackdrop = pass.uBackdropLoc >= 0 && backdropAvailable;
+            bool passAudioBound = false;
             {
                 KWin::ShaderBinder binder(pass.shader.get());
                 glActiveTexture(GL_TEXTURE0);
@@ -586,6 +597,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                                                          : pk->customColorsValues[slot]);
                     }
                 }
+                // Audio spectrum (unit kSurfaceAudioUnit) for a buffer pass that
+                // reads surface_audio.glsl — same contract as the main pass.
+                passAudioBound =
+                    bindSurfaceAudio(pass.shader.get(), pass.iAudioSpectrumSizeLoc, pass.uAudioSpectrumLoc);
                 drawFullscreenQuad();
             }
             for (size_t j = 0; j < i && j < 4; ++j) {
@@ -594,6 +609,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             }
             if (passHasBackdrop) {
                 glActiveTexture(GL_TEXTURE5);
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
+            if (passAudioBound) {
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
             glActiveTexture(GL_TEXTURE0);
@@ -616,6 +635,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // bind (frost's main reads the blurred buffers, not uBackdrop).
         const bool backdropAvailable = state.backdropTex && state.backdropRect.z() > 0.0f;
         const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && backdropAvailable;
+        bool mainAudioBound = false;
         {
             KWin::ShaderBinder binder(pk->shader.get());
             // Identity MVP so the NDC fullscreen quad from drawFullscreenQuad maps
@@ -656,6 +676,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             if (pk->uHasBackdropLoc >= 0) {
                 pk->shader->setUniform(pk->uHasBackdropLoc, backdropAvailable ? 1.0f : 0.0f);
             }
+            // Audio spectrum (unit kSurfaceAudioUnit) for a pack that reads
+            // surface_audio.glsl. Pushes iAudioSpectrumSize (0 when audio is
+            // off, so getBass* reads 0 and the pack renders static) and binds
+            // the spectrum texture only when live.
+            mainAudioBound = bindSurfaceAudio(pk->shader.get(), pk->iAudioSpectrumSizeLoc, pk->uAudioSpectrumLoc);
             // Contract uniforms + pack params (shared with the OffscreenData path).
             // windowId threaded in so the focus-fade ramp doesn't recompute
             // getWindowId(w) per pack.
@@ -668,6 +693,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         }
         if (mainHasBackdrop) {
             glActiveTexture(GL_TEXTURE5);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+        if (mainAudioBound) {
+            glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
         glActiveTexture(GL_TEXTURE0);
@@ -733,8 +762,16 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
         if (pack->uTimeLoc >= 0) {
             return true;
         }
+        // An audio-reactive pack must repaint every frame while a live spectrum
+        // flows so getBass* tracks the beat. audioReactiveDriving() self-
+        // terminates the loop when the toggle is off, capture stops, OR the
+        // spectrum has gone quiet (repeated frames) — so a static border with
+        // audio off, and a paused track, both cost nothing.
+        if (pack->iAudioSpectrumSizeLoc >= 0 && audioReactiveDriving()) {
+            return true;
+        }
         for (const CompiledSurfaceBufferPass& bp : pack->bufferPasses) {
-            if (bp.uTimeLoc >= 0) {
+            if (bp.uTimeLoc >= 0 || (bp.iAudioSpectrumSizeLoc >= 0 && audioReactiveDriving())) {
                 return true;
             }
         }

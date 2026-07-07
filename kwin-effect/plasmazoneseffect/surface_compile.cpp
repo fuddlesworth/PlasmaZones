@@ -315,6 +315,12 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     packState.uBackdropLoc = shader->uniformLocation(SC::kUBackdrop);
     packState.uBackdropRectLoc = shader->uniformLocation(SC::kUBackdropRect);
     packState.uHasBackdropLoc = shader->uniformLocation(SC::kUHasBackdrop);
+    // Audio (surface_audio.glsl): both resolve to -1 for a pack that never
+    // includes the module (the border, glow, …). A pack that reads getBass /
+    // audioBar references iAudioSpectrumSize + uAudioSpectrum, so the linker
+    // keeps them and iAudioSpectrumSizeLoc >= 0 flags the pack as audio-reactive.
+    packState.iAudioSpectrumSizeLoc = shader->uniformLocation(SC::kIAudioSpectrumSize);
+    packState.uAudioSpectrumLoc = shader->uniformLocation(SC::kUAudioSpectrum);
 
     // MAIN-pass multipass channel locations: the buffer-pass outputs are bound
     // here (idle drawWindow path) as iChannel0..3 so the main effect.frag can
@@ -420,6 +426,11 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
             pass.uBackdropLoc = bufShader->uniformLocation(SC::kUBackdrop);
             pass.uBackdropRectLoc = bufShader->uniformLocation(SC::kUBackdropRect);
             pass.uHasBackdropLoc = bufShader->uniformLocation(SC::kUHasBackdrop);
+            // Audio (surface_audio.glsl) — a buffer pass may read the spectrum
+            // too; both -1 when it doesn't (the linker drops the unreferenced
+            // uniforms), exactly like the main pass above.
+            pass.iAudioSpectrumSizeLoc = bufShader->uniformLocation(SC::kIAudioSpectrumSize);
+            pass.uAudioSpectrumLoc = bufShader->uniformLocation(SC::kUAudioSpectrum);
             for (int i = 0; i < 4; ++i) {
                 pass.iChannelLoc[i] = bufShader->uniformLocation(kIChannelNames[i]);
                 pass.iChannelResolutionLoc[i] = bufShader->uniformLocation(kIChannelResNames[i]);

@@ -17,6 +17,7 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAudio/AudioDefaults.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
@@ -60,6 +61,10 @@ class LogicalOutput;
 
 namespace PhosphorAnimation {
 class IMotionClock;
+}
+
+namespace PhosphorAudio {
+class IAudioSpectrumProvider;
 }
 
 namespace PlasmaZones {
@@ -698,8 +703,34 @@ private:
         qint64 lastMs = -1;
     };
     QHash<QString, FocusFadeState> m_focusFade;
-    // Focus ramp duration (ms) — a soft cross-focus fade without lag.
+    // Default focus ramp duration (ms) — the fallback before the animation
+    // settings / motion-profile tree land. The live value is m_focusFadeDurationMs.
     static constexpr qreal kFocusFadeMs = 160.0;
+    // Live focus cross-fade duration (ms) for the uSurfaceFocused ramp (border
+    // colour mix + the focus-fade content pack). NOT a standalone setting: it
+    // tracks the window.focus animation timing via refreshFocusFadeDuration()
+    // (resolved window.focus duration, or 0 when animations are disabled — an
+    // instant switch). Seeded to the constant default until the first refresh.
+    int m_focusFadeDurationMs = static_cast<int>(kFocusFadeMs);
+    // Recompute m_focusFadeDurationMs from the animation system: 0 when
+    // animations are disabled, else the resolved window.focus event duration
+    // (motion-tree per-event override → global animationDuration). Called when
+    // animationsEnabled / animationDuration / the motion profile tree change.
+    void refreshFocusFadeDuration();
+    // Resolve a per-event base duration (ms) from the motion profile tree: a
+    // motion-tree override anywhere up @p profilePath's ancestor chain replaces
+    // @p fallbackMs with the node's resolved effectiveDuration(), else the
+    // fallback stands. Shared by tryBeginShaderForEvent (per-event transition
+    // timing) and refreshFocusFadeDuration (the decoration focus fade), so the
+    // two never drift out of sync.
+    int resolveMotionTreeBaseDuration(const QString& profilePath, int fallbackMs) const;
+    // Cap on the per-frame ramp delta. A window at rest (value pinned at 0 or 1)
+    // stops being force-repainted by windowSurfaceAnimates, so its FocusFadeState
+    // `lastMs` goes stale; without this cap the first frame after a focus change
+    // would see a multi-second `now - lastMs` and jump the whole ramp in one step
+    // (an instant snap instead of a fade). A live window's real frame delta is
+    // always well under this, so the cap only tames the resume-after-idle case.
+    static constexpr qint64 kFocusFadeMaxStepMs = 50;
 
     // Live system colours that a `BorderColorToken::Accent` sentinel in a
     // border-colour rule resolves to. The sentinel tracks the system colour
@@ -1038,6 +1069,101 @@ private:
     /// when the window's expanded size × scale changes, and erased on window
     /// close / border removal (removeWindowDecoration) to free GPU memory.
     std::unordered_map<QString, SurfaceMultipassState> m_surfaceMultipass;
+
+    // ── Audio-reactive surface decorations (CAVA) ────────────────────────────
+    // The compositor has no daemon-style audio path, so the effect runs its OWN
+    // CavaSpectrumProvider (Qt-Core-only) and uploads the spectrum to a session-
+    // global `bars×1` texture bound as `uAudioSpectrum` (surface_audio.glsl) on
+    // every audio-reactive decoration pass, mirroring the daemon's RGBA8
+    // R-channel layout. A pack opts in purely by including surface_audio.glsl and
+    // reading getBass/audioBar (its compiled iAudioSpectrumSizeLoc then resolves
+    // >= 0). Cava is gated by syncEffectAudioState on `enableAudioVisualizer` AND
+    // at least one decorated window carrying an audio pack, so capture only spins
+    // up when a border can actually react.
+
+    /// The effect's own CAVA spectrum source. Constructed lazily on first need
+    /// (syncEffectAudioState) so a session that never uses an audio decoration
+    /// pays nothing. Owns a `cava` child process while running.
+    std::unique_ptr<PhosphorAudio::IAudioSpectrumProvider> m_audioProvider;
+
+    /// Session-global spectrum texture (`bars×1`, R = bar value 0..1). Uploaded
+    /// lazily during the composite fold when a new spectrum has arrived
+    /// (m_audioSpectrumDirty), reused across every audio-reactive window that
+    /// frame. Lives on the GL thread (allocated/uploaded only inside paint).
+    std::unique_ptr<KWin::GLTexture> m_audioSpectrumTex;
+
+    /// Latest spectrum delivered by the provider signal (values 0..1). Copied on
+    /// the compositor thread; consumed (uploaded) during the next paint.
+    QVector<float> m_audioSpectrum;
+    bool m_audioSpectrumDirty = false; ///< a new spectrum awaits GL upload
+    int m_audioSpectrumSize = 0; ///< bar count == iAudioSpectrumSize; 0 when audio is off
+    /// steady-clock ms of the last spectrum that actually CHANGED. Drives the
+    /// idle gate (audioReactiveDriving): sustained silence settles to repeated
+    /// frames, so after a quiet window the per-vsync recomposite stops instead of
+    /// folding every audio border forever. -1 until the first spectrum arrives.
+    qint64 m_audioSpectrumLastChangeMs = -1;
+
+    /// The daemon's audio-viz master toggle + bar count, pulled via getSetting in
+    /// loadCachedSettings exactly like snapAssistEnabled. The effect's cava run
+    /// gate ANDs the toggle with an audio decoration being present.
+    bool m_enableAudioVisualizer = false;
+    int m_audioSpectrumBarCount = PhosphorAudio::Defaults::DefaultBarCount;
+    /// Coalescing latch for scheduleEffectAudioSync: many decoration/settings
+    /// callbacks can fire in one event-loop turn (a focus change removes then
+    /// re-adds a decoration); collapsing them to one syncEffectAudioState keeps
+    /// the blocking cava stop()/start() off the synchronous path and avoids a
+    /// kill+respawn when a decoration is immediately re-added.
+    bool m_audioSyncScheduled = false;
+    /// Warn once, not every sync, when an audio pack wants CAVA but `cava` is not
+    /// installed. Reset when audio is torn down so a later install can re-warn.
+    bool m_audioUnavailableWarned = false;
+
+    /// Deliver a fresh spectrum from m_audioProvider: store it, stamp the
+    /// change time, mark the texture dirty, and prime a repaint so audio-reactive
+    /// borders pick it up.
+    void onEffectAudioSpectrum(const QVector<float>& spectrum);
+
+    /// Start/stop/reconfigure the effect's cava instance to match the run gate
+    /// (m_enableAudioVisualizer && hasAudioReactiveDecoration()). Lazily creates
+    /// m_audioProvider on first run. Prefer scheduleEffectAudioSync from
+    /// high-frequency callers (decoration refresh, settings replies).
+    void syncEffectAudioState();
+
+    /// Coalesced, deferred syncEffectAudioState: sets a pending latch and posts a
+    /// single queued evaluation, so a remove-then-readd (focus change) or the two
+    /// async settings replies settle to ONE net decision at event-loop return and
+    /// the compositor thread never blocks on cava stop()+respawn mid-refresh.
+    void scheduleEffectAudioSync();
+
+    /// True when any decorated window's resolved chain carries an audio-reactive
+    /// pack (SurfaceShaderEffect::audio). Read from pack METADATA (no compile
+    /// needed) so the run gate resolves before first paint.
+    bool hasAudioReactiveDecoration() const;
+
+    /// True when audio is live: the toggle is on, the provider is running, and a
+    /// non-empty spectrum has arrived. Gates pushing iAudioSpectrumSize > 0 and
+    /// binding the spectrum texture. NOT the repaint gate — use
+    /// audioReactiveDriving for that so silence lets the paint loop idle.
+    bool audioActive() const;
+
+    /// True when audio is live AND the spectrum changed recently (within the idle
+    /// window). The repaint gate for windowSurfaceAnimates: sustained silence
+    /// (repeated frames stop refreshing m_audioSpectrumLastChangeMs) lets the
+    /// per-vsync recomposite stand down until audio resumes.
+    bool audioReactiveDriving() const;
+
+    /// Upload m_audioSpectrum into m_audioSpectrumTex if dirty (reallocating on a
+    /// bar-count change), returning true when the texture is bindable this frame.
+    /// Runs inside the composite fold (GL context current). Self-heals: a failed
+    /// (re)allocation leaves the dirty flag set to retry next frame.
+    bool ensureAudioSpectrumTexture();
+
+    /// Bind the session-global spectrum to kSurfaceAudioUnit and push
+    /// iAudioSpectrumSize onto the currently-bound @p shader. Pushes size 0 (and
+    /// binds nothing) when audio is not live or the pack declares no audio
+    /// locations, so getBass*() reads 0 and the pack renders static. Returns true
+    /// when it bound the texture (the caller then unbinds the unit after drawing).
+    bool bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc);
 
     /// Resolve the DECORATION SURFACE PATH for @p windowId based on MEMBERSHIP
     /// alone:

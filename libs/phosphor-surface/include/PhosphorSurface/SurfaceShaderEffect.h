@@ -145,13 +145,12 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     bool handlesOpacity = false;
 
     /// Declares that the pack reacts to the CAVA audio spectrum (it includes
-    /// surface_audio.glsl and reads audioBar / getBass / …). Daemon-only: the
-    /// daemon pushes the live spectrum to a decorated OSD / popup carrying an
-    /// audio pack and keeps CAVA running for it; the compositor wires no audio,
-    /// so window decorations read iAudioSpectrumSize == 0 and render statically.
-    /// Session-global like the overlay category — the flag is what lets the
-    /// daemon gate CAVA on an audio pack being visible, so a plain decoration
-    /// never spins up audio capture.
+    /// surface_audio.glsl and reads audioBar / getBass / …). Both runtimes feed
+    /// it when the audio visualizer is on: the daemon pushes the live spectrum to
+    /// a decorated OSD / popup carrying an audio pack, and the KWin effect runs
+    /// its own CAVA provider to feed window decorations. Session-global like the
+    /// overlay category. The flag is what lets each host gate CAVA on an audio
+    /// pack being present, so a plain decoration never spins up audio capture.
     bool audio = false;
 
     /// Buffer-pass shader paths (relative to effect dir). When non-empty

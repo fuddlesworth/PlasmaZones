@@ -50,6 +50,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/decorations.cpp
     plasmazoneseffect/decoration_render.cpp
     plasmazoneseffect/surfacelayers.cpp
+    plasmazoneseffect/surface_audio.cpp
     plasmazoneseffect/window_identity.cpp
     plasmazoneseffect/mouse_drag.cpp
     plasmazoneseffect/window_filtering.cpp
@@ -155,6 +156,11 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # data/surface via SurfaceShaderRegistry, the third shader-pack category
     # alongside animations + overlay shaders. GPL->LGPL link is fine.
     PhosphorSurface::PhosphorSurface
+    # PhosphorAudio: the CAVA spectrum provider (Qt-Core-only). The effect runs
+    # its OWN CavaSpectrumProvider to feed audio-reactive surface decorations
+    # (border-audio), since the daemon's spectrum is not exported over the
+    # low-frequency D-Bus config channel. GPL->LGPL link is fine.
+    PhosphorAudio::PhosphorAudio
     # libepoxy: EGL dma-buf export entry points for snap-assist thumbnail
     # zero-copy delivery (snapassistthumbnailcapture.cpp). Qt6::DBus's
     # QDBusUnixFileDescriptor carries the exported fd to the daemon.

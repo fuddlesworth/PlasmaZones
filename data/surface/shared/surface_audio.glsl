@@ -7,21 +7,23 @@
 // on the helpers (they return 0 when audio is off).
 //
 // The spectrum is a session-global feature, exactly as it is for zone packs:
-// the daemon pushes the same spectrum to every surface item when the audio
-// visualizer is enabled, and a pack opts in purely by including this file and
-// reading the helpers. iAudioSpectrumSize (from the uniform contract) is the
-// bar count, 0 when audio is disabled. The compositor wires no audio texture,
-// so window decorations always read 0 here — audio-reactive decoration is a
-// daemon-surface (OSD / popup) feature.
+// the same spectrum reaches every surface item when the audio visualizer is
+// enabled, and a pack opts in purely by including this file and reading the
+// helpers. iAudioSpectrumSize (from the uniform contract) is the bar count, 0
+// when audio is disabled. Both runtimes populate it: the daemon pushes the
+// spectrum to its OSD / popup surfaces, and the KWin effect runs its own CAVA
+// provider to feed window decorations. It reads 0 (renders static) only when
+// the visualizer is off.
 
 #ifndef PLASMAZONES_SURFACE_AUDIO_GLSL
 #define PLASMAZONES_SURFACE_AUDIO_GLSL
 
 #include <surface_uniforms.glsl>
 
-// Audio spectrum texture (binding 6 on the daemon; a plain unbound sampler on
-// the compositor, where iAudioSpectrumSize is 0 so it is never sampled). 1D:
-// bar index = x, y = 0; R = bar value in 0..1.
+// Audio spectrum texture (binding 6 on the daemon's RHI pipeline; a plain named
+// sampler on the compositor's classic-GL pipeline, bound to a texture unit at
+// draw time). Never sampled while iAudioSpectrumSize is 0. 1D: bar index = x,
+// y = 0; R = bar value in 0..1.
 #ifdef PLASMAZONES_KWIN
 uniform sampler2D uAudioSpectrum;
 #else
