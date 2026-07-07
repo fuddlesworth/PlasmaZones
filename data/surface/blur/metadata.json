@@ -22,7 +22,8 @@
             "default": 24,
             "min": 2,
             "max": 64,
-            "description": "How strongly the scene behind the window is blurred (px)"
+            "description": "How strongly the scene behind the window is blurred (px)",
+            "group": "Blur"
         },
         {
             "id": "cornerRadius",
@@ -31,7 +32,8 @@
             "default": 8,
             "min": 0,
             "max": 32,
-            "description": "Corner rounding of the frost slab (px, match the Border pack)"
+            "description": "Corner rounding of the frost slab (px, match the Border pack)",
+            "group": "Shape"
         },
         {
             "id": "tintStrength",
@@ -40,14 +42,16 @@
             "default": 0.15,
             "min": 0.0,
             "max": 1.0,
-            "description": "How much of the tint colour is mixed over the blurred scene"
+            "description": "How much of the tint colour is mixed over the blurred scene",
+            "group": "Tint"
         },
         {
             "id": "tintColor",
             "name": "Tint colour",
             "type": "color",
             "default": "#ffffffff",
-            "description": "Colour mixed over the blurred scene"
+            "description": "Colour mixed over the blurred scene",
+            "group": "Tint"
         }
     ]
 }

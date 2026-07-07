@@ -158,9 +158,9 @@ void PlasmaZonesEffect::postPaintScreen()
             // settle state for BOTH extent modes. Without the held arm on the
             // anchor-extent branch below, a held anchor pack's idle/iTime
             // motion freezes the instant the pointer stops moving (the window
-            // emits no damage while stationary). meshSim is only seeded for
-            // surface-extent packs, so for anchor-extent this reduces to
-            // holdUntilRelease.
+            // emits no damage while stationary). meshSim is seeded only for
+            // packs that declare iMoveMesh (typically surface-extent packs), so
+            // for a pack without a live lattice this reduces to holdUntilRelease.
             const bool heldActive =
                 transition.holdUntilRelease || (transition.meshSim.initialized && !transition.meshSim.settled);
             if (transition.surfaceExtent) {
@@ -852,8 +852,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // shader-timing path. Reuses the outer-scope `nowMs`
                     // captured for iTimeDelta / iFrame above so all of
                     // this paint tick's monotonic readings come from the
-                    // same clock sample.
-                    if (nowMs - m_shaderManager.m_lastIDateRefreshMs >= 1000) {
+                    // same clock sample. The `== 0` arm forces a decompose on
+                    // the first paint that reads iDate (the refresh stamp starts
+                    // at 0), so iDate is valid from frame one even under 1 s
+                    // after boot, when the steady-clock `nowMs` can itself be
+                    // below 1000.
+                    if (m_shaderManager.m_lastIDateRefreshMs == 0
+                        || nowMs - m_shaderManager.m_lastIDateRefreshMs >= 1000) {
                         const QDateTime nowDateTime = QDateTime::currentDateTime();
                         const QDate date = nowDateTime.date();
                         const QTime t = nowDateTime.time();
@@ -1203,8 +1208,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 // otherwise the shader's uOldWindow reads unit 0 / transparent
                 // and a morph shader falls back to no cross-fade.
                 if (cached->iOldWindowLoc >= 0 && transition.oldSnapshot) {
-                    constexpr int kOldSnapshotUnit =
-                        1 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                    constexpr int kOldSnapshotUnit = ShaderInternal::kOldSnapshotUnit;
                     shader->setUniform(cached->iOldWindowLoc, kOldSnapshotUnit);
                     glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnit);
                     transition.oldSnapshot->bind();
@@ -1241,8 +1245,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (cached->iLayerRectInTextureLoc >= 0) {
                     shader->setUniform(cached->iLayerRectInTextureLoc, layerRectInTexture);
                 }
-                constexpr int kSurfaceLayerUnit =
-                    2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                constexpr int kSurfaceLayerUnit = ShaderInternal::kSurfaceLayerUnit;
                 // uTexture0 RETARGET: when the composite canvas maps 1:1 onto
                 // the window texture (unpadded chain, anchor-extent draw —
                 // the layer rect is the identity), point the shader's window
@@ -1335,8 +1338,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // bound just past the user-texture slots above for morph
             // transitions — don't leave it dangling for the next effect.
             if (cached->iOldWindowLoc >= 0 && transition.oldSnapshot) {
-                constexpr int kOldSnapshotUnit =
-                    1 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                constexpr int kOldSnapshotUnit = ShaderInternal::kOldSnapshotUnit;
                 glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnit);
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
@@ -1348,8 +1350,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // uSurfaceLayerLoc < 0). The unit is dedicated to the surface layer, so
             // clearing it when it was never bound is a harmless no-op.
             if (surfaceLayerTex) {
-                constexpr int kSurfaceLayerUnit =
-                    2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                constexpr int kSurfaceLayerUnit = ShaderInternal::kSurfaceLayerUnit;
                 glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnit);
                 glBindTexture(GL_TEXTURE_2D, 0);
             }

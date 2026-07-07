@@ -62,7 +62,7 @@ void main() {
     // cut off in a hard rectangle. (With NO margin — a borderless window whose
     // expandedGeometry equals its frame — this zeroes the halo entirely.)
     float edgeDist = min(min(p.x, p.y), min(uSurfaceSize.x - p.x, uSurfaceSize.y - p.y));
-    halo *= smoothstep(0.0, min(0.35 * reach, 12.0 * uSurfaceScale), edgeDist);
+    halo *= smoothstep(0.0, min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), edgeDist);
 
     // Outer-only: confined to where the surface itself is transparent, so the
     // content is passed through byte-for-byte and the AA rim blends. Focus

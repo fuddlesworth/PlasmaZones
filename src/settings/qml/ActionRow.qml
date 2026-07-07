@@ -1240,7 +1240,10 @@ ColumnLayout {
                         from: parent._pMin
                         to: parent._pMax
                         stepSize: parent._pRange <= 1 ? 0.01 : (parent._pRange <= 10 ? 0.1 : 1)
-                        value: parent._pValue
+                        // A number param that declares neither value nor
+                        // defaultValue yields undefined → NaN into the slider;
+                        // fall back to the min (mirrors ShaderParameterRow._numberOr).
+                        value: Number.isFinite(parent._pValue) ? parent._pValue : parent._pMin
                         formatValue: function (v) {
                             if (parent._pRange <= 1)
                                 return Math.round(v * 100) + "%";

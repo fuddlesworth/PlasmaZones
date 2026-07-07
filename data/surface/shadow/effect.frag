@@ -51,7 +51,7 @@ void main() {
     // instead of ending in a hard rectangle.
     vec2 rp = surfacePixel(vTexCoord);
     float edgeDist = min(min(rp.x, rp.y), min(uSurfaceSize.x - rp.x, uSurfaceSize.y - rp.y));
-    body *= smoothstep(0.0, min(0.35 * reach, 12.0 * uSurfaceScale), edgeDist);
+    body *= smoothstep(0.0, min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), edgeDist);
 
     // Outer-only: confined to where the surface is transparent, so content
     // and the AA rim pass through untouched. Mild focus softening — a real

@@ -270,7 +270,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // the open animation plays over it. A snap that is NOT on a freshly-opened
     // window (drag-snap, retile, focus move) has no such transition and morphs
     // normally.
-    const PlasmaZones::ShaderTransition* const inFlight = m_shaderManager.findTransition(window);
+    const ShaderTransition* const inFlight = m_shaderManager.findTransition(window);
     const bool openAnimationInFlight = inFlight && inFlight->addedGrabHeld;
     if (!skipAnimation && !allowDuringDrag && !openAnimationInFlight && m_windowAnimator->isEnabled()
         && shouldAnimateWindow(window)) {

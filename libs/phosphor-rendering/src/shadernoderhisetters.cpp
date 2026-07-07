@@ -225,6 +225,13 @@ void ShaderNodeRhi::setSurfaceFrameSize(float width, float height)
 
 void ShaderNodeRhi::setAppField0(int value)
 {
+    // A profile that doesn't expose the app-field slots must never see them
+    // marked dirty: its dirtyRegions() could otherwise emit a K_APP_FIELDS
+    // region past the end of a leaner UBO. Gate on the profile's declared
+    // capability so only profiles that own appField0/1 pay the granular path.
+    if (!m_uboProfile->hasAppFields()) {
+        return;
+    }
     if (m_appField0 == value) {
         return;
     }
@@ -238,6 +245,9 @@ void ShaderNodeRhi::setAppField0(int value)
 
 void ShaderNodeRhi::setAppField1(int value)
 {
+    if (!m_uboProfile->hasAppFields()) {
+        return;
+    }
     if (m_appField1 == value) {
         return;
     }

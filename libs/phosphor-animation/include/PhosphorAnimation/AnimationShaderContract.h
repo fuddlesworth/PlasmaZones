@@ -554,7 +554,8 @@ inline QString colorKey(int slot)
 /// is supplied by AnimationUniformExtension and pinned by the size
 /// static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
 /// If anyone reorders `BaseUniforms`, those asserts fail at compile time
-/// and the canonical GLSL header has to be updated to match. The GLSL side is exercised at build time by
+/// and the canonical GLSL header has to be updated to match. The GLSL side
+/// is exercised at build time by
 /// `tests/unit/ui/test_animation_shader_bake.cpp`, which runs every
 /// built-in animation shader through `qsb` (which in turn computes
 /// std140 offsets) — a layout drift would surface there as a bake

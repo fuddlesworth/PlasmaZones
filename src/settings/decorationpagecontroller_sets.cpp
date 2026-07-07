@@ -124,7 +124,15 @@ bool DecorationPageController::applyDecorationSet(const QString& name)
     // A set written by a newer build may carry fields this build drops on parse,
     // so applying it would commit a silently truncated look. Refuse it. A
     // missing version (legacy files) reads as the current format.
-    const int version = root.value(kVersionKey).toInt(kSetFormatVersion);
+    const QJsonValue versionVal = root.value(kVersionKey);
+    // A present-but-non-numeric version is malformed. Treat it as unknown
+    // (newer) and refuse, rather than silently reading it as the current format
+    // and applying a set this build may not fully understand.
+    if (!versionVal.isUndefined() && !versionVal.isDouble()) {
+        qCWarning(lcConfig) << "applyDecorationSet: non-numeric version in" << filePath << "— refusing";
+        return false;
+    }
+    const int version = versionVal.toInt(kSetFormatVersion);
     if (version > kSetFormatVersion) {
         qCWarning(lcConfig) << "applyDecorationSet: set version" << version << "in" << filePath
                             << "is newer than this build understands (" << kSetFormatVersion << ") — refusing";

@@ -246,4 +246,24 @@ inline constexpr int kSurfaceAudioUnit = 6;
 static_assert(kSurfaceAudioUnit > 5,
               "kSurfaceAudioUnit must clear the fold's units 0..5 (uTexture0/iChannel/backdrop)");
 
+/// Surface decoration texture units shared by the animation-layer paths in
+/// paint_pipeline.cpp and the present rebind in decoration_render.cpp. All are
+/// offset from kMaxUserTextureSlots (N, = 3 today) so the animation
+/// user-texture slots 0..N-1 never collide with them:
+///   kOldSnapshotUnit        (N+1) — the morph cross-fade's old-window snapshot
+///   kSurfaceLayerUnit       (N+2) — the composited surface layer bound for the
+///                                   animation shader / transition rebind
+///   kSurfaceChannelBaseUnit (N+3) — the present passthrough's final composite
+///                                   slot (shares unit 6 with kSurfaceAudioUnit
+///                                   in the disjoint present phase, see above)
+/// Centralized here (not re-derived per call site) so the fold, the animation
+/// path, and the present rebind can't drift apart if the contract's slot count
+/// changes.
+inline constexpr int kOldSnapshotUnit = 1 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+inline constexpr int kSurfaceLayerUnit = 2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+inline constexpr int kSurfaceChannelBaseUnit =
+    3 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+static_assert(kOldSnapshotUnit < kSurfaceLayerUnit && kSurfaceLayerUnit < kSurfaceChannelBaseUnit,
+              "surface decoration units must stay ordered and distinct");
+
 } // namespace PlasmaZones::ShaderInternal

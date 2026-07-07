@@ -289,7 +289,9 @@ inline bool isValidWrapToken(const QString& wrap)
 /// inside this contract namespace and consumers don't need to import the
 /// phosphor-shaders header directly. See
 /// `<PhosphorShaders/CustomParamsKey.h>` for the format, the rationale,
-/// and the full list of consumers.
+/// and the full list of consumers. This (vec, comp) form is part of the
+/// public contract surface for parity with the canonical two-overload
+/// helper; in-tree call sites currently use only the flat-slot form below.
 inline QString slotKey(int vec, char comp)
 {
     return PhosphorShaders::CustomParams::slotKey(vec, comp);

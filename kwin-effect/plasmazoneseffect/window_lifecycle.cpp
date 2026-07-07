@@ -782,7 +782,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     // The timer is only a generous SAFETY cap in case the
                     // sim never reaches its settle threshold.
                     st->holdUntilRelease = false;
-                    QTimer::singleShot(4000, this, [this, safeWindow, myGeneration]() {
+                    constexpr int kMeshSettleSafetyCapMs = 4000;
+                    QTimer::singleShot(kMeshSettleSafetyCapMs, this, [this, safeWindow, myGeneration]() {
                         if (!safeWindow) {
                             return;
                         }

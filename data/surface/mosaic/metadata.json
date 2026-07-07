@@ -25,8 +25,7 @@
             "default": 8,
             "min": 0,
             "max": 32,
-            "description": "Corner rounding of the pane (px, match the Border pack)",
-            "group": "Shape"
+            "description": "Corner rounding of the pane (px, match the Border pack)"
         },
         {
             "id": "tintStrength",

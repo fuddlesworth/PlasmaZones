@@ -729,9 +729,10 @@ void SettingsAdaptor::initializeRegistry()
     }
 
     // Per-surface decoration tree (JSON blob round-trip via D-Bus), mirroring
-    // the animation shaderProfileTree registration above. The kwin-effect lives
-    // in a separate process and fetches this by name via getSetting to resolve
-    // each surface's decoration (the user-applied shader-pack chain).
+    // the animation shaderProfileTree registration above. The out-of-process
+    // settings app round-trips the tree here over D-Bus; the daemon consumes it
+    // in-process (applyDecoration) to resolve each surface's decoration (the
+    // user-applied shader-pack chain).
     m_getters[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] = [this]() {
         return m_settings->decorationProfileTreeJson();
     };

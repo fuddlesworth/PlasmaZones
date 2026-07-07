@@ -229,6 +229,12 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     const qint64 pinned = m_shaderManager.currentFrameClockMs();
     const qint64 frameStamp = pinned >= 0 ? pinned : ShaderInternal::shaderClockNowMs();
     constexpr qint64 kAccumulationWindowMs = 50;
+    // Snapshot GL state BEFORE the realloc branch's clear (which sets the clear
+    // colour to transparent): the guard must capture the pristine ambient state
+    // so it hands blend/viewport/scissor/clear-colour back the way it found them
+    // on EVERY exit path, mid scene-walk. Its scope covers the realloc clear,
+    // the clear below, and the blit.
+    const ShaderInternal::ScopedGlState glStateGuard;
     if (state.backdropSize != textureSize || !state.backdropTex) {
         state.backdropTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
         if (!state.backdropTex) {
@@ -282,9 +288,9 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     }
     const bool sameGeneration =
         state.backdropFrameMs >= 0 && qAbs(frameStamp - state.backdropFrameMs) < kAccumulationWindowMs;
-    // Restore scissor/blend/viewport state — the clear below and the blit
-    // both honour scissor, and this runs mid scene-walk (see ScopedGlState).
-    const ShaderInternal::ScopedGlState glStateGuard;
+    // The clear below and the blit both honour scissor; disable it for them.
+    // GL state is restored by glStateGuard, constructed above (before the
+    // realloc clear) so it captures the pristine clear colour.
     glDisable(GL_SCISSOR_TEST);
     KWin::GLFramebuffer fbo(state.backdropTex.get());
     if (!fbo.valid()) {
@@ -408,14 +414,22 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
 
     // (Re)allocate the composite ping-pong pair on a size change.
     if (state.compositeSize != textureSize || !state.compositeTex[0] || !state.compositeTex[1]) {
+        bool allocFailed = false;
         for (auto& t : state.compositeTex) {
             t = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
             if (!t) {
-                m_surfaceMultipass.erase(windowId);
-                return nullptr;
+                allocFailed = true;
+                break;
             }
             t->setFilter(GL_LINEAR);
             t->setWrapMode(GL_CLAMP_TO_EDGE);
+        }
+        if (allocFailed) {
+            // Drop the half-allocated state. Erase AFTER the loop has ended so
+            // we never destroy the container mid-iteration (state is a reference
+            // into the map being erased).
+            m_surfaceMultipass.erase(windowId);
+            return nullptr;
         }
         state.compositeSize = textureSize;
         state.chainKey.clear(); // force the per-pack buffers to reallocate at the new size

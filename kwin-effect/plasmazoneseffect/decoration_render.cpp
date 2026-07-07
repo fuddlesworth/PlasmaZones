@@ -306,7 +306,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     // kSurfaceChannelBaseUnit, PAST the animation path's units so the two
     // paths never collide.
     int boundChannels = 0; // # of units we bound (for post-draw cleanup)
-    constexpr int kSurfaceChannelBaseUnit = 3 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+    constexpr int kSurfaceChannelBaseUnit = ShaderInternal::kSurfaceChannelBaseUnit;
     if (!m_capturingSnapshot && !m_windowDecorations.isEmpty() && !m_shaderManager.findTransition(w)) {
         const QString wid = getWindowId(w);
         const auto bit = m_windowDecorations.constFind(wid);
@@ -363,15 +363,13 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
         const auto reIt = m_surfaceMultipass.find(getWindowId(w));
         if (reIt != m_surfaceMultipass.end()) {
             if (KWin::GLTexture* const comp = reIt->second.compositeTex[reIt->second.finalSlot].get()) {
-                constexpr int kSurfaceLayerUnitDraw =
-                    2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                constexpr int kSurfaceLayerUnitDraw = ShaderInternal::kSurfaceLayerUnit;
                 glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnitDraw);
                 comp->bind();
                 // Old-content snapshot (morph cross-fades): same clobber, same
                 // last-moment rebind.
                 if (st->oldSnapshot) {
-                    constexpr int kOldSnapshotUnitDraw =
-                        1 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                    constexpr int kOldSnapshotUnitDraw = ShaderInternal::kOldSnapshotUnit;
                     glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnitDraw);
                     st->oldSnapshot->bind();
                 }

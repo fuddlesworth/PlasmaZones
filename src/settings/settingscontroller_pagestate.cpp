@@ -292,9 +292,11 @@ bool SettingsController::isPageDirty(const QString& page) const
 
     // Decoration pages share the single DecorationProfileTree key — value-based
     // like the manifest pages (see decorationConfigKeys for why the key can't
-    // live in the manifest itself). All three leaves report the same state,
-    // matching the shared-domain semantics: an edit on any decoration page is
-    // an edit of the one tree.
+    // live in the manifest itself). Every tree-backed decoration leaf
+    // (windows/osds/popups plus the sets and shaders library pages; the
+    // manifest-owned window-appearance leaf is handled by the manifest branch
+    // above) reports the same state, matching the shared-domain semantics: an
+    // edit on any decoration page is an edit of the one tree.
     if (isDecorationPage(page)) {
         for (const auto& gk : decorationConfigKeys()) {
             if (m_settings.isKeyModified(gk.first, gk.second))

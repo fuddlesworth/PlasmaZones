@@ -479,8 +479,11 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kAnimationsAllLeaves =
         kAnimationsDirectChildren + kAnimationsSurfacesChildren + kAnimationsLibraryChildren;
     // Decoration drill-down — Surfaces / Library sub-buckets, mirroring
-    // animations. decoration-shaders is a read-only browser (never dirty)
-    // but rides the topology map for symmetry with animations-shaders.
+    // animations. decorations-shaders is a read-only browser; like
+    // animations-shaders it still rides the shared decoration domain (see
+    // isDecorationPage), so it reports the tree's dirty state and its kebab
+    // Reset/Discard act on the whole tree — the shared-domain semantics, not a
+    // per-page edit surface.
     static const QSet<QString> kDecorationSurfacesChildren{
         QStringLiteral("decorations-windows"),
         QStringLiteral("decorations-osds"),
