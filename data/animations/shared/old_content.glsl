@@ -16,6 +16,9 @@
 // the daemon transition paths never sample old content. Include AFTER the
 // animation uniform block so iHasOldWindow / iAnchorRectInTexture / iWindowOpacity
 // and surfaceColor() are in scope.
+#ifndef PLASMAZONES_OLD_CONTENT_GLSL
+#define PLASMAZONES_OLD_CONTENT_GLSL
+
 #ifdef PLASMAZONES_KWIN
 uniform sampler2D uOldWindow;
 
@@ -31,4 +34,6 @@ vec4 oldColor(vec2 uv) {
     vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
     return texture(uOldWindow, vec2(t.x, 1.0 - t.y)) * iWindowOpacity;
 }
-#endif
+#endif // PLASMAZONES_KWIN
+
+#endif // PLASMAZONES_OLD_CONTENT_GLSL

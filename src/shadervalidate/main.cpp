@@ -403,12 +403,21 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     AnimationShaderEffect eff = AnimationShaderEffect::fromJson(doc.object());
     eff.sourceDir = QDir(packDir).absolutePath();
     // Mirror AnimationShaderRegistry::parseEffect: the fragment path comes from
-    // the metadata `fragmentShader` field, resolved relative to the pack dir
-    // (QDir::filePath returns an absolute input unchanged). The runtime does NOT
-    // default to effect.frag — a pack that omits the field is unreachable, so an
-    // empty path stays empty and is caught by isValid() below.
+    // the metadata `fragmentShader` field, resolved relative to the pack dir and
+    // confined to it (the metadata is user-editable, so a `../…`/absolute path
+    // must be rejected, not opened and fed to glslang — same guard as
+    // validateSurfacePack). The runtime does NOT default to effect.frag — a pack
+    // that omits the field is unreachable, so an empty path stays empty and is
+    // caught by isValid() below.
     if (!eff.fragmentShaderPath.isEmpty()) {
-        eff.fragmentShaderPath = QDir(packDir).filePath(eff.fragmentShaderPath);
+        const auto confined = confinedPackPath(packDir, eff.fragmentShaderPath);
+        if (!confined) {
+            out << name
+                << "\n  metadata      ERROR\n    fragmentShader path escapes the pack directory (path traversal "
+                   "rejected)\n  → 1 error\n\n";
+            return 1;
+        }
+        eff.fragmentShaderPath = *confined;
     }
     if (!eff.isValid()) {
         out << name << "\n  metadata      ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";

@@ -72,19 +72,14 @@ void PlasmaZonesEffect::reconcileDecorationShader(const QString& windowId, KWin:
     }
 
     if (wantsBorder) {
-        // The redirect shader OffscreenData::paint runs to present this window:
-        //   single pack → the pack's own main shader (it blits the redirected
-        //                 surface through itself, sampling its buffer iChannels);
-        //   multi pack  → the passthrough present shader, which samples the
-        //                 pre-composited final FBO that paintWindow's
-        //                 renderSurfaceChainComposite produced (the per-pack mains
-        //                 ran as FBO passes there, not via OffscreenData).
-        // Both compile-on-first-use; a null result tears the redirect down rather
-        // than leave the window blitting a dead/stale shader forever (a just-ended
-        // transition hands the slot back here still redirected).
-        // Every decorated window rides the composite path: the redirect always
-        // holds the present passthrough, and paintWindow's per-frame fold
-        // supplies the composite it blits. (The old cheap path bound the pack
+        // The redirect shader OffscreenData::paint runs to present this window is
+        // always the passthrough present shader: it samples the pre-composited
+        // final FBO that paintWindow's renderSurfaceChainComposite produced (the
+        // per-pack mains run as FBO passes there, not via OffscreenData). Every
+        // decorated window rides this composite path. Compiles on first use; a
+        // null result tears the redirect down rather than leave the window
+        // blitting a dead/stale shader forever (a just-ended transition hands the
+        // slot back here still redirected). (The old cheap path bound the pack
         // shader directly for single unpadded packs; retired — see drawWindow.)
         KWin::GLShader* const redirectShader = surfacePresentShader();
         if (!redirectShader) {

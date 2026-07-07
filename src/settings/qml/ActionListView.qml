@@ -158,7 +158,7 @@ ColumnLayout {
             // render verbatim. An empty chain is the "no decoration" sentinel.
             var chainIds = raw || [];
             if (!chainIds.length)
-                return i18n("No decoration");
+                return i18n("Block decoration");
             var decoCtl = root.appSettings ? root.appSettings.decorationPage : null;
             var packs = decoCtl ? (decoCtl.availableShaderEffects() || []) : [];
             var names = [];

@@ -947,10 +947,12 @@ private:
     /// at most once per frame.
     float advanceFocusFade(const QString& windowId, bool focused);
 
-    /// Render the window's active surface-layer stack into @p transition's
-    /// ping-pong FBO chain and return the texture holding the final composited
-    /// surface, or nullptr when the window has no active surface layers (the
-    /// caller then animates the bare `uTexture0`). Called once per animated frame
+    /// Render the window's active surface-layer stack into the window's
+    /// per-window ping-pong FBO chain (`m_surfaceMultipass`, shared with the
+    /// idle path) and return the texture holding the final composited surface,
+    /// or nullptr when the window has no active surface layers (the caller then
+    /// animates the bare `uTexture0`). @p transition supplies only its
+    /// `cached->shader` as the capture-restore shader. Called once per animated frame
     /// from paintWindow's transition branch BEFORE the animation draw: the
     /// returned texture is bound as `uSurfaceLayer` so the animation composites
     /// over the layered surface (border / rounded corners, future tint/glow) and

@@ -333,7 +333,8 @@ public:
     /// `{ key, kind, label }`. `kind` is one of the descriptor kinds the
     /// ActionRow editor dispatches on (enum, number, percent, bool, color,
     /// zoneOrdinals, screenId, virtualDesktop, snappingLayout, tilingAlgorithm,
-    /// animationEvent, shaderEffect, overlayShader, curveEditor); for
+    /// animationEvent, shaderEffect, overlayShader, decorationChain,
+    /// curveEditor); for
     /// `kind == "enum"` there is also an `options` string list, and for
     /// `kind == "number"`/`"percent"`, `min`/`max`/`scale` (the value stored is
     /// `display * scale`).
