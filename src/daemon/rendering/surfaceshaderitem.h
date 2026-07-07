@@ -140,8 +140,10 @@ protected:
      *
      * Mirrors ZoneShaderItem's load semantics (vertex shader resolved + loaded
      * before the fragment, include paths + param preamble pushed) minus all the
-     * zone-specific sync. Surface packs ship their own `main()` and no
-     * entry-point scaffold, so none is installed.
+     * zone-specific sync. A fragment entry-point scaffold IS installed, so a
+     * surface pack may define only `vec4 pSurface(vec2 uv)` and omit `main()`
+     * (a traditional `main()` pack passes through unchanged). The vertex stage
+     * has no scaffold and relies on a shared `surface.vert` for its `main()`.
      */
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;
 

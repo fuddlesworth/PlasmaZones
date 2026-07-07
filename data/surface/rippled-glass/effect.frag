@@ -49,7 +49,7 @@ void main() {
         // Ripple-space coordinate: p_rippleSize is the ripple's logical-px
         // size, so the pattern is DPI-stable and does not stretch with the
         // pane (unlike a frame-normalized uv).
-        float sizePx = max(p_rippleSize, 1.0) * uSurfaceScale;
+        float sizePx = max(p_rippleSize, 1.0) * max(uSurfaceScale, 0.001);
         vec2 q = px / sizePx;
         float t = iTime * max(p_rippleSpeed, 0.0);
 

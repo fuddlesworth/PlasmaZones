@@ -82,7 +82,7 @@ void main() {
     float mask = frameMask(fs.d);
 
     // Glass space: device px scaled so dropletScale 1.0 gives ~90 px cells.
-    float cellPx = 90.0 * clamp(p_dropletScale, 0.25, 4.0) * uSurfaceScale;
+    float cellPx = 90.0 * clamp(p_dropletScale, 0.25, 4.0) * max(uSurfaceScale, 0.001);
     vec2 st = (px - uSurfaceFrameTopLeft) / cellPx;
     float t = iTime * max(p_rainSpeed, 0.0);
 

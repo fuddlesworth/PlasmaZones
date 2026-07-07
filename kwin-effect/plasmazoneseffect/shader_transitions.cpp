@@ -981,12 +981,17 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // UI without a rebuild. Each falls back to the generic default when the
     // pack doesn't declare it, so a non-mesh pack costs nothing. The same
     // named values also reach the shader as p_<name> customParams, so the
-    // pack can expose them as ordinary sliders. Values are clamped to safe
-    // ranges because they arrive from user-editable metadata: `drag` is
-    // KWin's velocity-RETENTION factor, so drag >= 1.0 means the lattice
-    // never loses energy and never settles, pinning the transition open and
-    // driving full-screen repaints until the 4 s safety teardown fires;
-    // negative stiffness would push nodes away from rest and grow unbounded.
+    // pack can expose them as ordinary sliders. Values arrive from
+    // user-editable metadata, so they are clamped to keep the explicit spring
+    // integrator (mesh_sim.cpp) stable. Each per-node update is
+    // v' = drag*v - K*t^2*x, p += t*moveFactor*v' (t = 10 ms substep, K the
+    // spring constant); the 2x2 state matrix has det = drag and
+    // trace = 1 - K*t^2*moveFactor + drag, so both eigenvalues stay inside the
+    // unit circle iff drag < 1 AND K*t^2*moveFactor < 2*(1+drag). drag < 1
+    // alone is NOT sufficient: a stiff pack diverges, `settled` never trips,
+    // and the transition drives a full-screen-repaint runaway until the 4 s
+    // safety teardown. So clamp drag < 1, keep the stiffnesses non-negative,
+    // then cap moveFactor to the product bound below.
     // Materialised once here and reused for the slot translation below.
     const QVariantMap params = profile.effectiveParameters();
     {
@@ -1000,6 +1005,21 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         readParam("gripStiffness", transition.meshParams.gripStiffness, 0.0, 1.0);
         readParam("springiness", transition.meshParams.drag, 0.0, 0.99);
         readParam("moveFactor", transition.meshParams.moveFactor, 0.0, 1.0);
+
+        // Enforce K*t^2*moveFactor < 2*(1+drag) so the lattice always settles.
+        // K is the effective spring constant: grip nodes use gripStiffness
+        // directly (single DOF), while the free-sheet neighbour springs can
+        // reach ~2x sheetStiffness at the highest lattice mode, so take
+        // max(gripStiffness, 2*sheetStiffness). Cap moveFactor to 80% of the
+        // bound for margin; the shipped KWin preset (k=0.018, gk=0.16,
+        // mf=0.16, drag=0.82) sits at ~70% and is left untouched.
+        constexpr qreal kMeshSubstepMs = 10.0; // matches mesh_sim.cpp integrator step
+        const qreal effectiveK = qMax(transition.meshParams.gripStiffness, 2.0 * transition.meshParams.stiffness);
+        if (effectiveK > 0.0) {
+            const qreal moveFactorLimit =
+                0.8 * 2.0 * (1.0 + transition.meshParams.drag) / (kMeshSubstepMs * kMeshSubstepMs * effectiveK);
+            transition.meshParams.moveFactor = qMin(transition.meshParams.moveFactor, moveFactorLimit);
+        }
     }
 
     // Translate the friendly parameter map (e.g. {"direction": 1,

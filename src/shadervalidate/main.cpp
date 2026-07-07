@@ -57,6 +57,8 @@
 
 #include <rhi/qshader.h>
 
+#include <optional>
+
 using PhosphorAnimationShaders::AnimationShaderEffect;
 using PhosphorAnimationShaders::AnimationShaderRegistry;
 using PhosphorRendering::ShaderCompiler;
@@ -66,6 +68,26 @@ using PhosphorSurfaceShaders::SurfaceShaderEffect;
 using PhosphorSurfaceShaders::SurfaceShaderRegistry;
 
 namespace {
+
+// Confine a metadata-supplied shader path to its pack dir. The metadata is
+// user-editable, so a `../…` or absolute path must not be opened, compiled, or
+// even probed for existence outside the pack. Returns the confined absolute
+// path, or nullopt when the path is empty or escapes the pack dir. This is a
+// simplified lexical guard (cleanPath + prefix) for this local CI tool; the
+// runtime SurfaceShaderRegistry additionally applies canonical + symlink-escape
+// checks.
+std::optional<QString> confinedPackPath(const QString& packDir, const QString& rel)
+{
+    if (rel.isEmpty()) {
+        return std::nullopt;
+    }
+    const QString cleanRoot = QDir::cleanPath(QDir(packDir).absolutePath()) + QStringLiteral("/");
+    const QString abs = QDir::cleanPath(QDir(packDir).filePath(rel));
+    if (!abs.startsWith(cleanRoot)) {
+        return std::nullopt;
+    }
+    return abs;
+}
 
 const QStringList kValidParamTypes = {QStringLiteral("float"), QStringLiteral("int"), QStringLiteral("bool"),
                                       QStringLiteral("color"), QStringLiteral("image")};
@@ -281,7 +303,10 @@ int validatePack(const QString& packDir, QTextStream& out)
             bufferNames << root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
         }
         for (const QString& bufName : bufferNames) {
-            if (!QFile::exists(QDir(packDir).filePath(bufName))) {
+            const auto confined = confinedPackPath(packDir, bufName);
+            if (!confined) {
+                lints << QStringLiteral("multipass buffer shader path escapes the pack directory: %1").arg(bufName);
+            } else if (!QFile::exists(*confined)) {
                 lints << QStringLiteral("multipass buffer shader missing: %1").arg(bufName);
             }
         }
@@ -511,20 +536,19 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     SurfaceShaderEffect eff = SurfaceShaderEffect::fromJson(doc.object());
     eff.sourceDir = QDir(packDir).absolutePath();
     // The `fragmentShader` / `bufferShaders` / `vertexShader` paths come from the
-    // user-editable metadata.json, so confine each to the pack dir before it is
-    // opened and fed to glslang. Mirrors SurfaceShaderRegistry's traversal guard
-    // (surfaceshaderregistry.cpp): a `../../../etc/...` or absolute path must be
-    // rejected, not resolved and compiled.
-    const QString cleanRoot = QDir::cleanPath(QDir(packDir).absolutePath()) + QStringLiteral("/");
-    const auto confineToPack = [&cleanRoot, &packDir](QString& path) -> bool {
+    // user-editable metadata.json, so confine each to the pack dir (via
+    // confinedPackPath) before it is opened and fed to glslang: a
+    // `../../../etc/...` or absolute path must be rejected, not compiled. An
+    // empty path is left as-is (that stage is simply absent).
+    const auto confineToPack = [&packDir](QString& path) -> bool {
         if (path.isEmpty()) {
             return true;
         }
-        const QString abs = QDir::cleanPath(QDir(packDir).filePath(path));
-        if (!abs.startsWith(cleanRoot)) {
+        const auto confined = confinedPackPath(packDir, path);
+        if (!confined) {
             return false;
         }
-        path = abs;
+        path = *confined;
         return true;
     };
     if (!confineToPack(eff.fragmentShaderPath)) {
@@ -601,7 +625,13 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         const QJsonArray declaredBuffers = doc.object().value(QLatin1String("bufferShaders")).toArray();
         for (const QJsonValue& v : declaredBuffers) {
             const QString bufName = v.toString();
-            if (!bufName.isEmpty() && !QFile::exists(QDir(packDir).filePath(bufName))) {
+            if (bufName.isEmpty()) {
+                continue;
+            }
+            const auto confined = confinedPackPath(packDir, bufName);
+            if (!confined) {
+                lints << QStringLiteral("multipass buffer shader path escapes the pack directory: %1").arg(bufName);
+            } else if (!QFile::exists(*confined)) {
                 lints << QStringLiteral("multipass buffer shader missing: %1").arg(bufName);
             }
         }

@@ -261,6 +261,12 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             QString vertPath;
             if (vertexShaderUrl().isValid() && !vertexShaderUrl().isEmpty()) {
                 vertPath = vertexShaderUrl().toLocalFile();
+                // Mirror the fragment path: a qrc: URL has no local file, so
+                // map it to the ':'-prefixed resource path instead of silently
+                // dropping it and falling through to the surface.vert lookup.
+                if (vertexShaderUrl().scheme() == QLatin1String("qrc")) {
+                    vertPath = QLatin1Char(':') + vertexShaderUrl().path();
+                }
             }
             if (vertPath.isEmpty() && !fragPath.isEmpty()) {
                 const QString dir = QFileInfo(fragPath).absolutePath();

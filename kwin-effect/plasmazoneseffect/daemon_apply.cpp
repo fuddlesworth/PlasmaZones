@@ -499,8 +499,10 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // appId to survive the window's identity change across close/reopen.
         m_snapHandler->invalidateRestore(::PhosphorIdentity::WindowId::extractAppId(windowId));
     }
-    // The change-gated writes above (setWindowFloating / clearWindowZone) re-resolve
-    // this window's rules only when a match field actually flips. That is not enough
+    // The change-gated write above (setWindowFloating, plus the zone-cache
+    // clear that now runs inside clearWindowSnapped on the floating branch)
+    // re-resolves this window's rules only when a match field actually flips.
+    // That is not enough
     // on the cross-monitor drag-out path: the cross-screen handoff pre-sets the
     // floating / zone caches while the window is still moving, so by the time this
     // authoritative windowFloatingChanged arrives both writes are no-ops and the

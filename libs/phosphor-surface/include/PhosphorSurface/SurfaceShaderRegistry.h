@@ -163,11 +163,11 @@ public:
     /// ids in `friendlyParams` are silently ignored. Slot-budget overflows
     /// log a warning and drop the offending parameter.
     ///
-    /// Returns an empty map only when `effect` is invalid. A valid effect
-    /// with no declared parameters can still return user-texture keys
-    /// (`uTextureN`) when its metadata declares textures or `friendlyParams`
-    /// supplies texture overrides, so callers must not treat a non-empty
-    /// result as proof the effect declares parameters.
+    /// Returns an empty map when `effect` is invalid, or when a valid effect
+    /// declares no parameters and no textures and `friendlyParams` supplies no
+    /// texture overrides. Conversely a valid effect with no declared parameters
+    /// can still return user-texture keys (`uTextureN`), so callers must not
+    /// treat a non-empty result as proof the effect declares parameters.
     QVariantMap translateSurfaceParams(const QString& effectId, const QVariantMap& friendlyParams) const;
 
     /// Static counterpart for callers that already hold the resolved
