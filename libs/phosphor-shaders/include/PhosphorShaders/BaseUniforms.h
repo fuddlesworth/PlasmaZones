@@ -176,7 +176,7 @@ constexpr size_t K_TIME_BLOCK_SIZE = sizeof(float) + sizeof(float) + sizeof(int)
 // App-fields block (appField0, appField1) — 8 bytes at offset 88.
 // Uploaded as a tiny standalone region when ONLY the consumer's escape-hatch
 // fields changed. Without this granular region, every appField update would
-// trigger a full scene-header re-upload (~512 bytes).
+// trigger a full scene-header re-upload (~592 bytes).
 constexpr size_t K_APP_FIELDS_OFFSET = offsetof(BaseUniforms, appField0);
 constexpr size_t K_APP_FIELDS_SIZE = sizeof(int) * 2;
 

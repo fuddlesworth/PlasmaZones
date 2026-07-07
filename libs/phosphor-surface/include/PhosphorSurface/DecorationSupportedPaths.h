@@ -38,6 +38,20 @@ inline QStringList decorationLeafSurfacePaths()
     };
 }
 
+/// Walk @p path up one level in the dot-hierarchy ("window.floating" ->
+/// "window" -> ""). Single source of truth for the decoration ancestor-walk,
+/// shared by decorationSupportedSurfacePaths() below and
+/// DecorationProfileTree::resolve(), so the two cannot drift. Unlike the
+/// animation ProfilePaths::parentPath there is no synthetic "global" node: the
+/// tree's baseline IS the global default, so the chain terminates at "".
+inline QString decorationParentPath(const QString& path)
+{
+    if (path.isEmpty())
+        return QString();
+    const int dotIdx = path.lastIndexOf(QLatin1Char('.'));
+    return (dotIdx < 0) ? QString() : path.left(dotIdx);
+}
+
 /// Single source of truth for "which surface paths can carry a decoration
 /// profile". Includes every consumed leaf AND every ancestor of a consumed
 /// leaf — setting the decoration on an ancestor cascades to its descendants
@@ -59,8 +73,7 @@ inline QStringList decorationSupportedSurfacePaths()
                 seen.insert(cursor);
                 out.append(cursor);
             }
-            const int dotIdx = cursor.lastIndexOf(QLatin1Char('.'));
-            cursor = (dotIdx < 0) ? QString() : cursor.left(dotIdx);
+            cursor = decorationParentPath(cursor);
         }
     }
     return out;

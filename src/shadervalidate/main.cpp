@@ -75,9 +75,13 @@ namespace {
 // be opened, compiled, or even probed for existence outside the pack —
 // otherwise glslang's diagnostics could echo the contents of an outside file.
 // Returns the confined path, or nullopt when the path is empty or escapes the
-// pack dir. Mirrors the runtime SurfaceShaderRegistry guard: prefer a canonical
-// comparison (which follows symlinks) when both sides resolve, otherwise fall
-// back to a lexical prefix for both. Never mix the two domains.
+// pack dir. Uses the runtime SurfaceShaderRegistry guard's canonical-vs-lexical
+// domain logic: prefer a canonical comparison (which follows symlinks) when both
+// sides resolve, otherwise fall back to a lexical prefix for both. Never mix the
+// two domains. Deliberately STRICTER than the runtime in one respect: the
+// runtime only traversal-checks relative paths and trusts an absolute one,
+// whereas this gate confines absolute paths too — a shipped pack must never
+// reference a file outside its own dir.
 std::optional<QString> confinedPackPath(const QString& packDir, const QString& rel)
 {
     if (rel.isEmpty()) {
@@ -497,6 +501,9 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
             const QString assembled =
                 PhosphorShaders::assembleEntryPoint(raw, AnimationShaderRegistry::animationEntryPrologue(),
                                                     AnimationShaderRegistry::animationEntryCandidates());
+            // Animation runtime include paths are `shared`-only (see
+            // surfaceanimator.cpp animIncludePaths, which appends only each
+            // search path's `/shared` subdir), so the animation gate matches it.
             const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
             QString err;
             const QString expanded = ShaderCompiler::expandSource(
@@ -628,8 +635,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         // eff.textures could never surface an author's typo. Mirror fromJson's
         // {clamp,repeat,mirror} guard so a bad wrap fails the validator instead.
         const QString wrap = v.toObject().value(QLatin1String("wrap")).toString();
-        if (!wrap.isEmpty() && wrap != QLatin1String("clamp") && wrap != QLatin1String("repeat")
-            && wrap != QLatin1String("mirror")) {
+        if (!wrap.isEmpty() && !PhosphorSurfaceShaders::SurfaceShaderContract::isValidWrapToken(wrap)) {
             lints
                 << QStringLiteral("texture wrap not in {clamp,repeat,mirror}: %1 (cleared to clamp at load)").arg(wrap);
         }
@@ -701,7 +707,14 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             ++errors;
         } else {
             const QString raw = QString::fromUtf8(frag.readAll());
-            const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
+            const QString surfacePacksRoot = QFileInfo(packDir).absolutePath();
+            // Match the runtime SurfaceShaderItem::surfaceIncludePaths(): each
+            // surface data dir contributes its `shared` subdir AND the dir
+            // itself, so a shader that resolves an include from the packs-root
+            // (not just `shared/`) bakes identically here and can't false-fail
+            // the gate. The sibling zone validator uses the same
+            // {root/shared, root} pair.
+            const QStringList includePaths = {surfacePacksRoot + QStringLiteral("/shared"), surfacePacksRoot};
             QString err;
             // Assemble an entry-only pack (a `vec4 pSurface(vec2 uv)` body, no
             // main()) into a full TU before expansion, identical to the daemon /
@@ -728,7 +741,13 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // and bake on the daemon Qt-RHI path, same as overlay packs. The compositor
     // runtime executes them via the GL-FBO chain; both share this source.
     if (eff.isMultipass) {
-        const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
+        const QString surfacePacksRoot = QFileInfo(packDir).absolutePath();
+        // Match the runtime SurfaceShaderItem::surfaceIncludePaths(): each surface
+        // data dir contributes its `shared` subdir AND the dir itself, so a shader
+        // that resolves an include from the packs-root (not just `shared/`) bakes
+        // identically here and can't false-fail the gate. The sibling zone
+        // validator uses the same {root/shared, root} pair.
+        const QStringList includePaths = {surfacePacksRoot + QStringLiteral("/shared"), surfacePacksRoot};
         for (const QString& buf : eff.bufferShaderPaths) {
             if (!QFile::exists(buf)) {
                 continue; // missing buffers already linted above
@@ -765,10 +784,20 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // daemon — the sibling zone path (validatePack) already bakes the vertex
     // stage, so surface validation must too.
     {
-        const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
+        const QString surfacePacksRoot = QFileInfo(packDir).absolutePath();
+        // Match the runtime SurfaceShaderItem::surfaceIncludePaths(): each surface
+        // data dir contributes its `shared` subdir AND the dir itself, so a shader
+        // that resolves an include from the packs-root (not just `shared/`) bakes
+        // identically here and can't false-fail the gate. The sibling zone
+        // validator uses the same {root/shared, root} pair.
+        const QStringList includePaths = {surfacePacksRoot + QStringLiteral("/shared"), surfacePacksRoot};
         QString vertPath = eff.vertexShaderPath;
         if (vertPath.isEmpty()) {
-            const QString vertLocal = QDir(packDir).filePath(QStringLiteral("surface.vert"));
+            // Beside the FRAGMENT (matching the daemon runtime and the comment
+            // above), not merely inside packDir — a nested fragmentShader path
+            // resolves its sibling surface.vert the same way at runtime.
+            const QString vertLocal =
+                QFileInfo(eff.fragmentShaderPath).absolutePath() + QStringLiteral("/surface.vert");
             if (QFile::exists(vertLocal)) {
                 vertPath = vertLocal;
             } else {

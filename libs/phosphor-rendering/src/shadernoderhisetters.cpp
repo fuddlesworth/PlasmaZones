@@ -36,6 +36,14 @@ void ShaderNodeRhi::setUniformExtension(std::shared_ptr<PhosphorShaders::IUnifor
     m_ubo.reset();
     m_initialized = false;
     m_didFullUploadOnce = false;
+    // The recreated UBO starts uninitialized. Mark uniforms dirty so the next
+    // upload takes the full-upload path (which is gated on m_uniformsDirty) and
+    // re-writes the base region. Without this, a resize landing on an
+    // otherwise-clean frame would recreate m_ubo, then hit the
+    // m_uniformsDirty==false branch and leave the base region uninitialized
+    // (garbage uniforms). Mirrors releaseRhiResources(), which resets the same
+    // trio and also sets m_uniformsDirty.
+    m_uniformsDirty = true;
     // Resize staging buffer to match. Keep capacity to avoid churn if the size
     // oscillates. Actual memset/fill happens on upload.
     m_extensionStaging.resize(newSize);
@@ -224,7 +232,7 @@ void ShaderNodeRhi::setAppField0(int value)
     m_uboProfile->setAppField0(value);
     m_uniformsDirty = true;
     // Use the granular K_APP_FIELDS region (8 bytes) instead of the full
-    // scene header (~512 bytes). Phosphor updates these on every hover.
+    // scene header (~592 bytes). Phosphor updates these on every hover.
     m_appFieldsDirty = true;
 }
 

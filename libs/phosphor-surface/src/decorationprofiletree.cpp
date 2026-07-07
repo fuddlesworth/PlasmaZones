@@ -20,22 +20,6 @@ constexpr auto kJsonFieldOverrides = "overrides";
 constexpr auto kJsonFieldPath = "path";
 constexpr auto kJsonFieldProfile = "profile";
 
-/// Walk @p path up one level ("window.tiled" -> "window" -> "").
-///
-/// Local to this translation unit so phosphor-surface need not link
-/// phosphor-animation just to reuse ProfilePaths::parentPath. Unlike the
-/// animation variant there is no synthetic "global" node: the tree's
-/// baseline IS the global default, so the chain terminates at "".
-static QString parentPath(const QString& path)
-{
-    if (path.isEmpty())
-        return QString();
-    const int dotIdx = path.lastIndexOf(QLatin1Char('.'));
-    if (dotIdx < 0)
-        return QString();
-    return path.left(dotIdx);
-}
-
 } // namespace
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -48,7 +32,7 @@ DecorationProfile DecorationProfileTree::resolve(const QString& surfacePath) con
     QString cursor = surfacePath;
     while (!cursor.isEmpty()) {
         chain.prepend(cursor);
-        cursor = parentPath(cursor);
+        cursor = decorationParentPath(cursor);
     }
 
     DecorationProfile effective = m_baseline;
