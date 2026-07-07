@@ -984,7 +984,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // pack can expose them as ordinary sliders. Values arrive from
     // user-editable metadata, so they are clamped to keep the explicit spring
     // integrator (mesh_sim.cpp) stable. Each per-node update is
-    // v' = drag*v - K*t^2*x, p += t*moveFactor*v' (t = 10 ms substep, K the
+    // v' = drag*v - K*t*x, p += t*moveFactor*v' (t = 10 ms substep, K the
     // spring constant); the 2x2 state matrix has det = drag and
     // trace = 1 - K*t^2*moveFactor + drag, so both eigenvalues stay inside the
     // unit circle iff drag < 1 AND K*t^2*moveFactor < 2*(1+drag). drag < 1
