@@ -510,24 +510,42 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
 
     SurfaceShaderEffect eff = SurfaceShaderEffect::fromJson(doc.object());
     eff.sourceDir = QDir(packDir).absolutePath();
-    // Mirror SurfaceShaderRegistry::parseEffect: the fragment path comes from the
-    // metadata `fragmentShader` field, resolved relative to the pack dir.
-    if (!eff.fragmentShaderPath.isEmpty()) {
-        eff.fragmentShaderPath = QDir(packDir).filePath(eff.fragmentShaderPath);
+    // The `fragmentShader` / `bufferShaders` / `vertexShader` paths come from the
+    // user-editable metadata.json, so confine each to the pack dir before it is
+    // opened and fed to glslang. Mirrors SurfaceShaderRegistry's traversal guard
+    // (surfaceshaderregistry.cpp): a `../../../etc/...` or absolute path must be
+    // rejected, not resolved and compiled.
+    const QString cleanRoot = QDir::cleanPath(QDir(packDir).absolutePath()) + QStringLiteral("/");
+    const auto confineToPack = [&cleanRoot, &packDir](QString& path) -> bool {
+        if (path.isEmpty()) {
+            return true;
+        }
+        const QString abs = QDir::cleanPath(QDir(packDir).filePath(path));
+        if (!abs.startsWith(cleanRoot)) {
+            return false;
+        }
+        path = abs;
+        return true;
+    };
+    if (!confineToPack(eff.fragmentShaderPath)) {
+        out << name
+            << "\n  metadata      ERROR\n    fragmentShader path escapes the pack directory (path traversal "
+               "rejected)\n  → 1 error\n\n";
+        return 1;
     }
-    // fromJson leaves buffer paths relative (the registry's parseEffect resolves
-    // them); resolve here against the pack dir, same as fragmentShaderPath.
     for (QString& b : eff.bufferShaderPaths) {
-        if (!b.isEmpty()) {
-            b = QDir(packDir).filePath(b);
+        if (!confineToPack(b)) {
+            out << name
+                << "\n  metadata      ERROR\n    bufferShaders path escapes the pack directory (path traversal "
+                   "rejected)\n  → 1 error\n\n";
+            return 1;
         }
     }
-    // fromJson leaves an explicit `vertexShader` path relative too (the registry's
-    // parseEffect resolves it, surfaceshaderregistry.cpp); resolve here against the
-    // pack dir so the vertex stage below finds a custom vertex shader instead of
-    // probing it against the CWD, missing it, and passing a malformed stage.
-    if (!eff.vertexShaderPath.isEmpty()) {
-        eff.vertexShaderPath = QDir(packDir).filePath(eff.vertexShaderPath);
+    if (!confineToPack(eff.vertexShaderPath)) {
+        out << name
+            << "\n  metadata      ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n  "
+               "→ 1 error\n\n";
+        return 1;
     }
     if (!eff.isValid()) {
         out << name << "\n  metadata      ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";

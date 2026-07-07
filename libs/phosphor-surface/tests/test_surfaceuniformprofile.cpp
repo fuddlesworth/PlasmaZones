@@ -114,13 +114,33 @@ private Q_SLOTS:
         QCOMPARE(rc, 0);
     }
 
+    void golden_bytes_match_reference_no_flip()
+    {
+        // Cover the qt_Matrix[5] = +1 no-flip branch of fill(); makeFixedState
+        // sets yUpInNDC=true, so without this the +1 path stays untested.
+        PhosphorShaders::UboFrameState state = makeFixedState();
+        state.yUpInNDC = false;
+        SurfaceUniformProfile profile;
+        profile.fill(state);
+
+        const SurfaceUniforms reference = makeReference(state);
+        QCOMPARE(static_cast<int>(sizeof(reference)), profile.baseSize());
+        const int rc = std::memcmp(profile.data(), &reference, sizeof(SurfaceUniforms));
+        QCOMPARE(rc, 0);
+    }
+
     void no_app_fields()
     {
         SurfaceUniformProfile profile;
         QVERIFY(!profile.hasAppFields());
-        // No-op default writes must not crash or corrupt the buffer.
+        // No-op default writes must not crash OR silently mutate the buffer.
+        // Snapshot the bytes, run the no-op setters, and assert nothing moved.
+        const int sz = profile.baseSize();
+        const QByteArray before(static_cast<const char*>(profile.data()), sz);
         profile.setAppField0(99);
         profile.setAppField1(99);
+        const int rc = std::memcmp(profile.data(), before.constData(), static_cast<size_t>(sz));
+        QCOMPARE(rc, 0);
     }
 
     void dirty_regions_matrix_plus_scene()

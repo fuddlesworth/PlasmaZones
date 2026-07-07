@@ -178,10 +178,6 @@ struct CompiledSurfacePack
 /// getWindowId(w) in m_surfaceMultipass; freed by removeWindowDecoration.
 struct SurfaceMultipassState
 {
-    // One pack with buffer passes, presented through OffscreenData. Unused on
-    // the multi-pack path below (a window uses one path or the other).
-    QSize size; ///< full textureSize the single-pack targets were allocated for
-
     // ── Multi-pack chain compositing path (renderSurfaceChainComposite) ──────
     // The two composite textures ping-pong as the chain is folded pack-by-pack;
     // `finalSlot` names the slot holding the last fold (presented by drawWindow
@@ -699,21 +695,6 @@ struct ShaderTransition
     /// was not requested or failed — paintWindow then binds a transparent
     /// fallback (or the shader falls back to a non-cross-fade morph).
     std::unique_ptr<KWin::GLTexture> oldSnapshot;
-
-    /// Surface-layer-stack render targets (compositor path). The window's
-    /// surface with its active surface layers (border / rounded corners today;
-    /// tint / glow / ... in future) composited in order, rendered each animated
-    /// frame so the animation samples the LAYERED surface (bound as
-    /// `uSurfaceLayer`) instead of the bare live `uTexture0` — surface layers
-    /// stay visible for the whole transition rather than vanishing when the
-    /// animation shader takes the draw slot.
-    ///
-    /// Two textures for ping-pong chaining when more than one layer is active
-    /// (layer N reads slot `N%2`, writes slot `(N+1)%2`); a single-layer stack
-    /// (the common border-only case) uses slot 0 alone. Reused across frames and
-    /// reallocated only when the window's expanded size × scale changes; freed
-    /// with the transition. `renderSurfaceChain` returns the slot holding the
-    /// final composited surface.
 };
 
 /// First-frame suppression bookkeeping for a window that is about to be

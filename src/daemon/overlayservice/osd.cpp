@@ -325,6 +325,10 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         // was only kept alive for an audio decoration here.
         if (auto* item = qobject_cast<QQuickItem*>(slot)) {
             item->setProperty(OverlayQmlPropertyNames::WantsAudioDecoration.data(), false);
+            // Symmetric with applyDecoration's UniqueConnection: an undecorated
+            // slot no longer needs the show/hide hook (applyDecoration re-adds
+            // it if the slot is decorated again).
+            disconnect(item, &QQuickItem::visibleChanged, this, &OverlayService::syncCavaState);
         }
         syncCavaState();
     };

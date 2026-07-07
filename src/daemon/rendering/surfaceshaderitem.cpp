@@ -225,8 +225,10 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     // NB: the audio spectrum (CAVA, binding 6 + the UBO's iAudioSpectrumSize) is
     // pushed by syncBasePropertiesToNode above — the daemon writes the inherited
     // audioSpectrum Q_PROPERTY via OverlayService, and a pack reads it through
-    // surface_audio.glsl. The audioSpectrumChanged -> update() connection in the
-    // constructor is what re-runs this node sync on a new spectrum.
+    // surface_audio.glsl. The base ShaderEffect's own setAudioSpectrum /
+    // setAudioSpectrumVariant call update() on a value change (see the
+    // constructor note on why no extra connection is wired), which re-runs this
+    // node sync on a new spectrum.
 
     // ── Sync shader source ───────────────────────────────────────────
     // Reload only on an actual dirty flag (runtime setShaderSource /

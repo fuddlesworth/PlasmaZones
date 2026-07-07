@@ -109,8 +109,9 @@ Item {
 
     function _resolvedSummary() {
         var c = root._resolved && root._resolved.chain ? root._resolved.chain : [];
-        var packs = c.length > 0 ? root._packNames(c).join(", ") : i18n("None");
-        return i18n("Packs: %1", packs);
+        // Bare value: the sole caller wraps this in a "Current: %1" label, so a
+        // "Packs: " prefix here would render the doubled "Current: Packs: ...".
+        return c.length > 0 ? root._packNames(c).join(", ") : i18n("None");
     }
 
     function _packNames(ids) {

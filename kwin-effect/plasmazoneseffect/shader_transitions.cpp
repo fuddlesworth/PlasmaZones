@@ -981,19 +981,25 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // UI without a rebuild. Each falls back to the generic default when the
     // pack doesn't declare it, so a non-mesh pack costs nothing. The same
     // named values also reach the shader as p_<name> customParams, so the
-    // pack can expose them as ordinary sliders.
+    // pack can expose them as ordinary sliders. Values are clamped to safe
+    // ranges because they arrive from user-editable metadata: `drag` is
+    // KWin's velocity-RETENTION factor, so drag >= 1.0 means the lattice
+    // never loses energy and never settles, pinning the transition open and
+    // driving full-screen repaints until the 4 s safety teardown fires;
+    // negative stiffness would push nodes away from rest and grow unbounded.
+    // Materialised once here and reused for the slot translation below.
+    const QVariantMap params = profile.effectiveParameters();
     {
-        const QVariantMap np = profile.effectiveParameters();
-        auto readParam = [&](const char* name, qreal& out) {
-            const auto it = np.constFind(QLatin1String(name));
-            if (it != np.constEnd() && it->canConvert<double>()) {
-                out = it->toDouble();
+        auto readParam = [&](const char* name, qreal& out, qreal lo, qreal hi) {
+            const auto it = params.constFind(QLatin1String(name));
+            if (it != params.constEnd() && it->canConvert<double>()) {
+                out = qBound(lo, it->toDouble(), hi);
             }
         };
-        readParam("sheetStiffness", transition.meshParams.stiffness);
-        readParam("gripStiffness", transition.meshParams.gripStiffness);
-        readParam("springiness", transition.meshParams.drag);
-        readParam("moveFactor", transition.meshParams.moveFactor);
+        readParam("sheetStiffness", transition.meshParams.stiffness, 0.0, 1.0);
+        readParam("gripStiffness", transition.meshParams.gripStiffness, 0.0, 1.0);
+        readParam("springiness", transition.meshParams.drag, 0.0, 0.99);
+        readParam("moveFactor", transition.meshParams.moveFactor, 0.0, 1.0);
     }
 
     // Translate the friendly parameter map (e.g. {"direction": 1,
@@ -1004,7 +1010,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // SurfaceAnimator::runLeg path uses, so a single ShaderProfile
     // produces identical visuals on either runtime.
     const QVariantMap translated =
-        PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, profile.effectiveParameters());
+        PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, params);
     for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
         auto pull = [&](char component) -> float {
             const QString key = PhosphorAnimationShaders::AnimationShaderContract::slotKey(slot, component);

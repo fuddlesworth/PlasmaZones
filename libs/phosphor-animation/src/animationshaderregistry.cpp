@@ -267,14 +267,11 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
 
     // Resolve buffer shader paths (relative to effect dir, like
     // fragment/vertex). Multipass is fail-closed on any missing buffer:
-    // `bufferShaderPaths` is positionally aligned with `bufferWraps`
-    // and `bufferFilters` (per-buffer overrides), and silently
-    // compacting a missing entry would shift downstream wrap/filter
-    // overrides onto the wrong buffer with no surface signal to the
-    // author. Disable multipass entirely instead so the author sees the
-    // full pipeline degrade to single-pass — they will notice and fix
-    // their `metadata.json`. The single-pass fallback is a documented
-    // graceful-degradation contract; silent index corruption is not.
+    // `bufferShaderPaths` is positionally aligned with the per-buffer
+    // wrap/filter overrides, so silently compacting a missing entry would
+    // shift those overrides onto the wrong buffer. Disable multipass entirely
+    // instead (a documented graceful-degradation contract) so the author sees
+    // the pipeline degrade and fixes their `metadata.json`.
     if (e.isMultipass) {
         if (e.bufferShaderPaths.isEmpty()) {
             // `multipass: true` with no declared buffer shaders is

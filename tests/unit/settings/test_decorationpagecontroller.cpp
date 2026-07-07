@@ -552,7 +552,8 @@ private Q_SLOTS:
 
         QFile f(decorationSetsDir() + QStringLiteral("/bad-set.json"));
         QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(QJsonDocument(root).toJson());
+        const QByteArray bytes = QJsonDocument(root).toJson();
+        QCOMPARE(f.write(bytes), static_cast<qint64>(bytes.size()));
         f.close();
 
         QVERIFY2(!c.applyDecorationSet(QStringLiteral("bad-set")), "a set with an unknown path must be rejected");

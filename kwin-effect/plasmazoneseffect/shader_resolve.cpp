@@ -273,7 +273,7 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
         if (!action) {
             return std::nullopt;
         }
-        const QJsonValue v = action->params.value(QString(PhosphorRules::ActionParam::Value));
+        const QJsonValue v = action->params.value(PhosphorRules::ActionParam::Value);
         if (!v.isString()) {
             return std::nullopt;
         }

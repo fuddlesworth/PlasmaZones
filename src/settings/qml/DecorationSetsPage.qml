@@ -23,7 +23,6 @@ SettingsFlickable {
     // decorationSetsChanged (Q_INVOKABLE results are not reactive across
     // the QML binding boundary — same pattern as the Motion Sets page).
     property var setsList: settingsController.decorationPage.availableDecorationSets()
-    property bool _saving: false
 
     contentHeight: content.implicitHeight
     clip: true
@@ -31,11 +30,10 @@ SettingsFlickable {
     Connections {
         function onDecorationSetsChanged() {
             root.setsList = settingsController.decorationPage.availableDecorationSets();
-            root._saving = false;
         }
 
         function onToastRequested(text) {
-            if (window && window.showToast)
+            if (typeof window !== "undefined" && window && window.showToast)
                 window.showToast(text);
         }
 
@@ -107,9 +105,8 @@ SettingsFlickable {
                         text: i18n("Save")
                         icon.name: "document-save"
                         Accessible.name: i18n("Save decoration set")
-                        enabled: nameField.text.trim().length > 0 && !root._saving
+                        enabled: nameField.text.trim().length > 0
                         onClicked: {
-                            root._saving = true;
                             saveStatus.visible = false;
                             var ok = settingsController.decorationPage.saveCurrentAsDecorationSet(nameField.text.trim(), descField.text.trim());
                             if (ok) {
@@ -119,7 +116,6 @@ SettingsFlickable {
                                 saveStatus.text = i18n("Could not save decoration set. Check that the name is unique and that ~/.local/share/plasmazones is writable.");
                                 saveStatus.visible = true;
                             }
-                            root._saving = false;
                         }
                     }
                 }

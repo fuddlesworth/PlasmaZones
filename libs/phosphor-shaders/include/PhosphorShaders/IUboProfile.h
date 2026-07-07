@@ -51,6 +51,10 @@ public:
     }
     const UboUploadRegion& operator[](int i) const
     {
+        // Match push()'s defensive style: assert the caller stays within the
+        // populated range. Callers iterate [0, size()) via begin()/end(), so a
+        // stray index is a programming error.
+        Q_ASSERT(i >= 0 && i < m_count);
         return m_regions[static_cast<size_t>(i)];
     }
     const UboUploadRegion* begin() const

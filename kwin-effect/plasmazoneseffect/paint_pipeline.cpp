@@ -151,6 +151,18 @@ void PlasmaZonesEffect::postPaintScreen()
             }
             const bool timeBasedActive =
                 transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs;
+            // Held move/resize transitions live past their nominal duration
+            // (timeBasedActive goes false), and a soft-body lattice keeps
+            // ringing AFTER release when the window emits no damage of its
+            // own — so drive repaints off the hold flag and the lattice's
+            // settle state for BOTH extent modes. Without the held arm on the
+            // anchor-extent branch below, a held anchor pack's idle/iTime
+            // motion freezes the instant the pointer stops moving (the window
+            // emits no damage while stationary). meshSim is only seeded for
+            // surface-extent packs, so for anchor-extent this reduces to
+            // holdUntilRelease.
+            const bool heldActive =
+                transition.holdUntilRelease || (transition.meshSim.initialized && !transition.meshSim.settled);
             if (transition.surfaceExtent) {
                 // Surface-extent transitions paint the window translated
                 // far past its frame (bounce lifts it a full window-
@@ -168,15 +180,9 @@ void PlasmaZonesEffect::postPaintScreen()
                 // so the compositor's incremental present skips it.
                 // Use `effects->addRepaint(output)` — screen-level
                 // damage with no per-window clip — to mark the whole
-                // output as dirty every frame the transition is live.
-                // Held move/resize transitions live past their nominal
-                // duration (timeBasedActive goes false), and a soft-body
-                // lattice keeps ringing AFTER release when the window emits
-                // no damage of its own — so drive repaints off the hold flag
-                // and the lattice's settle state too, or the wobble would
-                // freeze mid-air the instant the pointer stops moving.
-                const bool heldActive =
-                    transition.holdUntilRelease || (transition.meshSim.initialized && !transition.meshSim.settled);
+                // output as dirty every frame the transition is live. The
+                // `heldActive` arm (hoisted above) keeps a held/ringing
+                // lattice repainting after the duration timer stands down.
                 if ((timeBasedActive || transition.durationMs == 0 || heldActive) && KWin::effects) {
                     if (const auto* output = w->screen()) {
                         KWin::effects->addRepaint(output->geometry());
@@ -184,15 +190,19 @@ void PlasmaZonesEffect::postPaintScreen()
                         KWin::effects->addRepaintFull();
                     }
                 }
-            } else if (timeBasedActive) {
+            } else if (timeBasedActive || heldActive) {
                 // Damage the whole output every frame an anchor-extent
-                // time-based shader is live. The vertex stage translates
-                // the redirected quad past the window's natural rect
-                // (bounce drops it in from above, fly-in slides it from
+                // time-based OR held shader is live. The vertex stage
+                // translates the redirected quad past the window's natural
+                // rect (bounce drops it in from above, fly-in slides it from
                 // the edge); the band it sweeps — both the off-frame
                 // destination and the vacated origin — must be marked
                 // dirty so the compositor recomposites it each frame.
-                // Without this the swept band keeps stale pixels.
+                // Without this the swept band keeps stale pixels. The held
+                // arm covers a held anchor-extent move whose duration timer
+                // has stood down: the window emits no damage while the
+                // pointer is stationary, so its idle motion would otherwise
+                // freeze until release.
                 if (KWin::effects) {
                     if (const auto* output = w->screen()) {
                         KWin::effects->addRepaint(output->geometry());

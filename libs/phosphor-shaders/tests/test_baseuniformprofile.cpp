@@ -140,6 +140,23 @@ private Q_SLOTS:
         QCOMPARE(rc, 0);
     }
 
+    void golden_bytes_match_reference_no_flip()
+    {
+        // Same golden comparison with yUpInNDC=false so the qt_Matrix[5] = +1
+        // no-flip branch of fill() is pinned too — the true-only fixture above
+        // would let a fill() bug that ignored yUpInNDC for qt_Matrix slip past.
+        UboFrameState state = makeFixedState();
+        state.yUpInNDC = false;
+        BaseUniformProfile profile;
+        profile.fill(state);
+
+        const BaseUniforms reference = makeReference(state);
+
+        QCOMPARE(static_cast<int>(sizeof(reference)), profile.baseSize());
+        const int rc = std::memcmp(profile.data(), &reference, sizeof(BaseUniforms));
+        QCOMPARE(rc, 0);
+    }
+
     void app_fields_write_through()
     {
         BaseUniformProfile profile;

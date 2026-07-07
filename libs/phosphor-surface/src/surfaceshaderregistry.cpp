@@ -316,7 +316,8 @@ QStringList effectWatchPaths(const SurfaceShaderEffect& e)
 }
 
 // Per-entry content signature: path|size|mtime of the pack's metadata.json
-// plus every file effectWatchPaths returns (frag/vert + declared textures).
+// plus every file effectWatchPaths returns (frag/vert + buffer shaders +
+// declared textures).
 // Drives MetadataPackLoader's per-entry reconcile so an edited pack
 // re-registers with fresh data while unedited siblings stay put; the
 // loader's coarse onCommitted hook re-emits effectsChanged on any
