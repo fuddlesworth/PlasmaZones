@@ -173,8 +173,7 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     // reset to empty ("runtime default") instead. Vocabularies match the
     // runtime normalisers (ShaderNodeRhi::normalizeWrapMode/FilterMode).
     const auto validatedWrap = [](QString wrap, const char* field) -> QString {
-        if (!wrap.isEmpty() && wrap != QLatin1String("clamp") && wrap != QLatin1String("repeat")
-            && wrap != QLatin1String("mirror")) {
+        if (!wrap.isEmpty() && !SurfaceShaderContract::isValidWrapToken(wrap)) {
             qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: unknown" << field << "value" << wrap
                                        << ", reset to runtime default";
             wrap.clear();
@@ -254,8 +253,7 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
         // to clamp anyway. Keeping unknown values in the in-memory
         // struct would also round-trip them back through toJson,
         // re-persisting the typo to disk on the next save.
-        if (!t.wrap.isEmpty() && t.wrap != QLatin1String("clamp") && t.wrap != QLatin1String("repeat")
-            && t.wrap != QLatin1String("mirror")) {
+        if (!t.wrap.isEmpty() && !SurfaceShaderContract::isValidWrapToken(t.wrap)) {
             qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: unknown wrap value" << t.wrap << "for slot"
                                        << slotIndex << ", reset to runtime default";
             t.wrap.clear();
@@ -318,7 +316,7 @@ bool SurfaceShaderEffect::operator==(const SurfaceShaderEffect& other) const
         return false;
     if (parameters.size() != other.parameters.size())
         return false;
-    for (int i = 0; i < parameters.size(); ++i) {
+    for (qsizetype i = 0; i < parameters.size(); ++i) {
         const auto& a = parameters[i];
         const auto& b = other.parameters[i];
         if (a.id != b.id || a.name != b.name || a.type != b.type)

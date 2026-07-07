@@ -8,6 +8,8 @@
 
 #include "rulelogging.h"
 
+#include <algorithm>
+
 namespace PhosphorRules {
 
 namespace {
@@ -276,7 +278,11 @@ bool ActionRegistry::hasTag(const QString& type, QLatin1StringView tag) const
     if (it == m_descriptors.constEnd()) {
         return false;
     }
-    return it->tags.contains(QString(tag));
+    // Compare against QLatin1StringView directly (QString::operator== has a
+    // non-allocating overload) rather than materialising a throwaway QString.
+    return std::any_of(it->tags.cbegin(), it->tags.cend(), [tag](const QString& t) {
+        return t == tag;
+    });
 }
 
 QStringList ActionRegistry::typesWithTag(QLatin1StringView tag) const

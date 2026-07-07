@@ -614,8 +614,8 @@ struct ShaderAttachResult
     /// decorator follows the shader's output and keeps drawing the
     /// shadow), but Qt 6's MultiEffect crashes inside its private
     /// QQuickShaderEffect's event handler when the source is a
-    /// non-stock QQuickItem subclass. Hide for now; the
-    /// shadow-pop-in at teardown is the lesser evil.
+    /// non-stock QQuickItem subclass. Hiding the siblings is the chosen
+    /// tradeoff; the shadow-pop-in at teardown is the lesser evil.
     QList<QPointer<QQuickItem>> hiddenSiblings;
     /// Live fboExtentKind. Captured by the syncGeometry lambda by
     /// `shared_ptr` so a metadata edit that flips an effect from
@@ -830,7 +830,8 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // (the only consumers) were ported to read the pad implicitly via
     // `iAnchorPosInFbo / iResolution`. customParams[7] is now a regular
     // user-parameter slot like the other seven, available for any future
-    // shader pack that declares >24 float params.
+    // shader pack that declares >28 float params (customParams[7].x is
+    // flat slot 28, reached only once the first 28 sub-slots are filled).
 
     // Build the geometry-sync lambda + its dependencies.
     //

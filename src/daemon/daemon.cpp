@@ -798,15 +798,15 @@ bool Daemon::init()
     // paint never blocks the render thread on a cold glslang compile. Shares the
     // single-threaded m_shaderBakePool, so all three categories serialise.
     //
-    // Two differences from the zone/animation warm-bakes:
-    //   • Surface packs ship NO entry-point scaffold (each pack's effect.frag
-    //     carries its own main()), so no prologue/candidates are passed — the
-    //     bake key is keyed on include paths + param preamble only, matching
-    //     SurfaceShaderItem's live load.
-    //   • Surface packs ship NO vertex shader; the vert is resolved from a
-    //     shared `surface.vert` in the include paths (same resolution as
-    //     SurfaceShaderItem). A pack with no resolvable vert is skipped — the
-    //     live path would error on it too, so there is nothing to warm.
+    // Like the zone/animation warm-bakes, the surface bake installs the same
+    // fragment entry-point scaffold the live loader uses (the
+    // surfaceEntryPrologue()/surfaceEntryCandidates() passed below), so a
+    // pSurface()-only pack compiles and the warm key matches SurfaceShaderItem's
+    // scaffolded live load. The one thing that differs is vertex-shader
+    // resolution: surface packs ship NO vertex shader, so the vert is resolved
+    // from a shared `surface.vert` in the include paths (same resolution as
+    // SurfaceShaderItem). A pack with no resolvable vert is skipped — the live
+    // path would error on it too, so there is nothing to warm.
     if (m_surfaceShaderRegistry) {
         auto scheduleWarmForSurfaceEffect = [this,
                                              registryPtr = QPointer<PhosphorSurfaceShaders::SurfaceShaderRegistry>(

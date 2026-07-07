@@ -210,7 +210,14 @@ void SettingsController::setNeedsSave(bool needs)
     // always resolves to a concrete leaf page.
     if (needs) {
         const QString target = m_externalEditStack.isEmpty() ? m_activePage : m_externalEditStack.top();
+        // The target must resolve to a concrete leaf page; a parent-category id
+        // would poison m_dirtyPages with a page the user never directly edits.
+        // Assert in debug, and in release skip the insert rather than dirtying a
+        // redirect target.
         Q_ASSERT(!parentPageRedirects().contains(target));
+        if (parentPageRedirects().contains(target)) {
+            return;
+        }
         if (!m_dirtyPages.contains(target)) {
             m_dirtyPages.insert(target);
             Q_EMIT dirtyPagesChanged();

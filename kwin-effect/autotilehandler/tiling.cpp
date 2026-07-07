@@ -12,6 +12,7 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>

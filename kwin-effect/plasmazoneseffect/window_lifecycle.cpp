@@ -319,7 +319,10 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
                            /*reverse=*/true, /*holdCloseGrab=*/true);
     m_windowAnimator->removeAnimation(w);
 
-    const QString closedWindowId = getWindowId(w);
+    // Same value as closingWindowId above: the windowId cache isn't dropped
+    // until later in this slot (m_windowIdCache.remove near the end), so a
+    // second getWindowId(w) would just re-hit the cache. Reuse the local.
+    const QString& closedWindowId = closingWindowId;
     const QString closedScreenId = getWindowScreenId(w);
 
     // Clean up snap-mode minimize tracking

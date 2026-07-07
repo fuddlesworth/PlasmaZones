@@ -269,6 +269,20 @@ inline constexpr int kMaxParameterSlots = PhosphorShaders::CustomParams::kFlatSl
 /// settings UI can reuse the same editor components.
 inline constexpr int kMaxUserTextureSlots = 3;
 
+/// The accepted texture / buffer `wrap` vocabulary, shared by every
+/// surface validation site (metadata parse, per-slot texture parse, and
+/// runtime-override translation). Returns true only for the three
+/// canonical tokens `clamp` / `repeat` / `mirror`. An empty string is NOT
+/// a member — callers treat empty as "use the runtime default" and handle
+/// it explicitly before consulting this predicate. Centralised here so the
+/// validation sites can no longer drift apart and accept a token one path
+/// rejects. Vocabulary matches the runtime normaliser
+/// (`ShaderNodeRhi::normalizeWrapMode`).
+inline bool isValidWrapToken(const QString& wrap)
+{
+    return wrap == QLatin1String("clamp") || wrap == QLatin1String("repeat") || wrap == QLatin1String("mirror");
+}
+
 /// Format a `customParams` slot key — thin forwarder onto
 /// `PhosphorShaders::CustomParams::slotKey`, the cross-library canonical
 /// helper. Kept here so surface-shader call sites can refer to a name

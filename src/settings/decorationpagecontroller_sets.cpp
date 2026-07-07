@@ -87,12 +87,12 @@ QVariantList DecorationPageController::availableDecorationSets() const
         }
         const QJsonObject obj = doc.object();
         QVariantMap row;
-        row.insert(QStringLiteral("name"), obj.value(kNameKey).toString());
-        row.insert(QStringLiteral("description"), obj.value(kDescriptionKey).toString());
-        row.insert(QStringLiteral("slug"), info.completeBaseName());
+        row.insert(QLatin1String("name"), obj.value(kNameKey).toString());
+        row.insert(QLatin1String("description"), obj.value(kDescriptionKey).toString());
+        row.insert(QLatin1String("slug"), info.completeBaseName());
         // Baseline counts as one covered surface in the row summary.
         const int baselineCount = obj.contains(kBaselineKey) ? 1 : 0;
-        row.insert(QStringLiteral("overrideCount"), obj.value(kOverridesKey).toArray().size() + baselineCount);
+        row.insert(QLatin1String("overrideCount"), obj.value(kOverridesKey).toArray().size() + baselineCount);
         result.append(row);
     }
     return result;

@@ -242,8 +242,12 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
                 const auto validated = validateTexturePathWithinEffectDir(bufPath, effectDir, e.id);
                 if (validated && QFile::exists(*validated)) {
                     resolved.append(*validated);
+                } else if (!validated) {
+                    // Traversal guard rejected the path (escapes the pack dir);
+                    // distinguish it from a merely-absent file in the diagnostic.
+                    missing.append(bufPath + QLatin1String(" (rejected: escapes pack dir)"));
                 } else {
-                    missing.append(validated.value_or(dir.filePath(bufPath)));
+                    missing.append(*validated + QLatin1String(" (not found)"));
                 }
             }
             if (missing.isEmpty()) {
@@ -670,8 +674,7 @@ QVariantMap SurfaceShaderRegistry::translateSurfaceParams(const SurfaceShaderEff
             // An empty value clears to clamp; any non-{clamp,repeat,mirror}
             // token is rejected and the wrap clears (clamp) rather than emitting
             // garbage downstream.
-            if (candidateWrap.isEmpty() || candidateWrap == QLatin1String("clamp")
-                || candidateWrap == QLatin1String("repeat") || candidateWrap == QLatin1String("mirror")) {
+            if (candidateWrap.isEmpty() || SurfaceShaderContract::isValidWrapToken(candidateWrap)) {
                 wrap = candidateWrap;
             } else {
                 qCWarning(lcRegistry) << "Surface effect" << effect.id << "runtime override wrap value" << candidateWrap

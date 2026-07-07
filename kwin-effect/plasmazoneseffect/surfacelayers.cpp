@@ -386,8 +386,22 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         return nullptr;
     }
 
-    // The resolved profile feeds each pack's compiled parameter overrides.
-    const PhosphorSurfaceShaders::DecorationProfile profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId));
+    // Resolve the decoration profile LAZILY: compiledPack reads it only on a
+    // compile-cache miss, and this composite fold runs every frame for an
+    // animated / audio decoration. In the steady state (all packs already
+    // compiled) resolving the tree every frame would be pure per-frame waste.
+    // Mirrors the lazy resolve in windowSurfaceAnimates(); materialised at most
+    // once even when several packs miss.
+    std::optional<PhosphorSurfaceShaders::DecorationProfile> profile;
+    auto compiledPackLazy = [&](const QString& packId) -> CompiledSurfacePack* {
+        if (const auto cacheIt = m_compiledPacks.find(packId); cacheIt != m_compiledPacks.end()) {
+            return &cacheIt->second;
+        }
+        if (!profile) {
+            profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId));
+        }
+        return compiledPack(packId, *profile);
+    };
 
     SurfaceMultipassState& state = m_surfaceMultipass[windowId];
     state.canvasGeo = logicalGeometry;
@@ -415,7 +429,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         state.chainBufferTex.clear();
         state.chainBufferTex.resize(chain.size());
         for (int k = 0; k < chain.size(); ++k) {
-            CompiledSurfacePack* const pk = compiledPack(chain.at(k), profile);
+            CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
             if (!pk || !pk->shader || pk->bufferPasses.empty()) {
                 continue;
             }
@@ -493,7 +507,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // container, so keep it.
     int src = 0;
     for (int k = 0; k < chain.size(); ++k) {
-        CompiledSurfacePack* const pk = compiledPack(chain.at(k), profile);
+        CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
         if (!pk || !pk->shader) {
             continue; // skip a failed pack; the composite carries through unchanged
         }

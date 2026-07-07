@@ -70,20 +70,27 @@ using PhosphorSurfaceShaders::SurfaceShaderRegistry;
 namespace {
 
 // Confine a metadata-supplied shader path to its pack dir. The metadata is
-// user-editable, so a `../…` or absolute path must not be opened, compiled, or
-// even probed for existence outside the pack. Returns the confined absolute
-// path, or nullopt when the path is empty or escapes the pack dir. This is a
-// simplified lexical guard (cleanPath + prefix) for this local CI tool; the
-// runtime SurfaceShaderRegistry additionally applies canonical + symlink-escape
-// checks.
+// user-editable (and this validator gates community-submitted packs in CI), so
+// a `../…` path, an absolute path, or a symlink escaping the pack dir must not
+// be opened, compiled, or even probed for existence outside the pack —
+// otherwise glslang's diagnostics could echo the contents of an outside file.
+// Returns the confined path, or nullopt when the path is empty or escapes the
+// pack dir. Mirrors the runtime SurfaceShaderRegistry guard: prefer a canonical
+// comparison (which follows symlinks) when both sides resolve, otherwise fall
+// back to a lexical prefix for both. Never mix the two domains.
 std::optional<QString> confinedPackPath(const QString& packDir, const QString& rel)
 {
     if (rel.isEmpty()) {
         return std::nullopt;
     }
-    const QString cleanRoot = QDir::cleanPath(QDir(packDir).absolutePath()) + QStringLiteral("/");
+    const QString lexicalRoot = QDir::cleanPath(QDir(packDir).absolutePath()) + QStringLiteral("/");
     const QString abs = QDir::cleanPath(QDir(packDir).filePath(rel));
-    if (!abs.startsWith(cleanRoot)) {
+    const QString canonicalRoot = QFileInfo(QDir(packDir).absolutePath()).canonicalFilePath();
+    const QString canonicalSelf = QFileInfo(abs).canonicalFilePath();
+    const bool useCanonical = !canonicalRoot.isEmpty() && !canonicalSelf.isEmpty();
+    const QString candidate = useCanonical ? canonicalSelf : abs;
+    const QString comparisonRoot = useCanonical ? (canonicalRoot + QStringLiteral("/")) : lexicalRoot;
+    if (!candidate.startsWith(comparisonRoot)) {
         return std::nullopt;
     }
     return abs;
