@@ -388,6 +388,12 @@ ColumnLayout {
         }
 
         Layout.fillWidth: true
+        // SettingsRow insets its content by largeSpacing on both sides
+        // via internal anchors; this editor lays out directly in the
+        // ColumnLayout, so match that inset explicitly or the Parameters
+        // header and rows hug the card's left edge.
+        Layout.leftMargin: Kirigami.Units.largeSpacing
+        Layout.rightMargin: Kirigami.Units.largeSpacing
         visible: root.shaderLegSupported && root.showShaderSection && root.shaderEffectId.length > 0 && _paramSchema.length > 0
         parameters: _paramSchema
         currentValues: root.shaderParams
