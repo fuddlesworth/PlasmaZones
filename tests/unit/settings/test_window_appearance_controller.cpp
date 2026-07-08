@@ -48,6 +48,10 @@ private Q_SLOTS:
         controller.setHideWindowTitleBars(true);
         QCOMPARE(settings.hideWindowTitleBars(), true);
         QCOMPARE(controller.hideWindowTitleBars(), true);
+
+        controller.setFocusFadeDuration(320);
+        QCOMPARE(settings.focusFadeDuration(), 320);
+        QCOMPARE(controller.focusFadeDuration(), 320);
     }
 
     void gapPropertiesForwardToSettings()

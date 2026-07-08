@@ -691,6 +691,16 @@ void PlasmaZonesEffect::loadCachedSettings()
             scheduleBorderSweep();
         }
     });
+    // Decoration focus cross-fade (uSurfaceFocused ramp). A standalone
+    // decoration setting, deliberately independent of animationsEnabled /
+    // animationDuration / the window.focus motion node: the fade is a
+    // decoration cross-fade, not a window animation. 0 = instant switch.
+    // No repaint needed on change — the new duration applies from the next
+    // focus change; in-flight ramps keep their pace via the step divisor.
+    loadSettingAsync(QStringLiteral("focusFadeDuration"), [this](const QVariant& v) {
+        m_focusFadeDurationMs = qBound(PhosphorCompositor::DecorationDefaults::FocusFadeMsMin, v.toInt(),
+                                       PhosphorCompositor::DecorationDefaults::FocusFadeMsMax);
+    });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
         m_snapAssistHandler->setEnabled(v.toBool());
     });
@@ -714,9 +724,6 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("animationsEnabled"), [this](const QVariant& v) {
         m_windowAnimator->setEnabled(v.toBool());
-        // The decoration focus fade shares the window.focus timing: animations
-        // off means an instant active/inactive switch (option B).
-        refreshFocusFadeDuration();
     });
     loadSettingAsync(QStringLiteral("animationDuration"), [this](const QVariant& v) {
         // Clamp against the canonical settings-UI bounds. The earlier
@@ -728,9 +735,6 @@ void PlasmaZonesEffect::loadCachedSettings()
                              PhosphorAnimation::Limits::MaxAnimationDurationMs);
         m_windowAnimator->setDuration(d);
         m_cachedAnimationDuration = d;
-        // Keep the focus fade in lockstep with the global animation duration
-        // (unless a window.focus motion-tree node overrides it).
-        refreshFocusFadeDuration();
     });
     loadSettingAsync(QStringLiteral("animationEasingCurve"), [this](const QVariant& v) {
         // Polymorphic curve parse — handles bare bezier, named easing,

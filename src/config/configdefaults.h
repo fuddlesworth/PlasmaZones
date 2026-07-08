@@ -327,6 +327,21 @@ public:
     {
         return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
     }
+    // Decoration focus cross-fade (uSurfaceFocused ramp) duration, ms. A
+    // standalone decoration setting, independent of the window animation
+    // system; 0 switches instantly.
+    static constexpr int focusFadeDuration()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::FocusFadeMs;
+    }
+    static constexpr int focusFadeDurationMin()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::FocusFadeMsMin;
+    }
+    static constexpr int focusFadeDurationMax()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::FocusFadeMsMax;
+    }
     static bool hideWindowTitleBars()
     {
         return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
@@ -1607,6 +1622,9 @@ private:
 static_assert(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDurationMin()
                   && ConfigDefaults::animationDuration() <= ConfigDefaults::animationDurationMax(),
               "ConfigDefaults::animationDuration() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDurationMin()
+                  && ConfigDefaults::focusFadeDuration() <= ConfigDefaults::focusFadeDurationMax(),
+              "ConfigDefaults::focusFadeDuration() outside declared [min, max] slider range");
 static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin()
                   && ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax(),
               "ConfigDefaults::animationStaggerInterval() outside declared [min, max] slider range");

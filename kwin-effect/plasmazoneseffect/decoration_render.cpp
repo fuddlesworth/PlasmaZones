@@ -104,9 +104,10 @@ void PlasmaZonesEffect::reconcileDecorationShader(const QString& windowId, KWin:
 float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
 {
     // Ramp the smoothed focus value toward the hard 0/1 target over
-    // kFocusFadeMs so a focus change fades rather than snaps. Called from
-    // pushBorderUniforms only for a pack that reads focus, with @p windowId
-    // threaded from the fold so getWindowId(w) is not recomputed per pack.
+    // m_focusFadeDurationMs (the standalone focusFadeDuration setting) so a
+    // focus change fades rather than snaps. Called from pushBorderUniforms
+    // only for a pack that reads focus, with @p windowId threaded from the
+    // fold so getWindowId(w) is not recomputed per pack.
     // Uses the PINNED per-frame clock: a second call within the same frame (a
     // chain with several focus-reading packs) reads now == lastMs and is an
     // exact no-op, so the ramp advances at most once per frame and the step
@@ -118,10 +119,9 @@ float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
     if (now < 0) {
         now = ShaderInternal::shaderClockNowMs();
     }
-    // Instant mode: the resolved window.focus duration is 0 (animations
-    // disabled, or a window.focus node set to 0 — see refreshFocusFadeDuration),
-    // so snap to the hard target with no ramp. windowSurfaceAnimates then never
-    // sees an in-flight value and forces no repaints — the switch is immediate.
+    // Instant mode: the user set focusFadeDuration to 0, so snap to the hard
+    // target with no ramp. windowSurfaceAnimates then never sees an in-flight
+    // value and forces no repaints — the switch is immediate.
     if (m_focusFadeDurationMs <= 0) {
         fs.value = target;
         fs.lastMs = now;

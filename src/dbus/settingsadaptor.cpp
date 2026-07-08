@@ -434,6 +434,7 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_STRING_SETTING("windowBorderColorInactive", windowBorderColorInactive, setWindowBorderColorInactive)
     REGISTER_BOOL_SETTING("hideWindowTitleBars", hideWindowTitleBars, setHideWindowTitleBars)
     REGISTER_STRING_SETTING("windowTitleBarScope", windowTitleBarScope, setWindowTitleBarScope)
+    REGISTER_INT_SETTING("focusFadeDuration", focusFadeDuration, setFocusFadeDuration)
     REGISTER_STRING_SETTING("labelFontFamily", labelFontFamily, setLabelFontFamily)
     // Custom setter with range validation (0.25-3.0) instead of REGISTER_DOUBLE_SETTING
     m_getters[QStringLiteral("labelFontSizeScale")] = [this]() {

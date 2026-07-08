@@ -277,6 +277,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("hideTitleBars"),
                PhosphorI18n::tr("Hide title bars"),
                {PhosphorI18n::tr("titlebar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("header")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("focusFadeDuration"),
+               PhosphorI18n::tr("Focus fade duration"),
+               {PhosphorI18n::tr("fade"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("dim"),
+                PhosphorI18n::tr("cross-fade")});
 
     // Gaps (shared inner/outer gap model) — folded onto the Window Appearance
     // page, which edits the same rule-backed model.

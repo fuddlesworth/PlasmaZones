@@ -484,6 +484,14 @@ public:
     {
         m_windowTitleBarScope = v;
     }
+    int focusFadeDuration() const override
+    {
+        return m_focusFadeDuration;
+    }
+    void setFocusFadeDuration(int ms) override
+    {
+        m_focusFadeDuration = ms;
+    }
     int adjacentThreshold() const override
     {
         return 20;
@@ -1260,6 +1268,7 @@ private:
     QString m_windowBorderColorInactive = ConfigDefaults::windowBorderColorInactive();
     bool m_hideWindowTitleBars = ConfigDefaults::hideWindowTitleBars();
     QString m_windowTitleBarScope = ConfigDefaults::windowTitleBarScope();
+    int m_focusFadeDuration = ConfigDefaults::focusFadeDuration();
 };
 
 } // namespace PlasmaZones

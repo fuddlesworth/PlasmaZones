@@ -1646,9 +1646,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // (150 ms). The resolved value is then handed to the combined resolver as its
     // `defaultDurationMs`, so the per-window-class Rule timing cascade
     // (`OverrideAnimationTiming`) still layers on top (rule wins → per-event base
-    // → global), matching the resolver's documented contract. The resolve is
-    // shared with refreshFocusFadeDuration so the focus fade tracks the same
-    // per-event timing.
+    // → global), matching the resolver's documented contract.
     const int baseDurationMs = resolveMotionTreeBaseDuration(profilePath, durationMs);
     // Combined cascade: ONE cached evaluator walk feeds BOTH the shader-slot
     // and timing-slot reads. The pre-refactor pair of `resolveAnimationShader
@@ -1912,9 +1910,6 @@ void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
                                 qCDebug(lcEffect) << "loadMotionProfileTreeFromDbus: tree loaded with"
                                                   << tree.overriddenPaths().size()
                                                   << "per-event overrides — paths=" << tree.overriddenPaths();
-                                // A window.focus per-event duration override may have
-                                // changed; keep the decoration focus fade in sync.
-                                refreshFocusFadeDuration();
                             },
                             /*arraySink=*/{});
     });
@@ -1941,23 +1936,6 @@ int PlasmaZonesEffect::resolveMotionTreeBaseDuration(const QString& profilePath,
         cursor = parent;
     }
     return fallbackMs;
-}
-
-void PlasmaZonesEffect::refreshFocusFadeDuration()
-{
-    // The decoration focus fade (uSurfaceFocused ramp, read by the border colour
-    // mix and the focus-fade content pack) shares the window.focus event's
-    // timing rather than carrying its own clock. Option B: with animations
-    // disabled the fade is instant (0) — "animations off = everything snaps".
-    if (!m_windowAnimator || !m_windowAnimator->isEnabled()) {
-        m_focusFadeDurationMs = 0;
-        return;
-    }
-    // Resolve the window.focus base duration the same way tryBeginShaderForEvent
-    // does (shared helper). Per-window Rule timing overrides are intentionally
-    // NOT applied — the fade tracks the per-event node, not per-window rules.
-    const QString profilePath = PhosphorAnimation::ProfilePaths::WindowFocus;
-    m_focusFadeDurationMs = qMax(0, resolveMotionTreeBaseDuration(profilePath, animationDurationMs()));
 }
 
 void PlasmaZonesEffect::slotMotionProfileTreeChanged()

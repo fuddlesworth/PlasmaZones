@@ -75,6 +75,8 @@ WindowAppearanceController::WindowAppearanceController(ISettings& settings, QObj
             &WindowAppearanceController::hideWindowTitleBarsChanged);
     connect(m_settings, &ISettings::windowTitleBarScopeChanged, this,
             &WindowAppearanceController::windowTitleBarScopeChanged);
+    connect(m_settings, &ISettings::focusFadeDurationChanged, this,
+            &WindowAppearanceController::focusFadeDurationChanged);
     connect(m_settings, &ISettings::innerGapChanged, this, &WindowAppearanceController::innerGapChanged);
     connect(m_settings, &ISettings::outerGapChanged, this, &WindowAppearanceController::outerGapChanged);
     connect(m_settings, &ISettings::usePerSideOuterGapChanged, this,
@@ -119,6 +121,10 @@ QString WindowAppearanceController::windowTitleBarScope() const
 {
     return m_settings->windowTitleBarScope();
 }
+int WindowAppearanceController::focusFadeDuration() const
+{
+    return m_settings->focusFadeDuration();
+}
 
 void WindowAppearanceController::setShowWindowBorder(bool show)
 {
@@ -151,6 +157,10 @@ void WindowAppearanceController::setHideWindowTitleBars(bool hide)
 void WindowAppearanceController::setWindowTitleBarScope(const QString& scope)
 {
     m_settings->setWindowTitleBarScope(scope);
+}
+void WindowAppearanceController::setFocusFadeDuration(int ms)
+{
+    m_settings->setFocusFadeDuration(ms);
 }
 
 // ── Shared inner/outer gaps ──────────────────────────────────────────────────

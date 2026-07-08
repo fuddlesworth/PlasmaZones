@@ -69,6 +69,27 @@ private Q_SLOTS:
         QCOMPARE(settings.adjacentThreshold(), ConfigDefaults::adjacentThresholdMax());
     }
 
+    /**
+     * Same clampInt contract on the decoration focus cross-fade duration
+     * (Windows/FocusFadeDuration): a hand-written out-of-range value snaps to
+     * the declared max rather than reaching the effect raw.
+     */
+    void testReadValidatedFocusFadeDuration_outOfRange_clampsToMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeInt(ConfigDefaults::focusFadeDurationKey(), 999999);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.focusFadeDuration(), ConfigDefaults::focusFadeDurationMax());
+    }
+
     // =========================================================================
     // Schema validColorOr validator (invalid color string)
     // =========================================================================

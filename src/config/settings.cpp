@@ -1438,6 +1438,8 @@ P_STORE_GET(bool, hideWindowTitleBars, windowsAppearanceGroup, hideTitleBarsKey,
 P_STORE_SET_BOOL(setHideWindowTitleBars, windowsAppearanceGroup, hideTitleBarsKey, hideWindowTitleBarsChanged)
 P_STORE_GET(QString, windowTitleBarScope, windowsAppearanceGroup, titleBarScopeKey, QString)
 P_STORE_SET_STRING(setWindowTitleBarScope, windowsAppearanceGroup, titleBarScopeKey, windowTitleBarScopeChanged)
+P_STORE_GET(int, focusFadeDuration, windowsAppearanceGroup, focusFadeDurationKey, int)
+P_STORE_SET_INT(setFocusFadeDuration, windowsAppearanceGroup, focusFadeDurationKey, focusFadeDurationChanged)
 
 void Settings::connectRuleStoreGapReactivity()
 {

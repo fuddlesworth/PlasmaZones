@@ -884,6 +884,11 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          QMetaType::QString,
          {},
          scopeValidator(CD::windowTitleBarScope())},
+        {CD::focusFadeDurationKey(),
+         CD::focusFadeDuration(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::focusFadeDurationMin(), CD::focusFadeDurationMax())},
     };
 }
 

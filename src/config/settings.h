@@ -181,6 +181,7 @@ public:
                    hideWindowTitleBarsChanged)
     Q_PROPERTY(QString windowTitleBarScope READ windowTitleBarScope WRITE setWindowTitleBarScope NOTIFY
                    windowTitleBarScopeChanged)
+    Q_PROPERTY(int focusFadeDuration READ focusFadeDuration WRITE setFocusFadeDuration NOTIFY focusFadeDurationChanged)
 
     // Performance and behavior (configurable constants)
     Q_PROPERTY(int pollIntervalMs READ pollIntervalMs WRITE setPollIntervalMs NOTIFY pollIntervalMsChanged)
@@ -661,6 +662,8 @@ public:
     void setHideWindowTitleBars(bool hide) override;
     QString windowTitleBarScope() const override;
     void setWindowTitleBarScope(const QString& scope) override;
+    int focusFadeDuration() const override;
+    void setFocusFadeDuration(int ms) override;
 
     // Performance — PhosphorConfig::Store-backed (see settingsschema.cpp).
     int pollIntervalMs() const override;

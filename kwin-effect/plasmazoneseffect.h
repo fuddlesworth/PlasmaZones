@@ -703,26 +703,19 @@ private:
         qint64 lastMs = -1;
     };
     QHash<QString, FocusFadeState> m_focusFade;
-    // Default focus ramp duration (ms) — the fallback before the animation
-    // settings / motion-profile tree land. The live value is m_focusFadeDurationMs.
-    static constexpr qreal kFocusFadeMs = 160.0;
     // Live focus cross-fade duration (ms) for the uSurfaceFocused ramp (border
-    // colour mix + the focus-fade content pack). NOT a standalone setting: it
-    // tracks the window.focus animation timing via refreshFocusFadeDuration()
-    // (resolved window.focus duration, or 0 when animations are disabled — an
-    // instant switch). Seeded to the constant default until the first refresh.
-    int m_focusFadeDurationMs = static_cast<int>(kFocusFadeMs);
-    // Recompute m_focusFadeDurationMs from the animation system: 0 when
-    // animations are disabled, else the resolved window.focus event duration
-    // (motion-tree per-event override → global animationDuration). Called when
-    // animationsEnabled / animationDuration / the motion profile tree change.
-    void refreshFocusFadeDuration();
+    // colour mix + the focus-fade content pack). A STANDALONE decoration
+    // setting ("focusFadeDuration", loaded in loadCachedSettings), deliberately
+    // independent of the window animation system: the fade is a decoration
+    // cross-fade, not a window animation, so disabling animations or retuning
+    // the window.focus event no longer snaps or retimes it. 0 = instant.
+    // Seeded to the shared default until the async settings load lands.
+    int m_focusFadeDurationMs = PhosphorCompositor::DecorationDefaults::FocusFadeMs;
     // Resolve a per-event base duration (ms) from the motion profile tree: a
     // motion-tree override anywhere up @p profilePath's ancestor chain replaces
     // @p fallbackMs with the node's resolved effectiveDuration(), else the
-    // fallback stands. Shared by tryBeginShaderForEvent (per-event transition
-    // timing) and refreshFocusFadeDuration (the decoration focus fade), so the
-    // two never drift out of sync.
+    // fallback stands. Used by tryBeginShaderForEvent (per-event transition
+    // timing).
     int resolveMotionTreeBaseDuration(const QString& profilePath, int fallbackMs) const;
     // Cap on the per-frame ramp delta. A window at rest (value pinned at 0 or 1)
     // stops being force-repainted by windowSurfaceAnimates, so its FocusFadeState

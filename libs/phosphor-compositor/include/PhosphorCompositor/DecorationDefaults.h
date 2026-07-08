@@ -32,12 +32,23 @@ inline constexpr int BorderRadius = 8;
 inline constexpr int BorderRadiusMin = 0;
 inline constexpr int BorderRadiusMax = 20;
 
+// How long uSurfaceFocused ramps between 0 and 1 when a window gains or
+// loses focus (ms) — the cross-fade every decoration pack that mixes by
+// focus (focus-fade wash, border dims, glow, shadow) renders with. A
+// standalone decoration setting, deliberately independent of the window
+// animation system: 0 means switch instantly.
+inline constexpr int FocusFadeMs = 160;
+inline constexpr int FocusFadeMsMin = 0;
+inline constexpr int FocusFadeMsMax = 1000;
+
 // A retuned default outside its own declared slider range would clamp
 // differently on every consumer — make that a compile error instead.
 static_assert(BorderWidth >= BorderWidthMin && BorderWidth <= BorderWidthMax,
               "BorderWidth default must lie within its declared bounds");
 static_assert(BorderRadius >= BorderRadiusMin && BorderRadius <= BorderRadiusMax,
               "BorderRadius default must lie within its declared bounds");
+static_assert(FocusFadeMs >= FocusFadeMsMin && FocusFadeMs <= FocusFadeMsMax,
+              "FocusFadeMs default must lie within its declared bounds");
 
 } // namespace DecorationDefaults
 
