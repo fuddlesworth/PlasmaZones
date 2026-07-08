@@ -16,8 +16,9 @@ import org.kde.kirigami as Kirigami
  * the App-Rules action row, and the decoration chain editor). Owns the
  * session-only lock map internally and rolls randomized values via the
  * inner editor's helper, so a host only ever has to persist values:
- * connect to @c valueChanged (single edit / colour pick) and
- * @c randomizeRequested (the rolled map).
+ * connect to @c valueChanged (single edit / colour pick),
+ * @c randomizeRequested (the rolled map), and @c resetRequested (the
+ * defaults map).
  *
  * @c effectId is forwarded with every value write and captured into the
  * colour dialog at open time, so a registry refresh mid-pick cannot

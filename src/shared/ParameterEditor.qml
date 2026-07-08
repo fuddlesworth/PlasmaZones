@@ -24,16 +24,17 @@ import org.kde.kirigami as Kirigami
  *   - feeds `parameters` (the schema) and `currentValues` (the live map)
  *   - listens for `valueChanged(id, value)` and writes back into its map
  *   - optionally listens for `lockToggled` / `randomizeRequested` /
- *     `lockAllRequested` and updates its locks map / runs randomize
+ *     `lockAllRequested` / `resetRequested` and updates its locks map /
+ *     runs randomize / resets to defaults
  *   - listens for `requestColorPicker` / `requestImagePicker` and opens
  *     the platform dialog at the parent level (image dialogs in
  *     particular need to outlive their delegate row)
  *
- * Three pure helpers (`lockedAfterToggle`, `lockedAfterAllToggle`,
- * `computeRandomized`) compute new maps from the component's current
- * props for hosts that wire the lock + randomize toolbar — both
- * consumers route their handler bodies through them so the transforms
- * live in one place.
+ * Four map-computing helpers (`lockedAfterToggle`, `lockedAfterAllToggle`,
+ * `computeRandomized`, `computeDefaults`) return fresh maps from the
+ * component's current props for hosts that wire the lock / randomize /
+ * reset toolbar — consumers route their handler bodies through them so
+ * the transforms live in one place.
  *
  * Accordion behavior: when `enableGroups: true` and the parameter list
  * declares any `group` field, rows are split into ParameterSection
@@ -68,8 +69,8 @@ ColumnLayout {
     property int colorButtonSize: compact ? Kirigami.Units.gridUnit * 2 : Kirigami.Units.gridUnit * 3
     property int colorLabelWidth: compact ? Kirigami.Units.gridUnit * 5 : Kirigami.Units.gridUnit * 7
     property int labelColumnWidth: Kirigami.Units.gridUnit * 8
-    /// The toolbar row (Lock-all / Randomize) is on by default but can
-    /// be hidden when neither button is wanted (animation settings).
+    /// The toolbar row (Reset / Lock-all / Randomize) is on by default but
+    /// can be hidden when no button is wanted (animation settings).
     readonly property bool _showToolbar: enableLocking || enableRandomize || enableReset || toolbarTrailing !== null
     /// Show the "Parameters" heading independently of the lock / randomize
     /// buttons. Defaults to the toolbar's own visibility so existing
@@ -240,6 +241,22 @@ ColumnLayout {
             if (value !== undefined)
                 next[param.id] = value;
         }
+        // Carry SVG image params' non-schema `<id>_svgSize` companion (written
+        // by ParameterRow) through the full-map replace. Randomize never rolls
+        // it, so dropping it here would silently revert the SVG render size —
+        // and a scoped group randomize must not touch an out-of-scope param's
+        // size at all.
+        if (root.currentValues) {
+            for (var c = 0; c < root.parameters.length; c++) {
+                var cp = root.parameters[c];
+                if (!cp || cp.id === undefined || cp.type !== "image")
+                    continue;
+
+                var svgKey = cp.id + "_svgSize";
+                if (root.currentValues[svgKey] !== undefined)
+                    next[svgKey] = root.currentValues[svgKey];
+            }
+        }
         return next;
     }
 
@@ -332,7 +349,7 @@ ColumnLayout {
 
     spacing: Kirigami.Units.smallSpacing
 
-    // ── Toolbar (Lock-all / Randomize) ───────────────────────────────
+    // ── Toolbar (Reset / Lock-all / Randomize) ───────────────────────
     RowLayout {
         Layout.fillWidth: true
         visible: (root.showParametersHeader || root._showToolbar) && root.parameters && root.parameters.length > 0
@@ -388,7 +405,7 @@ ColumnLayout {
         // `parameters: []` — undefined would otherwise hide every layout
         // branch and produce a blank component.
         visible: !root.parameters || root.parameters.length === 0
-        text: i18nc("@info", "This effect has no configurable parameters.")
+        text: i18nc("@info", "No configurable parameters.")
         wrapMode: Text.WordWrap
         opacity: 0.7
     }
@@ -433,8 +450,13 @@ ColumnLayout {
                             ids.push(gp.id);
                     }
                     root._randomizeScopeIds = ids;
-                    root.randomizeRequested();
-                    root._randomizeScopeIds = null;
+                    // finally-clear so a throwing consumer handler can't leave
+                    // a stale scope that would mis-scope the next Randomize-All.
+                    try {
+                        root.randomizeRequested();
+                    } finally {
+                        root._randomizeScopeIds = null;
+                    }
                 }
                 onGroupLockToggled: function (lock) {
                     // Synthesise per-id `lockToggled` signals so the host

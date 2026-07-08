@@ -526,6 +526,10 @@ Kirigami.Dialog {
                 lockedParams: root.lockedParams
                 enableLocking: true
                 enableRandomize: true
+                // This dialog has its own "Defaults" button in the footer
+                // button row, so suppress the editor's header reset to avoid a
+                // duplicate (same pattern as ShaderBrowserDetailDialog).
+                enableReset: false
                 enableGroups: true
                 enableImage: true
                 onValueChanged: function (id, value) {
@@ -538,7 +542,6 @@ Kirigami.Dialog {
                     root.toggleAllLocks(lock);
                 }
                 onRandomizeRequested: root.randomizeParameters()
-                onResetRequested: root.resetToDefaults()
                 onRequestColorPicker: function (id, name, current) {
                     root.openColorDialog(id, name, current);
                 }

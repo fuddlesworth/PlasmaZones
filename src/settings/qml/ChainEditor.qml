@@ -30,6 +30,7 @@ import org.plasmazones.common as PZCommon
  *   - paramChangeRequested(packId, id, value) — a per-pack parameter edit
  *   - paramsRandomizeRequested(packId, rolled) — a whole-pack randomize roll
  *   - paramsResetRequested(packId, defaults)  — a whole-pack reset to defaults
+ *   - layerEnabledChangeRequested(packId, on) — per-pack enable toggle
  *
  * The host routes those signals into the DecorationPageController's
  * setChain / setChainParam mutators (with its own surface path), then

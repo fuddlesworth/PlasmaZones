@@ -401,8 +401,8 @@ Kirigami.Dialog {
                             enableLocking: true
                             enableRandomize: true
                             // This dialog has its own "Default" reset button in
-                            // the toolbar above, so suppress the editor's
-                            // header reset to avoid a duplicate affordance.
+                            // its footer, so suppress the editor's header reset
+                            // to avoid a duplicate affordance.
                             enableReset: false
                             enableGroups: true
                             enableImage: true

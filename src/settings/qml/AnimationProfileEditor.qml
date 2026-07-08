@@ -25,9 +25,9 @@ import org.plasmazones.common as PZCommon
  * (@c availableShaders / @c shaderParamSchema) so the editor doesn't
  * reach a global context itself.
  *
- * The shader-parameter sub-editor exposes locking / randomize /
- * colour-picker affordances via the @c enableLocking / @c enableRandomize
- * / @c enableImage flags.
+ * The shader-parameter sub-editor exposes reset / locking / randomize /
+ * colour-picker affordances via the @c enableReset / @c enableLocking /
+ * @c enableRandomize / @c enableImage flags.
  */
 ColumnLayout {
     id: root
@@ -324,7 +324,7 @@ ColumnLayout {
         // header and rows hug the card's left edge.
         Layout.leftMargin: Kirigami.Units.largeSpacing
         Layout.rightMargin: Kirigami.Units.largeSpacing
-        visible: root.shaderLegSupported && root.showShaderSection && root.shaderEffectId.length > 0 && _paramSchema.length > 0
+        visible: root.shaderLegSupported && root.shaderEffectId.length > 0 && _paramSchema.length > 0
         parameters: _paramSchema
         currentValues: root.shaderParams
         effectId: root.shaderEffectId
