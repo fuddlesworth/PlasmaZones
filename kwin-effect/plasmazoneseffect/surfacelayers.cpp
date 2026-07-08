@@ -206,6 +206,12 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // fold runs right before KWin's on-screen draw of this same frame, which
     // must not inherit our offscreen state (see ScopedGlState).
     const ShaderInternal::ScopedGlState glStateGuard;
+    // Disable scissor for the whole fold: the FBO clears (capture, buffer, and
+    // main passes below) and the offscreen draws must not be clipped to a
+    // scissor box the scene walk left enabled — a scissored clear would leave
+    // stale/undefined texels in the composite. The guard restores scissor on
+    // exit (matching the captureWindowBackdrop and paint_pipeline siblings).
+    glDisable(GL_SCISSOR_TEST);
     namespace SC = PhosphorSurfaceShaders::SurfaceShaderContract;
 
     // Upload the audio spectrum ONCE per fold, up front, before any pass binds

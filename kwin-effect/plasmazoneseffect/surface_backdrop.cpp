@@ -77,8 +77,8 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // Snapshot GL state BEFORE the realloc branch's clear (which sets the clear
     // colour to transparent): the guard must capture the pristine ambient state
     // so it hands blend/viewport/scissor/clear-colour back the way it found them
-    // on EVERY exit path, mid scene-walk. Its scope covers the realloc clear,
-    // the clear below, and the blit.
+    // on EVERY exit path, mid scene-walk. Its scope covers the realloc-branch
+    // clear and the blit.
     const ShaderInternal::ScopedGlState glStateGuard;
     // Disable scissor for the WHOLE capture: the init clear below and the blit
     // must not be clipped to whatever scissor box the scene walk left enabled.
