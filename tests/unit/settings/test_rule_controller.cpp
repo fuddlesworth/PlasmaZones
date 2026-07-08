@@ -967,9 +967,10 @@ void TestRuleController::authoringMetadata()
     QVERIFY(!actions.isEmpty());
     bool sawFloat = false;
     // Every action carries a picker category; collect the order per wire so the
-    // grouping can be spot-checked. Context-domain categories come first,
-    // alphabetised (Gaps=0, Layout & engine=1, Overlay=2), then the window-domain
-    // categories, alphabetised (Animation=3, Appearance=4, Window=5).
+    // grouping can be spot-checked. Context-domain categories come first
+    // (Gaps=0, Engine=1, Snapping=2, Tiling=3, Overlay=4), then the
+    // window-domain categories (Animation=5, Appearance=6, Window=7). The old
+    // flat "Layout & engine" category was split into Engine / Snapping / Tiling.
     QHash<QString, int> actionCategoryOrder;
     for (const QVariant& v : actions) {
         const QVariantMap a = v.toMap();
@@ -982,10 +983,14 @@ void TestRuleController::authoringMetadata()
     }
     QVERIFY(sawFloat);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap")), 0); // Gaps (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode")), 1); // Layout & engine (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 3); // Animation (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity")), 4); // Appearance (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude")), 5); // Window (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode")), 1); // Engine (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setSnappingLayout")), 2); // Snapping (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setTilingAlgorithm")), 3); // Tiling (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setAlgorithmParam")), 3); // Tiling (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("overrideOverlayShader")), 4); // Overlay (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 5); // Animation (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity")), 6); // Appearance (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude")), 7); // Window (window)
 }
 
 void TestRuleController::inputHints()
