@@ -330,6 +330,22 @@ RowLayout {
         }
     }
 
+    // Slack absorber for the field-less state. Before a field is chosen the
+    // operator combo and value editor are both hidden, so the row's only
+    // fillWidth item (the value Loader above) is invisible and absorbs no
+    // stretch. QtQuick.Layouts then hands the leftover width to the remaining
+    // cells that carry a Layout.alignment (the info icon, field picker and
+    // trash), inflating each cell and left-aligning its item inside — which
+    // pushes the field picker rightward (the "Choose…" inset) and un-pins the
+    // trash. This empty fillWidth item soaks up that slack instead, so the
+    // picker stays at its natural left position and the trash stays hard right.
+    // Once a field is chosen the value Loader becomes the fillWidth item, so
+    // this collapses out of the layout.
+    Item {
+        Layout.fillWidth: true
+        visible: !leaf._hasField
+    }
+
     ToolButton {
         icon.name: "edit-delete"
         Layout.alignment: Qt.AlignTop
