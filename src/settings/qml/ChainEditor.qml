@@ -29,6 +29,7 @@ import org.plasmazones.common as PZCommon
  *   - chainChangeRequested(newChain)          — add / remove / reorder
  *   - paramChangeRequested(packId, id, value) — a per-pack parameter edit
  *   - paramsRandomizeRequested(packId, rolled) — a whole-pack randomize roll
+ *   - paramsResetRequested(packId, defaults)  — a whole-pack reset to defaults
  *
  * The host routes those signals into the DecorationPageController's
  * setChain / setChainParam mutators (with its own surface path), then
@@ -63,6 +64,7 @@ ColumnLayout {
     signal chainChangeRequested(var newChain)
     signal paramChangeRequested(string packId, string paramId, var value)
     signal paramsRandomizeRequested(string packId, var rolled)
+    signal paramsResetRequested(string packId, var defaults)
     signal layerEnabledChangeRequested(string packId, bool enabled)
 
     function _isLayerEnabled(packId) {
@@ -273,6 +275,9 @@ ColumnLayout {
                         }
                         onRandomizeRequested: function (rolled) {
                             root.paramsRandomizeRequested(packDelegate.packId, rolled);
+                        }
+                        onResetRequested: function (defaults) {
+                            root.paramsResetRequested(packDelegate.packId, defaults);
                         }
                     }
                 }

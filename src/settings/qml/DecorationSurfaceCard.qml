@@ -247,6 +247,10 @@ Item {
                         if (root.bridge)
                             root.bridge.setChainParams(root.surfacePath, packId, rolled);
                     }
+                    onParamsResetRequested: function (packId, defaults) {
+                        if (root.bridge)
+                            root.bridge.setChainParams(root.surfacePath, packId, defaults);
+                    }
                 }
             }
         }

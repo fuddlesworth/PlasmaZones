@@ -49,6 +49,11 @@ Item {
     required property var currentValues
     property var lockedParams: ({})
     property bool enableLocking: true
+    /// Show the per-row "randomize this one" button (right of the lock
+    /// toggle). Rolls a single value within the param's schema range and
+    /// emits it through `randomizeRequested`. Disabled while the param is
+    /// locked; hidden for `image` params (no sensible random image).
+    property bool enableRandomize: true
     property bool enableImage: true
     /// Compact mode: slider/spinbox/swatch use fixed widths matching the
     /// settings-app `SettingsSlider` aesthetic (16gu slider, 3gu value
@@ -70,6 +75,9 @@ Item {
 
     signal valueChanged(string paramId, var value)
     signal lockToggled(string paramId, bool locked)
+    /// Emitted when the per-row randomize button is clicked; the host
+    /// (ParameterEditor) rolls a fresh value for this one param.
+    signal randomizeRequested(string paramId)
     signal requestColorPicker(string paramId, string paramName, color current)
     signal requestImagePicker(string paramId)
 
@@ -472,6 +480,27 @@ Item {
             onClicked: {
                 if (paramDelegate.paramData)
                     paramDelegate.lockToggled(paramDelegate.paramData.id, !isLocked);
+            }
+        }
+
+        // ── RANDOMIZE (per-parameter) ────────────────────────────────
+        ToolButton {
+            visible: paramDelegate.enableRandomize && paramDelegate.paramType !== "image"
+            // Locked params are excluded from randomize (matches the lock's
+            // "won't be randomized" contract); grey the button rather than
+            // hide it so the row layout stays stable across lock toggles.
+            enabled: !paramDelegate._isLocked()
+            icon.name: "roll"
+            icon.width: Kirigami.Units.iconSizes.small
+            icon.height: Kirigami.Units.iconSizes.small
+            display: ToolButton.IconOnly
+            Accessible.name: i18nc("@action:button", "Randomize %1", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : "")
+            ToolTip.text: i18nc("@info:tooltip", "Randomize this parameter")
+            ToolTip.visible: hovered
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+            onClicked: {
+                if (paramDelegate.paramData)
+                    paramDelegate.randomizeRequested(paramDelegate.paramData.id);
             }
         }
     }

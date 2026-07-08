@@ -550,6 +550,11 @@ Item {
                     // call carrying every roll).
                     root._writeAllShaderParams(root.currentShaderEffectId, rolled);
                 }
+                onResetRequested: function (defaults) {
+                    // Same batch path as randomize — one setShaderOverride
+                    // carrying every param at its default.
+                    root._writeAllShaderParams(root.currentShaderEffectId, defaults);
+                }
             }
         }
     }

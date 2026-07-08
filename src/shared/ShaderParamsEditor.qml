@@ -41,6 +41,10 @@ ColumnLayout {
     property var lockedParams: ({})
     property bool enableLocking: true
     property bool enableRandomize: true
+    /// Forwarded to the inner editor's reset-all-to-defaults button.
+    /// Defaults to `enableRandomize` (same as the editor) so reset appears
+    /// wherever randomize does.
+    property bool enableReset: enableRandomize
     property bool enableImage: false
     property bool enableGroups: true
     property bool compact: true
@@ -52,6 +56,10 @@ ColumnLayout {
     /// Fired after a randomize roll with the full rolled value map. Locked
     /// and image params are preserved by the roll; the host persists it.
     signal randomizeRequested(var rolled)
+    /// Fired when the reset-all button is clicked, carrying the full
+    /// defaults map (every param at its schema default). Mirrors
+    /// `randomizeRequested`: the host persists it in one batch write.
+    signal resetRequested(var defaults)
     /// Re-exposed lock signals (working-state only) for hosts that mirror
     /// the lock map elsewhere. Most consumers ignore these.
     signal lockToggled(string paramId, bool locked)
@@ -71,6 +79,7 @@ ColumnLayout {
         lockedParams: root.lockedParams
         enableLocking: root.enableLocking
         enableRandomize: root.enableRandomize
+        enableReset: root.enableReset
         enableImage: root.enableImage
         enableGroups: root.enableGroups
         compact: root.compact
@@ -92,6 +101,10 @@ ColumnLayout {
             // computeRandomized honours the lock map and preserves image
             // params; emit the rolled map for the host to persist.
             root.randomizeRequested(editor.computeRandomized());
+        }
+        onResetRequested: {
+            // Full defaults map, persisted in one batch write like randomize.
+            root.resetRequested(editor.computeDefaults());
         }
         onRequestColorPicker: function (paramId, paramName, current) {
             // Capture effectId NOW so a registry refresh between open and

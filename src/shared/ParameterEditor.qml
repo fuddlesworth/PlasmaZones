@@ -50,6 +50,11 @@ ColumnLayout {
     property var lockedParams: ({})
     property bool enableLocking: true
     property bool enableRandomize: true
+    /// Show the header "reset all to defaults" button (left of Lock-All).
+    /// Defaults to `enableRandomize` so it appears wherever the bulk
+    /// randomize does; a host with its own reset affordance (the shader
+    /// browser's "Default" button) sets this false to avoid duplication.
+    property bool enableReset: enableRandomize
     property bool enableGroups: true
     property bool enableImage: true
     /// Compact mode renders rows in the settings-app style: title left,
@@ -65,7 +70,7 @@ ColumnLayout {
     property int labelColumnWidth: Kirigami.Units.gridUnit * 8
     /// The toolbar row (Lock-all / Randomize) is on by default but can
     /// be hidden when neither button is wanted (animation settings).
-    readonly property bool _showToolbar: enableLocking || enableRandomize || toolbarTrailing !== null
+    readonly property bool _showToolbar: enableLocking || enableRandomize || enableReset || toolbarTrailing !== null
     /// Show the "Parameters" heading independently of the lock / randomize
     /// buttons. Defaults to the toolbar's own visibility so existing
     /// consumers are unchanged; a host with both buttons disabled (e.g. the
@@ -148,6 +153,11 @@ ColumnLayout {
     signal lockToggled(string paramId, bool locked)
     signal lockAllRequested(bool locked)
     signal randomizeRequested
+    /// Reset every parameter to its schema default. Arg-less like
+    /// `randomizeRequested`: the host computes the defaults map via
+    /// `computeDefaults()` (or its own equivalent) and persists it in one
+    /// batch write, mirroring the randomize round-trip.
+    signal resetRequested
     signal requestColorPicker(string paramId, string paramName, color current)
     signal requestImagePicker(string paramId)
 
@@ -216,54 +226,96 @@ ColumnLayout {
 
                 continue;
             }
-            var value;
-            switch (param.type) {
-            case "number":
-            case "float":
-                // Coerce bounds/step to finite numbers: raw JSON metadata can
-                // carry strings/NaN, which would otherwise yield string
-                // concatenation ("0.5" + ...) or NaN in the persisted value.
-                var minF = root._finiteOr(param.min, 0);
-                var maxF = root._finiteOr(param.max, 1);
-                var stepF = root._finiteOr(param.step, 0);
-                value = minF + Math.random() * (maxF - minF);
-                if (stepF > 0) {
-                    value = Math.round(value / stepF) * stepF;
-                    // Step-rounding can escape the range when a bound is not
-                    // a step multiple (e.g. max 1.6, step 1 -> 2.0); the
-                    // emitted value is what persists, so clamp it back.
-                    value = Math.min(maxF, Math.max(minF, value));
-                }
-                break;
-            case "int":
-                var minI = Math.round(root._finiteOr(param.min, 0));
-                var maxI = Math.round(root._finiteOr(param.max, 100));
-                value = Math.floor(minI + Math.random() * (maxI - minI + 1));
-                // Clamp defensively — fractional/garbage bounds can push the
-                // draw above max (same range-escape class as the float step).
-                value = Math.min(maxI, Math.max(minI, value));
-                break;
-            case "bool":
-                value = Math.random() < 0.5;
-                break;
-            case "enum":
-                var opts = param.enumOptions || [];
-                // Preserve the current value when the vocabulary is empty
-                // rather than writing undefined into the rolled map.
-                value = opts.length > 0 ? opts[Math.floor(Math.random() * opts.length)] : param.default;
-                break;
-            case "color":
-                var r = Math.floor(Math.random() * 256);
-                var g = Math.floor(Math.random() * 256);
-                var b = Math.floor(Math.random() * 256);
-                value = "#" + r.toString(16).padStart(2, "0") + g.toString(16).padStart(2, "0") + b.toString(16).padStart(2, "0");
-                break;
-            default:
-                value = param.default;
-                break;
-            }
+            var value = root._rollParam(param);
             if (value !== undefined)
                 next[param.id] = value;
+        }
+        return next;
+    }
+
+    /// Roll a fresh value for one @p param within its metadata range,
+    /// returning it (or `undefined` for an unrollable type). Shared by
+    /// the bulk `computeRandomized` and the per-row `_randomizeOne` so the
+    /// per-type roll logic lives in one place.
+    function _rollParam(param) {
+        switch (param.type) {
+        case "number":
+        case "float":
+            // Coerce bounds/step to finite numbers: raw JSON metadata can
+            // carry strings/NaN, which would otherwise yield string
+            // concatenation ("0.5" + ...) or NaN in the persisted value.
+            var minF = root._finiteOr(param.min, 0);
+            var maxF = root._finiteOr(param.max, 1);
+            var stepF = root._finiteOr(param.step, 0);
+            var f = minF + Math.random() * (maxF - minF);
+            if (stepF > 0) {
+                f = Math.round(f / stepF) * stepF;
+                // Step-rounding can escape the range when a bound is not
+                // a step multiple (e.g. max 1.6, step 1 -> 2.0); the
+                // emitted value is what persists, so clamp it back.
+                f = Math.min(maxF, Math.max(minF, f));
+            }
+            return f;
+        case "int":
+            var minI = Math.round(root._finiteOr(param.min, 0));
+            var maxI = Math.round(root._finiteOr(param.max, 100));
+            // Clamp defensively — fractional/garbage bounds can push the
+            // draw above max (same range-escape class as the float step).
+            return Math.min(maxI, Math.max(minI, Math.floor(minI + Math.random() * (maxI - minI + 1))));
+        case "bool":
+            return Math.random() < 0.5;
+        case "enum":
+            var opts = param.enumOptions || [];
+            // Preserve the current value when the vocabulary is empty
+            // rather than writing undefined into the rolled map.
+            return opts.length > 0 ? opts[Math.floor(Math.random() * opts.length)] : param.default;
+        case "color":
+            var r = Math.floor(Math.random() * 256);
+            var g = Math.floor(Math.random() * 256);
+            var b = Math.floor(Math.random() * 256);
+            return "#" + r.toString(16).padStart(2, "0") + g.toString(16).padStart(2, "0") + b.toString(16).padStart(2, "0");
+        default:
+            return param.default;
+        }
+    }
+
+    /// Roll a single parameter and emit it through `valueChanged` (the
+    /// normal per-param write path — a per-row randomize is one value, so
+    /// unlike the bulk reset/randomize it needs no batch signal). `image`
+    /// params are skipped (no sensible random image); the per-row button
+    /// is hidden for them anyway.
+    function _randomizeOne(paramId) {
+        if (!root.parameters)
+            return;
+
+        for (var i = 0; i < root.parameters.length; i++) {
+            var p = root.parameters[i];
+            if (!p || p.id !== paramId)
+                continue;
+
+            if (p.type === "image")
+                return;
+
+            var value = root._rollParam(p);
+            if (value !== undefined)
+                root.valueChanged(paramId, value);
+            return;
+        }
+    }
+
+    /// Every parameter's schema default, keyed by id. Params with no
+    /// declared default are omitted (a reset can't invent one). Hosts feed
+    /// it back through their batch-persist path in the `resetRequested`
+    /// handler, mirroring how `computeRandomized` feeds the randomize path.
+    function computeDefaults() {
+        var next = {};
+        if (!root.parameters)
+            return next;
+
+        for (var i = 0; i < root.parameters.length; i++) {
+            var param = root.parameters[i];
+            if (param && param.id !== undefined && param.default !== undefined)
+                next[param.id] = param.default;
         }
         return next;
     }
@@ -281,6 +333,16 @@ ColumnLayout {
             text: i18nc("@title:group", "Parameters")
             font.weight: Font.DemiBold
             visible: root.showParametersHeader
+        }
+
+        ToolButton {
+            visible: root.enableReset
+            icon.name: "edit-reset"
+            display: ToolButton.IconOnly
+            ToolTip.text: i18nc("@info:tooltip", "Reset all parameters to their defaults")
+            Accessible.name: i18nc("@action:button", "Reset to Defaults")
+            Accessible.description: ToolTip.text
+            onClicked: root.resetRequested()
         }
 
         ToolButton {
@@ -412,6 +474,7 @@ ColumnLayout {
                 currentValues: root.currentValues
                 lockedParams: root.lockedParams
                 enableLocking: root.enableLocking
+                enableRandomize: root.enableRandomize
                 enableImage: root.enableImage
                 sliderValueLabelWidth: root.sliderValueLabelWidth
                 colorButtonSize: root.colorButtonSize
@@ -421,6 +484,9 @@ ColumnLayout {
                 }
                 onLockToggled: function (id, locked) {
                     root.lockToggled(id, locked);
+                }
+                onRandomizeRequested: function (id) {
+                    root._randomizeOne(id);
                 }
                 onRequestColorPicker: function (id, name, current) {
                     root.requestColorPicker(id, name, current);
@@ -480,6 +546,7 @@ ColumnLayout {
                 currentValues: root.currentValues
                 lockedParams: root.lockedParams
                 enableLocking: root.enableLocking
+                enableRandomize: root.enableRandomize
                 enableImage: root.enableImage
                 sliderValueLabelWidth: root.sliderValueLabelWidth
                 colorButtonSize: root.colorButtonSize
@@ -489,6 +556,9 @@ ColumnLayout {
                 }
                 onLockToggled: function (id, locked) {
                     root.lockToggled(id, locked);
+                }
+                onRandomizeRequested: function (id) {
+                    root._randomizeOne(id);
                 }
                 onRequestColorPicker: function (id, name, current) {
                     root.requestColorPicker(id, name, current);

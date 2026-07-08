@@ -538,6 +538,7 @@ Kirigami.Dialog {
                     root.toggleAllLocks(lock);
                 }
                 onRandomizeRequested: root.randomizeParameters()
+                onResetRequested: root.resetToDefaults()
                 onRequestColorPicker: function (id, name, current) {
                     root.openColorDialog(id, name, current);
                 }

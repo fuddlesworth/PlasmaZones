@@ -1236,6 +1236,11 @@ ColumnLayout {
                 // current value, the rest are rolled per their schema range.
                 row.actionEdited(row._withParam("params", rolled));
             }
+            onResetRequested: function (defaults) {
+                // Full defaults map replaces the rule's param overrides in
+                // one write, mirroring the randomize batch above.
+                row.actionEdited(row._withParam("params", defaults));
+            }
         }
     }
 
