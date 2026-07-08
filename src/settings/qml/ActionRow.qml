@@ -1263,17 +1263,28 @@ ColumnLayout {
         // param UIs, minus the lock / randomize affordances. The algorithm
         // schema is adapted to the descriptor shape via row._adapted*.
         PZCommon.ParameterEditor {
+            id: algorithmParamEditor
+
             Layout.fillWidth: true
             parameters: row._adaptedAlgorithmParamSchema
             currentValues: row._algorithmParamValues
             compact: true
             enableLocking: false
             enableRandomize: false
+            // No lock/randomize for algorithm params, but reset-to-default is
+            // useful on its own — clears the rule's overrides back to the
+            // algorithm's declared defaults.
+            enableReset: true
             enableImage: false
             enableGroups: false
             showParametersHeader: true
             onValueChanged: function (paramId, value) {
                 row._writeAlgorithmParam(paramId, value);
+            }
+            onResetRequested: {
+                // Replace the override map with every param's default in one
+                // write (batch, like the shader action's reset).
+                row.actionEdited(row._withParam("params", algorithmParamEditor.computeDefaults()));
             }
         }
     }

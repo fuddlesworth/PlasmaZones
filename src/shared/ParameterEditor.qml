@@ -198,12 +198,21 @@ ColumnLayout {
         return isFinite(n) ? n : fallback;
     }
 
-    /// Roll a fresh value for every unlocked parameter within its
-    /// metadata range. Locked entries and `image`-typed entries are
-    /// preserved verbatim from `currentValues` (or the param default
-    /// when missing). Returns a new full values map. Hosts can
-    /// either feed it back via `currentValues` (editor pattern) or
-    /// push it through their write-back API (settings pattern).
+    /// Transient scope for `computeRandomized`: when a group-randomize is
+    /// in flight this holds that group's param ids so only they roll (the
+    /// rest keep their current value). Null means "roll every param" (the
+    /// header Randomize-All). Set and cleared synchronously around the
+    /// `randomizeRequested` emission, which every consumer handles inline,
+    /// so the scope is always live when `computeRandomized` reads it.
+    property var _randomizeScopeIds: null
+
+    /// Roll a fresh value for every unlocked, in-scope parameter within its
+    /// metadata range. Out-of-scope entries (when `_randomizeScopeIds` is
+    /// set), locked entries, and `image`-typed entries are preserved
+    /// verbatim from `currentValues` (or the param default when missing).
+    /// Returns a new full values map. Hosts can either feed it back via
+    /// `currentValues` (editor pattern) or push it through their write-back
+    /// API (settings pattern).
     function computeRandomized() {
         var next = {};
         if (!root.parameters)
@@ -214,7 +223,8 @@ ColumnLayout {
             if (!param || param.id === undefined)
                 continue;
 
-            if ((root.lockedParams && root.lockedParams[param.id] === true) || param.type === "image") {
+            var inScope = !root._randomizeScopeIds || root._randomizeScopeIds.indexOf(param.id) >= 0;
+            if (!inScope || (root.lockedParams && root.lockedParams[param.id] === true) || param.type === "image") {
                 // Mirror the switch-path's undefined guard below — a
                 // schema with a missing `default` and a currentValues
                 // map missing this id would otherwise write
@@ -406,8 +416,25 @@ ColumnLayout {
                 expanded: root.expandedGroupIndex === index
                 lockedParams: root.lockedParams
                 enableLocking: root.enableLocking
+                enableRandomize: root.enableRandomize
                 onToggled: {
                     root.expandedGroupIndex = expanded ? -1 : index;
+                }
+                onGroupRandomizeRequested: {
+                    // Scope the roll to this group's ids, then emit the
+                    // arg-less randomizeRequested the consumer already handles
+                    // (it calls computeRandomized synchronously, which reads
+                    // the scope). Cleared right after so a later Randomize-All
+                    // rolls everything again.
+                    var ids = [];
+                    for (var k = 0; k < paramSection.groupParams.length; k++) {
+                        var gp = paramSection.groupParams[k];
+                        if (gp && gp.id !== undefined)
+                            ids.push(gp.id);
+                    }
+                    root._randomizeScopeIds = ids;
+                    root.randomizeRequested();
+                    root._randomizeScopeIds = null;
                 }
                 onGroupLockToggled: function (lock) {
                     // Synthesise per-id `lockToggled` signals so the host
