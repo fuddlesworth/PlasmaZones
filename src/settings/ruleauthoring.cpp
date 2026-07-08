@@ -205,9 +205,12 @@ QString fieldDescription(Field f)
     return QString();
 }
 
-/// Group an action type into a picker category. Derives from the
-/// descriptor's `category` field — adding a new action to an existing
-/// category requires zero changes here.
+/// Group an action type into a picker category. Most categories derive
+/// straight from the descriptor's `category` field, so a new action in an
+/// existing category needs no change here. The exception is `layoutEngine`,
+/// which is split by action type into Engine, Snapping, and Tiling (the last
+/// with Algorithm and Behavior submenus via a `/` in the label); a new
+/// layoutEngine action lands in Engine unless added to the dispatch below.
 PickerCategory actionCategory(const QString& type)
 {
     const auto desc = PhosphorRules::ActionRegistry::instance().descriptor(type);
@@ -216,26 +219,43 @@ PickerCategory actionCategory(const QString& type)
     }
     const QString& cat = desc->category;
     // Two groups, alphabetised within each: the context-domain categories
-    // (resolved per screen/desktop/activity/mode) come first (orders 0-2), then
-    // the window-domain categories (orders 3-5). Keep these orders in lockstep
+    // (resolved per screen/desktop/activity/mode) come first (orders 0-4), then
+    // the window-domain categories (orders 5-7). Keep these orders in lockstep
     // with each category's action domains in RuleAction.cpp.
     if (cat == QLatin1String("gap")) {
         return {PhosphorI18n::tr("Gaps"), 0};
     }
     if (cat == QLatin1String("layoutEngine")) {
-        return {PhosphorI18n::tr("Layout & engine"), 1};
+        // The old flat "Layout & engine" list is split by what each action
+        // drives. The engine controls stand alone; the two arrangement engines
+        // (snapping and tiling) each get their own category, and tiling is
+        // further split into Algorithm and Behavior submenus (a `/` in the
+        // label, which CategoryMenuButton renders as a nested submenu).
+        if (type == ActionType::SetSnappingLayout || type == ActionType::DefaultLayoutAssignment) {
+            return {PhosphorI18n::tr("Snapping"), 2};
+        }
+        if (type == ActionType::SetTilingAlgorithm || type == ActionType::SetAlgorithmParam) {
+            return {PhosphorI18n::tr("Tiling") + QStringLiteral("/") + PhosphorI18n::tr("Algorithm"), 3};
+        }
+        if (type == ActionType::SetMaxWindows || type == ActionType::SetSplitRatio || type == ActionType::SetMasterCount
+            || type == ActionType::SetInsertPosition || type == ActionType::SetOverflowBehavior
+            || type == ActionType::SetDragBehavior) {
+            return {PhosphorI18n::tr("Tiling") + QStringLiteral("/") + PhosphorI18n::tr("Behavior"), 3};
+        }
+        // Cross-cutting engine controls: SetEngineMode / DisableEngine / LockContext.
+        return {PhosphorI18n::tr("Engine"), 1};
     }
     if (cat == QLatin1String("overlay")) {
-        return {PhosphorI18n::tr("Overlay"), 2};
+        return {PhosphorI18n::tr("Overlay"), 4};
     }
     if (cat == QLatin1String("animation")) {
-        return {PhosphorI18n::tr("Animation"), 3};
+        return {PhosphorI18n::tr("Animation"), 5};
     }
     if (cat == QLatin1String("appearance") || cat == QLatin1String("borderAppearance")) {
-        return {PhosphorI18n::tr("Appearance"), 4};
+        return {PhosphorI18n::tr("Appearance"), 6};
     }
     if (cat == QLatin1String("windowManagement")) {
-        return {PhosphorI18n::tr("Window"), 5};
+        return {PhosphorI18n::tr("Window"), 7};
     }
     return {PhosphorI18n::tr("Other"), 99};
 }
