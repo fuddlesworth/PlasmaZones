@@ -1,0 +1,63 @@
+{
+    "id": "fireflies",
+    "name": "Fireflies",
+    "description": "A handful of soft glowing sparks drifting around the window in the clear margin outside its frame, each blinking on its own rhythm. The swarm dims when the surface loses focus. Count, spark size, drift range, drift speed and the two spark colours are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Ambience",
+    "animated": true,
+    "fragmentShader": "effect.frag",
+    "paddingParam": "flyRange",
+    "parameters": [
+        {
+            "id": "flyRange",
+            "name": "Drift range",
+            "type": "int",
+            "default": 48,
+            "min": 16,
+            "max": 96,
+            "description": "How far outside the frame the sparks roam (px)"
+        },
+        {
+            "id": "flyCount",
+            "name": "Spark count",
+            "type": "int",
+            "default": 8,
+            "min": 1,
+            "max": 16,
+            "description": "How many sparks drift around the window"
+        },
+        {
+            "id": "flySize",
+            "name": "Spark size",
+            "type": "float",
+            "default": 2.5,
+            "min": 1.0,
+            "max": 8.0,
+            "description": "Radius of each spark's glowing core (px)"
+        },
+        {
+            "id": "driftSpeed",
+            "name": "Drift speed",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.05,
+            "max": 2.0,
+            "description": "How quickly the sparks wander and blink"
+        },
+        {
+            "id": "colorA",
+            "name": "First colour",
+            "type": "color",
+            "default": "#ffffd08a",
+            "description": "Warm spark colour, mixed per spark with the second colour"
+        },
+        {
+            "id": "colorB",
+            "name": "Second colour",
+            "type": "color",
+            "default": "#ff8adcff",
+            "description": "Cool spark colour, mixed per spark with the first colour"
+        }
+    ]
+}

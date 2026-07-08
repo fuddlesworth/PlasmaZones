@@ -25,6 +25,16 @@
 
 namespace PhosphorPlacement {
 
+// Snapped-window frames are passed through the shared
+// PhosphorGeometry::insetRect helper (the autotile path is deliberately
+// un-inset and does not call it) with the
+// inset from IGeometryResolver::snapBorderInset, which returns 0 in all
+// configurations today: the KWin effect's border shader recolours the window's
+// own outermost band INSIDE the frame, so frames are not inset and a snapped
+// window fills its zone exactly (no border-width gap between tiles). insetRect
+// is retained as the seam for a future per-window-border design that would draw
+// outside the frame; with inset 0 it is a no-op.
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -152,8 +162,17 @@ PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QStri
                                 : PhosphorEngine::GeometryDefaults::InnerGap;
     auto og = m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
                                  : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
-    int defaultBw = m_geometryResolver ? m_geometryResolver->defaultBorderWidth() : 2;
-    int defaultBr = m_geometryResolver ? m_geometryResolver->defaultBorderRadius() : 0;
+    // The null-resolver fallbacks mirror PhosphorZones::ZoneDefaults
+    // (BorderWidth=2, BorderRadius=8) — the same defaults DaemonGeometryResolver
+    // falls back to when its settings are absent. They are duplicated as
+    // literals here because phosphor-placement does not depend on
+    // phosphor-zones' defaults header and pulling it in for two constants is
+    // disproportionate; this branch is a degenerate safety path (production
+    // always wires a DaemonGeometryResolver).
+    constexpr int kFallbackBorderWidth = 2;
+    constexpr int kFallbackBorderRadius = 8;
+    int defaultBw = m_geometryResolver ? m_geometryResolver->defaultBorderWidth() : kFallbackBorderWidth;
+    int defaultBr = m_geometryResolver ? m_geometryResolver->defaultBorderRadius() : kFallbackBorderRadius;
 
     PhosphorProtocol::EmptyZoneList result;
     for (PhosphorZones::Zone* zone : layout->zones()) {
@@ -215,8 +234,15 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
                                 : PhosphorEngine::GeometryDefaults::InnerGap;
     auto og = m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
                                  : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
-    return PhosphorZones::GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout, zp,
-                                                                  og);
+    QRect geo =
+        PhosphorZones::GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout, zp, og);
+    // Reserved snap-border inset seam: snapBorderInset() returns 0 in every
+    // config today (the border shader recolours the window's own band, no
+    // geometry inset), so this is currently a no-op. Single chokepoint for
+    // actual window frames — snap-assist previews use getZoneGeometryWithGaps
+    // directly (buildEmptyZoneList) and bypass this, so previews stay un-inset.
+    int inset = m_geometryResolver ? m_geometryResolver->snapBorderInset() : 0;
+    return PhosphorGeometry::insetRect(geo, inset);
 }
 
 QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
@@ -255,7 +281,12 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
             }
         }
     }
-    return combined.toAlignedRect();
+    // Inset the COMBINED span once (not per sub-zone) so the border traces the
+    // outer edge of the multi-zone frame, matching the single per-mode snap
+    // border the effect draws. snapBorderInset() returns 0 in every config
+    // today (reserved seam), so this is currently a no-op.
+    int inset = m_geometryResolver ? m_geometryResolver->snapBorderInset() : 0;
+    return PhosphorGeometry::insetRect(combined.toAlignedRect(), inset);
 }
 
 } // namespace PhosphorPlacement

@@ -10,67 +10,83 @@
 #include <QQuickWindow>
 #include <cmath>
 #include <cstring>
+#include <type_traits>
 
 #include <rhi/qshaderbaker.h>
 
 namespace PhosphorRendering {
 
 // ============================================================================
-// syncBaseUniforms — only writes BaseUniforms fields (NOT extension data)
+// syncBaseUniforms — shim: snapshot node members into a UboFrameState and hand
+// it to the installed UBO profile. The actual UBO byte-fill (the legacy
+// syncBaseUniforms body) now lives in BaseUniformProfile::fill(); the node only
+// resolves the live channel/texture sizes (which need RHI textures / QImages)
+// and supplies the NDC Y-orientation.
 // ============================================================================
 
-void ShaderNodeRhi::syncBaseUniforms()
+void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
 {
-    // Split full-precision m_time (double) into iTime (wrapped lo) + iTimeHi (wrap offset)
-    m_baseUniforms.iTime = static_cast<float>(m_time - static_cast<double>(m_timeHi));
-    m_baseUniforms.iTimeHi = m_timeHi;
-    m_baseUniforms.iTimeDelta = m_timeDelta;
-    // When feedback buffers haven't been cleared yet, override iFrame to 0
-    m_baseUniforms.iFrame = (m_bufferFeedback && !m_bufferFeedbackCleared) ? 0 : m_frame;
-    m_baseUniforms.iResolution[0] = m_width;
-    m_baseUniforms.iResolution[1] = m_height;
-    m_baseUniforms.iMouse[0] = static_cast<float>(m_mousePosition.x());
-    m_baseUniforms.iMouse[1] = static_cast<float>(m_mousePosition.y());
-    m_baseUniforms.iMouse[2] = m_width > 0 ? static_cast<float>(m_mousePosition.x() / m_width) : 0.0f;
-    m_baseUniforms.iMouse[3] = m_height > 0 ? static_cast<float>(m_mousePosition.y() / m_height) : 0.0f;
-    m_baseUniforms.iIsReversed = m_isReversed ? 1 : 0;
-    // iDate only advances once per second. m_sceneDataDirty is set by every
-    // mouse-move/resize event, so naïvely recomputing iDate whenever it's
-    // true would hit QDateTime::currentDateTime() at 60+ Hz during
-    // interaction. Guard with a 1-second cached timestamp — iDate still
-    // refreshes during idle (sceneDataDirty remains set for the first frame
-    // of each redraw cycle), but we skip ~60 redundant calls per second.
-    if (!m_didFullUploadOnce
-        || (m_sceneDataDirty
-            && (m_lastDateRefreshMs == 0 || (QDateTime::currentMSecsSinceEpoch() - m_lastDateRefreshMs) >= 1000))) {
-        const QDateTime now = QDateTime::currentDateTime();
-        m_lastDateRefreshMs = now.toMSecsSinceEpoch();
-        m_baseUniforms.iDate[0] = static_cast<float>(now.date().year());
-        m_baseUniforms.iDate[1] = static_cast<float>(now.date().month());
-        m_baseUniforms.iDate[2] = static_cast<float>(now.date().day());
-        m_baseUniforms.iDate[3] = static_cast<float>(now.time().hour() * 3600 + now.time().minute() * 60
-                                                     + now.time().second() + now.time().msec() / 1000.0);
-    }
+    PhosphorShaders::UboFrameState state;
 
-    // appField0/appField1: left as-is (set by setAppField0/1 or extension)
+    // UboFrameState's array extents are declared independently of the contract
+    // constants that bound the write loops below (phosphor-shaders cannot see
+    // the animation contract — dependency direction). Pin them here, the one
+    // TU that sees both, so a future kMax* bump cannot silently overrun the
+    // state arrays.
+    static_assert(std::extent_v<decltype(state.customParams)> == kMaxCustomParams,
+                  "UboFrameState::customParams must match the contract's kMaxCustomParams");
+    static_assert(std::extent_v<decltype(state.customColors)> == kMaxCustomColors,
+                  "UboFrameState::customColors must match the contract's kMaxCustomColors");
+    static_assert(std::extent_v<decltype(state.channelResolution)> == kMaxBufferPasses,
+                  "UboFrameState::channelResolution must match the contract's kMaxBufferPasses");
+    static_assert(std::extent_v<decltype(state.textureResolution)> == kMaxUserTextures,
+                  "UboFrameState::textureResolution must match the contract's kMaxUserTextures");
+
+    // Split full-precision m_time (double) into iTime (wrapped lo) + iTimeHi (wrap offset)
+    state.time = static_cast<float>(m_time - static_cast<double>(m_timeHi));
+    state.timeHi = m_timeHi;
+    state.timeDelta = m_timeDelta;
+    state.frame = m_frame;
+    state.bufferFeedback = m_bufferFeedback;
+    state.bufferFeedbackCleared = m_bufferFeedbackCleared;
+    state.width = m_width;
+    state.height = m_height;
+    state.mouseX = static_cast<float>(m_mousePosition.x());
+    state.mouseY = static_cast<float>(m_mousePosition.y());
+    state.isReversed = m_isReversed;
+    state.didFullUploadOnce = m_didFullUploadOnce;
+    state.sceneDataDirty = m_sceneDataDirty;
+    state.yUpInNDC = rhi->isYUpInNDC();
+
+    // Surface-only fields — read by a SurfaceUniformProfile, ignored by the
+    // BaseUniformProfile (so the overlay/animation UBO bytes are unchanged).
+    state.qtOpacity = m_surfaceOpacity;
+    state.surfaceScale = m_surfaceScale;
+    state.surfaceFocused = m_surfaceFocused ? 1.0f : 0.0f;
+    state.surfaceSize[0] = m_surfaceSize[0];
+    state.surfaceSize[1] = m_surfaceSize[1];
+    state.surfaceFrameTopLeft[0] = m_surfaceFrameTopLeft[0];
+    state.surfaceFrameTopLeft[1] = m_surfaceFrameTopLeft[1];
+    state.surfaceFrameSize[0] = m_surfaceFrameSize[0];
+    state.surfaceFrameSize[1] = m_surfaceFrameSize[1];
 
     // Custom params
     for (int i = 0; i < kMaxCustomParams; ++i) {
-        m_baseUniforms.customParams[i][RhiConstants::ComponentX] = m_customParams[i].x();
-        m_baseUniforms.customParams[i][RhiConstants::ComponentY] = m_customParams[i].y();
-        m_baseUniforms.customParams[i][RhiConstants::ComponentZ] = m_customParams[i].z();
-        m_baseUniforms.customParams[i][RhiConstants::ComponentW] = m_customParams[i].w();
+        state.customParams[i][RhiConstants::ComponentX] = m_customParams[i].x();
+        state.customParams[i][RhiConstants::ComponentY] = m_customParams[i].y();
+        state.customParams[i][RhiConstants::ComponentZ] = m_customParams[i].z();
+        state.customParams[i][RhiConstants::ComponentW] = m_customParams[i].w();
     }
 
     // Custom colors
     for (int i = 0; i < kMaxCustomColors; ++i) {
-        m_baseUniforms.customColors[i][0] = static_cast<float>(m_customColors[i].redF());
-        m_baseUniforms.customColors[i][1] = static_cast<float>(m_customColors[i].greenF());
-        m_baseUniforms.customColors[i][2] = static_cast<float>(m_customColors[i].blueF());
-        m_baseUniforms.customColors[i][3] = static_cast<float>(m_customColors[i].alphaF());
+        state.customColors[i][0] = static_cast<float>(m_customColors[i].redF());
+        state.customColors[i][1] = static_cast<float>(m_customColors[i].greenF());
+        state.customColors[i][2] = static_cast<float>(m_customColors[i].blueF());
+        state.customColors[i][3] = static_cast<float>(m_customColors[i].alphaF());
     }
 
-    // iChannelResolution
+    // iChannelResolution — resolved node-side (needs live RHI textures).
     const bool multiBufferMode = m_bufferPaths.size() > 1;
     const int numChannels = multiBufferMode ? qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses))
                                             : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
@@ -78,41 +94,35 @@ void ShaderNodeRhi::syncBaseUniforms()
         if (i < numChannels) {
             if (multiBufferMode && m_multiBufferTextures[i]) {
                 QSize ps = m_multiBufferTextures[i]->pixelSize();
-                m_baseUniforms.iChannelResolution[i][0] = static_cast<float>(ps.width());
-                m_baseUniforms.iChannelResolution[i][1] = static_cast<float>(ps.height());
+                state.channelResolution[i][0] = static_cast<float>(ps.width());
+                state.channelResolution[i][1] = static_cast<float>(ps.height());
             } else if (!multiBufferMode && i == 0 && m_bufferTexture) {
                 QSize ps = m_bufferTexture->pixelSize();
-                m_baseUniforms.iChannelResolution[0][0] = static_cast<float>(ps.width());
-                m_baseUniforms.iChannelResolution[0][1] = static_cast<float>(ps.height());
+                state.channelResolution[0][0] = static_cast<float>(ps.width());
+                state.channelResolution[0][1] = static_cast<float>(ps.height());
             } else {
-                m_baseUniforms.iChannelResolution[i][0] = 1.0f;
-                m_baseUniforms.iChannelResolution[i][1] = 1.0f;
+                state.channelResolution[i][0] = 1.0f;
+                state.channelResolution[i][1] = 1.0f;
             }
         } else {
-            m_baseUniforms.iChannelResolution[i][0] = 1.0f;
-            m_baseUniforms.iChannelResolution[i][1] = 1.0f;
+            state.channelResolution[i][0] = 1.0f;
+            state.channelResolution[i][1] = 1.0f;
         }
-        m_baseUniforms.iChannelResolution[i][2] = 0.0f;
-        m_baseUniforms.iChannelResolution[i][3] = 0.0f;
     }
-    m_baseUniforms.iAudioSpectrumSize = static_cast<int>(m_audioSpectrum.size());
+    state.audioSpectrumSize = static_cast<int>(m_audioSpectrum.size());
 
-    // iFlipBufferY set in uploadDirtyTextures() where rhi is available
-    m_baseUniforms._pad_after_audioSpectrum[0] = 0;
-    m_baseUniforms._pad_after_audioSpectrum[1] = 0;
-
-    // User texture resolutions (bindings 7-10)
+    // User texture resolutions (bindings 7-10) — resolved node-side.
     for (int i = 0; i < kMaxUserTextures; ++i) {
         if (m_userTextures[i] && !m_userTextureImages[i].isNull()) {
-            m_baseUniforms.iTextureResolution[i][0] = static_cast<float>(m_userTextureImages[i].width());
-            m_baseUniforms.iTextureResolution[i][1] = static_cast<float>(m_userTextureImages[i].height());
+            state.textureResolution[i][0] = static_cast<float>(m_userTextureImages[i].width());
+            state.textureResolution[i][1] = static_cast<float>(m_userTextureImages[i].height());
         } else {
-            m_baseUniforms.iTextureResolution[i][0] = 1.0f;
-            m_baseUniforms.iTextureResolution[i][1] = 1.0f;
+            state.textureResolution[i][0] = 1.0f;
+            state.textureResolution[i][1] = 1.0f;
         }
-        m_baseUniforms.iTextureResolution[i][2] = 0.0f;
-        m_baseUniforms.iTextureResolution[i][3] = 0.0f;
     }
+
+    m_uboProfile->fill(state);
 }
 
 // ============================================================================
@@ -132,7 +142,7 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
         m_extensionStaging.resize(extSize);
     }
     m_uniformExtension->write(m_extensionStaging.data(), 0);
-    const int extOffset = static_cast<int>(sizeof(PhosphorShaders::BaseUniforms));
+    const int extOffset = m_uboProfile->baseSize();
     batch->updateDynamicBuffer(m_ubo.get(), extOffset, extSize, m_extensionStaging.constData());
     m_uniformExtension->clearDirty();
 }
@@ -163,7 +173,10 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 //   m_timeHiDirty     ← setTime (wrap-offset crossing)
 //   m_sceneDataDirty  ← setResolution, setMousePosition, setCustomParams,
 //                        setCustomColor, setAudioSpectrum, setUserTexture,
-//                        setIsReversed
+//                        setIsReversed, and the surface-contract setters
+//                        (setSurfaceOpacity, setSurfaceScale, setSurfaceFocused,
+//                        setSurfaceSize, setSurfaceFrameTopLeft,
+//                        setSurfaceFrameSize)
 //   m_appFieldsDirty  ← setAppField0, setAppField1
 //   extension dirty   ← tracked via m_uniformExtension->isDirty() (set by the
 //                        extension's own updateFromX() methods)
@@ -177,8 +190,10 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     const bool extensionHasData = m_uniformExtension && m_uniformExtension->extensionSize() > 0;
 
     if (m_uniformsDirty) {
-        syncBaseUniforms();
-        m_baseUniforms.iFlipBufferY = 1;
+        // syncBaseUniforms(rhi) snapshots node members into a UboFrameState and
+        // calls m_uboProfile->fill(state). The profile folds in iFlipBufferY=1
+        // and the NDC Y-orientation correction baked into qt_Matrix:
+        //
         // NDC Y-orientation correction for the fixed-NDC fullscreen quad on the
         // DIRECT-TO-WINDOW path (daemon animation shaders, whose shaderItem is
         // not layer-enabled). Qt-RHI does NOT normalise the NDC Y direction of
@@ -194,50 +209,31 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         // (The buffer/multipass passes pin qt_Matrix back to identity — see the
         // multipass block in shadernoderhicore.cpp — because their FBO
         // round-trip is already backend-consistent and must not be flipped.)
-        std::memset(m_baseUniforms.qt_Matrix, 0, sizeof(m_baseUniforms.qt_Matrix));
-        m_baseUniforms.qt_Matrix[0] = 1.0f;
-        m_baseUniforms.qt_Matrix[5] = rhi->isYUpInNDC() ? -1.0f : 1.0f;
-        m_baseUniforms.qt_Matrix[10] = 1.0f;
-        m_baseUniforms.qt_Matrix[15] = 1.0f;
+        syncBaseUniforms(rhi);
+        const void* uboData = m_uboProfile->data();
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch) {
             if (!m_didFullUploadOnce) {
-                // Upload base uniforms
-                batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(PhosphorShaders::BaseUniforms), &m_baseUniforms);
+                // Upload base uniforms (full region(s) from the profile)
+                for (const auto& r : m_uboProfile->fullUploadRegions()) {
+                    batch->updateDynamicBuffer(m_ubo.get(), r.offset, r.size,
+                                               static_cast<const char*>(uboData) + r.offset);
+                }
                 // Upload extension data if present
                 if (extensionHasData) {
                     uploadExtensionToUbo(batch);
                 }
                 m_didFullUploadOnce = true;
             } else {
-                if (m_timeDirty) {
-                    batch->updateDynamicBuffer(m_ubo.get(), K_TIME_BLOCK_OFFSET, K_TIME_BLOCK_SIZE,
-                                               static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
-                                                   + K_TIME_BLOCK_OFFSET);
-                }
-                // K_TIME_HI is subsumed by K_SCENE_HEADER. When both flags
-                // fire on the same frame, only the broader upload runs;
-                // the granular K_TIME_HI write only fires when scene-data
-                // is otherwise clean (the time-wrap-only path).
-                if (m_timeHiDirty && !m_sceneDataDirty) {
-                    batch->updateDynamicBuffer(m_ubo.get(), K_TIME_HI_OFFSET, K_TIME_HI_SIZE,
-                                               static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
-                                                   + K_TIME_HI_OFFSET);
-                }
-                if (m_sceneDataDirty) {
-                    // Scene header: iResolution through end of BaseUniforms
-                    // (subsumes the appFields, iTimeHi, and iIsReversed
-                    // regions — no need for separate uploads when this
-                    // fires).
-                    batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_HEADER_OFFSET, K_SCENE_HEADER_SIZE,
-                                               static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
-                                                   + K_SCENE_HEADER_OFFSET);
-                } else if (m_appFieldsDirty) {
-                    // Only appField0/appField1 changed (8 bytes at offset 88) —
-                    // skip the full ~512-byte scene-header upload.
-                    batch->updateDynamicBuffer(m_ubo.get(), K_APP_FIELDS_OFFSET, K_APP_FIELDS_SIZE,
-                                               static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
-                                                   + K_APP_FIELDS_OFFSET);
+                // Map the node's granular dirty flags onto the profile's
+                // dirty-region dispatch (which reproduces the exact legacy
+                // K_TIME_BLOCK / K_TIME_HI / K_SCENE_HEADER / K_APP_FIELDS
+                // broader-subsumes-narrower behaviour).
+                const PhosphorShaders::UboDirtyFlags flags{m_timeDirty, m_timeHiDirty, m_sceneDataDirty,
+                                                           m_appFieldsDirty};
+                for (const auto& r : m_uboProfile->dirtyRegions(flags)) {
+                    batch->updateDynamicBuffer(m_ubo.get(), r.offset, r.size,
+                                               static_cast<const char*>(uboData) + r.offset);
                 }
                 // Extension region: uploaded separately when dirty.
                 // Track whether we've already uploaded the extension
@@ -262,7 +258,10 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // in a future revision would land here and silently
                 // miss the upload.
                 if (!m_timeDirty && !m_timeHiDirty && !m_sceneDataDirty && !m_appFieldsDirty) {
-                    batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(PhosphorShaders::BaseUniforms), &m_baseUniforms);
+                    for (const auto& r : m_uboProfile->fullUploadRegions()) {
+                        batch->updateDynamicBuffer(m_ubo.get(), r.offset, r.size,
+                                                   static_cast<const char*>(uboData) + r.offset);
+                    }
                     if (extensionHasData && !extensionUploaded) {
                         uploadExtensionToUbo(batch);
                     }
@@ -313,19 +312,27 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
 
     // Audio spectrum texture: resize if needed, upload when dirty
     if (m_audioSpectrumDirty && m_audioSpectrumTexture && m_audioSpectrumSampler) {
-        m_audioSpectrumDirty = false;
         const int bars = m_audioSpectrum.size();
         const QSize targetSize = bars > 0 ? QSize(bars, 1) : QSize(1, 1);
         if (m_audioSpectrumTexture->pixelSize() != targetSize) {
-            m_audioSpectrumTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
-            if (!m_audioSpectrumTexture->create()) {
+            // Build the resized texture into a local and only swap it in on a
+            // successful create(), so a failed resize keeps the previous working
+            // texture and leaves m_audioSpectrumDirty set for a retry next frame
+            // (mirrors the self-healing user-texture path below) instead of
+            // stranding a non-created texture with dirty already cleared.
+            std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
+            if (!resized->create()) {
+                qCWarning(lcShaderNode) << "audio spectrum texture create() failed for size" << targetSize
+                                        << ", keeping previous texture; will retry next frame";
                 return;
             }
+            m_audioSpectrumTexture = std::move(resized);
             resetAllBindingsAndPipelines();
             if (!ensurePipeline()) {
                 return;
             }
         }
+        m_audioSpectrumDirty = false;
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch && bars > 0) {
             QImage img(bars, 1, QImage::Format_RGBA8888);

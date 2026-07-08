@@ -80,7 +80,8 @@ public:
     /// just churn the closures without changing behaviour.
     ///
     /// All lookups (screen, activity, zone, snappingLayout, tilingAlgorithm,
-    /// shaderEffect, overlayShader) must be wired for the model to render rich
+    /// shaderEffect, overlayShader, decorationPack, curve) must be wired for the
+    /// model to render rich
     /// `matchSummary` / `actionSummary` cells — a missing lookup falls
     /// back to printing the raw id/UUID. SettingsController is the
     /// single intended caller and installs all of them during page
@@ -100,6 +101,7 @@ public:
     /// animation shader registry (the same source the rule editor's shader
     /// picker uses), so the list renders "Dissolve" rather than the raw id.
     void setShaderEffectLookup(RuleModel::LabelLookup fn);
+    void setDecorationPackLookup(RuleModel::LabelLookup fn);
     /// Overlay shader id → display name resolver for OverrideOverlayShader
     /// actions. SettingsController wires this from the overlay/snapping shader
     /// registry (the source the rule editor's overlay-shader picker uses), so
@@ -331,7 +333,8 @@ public:
     /// `{ key, kind, label }`. `kind` is one of the descriptor kinds the
     /// ActionRow editor dispatches on (enum, number, percent, bool, color,
     /// zoneOrdinals, screenId, virtualDesktop, snappingLayout, tilingAlgorithm,
-    /// animationEvent, shaderEffect, overlayShader, curveEditor); for
+    /// animationEvent, shaderEffect, overlayShader, decorationChain,
+    /// curveEditor); for
     /// `kind == "enum"` there is also an `options` string list, and for
     /// `kind == "number"`/`"percent"`, `min`/`max`/`scale` (the value stored is
     /// `display * scale`).

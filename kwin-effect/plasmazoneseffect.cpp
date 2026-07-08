@@ -80,8 +80,21 @@ bool PlasmaZonesEffect::isActive() const
     // KWin still only composites on damage; isActive() merely keeps the
     // effect consulted (and the window composited rather than
     // direct-scanned-out) when a frame is produced.
+    //
+    // `!m_windowDecorations.isEmpty()` is the SAME persistent case as opacity
+    // rules: a per-window border is rendered passively in drawWindow by
+    // re-blitting the redirected window through the border shader on every
+    // composite (the KDE-Rounded-Corners / LightlyShaders model). Those
+    // effects keep isActive() true whenever they manage a window; without
+    // this clause an idle bordered window (no drag/animation/transition)
+    // drops the effect from the chain, drawWindow is never called, and the
+    // border only appears while some OTHER trigger (an animation) holds the
+    // effect active. Gating on a non-empty border set keeps the effect
+    // consulted for as long as any window has a border, so the border
+    // survives idle. O(1) — a QHash emptiness check, safe in this per-frame
+    // hot path.
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
-        || m_shaderManager.hasOpacityRules();
+        || m_shaderManager.hasOpacityRules() || !m_windowDecorations.isEmpty();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)

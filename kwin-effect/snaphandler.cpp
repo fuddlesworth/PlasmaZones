@@ -69,11 +69,11 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     // handler only records snap tiled-tracking for border RENDERING.
 
     // Border overlays are visual-only, so skip the off-desktop case (consistent
-    // with updateAllBorders): an OutlinedBorderItem for an invisible window is
-    // wasted work. When the user switches to that window's desktop, the
-    // desktopChanged → updateAllBorders connection rebuilds its border.
+    // with updateAllDecorations): redirecting an invisible window through the border
+    // shader is wasted work. When the user switches to that window's desktop, the
+    // desktopChanged → updateAllDecorations connection rebuilds its border.
     if (w->isOnCurrentDesktop()) {
-        m_effect->updateWindowBorder(windowId, w);
+        m_effect->updateWindowDecoration(windowId, w);
     }
 }
 
@@ -83,7 +83,27 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
         return;
     }
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-    m_effect->removeWindowBorder(windowId);
+    // A window that is no longer snap-managed occupies no zone. The zone cache
+    // is the source of the IsSnapped / Zone rule-match fields, and several
+    // unsnap paths (drag-out unsnap in particular) get their answer in the
+    // endDrag reply with NO windowStateChanged broadcast to follow — leaving
+    // the entry stale means the coalesced rule re-resolve still sees
+    // "snapped", so a placement-scoped decoration never rebuilds and a
+    // hide-title-bar-when-snapped rule keeps the title bar hidden until some
+    // unrelated re-resolve (e.g. a focus swap). Clearing here, in the one
+    // place every unsnap funnels through, keeps the fact and the tracking in
+    // lockstep; clearWindowZone re-resolves the rules only when an entry was
+    // actually dropped, so this is free for callers whose broadcast already
+    // landed. Cleared BEFORE the re-decorate below so the re-resolve sees the
+    // window as unsnapped and picks the floating-state chain, not the snapped
+    // one it is leaving.
+    m_effect->clearWindowZone(windowId);
+    // Re-resolve the decoration SYNCHRONOUSLY instead of dropping it: this
+    // funnel runs at drag start (the daemon floats the grabbed window), and a
+    // bare removeWindowDecoration here blanked EVERY pack — interior blur
+    // included — until some later push happened to rebuild the entry
+    // mid-drag. The shared funnel swaps update-or-remove in the same turn.
+    m_effect->reconcileDecorationOnPlacementFlip(windowId);
 }
 
 void SnapHandler::clearSnapTracking()
@@ -91,15 +111,15 @@ void SnapHandler::clearSnapTracking()
     // Bookkeeping only. Physical title-bar restores are the
     // DecorationManager's job — teardown callers pair this with
     // DecorationManager::restoreAll(). Callers also pair it with
-    // clearAllBorders() to tear down the OutlinedBorderItem scene items.
+    // clearAllDecorations() to release the per-window border shader redirect.
     m_border.tiledWindowsByScreen.clear();
 }
 
 void SnapHandler::onWindowClosed(const QString& windowId)
 {
     // Pure bookkeeping — the window is being destroyed, so no setNoBorder /
-    // removeWindowBorder is needed (the border item is removed by the effect's
-    // close path and the title bar dies with the window).
+    // removeWindowDecoration is needed (the effect's close path drops the border
+    // entry / shader redirect and the title bar dies with the window).
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
 }
 
@@ -309,7 +329,7 @@ void SnapHandler::handleMinimizeChanged(const QString& windowId, const QString& 
     qCInfo(lcEffect) << "Snap: window" << (minimized ? "minimized, floating:" : "unminimized, unfloating:") << windowId
                      << "on" << screenId;
 
-    if (m_effect->m_daemonServiceRegistered) {
+    if (m_effect->isDaemonReady("snap minimize float")) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("setWindowFloatingForScreen"),
                                                        {windowId, screenId, minimized},

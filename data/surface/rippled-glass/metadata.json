@@ -1,0 +1,108 @@
+{
+    "id": "rippled-glass",
+    "name": "Rippled Glass",
+    "description": "A pane of rippled glass over the scene behind the window. The blurred backdrop warps across the whole pane under a drifting watery distortion, with slight colour fringing and soft highlights along the ripples. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Blur",
+    "fragmentShader": "effect.frag",
+    "needsBackdrop": true,
+    "handlesOpacity": true,
+    "animated": true,
+    "multipass": true,
+    "bufferScale": 0.25,
+    "bufferShaders": [
+        "buffer0.frag",
+        "buffer1.frag"
+    ],
+    "parameters": [
+        {
+            "id": "blurRadius",
+            "name": "Blur radius",
+            "type": "int",
+            "default": 16,
+            "min": 2,
+            "max": 64,
+            "description": "How strongly the scene behind the glass is blurred (px)",
+            "group": "Blur"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Corner rounding of the glass pane (px, match the Border pack)",
+            "group": "Shape"
+        },
+        {
+            "id": "refractionStrength",
+            "name": "Ripple strength",
+            "type": "float",
+            "default": 10.0,
+            "min": 0.0,
+            "max": 40.0,
+            "description": "How far the ripples bend the backdrop (px)",
+            "group": "Refraction"
+        },
+        {
+            "id": "rippleSize",
+            "name": "Ripple size",
+            "type": "float",
+            "default": 48.0,
+            "min": 12.0,
+            "max": 160.0,
+            "description": "Size of the individual ripples (px)",
+            "group": "Refraction"
+        },
+        {
+            "id": "rippleSpeed",
+            "name": "Ripple drift",
+            "type": "float",
+            "default": 0.2,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "How quickly the ripples drift, where 0 freezes them",
+            "group": "Refraction"
+        },
+        {
+            "id": "fringing",
+            "name": "Colour fringing",
+            "type": "float",
+            "default": 0.25,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Chromatic split between the red and blue refraction",
+            "group": "Refraction"
+        },
+        {
+            "id": "highlightStrength",
+            "name": "Ripple highlights",
+            "type": "float",
+            "default": 0.25,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Strength of the light caught along the ripple crests",
+            "group": "Lighting"
+        },
+        {
+            "id": "tintStrength",
+            "name": "Tint strength",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How much of the tint colour is mixed over the glass",
+            "group": "Tint"
+        },
+        {
+            "id": "tintColor",
+            "name": "Tint colour",
+            "type": "color",
+            "default": "#ffffffff",
+            "description": "Colour mixed over the glass",
+            "group": "Tint"
+        }
+    ]
+}

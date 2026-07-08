@@ -12,6 +12,7 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -405,7 +406,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         // as soon as the client commits its constrained size — no deferred timer needed.
 
         // Refresh the active border for the focused window (tiledWindows may have changed)
-        m_effect->updateAllBorders();
+        m_effect->updateAllDecorations();
     };
 
     m_effect->applyStaggeredOrImmediate(

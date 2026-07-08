@@ -152,6 +152,28 @@ ColumnLayout {
             }
             return rawStr;
         }
+        if (kind === "decorationChain") {
+            // Surface-pack ids resolve through the decoration pack catalog
+            // (mirrors ActionRow's _decorationChainEditor source); unknown ids
+            // render verbatim. An empty chain is the "no decoration" sentinel.
+            var chainIds = raw || [];
+            if (!chainIds.length)
+                return i18n("Block decoration");
+            var decoCtl = root.appSettings ? root.appSettings.decorationPage : null;
+            var packs = decoCtl ? (decoCtl.availableShaderEffects() || []) : [];
+            var names = [];
+            for (var ci = 0; ci < chainIds.length; ++ci) {
+                var packName = chainIds[ci];
+                for (var pj = 0; pj < packs.length; ++pj) {
+                    if (packs[pj].id === chainIds[ci]) {
+                        packName = packs[pj].name;
+                        break;
+                    }
+                }
+                names.push(packName);
+            }
+            return names.join(", ");
+        }
         if (kind === "overlayShader") {
             // Overlay shaders come from the snapping-shaders registry, not the
             // animation one (mirrors ActionRow's _overlayShaderEditor source).
@@ -386,7 +408,7 @@ ColumnLayout {
                                     implicitWidth: valueLabel.implicitHeight
                                     implicitHeight: valueLabel.implicitHeight
                                     radius: Math.round(Kirigami.Units.smallSpacing / 2)
-                                    color: paramRow.modelData.kind !== "color" ? "transparent" : (_rawColor === "accent" ? Kirigami.Theme.highlightColor : _rawColor)
+                                    color: paramRow.modelData.kind !== "color" ? "transparent" : (_rawColor === "accent" ? Kirigami.Theme.highlightColor : (_rawColor === "" ? Kirigami.Theme.backgroundColor : _rawColor))
                                     border.width: Math.round(Screen.devicePixelRatio)
                                     border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
                                 }

@@ -1,0 +1,183 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "../plasmazoneseffect.h"
+
+#include "shader_internal.h"
+#include "types.h"
+#include "window_query.h"
+
+#include <core/rendertarget.h>
+#include <core/renderviewport.h>
+#include <effect/effectwindow.h>
+#include <opengl/glframebuffer.h>
+#include <opengl/gltexture.h>
+#include <scene/item.h>
+
+#include <QRectF>
+#include <QSize>
+#include <QVector4D>
+
+#include <epoxy/gl.h>
+
+// Backdrop capture for the surface decoration fold. Split out of
+// surfacelayers.cpp to keep that TU under the 800-line limit, mirroring the
+// earlier surface_audio.cpp split.
+namespace PlasmaZones {
+
+// Blit the scene behind @p w into its backdrop texture (see the header).
+// MUST run from paintWindow, while the live render target still holds only
+// the content painted below this window.
+void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTarget,
+                                              const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
+                                              const WindowDecoration& wb, const QRectF& animatedFrame)
+{
+    // Mirror renderSurfaceChainComposite's canvas math EXACTLY (padded
+    // logical rect, capped capture scale, derived texture size) so uBackdrop
+    // and the composite canvas are texel-aligned — a pack samples both with
+    // the same uv (backdropTexel / surfaceTexel).
+    const qreal pad = wb.outerPadding;
+    QRectF logicalGeometry = w->expandedGeometry();
+    if (logicalGeometry.isEmpty()) {
+        logicalGeometry = w->frameGeometry();
+    }
+    logicalGeometry.adjust(-pad, -pad, pad, pad);
+    qreal captureScale = viewport.scale();
+    constexpr qreal kMaxSurfaceDim = 8192.0;
+    const qreal longestPx = qMax(logicalGeometry.width(), logicalGeometry.height()) * captureScale;
+    if (longestPx > kMaxSurfaceDim) {
+        captureScale *= kMaxSurfaceDim / longestPx;
+    }
+    const QSize textureSize = (logicalGeometry.size() * captureScale).toSize();
+    if (textureSize.isEmpty()) {
+        return;
+    }
+    const QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return; // no stable id — don't orphan a default-inserted entry under ""
+    }
+    SurfaceMultipassState& state = m_surfaceMultipass[windowId];
+    // ── Multi-output accumulation ───────────────────────────────────────
+    // paintWindow runs once per OUTPUT, and each output can only blit the
+    // slice of the canvas its viewport covers. OUTPUTS HAVE INDEPENDENT
+    // FRAME CLOCKS, so "same frame" is undecidable from the pinned clock —
+    // keying a clear on it made the neighbour output (whose cycle always
+    // looks like a new frame) wholesale-clear the texture and leave only
+    // its overhang sliver, which the pixel probes showed as a transparent
+    // backdrop exactly while animations kept both outputs cycling. So:
+    // NEVER clear on capture (stale pixels outside the valid rect are
+    // never sampled — backdropTexel clamps into it; the texture is cleared
+    // once at allocation), and treat captures within a short window as one
+    // accumulation generation: their dest slices overwrite in place and
+    // the valid rect grows to the union. A stale generation restarts the
+    // rect at this capture's slice.
+    const qint64 pinned = m_shaderManager.currentFrameClockMs();
+    const qint64 frameStamp = pinned >= 0 ? pinned : ShaderInternal::shaderClockNowMs();
+    constexpr qint64 kAccumulationWindowMs = 50;
+    // Snapshot GL state BEFORE the realloc branch's clear (which sets the clear
+    // colour to transparent): the guard must capture the pristine ambient state
+    // so it hands blend/viewport/scissor/clear-colour back the way it found them
+    // on EVERY exit path, mid scene-walk. Its scope covers the realloc-branch
+    // clear and the blit.
+    const ShaderInternal::ScopedGlState glStateGuard;
+    // Disable scissor for the WHOLE capture: the init clear below and the blit
+    // must not be clipped to whatever scissor box the scene walk left enabled.
+    // A scissored init clear would leave a freshly-allocated texture's margin
+    // undefined. The guard restores the ambient scissor on exit.
+    glDisable(GL_SCISSOR_TEST);
+    if (state.backdropSize != textureSize || !state.backdropTex) {
+        state.backdropTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+        if (!state.backdropTex) {
+            state.backdropSize = QSize();
+            return;
+        }
+        state.backdropTex->setFilter(GL_LINEAR);
+        state.backdropTex->setWrapMode(GL_CLAMP_TO_EDGE);
+        state.backdropSize = textureSize;
+        state.backdropRect = QVector4D();
+        state.backdropFrameMs = -1;
+        // The only clear the texture ever gets: uncovered regions read
+        // transparent until a capture lands there, and are never sampled
+        // (backdropTexel clamps into the valid rect).
+        KWin::GLFramebuffer clearFbo(state.backdropTex.get());
+        if (clearFbo.valid()) {
+            KWin::GLFramebuffer::pushFramebuffer(&clearFbo);
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            KWin::GLFramebuffer::popFramebuffer();
+        }
+    }
+    // Where to READ the scene from. At rest that is the canvas rect itself;
+    // while an animation draws the window elsewhere (animatedFrame valid),
+    // map the canvas rect through the frame -> animatedFrame transform so
+    // the pane shows the scene behind the MOVING quad. The canvas/texture
+    // stays rest-rect sized either way (it must match the composite); a
+    // moving source of a different size is scaled by the blit.
+    QRectF sourceRect = logicalGeometry;
+    if (animatedFrame.isValid()) {
+        QRectF frame = w->frameGeometry();
+        if (frame.isEmpty()) {
+            frame = animatedFrame;
+        }
+        const qreal sx = animatedFrame.width() / qMax(frame.width(), 1.0);
+        const qreal sy = animatedFrame.height() / qMax(frame.height(), 1.0);
+        sourceRect = QRectF(animatedFrame.x() + (logicalGeometry.x() - frame.x()) * sx,
+                            animatedFrame.y() + (logicalGeometry.y() - frame.y()) * sy, logicalGeometry.width() * sx,
+                            logicalGeometry.height() * sy);
+        if (sourceRect.isEmpty()) {
+            sourceRect = logicalGeometry;
+        }
+    }
+    // The source can hang off the output (a padded canvas at a screen edge,
+    // a window half-dragged off, an animation passing the edge): blit only
+    // the part the render target covers and record the valid sub-rect so
+    // packs clamp samples into it rather than reading the cleared margin.
+    const QRectF sourceLogicalF = sourceRect & viewport.renderRect();
+    if (sourceLogicalF.isEmpty()) {
+        return; // keep whatever another output captured
+    }
+    const bool sameGeneration =
+        state.backdropFrameMs >= 0 && qAbs(frameStamp - state.backdropFrameMs) < kAccumulationWindowMs;
+    KWin::GLFramebuffer fbo(state.backdropTex.get());
+    if (!fbo.valid()) {
+        state.backdropTex.reset();
+        state.backdropSize = QSize();
+        return;
+    }
+    // No clear here — see the accumulation note above.
+    const KWin::Rect source(qRound(sourceLogicalF.x()), qRound(sourceLogicalF.y()), qRound(sourceLogicalF.width()),
+                            qRound(sourceLogicalF.height()));
+    // Destination: the source's PROPORTIONAL position within sourceRect,
+    // mapped onto the texture — reduces to the plain scaled copy at rest
+    // (sourceRect == logicalGeometry) and scales a moving/resizing source
+    // into the rest-sized canvas during animations.
+    const qreal texW = textureSize.width();
+    const qreal texH = textureSize.height();
+    const QRectF destF((source.x() - sourceRect.x()) / sourceRect.width() * texW,
+                       (source.y() - sourceRect.y()) / sourceRect.height() * texH,
+                       source.width() / sourceRect.width() * texW, source.height() / sourceRect.height() * texH);
+    const KWin::Rect destination(qRound(destF.x()), qRound(destF.y()), qRound(destF.width()), qRound(destF.height()));
+    if (!fbo.blitFromRenderTarget(renderTarget, viewport, source, destination)) {
+        state.backdropRect = QVector4D();
+        return;
+    }
+    // Valid sub-rect in TOP-DOWN normalized coords — matches backdropTexel's
+    // clamp space. Same-frame captures UNION with the slices other outputs
+    // already blitted (adjacent outputs tile the canvas, so the bounding box
+    // is exact for the straddling case).
+    QVector4D destNorm(static_cast<float>(destF.x() / textureSize.width()),
+                       static_cast<float>(destF.y() / textureSize.height()),
+                       static_cast<float>(destF.width() / textureSize.width()),
+                       static_cast<float>(destF.height() / textureSize.height()));
+    if (sameGeneration && state.backdropRect.z() > 0.0f && state.backdropRect.w() > 0.0f) {
+        const float x0 = qMin(state.backdropRect.x(), destNorm.x());
+        const float y0 = qMin(state.backdropRect.y(), destNorm.y());
+        const float x1 = qMax(state.backdropRect.x() + state.backdropRect.z(), destNorm.x() + destNorm.z());
+        const float y1 = qMax(state.backdropRect.y() + state.backdropRect.w(), destNorm.y() + destNorm.w());
+        destNorm = QVector4D(x0, y0, x1 - x0, y1 - y0);
+    }
+    state.backdropRect = destNorm;
+    state.backdropFrameMs = frameStamp;
+}
+
+} // namespace PlasmaZones

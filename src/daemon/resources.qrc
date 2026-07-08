@@ -11,6 +11,7 @@
         <file alias="LayoutPreview.qml">../ui/LayoutPreview.qml</file>
         <file alias="OsdDismissable.qml">../ui/OsdDismissable.qml</file>
         <file alias="LayoutOsdContent.qml">../ui/LayoutOsdContent.qml</file>
+        <file alias="SurfaceDecoration.qml">../ui/SurfaceDecoration.qml</file>
         <file alias="NavigationOsdContent.qml">../ui/NavigationOsdContent.qml</file>
         <file alias="PassiveOverlayShell.qml">../ui/PassiveOverlayShell.qml</file>
         <file alias="SnapAssistContent.qml">../ui/SnapAssistContent.qml</file>

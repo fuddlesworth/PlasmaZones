@@ -1,0 +1,46 @@
+{
+    "id": "glow",
+    "name": "Glow",
+    "description": "A soft coloured shadow that hugs the surface's edge, brightest against the window and fading out over the glow size. It follows the frame's rounded corners and dims when the surface loses focus.",
+    "author": "PlasmaZones",
+    "version": "1.1",
+    "category": "Ambience",
+    "fragmentShader": "effect.frag",
+    "paddingParam": "glowSize",
+    "parameters": [
+        {
+            "id": "glowStrength",
+            "name": "Glow strength",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "Intensity of the halo at the window edge"
+        },
+        {
+            "id": "glowSize",
+            "name": "Glow size",
+            "type": "int",
+            "default": 24,
+            "min": 4,
+            "max": 64,
+            "description": "How far the halo reaches from the edge (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Corner rounding the halo follows (px, match the Border pack)"
+        },
+        {
+            "id": "glowColor",
+            "name": "Glow tint",
+            "type": "color",
+            "default": "#ff3daee9",
+            "description": "Colour of the halo"
+        }
+    ]
+}

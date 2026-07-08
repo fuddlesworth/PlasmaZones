@@ -40,6 +40,10 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PhosphorSurfaceShaders {
+class SurfaceShaderRegistry;
+}
+
 namespace PhosphorEngine {
 class WindowRegistry;
 }
@@ -271,6 +275,7 @@ private:
      */
     void setupAnimationProfiles();
     void setupAnimationShaderEffects();
+    void setupSurfaceShaderEffects();
     /// Push the current `Settings::animationProfile()` into the registry
     /// under the shell's well-known paths. Called from
     /// `setupAnimationProfiles()` at startup and from the coalescing
@@ -804,6 +809,18 @@ private:
     /// before this registry is reset, preventing dangling-pointer
     /// access during shutdown.
     std::unique_ptr<PhosphorAnimationShaders::AnimationShaderRegistry> m_animationShaderRegistry;
+
+    /// Surface shader effect discovery (window border / rounded corners / glow
+    /// — the third shader-pack category beside zone shaders + animation
+    /// transitions). Scans `plasmazones/surface` from XDG data dirs and monitors
+    /// for user-dropped packs via QFileSystemWatcher, mirroring
+    /// m_animationShaderRegistry. The daemon warm-bakes discovered packs so the
+    /// first surface paint never blocks on glslang, and lends the registry to
+    /// the overlay service (setSurfaceShaderRegistry, Stage d) whose
+    /// SurfaceShaderItem hosts render decoration packs on OSD / popup surfaces.
+    /// Declared AFTER m_overlayService: stop() nulls the overlay's borrow
+    /// before resetting this registry.
+    std::unique_ptr<PhosphorSurfaceShaders::SurfaceShaderRegistry> m_surfaceShaderRegistry;
 
     /// Phase 4 sub-commit 7: user-authored curve / profile scanners.
     /// Scan `plasmazones/curves` and `plasmazones/profiles` from XDG

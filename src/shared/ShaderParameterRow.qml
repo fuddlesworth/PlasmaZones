@@ -57,7 +57,8 @@ Item {
     /// `compact` is false — non-compact rows let the slider fill width.
     property int sliderControlWidth: Kirigami.Units.gridUnit * 16
     property int colorButtonSize: compact ? Kirigami.Units.gridUnit * 2 : Kirigami.Units.gridUnit * 3
-    property int colorLabelWidth: compact ? Kirigami.Units.gridUnit * 5 : Kirigami.Units.gridUnit * 7
+    // Sized for the 9-char #AARRGGBB hex the swatch label shows (alpha-first).
+    property int colorLabelWidth: compact ? Kirigami.Units.gridUnit * 6 : Kirigami.Units.gridUnit * 8
     readonly property string paramType: paramData ? (paramData.type || "") : ""
     readonly property bool isSvgImage: paramType === "image" && imagePickerButton.currentPath.length > 0 && (imagePickerButton.currentPath.toLowerCase().endsWith(".svg") || imagePickerButton.currentPath.toLowerCase().endsWith(".svgz"))
 
@@ -135,8 +136,10 @@ Item {
 
                     var fallback = paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : 0.5;
                     var v = paramDelegate._value(fallback);
-                    var num = Number(v);
-                    return isNaN(num) ? Number(fallback) || 0.5 : num;
+                    // _numberOr rejects NaN/Infinity/non-numeric so a legitimate
+                    // stored 0 survives (a `Number(x) || 0.5` coercion would
+                    // wrongly turn 0 into 0.5).
+                    return paramDelegate._numberOr(v, paramDelegate._numberOr(fallback, 0.5));
                 }
                 // Defer host-driven updates while the user is interacting,
                 // INCLUDING keyboard arrow adjustments — `pressed` is only
@@ -202,7 +205,11 @@ Item {
 
             visible: paramDelegate.paramType === "bool"
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
-            text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
+            // In compact mode the description is already rendered in the
+            // row's left-hand label column, so repeating it as the checkbox
+            // label would duplicate it. Only the wide layout (name-only left
+            // label) needs the checkbox to carry the description.
+            text: (paramDelegate.compact || !paramDelegate.paramData) ? "" : (paramDelegate.paramData.description || "")
             onToggled: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id, checked);
@@ -294,7 +301,16 @@ Item {
 
         Label {
             visible: paramDelegate.paramType === "color"
-            text: colorSwatch.currentColor.toString().toUpperCase()
+            // #AARRGGBB (alpha-first), not currentColor.toString() — the latter
+            // emits #RRGGBB and hides the alpha channel this param carries.
+            // Mirrors ColorSwatchRow's display and the stored wire form.
+            text: {
+                function pad(v) {
+                    return Math.round(v * 255).toString(16).padStart(2, '0');
+                }
+                var c = colorSwatch.currentColor;
+                return ("#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b)).toUpperCase();
+            }
             Layout.preferredWidth: paramDelegate.colorLabelWidth
             font: Kirigami.Theme.fixedWidthFont
             opacity: 0.7
@@ -377,7 +393,11 @@ Item {
                         return 1024;
 
                     var v = paramDelegate.currentValues[paramDelegate.paramData.id + "_svgSize"];
-                    return Number(v) || 1024;
+                    // _numberOr for pattern-consistency with the float/int rows
+                    // (a `Number(v) || 1024` coercion misreads falsy values).
+                    // The spinbox's own `from: 64` floor means a stored 0 would
+                    // display as 64 regardless.
+                    return paramDelegate._numberOr(v, 1024);
                 }
                 when: !svgSizeSpinBox.activeFocus
                 restoreMode: Binding.RestoreNone

@@ -37,6 +37,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendAutotilingSchema(s);
     appendWindowsSchema(s);
     appendGapsSchema(s);
+    appendSurfaceSchema(s);
 
     return s;
 }
@@ -638,8 +639,17 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::triggerDistanceMin(), CD::triggerDistanceMax())},
-        {CD::positionKey(), CD::position(), QMetaType::Int, {}, clampInt(0, 8)},
-        {CD::layoutModeKey(), CD::layoutMode(), QMetaType::Int, {}, clampInt(0, 2)},
+        {CD::positionKey(),
+         CD::position(),
+         QMetaType::Int,
+         {},
+         clampInt(static_cast<int>(ZoneSelectorPosition::TopLeft),
+                  static_cast<int>(ZoneSelectorPosition::BottomRight))},
+        {CD::layoutModeKey(),
+         CD::layoutMode(),
+         QMetaType::Int,
+         {},
+         clampInt(static_cast<int>(ZoneSelectorLayoutMode::Grid), static_cast<int>(ZoneSelectorLayoutMode::Vertical))},
         {CD::previewWidthKey(),
          CD::previewWidth(),
          QMetaType::Int,
@@ -660,7 +670,7 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          CD::sizeMode(),
          QMetaType::Int,
          {},
-         clampInt(0, static_cast<int>(ZoneSelectorSizeMode::Manual))},
+         clampInt(static_cast<int>(ZoneSelectorSizeMode::Auto), static_cast<int>(ZoneSelectorSizeMode::Manual))},
         {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, {}, clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
     };
 }
@@ -909,6 +919,24 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::outerGapRightMin(), CD::outerGapRightMax())},
+    };
+}
+
+// ─── Surface ────────────────────────────────────────────────────────────────
+// Per-surface decoration tree: a DecorationProfileTree (the user-applied surface
+// shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested
+// JSON object — same QVariantMap storage shape as the autotile PerAlgorithmSettings
+// entry above and the animation ShaderProfileTree blob, with no sanitizer because
+// the per-pack override schema is not known to the config layer.
+
+void appendSurfaceSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::surfaceGroup()] = {
+        // Per-surface decoration tree. The default is the (empty) ConfigDefaults
+        // baseline serialized to a map; a user engages packs from the Decoration
+        // pages.
+        {CD::surfaceDecorationTreeKey(), CD::decorationProfileTree().toJson().toVariantMap(), QMetaType::QVariantMap},
     };
 }
 

@@ -481,15 +481,10 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // empty zoneId (e.g. a float toggle when no pre-tile geometry is
         // stored, so applyGeometryForFloat sends nothing). Idempotent — a
         // no-op if the window wasn't snap-tracked.
+        // clearWindowSnapped also drops the ZoneCache entry (the IsSnapped /
+        // Zone rule-fact source), covering float paths that don't emit
+        // windowStateChanged with an empty zone.
         m_snapHandler->clearWindowSnapped(windowId);
-        // Same backstop for the ZoneCache, the source of the IsSnapped / Zone
-        // rule-match fields (m_snapHandler's set is a separate border-tracking
-        // cache). Without this, a float path that doesn't emit windowStateChanged
-        // with an empty zone leaves the zone entry stale, so IsSnapped stays true
-        // and a baseline border / title-bar rule scoped to snapped windows keeps
-        // drawing / hiding on the now-floating window. clearWindowZone re-resolves
-        // the rules when it actually drops an entry.
-        m_navigationHandler->clearWindowZone(windowId);
 
         // Invalidate any stale instant-restore entry for this app. The snap
         // restore cache (SnapHandler) is a single-shot latency cache populated at
@@ -504,10 +499,12 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // appId to survive the window's identity change across close/reopen.
         m_snapHandler->invalidateRestore(::PhosphorIdentity::WindowId::extractAppId(windowId));
     }
-    // The change-gated writes above (setWindowFloating / clearWindowZone) re-resolve
-    // this window's rules only when a match field actually flips. That is not enough
-    // on the cross-monitor drag-out path: the cross-screen handoff pre-sets the
-    // floating / zone caches while the window is still moving, so by the time this
+    // The change-gated write above (setWindowFloating, plus the zone-cache
+    // clear that now runs inside clearWindowSnapped on the floating branch)
+    // re-resolves this window's rules only when a match field actually flips.
+    // That is not enough on the cross-monitor drag-out path: the cross-screen
+    // handoff pre-sets the floating / zone caches while the window is still
+    // moving, so by the time this
     // authoritative windowFloatingChanged arrives both writes are no-ops and the
     // hide-title-bar / border reconcile never runs — the floated window keeps its
     // snap chrome (hidden title bar), ignoring the show-title-bar-when-floating rule.
@@ -538,11 +535,13 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
 
 void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowId)
 {
-    // Run when there are rules OR a config-default border / hidden title bar could
-    // apply: both are scope-gated on placement state (isSnapped / isTiled / normal),
-    // so a snap / unsnap / zone change must re-resolve the window's appearance. With
-    // neither, a placement change can't change any window's appearance — skip.
-    if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault()) {
+    // Run when there are rules OR a config-default border / hidden title bar OR any
+    // decoration-tree chain could apply: all are placement-sensitive (rule scopes,
+    // appearance scope gating, and the placement-derived surface paths the tree
+    // resolves through), so a snap / unsnap / zone change must re-resolve the
+    // window's appearance. With none of them, a placement change can't change any
+    // window's appearance — skip.
+    if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault() && !hasDecorationTreeContent()) {
         return;
     }
     // Coalesce: a single float toggle emits BOTH windowFloatingChanged and
@@ -570,7 +569,9 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
 void PlasmaZonesEffect::flushPendingRuleInvalidations()
 {
     const QSet<QString> windowIds = std::exchange(m_pendingRuleInvalidations, {});
-    if (windowIds.isEmpty() || (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault())) {
+    if (windowIds.isEmpty()
+        || (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault()
+            && !hasDecorationTreeContent())) {
         return;
     }
     // The match cache is keyed on (windowId, ruleSet revision); neither moves on a
@@ -585,18 +586,18 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
         }
         // Recreate this window's border so a state-scoped border colour
         // re-applies. Border overlays are visual-only, so build them only for a
-        // window on the current desktop — matching updateAllBorders, which gates
+        // window on the current desktop — matching updateAllDecorations, which gates
         // the same call this way to avoid building an invisible off-desktop item
         // that the next desktop switch tears down.
         if (w->isOnCurrentDesktop()) {
-            updateWindowBorder(windowId, w);
+            updateWindowDecoration(windowId, w);
         }
         // Re-resolve the hide-title-bar override too: a SetHideTitleBar rule
         // scoped on a placement field (IsSnapped / IsFloating / Zone / Mode) must
         // recompute on a snap/unsnap, otherwise a title bar hidden WHEN isSnapped
-        // stays hidden after unsnap until the next updateAllBorders. The
+        // stays hidden after unsnap until the next updateAllDecorations. The
         // decoration state survives desktop switches, so reconcile it for the
-        // window regardless of which desktop it sits on (as updateAllBorders does).
+        // window regardless of which desktop it sits on (as updateAllDecorations does).
         reconcileRuleHiddenTitleBar(windowId, w);
         // An opacity-only (borderless) window needs an explicit repaint for its
         // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
@@ -616,7 +617,7 @@ void PlasmaZonesEffect::scheduleBorderSweep()
     // before the turn ends.
     QTimer::singleShot(0, this, [this] {
         m_borderSweepPending = false;
-        updateAllBorders();
+        updateAllDecorations();
     });
 }
 

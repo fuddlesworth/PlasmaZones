@@ -329,7 +329,13 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
     // path has to clean up after itself.
     m_autotileTargetZones.remove(windowId);
     m_centeredWaylandZones.remove(windowId);
-    m_effect->removeWindowBorder(windowId);
+    // Shared placement-flip funnel (update-or-remove in the same turn) —
+    // the bare removal here left the float paths WITHOUT a bulk
+    // updateAllDecorations follow-up (daemon auto-float past maxWindows)
+    // undecorated until an unrelated refresh, the same drag-start blackout
+    // the snap engine had. The tiled/floating facts were flipped above, so
+    // the funnel resolves the floating-state chain.
+    m_effect->reconcileDecorationOnPlacementFlip(windowId);
     unmaximizeMonocleWindow(windowId);
 }
 

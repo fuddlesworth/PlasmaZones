@@ -250,6 +250,10 @@ public:
     /// so the summary renders the friendly name rather than the raw id. Sourced
     /// from the overlay/snapping shader registry, NOT the animation one.
     void setOverlayShaderLabelLookup(LabelLookup fn);
+    /// Resolver for `OverrideDecorationChain` action params (surface-pack ids
+    /// like "frosted-glass") so the summary renders pack names. Sourced from
+    /// the surface shader registry, distinct from both shader lookups above.
+    void setDecorationPackLabelLookup(LabelLookup fn);
     /// Resolver for `OverrideAnimationCurve` action params (curve wire strings
     /// like "0.33,1.00,0.68,1.00" / "spring:12,1") so the summary renders the
     /// friendly preset name ("Standard (Cubic)", "Spring (12, 1)", "Custom")
@@ -306,6 +310,7 @@ private:
     LabelLookup m_shaderEffectLookup;
     LabelLookup m_overlayShaderLookup;
     LabelLookup m_curveLookup;
+    LabelLookup m_decorationPackLookup;
 };
 
 } // namespace PlasmaZones

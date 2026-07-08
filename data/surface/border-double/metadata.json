@@ -1,0 +1,61 @@
+{
+    "id": "border-double",
+    "name": "Double Border",
+    "description": "Rounded corners with two concentric border lines separated by a clear gap, each with its own width and colour. The lines dim when the surface loses focus. Both widths, the gap, the corner radius and the two colours are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Borders",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "outerWidth",
+            "name": "Outer width",
+            "type": "int",
+            "default": 2,
+            "min": 0,
+            "max": 10,
+            "description": "Thickness of the outer line (px)"
+        },
+        {
+            "id": "gapWidth",
+            "name": "Gap width",
+            "type": "int",
+            "default": 3,
+            "min": 1,
+            "max": 12,
+            "description": "Clear space between the two lines (px)"
+        },
+        {
+            "id": "innerWidth",
+            "name": "Inner width",
+            "type": "int",
+            "default": 1,
+            "min": 0,
+            "max": 10,
+            "description": "Thickness of the inner line (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Roundness of the corners (px, 0 for square)"
+        },
+        {
+            "id": "colorA",
+            "name": "Outer colour",
+            "type": "color",
+            "default": "#ff3daee9",
+            "description": "Colour of the outer line"
+        },
+        {
+            "id": "colorB",
+            "name": "Inner colour",
+            "type": "color",
+            "default": "#803daee9",
+            "description": "Colour of the inner line"
+        }
+    ]
+}

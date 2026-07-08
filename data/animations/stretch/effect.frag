@@ -4,28 +4,21 @@
 // Stretch fragment shader — samples the elastic-deformed window content.
 //
 // The vertex stage (effect.vert) does the rubber-band deformation and
-// hands each fragment its sampling card uv, a shade factor, and the
-// old->new cross-fade through vStretch. This stage samples the window at
-// the card uv, cross-fades the captured old frame into the live content as
-// the move settles (so a resize re-lays correctly), applies the shade, and
-// masks the window's [0, 1] card rect.
+// hands each fragment its sampling card uv and the old->new cross-fade
+// through vStretch. This stage samples the window at the card uv,
+// cross-fades the captured old frame into the live content as the move
+// settles (so a resize re-lays correctly), and masks the window's [0, 1]
+// card rect.
 
 #ifdef PLASMAZONES_KWIN
-uniform sampler2D uOldWindow;
 // .xy = sampling card uv, .z = old->new cross-fade.
 layout(location = 1) in vec3 vStretch;
 #endif
 
 #include <anchor_remap.glsl>
 
-#ifdef PLASMAZONES_KWIN
-// Sample the captured OLD content at card-space uv, mirroring
-// surfaceColor's anchor fold + KWin Y-up flip + window-rule opacity.
-vec4 oldColor(vec2 uv) {
-    vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
-    return texture(uOldWindow, vec2(t.x, 1.0 - t.y)) * iWindowOpacity;
-}
-#endif
+// uOldWindow + oldColor(): the shared captured-old-frame sampler.
+#include <old_content.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN

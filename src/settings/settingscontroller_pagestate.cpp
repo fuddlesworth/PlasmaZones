@@ -17,7 +17,6 @@
 #include "../core/logging.h"
 
 #include <QDebug>
-#include <QScopeGuard>
 
 namespace PlasmaZones {
 
@@ -74,6 +73,57 @@ const Settings::ConfigKeyList& animationConfigKeys()
     };
     return keys;
 }
+
+// Every decoration leaf edits the single shared DecorationProfileTree settings
+// key (one JSON blob covering windows + OSDs + popups), so
+// pageGroupChildren("decorations") — the canonical leaf set — identifies them
+// all and Reset/Discard act on the whole tree, mirroring the animation shared
+// domain above.
+bool isDecorationPage(const QString& page)
+{
+    return SettingsController::pageGroupChildren().value(QStringLiteral("decorations")).contains(page);
+}
+
+// The decoration "value" surface: one Store-backed key. It cannot ride the
+// pageOwnedConfigKeys manifest — every decoration leaf would own the
+// same key, violating the manifest's one-owner invariant — so the decoration
+// branches in isPageDirty/resetPage/discardPage dispatch through this list
+// instead. Unlike the animation domain there are no side files: reset/discard
+// is entirely resetKeys/discardKeys, and the decorationProfileTreeChanged
+// re-emit drives DecorationPageController::profilesChanged so open cards
+// refresh.
+const Settings::ConfigKeyList& decorationConfigKeys()
+{
+    using CD = ConfigDefaults;
+    static const Settings::ConfigKeyList keys{
+        {CD::surfaceGroup(), CD::surfaceDecorationTreeKey()},
+    };
+    return keys;
+}
+
+// RAII suppression of onSettingsPropertyChanged around bulk resetKeys /
+// discardKeys NOTIFY storms: raises the loading flag for the enclosing scope
+// and restores the previous value on exit. Every reset/discard branch shares
+// this instead of hand-rolling the save/set/qScopeGuard triple.
+class LoadingScope
+{
+public:
+    explicit LoadingScope(bool& flag)
+        : m_flag(flag)
+        , m_previous(flag)
+    {
+        flag = true;
+    }
+    ~LoadingScope()
+    {
+        m_flag = m_previous;
+    }
+    Q_DISABLE_COPY_MOVE(LoadingScope)
+
+private:
+    bool& m_flag;
+    bool m_previous;
+};
 
 } // namespace
 
@@ -160,7 +210,14 @@ void SettingsController::setNeedsSave(bool needs)
     // always resolves to a concrete leaf page.
     if (needs) {
         const QString target = m_externalEditStack.isEmpty() ? m_activePage : m_externalEditStack.top();
+        // The target must resolve to a concrete leaf page; a parent-category id
+        // would poison m_dirtyPages with a page the user never directly edits.
+        // Assert in debug, and in release skip the insert rather than dirtying a
+        // redirect target.
         Q_ASSERT(!parentPageRedirects().contains(target));
+        if (parentPageRedirects().contains(target)) {
+            return;
+        }
         if (!m_dirtyPages.contains(target)) {
             m_dirtyPages.insert(target);
             Q_EMIT dirtyPagesChanged();
@@ -233,6 +290,21 @@ bool SettingsController::isPageDirty(const QString& page) const
         return false;
     }
 
+    // Decoration pages share the single DecorationProfileTree key — value-based
+    // like the manifest pages (see decorationConfigKeys for why the key can't
+    // live in the manifest itself). Every tree-backed decoration leaf
+    // (windows/osds/popups plus the sets and shaders library pages; the
+    // manifest-owned window-appearance leaf is handled by the manifest branch
+    // above) reports the same state, matching the shared-domain semantics: an
+    // edit on any decoration page is an edit of the one tree.
+    if (isDecorationPage(page)) {
+        for (const auto& gk : decorationConfigKeys()) {
+            if (m_settings.isKeyModified(gk.first, gk.second))
+                return true;
+        }
+        return false;
+    }
+
     if (m_dirtyPages.contains(page))
         return true;
     // Parent / virtual-parent category: dirty if any child leaf in
@@ -260,9 +332,10 @@ bool SettingsController::pageSupportsReset(const QString& page) const
     // appearance page, whose Windows.* + Gaps.* keys are in the manifest); ordering
     // pages drop the custom order; shortcuts pages unassign every quick slot; the
     // virtual screens page unsplits every monitor; animation pages clear every
-    // per-event override and reset the animation config keys.
+    // per-event override and reset the animation config keys; decoration pages
+    // reset the shared DecorationProfileTree key.
     return pageOwnedConfigKeys().contains(page) || isOrderingPage(page) || isShortcutsPage(page)
-        || page == QLatin1String("virtualscreens") || isAnimationPage(page);
+        || page == QLatin1String("virtualscreens") || isAnimationPage(page) || isDecorationPage(page);
 }
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
@@ -271,6 +344,30 @@ bool SettingsController::pageSupportsDiscard(const QString& page) const
     // already covered by pageSupportsReset). Kept as a distinct query so the two
     // kebab items can diverge if a future page becomes discard-only.
     return pageSupportsReset(page);
+}
+
+void SettingsController::reconcilePagesDirty(const QSet<QString>& pages)
+{
+    // Batched reconcilePageDirty: adjust every page's m_dirtyPages membership
+    // against its value-based truth, then emit dirtyPagesChanged AT MOST once —
+    // the shared-domain reset paths reconcile every leaf of a group and would
+    // otherwise fire one NOTIFY per flipped leaf (the discard paths already
+    // batch this way).
+    bool changed = false;
+    for (const QString& page : pages) {
+        const bool dirty = isPageDirty(page);
+        const bool had = m_dirtyPages.contains(page);
+        if (dirty && !had) {
+            m_dirtyPages.insert(page);
+            changed = true;
+        } else if (!dirty && had) {
+            m_dirtyPages.remove(page);
+            changed = true;
+        }
+    }
+    if (changed) {
+        Q_EMIT dirtyPagesChanged();
+    }
 }
 
 void SettingsController::reconcilePageDirty(const QString& page)
@@ -315,6 +412,29 @@ void SettingsController::reconcileRuleBackedDirty()
 
 void SettingsController::resetPage(const QString& page)
 {
+    // Manifest-owned pages FIRST, mirroring isPageDirty and discardPage. A page
+    // can belong to a shared-domain GROUP (animations / decorations) yet own its
+    // own config keys: window-appearance is a decorations-group child, so
+    // isDecorationPage(page) is true, but its Windows.* / Gaps.* keys live in
+    // the manifest. Checking the shared-domain branches first would reset the
+    // whole DecorationProfileTree instead of the page's own keys, and since
+    // isPageDirty and discardPage both route window-appearance through its
+    // manifest, Reset must too or the three disagree.
+    {
+        const auto& manifest = pageOwnedConfigKeys();
+        const auto ownedIt = manifest.constFind(page);
+        if (ownedIt != manifest.constEnd()) {
+            // Suppress onSettingsPropertyChanged for the reset's NOTIFY storm;
+            // reconcile `page`'s dirty state explicitly below.
+            {
+                const LoadingScope loadingScope(m_loading);
+                m_settings.resetKeys(*ownedIt);
+            }
+            reconcilePageDirty(page);
+            return;
+        }
+    }
+
     // Animation pages (whole tree, shared domain): reset to defaults =
     // clear every per-event override file AND reset the animation config keys
     // (Profile, ShaderProfileTree, WindowFiltering, Enabled, Backend) to their
@@ -325,18 +445,39 @@ void SettingsController::resetPage(const QString& page)
     // the config reset; mark the active page dirty explicitly below.
     if (isAnimationPage(page)) {
         if (m_animationsPage != nullptr) {
-            const bool wasLoading = m_loading;
-            m_loading = true;
-            const auto restoreLoading = qScopeGuard([this, wasLoading] {
-                m_loading = wasLoading;
-            });
+            const LoadingScope loadingScope(m_loading);
             m_animationsPage->clearAllOverrides();
             m_settings.resetKeys(animationConfigKeys());
         }
         // isPageDirty(animation) is value-based (hasPendingChanges || any
-        // animation key modified), so reconcilePageDirty syncs the active page's
-        // m_dirtyPages entry against the post-reset truth.
-        reconcilePageDirty(page);
+        // animation key modified). Reconcile EVERY animation leaf, not just the
+        // active page: the shared domain means an edit made while a sibling
+        // subpage was active left ITS m_dirtyPages entry behind, and a reset
+        // that lands back on the committed baseline must clear those too or
+        // needsSave() sticks true with no badge to explain it. Batched so
+        // dirtyPagesChanged fires at most once (like the discard path).
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
+        return;
+    }
+
+    // Decoration pages (whole tree, shared domain): reset the single
+    // DecorationProfileTree key to its schema default — the empty/neutral tree
+    // (borders are rule-owned; the tree carries only opt-in shader-pack
+    // decoration). Staged like ordinary edits: Save commits, Discard restores
+    // the baseline. Same NOTIFY-storm suppression as the manifest path.
+    if (isDecorationPage(page)) {
+        {
+            const LoadingScope loadingScope(m_loading);
+            m_settings.resetKeys(decorationConfigKeys());
+        }
+        // isPageDirty(decoration) is value-based. Reconcile EVERY decoration
+        // leaf, not just the active page: the shared key means an edit made
+        // while a sibling leaf was active left ITS m_dirtyPages entry behind,
+        // and a reset that lands back on the committed baseline must clear
+        // those too or needsSave() sticks true with no badge to explain it
+        // (mirrors the discardPage decoration branch). Batched so
+        // dirtyPagesChanged fires at most once.
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decorations")));
         return;
     }
 
@@ -399,27 +540,10 @@ void SettingsController::resetPage(const QString& page)
         return;
     }
 
-    const auto& manifest = pageOwnedConfigKeys();
-    const auto it = manifest.constFind(page);
-    if (it == manifest.constEnd()) {
-        qCWarning(PlasmaZones::lcCore) << "resetPage: no config manifest for page" << page;
-        return;
-    }
-    // Suppress onSettingsPropertyChanged for the reset's NOTIFY storm — it
-    // would otherwise mark the ACTIVE page dirty (which may differ from the
-    // page being reset). We reconcile `page`'s dirty state explicitly below.
-    {
-        const bool wasLoading = m_loading;
-        m_loading = true;
-        const auto restoreLoading = qScopeGuard([this, wasLoading] {
-            m_loading = wasLoading;
-        });
-        m_settings.resetKeys(*it);
-    }
-    // Resetting to defaults usually diverges from the saved baseline, so the
-    // page normally becomes dirty (stage → Save/Discard). If the defaults
-    // already matched the baseline it stays clean — reconcile handles both.
-    reconcilePageDirty(page);
+    // Manifest-owned pages were handled at the top of this function; anything
+    // reaching here matched no manifest entry and no shared-domain / ordering /
+    // shortcut / virtual-screen branch, so there is nothing to reset.
+    qCWarning(PlasmaZones::lcCore) << "resetPage: no config manifest for page" << page;
 }
 
 void SettingsController::discardPage(const QString& page)
@@ -428,11 +552,7 @@ void SettingsController::discardPage(const QString& page)
     const auto it = manifest.constFind(page);
     if (it != manifest.constEnd()) {
         {
-            const bool wasLoading = m_loading;
-            m_loading = true;
-            const auto restoreLoading = qScopeGuard([this, wasLoading] {
-                m_loading = wasLoading;
-            });
+            const LoadingScope loadingScope(m_loading);
             m_settings.discardKeys(*it);
         }
         // Every owned key is back at the committed baseline, so the page is clean.
@@ -496,24 +616,31 @@ void SettingsController::discardPage(const QString& page)
             m_animationsPage->revertPending();
         }
         {
-            const bool wasLoading = m_loading;
-            m_loading = true;
-            const auto restoreLoading = qScopeGuard([this, wasLoading] {
-                m_loading = wasLoading;
-            });
+            const LoadingScope loadingScope(m_loading);
             m_settings.discardKeys(animationConfigKeys());
         }
-        // revertPending() left hasPendingChanges() false; clear every animation
-        // leaf's m_dirtyPages marker so the global needsSave drops the entries
-        // the pendingChangesChanged handler had attributed to the tree.
-        bool changed = false;
-        for (const QString& leaf : pageGroupChildren().value(QStringLiteral("animations"))) {
-            if (m_dirtyPages.remove(leaf))
-                changed = true;
+        // revertPending() left hasPendingChanges() false; reconcile every
+        // animation leaf against the value-based truth (all clean post-revert)
+        // so the global needsSave drops the entries the pendingChangesChanged
+        // handler had attributed to the tree. Batched: one emission at most.
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
+        return;
+    }
+
+    // Decoration pages share the single DecorationProfileTree key — discard
+    // reverts it to the committed baseline. discardKeys re-emits
+    // decorationProfileTreeChanged, which DecorationPageController forwards as
+    // profilesChanged so the open cards refresh. Clear every decoration leaf's
+    // stale m_dirtyPages marker: the shared key means one leaf's edit may have
+    // badged the others.
+    if (isDecorationPage(page)) {
+        {
+            const LoadingScope loadingScope(m_loading);
+            m_settings.discardKeys(decorationConfigKeys());
         }
-        if (changed) {
-            Q_EMIT dirtyPagesChanged();
-        }
+        // Reconcile every decoration leaf against the value-based truth (all
+        // clean post-discard). Batched: one emission at most.
+        reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("decorations")));
         return;
     }
 

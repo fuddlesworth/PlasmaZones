@@ -1,0 +1,243 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "../plasmazoneseffect.h"
+
+#include "shader_internal.h"
+
+#include <effect/effecthandler.h>
+#include <opengl/glshader.h>
+#include <opengl/gltexture.h>
+
+#include <PhosphorAudio/CavaSpectrumProvider.h>
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorSurface/SurfaceShaderEffect.h>
+
+#include <QImage>
+#include <QLoggingCategory>
+
+#include <memory>
+#include <epoxy/gl.h>
+
+// Audio-reactive surface decorations (CAVA). The compositor has no daemon-style
+// audio path, so the effect runs its own CavaSpectrumProvider and feeds the
+// spectrum to audio-reactive decoration packs through surface_audio.glsl. Split
+// out of surfacelayers.cpp to keep that TU under the 800-line limit; the fold
+// itself (which binds the uploaded texture) still lives there. See the member
+// docs in plasmazoneseffect.h.
+
+namespace PlasmaZones {
+
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+
+namespace {
+// A spectrum that has not changed for this long is treated as silence: the
+// per-vsync recomposite stands down (audioReactiveDriving) and the next changed
+// frame is treated as an idle→active edge that re-primes the paint loop
+// (onEffectAudioSpectrum). One threshold shared by both so the "still driving"
+// and "was idle" tests are exact complements.
+constexpr qint64 kAudioIdleQuietMs = 200;
+} // namespace
+
+bool PlasmaZonesEffect::audioActive() const
+{
+    return m_enableAudioVisualizer && m_audioProvider && m_audioProvider->isRunning() && m_audioSpectrumSize > 0;
+}
+
+bool PlasmaZonesEffect::audioReactiveDriving() const
+{
+    if (!audioActive() || m_audioSpectrumLastChangeMs < 0) {
+        return false;
+    }
+    // Quiet window: once the spectrum stops changing (a paused / silent track
+    // settles to repeated frames, deduped in onEffectAudioSpectrum) let the
+    // per-vsync recomposite idle. A fresh spectrum re-stamps the change time and
+    // primes a repaint, so the loop resumes the instant audio returns.
+    return (ShaderInternal::shaderClockNowMs() - m_audioSpectrumLastChangeMs) < kAudioIdleQuietMs;
+}
+
+bool PlasmaZonesEffect::hasAudioReactiveDecoration() const
+{
+    // Read the audio flag from pack METADATA (SurfaceShaderEffect::audio), not a
+    // compiled shader, so the run gate resolves before a window's first paint.
+    // A decoration entry existing (regardless of shaderApplied, which is set a
+    // step later by reconcileDecorationShader) means the window will render this
+    // chain — that is the gate; a shaderApplied check here would miss the entry
+    // updateWindowDecoration just inserted and delay cava startup a cycle.
+    for (auto it = m_windowDecorations.cbegin(); it != m_windowDecorations.cend(); ++it) {
+        for (const QString& packId : it->chain) {
+            if (m_surfaceShaderRegistry.effect(packId).audio) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void PlasmaZonesEffect::onEffectAudioSpectrum(const QVector<float>& spectrum)
+{
+    // Store on the compositor thread; the composite fold uploads it to the GL
+    // texture on the next paint (m_audioSpectrumDirty). Skip an identical frame
+    // (cava repeats the last value on a silent track): no upload/repaint churn,
+    // and the un-stamped change time lets audioReactiveDriving() settle to idle.
+    if (m_audioSpectrum == spectrum) {
+        return;
+    }
+    const qint64 now = ShaderInternal::shaderClockNowMs();
+    // Was the paint loop idle (first spectrum, or a silence gap past the quiet
+    // window)? Only the idle→active EDGE needs a manual kick; steady-state
+    // repaints are carried by postPaintScreen's windowSurfaceAnimates loop, which
+    // is visibility-gated (isOnCurrentDesktop). Priming every frame would
+    // full-recomposite the screen at the cava framerate even for a minimized or
+    // off-desktop audio border — exactly what the visibility gate avoids.
+    const bool wasIdle = m_audioSpectrumLastChangeMs < 0 || (now - m_audioSpectrumLastChangeMs) >= kAudioIdleQuietMs;
+    m_audioSpectrum = spectrum;
+    m_audioSpectrumSize = static_cast<int>(spectrum.size());
+    m_audioSpectrumDirty = true;
+    m_audioSpectrumLastChangeMs = now;
+    // An audio border emits no damage of its own, so on the resume edge damage
+    // the screen once to restart the self-sustaining loop.
+    if (wasIdle && KWin::effects && audioActive()) {
+        KWin::effects->addRepaintFull();
+    }
+}
+
+void PlasmaZonesEffect::scheduleEffectAudioSync()
+{
+    if (m_audioSyncScheduled) {
+        return;
+    }
+    m_audioSyncScheduled = true;
+    // Defer to event-loop return so a remove-then-readd (focus change removes
+    // then re-adds a decoration) or the two async settings replies collapse to
+    // ONE syncEffectAudioState — no blocking cava stop()+respawn on the
+    // synchronous refresh path, and no kill when a decoration is re-added in the
+    // same turn. `this` as the context object discards the call if the effect is
+    // destroyed before it runs.
+    QMetaObject::invokeMethod(
+        this,
+        [this]() {
+            m_audioSyncScheduled = false;
+            syncEffectAudioState();
+        },
+        Qt::QueuedConnection);
+}
+
+void PlasmaZonesEffect::syncEffectAudioState()
+{
+    const bool wantRun = m_enableAudioVisualizer && hasAudioReactiveDecoration();
+    if (wantRun) {
+        if (!m_audioProvider) {
+            // Lazily created on first need so a session that never uses an audio
+            // decoration spawns no cava process.
+            auto provider = std::make_unique<PhosphorAudio::CavaSpectrumProvider>();
+            connect(provider.get(), &PhosphorAudio::IAudioSpectrumProvider::spectrumUpdated, this,
+                    &PlasmaZonesEffect::onEffectAudioSpectrum);
+            m_audioProvider = std::move(provider);
+        }
+        if (!m_audioProvider->isAvailable()) {
+            // Graceful fallback: the pack already renders as a plain static
+            // border when iAudioSpectrumSize stays 0 (no spectrum ever arrives).
+            // Warn ONCE — this path is re-entered on every sync while the audio
+            // decoration is present, so an unconditional warn would spam the log.
+            if (!m_audioUnavailableWarned) {
+                qCWarning(lcEffect) << "Audio-reactive decoration active but cava is not installed; "
+                                       "border renders static";
+                m_audioUnavailableWarned = true;
+            }
+            return;
+        }
+        m_audioProvider->setBarCount(m_audioSpectrumBarCount);
+        if (!m_audioProvider->isRunning()) {
+            m_audioProvider->start();
+            // Kick one repaint so the first spectrum has a consumer; the
+            // per-window animate loop then keeps the border repainting.
+            if (KWin::effects) {
+                KWin::effects->addRepaintFull();
+            }
+        }
+        return;
+    }
+    // Not wanted (toggle off or no audio decoration left): stop capture and clear
+    // the spectrum so audioActive() goes false and any lingering audio border
+    // falls back to static on its next paint.
+    const bool wasLive = (m_audioProvider && m_audioProvider->isRunning()) || m_audioSpectrumSize > 0;
+    if (m_audioProvider && m_audioProvider->isRunning()) {
+        m_audioProvider->stop();
+    }
+    m_audioSpectrum.clear();
+    m_audioSpectrumSize = 0;
+    m_audioSpectrumDirty = false;
+    m_audioSpectrumLastChangeMs = -1;
+    // Re-arm the not-installed warning so a later session (cava installed
+    // meanwhile) can report again if it is still missing.
+    m_audioUnavailableWarned = false;
+    // If audio was live, damage the screen once so a visible reactive border
+    // repaints to its static (silent) look now. windowSurfaceAnimates returns
+    // false the instant audioActive() drops, so without this a pure toggle-off
+    // (which lands no window damage of its own) leaves the border frozen on its
+    // last pulsed frame until unrelated damage arrives. The last-decoration path
+    // already damages the window, so this is idempotent there.
+    if (wasLive && KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
+}
+
+bool PlasmaZonesEffect::ensureAudioSpectrumTexture()
+{
+    if (m_audioSpectrumSize <= 0) {
+        return false;
+    }
+    if (m_audioSpectrumDirty || !m_audioSpectrumTex) {
+        // Rebuild the whole `bars×1` texture — it is tiny (≤256 texels) and a
+        // fresh upload sidesteps a resize/allocate dance on a bar-count change.
+        // R = bar value in 0..1, matching the daemon's RGBA8 layout so a pack
+        // reads the same texel on either runtime.
+        const int bars = m_audioSpectrumSize;
+        QImage img(bars, 1, QImage::Format_RGBA8888);
+        for (int i = 0; i < bars; ++i) {
+            const float v = qBound(0.0f, m_audioSpectrum[i], 1.0f);
+            const int u = qRound(v * 255.0f);
+            img.setPixel(i, 0, qRgba(u, 0, 0, 255));
+        }
+        std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::upload(img);
+        if (!tex) {
+            // Leave m_audioSpectrumDirty set so the next frame retries instead of
+            // stranding a stale/absent texture.
+            qCWarning(lcEffect) << "audio spectrum GLTexture::upload failed for" << bars << "bars; retry next frame";
+            return false;
+        }
+        tex->setFilter(GL_LINEAR); // audioBarSmooth() samples with texture()
+        tex->setWrapMode(GL_CLAMP_TO_EDGE);
+        m_audioSpectrumTex = std::move(tex);
+        m_audioSpectrumDirty = false;
+    }
+    return m_audioSpectrumTex != nullptr;
+}
+
+bool PlasmaZonesEffect::bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc)
+{
+    // The texture was uploaded up front by renderSurfaceChainComposite (see the
+    // note there); here we only bind the ready texture — no upload mid-pass.
+    const bool live = audioActive() && m_audioSpectrumTex != nullptr;
+    // Push the bar count (0 when not live) so surface_audio.glsl's helpers gate
+    // themselves off and the pack renders static without a bound sampler. Derive
+    // the count from the BOUND texture's width, not m_audioSpectrumSize: if an
+    // upload failed during a bar-count change the retained texture is still the
+    // old size, and pushing the new (larger) size would let audioBar() index past
+    // the texture for one frame (undefined texelFetch). The dirty flag reuploads
+    // at the new size next frame.
+    if (iAudioSpectrumSizeLoc >= 0) {
+        shader->setUniform(iAudioSpectrumSizeLoc, live ? m_audioSpectrumTex->width() : 0);
+    }
+    if (live && uAudioSpectrumLoc >= 0) {
+        glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
+        m_audioSpectrumTex->bind();
+        glActiveTexture(GL_TEXTURE0);
+        shader->setUniform(uAudioSpectrumLoc, ShaderInternal::kSurfaceAudioUnit);
+        return true;
+    }
+    return false;
+}
+
+} // namespace PlasmaZones

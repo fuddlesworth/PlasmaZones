@@ -285,6 +285,19 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                         // this branch) and the post-Phase-1B validator would
                         // drop the ApplySnap outcome for an empty zoneId.
                         resolvedZoneIdOut = zoneUuid;
+                        // Re-resolve the committed frame through the WTS wrapper
+                        // so the zone-selector snap inherits the snap-border
+                        // inset (no-op when off), matching the overlay-zone and
+                        // restore commit paths. zoneGeom (from the overlay
+                        // service) is the raw highlight rect; commit the inset
+                        // one. Keep the raw rect if the wrapper can't resolve.
+                        const QRect insetGeom = m_windowTracking->service()->zoneGeometry(zoneUuid, selectorScreenId);
+                        if (insetGeom.isValid()) {
+                            snapX = insetGeom.x();
+                            snapY = insetGeom.y();
+                            snapWidth = insetGeom.width();
+                            snapHeight = insetGeom.height();
+                        }
                         auto* snapEng = m_windowTracking->snapEngine();
                         if (snapEng)
                             snapEng->commitSnap(windowId, zoneUuid, releaseScreenId);
@@ -347,10 +360,28 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Do not snap to overlay zone when releasing on a disabled monitor
     if (!usedZoneSelector && !capturedSnapCancelled && !capturedZoneId.isEmpty() && useOverlayZone) {
         if (capturedIsMultiZoneMode && capturedMultiZoneGeometry.isValid() && capturedGeometryMatchesReleaseScreen) {
-            snapX = capturedMultiZoneGeometry.x();
-            snapY = capturedMultiZoneGeometry.y();
-            snapWidth = capturedMultiZoneGeometry.width();
-            snapHeight = capturedMultiZoneGeometry.height();
+            // Pass ALL zone IDs for multi-zone snap (not just primary)
+            QStringList allZoneIds;
+            for (const QUuid& id : capturedAdjacentZoneIds) {
+                allZoneIds.append(id.toString());
+            }
+            if (allZoneIds.isEmpty()) {
+                allZoneIds.append(capturedZoneId);
+            }
+            // The captured rect is the raw (un-inset) zone span used to draw the
+            // live drag highlight. Re-resolve the COMMITTED frame through the WTS
+            // wrapper so it passes through the reserved snap-border inset seam
+            // (snapBorderInset() returns 0 in every config today, so no inset is
+            // applied), matching every other committed snap path. Fall back to
+            // the captured rect if tracking is unavailable.
+            const QRect committedGeometry = m_windowTracking
+                ? m_windowTracking->service()->resolveZoneGeometry(allZoneIds, releaseScreenId)
+                : capturedMultiZoneGeometry;
+            const QRect frame = committedGeometry.isValid() ? committedGeometry : capturedMultiZoneGeometry;
+            snapX = frame.x();
+            snapY = frame.y();
+            snapWidth = frame.width();
+            snapHeight = frame.height();
             shouldApplyGeometry = true;
             // Publish primary zone id — identical reason to the zone-selector
             // branch above. capturedZoneId is the primary zone of the
@@ -358,14 +389,6 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             resolvedZoneIdOut = capturedZoneId;
             tryStorePreSnapGeometry(windowId, capturedOriginalGeometry);
             if (m_windowTracking) {
-                // Pass ALL zone IDs for multi-zone snap (not just primary)
-                QStringList allZoneIds;
-                for (const QUuid& id : capturedAdjacentZoneIds) {
-                    allZoneIds.append(id.toString());
-                }
-                if (allZoneIds.isEmpty()) {
-                    allZoneIds.append(capturedZoneId);
-                }
                 auto* snapMulti = m_windowTracking->snapEngine();
                 if (snapMulti)
                     snapMulti->commitMultiZoneSnap(windowId, allZoneIds, releaseScreenId);
@@ -373,10 +396,16 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 m_windowTracking->service()->recordSnapIntent(windowId, true);
             }
         } else if (capturedZoneGeometry.isValid() && capturedGeometryMatchesReleaseScreen) {
-            snapX = capturedZoneGeometry.x();
-            snapY = capturedZoneGeometry.y();
-            snapWidth = capturedZoneGeometry.width();
-            snapHeight = capturedZoneGeometry.height();
+            // Re-resolve the committed single-zone frame through the WTS wrapper
+            // so it inherits the snap-border inset (see multi-zone branch above).
+            const QRect committedGeometry = m_windowTracking
+                ? m_windowTracking->service()->zoneGeometry(capturedZoneId, releaseScreenId)
+                : capturedZoneGeometry;
+            const QRect frame = committedGeometry.isValid() ? committedGeometry : capturedZoneGeometry;
+            snapX = frame.x();
+            snapY = frame.y();
+            snapWidth = frame.width();
+            snapHeight = frame.height();
             shouldApplyGeometry = true;
             resolvedZoneIdOut = capturedZoneId;
             tryStorePreSnapGeometry(windowId, capturedOriginalGeometry);

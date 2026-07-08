@@ -8,8 +8,8 @@
 //     ShaderNodeRhi → BaseUniforms UBO at binding=0). Qt-RHI's SPIR-V
 //     pipeline mandates UBO-bound uniforms; default-block uniforms aren't
 //     supported. The UBO branch below is std140-aligned with
-//     `PhosphorShaders::BaseUniforms` and covers its full 720-byte
-//     footprint.
+//     `PhosphorShaders::BaseUniforms` for its 672-byte base, extended to
+//     720 bytes by `AnimationUniformExtension`.
 //
 //   • Compositor window-content execution (kwin-effect → KWin::GLShader,
 //     classic OpenGL). KWin's `GLShader::setUniform(loc, val)` API
@@ -51,10 +51,14 @@
 // Layout-drift guard: the offsets in the UBO branch MUST stay aligned
 // with `PhosphorShaders::BaseUniforms`. The C++ side enforces that via
 // `static_assert(offsetof(...))` in `<PhosphorShaders/BaseUniforms.h>`
-// for every field declared below — if any assert fails after a
-// `BaseUniforms` change, this header has to move in lockstep. The bake
-// test in `tests/unit/ui/test_animation_shader_bake.cpp` surfaces
-// GLSL-side drift by running `qsb` over every built-in shader.
+// for every BASE field declared below (through iIsReversed at 660); the
+// anchor-extension tail (iSurfaceScreenPos .. iAnchorRectInTexture,
+// bytes 672-720) is supplied by AnimationUniformExtension and pinned by
+// the size static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
+// If any assert fails after a C++-side change, this header has to move
+// in lockstep. The bake test in
+// `tests/unit/ui/test_animation_shader_bake.cpp` surfaces GLSL-side
+// drift by running `qsb` over every built-in shader.
 
 #ifndef PLASMAZONES_ANIMATION_UNIFORMS_GLSL
 #define PLASMAZONES_ANIMATION_UNIFORMS_GLSL
@@ -196,6 +200,51 @@ uniform sampler2D uTexture0;
 uniform sampler2D uTexture1;
 uniform sampler2D uTexture2;
 uniform sampler2D uTexture3;
+// Surface-layer stack output (kwin path). When `iHasSurfaceLayer != 0`,
+// `surfaceColor()` samples this in place of `uTexture0`: it holds the window
+// with its surface layers (border / rounded corners, future tint, ...) already
+// composited, so an animation runs OVER the layered surface and the border
+// does not disappear when the animation shader takes the draw slot. The
+// kwin-effect renders it (PlasmaZonesEffect::renderSurfaceChain) and binds it
+// to a dedicated unit; it shares uTexture0's bottom-origin layout, so the same
+// Y-flip applies when sampling. Default unit / `iHasSurfaceLayer == 0` leaves
+// the unlayered path untouched.
+uniform sampler2D uSurfaceLayer;
+uniform int iHasSurfaceLayer;
+
+// 1 when uOldWindow holds a real captured old-content snapshot, 0 when the
+// transition began without a capture (lifecycle moves/resizes). Old-content
+// samplers gate on this and fall back to surfaceColor() — the no-snapshot
+// compositor fallback points uOldWindow at unit 0 (the RAW window), which
+// would otherwise blank the decoration for the old side of a cross-fade.
+uniform int iHasOldWindow;
+
+// Interactive-move motion state (held move/resize transitions only; zero
+// otherwise). iMoveVelocity is spring-smoothed logical px/s and decays
+// through zero with a slight overshoot after release, so velocity-driven
+// deformations settle naturally. iMoveOffset is the raw frame-origin
+// displacement since the grab, logical px.
+uniform vec2 iMoveVelocity;
+uniform vec2 iMoveOffset;
+// Second, looser spring over the same motion: lags iMoveVelocity and rings
+// longer after release. Blend by distance from the grip for phase spread.
+uniform vec2 iMoveVelocity2;
+// Motion history for held move/resize transitions: slot k = the window
+// origin k*15 ms ago, relative to now (all zeros at rest). Sample at a
+// per-vertex delay for delayed path-following deformations.
+uniform vec2 iMoveTrail[16];
+// Solved 4x4 soft-body control lattice for held move/resize transitions:
+// node (i,j) = iMoveMesh[i + 4*j], deflection from its ideal grid spot on
+// the current frame in logical px (row 0 top). All zeros at rest. Sample
+// via bilinear or bicubic Bezier across the render mesh for physics-driven
+// deformation.
+uniform vec2 iMoveMesh[16];
+// The animated surface's [0,1] sub-rect within uSurfaceLayer's canvas — the
+// layer analogue of iAnchorRectInTexture. The compositor pads the layer canvas
+// by the decoration chain's outer margin (glow reach), so the layer cannot be
+// sampled with uTexture0's mapping; surfaceColor() remaps through this
+// instead. An unpadded layer carries the same value as iAnchorRectInTexture.
+uniform vec4 iLayerRectInTexture;
 
 #else
 
@@ -211,11 +260,13 @@ uniform sampler2D uTexture3;
 // occupying [580, 584)), the next `vec4 iTextureResolution[4]` is
 // auto-aligned to offset 592 by std140 (rule 4 → 16-byte boundary),
 // implicitly filling the same 8 bytes the C struct's
-// `_pad_after_audioSpectrum[2]` covers. Likewise the struct itself is
-// auto-aligned to a 16-byte multiple at the end, picking up the
-// trailing 12 bytes that C's `_pad_after_iTimeHi[3]` owns and landing
-// the pre-anchor block at 672 bytes. The iSurfaceScreenPos / iAnchor*
-// fields below then extend the full `BaseUniforms` struct to 720 bytes.
+// `_pad_after_audioSpectrum[2]` covers. Likewise `iSurfaceScreenPos`
+// below is auto-aligned to a 16-byte boundary (rule 2: vec2 at 672),
+// bridging the 8 bytes C's `_pad_after_iIsReversed[2]` owns after
+// `iIsReversed` at 660 and landing the base block at 672 bytes. The
+// iSurfaceScreenPos / iAnchor* fields then extend the AnimationUniforms
+// UBO block to 720 bytes (they are supplied by AnimationUniformExtension,
+// not BaseUniforms, which stays pinned at 672).
 layout(std140, binding = 0) uniform AnimationUniforms {
     mat4 qt_Matrix;              // offset 0   (64 bytes) — Qt scene-graph transform; daemon-only
     float qt_Opacity;            // offset 64  (4 bytes)  — Qt scene-graph opacity; daemon-only
@@ -253,7 +304,9 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              direction + windowAlpha reveal).
     // implicit 8-byte std140 pad here — `vec4 iSurfaceScreenPos` below
     // has 16-byte alignment, so std140 forces the next field to offset
-    // 672. The C struct mirrors this with `_pad_before_iSurfaceScreenPos[2]`.
+    // 672. The C struct mirrors this with `_pad_after_iIsReversed[2]`
+    // (BaseUniforms' trailing pad; the anchor fields themselves live in
+    // AnimationUniformExtension).
     vec4 iSurfaceScreenPos;      // offset 672 (16 bytes) — .xy = surface origin
                                  //              in logical-screen pixels;
                                  //              .zw = (screenWidth, screenHeight).
@@ -347,7 +400,21 @@ vec4 surfaceColor(vec2 uv) {
     // surface through this helper (directly or via bmw_compat's
     // `getInputColor`), so the dim propagates uniformly without per-shader
     // edits.
-    return texture(uTexture0, vec2(t.x, 1.0 - t.y)) * iWindowOpacity;
+    vec2 fc = vec2(t.x, 1.0 - t.y);
+    // Surface-layer redirect: when the window has an active surface-layer stack
+    // (border / rounded corners, ...), sample the pre-composited layered surface
+    // so the animation runs over it. `uSurfaceLayer` shares uTexture0's
+    // bottom-origin layout and premultiplied alpha, so the flip + opacity dim
+    // are identical. Falls back to the live redirected surface when the window
+    // has no layers (`iHasSurfaceLayer == 0`).
+    if (iHasSurfaceLayer != 0) {
+        // The layer canvas may be PADDED past uTexture0's extent (the
+        // decoration chain's outer margin), so it has its own sub-rect
+        // remap; uv outside [0,1] reaches the halo in the margin band.
+        vec2 tl = iLayerRectInTexture.xy + uv * iLayerRectInTexture.zw;
+        return texture(uSurfaceLayer, vec2(tl.x, 1.0 - tl.y)) * iWindowOpacity;
+    }
+    return texture(uTexture0, fc) * iWindowOpacity;
 #else
     // The daemon's Qt-RHI texture is top-origin (Y-down) — no flip. The
     // daemon path has no window-rule opacity (SetOpacity is a compositor

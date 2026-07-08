@@ -57,8 +57,9 @@ namespace PhosphorAnimationShaders {
 ///
 ///   • Default branch (daemon path): `layout(std140, binding = 0) uniform
 ///     AnimationUniforms { ... };` — std140-aligned with
-///     `PhosphorShaders::BaseUniforms` covering its full footprint
-///     (currently 672 bytes; pinned by BaseUniforms.h's static_asserts),
+///     `PhosphorShaders::BaseUniforms` covering the base footprint
+///     (672 bytes; pinned by BaseUniforms.h's static_asserts) plus the
+///     48-byte anchor extension (AnimationUniformExtension, total 720),
 ///     populated by Qt-RHI's binding=0 upload.
 ///
 ///   • `#ifdef PLASMAZONES_KWIN` branch (compositor path): plain
@@ -331,6 +332,82 @@ inline constexpr const char* kIToRect = "iToRect";
 /// fallback is bound when no snapshot was captured.
 inline constexpr const char* kUOldWindow = "uOldWindow";
 
+/// `sampler2D uSurfaceLayer` — COMPOSITOR PATH ONLY. The window's surface
+/// after the surface-layer stack (border / rounded corners, and any future
+/// layers such as a colour tint) has been composited into an FBO. When
+/// `iHasSurfaceLayer != 0`, `surfaceColor()` samples THIS in place of the bare
+/// live `uTexture0`, so an animation composites OVER the layered surface
+/// instead of the raw window — the border (and any other surface layer) stays
+/// visible for the whole transition instead of vanishing the instant the
+/// animation shader takes the draw slot. Bound to a dedicated texture unit on
+/// the kwin path; produced by `PlasmaZonesEffect::renderSurfaceChain`. Absent
+/// on the daemon path (the daemon composes its own multipass surface).
+inline constexpr const char* kUSurfaceLayer = "uSurfaceLayer";
+
+/// `int iHasSurfaceLayer` — COMPOSITOR PATH ONLY. 1 when `uSurfaceLayer` holds
+/// a valid layered surface for this frame (the window has ≥1 active surface
+/// layer), 0 otherwise. `surfaceColor()` branches on it so a window with no
+/// surface layers animates the bare `uTexture0` exactly as before. Pushed every
+/// frame by the kwin-effect; defaults to 0 (GL zero-init), so a shader that
+/// never receives it falls back to the unlayered path.
+inline constexpr const char* kIHasSurfaceLayer = "iHasSurfaceLayer";
+
+/// `int iHasOldWindow` — COMPOSITOR PATH ONLY. 1 when `uOldWindow` holds a
+/// genuinely captured old-content snapshot for this transition, 0 when no
+/// capture ran (lifecycle events like window.move / window.resize begin with
+/// no geometry change to snapshot). Old-content samplers MUST gate on this
+/// and fall back to `surfaceColor()` when 0: the compositor's no-snapshot
+/// fallback aliases `uOldWindow` onto unit 0 (the RAW undecorated window),
+/// so an ungated cross-fade from "old" blanks every decoration pack until
+/// the fade completes.
+inline constexpr const char* kIHasOldWindow = "iHasOldWindow";
+
+/// `vec2 iMoveVelocity` — COMPOSITOR PATH ONLY. Spring-smoothed window
+/// velocity in logical px/s during a HELD interactive move/resize
+/// transition (holdUntilRelease). The smoothing filter is underdamped on
+/// purpose: after the pointer stops or releases, the value decays through
+/// zero with a slight overshoot, so a velocity-driven deformation (wobble,
+/// tilt) relaxes with a natural spring settle instead of freezing. Zero
+/// for time-driven transitions and on the daemon path.
+inline constexpr const char* kIMoveVelocity = "iMoveVelocity";
+/// `vec2 iMoveOffset` — COMPOSITOR PATH ONLY. Raw displacement of the
+/// window's frame origin since the interactive grab, logical px. Zero for
+/// non-held transitions and on the daemon path.
+inline constexpr const char* kIMoveOffset = "iMoveOffset";
+/// `vec2 iMoveVelocity2` — COMPOSITOR PATH ONLY. A second, LOOSER spring
+/// over the same frame velocity (lower stiffness, lighter damping), so it
+/// lags iMoveVelocity and rings longer after release. Blending between the
+/// two by distance from the grip point gives a jelly deformation whose far
+/// regions move out of phase with the grip — the KDE-wobbly billow —
+/// without any per-vertex state in the shader.
+inline constexpr const char* kIMoveVelocity2 = "iMoveVelocity2";
+/// `vec2 iMoveTrail[16]` — COMPOSITOR PATH ONLY. Short motion history for
+/// HELD move/resize transitions: slot k holds the window origin as it was
+/// k*15 ms in the past, RELATIVE to the current origin (so a static window
+/// publishes all zeros). 16 slots = 240 ms of path. The host merely records
+/// positions — all deformation logic stays in the shader, which samples the
+/// trail at a per-vertex delay to follow the drag PATH (delayed-follow is
+/// what a spring mesh visually does), typically weighted by distance from
+/// the grip point (iMouse).
+inline constexpr const char* kIMoveTrail = "iMoveTrail";
+/// `vec2 iMoveMesh[16]` — COMPOSITOR PATH ONLY. The solved displacements of
+/// a 4x4 neighbour-coupled soft-body control lattice for HELD move/resize
+/// transitions: slot i+4*j is node (i,j)'s deflection from its ideal grid
+/// position on the current frame, logical px, row 0 at the top. The host
+/// runs the spring simulation (grip-constrained, wave-propagating); a pack
+/// interpolates the lattice across its render mesh (bilinear or bicubic
+/// Bezier) to deform WITH real physics. All zeros at rest / non-held /
+/// daemon. Generic: wobble is the first consumer, but any geometry pack
+/// can read the same lattice.
+inline constexpr const char* kIMoveMesh = "iMoveMesh";
+/// Card/anchor-space [0,1] sub-rect of the animated surface WITHIN
+/// uSurfaceLayer's canvas (xy offset, zw scale) — the layer analogue of
+/// iAnchorRectInTexture. The compositor pads the layer canvas by the
+/// decoration chain's outer margin (glow reach), so the layer needs its own
+/// remap; an unpadded layer carries the same value as iAnchorRectInTexture.
+/// Compositor-only, like uSurfaceLayer itself.
+inline constexpr const char* kILayerRectInTexture = "iLayerRectInTexture";
+
 /// `float iWindowOpacity` — the window's effective rule-resolved opacity
 /// in [0.0, 1.0], COMPOSITOR PATH ONLY. A `SetOpacity` rule must
 /// dim the window for the whole duration of a transition, but the custom
@@ -471,10 +548,14 @@ inline QString colorKey(int slot)
 /// run on both runtimes without per-runtime overrides.
 ///
 /// The C++ side of the contract is pinned by `static_assert(offsetof(...))`
-/// statements in `<PhosphorShaders/BaseUniforms.h>` for every field
-/// declared in the GLSL UBO. If anyone reorders `BaseUniforms`, those
-/// asserts fail at compile time and the canonical GLSL header has to
-/// be updated to match. The GLSL side is exercised at build time by
+/// statements in `<PhosphorShaders/BaseUniforms.h>` for every BASE field
+/// declared in the GLSL UBO (through iIsReversed at byte 660); the anchor
+/// tail (iSurfaceScreenPos .. iAnchorRectInTexture, bytes 672-719, 720 total)
+/// is supplied by AnimationUniformExtension and pinned by the size
+/// static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
+/// If anyone reorders `BaseUniforms`, those asserts fail at compile time
+/// and the canonical GLSL header has to be updated to match. The GLSL side
+/// is exercised at build time by
 /// `tests/unit/ui/test_animation_shader_bake.cpp`, which runs every
 /// built-in animation shader through `qsb` (which in turn computes
 /// std140 offsets) — a layout drift would surface there as a bake

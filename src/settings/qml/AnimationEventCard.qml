@@ -141,28 +141,6 @@ Item {
         return chain.slice(1).join(" ← ");
     }
 
-    function summaryDescription() {
-        if (root.currentTimingMode === CurvePresets.timingModeSpring) {
-            var si = CurvePresets.springPresetIndex(root.currentSpringOmega, root.currentSpringZeta);
-            if (si >= 0)
-                return i18n("Spring · %1", CurvePresets.springPresets[si].label);
-
-            return i18n("Spring · Custom");
-        }
-        var idx = CurvePresets.findIndices(root.currentEasingCurve);
-        if (idx.styleIndex >= 0)
-            return CurvePresets.easingStyles[idx.styleIndex].label + " · " + CurvePresets.easingDirections[idx.dirIndex].label;
-
-        return i18n("Easing · Custom");
-    }
-
-    function summarySecondary() {
-        if (root.currentTimingMode === CurvePresets.timingModeSpring)
-            return i18n("ω=%1 · ζ=%2", root.currentSpringOmega.toFixed(1), root.currentSpringZeta.toFixed(2));
-
-        return i18n("%1 ms", root.currentDuration);
-    }
-
     // `effectId` is explicit so callers can snapshot it at user-action
     // time (e.g. when the color dialog opens) rather than reading
     // `root.currentShaderEffectId` at write time. Without that snapshot,
@@ -521,6 +499,13 @@ Item {
                 availableShaders: {
                     void (root._shaderRegistryRev);
                     return settingsController.animationsPage.availableShaderEffectsForPath(root.eventPath);
+                }
+                // Parameter schema for the picked shader, fed in the same
+                // registry-tick-bound way so the editor doesn't reach the
+                // settingsController context itself.
+                shaderParamSchema: {
+                    void (root._shaderRegistryRev);
+                    return editor.shaderEffectId.length > 0 ? settingsController.animationsPage.shaderParameters(editor.shaderEffectId) : [];
                 }
                 onShaderEffectActivated: function (id) {
                     var sid = id || "";

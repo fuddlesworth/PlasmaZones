@@ -9,6 +9,7 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ProfileTree.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
@@ -24,7 +25,25 @@
 namespace PlasmaZones {
 
 namespace {
-constexpr qsizetype kMaxShaderProfileTreeBytes = 64 * 1024;
+// Shared wire-size cap for the JSON profile-tree blobs (animation shader tree
+// AND surface decoration tree) accepted over D-Bus.
+constexpr qsizetype kMaxProfileTreeBytes = 64 * 1024;
+
+// Shared wire validation for the two profile-tree blob setters: gate on UTF-8
+// byte length — for multi-byte payloads QString::size() undercounts what a
+// 64 KiB wire frame encodes to — and require a top-level JSON object. Fills
+// @p outDoc with the parsed document on success.
+bool validProfileTreeBlob(const QVariant& v, QJsonDocument* outDoc)
+{
+    const QByteArray raw = v.toString().toUtf8();
+    if (raw.size() > kMaxProfileTreeBytes)
+        return false;
+    QJsonDocument doc = QJsonDocument::fromJson(raw);
+    if (!doc.isObject())
+        return false;
+    *outDoc = std::move(doc);
+    return true;
+}
 }
 
 SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry,
@@ -579,15 +598,8 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_setters[QString(PhosphorProtocol::Service::SettingProperty::ShaderProfileTree)] =
             [concrete](const QVariant& v) -> bool {
-            // Gate on UTF-8 byte length, not QString::size() — for
-            // multi-byte payloads the latter undercounts and a 64 KiB
-            // wire frame can encode to substantially more bytes
-            // on disk / on the bus.
-            const QByteArray raw = v.toString().toUtf8();
-            if (raw.size() > kMaxShaderProfileTreeBytes)
-                return false;
-            const QJsonDocument doc = QJsonDocument::fromJson(raw);
-            if (!doc.isObject())
+            QJsonDocument doc;
+            if (!validProfileTreeBlob(v, &doc))
                 return false;
             concrete->setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
             return true;
@@ -716,6 +728,26 @@ void SettingsAdaptor::initializeRegistry()
         m_schemas[QStringLiteral("autotileInsertPosition")] = QStringLiteral("int");
     }
 
+    // Per-surface decoration tree (JSON blob round-trip via D-Bus), mirroring
+    // the animation shaderProfileTree registration above. The out-of-process
+    // settings app round-trips the tree here over D-Bus; the daemon consumes it
+    // in-process (applyDecoration) to resolve each surface's decoration (the
+    // user-applied shader-pack chain).
+    m_getters[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] = [this]() {
+        return m_settings->decorationProfileTreeJson();
+    };
+    m_setters[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] =
+        [this](const QVariant& v) -> bool {
+        QJsonDocument doc;
+        if (!validProfileTreeBlob(v, &doc))
+            return false;
+        // Reuse the doc validProfileTreeBlob already parsed instead of
+        // re-parsing the same UTF-8 through the JSON facade (mirrors the
+        // ShaderProfileTree setter above).
+        m_settings->setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
+        return true;
+    };
+    m_schemas[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] = QStringLiteral("string");
     REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
     m_getters[QStringLiteral("autotileStickyWindowHandling")] = [this]() {
         return static_cast<int>(m_settings->autotileStickyWindowHandling());

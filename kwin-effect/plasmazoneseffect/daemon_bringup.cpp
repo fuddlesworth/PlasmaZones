@@ -160,8 +160,8 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // the daemon's bounded LRU is empty after a fresh registration (whether
     // first-start or restart), so any handle the kwin-effect would otherwise
     // skip on assumption-of-residence must be re-captured. Without this
-    // reset, the first ~24 windows the user snap-assists toward after a
-    // daemon restart silently fall back to icons.
+    // reset, windows the user snap-assists toward shortly after a daemon
+    // restart could silently fall back to icons until the set is rebuilt.
     if (m_snapAssistHandler) {
         m_snapAssistHandler->resetRecentlyPostedThumbnails();
     }
@@ -260,17 +260,27 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QStringList> reply = *w;
+            // Clear the stale local float set unconditionally. This reply lands
+            // during daemon bringup, so the freshly-registered daemon's float
+            // state is authoritative (and empty on a fresh start). An invalid
+            // reply still means the previous session's entries must be dropped —
+            // retaining them would leave isWindowFloating() returning true for
+            // windows that are no longer floating.
+            m_navigationHandler->clearAllFloatingState();
             if (reply.isValid()) {
                 // Bulk re-seed via the direct-write path (no per-window rule
-                // invalidation), then drop every placement-scoped verdict once
-                // below — mirrors syncZonesFromDaemon.
+                // invalidation) — the shared invalidation below drops every
+                // placement-scoped verdict once, mirroring syncZonesFromDaemon.
                 m_navigationHandler->seedFloatingWindows(reply.value());
-                // Re-seeding the float cache changes the IsFloating match input for
-                // these windows; drop the stale placement-scoped opacity verdicts so
-                // a `WHEN isFloating` SetOpacity rule re-resolves against the fresh
-                // state on the next frame (mirrors the daemon-loss invalidation).
-                invalidateAllRuleCaches();
             }
+            // The clear (and any re-seed) changed the IsFloating match input;
+            // drop the stale placement-scoped verdicts so a `WHEN isFloating`
+            // rule re-resolves against the fresh state on the next frame
+            // (mirrors the daemon-loss invalidation). Runs on the invalid-reply
+            // path too — the unconditional clear above changed state there as
+            // well, and skipping it would leave a cached "floating" verdict
+            // pinned to a window that is no longer floating.
+            invalidateAllRuleCaches();
         });
     }
 
@@ -599,7 +609,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     // System colours for window-border rules: the zone highlight / inactive
     // colours track the Plasma colour scheme (when "use system colours" is on the
     // daemon keeps them in sync), and they are what a border-colour `accent`
-    // sentinel resolves to in updateWindowBorder — highlight for the focused
+    // sentinel resolves to in updateWindowDecoration — highlight for the focused
     // (active) slot, inactive for the unfocused (inactive) slot, mirroring the
     // distinct active/inactive system border colours the per-mode appearance
     // settings used before they folded into rules. Both are re-fetched on every
@@ -684,8 +694,29 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
         m_snapAssistHandler->setEnabled(v.toBool());
     });
+    // Audio-reactive surface decorations: the same daemon audio-viz toggle + bar
+    // count that gate the daemon's overlay audio also gate the effect's own cava
+    // instance (syncEffectAudioState ANDs the toggle with an audio decoration
+    // being present). scheduleEffectAudioSync (deferred + coalesced) so these two
+    // independent async replies collapse to ONE sync — otherwise an early
+    // enable-reply could start cava at the default bar count and the later
+    // bar-count reply would immediately restart it.
+    loadSettingAsync(QStringLiteral("enableAudioVisualizer"), [this](const QVariant& v) {
+        m_enableAudioVisualizer = v.toBool();
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioSpectrumBarCount"), [this](const QVariant& v) {
+        // Clamp to the provider's accepted range as defence-in-depth; the daemon
+        // schema already bounds it, but a malformed reply would otherwise reach
+        // setBarCount and be re-clamped there anyway.
+        m_audioSpectrumBarCount = qBound(PhosphorAudio::Defaults::MinBars, v.toInt(), PhosphorAudio::Defaults::MaxBars);
+        scheduleEffectAudioSync();
+    });
     loadSettingAsync(QStringLiteral("animationsEnabled"), [this](const QVariant& v) {
         m_windowAnimator->setEnabled(v.toBool());
+        // The decoration focus fade shares the window.focus timing: animations
+        // off means an instant active/inactive switch (option B).
+        refreshFocusFadeDuration();
     });
     loadSettingAsync(QStringLiteral("animationDuration"), [this](const QVariant& v) {
         // Clamp against the canonical settings-UI bounds. The earlier
@@ -697,6 +728,9 @@ void PlasmaZonesEffect::loadCachedSettings()
                              PhosphorAnimation::Limits::MaxAnimationDurationMs);
         m_windowAnimator->setDuration(d);
         m_cachedAnimationDuration = d;
+        // Keep the focus fade in lockstep with the global animation duration
+        // (unless a window.focus motion-tree node overrides it).
+        refreshFocusFadeDuration();
     });
     loadSettingAsync(QStringLiteral("animationEasingCurve"), [this](const QVariant& v) {
         // Polymorphic curve parse — handles bare bezier, named easing,
@@ -798,7 +832,41 @@ void PlasmaZonesEffect::loadCachedSettings()
     // Window border / title-bar appearance is pushed as unified config defaults
     // (the window-appearance loaders above). Each slot is resolved as that config
     // default, scope-gated, with per-window rule overrides layered on top inside
-    // updateWindowBorder / reconcileRuleHiddenTitleBar (resolveEffectiveWindowAppearance).
+    // updateWindowDecoration / reconcileRuleHiddenTitleBar (resolveEffectiveWindowAppearance).
+
+    // Per-surface decoration profile tree (Stage 2a): the SSOT for each surface's
+    // USER shader-pack chain (e.g. glow) plus each pack's parameter overrides,
+    // keyed by surface path (window.tiled / window.snapped / window.floating).
+    // The appearance-owned "border" base pack is prepended by updateWindowDecoration
+    // from the config/rule resolution above; this tree contributes the packs the
+    // user chained on top. The autotile/snap BorderState is still maintained (it
+    // drives MEMBERSHIP — which windows are tiled/snapped — and the daemon's
+    // retile insets), but does not feed appearance.
+    //
+    // On change: drop every compiled pack (a chain edit may reference a new pack,
+    // and per-pack param VALUES are baked at compile time so they must recompile)
+    // and rebuild all borders against the new tree, then repaint.
+    loadSettingAsync(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree, [this](const QVariant& v) {
+        const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+        if (!doc.isObject()) {
+            qCWarning(lcEffect) << "decorationProfileTreeJson is not a JSON object — keeping current tree";
+            return;
+        }
+        PhosphorSurfaceShaders::DecorationProfileTree tree =
+            PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object());
+        if (tree == m_decorationTree) {
+            return;
+        }
+        m_decorationTree = std::move(tree);
+        // Per-pack param values are baked at first compile, so a tree change that
+        // alters parameters[packId] requires a recompile of that pack — clear the
+        // whole compiled-pack cache (it lazily recompiles on the next paint).
+        m_compiledPacks.clear();
+        updateAllDecorations();
+        if (KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
+    });
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
         m_autotileHandler->setFocusFollowsMouse(v.toBool());

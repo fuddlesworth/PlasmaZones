@@ -7,11 +7,8 @@
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
-#include <PhosphorEngine/IGeometrySettings.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
-#include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorZones/Layout.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include "snapenginelogging.h"
 
@@ -354,113 +351,6 @@ const SnapState* SnapEngine::lastUsedStateForScreen(const QString& screenId) con
 PhosphorEngine::ISnapSettings* SnapEngine::snapSettings() const
 {
     return dynamic_cast<PhosphorEngine::ISnapSettings*>(engineSettings());
-}
-
-namespace {
-// Resolve outer gaps following the geometry pipeline's precedence (minus the
-// context-rule tier the engine can't reach): per-screen override map -> layout
-// override -> global. Mirrors GeometryUtils::resolveOuterGapsFromMap + the
-// layout/global branches of getEffectiveOuterGaps so the snap engine's
-// empty-zone-fill and rotation paths apply the same gaps as the main pipeline.
-::PhosphorLayout::EdgeGaps resolveOuterGapsForScreen(const QVariantMap& perScreen, PhosphorZones::Layout* layout,
-                                                     PhosphorEngine::IGeometrySettings* gs)
-{
-    namespace PSK = PhosphorEngine::PerScreenSnappingKey;
-    namespace GD = PhosphorEngine::GeometryDefaults;
-    const int globalUniform = gs ? gs->outerGap() : GD::OuterGap;
-
-    // Tier 1: per-screen per-side block wins when engaged and any side is set.
-    const auto usePerSideIt = perScreen.constFind(PSK::UsePerSideOuterGap);
-    if (usePerSideIt != perScreen.constEnd() && usePerSideIt->toBool()) {
-        const auto topIt = perScreen.constFind(PSK::OuterGapTop);
-        const auto bottomIt = perScreen.constFind(PSK::OuterGapBottom);
-        const auto leftIt = perScreen.constFind(PSK::OuterGapLeft);
-        const auto rightIt = perScreen.constFind(PSK::OuterGapRight);
-        if (topIt != perScreen.constEnd() || bottomIt != perScreen.constEnd() || leftIt != perScreen.constEnd()
-            || rightIt != perScreen.constEnd()) {
-            const auto uniformIt = perScreen.constFind(PSK::OuterGap);
-            const int fallback = (uniformIt != perScreen.constEnd()) ? uniformIt->toInt() : globalUniform;
-            return ::PhosphorLayout::EdgeGaps{(topIt != perScreen.constEnd()) ? topIt->toInt() : fallback,
-                                              (bottomIt != perScreen.constEnd()) ? bottomIt->toInt() : fallback,
-                                              (leftIt != perScreen.constEnd()) ? leftIt->toInt() : fallback,
-                                              (rightIt != perScreen.constEnd()) ? rightIt->toInt() : fallback};
-        }
-    }
-    // Tier 1 (uniform): per-screen uniform override.
-    const auto uniformIt = perScreen.constFind(PSK::OuterGap);
-    if (uniformIt != perScreen.constEnd()) {
-        return ::PhosphorLayout::EdgeGaps::uniform(uniformIt->toInt());
-    }
-
-    // Tier 2: layout per-side override, filling unset sides from the global
-    // per-side values (or the global uniform), mirroring getEffectiveOuterGaps.
-    if (layout && layout->usePerSideOuterGap() && layout->hasPerSideOuterGapOverride()) {
-        ::PhosphorLayout::EdgeGaps gaps = layout->rawOuterGaps();
-        const bool globalPerSide = gs && gs->usePerSideOuterGap();
-        if (gaps.top < 0)
-            gaps.top = globalPerSide ? gs->outerGapTop() : globalUniform;
-        if (gaps.bottom < 0)
-            gaps.bottom = globalPerSide ? gs->outerGapBottom() : globalUniform;
-        if (gaps.left < 0)
-            gaps.left = globalPerSide ? gs->outerGapLeft() : globalUniform;
-        if (gaps.right < 0)
-            gaps.right = globalPerSide ? gs->outerGapRight() : globalUniform;
-        return gaps;
-    }
-    // Tier 2 (uniform): layout uniform override.
-    if (layout && layout->hasOuterGapOverride()) {
-        return ::PhosphorLayout::EdgeGaps::uniform(layout->outerGap());
-    }
-
-    // Tier 3: global, honoring global per-side gaps.
-    if (gs && gs->usePerSideOuterGap()) {
-        return ::PhosphorLayout::EdgeGaps{gs->outerGapTop(), gs->outerGapBottom(), gs->outerGapLeft(),
-                                          gs->outerGapRight()};
-    }
-    return ::PhosphorLayout::EdgeGaps::uniform(globalUniform);
-}
-} // namespace
-
-SnapEngine::GapParams SnapEngine::resolveGapParams(const QString& screenId, PhosphorZones::Layout* layout) const
-{
-    namespace PSK = PhosphorEngine::PerScreenSnappingKey;
-    auto* gs = dynamic_cast<PhosphorEngine::IGeometrySettings*>(engineSettings());
-    if (!gs) {
-        return {PhosphorEngine::GeometryDefaults::InnerGap,
-                ::PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap)};
-    }
-
-    // Context gap override (mode / desktop / activity), wired by the daemon.
-    // It already folds in the per-monitor ScreenId rule, so consult it FIRST so
-    // the resnap recompute honours the same context cascade the snap COMMIT path
-    // resolves through DaemonGeometryResolver::contextGapOverrideFor. Fall back
-    // to the direct per-screen snapping read (with virtual->physical fallback so
-    // a per-monitor gap set on a physical screen still applies on its virtual
-    // sub-screens) only when no provider is wired — the unit-test behaviour.
-    QVariantMap perScreen;
-    if (m_contextGapProvider) {
-        perScreen = m_contextGapProvider(screenId);
-    }
-    if (perScreen.isEmpty() && !screenId.isEmpty()) {
-        perScreen = gs->getPerScreenSnappingSettings(screenId);
-        if (perScreen.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-            perScreen =
-                gs->getPerScreenSnappingSettings(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
-        }
-    }
-
-    // Zone padding precedence: per-screen -> layout override -> global.
-    int zonePadding;
-    const auto zpIt = perScreen.constFind(PSK::InnerGap);
-    if (zpIt != perScreen.constEnd()) {
-        zonePadding = zpIt->toInt();
-    } else if (layout && layout->hasZonePaddingOverride()) {
-        zonePadding = layout->zonePadding();
-    } else {
-        zonePadding = gs->innerGap();
-    }
-
-    return {zonePadding, resolveOuterGapsForScreen(perScreen, layout, gs)};
 }
 
 // Out-of-line so unique_ptr<SnapNavigationTargetResolver> can destroy the

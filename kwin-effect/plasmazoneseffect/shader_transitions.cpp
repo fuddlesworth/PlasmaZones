@@ -67,14 +67,13 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
+using ShaderInternal::injectKwinDefineAfterVersion;
 using ShaderInternal::kCustomColorsElementNames;
 using ShaderInternal::kCustomParamsElementNames;
 using ShaderInternal::kITextureResolutionKeys;
 using ShaderInternal::kUserTextureSamplerNames;
 using ShaderInternal::kUserTextureWrapKeys;
 using ShaderInternal::shaderClockNowMs;
-
-namespace {
 
 /// Splice `#define PLASMAZONES_KWIN` between the shader's `#version`
 /// directive and the rest of the source. The macro selects the
@@ -94,7 +93,7 @@ namespace {
 /// fallback exists to surface third-party packs that violate the
 /// contract with a useful journal entry rather than a cryptic GLSL
 /// error.
-inline QByteArray injectKwinDefineAfterVersion(const QString& source)
+QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
 {
     // Strip a leading UTF-8 BOM (U+FEFF) before anything else. The BOM
     // is not a Unicode whitespace category, so QString::trimmed() does
@@ -219,9 +218,9 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
         // matching the rest of the animation suite, prepend the define,
         // and warn so the author sees the contract violation in the
         // journal.
-        qCWarning(lcEffect) << "Animation shader source has no #version directive — synthesizing `#version 450`. "
-                               "Animation shaders MUST declare `#version 450` (the canonical contract); the bake "
-                               "test on the daemon side enforces this.";
+        qCWarning(lcEffect) << "Shader source has no #version directive — synthesizing `#version 450`. "
+                               "Animation and surface packs MUST declare `#version 450` (the canonical contract); "
+                               "the shader-validate CI gate enforces this for the bundled packs.";
         const QString header = QStringLiteral("#version 450") + eol + defineLine;
         return (header + working).toUtf8();
     }
@@ -238,6 +237,8 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
     working.insert(realVersionEnd + 1, defineLine);
     return working.toUtf8();
 }
+
+namespace {
 
 /// Load a user-texture file into a QImage. Mirrors the daemon-side path
 /// in `PhosphorRendering::ShaderEffect::setShaderParams`: PNG/JPG/etc.
@@ -755,7 +756,16 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                         qCWarning(lcEffect) << "Failed to expand vertex shader includes for" << effectId << ":"
                                             << vertIncErr << "— falling back to KWin default vertex stage";
                     } else {
-                        vertWithKwinDefine = injectKwinDefineAfterVersion(expandedVert);
+                        // Same named-param preamble as the fragment stage: a
+                        // vertex-driven pack (wobble's velocity lag, the
+                        // pendulum swing) reads its `p_<id>` params in the
+                        // VERT, and the daemon bake already splices the
+                        // preamble into both stages — without this the GL
+                        // compile failed on the undefined identifiers and
+                        // the transition silently never installed.
+                        const QString vertWithParams = PhosphorShaders::spliceAfterVersion(
+                            expandedVert, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
+                        vertWithKwinDefine = injectKwinDefineAfterVersion(vertWithParams);
                     }
                 }
             }
@@ -812,6 +822,32 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         cached.iFromRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIFromRect);
         cached.iToRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIToRect);
         cached.iOldWindowLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUOldWindow);
+        // Surface-layer-stack uniforms — every animation shader resolves these
+        // (declared in the shared header and read through surfaceColor()), so
+        // they are valid whenever the shader samples the window surface. The
+        // kwin-effect binds the layered surface + flag each frame; a window with
+        // no surface layers pushes the flag as 0 and the shader samples the bare
+        // uTexture0. See AnimationShaderContract::kUSurfaceLayer / kIHasSurfaceLayer.
+        cached.uSurfaceLayerLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUSurfaceLayer);
+        cached.iHasSurfaceLayerLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasSurfaceLayer);
+        cached.iHasOldWindowLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasOldWindow);
+        cached.iMoveVelocityLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveVelocity);
+        cached.iMoveOffsetLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveOffset);
+        cached.iMoveVelocity2Loc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveVelocity2);
+        cached.iMoveTrailLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveTrail);
+        cached.iMoveMeshLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveMesh);
+        cached.iLayerRectInTextureLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kILayerRectInTexture);
+        // uTexture0 — for the transition-time composite retarget (see
+        // CachedShader::uTexture0Loc). The name is the contract's literal
+        // sampler identifier (animation_uniforms.glsl, both branches).
+        cached.uTexture0Loc = shader->uniformLocation("uTexture0");
         // SetOpacity rule opacity — a separate concern from the morph uniforms
         // above: applies to ALL shaders (compositor path only), so surfaceColor
         // can dim the surface for a SetOpacity rule. See
@@ -940,6 +976,52 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // meaningful for surface-extent shaders, mirroring `apply()`'s guard.
     transition.gridSubdivisions = transition.surfaceExtent ? eff.geometryGridSubdivisions : 0;
 
+    // Soft-body lattice constants (iMoveMesh consumers): read the pack's
+    // named params so a mesh pack can tune the physics live in the settings
+    // UI without a rebuild. Each falls back to the generic default when the
+    // pack doesn't declare it, so a non-mesh pack costs nothing. The same
+    // named values also reach the shader as p_<name> customParams, so the
+    // pack can expose them as ordinary sliders. Values arrive from
+    // user-editable metadata, so they are clamped to keep the explicit spring
+    // integrator (mesh_sim.cpp) stable. Each per-node update is
+    // v' = drag*v - K*t*x, p += t*moveFactor*v' (t = 10 ms substep, K the
+    // spring constant); the 2x2 state matrix has det = drag and
+    // trace = 1 - K*t^2*moveFactor + drag, so both eigenvalues stay inside the
+    // unit circle iff drag < 1 AND K*t^2*moveFactor < 2*(1+drag). drag < 1
+    // alone is NOT sufficient: a stiff pack diverges, `settled` never trips,
+    // and the transition drives a full-screen-repaint runaway until the 4 s
+    // safety teardown. So clamp drag < 1, keep the stiffnesses non-negative,
+    // then cap moveFactor to the product bound below.
+    // Materialised once here and reused for the slot translation below.
+    const QVariantMap params = profile.effectiveParameters();
+    {
+        auto readParam = [&](const char* name, qreal& out, qreal lo, qreal hi) {
+            const auto it = params.constFind(QLatin1String(name));
+            if (it != params.constEnd() && it->canConvert<double>()) {
+                out = qBound(lo, it->toDouble(), hi);
+            }
+        };
+        readParam("sheetStiffness", transition.meshParams.stiffness, 0.0, 1.0);
+        readParam("gripStiffness", transition.meshParams.gripStiffness, 0.0, 1.0);
+        readParam("springiness", transition.meshParams.drag, 0.0, 0.99);
+        readParam("moveFactor", transition.meshParams.moveFactor, 0.0, 1.0);
+
+        // Enforce K*t^2*moveFactor < 2*(1+drag) so the lattice always settles.
+        // K is the effective spring constant: grip nodes use gripStiffness
+        // directly (single DOF), while the free-sheet neighbour springs can
+        // reach ~2x sheetStiffness at the highest lattice mode, so take
+        // max(gripStiffness, 2*sheetStiffness). Cap moveFactor to 80% of the
+        // bound for margin; the shipped KWin preset (k=0.018, gk=0.16,
+        // mf=0.16, drag=0.82) sits at ~70% and is left untouched.
+        constexpr qreal kMeshSubstepMs = 10.0; // matches mesh_sim.cpp integrator step
+        const qreal effectiveK = qMax(transition.meshParams.gripStiffness, 2.0 * transition.meshParams.stiffness);
+        if (effectiveK > 0.0) {
+            const qreal moveFactorLimit =
+                0.8 * 2.0 * (1.0 + transition.meshParams.drag) / (kMeshSubstepMs * kMeshSubstepMs * effectiveK);
+            transition.meshParams.moveFactor = qMin(transition.meshParams.moveFactor, moveFactorLimit);
+        }
+    }
+
     // Translate the friendly parameter map (e.g. {"direction": 1,
     // "parallax": 0.2}) to slot keys, then pack each
     // `customParams<N>_<x|y|z|w>` set into a vec4 we can blast in one
@@ -948,7 +1030,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // SurfaceAnimator::runLeg path uses, so a single ShaderProfile
     // produces identical visuals on either runtime.
     const QVariantMap translated =
-        PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, profile.effectiveParameters());
+        PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, params);
     for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
         auto pull = [&](char component) -> float {
             const QString key = PhosphorAnimationShaders::AnimationShaderContract::slotKey(slot, component);
@@ -1295,7 +1377,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     }
     // A surface-extent transition paints across the whole output. The
     // off-frame band the shader sweeps is covered by the unconditional
-    // `effects->addRepaintFull()` issued below —
+    // `effects->addRepaintFull()` at the end of this function —
     // `addLayerRepaint` itself clips its argument back to the window-
     // item's bounding rect via the scene's `mapFromScene` (see
     // paint_pipeline.cpp's commentary), so widening `repaintRect` to
@@ -1382,11 +1464,73 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
                 surfaceExtentRepaint = output->geometry();
             }
         }
+        // Border-vs-animation slot handover: if the window still has a border,
+        // the border shader — not "no shader" — is the correct resting state.
+        // The animation transition borrowed the OffscreenEffect setShader slot
+        // (its begin overrode whatever the border path had set); on teardown,
+        // hand the slot BACK to the border shader and KEEP the redirect, rather
+        // than unredirecting. Unredirecting here would drop the border outline
+        // on every snapped window the moment its open/focus/move animation
+        // ends. reconcileDecorationShader re-applies the border shader (setShader +
+        // redirect, both idempotent) and stamps WindowDecoration::shaderApplied so
+        // the per-frame uniform push and removeWindowDecoration resume owning the
+        // slot. We must erase the transition FIRST so reconcileDecorationShader's
+        // own findTransition() check sees no live transition and takes the
+        // apply branch.
+        m_shaderManager.eraseTransition(window);
+        st = nullptr;
+        const QString wid = getWindowId(window);
+        // A CLOSING window's border entry was kept alive so renderSurfaceChain
+        // could composite it under the close animation (slotWindowClosed defers
+        // the removal); the animation is over and the window is going away, so
+        // drop it now rather than re-applying a resting border to a corpse.
+        if (releaseCloseGrab) {
+            removeWindowDecoration(wid);
+        }
+        const bool stillBordered = m_windowDecorations.contains(wid);
+        if (stillBordered) {
+            reconcileDecorationShader(wid, window);
+        } else if (!releaseCloseGrab) {
+            // First decoration opportunity for a freshly-opened window. Its
+            // window.open animation borrowed the OffscreenEffect redirect/shader
+            // slot, so creating the border back in slotWindowAdded would fight the
+            // in-flight transition (and the open animation visibly broke). Now
+            // that the transition is torn down, create it here so the border
+            // appears the moment the open animation ends — no focus change needed.
+            // updateWindowDecoration self-gates (app-window filter + non-empty chain)
+            // and re-applies via reconcileDecorationShader (the transition is already
+            // erased, so it takes the apply branch). Skipped for a CLOSING window
+            // (releaseCloseGrab) — no point decorating a window on its way out.
+            // If the window isn't decoratable, hand the slot back to KWin.
+            updateWindowDecoration(wid, window);
+            if (!m_windowDecorations.contains(wid)) {
+                setShader(window, nullptr);
+                unredirect(window);
+            }
+        } else {
+            setShader(window, nullptr);
+            unredirect(window);
+        }
+    } else {
+        m_shaderManager.eraseTransition(window);
+        st = nullptr;
+        // Clear the redirect's bound shader BEFORE the border/multipass
+        // teardown below destroys the layer textures its uniforms still
+        // reference: the grab release and the Deleted's destruction are not
+        // frame-synchronous, so an EXPIRY-FRAME paint of the ref-held corpse
+        // would otherwise re-run the animation program with iHasSurfaceLayer
+        // stale at 1 and its texture freshly deleted — an unbound sampler
+        // reads opaque black across the whole quad. setShader on the ref-held
+        // deleted window is the same operation close-begin already performs
+        // (KWin's setShader is a keyed no-op only for un-redirected windows;
+        // our redirect is live until the unref).
         setShader(window, nullptr);
-        unredirect(window);
+        // Deleted window: drop the border entry the close path deferred.
+        // The rest of removeWindowDecoration's GL side is a no-op here
+        // (findWindowById resolves nothing for a deleted id); the
+        // windowDeleted handler remains the backstop.
+        removeWindowDecoration(getWindowId(window), window);
     }
-    st = nullptr;
-    m_shaderManager.eraseTransition(window);
     if (!surfaceExtentRepaint.isEmpty() && KWin::effects) {
         KWin::effects->addRepaint(KWin::Rect(surfaceExtentRepaint));
     }
@@ -1496,47 +1640,16 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // over the global default exactly as the daemon's SurfaceAnimator
     // resolves per-event OSD/popup durations from the registry.
     //
-    // Fall back to the caller-supplied global `animationDurationMs()`
-    // when NO node in the path's parent chain carries an override:
-    // an empty tree (D-Bus race / fresh user) must not silently
-    // collapse every event to the library default (150 ms). The
-    // resolved value is then handed to the combined resolver as its
-    // `defaultDurationMs`, so the per-window-class Rule timing
-    // cascade (`OverrideAnimationTiming`) still layers on top (rule
-    // wins → per-event base → global), matching the resolver's
-    // documented contract.
-    int baseDurationMs = durationMs;
-    {
-        const auto& motionTree = m_shaderManager.motionProfileTree();
-        bool hasChainOverride = false;
-        // Hard cap on ancestor-walk iterations as a defensive guard
-        // against a malformed `profilePath` whose `parentPath` returns
-        // the input unchanged (would otherwise loop forever on the
-        // compositor thread). Real profile paths are dot-separated like
-        // `window.open` / `window` / `Global` — three to four segments
-        // at most across the project's path dictionary, so 16 is a
-        // generous ceiling that costs nothing on the happy path.
-        constexpr int kMaxAncestorDepth = 16;
-        QString cursor = profilePath;
-        for (int depth = 0; !cursor.isEmpty() && depth < kMaxAncestorDepth; ++depth) {
-            if (motionTree.hasOverride(cursor)) {
-                hasChainOverride = true;
-                break;
-            }
-            const QString parent = PhosphorAnimation::ProfilePaths::parentPath(cursor);
-            if (parent == cursor) {
-                // parentPath did not advance — malformed input. Bail
-                // rather than spin: the chain-override search is best-
-                // effort, and the caller falls through to `durationMs`
-                // when no override is found.
-                break;
-            }
-            cursor = parent;
-        }
-        if (hasChainOverride) {
-            baseDurationMs = qRound(motionTree.resolve(profilePath).effectiveDuration());
-        }
-    }
+    // Fall back to the caller-supplied global `durationMs` when NO node in the
+    // path's parent chain carries an override: an empty tree (D-Bus race / fresh
+    // user) must not silently collapse every event to the library default
+    // (150 ms). The resolved value is then handed to the combined resolver as its
+    // `defaultDurationMs`, so the per-window-class Rule timing cascade
+    // (`OverrideAnimationTiming`) still layers on top (rule wins → per-event base
+    // → global), matching the resolver's documented contract. The resolve is
+    // shared with refreshFocusFadeDuration so the focus fade tracks the same
+    // per-event timing.
+    const int baseDurationMs = resolveMotionTreeBaseDuration(profilePath, durationMs);
     // Combined cascade: ONE cached evaluator walk feeds BOTH the shader-slot
     // and timing-slot reads. The pre-refactor pair of `resolveAnimationShader
     // Profile` + `resolveAnimationDuration` ran two priority-order walks per
@@ -1617,6 +1730,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
             return;
         }
         if (const auto* live = m_shaderManager.findTransition(safeWindow); live && live->generation == myGeneration) {
+            // HELD transitions (interactive move/resize) outlive their
+            // nominal duration by design: the user is still dragging.
+            // windowFinishUserMovedResized owns their teardown (a settle
+            // tail after release), so the duration timer stands down.
+            if (live->holdUntilRelease) {
+                return;
+            }
             endShaderTransition(safeWindow);
         }
         // else: a newer transition replaced us (last-event-wins) and owns
@@ -1738,9 +1858,9 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
         // Per-window border / title-bar rules ride the same animation rule set
         // (Tag::Effect admits them). Refresh borders so an edited /
         // added / removed SetBorder* / SetHideTitleBar rule applies immediately
-        // — updateAllBorders re-merges every window and reconciles rule-hidden
+        // — updateAllDecorations re-merges every window and reconciles rule-hidden
         // title bars against the fresh evaluator.
-        updateAllBorders();
+        updateAllDecorations();
 
         // Update the drag-gate exclusion rule set from the same unified
         // payload — `loadRuleAnimationsFromDbus` is the effect's one
@@ -1792,9 +1912,52 @@ void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
                                 qCDebug(lcEffect) << "loadMotionProfileTreeFromDbus: tree loaded with"
                                                   << tree.overriddenPaths().size()
                                                   << "per-event overrides — paths=" << tree.overriddenPaths();
+                                // A window.focus per-event duration override may have
+                                // changed; keep the decoration focus fade in sync.
+                                refreshFocusFadeDuration();
                             },
                             /*arraySink=*/{});
     });
+}
+
+int PlasmaZonesEffect::resolveMotionTreeBaseDuration(const QString& profilePath, int fallbackMs) const
+{
+    // A motion-tree override anywhere up @p profilePath's ancestor chain replaces
+    // @p fallbackMs with the node's resolved effective duration; otherwise the
+    // fallback stands. The kMaxAncestorDepth cap guards a malformed profilePath
+    // whose parentPath() returns the input unchanged (would spin on the
+    // compositor thread). Real paths are three or four dot-separated segments.
+    const auto& motionTree = m_shaderManager.motionProfileTree();
+    constexpr int kMaxAncestorDepth = 16;
+    QString cursor = profilePath;
+    for (int depth = 0; !cursor.isEmpty() && depth < kMaxAncestorDepth; ++depth) {
+        if (motionTree.hasOverride(cursor)) {
+            return qRound(motionTree.resolve(profilePath).effectiveDuration());
+        }
+        const QString parent = PhosphorAnimation::ProfilePaths::parentPath(cursor);
+        if (parent == cursor) {
+            break;
+        }
+        cursor = parent;
+    }
+    return fallbackMs;
+}
+
+void PlasmaZonesEffect::refreshFocusFadeDuration()
+{
+    // The decoration focus fade (uSurfaceFocused ramp, read by the border colour
+    // mix and the focus-fade content pack) shares the window.focus event's
+    // timing rather than carrying its own clock. Option B: with animations
+    // disabled the fade is instant (0) — "animations off = everything snaps".
+    if (!m_windowAnimator || !m_windowAnimator->isEnabled()) {
+        m_focusFadeDurationMs = 0;
+        return;
+    }
+    // Resolve the window.focus base duration the same way tryBeginShaderForEvent
+    // does (shared helper). Per-window Rule timing overrides are intentionally
+    // NOT applied — the fade tracks the per-event node, not per-window rules.
+    const QString profilePath = PhosphorAnimation::ProfilePaths::WindowFocus;
+    m_focusFadeDurationMs = qMax(0, resolveMotionTreeBaseDuration(profilePath, animationDurationMs()));
 }
 
 void PlasmaZonesEffect::slotMotionProfileTreeChanged()

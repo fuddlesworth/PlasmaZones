@@ -10,7 +10,7 @@
  * 2. save/load round-trip fidelity (P0)
  * 3. Signal emission on load and setters (P1)
  * 4. LabelFontWeight default (regression guard)
- * 5. Legacy activation migration
+ * 5. Activation setting load + default fallback
  *
  * Companion test files (split for the <800-line guideline):
  *   - test_settings_animation_profile.cpp — Profile JSON-blob storage,

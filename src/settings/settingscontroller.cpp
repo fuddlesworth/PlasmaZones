@@ -46,6 +46,7 @@
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorFsLoader/SchemaValidator.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -85,6 +86,31 @@
 #include <memory>
 
 namespace PlasmaZones {
+
+namespace {
+
+// Materialise + register the XDG search dirs for a settings-side shader-pack
+// registry (animation / surface): system dirs reversed to lowest-priority-first
+// (the loaders apply first-registration-wins, yielding user > sys-high > ... >
+// sys-low once the user dir is appended last), user dir created up-front so
+// the watcher attaches a direct watch instead of a parent-watch proxy.
+// @p subdir is the ConfigDefaults::user*Subdir() constant (leading '/'):
+// stripped for locateAll's relative-path arg, kept for the writable-base join.
+template<typename Registry>
+void registerXdgPackDirs(Registry* registry, const QString& subdir)
+{
+    QStringList dirs =
+        QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, subdir.mid(1), QStandardPaths::LocateDirectory);
+    std::reverse(dirs.begin(), dirs.end());
+    const QString userDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + subdir;
+    if (!dirs.contains(userDir))
+        dirs.append(userDir);
+    QDir().mkpath(userDir);
+    registry->setUserPath(userDir);
+    registry->addSearchPaths(dirs);
+}
+
+} // namespace
 
 // Member-function definition for the static sort helper declared in the
 // header. Both settingscontroller.cpp and settingscontroller_layouts.cpp
@@ -128,6 +154,11 @@ SettingsController::~SettingsController()
         // The overlay-shader resolver reaches m_overlayShaderRegistry — clear it
         // too for the same symmetry.
         m_rulesPage->setOverlayShaderLookup({});
+        // The decoration-pack resolver captures `this` and dereferences
+        // m_surfaceShaderRegistry (a QObject child of this, destroyed during
+        // ~QObject teardown); clear it too so a deferred dataChanged during
+        // teardown can't run the lookup against the dangling registry.
+        m_rulesPage->setDecorationPackLookup({});
         // Drain any in-flight `dataChanged` emissions queued against
         // the cleared lookups before the model captures the now-
         // empty resolvers. refreshLabels walks every row once and
@@ -419,22 +450,10 @@ SettingsController::SettingsController(QObject* parent)
     // ShaderEffects (XDG search paths + user dir, materialised before
     // registration so the watcher attaches a direct watch).
     m_animationShaderRegistry = new PhosphorAnimationShaders::AnimationShaderRegistry(this);
-    {
-        // Centralised subdir constant (with leading "/") — strip the slash for
-        // locateAll's relative-path arg, keep it as-is for the writable-base
-        // join. This matches AnimationsPageController::userShaderDirectoryPath
-        // so the two settings-side consumers can never drift apart.
-        const QString subdir = ConfigDefaults::userAnimationsSubdir();
-        QStringList animDirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, subdir.mid(1),
-                                                         QStandardPaths::LocateDirectory);
-        std::reverse(animDirs.begin(), animDirs.end());
-        const QString userAnimDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + subdir;
-        if (!animDirs.contains(userAnimDir))
-            animDirs.append(userAnimDir);
-        QDir().mkpath(userAnimDir);
-        m_animationShaderRegistry->setUserPath(userAnimDir);
-        m_animationShaderRegistry->addSearchPaths(animDirs);
-    }
+    // The centralised subdir constant matches
+    // AnimationsPageController::userShaderDirectoryPath so the two
+    // settings-side consumers can never drift apart.
+    registerXdgPackDirs(m_animationShaderRegistry, ConfigDefaults::userAnimationsSubdir());
 
     // Animations page sub-controller — Q_PROPERTY surface for the new
     // animation-event drilldown. Per-event motion overrides persist as
@@ -469,6 +488,26 @@ SettingsController::SettingsController(QObject* parent)
         setNeedsSave(true);
         endExternalEdit();
     });
+
+    // Surface shader registry — settings-side mirror of the daemon's /
+    // compositor's. Scans the same XDG `plasmazones/surface` dirs
+    // independently; FS watching keeps each in sync without IPC. Mirrors
+    // the animation-shader registry block above (XDG search paths + user
+    // dir, materialised before registration so the watcher attaches a
+    // direct watch).
+    m_surfaceShaderRegistry = new PhosphorSurfaceShaders::SurfaceShaderRegistry(this);
+    registerXdgPackDirs(m_surfaceShaderRegistry, ConfigDefaults::userSurfaceSubdir());
+
+    // Decoration drill-down sub-controller. PER-SURFACE scope: edits a
+    // DecorationProfileTree (per-surface chains of decoration packs) with a
+    // baseline global default + walk-up inheritance. The tree persists via the
+    // Settings decorationProfileTreeJson Q_PROPERTY, whose NOTIFY
+    // (decorationProfileTreeChanged) the meta-object loop above already routes
+    // into onSettingsPropertyChanged for dirty tracking — so this controller
+    // needs no per-page staging (isDirty/apply/discard are no-ops). It is
+    // registered with the framework as a headless domain (the drill-down nav
+    // nodes are virtual PageAdapters) in buildApplicationController.
+    m_decorationPage = new DecorationPageController(m_surfaceShaderRegistry, &m_settings, this);
 
     // Rules page sub-controller — the unified rule surface. It owns
     // its own RuleModel and talks to the daemon's
@@ -664,6 +703,19 @@ SettingsController::SettingsController(QObject* parent)
         return name.isEmpty() ? effectId : name;
     };
     m_rulesPage->setOverlayShaderLookup(resolveOverlayShaderLookup);
+    // OverrideDecorationChain stores surface-pack ids ("frosted-glass");
+    // resolve them to friendly names via the surface shader registry (the
+    // same source the decoration pages' pack picker reads), so the list
+    // shows "Decoration: Frosted Glass, Glow" rather than raw ids. Unknown
+    // ids round-trip verbatim, matching the other lookups' fallbacks.
+    auto resolveDecorationPackLookup = [this](const QString& packId) -> QString {
+        if (packId.isEmpty() || !m_surfaceShaderRegistry || !m_surfaceShaderRegistry->hasEffect(packId)) {
+            return packId;
+        }
+        const QString name = m_surfaceShaderRegistry->effect(packId).name;
+        return name.isEmpty() ? packId : name;
+    };
+    m_rulesPage->setDecorationPackLookup(resolveDecorationPackLookup);
     auto refreshRuleLabels = [this]() {
         if (m_rulesPage && m_rulesPage->model()) {
             m_rulesPage->model()->refreshLabels();
@@ -675,6 +727,10 @@ SettingsController::SettingsController(QObject* parent)
     // A shader-pack rescan (user drops in a new effect, or one is removed)
     // can change an id→name mapping; refresh so resolved Shader labels track it.
     connect(m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
+            refreshRuleLabels);
+    // Same refresh for surface-pack rescans so resolved Decoration labels
+    // track pack installs/removals.
+    connect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
             refreshRuleLabels);
 
     // Overlay shader registry — settings-side mirror of the daemon's. The

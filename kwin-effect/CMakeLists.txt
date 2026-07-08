@@ -47,7 +47,11 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect.cpp
     plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
-    plasmazoneseffect/borders.cpp
+    plasmazoneseffect/decorations.cpp
+    plasmazoneseffect/decoration_render.cpp
+    plasmazoneseffect/surfacelayers.cpp
+    plasmazoneseffect/surface_backdrop.cpp
+    plasmazoneseffect/surface_audio.cpp
     plasmazoneseffect/window_identity.cpp
     plasmazoneseffect/mouse_drag.cpp
     plasmazoneseffect/window_filtering.cpp
@@ -59,8 +63,10 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/daemon_apply.cpp
     plasmazoneseffect/drag_snap.cpp
     plasmazoneseffect/drag_end.cpp
+    plasmazoneseffect/mesh_sim.cpp
     plasmazoneseffect/paint_pipeline.cpp
     plasmazoneseffect/shader_transitions.cpp
+    plasmazoneseffect/surface_compile.cpp
     plasmazoneseffect/shader_resolve.cpp
     plasmazoneseffect/shader_resolve.h
     plasmazoneseffect/shader_internal.h
@@ -146,6 +152,16 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # the `#define PLASMAZONES_KWIN` injection selects its default-block
     # branch (KWin::GLShader's classic-GL pipeline doesn't bind UBOs).
     PhosphorShaders::PhosphorShaders
+    # PhosphorSurface: the surface-shader pack registry/contract. The effect
+    # compiles the selected surface pack (window border / rounded corners) from
+    # data/surface via SurfaceShaderRegistry, the third shader-pack category
+    # alongside animations + overlay shaders. GPL->LGPL link is fine.
+    PhosphorSurface::PhosphorSurface
+    # PhosphorAudio: the CAVA spectrum provider (Qt-Core-only). The effect runs
+    # its OWN CavaSpectrumProvider to feed audio-reactive surface decorations
+    # (border-audio), since the daemon's spectrum is not exported over the
+    # low-frequency D-Bus config channel. GPL->LGPL link is fine.
+    PhosphorAudio::PhosphorAudio
     # libepoxy: EGL dma-buf export entry points for snap-assist thumbnail
     # zero-copy delivery (snapassistthumbnailcapture.cpp). Qt6::DBus's
     # QDBusUnixFileDescriptor carries the exported fd to the daemon.
@@ -156,7 +172,6 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
 target_include_directories(kwin_effect_plasmazones PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
-    ${CMAKE_SOURCE_DIR}  # For shared/ headers (virtualscreenid.h)
 )
 
 # Note: metadata.json is embedded in the plugin binary via Q_PLUGIN_METADATA in

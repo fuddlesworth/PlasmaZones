@@ -23,7 +23,8 @@
  *   - the zone-overlay appearance groups are renamed from
  *     `Snapping.Appearance.*` to `Snapping.Zones.*` (key-for-key move,
  *     absent-source no-op, idempotent, coexisting with the folds above),
- *   - config.json is stamped `_version == 4`,
+ *   - config.json is stamped at the current schema version (the chain runs
+ *     past the v3→v4 step to ConfigSchemaVersion),
  *   - the conversion is idempotent (running twice is a no-op).
  *
  * rules.json SUPERSEDES the v3 inputs: the migration renames
@@ -71,7 +72,8 @@ private:
         QDir().mkpath(QFileInfo(path).absolutePath());
         QFile f(path);
         QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(QJsonDocument(obj).toJson());
+        const QByteArray bytes = QJsonDocument(obj).toJson();
+        QCOMPARE(f.write(bytes), static_cast<qint64>(bytes.size()));
     }
 
     QJsonObject readJson(const QString& path)
@@ -305,7 +307,6 @@ private Q_SLOTS:
         const QJsonObject wr = readJson(ConfigDefaults::rulesFilePath());
         QCOMPARE(wr.value(QStringLiteral("_version")).toInt(), 4);
 
-        // config.json stamped v4.
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
         // The migration chain now runs v3 → v4 → v5, so config.json lands at
         // the current schema version (the v3→v4 step still stamps 4 mid-chain).
@@ -774,8 +775,6 @@ private Q_SLOTS:
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
         QVERIFY(!firstRun.isEmpty());
-        const int firstCount =
-            QJsonDocument::fromJson(firstRun).object().value(QStringLiteral("rules")).toArray().size();
 
         // The process-level migration guard would normally short-circuit;
         // reset it so the second call re-runs the full logic against the
@@ -791,11 +790,8 @@ private Q_SLOTS:
         // v4 RuleSet; on the second run it succeeds, so finalize takes
         // the already-converted branch and only retries the idempotent
         // cleanup steps instead of rebuilding — rules.json is
-        // byte-identical, the rule count is unchanged.
+        // byte-identical.
         QCOMPARE(secondRun, firstRun);
-        const int secondCount =
-            QJsonDocument::fromJson(secondRun).object().value(QStringLiteral("rules")).toArray().size();
-        QCOMPARE(secondCount, firstCount);
     }
 
     // ─── No-assignments fixture ───────────────────────────────────────────
@@ -1096,7 +1092,7 @@ private Q_SLOTS:
         {
             QFile f(corruptPath);
             QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(corruptBytes);
+            QCOMPARE(f.write(corruptBytes), static_cast<qint64>(corruptBytes.size()));
         }
 
         QVERIFY2(!ConfigMigration::ensureJsonConfig(), "ensureJsonConfig must return false on a malformed rules.json");
@@ -1152,7 +1148,7 @@ private Q_SLOTS:
         {
             QFile f(corruptPath);
             QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(corruptBytes);
+            QCOMPARE(f.write(corruptBytes), static_cast<qint64>(corruptBytes.size()));
         }
 
         // Migration MUST abort.
@@ -1284,7 +1280,7 @@ private Q_SLOTS:
         {
             QFile pin(quickLayoutsPath + QStringLiteral("/.pin"));
             QVERIFY(pin.open(QIODevice::WriteOnly));
-            pin.write("x");
+            QCOMPARE(pin.write("x"), static_cast<qint64>(1));
         }
 
         // First attempt: the sidecar write fails, migration aborts BEFORE
@@ -2101,9 +2097,11 @@ private:
         return root;
     }
 
-    /// Animation-exclude rules are the only ExcludeAnimations-action
-    /// shape the migration produces, so a simple "rules whose actions
-    /// contain excludeAnimations" filter cleanly isolates them.
+    /// Animation-exclude rules are the only ExcludeAnimations-action shape the
+    /// migration produces, with exactly one action, so filtering for the exact
+    /// single-action list {excludeAnimations} cleanly isolates them. (Exact
+    /// match, not "contains": if the migration ever emits a second action
+    /// alongside it, this filter must be revisited rather than silently passing.)
     QList<QJsonObject> animationExclusionRules(const QJsonArray& rules)
     {
         QList<QJsonObject> out;

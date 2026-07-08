@@ -90,6 +90,27 @@ void OverlayService::setSettings(ISettings* settings)
                 }
             });
 
+            // Per-surface decoration tree drives each overlay's decoration
+            // (border/titlebar + shader-pack chain), resolved + pushed at show
+            // time. Re-apply it to any currently-visible transient overlay on a
+            // live edit so the decoration preview updates without waiting for the
+            // next show. Connected to the specific signal (not the settingsChanged
+            // catch-all) so unrelated edits don't re-bake decoration; each
+            // applyDecoration is null-safe per slot, so screens without a wired
+            // slot are skipped. OSDs are intentionally omitted — they auto-dismiss
+            // sub-second, so a live re-decorate has no observable effect.
+            connect(m_settings, &ISettings::decorationProfileTreeChanged, this, [this]() {
+                for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                    const auto& state = it.value();
+                    if (m_zoneSelectorVisible)
+                        applyDecoration(state.zoneSelectorSlot(), QStringLiteral("popup.zoneSelector"));
+                    if (m_snapAssistVisible)
+                        applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
+                    if (m_layoutPickerVisible)
+                        applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
+                }
+            });
+
             // Global animations toggle: when off, SurfaceAnimator snaps
             // beginShow / beginHide to the target opacity and fires
             // completion synchronously, skipping motion + shader legs.
@@ -328,8 +349,12 @@ void OverlayService::syncCavaState()
     // CAVA is a continuous audio-capture + FFT child process feeding a per-frame
     // spectrum; running it while nothing is displayed burns CPU on capture AND
     // on per-frame overlay repaints. Run it only while audio-viz is enabled AND
-    // the overlay (un-idled) or the editor's shader preview is actually shown.
-    const bool wantRun = m_settings->enableAudioVisualizer() && isOverlayDisplaying();
+    // something that reacts to audio is on screen: the overlay (un-idled), the
+    // editor's shader preview, or a decoration surface (OSD / popup) carrying an
+    // audio-reactive pack. A plain decoration never starts audio (it declares no
+    // `audio` flag, so visibleAudioDecorationSlots() ignores it).
+    const bool wantRun =
+        m_settings->enableAudioVisualizer() && (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty());
 
     if (wantRun) {
         if (m_idleQuiesceTimer) {
@@ -353,12 +378,21 @@ void OverlayService::syncCavaState()
         if (m_audioProvider->isRunning()) {
             m_audioProvider->stop();
             for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-                if (!it_.value().overlayPhysScreen) {
-                    continue;
+                const auto& st = it_.value();
+                if (st.overlayPhysScreen) {
+                    if (auto* slot = st.mainOverlaySlot()) {
+                        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                    }
                 }
-                auto* slot = it_.value().mainOverlaySlot();
-                if (slot) {
-                    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                // Decoration slots (OSD / popups) carry their own audioSpectrum,
+                // so an audio-reactive border must settle to silence too rather
+                // than freeze on the last pushed frame. Independent of the zone
+                // overlay, so cleared regardless of overlayPhysScreen.
+                for (QQuickItem* deco :
+                     {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(), st.zoneSelectorSlot()}) {
+                    if (deco) {
+                        writeQmlProperty(deco, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                    }
                 }
             }
             if (m_shaderPreviewWindow) {
@@ -388,8 +422,10 @@ void OverlayService::scheduleIdleQuiesce()
             // window both cancels this timer and resumes, but guard anyway. The
             // overlay's QQuickWindows are intentionally left alive (NVIDIA
             // teardown-deadlock avoidance); we only pause the 60 Hz shader
-            // render loop and the CAVA capture.
-            if (isOverlayDisplaying()) {
+            // render loop and the CAVA capture. Mirror syncCavaState's wantRun
+            // predicate: a visible audio decoration also keeps CAVA alive, so it
+            // must veto the quiesce too.
+            if (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty()) {
                 return;
             }
             stopShaderAnimation();

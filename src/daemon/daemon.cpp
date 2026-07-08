@@ -18,6 +18,7 @@
 #include <QDBusError>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QPluginLoader>
 #include <QRegularExpression>
 #include <QSet>
@@ -33,14 +34,15 @@
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
 
 #include <array>
 
 #include "overlayservice.h"
 #include "unifiedlayoutcontroller.h"
 #include "modetracker.h"
-#include "unifiedlayoutcontroller.h"
 #include "shortcutmanager.h"
+#include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneentryscaffold.h"
 #include "rendering/zoneshadernoderhi.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -314,6 +316,7 @@ Daemon::Daemon(QObject* parent)
     // an empty registry for the brief window before loaders run.
     setupAnimationProfiles();
     setupAnimationShaderEffects();
+    setupSurfaceShaderEffects();
 }
 
 // Paths that follow the user's `Settings.animationProfile` slider
@@ -572,6 +575,43 @@ void Daemon::setupAnimationShaderEffects()
     }
 }
 
+void Daemon::setupSurfaceShaderEffects()
+{
+    m_surfaceShaderRegistry = std::make_unique<PhosphorSurfaceShaders::SurfaceShaderRegistry>(nullptr);
+
+    // System dirs from XDG_DATA_DIRS in descending priority. Reverse so the
+    // first registered is the lowest-priority system dir — the loader applies
+    // first-registration-wins, yielding `user > sys-highest > ... > sys-lowest`
+    // after the user dir is appended last. Surface packs install to
+    // `plasmazones/surface` (singular), the third category beside
+    // `plasmazones/shaders` and `plasmazones/animations`.
+    QStringList surfaceDirs = QStandardPaths::locateAll(
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/surface"), QStandardPaths::LocateDirectory);
+    std::reverse(surfaceDirs.begin(), surfaceDirs.end());
+
+    const QString userSurfaceDir =
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/surface");
+    if (!surfaceDirs.contains(userSurfaceDir))
+        surfaceDirs.append(userSurfaceDir);
+
+    // Materialise the user dir BEFORE registering so the watcher attaches a
+    // direct watch instead of a parent-watch proxy (mirrors the animation /
+    // curve / profile setup). Failures are non-fatal — the on-demand scan still
+    // runs without a watch.
+    QDir().mkpath(userSurfaceDir);
+
+    m_surfaceShaderRegistry->setUserPath(userSurfaceDir);
+    m_surfaceShaderRegistry->addSearchPaths(surfaceDirs);
+
+    // Stage d: hand the registry to the overlay service so the OSD show path can
+    // resolve its decoration pack's fragment shader + translated params. Borrow
+    // is nulled in stop() before the registry is reset, mirroring the animation
+    // registry's teardown.
+    if (m_overlayService) {
+        m_overlayService->setSurfaceShaderRegistry(m_surfaceShaderRegistry.get());
+    }
+}
+
 Daemon::~Daemon()
 {
     stop();
@@ -750,6 +790,115 @@ bool Daemon::init()
         for (const PhosphorAnimationShaders::AnimationShaderEffect& info :
              m_animationShaderRegistry->availableEffects()) {
             scheduleWarmForAnimEffect(info);
+        }
+    }
+
+    // Warm-bake SURFACE shaders (window border / rounded corners / glow) the
+    // same way zone + animation shaders are warmed above, so the first surface
+    // paint never blocks the render thread on a cold glslang compile. Shares the
+    // single-threaded m_shaderBakePool, so all three categories serialise.
+    //
+    // Like the zone/animation warm-bakes, the surface bake installs the same
+    // fragment entry-point scaffold the live loader uses (the
+    // surfaceEntryPrologue()/surfaceEntryCandidates() passed below), so a
+    // pSurface()-only pack compiles and the warm key matches SurfaceShaderItem's
+    // scaffolded live load. The one thing that differs is vertex-shader
+    // resolution: surface packs ship NO vertex shader, so the vert is resolved
+    // from a shared `surface.vert` in the include paths (same resolution as
+    // SurfaceShaderItem). A pack with no resolvable vert is skipped — the live
+    // path would error on it too, so there is nothing to warm.
+    if (m_surfaceShaderRegistry) {
+        auto scheduleWarmForSurfaceEffect = [this,
+                                             registryPtr = QPointer<PhosphorSurfaceShaders::SurfaceShaderRegistry>(
+                                                 m_surfaceShaderRegistry.get())](
+                                                const PhosphorSurfaceShaders::SurfaceShaderEffect& info) {
+            if (!info.isValid() || info.fragmentShaderPath.isEmpty() || !QFile::exists(info.fragmentShaderPath)) {
+                return;
+            }
+            // Pure liveness gate: the include paths come from the static
+            // helper below (not the registry), so the QPointer is checked
+            // only to skip bakes scheduled across registry teardown.
+            if (!registryPtr) {
+                return;
+            }
+            // Include paths come from the SAME function the live loader's
+            // constructor uses (SurfaceShaderItem::surfaceIncludePaths — XDG
+            // dirs user-first, each contributing its `shared` subdir then
+            // itself), so the bake-cache key the warm compile writes is
+            // structurally guaranteed to be the one the first live paint
+            // looks up; the two can no longer silently diverge. The vert
+            // resolves as the live loader does: the pack's metadata vert
+            // first, else `surface.vert` beside the frag, else the first
+            // `surface.vert` in the include dirs (the `shared` subdir
+            // carries the shipped one — packs themselves ship no vert, so
+            // both sides land on the shared vert today). The overlay host
+            // satisfies the matching side of this contract: applyDecoration
+            // writes each chain stage's vertexSource from the pack's declared
+            // vertexShaderPath (and the registry preamble), so a pack that
+            // ships its own vert keys the same vert on both the warm bake
+            // and the live load.
+            const QStringList includePaths = SurfaceShaderItem::surfaceIncludePaths();
+            QString vertPath = info.vertexShaderPath;
+            if (vertPath.isEmpty()) {
+                const QString besideFrag =
+                    QFileInfo(info.fragmentShaderPath).absolutePath() + QStringLiteral("/surface.vert");
+                if (QFile::exists(besideFrag)) {
+                    vertPath = besideFrag;
+                }
+            }
+            if (vertPath.isEmpty()) {
+                for (const QString& incDir : std::as_const(includePaths)) {
+                    const QString candidate = incDir + QStringLiteral("/surface.vert");
+                    if (QFile::exists(candidate)) {
+                        vertPath = candidate;
+                        break;
+                    }
+                }
+            }
+            if (vertPath.isEmpty() || !QFile::exists(vertPath)) {
+                return;
+            }
+            const QString effectId = info.id;
+            const QString paramPreamble = PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(info);
+            // Bake WITH the same fragment entry-point scaffold the live loader
+            // installs (surfaceshaderitem.cpp setEntryScaffold), or a
+            // `pSurface()`-only pack bakes its raw main()-less source and fails
+            // to compile, and even a traditional main() pack would key the
+            // cache differently from the scaffolded live load and miss it.
+            // Mirrors the zone and animation warm-bakes above.
+            const QString entryPrologue = PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryPrologue();
+            const QList<PhosphorShaders::EntryCandidate> entryCandidates =
+                PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryCandidates();
+            auto* watcher = new QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>(this);
+            connect(watcher, &QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>::finished, this,
+                    [watcher, effectId]() {
+                        const PhosphorRendering::WarmShaderBakeResult r = watcher->result();
+                        if (!r.success) {
+                            qCWarning(lcDaemon) << "Surface shader bake: failed for" << effectId << r.errorMessage;
+                        }
+                        watcher->deleteLater();
+                    });
+            watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
+                                                 [vertPath, fragPath = info.fragmentShaderPath, includePaths,
+                                                  paramPreamble, entryPrologue, entryCandidates]() {
+                                                     return warmShaderBakeCacheForPaths(vertPath, fragPath,
+                                                                                        includePaths, paramPreamble,
+                                                                                        entryPrologue, entryCandidates);
+                                                 }));
+        };
+        connect(m_surfaceShaderRegistry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                [this, scheduleWarmForSurfaceEffect]() {
+                    if (!m_surfaceShaderRegistry) {
+                        return;
+                    }
+                    const QList<PhosphorSurfaceShaders::SurfaceShaderEffect> effects =
+                        m_surfaceShaderRegistry->availableEffects();
+                    for (const PhosphorSurfaceShaders::SurfaceShaderEffect& info : effects) {
+                        scheduleWarmForSurfaceEffect(info);
+                    }
+                });
+        for (const PhosphorSurfaceShaders::SurfaceShaderEffect& info : m_surfaceShaderRegistry->availableEffects()) {
+            scheduleWarmForSurfaceEffect(info);
         }
     }
 
@@ -1242,31 +1391,6 @@ bool Daemon::init()
             return GeometryUtils::mergeConfigPerScreenGaps(
                 GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
                     screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling"))),
-                m_settings.get(), screenId);
-        });
-    }
-
-    // Symmetric per-context (window-rule) gap overrides for snapping. The snap
-    // COMMIT path already honours the full context cascade via
-    // DaemonGeometryResolver::contextGapOverrideFor; this wires the resnap
-    // RECOMPUTE (SnapEngine::resolveGapParams) to the same cascade so a per-mode
-    // `Mode Equals "snapping"` gap rule (and per-desktop/activity gap rules)
-    // apply on resnap, not just in preview. setContextGapProvider is derived-only
-    // (SnapEngine); m_snapEngine is held as the base PlacementEngineBase, so the
-    // qobject_cast mirrors the narrowing used at the autotile-toggle branch above.
-    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-        concreteSnap->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
-            if (!m_layoutManager || screenId.isEmpty()) {
-                return {};
-            }
-            // This is the snap gap path, so resolve against the "snapping"
-            // placement mode — a per-mode `Mode Equals "snapping"` gap rule then
-            // applies here and a "tiling" one stays inert. The config per-monitor
-            // gap is merged UNDER the rule override so a user gap rule still wins
-            // per slot.
-            return GeometryUtils::mergeConfigPerScreenGaps(
-                GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
-                    screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("snapping"))),
                 m_settings.get(), screenId);
         });
     }
@@ -2194,6 +2318,15 @@ void Daemon::stop()
         m_overlayService->setAnimationShaderRegistry(nullptr);
     }
     m_animationShaderRegistry.reset();
+    // Reset the surface registry here too so its QFileSystemWatcher and the
+    // effectsChanged → warm-bake connection (captured by value into the init()
+    // lambda, targeting `this`) are torn down before the event loop can spin
+    // during shutdown. Null the overlay service's borrow FIRST (Stage d wired
+    // the OSD decoration consumer), mirroring the animation registry above.
+    if (m_overlayService) {
+        m_overlayService->setSurfaceShaderRegistry(nullptr);
+    }
+    m_surfaceShaderRegistry.reset();
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();
@@ -2329,7 +2462,7 @@ void Daemon::stop()
     // teardown contract grep-discoverable and survives that refactor.
     // `m_snapEngine` is base-typed `PlacementEngineBase*`; the setter
     // lives on the concrete `SnapEngine`. qobject_cast mirrors the
-    // narrowing in the settingsChanged autotile-disabled branch above.
+    // concreteAutotile narrowing a few lines below.
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         concreteSnap->setExcludeRuleSet(nullptr);
     }
@@ -2350,14 +2483,6 @@ void Daemon::stop()
     // `PlacementEngineBase*`; setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
-    }
-    // Clear the symmetric snap context-gap provider, which captures `this`
-    // (Daemon, via m_layoutManager / currentDesktopForScreen / currentActivity).
-    // Same teardown contract as the autotile provider above. `m_snapEngine` is
-    // base-typed `PlacementEngineBase*`; setContextGapProvider lives on the
-    // concrete SnapEngine.
-    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-        concreteSnap->setContextGapProvider({});
     }
 
     // Destroy engines now (during stop(), before Qt child destruction order).

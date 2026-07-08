@@ -9,6 +9,7 @@
 #include <PhosphorSnapEngine/ISnapSettings.h>
 
 #include <QHash>
+#include <QJsonDocument>
 #include <QSet>
 
 namespace PlasmaZones {
@@ -880,6 +881,22 @@ public:
         return {};
     }
     void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree&) override
+    {
+    }
+    PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override
+    {
+        return ConfigDefaults::decorationProfileTree();
+    }
+    void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree&) override
+    {
+    }
+    QString decorationProfileTreeJson() const override
+    {
+        // Serialize the SAME tree the typed accessor returns, so the two
+        // accessors stay coherent for any test that reads the JSON facade.
+        return QString::fromUtf8(QJsonDocument(decorationProfileTree().toJson()).toJson(QJsonDocument::Compact));
+    }
+    void setDecorationProfileTreeJson(const QString&) override
     {
     }
 

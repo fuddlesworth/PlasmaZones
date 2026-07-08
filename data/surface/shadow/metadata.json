@@ -1,0 +1,64 @@
+{
+    "id": "shadow",
+    "name": "Drop Shadow",
+    "description": "A soft dark shadow behind the window, cast slightly downward the way a real light would. It follows the frame's rounded corners, softens on the unfocused window and leaves the window content untouched. Size, offset, colour and strength are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Ambience",
+    "fragmentShader": "effect.frag",
+    "paddingParam": "shadowSize",
+    "parameters": [
+        {
+            "id": "shadowSize",
+            "name": "Shadow size",
+            "type": "int",
+            "default": 28,
+            "min": 4,
+            "max": 128,
+            "description": "How far the shadow reaches from the edge (px)"
+        },
+        {
+            "id": "shadowStrength",
+            "name": "Shadow strength",
+            "type": "float",
+            "default": 0.85,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "Darkness of the shadow at the window edge"
+        },
+        {
+            "id": "offsetX",
+            "name": "Horizontal offset",
+            "type": "int",
+            "default": 0,
+            "min": -32,
+            "max": 32,
+            "description": "Sideways cast of the shadow (px, positive is right)"
+        },
+        {
+            "id": "offsetY",
+            "name": "Vertical offset",
+            "type": "int",
+            "default": 8,
+            "min": -32,
+            "max": 32,
+            "description": "Downward cast of the shadow (px, positive is down)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Corner rounding the shadow follows (px, match the Border pack)"
+        },
+        {
+            "id": "shadowColor",
+            "name": "Shadow colour",
+            "type": "color",
+            "default": "#99000000",
+            "description": "Colour of the shadow, translucent black by default"
+        }
+    ]
+}

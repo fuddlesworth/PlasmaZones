@@ -129,6 +129,7 @@ private Q_SLOTS:
         QJsonObject extra;
         extra.insert(QLatin1String("multipass"), true);
         extra.insert(QLatin1String("bufferShaders"), QJsonArray{QStringLiteral("buffer-a.frag")});
+        extra.insert(QLatin1String("bufferWraps"), QJsonArray{QStringLiteral("repeat")});
         extra.insert(QLatin1String("wallpaper"), true);
         extra.insert(QLatin1String("depthBuffer"), true);
         extra.insert(QLatin1String("bufferScale"), 0.5);
@@ -150,9 +151,64 @@ private Q_SLOTS:
         QVERIFY(eff.isValid());
         QCOMPARE(eff.isMultipass, true);
         QCOMPARE(eff.bufferShaderPaths.size(), 1);
+        // A VALID multipass pack keeps its per-buffer overrides — the
+        // single-pass coherence clear is gated on !isMultipass.
+        QCOMPARE(eff.bufferWraps, QStringList{QStringLiteral("repeat")});
         QCOMPARE(eff.useWallpaper, true);
         QCOMPARE(eff.useDepthBuffer, true);
         QCOMPARE(eff.bufferScale, qreal(0.5));
+    }
+
+    void testSinglePassClearsOrphanBufferOverrides()
+    {
+        // A pack that never declares multipass but ships per-buffer
+        // wrap/filter overrides must not carry them through parseEffect:
+        // they claim positional alignment with an empty bufferShaderPaths,
+        // survive toJson, and participate in operator==. Pins the
+        // single-pass coherence clear (mirrors the surface registry test).
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        QJsonObject extra;
+        extra.insert(QLatin1String("bufferWraps"), QJsonArray{QStringLiteral("clamp")});
+        extra.insert(QLatin1String("bufferFilters"), QJsonArray{QStringLiteral("nearest")});
+        writeMetadata(tmp.path() + QStringLiteral("/orphan"), QStringLiteral("orphan"), QStringLiteral("effect.frag"),
+                      extra);
+
+        AnimationShaderRegistry registry;
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
+
+        const AnimationShaderEffect eff = registry.effect(QStringLiteral("orphan"));
+        QVERIFY(eff.isValid());
+        QVERIFY(!eff.isMultipass);
+        QVERIFY(eff.bufferWraps.isEmpty());
+        QVERIFY(eff.bufferFilters.isEmpty());
+    }
+
+    void testFailClosedMultipassClearsOrphanBufferOverrides()
+    {
+        // multipass:true with a declared-but-missing buffer file fails closed
+        // to single-pass; the orphaned wrap/filter overrides must be cleared
+        // in the same normalization.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        QJsonObject extra;
+        extra.insert(QLatin1String("multipass"), true);
+        extra.insert(QLatin1String("bufferShaders"), QJsonArray{QStringLiteral("missing.frag")});
+        extra.insert(QLatin1String("bufferWraps"), QJsonArray{QStringLiteral("repeat")});
+        writeMetadata(tmp.path() + QStringLiteral("/failclosed"), QStringLiteral("failclosed"),
+                      QStringLiteral("effect.frag"), extra);
+        // missing.frag intentionally NOT written to disk.
+
+        AnimationShaderRegistry registry;
+        registry.addSearchPath(tmp.path(), LiveReload::Off);
+
+        const AnimationShaderEffect eff = registry.effect(QStringLiteral("failclosed"));
+        QVERIFY(eff.isValid());
+        QVERIFY(!eff.isMultipass);
+        QVERIFY(eff.bufferShaderPaths.isEmpty());
+        QVERIFY(eff.bufferWraps.isEmpty());
     }
 
     void testLaterPathOverridesEarlier()

@@ -125,6 +125,19 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     QString windowId = getWindowId(w);
     m_navigationHandler->syncFloatingStateForWindow(windowId);
 
+    // Decorate the new window immediately, open transition or not. The old
+    // slot-fight hazard is gone: reconcileDecorationShader defers the
+    // redirect/shader slot to any live transition (it only marks the entry,
+    // shaderApplied=false), and renderSurfaceChain re-evaluates the border
+    // entry per frame, compositing the decoration UNDER the open animation via
+    // uSurfaceLayer — so the border flies in WITH the window instead of
+    // popping in at transition end. updateWindowDecoration self-gates and is
+    // idempotent (snap/autotile re-running it later is harmless).
+    // Current-desktop only, matching updateAllDecorations.
+    if (w->isOnCurrentDesktop()) {
+        updateWindowDecoration(windowId, w);
+    }
+
     bool onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
 
     // First-frame suppression: KWin places a new window at its centred
@@ -306,7 +319,10 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
                            /*reverse=*/true, /*holdCloseGrab=*/true);
     m_windowAnimator->removeAnimation(w);
 
-    const QString closedWindowId = getWindowId(w);
+    // Same value as closingWindowId above: the windowId cache isn't dropped
+    // until later in this slot (m_windowIdCache.remove near the end), so a
+    // second getWindowId(w) would just re-hit the cache. Reuse the local.
+    const QString& closedWindowId = closingWindowId;
     const QString closedScreenId = getWindowScreenId(w);
 
     // Clean up snap-mode minimize tracking
@@ -321,18 +337,28 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_autotileHandler->clearDesktopMoveStash(closedWindowId);
 
     // Mirror that cleanup for snapping's own border set. Pure bookkeeping —
-    // the window is being destroyed, so no setNoBorder/removeWindowBorder is
-    // needed here (the border item is removed just below and the title bar
-    // dies with the window).
+    // the window is being destroyed, so no setNoBorder/removeWindowDecoration is
+    // needed here (the border entry / shader redirect is dropped just below and
+    // the title bar dies with the window).
     m_snapHandler->onWindowClosed(closedWindowId);
     // Drop the window's decoration ownership state (the Rule owner and any
     // force-show veto). forgetWindow makes zero compositor calls — the
     // decoration dies with the window.
     m_decorationManager->forgetWindow(closedWindowId);
 
-    // Remove the window's border item (parent WindowItem is being destroyed anyway,
-    // but clean up our tracking hash to avoid stale entries).
-    removeWindowBorder(closedWindowId);
+    // Drop the window's border entry and release its border-shader redirect —
+    // UNLESS a close transition was just installed above: renderSurfaceChain
+    // re-evaluates the entry per frame and composites the decoration UNDER the
+    // close animation (the border rides the closing window out instead of
+    // vanishing at frame 1). endShaderTransition removes the entry on
+    // teardown, and the windowDeleted handler is the backstop for a window
+    // destroyed mid-animation.
+    if (!m_shaderManager.hasTransition(w)) {
+        // Pass the window pointer: the id no longer resolves via
+        // findWindowById at this point, and the GL release must run (see
+        // removeWindowDecoration) or the redirect paints opaque black.
+        removeWindowDecoration(closedWindowId, w);
+    }
 
     // Notify general daemon for cleanup
     notifyWindowClosed(w);
@@ -340,8 +366,21 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // Clean up caches AFTER all consumers that call getWindowId(w).
     // The windowDeleted handler does final cleanup, but removing here
     // prevents re-insertion by any late calls.
-    m_windowIdCache.remove(w);
-    m_windowIdReverse.remove(closedWindowId);
+    //
+    // EXCEPT while a close transition is in flight: the border /
+    // multipass-composite entries kept alive above are keyed by the FROZEN
+    // windowId, and every close-frame fold lookup re-derives its key via
+    // getWindowId(w). Scrubbing the cache here would make that re-derive
+    // recompute from the now-Deleted window (empty window() / mutated
+    // class), yielding a different or empty id — every lookup misses, the
+    // fold never binds uSurfaceLayer, and the decoration vanishes at close
+    // frame 1 even though its entries were deliberately preserved. Keep the
+    // frozen mapping for the animation's lifetime; endShaderTransition and
+    // the windowDeleted backstop both re-scrub on teardown.
+    if (!m_shaderManager.hasTransition(w)) {
+        m_windowIdCache.remove(w);
+        m_windowIdReverse.remove(closedWindowId);
+    }
     m_trackedScreenPerWindow.remove(w);
     m_restoreSuppress.remove(w);
     // Drop any pending-but-not-yet-flushed frame geometry for the
@@ -355,6 +394,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // cleanup keeps the pending-batch in lockstep with the live
     // window set.
     m_pendingFrameGeometry.remove(closedWindowId);
+    m_focusFade.remove(closedWindowId);
     // Symmetric with the `windowDeleted` lambda in `lifecycle.cpp`
     // (which removes the same key from `m_frameOpacityCache` after the
     // close-grab unref). Close shaders held via `holdCloseGrab=true`
@@ -386,14 +426,15 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
         m_shaderManager.animationRuleEvaluator().clearCache();
 
         // A focus-scoped SetOpacity rule changes a window's resolved opacity
-        // when it gains or loses focus. updateAllBorders() below repaints any
-        // window that carries a border item, but an opacity-only (borderless)
-        // window has nothing to recreate — so without an explicit repaint its
-        // re-resolved opacity would not reach the screen until some unrelated
-        // damage happened to repaint it. Force a repaint of both the window
-        // gaining focus (w) and the one losing it (m_lastActivatedWindow).
-        // Gated on hasOpacityRules() because pure border-colour changes are
-        // already covered by updateAllBorders()'s item recreate.
+        // when it gains or loses focus. updateAllDecorations() below repaints any
+        // bordered window (updateWindowDecoration requests a full repaint), but an
+        // opacity-only (borderless) window has no border to re-resolve — so
+        // without an explicit repaint its re-resolved opacity would not reach
+        // the screen until some unrelated damage happened to repaint it. Force a
+        // repaint of both the window gaining focus (w) and the one losing it
+        // (m_lastActivatedWindow). Gated on hasOpacityRules() because pure
+        // border-colour changes are already covered by updateAllDecorations()'s
+        // per-window repaint.
         if (m_shaderManager.hasOpacityRules()) {
             if (w) {
                 w->addRepaintFull();
@@ -408,11 +449,11 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     // pointer is correct if opacity rules are added before the next activation.
     m_lastActivatedWindow = w;
 
-    // Recreate all borders so the active window gets the active color
-    // and inactive windows get the inactive color.  A full recreate is
-    // used instead of in-place setOutline() because the latter may not
-    // trigger a scene-graph repaint in all KWin versions.
-    updateAllBorders();
+    // Re-resolve every window's border against the new focus state so the
+    // active window picks up the active colour and the rest the inactive one.
+    // updateAllDecorations tears down and re-applies the per-window border shader
+    // (reconcileDecorationShader) for each tracked window.
+    updateAllDecorations();
 }
 
 void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
@@ -437,11 +478,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
 
                 // Title-bar state is rule-driven (no autotile decoration claim
                 // to release): KWin's off-desktop noBorder reset is corrected on
-                // desktop return by updateAllBorders → resyncWindow for any
+                // desktop return by updateAllDecorations → resyncWindow for any
                 // rule-owned window. onWindowClosed below only clears effect-side
                 // tracking (shared with the genuine-close path).
                 m_autotileHandler->onWindowClosed(windowId, screenId);
-                removeWindowBorder(windowId);
+                removeWindowDecoration(windowId);
                 qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
             }
         }
@@ -526,7 +567,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // this covers snapping-mode windows which autotile doesn't track.)
         //
         // VS crossing detection uses PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing()
-        // (shared/virtualscreenid.h) — the same predicate used by autotilehandler/tiling.cpp.
+        // (<PhosphorIdentity/VirtualScreenId.h>) — the same predicate used by
+        // autotilehandler/tiling.cpp.
         connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_virtualScreensReady) {
                 return;
@@ -684,9 +726,87 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                                    window->isUserResize() ? PhosphorAnimation::ProfilePaths::WindowResize
                                                           : PhosphorAnimation::ProfilePaths::WindowMove,
                                    animationDurationMs());
+            // Genuine old-content capture for cross-fade shaders: a
+            // move/resize begins with the window ALIVE and its pre-drag
+            // content still current, so a shader that declares uOldWindow
+            // (ripple-snap, window-morph, ...) gets a real decorated
+            // snapshot to fade FROM — matching the drag-snap morph path —
+            // instead of leaning on the iHasOldWindow fallback (which
+            // collapses the old side to the live content). Especially
+            // material for resizes, where the old content re-lays. The
+            // !oldSnapshot guard preserves an existing capture on a
+            // retargeted transition, mirroring drag_snap; a failed capture
+            // clears needsSnapshot and the shader-side fallback covers it.
+            if (auto* st = m_shaderManager.findTransition(window); st && st->cached) {
+                if (st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
+                    st->needsSnapshot = true;
+                }
+                // HELD transition: the drag is open-ended, so the shader
+                // stays active (progress clamped at 1) until the release
+                // handler below schedules the settle-tail teardown; the
+                // duration timer stands down for held transitions. The
+                // grab origin anchors iMoveOffset, and the velocity spring
+                // integrates from here (see the paint pipeline).
+                st->holdUntilRelease = true;
+                st->grabOrigin = window->frameGeometry().topLeft();
+                st->lastMovePos = st->grabOrigin;
+                st->lastMoveSampleMs = -1;
+                // Seed the generic soft-body lattice (iMoveMesh) so a
+                // mesh-consuming pack (wobble, ...) gets neighbour-coupled
+                // physics from the first frame. The grip is the node
+                // nearest the cursor at grab; physics constants use KWin's
+                // middle preset (per-pack tuning can layer on later).
+                if (st->cached->iMoveMeshLoc >= 0 && KWin::effects) {
+                    ShaderInternal::initMeshSim(st->meshSim, window->frameGeometry(), KWin::effects->cursorPos(),
+                                                st->meshParams);
+                }
+            }
         }
     });
     connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {
+        // Release a HELD move/resize transition with a settle tail: the
+        // velocity spring decays through zero over the next fraction of a
+        // second, letting wobble/tilt shaders relax to rest before the
+        // teardown lands. Generation-guarded exactly like the duration
+        // timer so an interrupting transition owns its own lifetime.
+        if (window) {
+            if (auto* st = m_shaderManager.findTransition(window); st && st->holdUntilRelease) {
+                const quint64 myGeneration = st->generation;
+                QPointer<KWin::EffectWindow> safeWindow(window);
+                if (st->meshSim.initialized) {
+                    // Soft-body lattice: hand teardown to the settle gate.
+                    // Clearing holdUntilRelease drops the transition into
+                    // "active while the lattice still has energy" mode (see
+                    // the paint pipeline), so the wobble rings out for as
+                    // long as it physically takes rather than a fixed tail.
+                    // The timer is only a generous SAFETY cap in case the
+                    // sim never reaches its settle threshold.
+                    st->holdUntilRelease = false;
+                    constexpr int kMeshSettleSafetyCapMs = 4000;
+                    QTimer::singleShot(kMeshSettleSafetyCapMs, this, [this, safeWindow, myGeneration]() {
+                        if (!safeWindow) {
+                            return;
+                        }
+                        if (const auto* live = m_shaderManager.findTransition(safeWindow);
+                            live && live->generation == myGeneration) {
+                            endShaderTransition(safeWindow);
+                        }
+                    });
+                } else {
+                    // Velocity / trail packs: the springLag decays over the
+                    // next fraction of a second, so keep the fixed tail.
+                    QTimer::singleShot(animationDurationMs(), this, [this, safeWindow, myGeneration]() {
+                        if (!safeWindow) {
+                            return;
+                        }
+                        if (const auto* live = m_shaderManager.findTransition(safeWindow);
+                            live && live->generation == myGeneration) {
+                            endShaderTransition(safeWindow);
+                        }
+                    });
+                }
+            }
+        }
         const bool wasResize = (window && m_resizingWindow == window);
         m_resizingWindow = nullptr;
         // A floating window the user just RESIZED has a new free size. Persist it
@@ -815,7 +935,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // Self-heal a noBorder reset KWin issues asynchronously after a
                 // cross-OUTPUT move. For a rule-owned (title-bar-hidden) window
                 // the manager already believes it hidden, so the synchronous
-                // resync in updateAllBorders bails ("still suppressed") when it
+                // resync in updateAllDecorations bails ("still suppressed") when it
                 // runs before KWin re-evaluates the decoration. KWin grows the
                 // frame by the title-bar height when it re-decorates, firing this
                 // very signal: resyncWindow re-hides exactly the windows the

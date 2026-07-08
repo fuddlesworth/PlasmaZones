@@ -99,6 +99,10 @@ SettingsFlickable {
         // (the overlay/snapping shader catalog) for the overlayShader picker
         // editor (OverrideOverlayShader) and its read-only name resolution.
         readonly property var snappingShadersPage: settingsController.snappingShadersPage
+        // `DecorationPageController` — exposes `availableShaderEffects()` (the
+        // surface-pack catalog) for the decorationChain editor in ActionRow
+        // (OverrideDecorationChain) and its read-only name resolution.
+        readonly property var decorationPage: settingsController.decorationPage
         // `TilingAlgorithmController` — exposes `customParamsForAlgorithm(id)` (the
         // Luau-declared custom-param schema) for the SetAlgorithmParam inline
         // params editor in ActionRow.

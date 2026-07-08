@@ -128,6 +128,23 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("animations-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect")});
 
+    // Decorations
+    search->setPageKeywords(QStringLiteral("decorations-windows"),
+                            {PhosphorI18n::tr("window"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("border"),
+                             PhosphorI18n::tr("surface"), PhosphorI18n::tr("appearance")});
+    search->setPageKeywords(
+        QStringLiteral("decorations-osds"),
+        {PhosphorI18n::tr("osd"), PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("decoration")});
+    search->setPageKeywords(QStringLiteral("decorations-popups"),
+                            {PhosphorI18n::tr("popup"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("tooltip")});
+    search->setPageKeywords(QStringLiteral("decorations-sets"),
+                            {PhosphorI18n::tr("decoration set"), PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"),
+                             PhosphorI18n::tr("profile"), PhosphorI18n::tr("pack")});
+    search->setPageKeywords(QStringLiteral("decorations-shaders"),
+                            {PhosphorI18n::tr("shader"), PhosphorI18n::tr("surface"), PhosphorI18n::tr("pack"),
+                             PhosphorI18n::tr("border"), PhosphorI18n::tr("glass"), PhosphorI18n::tr("glow"),
+                             PhosphorI18n::tr("blur")});
+
     // Top-level + tools
     search->setPageKeywords(QStringLiteral("window-appearance"),
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("border"), PhosphorI18n::tr("color"),
@@ -152,6 +169,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("general"), QStringLiteral("renderingBackend"),
                PhosphorI18n::tr("Rendering backend"),
                {PhosphorI18n::tr("opengl"), PhosphorI18n::tr("vulkan"), PhosphorI18n::tr("graphics")});
+    addSection(search, QStringLiteral("general"), QStringLiteral("shaderEffects"), PhosphorI18n::tr("Shader Effects"));
+    addSetting(search, QStringLiteral("general"), QStringLiteral("frameRate"), PhosphorI18n::tr("Frame rate"),
+               {PhosphorI18n::tr("fps"), PhosphorI18n::tr("refresh"), PhosphorI18n::tr("animation")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioSpectrum"), PhosphorI18n::tr("Audio spectrum"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("music"), PhosphorI18n::tr("visualizer"),
+                PhosphorI18n::tr("sound")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("spectrumBars"), PhosphorI18n::tr("Spectrum bars"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("bands"), PhosphorI18n::tr("frequency")});
     addSection(search, QStringLiteral("general"), QStringLiteral("windowFiltering"),
                PhosphorI18n::tr("Window filtering"));
     addSetting(search, QStringLiteral("general"), QStringLiteral("excludeTransient"),
@@ -193,8 +218,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Zone Labels"));
     addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("effects"),
                PhosphorI18n::tr("Effects"));
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("shaderEffects"),
-               PhosphorI18n::tr("Shader Effects"));
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("systemAccentColor"),
                PhosphorI18n::tr("System accent color"),
                {PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("colour")});
@@ -232,16 +255,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("index"), PhosphorI18n::tr("digit"), PhosphorI18n::tr("label")});
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("flashOnLayoutSwitch"),
                PhosphorI18n::tr("Flash on layout switch"), {PhosphorI18n::tr("blink"), PhosphorI18n::tr("animation")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("frameRate"),
-               PhosphorI18n::tr("Frame rate"),
-               {PhosphorI18n::tr("fps"), PhosphorI18n::tr("refresh"), PhosphorI18n::tr("animation")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("audioSpectrum"),
-               PhosphorI18n::tr("Audio spectrum"),
-               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("music"), PhosphorI18n::tr("visualizer"),
-                PhosphorI18n::tr("sound")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("spectrumBars"),
-               PhosphorI18n::tr("Spectrum bars"),
-               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("bands"), PhosphorI18n::tr("frequency")});
 
     // Window Appearance (shared baseline-rule editor)
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("borders"), PhosphorI18n::tr("Borders"));

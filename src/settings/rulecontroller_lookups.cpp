@@ -51,6 +51,13 @@ void RuleController::setShaderEffectLookup(RuleModel::LabelLookup fn)
     m_model.setShaderEffectLabelLookup(std::move(fn));
 }
 
+void RuleController::setDecorationPackLookup(RuleModel::LabelLookup fn)
+{
+    // Same summary-enhancement wiring as setShaderEffectLookup, resolved
+    // against the surface shader registry (decoration packs).
+    m_model.setDecorationPackLabelLookup(std::move(fn));
+}
+
 void RuleController::setOverlayShaderLookup(RuleModel::LabelLookup fn)
 {
     // Same separate-wiring rationale as setShaderEffectLookup above; the overlay

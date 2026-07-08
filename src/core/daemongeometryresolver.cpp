@@ -62,4 +62,16 @@ int DaemonGeometryResolver::defaultBorderRadius() const
     return m_settings ? m_settings->borderRadius() : ::PhosphorZones::ZoneDefaults::BorderRadius;
 }
 
+int DaemonGeometryResolver::snapBorderInset() const
+{
+    // No inset. The KWin effect's border shader recolours the window's OWN
+    // outermost band (inside the frame), for decorated and borderless windows
+    // alike, so the border never extends past the frame edge into the neighbour.
+    // A snapped window therefore fills its zone exactly; any visible separation
+    // between tiles must come from the zone gap/padding settings, not from a
+    // border-width inset (which previously assumed the border was drawn OUTSIDE
+    // the frame and added a spurious 2x-border-width gap between tiles).
+    return 0;
+}
+
 } // namespace PlasmaZones

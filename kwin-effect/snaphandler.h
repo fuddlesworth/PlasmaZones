@@ -6,7 +6,6 @@
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 
-#include <QColor>
 #include <QHash>
 #include <QObject>
 #include <QPointF>
@@ -57,7 +56,10 @@ struct CachedSnapRestore
  * Delegates window lookups back to the effect through the m_effect back-pointer.
  *
  * Built on the shared PhosphorCompositor BorderState + AutotileStateHelpers so
- * snap and autotile share one standardized tracking mechanism.
+ * snap and autotile share one standardized tracking mechanism. The effect's
+ * membership resolver (resolveSurfacePathFor) reads isTiledWindow() here
+ * alongside AutotileHandler's so each window resolves to the decoration surface
+ * path of the mode that manages it.
  */
 class SnapHandler : public QObject
 {
@@ -71,8 +73,10 @@ public:
     /// Record @p windowId as snap-committed on @p screenId (idempotent) and
     /// (re)draw its border. Title-bar hiding is driven by rules.
     void markWindowSnapped(const QString& windowId, const QString& screenId);
-    /// Drop @p windowId from the snap set on every screen and remove its
-    /// border. Title-bar restores flow through the rule path.
+    /// Drop @p windowId from the snap set on every screen, remove its border,
+    /// and clear its zone-cache entry (the IsSnapped / Zone rule-fact source)
+    /// so placement-scoped rules re-resolve immediately. Title-bar restores
+    /// flow through the rule path.
     void clearWindowSnapped(const QString& windowId);
     /// Drop all snap tiled-tracking bookkeeping. Physical title-bar restores
     /// are the DecorationManager's job — teardown callers pair this with
@@ -80,7 +84,7 @@ public:
     /// AutotileHandler::clearTiledTracking).
     void clearSnapTracking();
     /// Drop snap border/title-bar tracking for a window being destroyed. Pure
-    /// bookkeeping — no setNoBorder/removeWindowBorder, the window is going away.
+    /// bookkeeping — no setNoBorder/removeWindowDecoration, the window is going away.
     void onWindowClosed(const QString& windowId);
 
     // ── Snapping focus-follows-mouse (mirrors AutotileHandler) ──

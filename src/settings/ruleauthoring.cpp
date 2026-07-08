@@ -402,6 +402,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (key == ActionParam::Event) {
         return PhosphorI18n::tr("Event");
     }
+    if (key == ActionParam::Chain) {
+        return PhosphorI18n::tr("Decoration packs");
+    }
     if (key == ActionParam::EffectId) {
         return PhosphorI18n::tr("Shader effect");
     }
@@ -559,6 +562,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::OverrideAnimationShader) {
         return PhosphorI18n::tr("Override animation shader");
+    }
+    if (type == ActionType::OverrideDecorationChain) {
+        return PhosphorI18n::tr("Override decoration packs");
     }
     if (type == ActionType::OverrideAnimationTiming) {
         return PhosphorI18n::tr("Override animation duration");
@@ -1193,6 +1199,12 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // passes the validator (non-empty array of positive ordinals) before
             // the user edits the zone list.
             payload[key] = QVariantList{1};
+        } else if (kind == QLatin1String("decorationChain")) {
+            // Seed an empty array: unlike zoneOrdinals, an empty chain IS a
+            // valid payload (the "no decoration" sentinel), so a fresh
+            // OverrideDecorationChain rule is savable immediately and the
+            // user stacks packs from there.
+            payload[key] = QVariantList{};
         } else if (kind == QLatin1String("virtualDesktop")) {
             // Seed desktop 1 so a fresh RouteToDesktop rule passes the validator
             // (a 1-based ordinal) before the user picks a desktop.

@@ -19,7 +19,7 @@ import org.plasmazones.common as PZCommon
  * `actionEdited(updatedAction)`; the parent owns the list.
  *
  * For `overrideAnimationShader` and `overrideOverlayShader`, a
- * `ShaderParameterEditor` surfaces below the row when an effect is selected so
+ * `ShaderParamsEditor` surfaces below the row when an effect is selected so
  * shader uniforms can be edited in place — matching the animation-settings
  * page's per-event editor. Each shader-override type sources its uniform schema
  * from its own registry (animation vs overlay/snapping).
@@ -117,7 +117,7 @@ ColumnLayout {
     }
     /// The active shader-uniform schema for whichever shader-override action is
     /// being edited (animation or overlay) — drives the inline
-    /// ShaderParameterEditor below the row.
+    /// ShaderParamsEditor below the row.
     readonly property var _activeShaderParamSchema: {
         if (row.action.type === "overrideAnimationShader")
             return row._shaderParamSchema;
@@ -156,18 +156,17 @@ ColumnLayout {
         next[name] = value;
         row.actionEdited(row._withParam("params", next));
     }
-    /// Working-state lock map for the shader-params editor — mirrors the
-    /// per-event animation editor's behaviour. Locks influence randomize
-    /// (locked params are kept) but are NOT persisted to the rule, so a
-    /// reopened rule starts with no locks (same as the per-event card).
-    /// The map is reset whenever the selected `effectId` changes so locks
-    /// for the previous effect don't leak into the new effect's params
-    /// (e.g. `intensity` locked under Smoke shouldn't carry into BMW).
-    property var _shaderParamLocks: ({})
     /// Stable empty-object fallback for the inline shader params editor's
     /// `currentValues` binding — using `({})` inline would allocate a new
     /// object identity per binding evaluation and churn the editor.
     readonly property var _emptyShaderParams: ({})
+    // The OverrideDecorationChain action payload has a fixed two-key schema: the
+    // ordered pack list under "chain", the per-pack overrides under "params".
+    // The inline add-picker and the below-row list editor live in different
+    // scopes (the list editor's Loader has no param descriptor), so naming the
+    // keys once here keeps the two halves from drifting onto different literals.
+    readonly property string _decorationChainKey: "chain"
+    readonly property string _decorationParamsKey: "params"
     // Param-editor Components — the `modelData` they reference is the
     // **Loader**'s `modelData` (set by Repeater), reached via `parent.modelData`
     // since each loaded item is parented to the Loader. A `required property
@@ -201,6 +200,8 @@ ColumnLayout {
     // ones incompatible with the action's target event render dimmed. Wire
     // value is the effect id.
     property Component _shaderEffectEditor
+    property Component _decorationChainEditor
+    property Component _decorationChainListEditor
     // Overlay-shader picker for OverrideOverlayShader actions — the overlay/
     // snapping shader registry (Snapping → Shaders page), distinct from the
     // animation shaders above. Wire value is the shader id.
@@ -314,17 +315,19 @@ ColumnLayout {
 
     spacing: Kirigami.Units.smallSpacing
 
-    // Reset session locks when the user switches the effect. Tracking via
-    // a Connections handler so the reset fires every time the effectId
-    // transitions (not just on the initial set). `target` is declared
-    // BEFORE the signal-handler function — strict QML resolves signal
-    // names against the target's metaobject at parse time.
+    // Reset session locks when the user switches the effect. The shared
+    // ShaderParamsEditor owns the working-state lock map, so the reset
+    // clears it on the loaded editor instance. Tracking via a Connections
+    // handler so the reset fires every time the effectId transitions (not
+    // just on the initial set). `target` is declared BEFORE the
+    // signal-handler function — strict QML resolves signal names against
+    // the target's metaobject at parse time.
     Connections {
         function onActionEdited(updated) {
             // Compare against the action BEFORE the edit lands — `row.action`
             // is still the previous state until the parent re-feeds us.
-            if ((row.action.type === "overrideAnimationShader" || row.action.type === "overrideOverlayShader") && updated && updated.effectId !== row.action.effectId)
-                row._shaderParamLocks = ({});
+            if ((row.action.type === "overrideAnimationShader" || row.action.type === "overrideOverlayShader") && updated && updated.effectId !== row.action.effectId && shaderParamsLoader.item)
+                shaderParamsLoader.item.lockedParams = ({});
         }
 
         target: row
@@ -449,6 +452,9 @@ ColumnLayout {
                     if (modelData.kind === "shaderEffect")
                         return row._shaderEffectEditor;
 
+                    if (modelData.kind === "decorationChain")
+                        return row._decorationChainEditor;
+
                     if (modelData.kind === "overlayShader")
                         return row._overlayShaderEditor;
 
@@ -509,11 +515,27 @@ ColumnLayout {
     // registry's schema). Matches the per-event editor on the animation settings
     // page so users can tweak uniforms without leaving the rule editor.
     Loader {
+        id: shaderParamsLoader
+
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
         active: row._activeShaderParamSchema.length > 0
         visible: active
         sourceComponent: row._shaderParamsEditor
+    }
+
+    // ── Bottom: decoration-chain rows for OverrideDecorationChain ────────────
+    // The inline slot holds only the compact add-picker; the chain itself
+    // (ordered rows with reorder/remove and inline per-pack parameters)
+    // renders full-width down here, mirroring the decoration surface cards.
+    Loader {
+        id: decorationChainLoader
+
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+        active: row.action.type === "overrideDecorationChain"
+        visible: active
+        sourceComponent: row._decorationChainListEditor
     }
 
     // ── Bottom: custom-parameter editor for SetAlgorithmParam ────────────────
@@ -664,14 +686,17 @@ ColumnLayout {
     _colorParamEditor: Component {
         RowLayout {
             readonly property var _param: parent.modelData
-            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : "#FF3DAEE9"
+            // Final fallback (colour param with no stored value AND no metadata
+            // default) derives from the theme's accent rather than a hardcoded
+            // hex (CLAUDE.md: never hardcode colors).
+            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : (_param.default !== undefined ? String(_param.default) : String(Kirigami.Theme.highlightColor))
             // A border-colour action's single `value` param may carry the "accent"
             // sentinel ("follow the system accent") instead of a hex string. It is
             // not a QColor, so render the live system colour for the swatch and a
             // word for the label rather than letting QColor("accent") fall to black.
             readonly property bool _isAccent: _hex === "accent"
             // The accent sentinel follows the system colour scheme per focus state,
-            // the same split updateWindowBorder applies: the focused (active) slot
+            // the same split updateWindowDecoration applies: the focused (active) slot
             // adopts the highlight colour, the unfocused (inactive) slot the inactive
             // colour. Preview the matching system colour WITH its alpha so the swatch
             // shows what the border will actually draw instead of one opaque accent
@@ -985,6 +1010,104 @@ ColumnLayout {
         }
     }
 
+    _decorationChainEditor: Component {
+        // Inline half of the OverrideDecorationChain editor: a compact
+        // add-picker sitting in the THEN row (mirroring the shader-effect
+        // picker's placement); selecting a pack APPENDS it to the action's
+        // chain. The chain rows themselves render full-width BELOW the row
+        // via decorationChainLoader, exactly like the shader-uniform editor
+        // splits from its inline effect picker.
+        PZCommon.CategoryMenuButton {
+            readonly property var _param: parent.modelData
+            readonly property var _chain: row.action[row._decorationChainKey] || []
+            // Packs not already in the chain; re-evaluates as the chain grows.
+            readonly property var _addable: {
+                var all = row.appSettings && row.appSettings.decorationPage ? row.appSettings.decorationPage.availableShaderEffects() : [];
+                var out = [];
+                for (var i = 0; i < all.length; i++) {
+                    if (all[i] && all[i].id && _chain.indexOf(all[i].id) < 0)
+                        out.push(all[i]);
+                }
+                return out;
+            }
+
+            items: _addable
+            enabled: _addable.length > 0
+            currentId: ""
+            includeNoneEntry: false
+            placeholderText: i18nc("@action:button", "Add a pack…")
+            Accessible.description: _param.label
+            onSelected: function (id) {
+                if (!id || id.length === 0)
+                    return;
+                var next = _chain.slice();
+                next.push(id);
+                row.actionEdited(row._withParam(row._decorationChainKey, next));
+            }
+        }
+    }
+
+    _decorationChainListEditor: Component {
+        // Below-row half of the OverrideDecorationChain editor: the SAME
+        // chain rows the decoration surface cards embed (reorder, remove,
+        // expand for full descriptions + per-pack parameters), rewired so
+        // every signal mutates the ACTION payload. The add row is hidden
+        // (the inline picker above owns adding) and so are the layer
+        // toggles (a rule chain is explicit; remove a pack instead). An
+        // empty chain is the valid "no decoration" sentinel.
+        ChainEditor {
+            availableShaders: row.appSettings && row.appSettings.decorationPage ? row.appSettings.decorationPage.availableShaderEffects() : []
+            chain: row.action[row._decorationChainKey] || []
+            // Hoisted stable-empty identity (same as _shaderParamsEditor's
+            // currentValues) rather than an inline `({})` that churns a new
+            // object per binding evaluation.
+            packParameters: row.action[row._decorationParamsKey] || row._emptyShaderParams
+            showLayerToggles: false
+            showAddRow: false
+            onChainChangeRequested: function (newChain) {
+                // Prune params of removed packs, mirroring
+                // DecorationPageController.setChain: re-adding a pack starts
+                // from its defaults rather than resurrecting old overrides.
+                var cur = row.action[row._decorationParamsKey] || {};
+                var pruned = {};
+                for (var pid in cur) {
+                    if (newChain.indexOf(pid) >= 0)
+                        pruned[pid] = cur[pid];
+                }
+                var next = row._withParam(row._decorationChainKey, newChain);
+                next[row._decorationParamsKey] = pruned;
+                row.actionEdited(next);
+            }
+            onParamChangeRequested: function (packId, paramId, value) {
+                var cur = row.action[row._decorationParamsKey] || {};
+                var params = {};
+                for (var pid in cur)
+                    params[pid] = cur[pid];
+                var packParams = {};
+                var curPack = params[packId] || {};
+                for (var k in curPack)
+                    packParams[k] = curPack[k];
+                packParams[paramId] = value;
+                params[packId] = packParams;
+                row.actionEdited(row._withParam(row._decorationParamsKey, params));
+            }
+            onParamsRandomizeRequested: function (packId, rolled) {
+                var cur = row.action[row._decorationParamsKey] || {};
+                var params = {};
+                for (var pid in cur)
+                    params[pid] = cur[pid];
+                var packParams = {};
+                var curPack = params[packId] || {};
+                for (var k in curPack)
+                    packParams[k] = curPack[k];
+                for (var r in rolled)
+                    packParams[r] = rolled[r];
+                params[packId] = packParams;
+                row.actionEdited(row._withParam(row._decorationParamsKey, params));
+            }
+        }
+    }
+
     _shaderEffectEditor: Component {
         // Cascading category menu (same widget as the action-type picker above
         // and the animations page's shader picker) instead of a flat combo, so
@@ -1044,18 +1167,20 @@ ColumnLayout {
     }
 
     _shaderParamsEditor: Component {
-        PZCommon.ShaderParameterEditor {
+        PZCommon.ShaderParamsEditor {
             id: paramEditor
 
             parameters: row._activeShaderParamSchema
             currentValues: row.action.params || row._emptyShaderParams
-            lockedParams: row._shaderParamLocks
+            effectId: row.action.effectId || ""
             enableLocking: true
             enableRandomize: true
-            enableGroups: true
             enableImage: false
             compact: true
-            onValueChanged: function (paramId, value) {
+            // The shared editor owns the session-only lock map and hosts the
+            // colour dialog; the rule only persists values. Locks reset on
+            // effect switch via the Loader (see the Connections handler above).
+            onValueChanged: function (effectId, paramId, value) {
                 // Clone the current param map and stamp the new value so the
                 // binding re-evaluates (mutating in place wouldn't trigger).
                 var next = ({});
@@ -1065,19 +1190,9 @@ ColumnLayout {
                 next[paramId] = value;
                 row.actionEdited(row._withParam("params", next));
             }
-            onLockToggled: function (paramId, locked) {
-                // Mirror AnimationProfileEditor — the editor's helper computes
-                // the post-toggle map so the same merge logic lives in one
-                // place. Locks are session state, not persisted to the rule.
-                row._shaderParamLocks = paramEditor.lockedAfterToggle(paramId, locked);
-            }
-            onLockAllRequested: function (lock) {
-                row._shaderParamLocks = paramEditor.lockedAfterAllToggle(lock);
-            }
-            onRandomizeRequested: {
+            onRandomizeRequested: function (rolled) {
                 // computeRandomized respects locks: locked params keep their
                 // current value, the rest are rolled per their schema range.
-                var rolled = paramEditor.computeRandomized();
                 row.actionEdited(row._withParam("params", rolled));
             }
         }
@@ -1125,7 +1240,10 @@ ColumnLayout {
                         from: parent._pMin
                         to: parent._pMax
                         stepSize: parent._pRange <= 1 ? 0.01 : (parent._pRange <= 10 ? 0.1 : 1)
-                        value: parent._pValue
+                        // A number param that declares neither value nor
+                        // defaultValue yields undefined → NaN into the slider;
+                        // fall back to the min so from/to stay finite.
+                        value: Number.isFinite(parent._pValue) ? parent._pValue : parent._pMin
                         formatValue: function (v) {
                             if (parent._pRange <= 1)
                                 return Math.round(v * 100) + "%";

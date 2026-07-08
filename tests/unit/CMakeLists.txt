@@ -55,6 +55,10 @@ add_executable(test_wts_queries core/test_wts_queries.cpp)
 target_link_libraries(test_wts_queries PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_queries COMMAND test_wts_queries)
 
+add_executable(test_daemongeometryresolver_inset core/test_daemongeometryresolver_inset.cpp)
+target_link_libraries(test_daemongeometryresolver_inset PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_daemongeometryresolver_inset COMMAND test_daemongeometryresolver_inset)
+
 add_executable(test_wts_clearfloat core/test_wts_clearfloat.cpp)
 target_link_libraries(test_wts_clearfloat PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_clearfloat COMMAND test_wts_clearfloat)
@@ -271,6 +275,12 @@ p_add_test(test_settings_animation_profile config/test_settings_animation_profil
 # autoAssignAllLayouts master toggle. Split from test_settings_core to
 # keep each test file under the project's <800-line guideline.
 p_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
+
+# Companion test executable: DecorationProfileTree persistence + JSON facade
+# (the decoration analogue of test_settings_shader_tree). PhosphorSurface
+# symbols resolve transitively via plasmazones_core (which links
+# PhosphorSurface PUBLIC for Settings::decorationProfileTree()).
+p_add_test(test_settings_decoration_tree config/test_settings_decoration_tree.cpp)
 
 # Companion test executable: per-page Discard/Reset primitives — committed
 # baseline capture, isKeyModified, discardKeys (revert-to-baseline) and
@@ -529,6 +539,10 @@ target_compile_definitions(test_engine_settings PRIVATE "P_SOURCE_DIR=\"${PROJEC
 add_executable(test_zone_shader_item ui/test_zone_shader_item.cpp)
 target_link_libraries(test_zone_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
 add_test(NAME test_zone_shader_item COMMAND test_zone_shader_item)
+
+add_executable(test_surface_shader_item ui/test_surface_shader_item.cpp)
+target_link_libraries(test_surface_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
+add_test(NAME test_surface_shader_item COMMAND test_surface_shader_item)
 
 # Pure-data byte-layout test for the zone UBO extension. No GPU / scene graph
 # required - guards against silent C++/GLSL UBO drift after a struct refactor.
@@ -789,6 +803,31 @@ target_link_libraries(test_animations_shader_overrides
         plasmazones_core
 )
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
+
+# Decoration page (per-surface DecorationProfileTree editor): reader /
+# mutator coverage for DecorationPageController — chain resolution,
+# override engage/clear, per-pack parameter merge/prune, subtree ops and
+# profilesChanged reload propagation. Compiles the controller sources
+# directly (they live in the plasmazones-settings executable, not
+# plasmazones_core); the split _paths TU carries parentChain().
+add_executable(test_decorationpagecontroller
+    settings/test_decorationpagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_paths.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_browser.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_sets.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
+)
+target_link_libraries(test_decorationpagecontroller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        PhosphorSurface::PhosphorSurface
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
 
 # Rules page (Phase 4 of the window-rule refactor): RuleModel
 # derives SectionRole / summaries from a rule's shape; RuleController

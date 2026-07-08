@@ -48,6 +48,7 @@ namespace SettingProperty {
 inline constexpr QLatin1String ShaderProfileTree("shaderProfileTree");
 inline constexpr QLatin1String MotionProfileTree("motionProfileTree");
 inline constexpr QLatin1String AnimationShaderSearchPaths("animationShaderSearchPaths");
+inline constexpr QLatin1String DecorationProfileTree("decorationProfileTree");
 }
 
 /// Keys for the extended-window-property QVariantMap (the trailing a{sv} argument

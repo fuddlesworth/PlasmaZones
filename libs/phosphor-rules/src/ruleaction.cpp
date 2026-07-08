@@ -8,6 +8,8 @@
 
 #include "rulelogging.h"
 
+#include <algorithm>
+
 namespace PhosphorRules {
 
 namespace {
@@ -92,12 +94,12 @@ bool hasHexColorOrAccent(const QJsonObject& params, QLatin1StringView key)
 // own ConfigDefaults ranges on consumption; these only reject grossly
 // malformed hand-edited payloads. Kept generous so values a user could pick
 // through the global UI are never dropped on load.
-constexpr double kMaxBorderWidth = 10.0;
-constexpr double kMaxBorderRadius = 20.0;
+// Border width/radius upper bounds live in RuleAction.h (MaxBorderWidth /
+// MaxBorderRadius) so the KWin-effect consumer re-validation shares them.
 constexpr double kMaxGap = 500.0;
 // Zone-overlay border dimensions have their own bounds mirroring the global
 // `Snapping.Zones.Border` config ranges (width 0-10, radius 0-50) — the overlay
-// radius goes wider than the per-window `kMaxBorderRadius` (20).
+// radius goes wider than the per-window `MaxBorderRadius` (20).
 constexpr double kMaxOverlayBorderRadius = 50.0;
 // Autotile parameter bounds (display units), mirroring the AutotileDefaults
 // clamps the engine applies on consumption. These only reject grossly malformed
@@ -276,7 +278,11 @@ bool ActionRegistry::hasTag(const QString& type, QLatin1StringView tag) const
     if (it == m_descriptors.constEnd()) {
         return false;
     }
-    return it->tags.contains(QString(tag));
+    // Compare against QLatin1StringView directly (QString::operator== has a
+    // non-allocating overload) rather than materialising a throwaway QString.
+    return std::any_of(it->tags.cbegin(), it->tags.cend(), [tag](const QString& t) {
+        return t == tag;
+    });
 }
 
 QStringList ActionRegistry::typesWithTag(QLatin1StringView tag) const
@@ -858,7 +864,7 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::OverlayBorderWidth),
         .validate =
             [](const QJsonObject& p) {
-                return hasNumberInRange(p, ActionParam::Value, kMaxBorderWidth);
+                return hasNumberInRange(p, ActionParam::Value, MaxBorderWidth);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -866,7 +872,7 @@ void ActionRegistry::registerBuiltins()
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("number"),
                      .min = 0.0,
-                     .max = kMaxBorderWidth,
+                     .max = MaxBorderWidth,
                      .defaultDisplay = 2.0}},
         .category = QStringLiteral("overlay"),
         .displayOrder = 7,
@@ -1003,7 +1009,7 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::BorderWidth),
         .validate =
             [](const QJsonObject& p) {
-                return hasNumberInRange(p, ActionParam::Value, kMaxBorderWidth);
+                return hasNumberInRange(p, ActionParam::Value, MaxBorderWidth);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -1011,7 +1017,7 @@ void ActionRegistry::registerBuiltins()
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("number"),
                      .min = 0.0,
-                     .max = kMaxBorderWidth,
+                     .max = MaxBorderWidth,
                      .defaultDisplay = 2.0}},
         .category = QStringLiteral("borderAppearance"),
         .displayOrder = 2,
@@ -1022,7 +1028,7 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::BorderRadius),
         .validate =
             [](const QJsonObject& p) {
-                return hasNumberInRange(p, ActionParam::Value, kMaxBorderRadius);
+                return hasNumberInRange(p, ActionParam::Value, MaxBorderRadius);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -1030,7 +1036,7 @@ void ActionRegistry::registerBuiltins()
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("number"),
                      .min = 0.0,
-                     .max = kMaxBorderRadius,
+                     .max = MaxBorderRadius,
                      .defaultDisplay = 8.0}},
         .category = QStringLiteral("borderAppearance"),
         .displayOrder = 3,
@@ -1068,6 +1074,26 @@ void ActionRegistry::registerBuiltins()
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
         .category = QStringLiteral("borderAppearance"),
         .displayOrder = 5,
+        .tags = {QString(Tag::Border), QString(Tag::Effect)},
+    });
+    // Decoration-chain override: an ordered surface-pack list (empty array =
+    // "no decoration" sentinel, so `Chain` must be PRESENT and an array but
+    // may be empty) plus an optional per-pack params object riding the shared
+    // `Params` key out-of-band, exactly like OverrideAnimationShader's
+    // uniform map (the editor writes it; it is not in the params schema).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OverrideDecorationChain),
+        .slotFor = constantSlot(ActionSlot::DecorationChain),
+        .validate =
+            [](const QJsonObject& p) {
+                return p.contains(ActionParam::Chain) && p.value(ActionParam::Chain).isArray();
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Chain), QString(ActionParam::Params)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Chain), .kind = QStringLiteral("decorationChain")}},
+        .category = QStringLiteral("borderAppearance"),
+        .displayOrder = 6,
         .tags = {QString(Tag::Border), QString(Tag::Effect)},
     });
 

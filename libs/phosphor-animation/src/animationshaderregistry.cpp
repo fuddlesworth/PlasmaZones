@@ -267,14 +267,11 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
 
     // Resolve buffer shader paths (relative to effect dir, like
     // fragment/vertex). Multipass is fail-closed on any missing buffer:
-    // `bufferShaderPaths` is positionally aligned with `bufferWraps`
-    // and `bufferFilters` (per-buffer overrides), and silently
-    // compacting a missing entry would shift downstream wrap/filter
-    // overrides onto the wrong buffer with no surface signal to the
-    // author. Disable multipass entirely instead so the author sees the
-    // full pipeline degrade to single-pass — they will notice and fix
-    // their `metadata.json`. The single-pass fallback is a documented
-    // graceful-degradation contract; silent index corruption is not.
+    // `bufferShaderPaths` is positionally aligned with the per-buffer
+    // wrap/filter overrides, so silently compacting a missing entry would
+    // shift those overrides onto the wrong buffer. Disable multipass entirely
+    // instead (a documented graceful-degradation contract) so the author sees
+    // the pipeline degrade and fixes their `metadata.json`.
     if (e.isMultipass) {
         if (e.bufferShaderPaths.isEmpty()) {
             // `multipass: true` with no declared buffer shaders is
@@ -303,15 +300,21 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
                     << missing.join(QLatin1String(", "));
                 e.isMultipass = false;
                 e.bufferShaderPaths.clear();
-                // Per-buffer overrides are positionally aligned with
-                // bufferShaderPaths; with paths cleared, the overrides are
-                // orphaned data that would still survive toJson round-trip
-                // and operator== comparison. Clear them in lockstep so the
-                // disabled-multipass struct is internally coherent.
-                e.bufferWraps.clear();
-                e.bufferFilters.clear();
+                // The per-buffer wrap/filter overrides are cleared by the
+                // single-pass coherence block below (isMultipass is now
+                // false), which is the single owner of that cleanup.
             }
         }
+    }
+    // A single-pass effect (multipass never declared, declared-but-empty, or
+    // fail-closed above) must not carry orphan per-buffer override arrays:
+    // they claim positional alignment with a bufferShaderPaths that is empty,
+    // survive toJson, and participate in operator==. Clear them so the parsed
+    // struct is internally coherent regardless of which branch produced the
+    // single-pass state. (Mirrors SurfaceShaderRegistry::parseEffect.)
+    if (!e.isMultipass) {
+        e.bufferWraps.clear();
+        e.bufferFilters.clear();
     }
 
     return e;

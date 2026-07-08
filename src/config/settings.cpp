@@ -18,6 +18,7 @@
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
 
 #include <QGuiApplication>
 #include <QMetaMethod>
@@ -323,6 +324,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::orderingGroup(), // "Ordering"
         ConfigDefaults::windowsAppearanceGroup(), // "Windows" — window border + title bar decoration
         ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
+        ConfigDefaults::surfaceGroup(), // "Surface" — per-surface decoration tree (DecorationProfileTree blob)
     };
 }
 
@@ -1304,6 +1306,75 @@ void Settings::setShaderProfileTreeJson(const QString& json)
         return;
     }
     setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
+}
+
+// ── Surface decoration tree (PhosphorConfig::Store-backed) ──────────────────
+// Persisted as one nested JSON entry under Surface/DecorationProfileTree,
+// mirroring how the animation shaderProfileTree persists under
+// Animations/ShaderProfileTree. The read-side falls back to the
+// ConfigDefaults tree (EMPTY / neutral: no baseline chain, no overrides —
+// border and titlebar visuals are owned by the window rules, see
+// ConfigDefaults::decorationProfileTree) when the store holds no entry, so a
+// fresh config starts with no shader-pack decoration.
+
+PhosphorSurfaceShaders::DecorationProfileTree Settings::decorationProfileTree() const
+{
+    const QVariantMap map =
+        m_store->read<QVariantMap>(ConfigDefaults::surfaceGroup(), ConfigDefaults::surfaceDecorationTreeKey());
+    // The Surface schema registers a NON-empty default for this key (the
+    // serialized ConfigDefaults::decorationProfileTree), so a store built with
+    // the schema never returns empty here. The guard covers a store constructed
+    // WITHOUT the schema default (e.g. a bare test stub): fall back to the same
+    // canonical default rather than to an empty tree.
+    if (map.isEmpty())
+        return ConfigDefaults::decorationProfileTree();
+    return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map));
+}
+
+void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
+{
+    // Prune the incoming tree at the persistence boundary — same
+    // belt-and-braces rationale as setShaderProfileTree. fromJson is the
+    // tree's canonical unsupported-path filter (setOverride itself does not
+    // validate), so a toJson→fromJson round trip IS the prune: a Q_INVOKABLE
+    // write from scripting/tests cannot stamp unsupported-path entries onto
+    // disk. The read side (decorationProfileTree) passes through the same
+    // filter, so the comparison below is pruned-vs-pruned.
+    const auto pruned = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(tree.toJson());
+    // Value-equality compare so a same-tree write doesn't fire a spurious
+    // changed signal. Compare against the effective current tree (the
+    // ConfigDefaults default when the store is empty) so writing the default
+    // back over an empty store is correctly a no-op.
+    if (pruned == decorationProfileTree())
+        return;
+    m_store->write(ConfigDefaults::surfaceGroup(), ConfigDefaults::surfaceDecorationTreeKey(),
+                   pruned.toJson().toVariantMap());
+    Q_EMIT decorationProfileTreeChanged();
+    Q_EMIT settingsChanged();
+}
+
+QString Settings::decorationProfileTreeJson() const
+{
+    return QString::fromUtf8(QJsonDocument(decorationProfileTree().toJson()).toJson(QJsonDocument::Compact));
+}
+
+void Settings::setDecorationProfileTreeJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        // Empty string = reset to the canonical default, exactly like the
+        // animation shaderProfileTree facade. That default is the EMPTY /
+        // neutral tree (ConfigDefaults::decorationProfileTree — border and
+        // titlebar visuals are rule-owned, the tree carries only opt-in
+        // shader-pack decoration), so clearing restores "no decoration".
+        setDecorationProfileTree(ConfigDefaults::decorationProfileTree());
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject()) {
+        qCWarning(lcConfig) << "setDecorationProfileTreeJson: malformed JSON, ignoring";
+        return;
+    }
+    setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
 }
 
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────

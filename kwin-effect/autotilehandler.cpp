@@ -371,7 +371,7 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             // already-tracked window).
             m_expectedOutputMove.remove(windowId);
             notifyWindowAdded(w);
-            m_effect->updateAllBorders();
+            m_effect->updateAllDecorations();
         }
         return;
     }
@@ -417,7 +417,7 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // handoffRelease) — else it lingers phantom.
                 cleanupAutotileTracking(windowId, oldScreenId);
             }
-            m_effect->updateAllBorders();
+            m_effect->updateAllDecorations();
             return;
         }
     }
@@ -579,7 +579,7 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         }
     }
 
-    m_effect->updateAllBorders();
+    m_effect->updateAllDecorations();
 }
 
 void AutotileHandler::cleanupAutotileTracking(const QString& windowId, const QString& screenId)
@@ -692,7 +692,7 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
         }
     }
 
-    m_effect->updateAllBorders();
+    m_effect->updateAllDecorations();
 }
 
 void AutotileHandler::onDaemonReady()

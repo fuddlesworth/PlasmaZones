@@ -1,0 +1,71 @@
+{
+    "id": "border-circuit",
+    "name": "Circuit Border",
+    "description": "Rounded corners and a window border textured as a hex circuit, with bright data pulses travelling around the band over a dim base grid. The cells flicker faintly and the whole band dims when the surface loses focus. Width, corner radius, hex size, pulse count, pulse speed and the two colours are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Borders",
+    "animated": true,
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "borderWidth",
+            "name": "Border width",
+            "type": "int",
+            "default": 4,
+            "min": 2,
+            "max": 12,
+            "description": "Thickness of the circuit band (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Roundness of the corners (px, 0 for square)"
+        },
+        {
+            "id": "hexSize",
+            "name": "Hex size",
+            "type": "float",
+            "default": 7.0,
+            "min": 3.0,
+            "max": 24.0,
+            "description": "Size of the circuit cells (px)"
+        },
+        {
+            "id": "pulseCount",
+            "name": "Pulse count",
+            "type": "int",
+            "default": 3,
+            "min": 1,
+            "max": 6,
+            "description": "How many data pulses travel the band at once"
+        },
+        {
+            "id": "pulseSpeed",
+            "name": "Pulse speed",
+            "type": "float",
+            "default": 0.12,
+            "min": 0.02,
+            "max": 1.0,
+            "description": "How many times per second each pulse travels around the border"
+        },
+        {
+            "id": "colorA",
+            "name": "Grid colour",
+            "type": "color",
+            "default": "#803daee9",
+            "description": "Colour of the dim base circuit grid"
+        },
+        {
+            "id": "colorB",
+            "name": "Pulse colour",
+            "type": "color",
+            "default": "#ff55aaff",
+            "description": "Colour of the travelling data pulses"
+        }
+    ]
+}

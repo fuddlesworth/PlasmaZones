@@ -91,8 +91,49 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
+#include <PhosphorPlacement/IGeometryResolver.h>
+#include <PhosphorEngine/IGeometrySettings.h>
 
 using StubSettingsQueries = StubSettings;
+
+// =========================================================================
+// Stub geometry resolver: returns a fixed snap-border inset so the snapped
+// frame-geometry inset can be exercised independently of ISettings wiring.
+// All gap/padding accessors fall through to defaults (matching the daemon
+// resolver's null-settings behaviour) so geometry maths stay deterministic.
+// =========================================================================
+class StubBorderInsetResolver : public PhosphorPlacement::IGeometryResolver
+{
+public:
+    explicit StubBorderInsetResolver(int inset)
+        : m_inset(inset)
+    {
+    }
+
+    int resolveInnerGap(PhosphorZones::Layout*, const QString&) const override
+    {
+        return PhosphorEngine::GeometryDefaults::InnerGap;
+    }
+    PhosphorLayout::EdgeGaps resolveOuterGaps(PhosphorZones::Layout*, const QString&) const override
+    {
+        return PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
+    }
+    int defaultBorderWidth() const override
+    {
+        return 2;
+    }
+    int defaultBorderRadius() const override
+    {
+        return 0;
+    }
+    int snapBorderInset() const override
+    {
+        return m_inset;
+    }
+
+private:
+    int m_inset;
+};
 
 // =========================================================================
 // Stub PhosphorZones::Zone Detector + createTestLayout come from the shared
@@ -341,6 +382,172 @@ private Q_SLOTS:
         QVERIFY(qAbs(geo.top() - expectedUnion.top()) <= 1);
         QVERIFY(qAbs(geo.right() - expectedUnion.right()) <= 1);
         QVERIFY(qAbs(geo.bottom() - expectedUnion.bottom()) <= 1);
+    }
+
+    // =====================================================================
+    // P1: Snap-border frame inset (reserved seam)
+    //
+    // The snap-border inset seam shrinks a snapped window's frame by the inset
+    // on every side so a border drawn on the window edge would sit INSIDE the
+    // zone, separating adjacent tiles. Production snapBorderInset() is pinned to
+    // 0 (no inset); this test exercises the insetRect seam itself with a
+    // SYNTHETIC non-zero inset supplied by a stub resolver, NOT a show-border
+    // setting. The fixture m_service has a null resolver (snapBorderInset() == 0),
+    // so it is the un-inset baseline; a fresh service with a stub resolver
+    // supplies the inset. Same layout + null screen manager → the only delta is the
+    // inset.
+    // =====================================================================
+
+    void testZoneGeometry_insetBySnapBorder()
+    {
+        constexpr int kInset = 4;
+        StubBorderInsetResolver resolver(kInset);
+        // unique_ptr so a failed assertion's early return can't leak the local.
+        const auto insetService = std::make_unique<PhosphorPlacement::WindowTrackingService>(
+            m_layoutManager, m_zoneDetector, nullptr, nullptr, &resolver);
+
+        const QRect baseline = m_service->zoneGeometry(m_zoneIds[0], QString());
+        const QRect inset = insetService->zoneGeometry(m_zoneIds[0], QString());
+        QVERIFY(baseline.isValid());
+        QVERIFY(inset.isValid());
+        QCOMPARE(inset, baseline.adjusted(kInset, kInset, -kInset, -kInset));
+    }
+
+    void testZoneGeometry_noInsetWhenBorderOff()
+    {
+        // Inset 0 mirrors snappingShowBorder == false: geometry is unchanged.
+        StubBorderInsetResolver resolver(0);
+        const auto service = std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, m_zoneDetector,
+                                                                                        nullptr, nullptr, &resolver);
+
+        QCOMPARE(service->zoneGeometry(m_zoneIds[0], QString()), m_service->zoneGeometry(m_zoneIds[0], QString()));
+    }
+
+    void testMultiZoneGeometry_insetSpanOnce()
+    {
+        constexpr int kInset = 4;
+        StubBorderInsetResolver resolver(kInset);
+        const auto insetService = std::make_unique<PhosphorPlacement::WindowTrackingService>(
+            m_layoutManager, m_zoneDetector, nullptr, nullptr, &resolver);
+
+        const QStringList multiZones = {m_zoneIds[0], m_zoneIds[1]};
+        const QRect baseline = m_service->multiZoneGeometry(multiZones, QString());
+        const QRect inset = insetService->multiZoneGeometry(multiZones, QString());
+        QVERIFY(baseline.isValid());
+        QVERIFY(inset.isValid());
+        // The COMBINED span is inset once (not per sub-zone): exactly kInset per
+        // side off the union rect.
+        QCOMPARE(inset, baseline.adjusted(kInset, kInset, -kInset, -kInset));
+    }
+
+    // =====================================================================
+    // P1: Commit-path inset — rotate + snap-all
+    //
+    // The snap border inset must be applied to the COMMITTED frame geometry of
+    // every snap-engine path that produces a real window frame, not just the
+    // WTS wrapper in isolation. SnapEngine::calculateRotation and
+    // calculateSnapAllWindowEntries build entry.targetGeometry — the rect that
+    // becomes the window's frame via applyGeometriesBatch — so both must route
+    // through the inset-applying WTS wrapper. Earlier they called the raw
+    // GeometryUtils::getZoneGeometryForScreen, which bypassed the inset and
+    // shrank the inter-tile gap on every rotate (the login-then-rotate
+    // whack-a-mole the user hit). These tests pin the contract by wiring a
+    // SnapEngine to an inset WTS and an un-inset WTS and comparing the produced
+    // targetGeometry against each service's own zoneGeometry().
+    // =====================================================================
+
+    // Helpers live in a plain private section — moc rejects non-slot
+    // declarations inside Q_SLOTS.
+private:
+    // A SnapEngine wired to a WTS carrying a border-inset resolver, sharing the
+    // fixture layout. Members declared service-first so reverse-order
+    // destruction tears the engine down before the service it references —
+    // and unique_ptr ownership means a failed assertion's early return in a
+    // test slot cannot leak either object.
+    struct EngineWithService
+    {
+        std::unique_ptr<PhosphorPlacement::WindowTrackingService> service;
+        std::unique_ptr<SnapEngine> engine;
+    };
+
+    EngineWithService makeEngineWithResolver(PhosphorPlacement::IGeometryResolver* resolver)
+    {
+        EngineWithService out;
+        out.service = std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, m_zoneDetector,
+                                                                                 nullptr, nullptr, resolver);
+        out.engine = std::make_unique<SnapEngine>(m_layoutManager, out.service.get(), m_zoneDetector, nullptr, nullptr);
+        out.engine->setEngineSettings(m_settings);
+        out.service->setSnapState(out.engine->snapState());
+        out.service->setSnapEngine(out.engine.get());
+        return out;
+    }
+
+private Q_SLOTS:
+    void testCalculateRotation_committedFrameInsetWhenBorderOn()
+    {
+        constexpr int kInset = 4;
+        StubBorderInsetResolver resolver(kInset);
+        const EngineWithService f = makeEngineWithResolver(&resolver);
+
+        // Snap one window to zone 0, then rotate clockwise → it targets zone 1.
+        const QString windowId = QStringLiteral("app:win:rotate-inset");
+        f.service->assignWindowToZone(windowId, m_zoneIds[0], QString(), 0);
+
+        const QVector<ZoneAssignmentEntry> entries = f.engine->calculateRotation(/*clockwise=*/true, QString());
+        QCOMPARE(entries.size(), 1);
+
+        const QString targetZoneId = entries[0].targetZoneId;
+        // The committed frame must equal the INSET zone geometry, not the raw
+        // zone rect — proving the rotate path routes through the wrapper.
+        QCOMPARE(entries[0].targetGeometry, f.service->zoneGeometry(targetZoneId, QString()));
+        QCOMPARE(entries[0].targetGeometry,
+                 m_service->zoneGeometry(targetZoneId, QString()).adjusted(kInset, kInset, -kInset, -kInset));
+    }
+
+    void testCalculateRotation_committedFrameNotInsetWhenBorderOff()
+    {
+        StubBorderInsetResolver resolver(0);
+        const EngineWithService f = makeEngineWithResolver(&resolver);
+
+        const QString windowId = QStringLiteral("app:win:rotate-noinset");
+        f.service->assignWindowToZone(windowId, m_zoneIds[0], QString(), 0);
+
+        const QVector<ZoneAssignmentEntry> entries = f.engine->calculateRotation(/*clockwise=*/true, QString());
+        QCOMPARE(entries.size(), 1);
+
+        const QString targetZoneId = entries[0].targetZoneId;
+        // Inset 0 (border off) → committed frame equals the full zone rect.
+        QCOMPARE(entries[0].targetGeometry, m_service->zoneGeometry(targetZoneId, QString()));
+    }
+
+    void testCalculateSnapAllWindows_committedFrameInsetWhenBorderOn()
+    {
+        constexpr int kInset = 4;
+        StubBorderInsetResolver resolver(kInset);
+        const EngineWithService f = makeEngineWithResolver(&resolver);
+
+        const QStringList windows = {QStringLiteral("new1:win:111")};
+        const QVector<ZoneAssignmentEntry> entries = f.engine->calculateSnapAllWindowEntries(windows, QString());
+        QCOMPARE(entries.size(), 1);
+
+        // The fill-empty-zone commit must inset the frame exactly like the
+        // wrapper — same proof as the rotate path.
+        QCOMPARE(entries[0].targetGeometry, f.service->zoneGeometry(entries[0].targetZoneId, QString()));
+        QCOMPARE(
+            entries[0].targetGeometry,
+            m_service->zoneGeometry(entries[0].targetZoneId, QString()).adjusted(kInset, kInset, -kInset, -kInset));
+    }
+
+    void testCalculateSnapAllWindows_committedFrameNotInsetWhenBorderOff()
+    {
+        StubBorderInsetResolver resolver(0);
+        const EngineWithService f = makeEngineWithResolver(&resolver);
+
+        const QStringList windows = {QStringLiteral("new1:win:222")};
+        const QVector<ZoneAssignmentEntry> entries = f.engine->calculateSnapAllWindowEntries(windows, QString());
+        QCOMPARE(entries.size(), 1);
+
+        QCOMPARE(entries[0].targetGeometry, m_service->zoneGeometry(entries[0].targetZoneId, QString()));
     }
 
     // =====================================================================

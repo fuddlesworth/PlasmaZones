@@ -16,7 +16,7 @@ import org.plasmazones.settings
  * · edit / duplicate / delete. Composite rules show condition / action-count
  * badges. The enabled dot is a toggle; edit / duplicate / delete are buttons.
  */
-ItemDelegate {
+ExpandableRowDelegate {
     // Drag-reorder lives in the RuleSectionList container (which owns the grip
     // column and the drop cascade), NOT in this delegate: a ColumnLayout-based
     // Repeater snaps items back to their layout position the instant a MouseArea
@@ -75,11 +75,11 @@ ItemDelegate {
     /// events, shader effects, curves) to the same labels the rule
     /// editor shows.
     property var appSettings: null
-    /// Current expansion state — toggled by the chevron on the row. Lives
-    /// on the delegate so each row expands independently; resets on page
-    /// reload (acceptable — the rule list is the page's primary content
-    /// and the expansion is a peek, not a persistent view mode).
-    property bool expanded: false
+    /// The expandable-row shell (hover highlight, whole-row click-to-expand,
+    /// animated clip, lazy body Loader) is inherited from
+    /// ExpandableRowDelegate; the body is the read-only WHEN/THEN preview,
+    /// disabled when no controller is threaded in.
+    expansionContent: row.controller !== null ? expansionComponent : null
 
     signal editRequested
     signal duplicateRequested
@@ -116,364 +116,273 @@ ItemDelegate {
     }
 
     // Instantiated inside a Repeater/ColumnLayout — `Layout.fillWidth: true`
-    // (set by the delegate's parent) drives the width; there is no enclosing
-    // ListView, so no `ListView.view` branch.
-    hoverEnabled: true
-    // Whole-row click toggles expansion (Option C). The toolbar buttons
-    // (edit / duplicate / delete) and the SettingsSwitch consume their own
-    // clicks, so a click on those never reaches this handler — the user can
-    // hit Edit / Duplicate / Delete / Toggle without accidentally expanding.
-    // Click events on the name/match-summary labels and badge area DO bubble
-    // up here, so clicking the body of the row toggles expansion. The
-    // `arrow-right` icon's rotation signals the state.
-    onClicked: {
-        row.expanded = !row.expanded;
+    // (set by the delegate's parent) drives the width. The hover highlight,
+    // the whole-row click-to-expand handling (toolbar buttons and the
+    // SettingsSwitch consume their own clicks first), and the animated
+    // expansion clip all come from the shared ExpandableRowDelegate shell;
+    // the children below are its header-row content.
+
+    // Enable/disable toggle. Replaces an earlier filled-dot affordance
+    // that read as decorative: users couldn't tell it was clickable, and
+    // the disabled-state hollow ring wasn't obviously distinct. The
+    // SettingsSwitch is the same control the rest of the settings app
+    // uses for boolean toggles (animated knob via PhosphorMotionAnimation,
+    // PointingHandCursor on hover), so the affordance matches the user's
+    // existing mental model and screen-reader output stays unchanged.
+    SettingsSwitch {
+        Layout.alignment: Qt.AlignVCenter
+        checked: row.ruleEnabled
+        accessibleName: row.ruleEnabled ? i18n("Disable rule %1", row.ruleName) : i18n("Enable rule %1", row.ruleName)
+        onToggled: function (newValue) {
+            row.toggleRequested(newValue);
+        }
     }
 
-    contentItem: ColumnLayout {
-        spacing: Kirigami.Units.smallSpacing
+    // Warning badge — sits before the rule name so it's the first thing
+    // the eye hits when scanning the list. Hovering reveals the count
+    // explanation; the editor sheet itself shows the full per-issue
+    // messages. Hidden when the rule is well-formed.
+    Kirigami.Icon {
+        visible: row.validationIssueCount > 0
+        Layout.alignment: Qt.AlignVCenter
+        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+        source: "dialog-warning"
+        Accessible.name: i18np("%n validation issue", "%n validation issues", row.validationIssueCount)
+        ToolTip.visible: warningHover.hovered
+        ToolTip.delay: Kirigami.Units.toolTipDelay
+        ToolTip.text: i18np("This rule has %n validation issue. Open the editor to see the details.", "This rule has %n validation issues. Open the editor to see the details.", row.validationIssueCount)
 
-        RowLayout {
+        HoverHandler {
+            id: warningHover
+        }
+    }
+
+    ColumnLayout {
+        Layout.fillWidth: true
+        spacing: 0
+
+        Label {
             Layout.fillWidth: true
-            spacing: Kirigami.Units.largeSpacing
+            text: row.ruleName.length > 0 ? row.ruleName : row.matchSummary
+            font.bold: true
+            opacity: row.ruleEnabled ? 1 : 0.5
+            elide: Text.ElideRight
+        }
 
-            // Enable/disable toggle. Replaces an earlier filled-dot affordance
-            // that read as decorative: users couldn't tell it was clickable, and
-            // the disabled-state hollow ring wasn't obviously distinct. The
-            // SettingsSwitch is the same control the rest of the settings app
-            // uses for boolean toggles (animated knob via PhosphorMotionAnimation,
-            // PointingHandCursor on hover), so the affordance matches the user's
-            // existing mental model and screen-reader output stays unchanged.
-            SettingsSwitch {
-                Layout.alignment: Qt.AlignVCenter
-                checked: row.ruleEnabled
-                accessibleName: row.ruleEnabled ? i18n("Disable rule %1", row.ruleName) : i18n("Enable rule %1", row.ruleName)
-                onToggled: function (newValue) {
-                    row.toggleRequested(newValue);
-                }
+        Label {
+            Layout.fillWidth: true
+            text: row.matchSummary
+            opacity: row.ruleEnabled ? 0.7 : 0.4
+            elide: Text.ElideRight
+            visible: row.ruleName.length > 0
+        }
+    }
+
+    // Section badge — the rule's category (Monitor / Application / …),
+    // shown first in the cluster so the flat priority list stays legible
+    // by category without grouping. Highlight-tinted (theme-derived, not
+    // hardcoded) to read as a category marker distinct from the neutral
+    // metadata badges that follow.
+    Rectangle {
+        visible: row.sectionLabel.length > 0
+        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: sectionBadgeLabel.implicitWidth + Kirigami.Units.largeSpacing
+        implicitHeight: sectionBadgeLabel.implicitHeight + Kirigami.Units.smallSpacing
+        radius: Kirigami.Units.smallSpacing
+        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
+
+        Label {
+            id: sectionBadgeLabel
+
+            anchors.centerIn: parent
+            text: row.sectionLabel
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            opacity: 0.85
+        }
+    }
+
+    // "Composite" badge — paired with the conditions count for composite
+    // rules. Surfaces the kind of rule the user is looking at without
+    // making them open the editor. Sentence case (project convention; the
+    // mockup's uppercase is intentionally not followed).
+    Rectangle {
+        visible: row.isComposite
+        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: compositeLabel.implicitWidth + Kirigami.Units.largeSpacing
+        implicitHeight: compositeLabel.implicitHeight + Kirigami.Units.smallSpacing
+        radius: Kirigami.Units.smallSpacing
+        color: Kirigami.Theme.alternateBackgroundColor
+
+        Label {
+            id: compositeLabel
+
+            anchors.centerIn: parent
+            // Project badge convention: title-case the noun ("Composite",
+            // "Conditions", "Actions", "Priority …"). Same in the
+            // condition/action/priority badges below — keeping them
+            // consistent so the eye reads the badge cluster as a unit.
+            text: i18nc("Badge shown when the rule's match is a composite expression", "Composite")
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            opacity: 0.7
+        }
+    }
+
+    // Condition-count badge for composite rules.
+    Rectangle {
+        visible: row.isComposite
+        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: condLabel.implicitWidth + Kirigami.Units.largeSpacing
+        implicitHeight: condLabel.implicitHeight + Kirigami.Units.smallSpacing
+        radius: Kirigami.Units.smallSpacing
+        color: Kirigami.Theme.alternateBackgroundColor
+
+        Label {
+            id: condLabel
+
+            anchors.centerIn: parent
+            text: i18np("%n Condition", "%n Conditions", row.conditionCount)
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            opacity: 0.7
+        }
+    }
+
+    // Action-count badge — shown for rules carrying more than one action.
+    Rectangle {
+        visible: row.actionCount > 1
+        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: actionLabel.implicitWidth + Kirigami.Units.largeSpacing
+        implicitHeight: actionLabel.implicitHeight + Kirigami.Units.smallSpacing
+        radius: Kirigami.Units.smallSpacing
+        color: Kirigami.Theme.alternateBackgroundColor
+
+        Label {
+            id: actionLabel
+
+            anchors.centerIn: parent
+            text: i18np("%n Action", "%n Actions", row.actionCount)
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            opacity: 0.7
+        }
+    }
+
+    // Priority badge — kept on every row so precedence stays legible even
+    // when the filter hides categories (the visible rows are then a subset,
+    // so position alone can't convey the true ordering). Managed System
+    // rules are pinned to INT_MIN, so show that intent, not the raw number.
+    Rectangle {
+        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: priorityLabel.implicitWidth + Kirigami.Units.largeSpacing
+        implicitHeight: priorityLabel.implicitHeight + Kirigami.Units.smallSpacing
+        radius: Kirigami.Units.smallSpacing
+        color: Kirigami.Theme.alternateBackgroundColor
+
+        Label {
+            id: priorityLabel
+
+            anchors.centerIn: parent
+            text: row.managed ? i18nc("Priority badge for a managed baseline rule that always sorts last", "Lowest priority") : i18nc("Badge showing the rule's raw priority integer", "Priority %1", row.priority)
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            opacity: 0.7
+        }
+    }
+
+    // Doubles as the expand-state indicator AND the visual separator
+    // between the match and action halves (shared ExpandChevron).
+    ExpandChevron {
+        expanded: row.expanded
+    }
+
+    // Action summary — wraps to two lines before eliding so multi-action
+    // labels like "Engine: Snapping · Snapping: Portrait 2-Row" don't get
+    // cut at "Portrait..." (a constant-width single-line elide makes the
+    // user open the editor just to see which layout the rule picks).
+    Label {
+        Layout.alignment: Qt.AlignVCenter
+        Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 18
+        elide: Text.ElideRight
+        font.bold: true
+        maximumLineCount: 2
+        opacity: row.ruleEnabled ? 1 : 0.5
+        text: row.actionSummary
+        wrapMode: Text.WordWrap
+    }
+
+    ToolButton {
+        icon.name: "document-edit"
+        Layout.alignment: Qt.AlignVCenter
+        ToolTip.text: i18n("Edit rule")
+        ToolTip.visible: hovered
+        Accessible.name: i18n("Edit rule %1", row.ruleName)
+        onClicked: row.editRequested()
+    }
+
+    // Duplicate — clones the rule with a fresh UUID and inserts it just
+    // after the original. Cheap way to template a near-identical rule
+    // (same match, tweak the actions; or same actions, tweak the match)
+    // without re-entering the editor from scratch.
+    ToolButton {
+        icon.name: "edit-copy"
+        Layout.alignment: Qt.AlignVCenter
+        ToolTip.text: i18n("Duplicate rule")
+        ToolTip.visible: hovered
+        Accessible.name: i18n("Duplicate rule %1", row.ruleName)
+        onClicked: row.duplicateRequested()
+    }
+
+    ToolButton {
+        // Managed System rules (the seeded defaults) are non-deletable —
+        // shown but disabled, so the button keeps its column alignment
+        // with the deletable rows in other sections.
+        enabled: !row.managed
+        icon.name: "edit-delete"
+        Layout.alignment: Qt.AlignVCenter
+        ToolTip.text: row.managed ? i18n("System rules can't be deleted") : i18n("Delete rule")
+        ToolTip.visible: hovered
+        Accessible.name: i18n("Delete rule %1", row.ruleName)
+        onClicked: row.deleteRequested()
+    }
+
+    // Lazily-loaded read-only preview of the rule's full match tree,
+    // hosted by the shell's expansion Loader (see expansionContent above).
+    // The controller's `ruleJson` returns a deep copy of the rule, so the
+    // View walks its own data and a controller-side mutation won't yank
+    // the tree mid-render.
+    Component {
+        id: expansionComponent
+
+        ColumnLayout {
+            readonly property var _ruleJson: row.controller ? row.controller.ruleJson(row.ruleId) : ({})
+
+            spacing: Kirigami.Units.smallSpacing
+
+            SectionHeaderPill {
+                Layout.alignment: Qt.AlignLeft
+                text: i18n("WHEN")
             }
 
-            // Warning badge — sits before the rule name so it's the first thing
-            // the eye hits when scanning the list. Hovering reveals the count
-            // explanation; the editor sheet itself shows the full per-issue
-            // messages. Hidden when the rule is well-formed.
-            Kirigami.Icon {
-                visible: row.validationIssueCount > 0
-                Layout.alignment: Qt.AlignVCenter
-                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                source: "dialog-warning"
-                Accessible.name: i18np("%n validation issue", "%n validation issues", row.validationIssueCount)
-                ToolTip.visible: warningHover.hovered
-                ToolTip.delay: Kirigami.Units.toolTipDelay
-                ToolTip.text: i18np("This rule has %n validation issue. Open the editor to see the details.", "This rule has %n validation issues. Open the editor to see the details.", row.validationIssueCount)
-
-                HoverHandler {
-                    id: warningHover
-                }
-            }
-
-            ColumnLayout {
+            MatchExpressionView {
                 Layout.fillWidth: true
-                spacing: 0
-
-                Label {
-                    Layout.fillWidth: true
-                    text: row.ruleName.length > 0 ? row.ruleName : row.matchSummary
-                    font.bold: true
-                    opacity: row.ruleEnabled ? 1 : 0.5
-                    elide: Text.ElideRight
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: row.matchSummary
-                    opacity: row.ruleEnabled ? 0.7 : 0.4
-                    elide: Text.ElideRight
-                    visible: row.ruleName.length > 0
-                }
+                matchJson: parent._ruleJson.match || ({
+                        "all": []
+                    })
+                controller: row.controller
+                matchFieldOptions: row.matchFieldOptions
+                appSettings: row.appSettings
             }
 
-            // Section badge — the rule's category (Monitor / Application / …),
-            // shown first in the cluster so the flat priority list stays legible
-            // by category without grouping. Highlight-tinted (theme-derived, not
-            // hardcoded) to read as a category marker distinct from the neutral
-            // metadata badges that follow.
-            Rectangle {
-                visible: row.sectionLabel.length > 0
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: sectionBadgeLabel.implicitWidth + Kirigami.Units.largeSpacing
-                implicitHeight: sectionBadgeLabel.implicitHeight + Kirigami.Units.smallSpacing
-                radius: Kirigami.Units.smallSpacing
-                color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
-
-                Label {
-                    id: sectionBadgeLabel
-
-                    anchors.centerIn: parent
-                    text: row.sectionLabel
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    opacity: 0.85
-                }
+            SectionHeaderPill {
+                Layout.alignment: Qt.AlignLeft
+                Layout.topMargin: Kirigami.Units.smallSpacing
+                text: i18n("THEN")
             }
 
-            // "Composite" badge — paired with the conditions count for composite
-            // rules. Surfaces the kind of rule the user is looking at without
-            // making them open the editor. Sentence case (project convention; the
-            // mockup's uppercase is intentionally not followed).
-            Rectangle {
-                visible: row.isComposite
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: compositeLabel.implicitWidth + Kirigami.Units.largeSpacing
-                implicitHeight: compositeLabel.implicitHeight + Kirigami.Units.smallSpacing
-                radius: Kirigami.Units.smallSpacing
-                color: Kirigami.Theme.alternateBackgroundColor
-
-                Label {
-                    id: compositeLabel
-
-                    anchors.centerIn: parent
-                    // Project badge convention: title-case the noun ("Composite",
-                    // "Conditions", "Actions", "Priority …"). Same in the
-                    // condition/action/priority badges below — keeping them
-                    // consistent so the eye reads the badge cluster as a unit.
-                    text: i18nc("Badge shown when the rule's match is a composite expression", "Composite")
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    opacity: 0.7
-                }
-            }
-
-            // Condition-count badge for composite rules.
-            Rectangle {
-                visible: row.isComposite
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: condLabel.implicitWidth + Kirigami.Units.largeSpacing
-                implicitHeight: condLabel.implicitHeight + Kirigami.Units.smallSpacing
-                radius: Kirigami.Units.smallSpacing
-                color: Kirigami.Theme.alternateBackgroundColor
-
-                Label {
-                    id: condLabel
-
-                    anchors.centerIn: parent
-                    text: i18np("%n Condition", "%n Conditions", row.conditionCount)
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    opacity: 0.7
-                }
-            }
-
-            // Action-count badge — shown for rules carrying more than one action.
-            Rectangle {
-                visible: row.actionCount > 1
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: actionLabel.implicitWidth + Kirigami.Units.largeSpacing
-                implicitHeight: actionLabel.implicitHeight + Kirigami.Units.smallSpacing
-                radius: Kirigami.Units.smallSpacing
-                color: Kirigami.Theme.alternateBackgroundColor
-
-                Label {
-                    id: actionLabel
-
-                    anchors.centerIn: parent
-                    text: i18np("%n Action", "%n Actions", row.actionCount)
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    opacity: 0.7
-                }
-            }
-
-            // Priority badge — kept on every row so precedence stays legible even
-            // when the filter hides categories (the visible rows are then a subset,
-            // so position alone can't convey the true ordering). Managed System
-            // rules are pinned to INT_MIN, so show that intent, not the raw number.
-            Rectangle {
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: priorityLabel.implicitWidth + Kirigami.Units.largeSpacing
-                implicitHeight: priorityLabel.implicitHeight + Kirigami.Units.smallSpacing
-                radius: Kirigami.Units.smallSpacing
-                color: Kirigami.Theme.alternateBackgroundColor
-
-                Label {
-                    id: priorityLabel
-
-                    anchors.centerIn: parent
-                    text: row.managed ? i18nc("Priority badge for a managed baseline rule that always sorts last", "Lowest priority") : i18nc("Badge showing the rule's raw priority integer", "Priority %1", row.priority)
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    opacity: 0.7
-                }
-            }
-
-            // Doubles as the expand-state indicator: rotates 90° clockwise when
-            // `row.expanded` so the same icon serves as the visual separator
-            // between match and action AND as a chevron pointing at the
-            // expanded body. The whole-row `onClicked` handler above owns the
-            // toggle; this is a passive indicator (no MouseArea), which keeps
-            // it from competing with the row click for the same press event.
-            Kirigami.Icon {
-                source: "arrow-right"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                Layout.alignment: Qt.AlignVCenter
-                opacity: 0.6
-                rotation: row.expanded ? 90 : 0
-
-                Behavior on rotation {
-                    PhosphorMotionAnimation {
-                        profile: "widget.hover"
-                        durationOverride: Kirigami.Units.shortDuration
-                    }
-                }
-            }
-
-            // Action summary — wraps to two lines before eliding so multi-action
-            // labels like "Engine: Snapping · Snapping: Portrait 2-Row" don't get
-            // cut at "Portrait..." (a constant-width single-line elide makes the
-            // user open the editor just to see which layout the rule picks).
-            Label {
-                Layout.alignment: Qt.AlignVCenter
-                Layout.maximumWidth: Kirigami.Units.gridUnit * 22
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 18
-                elide: Text.ElideRight
-                font.bold: true
-                maximumLineCount: 2
-                opacity: row.ruleEnabled ? 1 : 0.5
-                text: row.actionSummary
-                wrapMode: Text.WordWrap
-            }
-
-            ToolButton {
-                icon.name: "document-edit"
-                Layout.alignment: Qt.AlignVCenter
-                ToolTip.text: i18n("Edit rule")
-                ToolTip.visible: hovered
-                Accessible.name: i18n("Edit rule %1", row.ruleName)
-                onClicked: row.editRequested()
-            }
-
-            // Duplicate — clones the rule with a fresh UUID and inserts it just
-            // after the original. Cheap way to template a near-identical rule
-            // (same match, tweak the actions; or same actions, tweak the match)
-            // without re-entering the editor from scratch.
-            ToolButton {
-                icon.name: "edit-copy"
-                Layout.alignment: Qt.AlignVCenter
-                ToolTip.text: i18n("Duplicate rule")
-                ToolTip.visible: hovered
-                Accessible.name: i18n("Duplicate rule %1", row.ruleName)
-                onClicked: row.duplicateRequested()
-            }
-
-            ToolButton {
-                // Managed System rules (the seeded defaults) are non-deletable —
-                // shown but disabled, so the button keeps its column alignment
-                // with the deletable rows in other sections.
-                enabled: !row.managed
-                icon.name: "edit-delete"
-                Layout.alignment: Qt.AlignVCenter
-                ToolTip.text: row.managed ? i18n("System rules can't be deleted") : i18n("Delete rule")
-                ToolTip.visible: hovered
-                Accessible.name: i18n("Delete rule %1", row.ruleName)
-                onClicked: row.deleteRequested()
-            }
-        }
-        // ── Expansion area ───────────────────────────────────────────────
-
-        // Clipped container that animates the expansion in/out instead of
-        // snapping height between 0 and the full body. Mirrors SettingsCard's
-        // expand/collapse pattern: clip:true keeps the loaded body from
-        // bleeding above the row during the height interpolation, and
-        // PhosphorMotionAnimation on `Layout.preferredHeight` + `opacity`
-        // hands the timing off to the project's motion profile (so
-        // animation-speed and reduce-motion preferences propagate without
-        // a hardcoded duration). The Loader stays `active` for one extra
-        // animation cycle when collapsing so the body can fade out
-        // gracefully instead of being torn down mid-transition.
-        Item {
-            id: expansionClip
-
-            // `_active` lags `row.expanded` through the collapse animation by
-            // also gating on `Layout.preferredHeight > 0` — Qt's animation
-            // updates the height property directly during the transition,
-            // so the value is positive while interpolating from full→0 and
-            // only reaches 0 when the animation lands. Without this lag the
-            // Loader would unload synchronously on collapse-start and the
-            // user would see the viewport blank before the height finished
-            // shrinking. Re-expanding mid-collapse keeps the Loader active
-            // (no reload thrash) because the height never reaches 0.
-            property bool _active: row.controller !== null && (row.expanded || Layout.preferredHeight > 0)
-
-            Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.gridUnit * 2
-            Layout.preferredHeight: row.expanded ? expansionLoader.implicitHeight + Kirigami.Units.smallSpacing : 0
-            clip: true
-            opacity: row.expanded ? 1 : 0
-            visible: Layout.preferredHeight > 0 || opacity > 0
-
-            Behavior on Layout.preferredHeight {
-                PhosphorMotionAnimation {
-                    profile: row.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
-                    durationOverride: Kirigami.Units.shortDuration
-                }
-            }
-
-            Behavior on opacity {
-                PhosphorMotionAnimation {
-                    profile: row.expanded ? "widget.fadeIn" : "widget.fadeOut"
-                    durationOverride: Kirigami.Units.veryShortDuration * 2
-                }
-            }
-
-            // Lazy-loaded read-only preview of the rule's full match tree.
-            // `active` gates instantiation on the row actually being expanded
-            // — collapsed rows pay zero cost. The controller's `ruleJson`
-            // returns a deep copy of the rule, so the View walks its own data
-            // and a controller-side mutation won't yank the tree mid-render.
-            Loader {
-                id: expansionLoader
-
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                active: expansionClip._active
-                visible: active
-                sourceComponent: expansionComponent
-            }
-        }
-
-        Component {
-            id: expansionComponent
-
-            ColumnLayout {
-                readonly property var _ruleJson: row.controller ? row.controller.ruleJson(row.ruleId) : ({})
-
-                spacing: Kirigami.Units.smallSpacing
-
-                SectionHeaderPill {
-                    Layout.alignment: Qt.AlignLeft
-                    text: i18n("WHEN")
-                }
-
-                MatchExpressionView {
-                    Layout.fillWidth: true
-                    matchJson: parent._ruleJson.match || ({
-                            "all": []
-                        })
-                    controller: row.controller
-                    matchFieldOptions: row.matchFieldOptions
-                    appSettings: row.appSettings
-                }
-
-                SectionHeaderPill {
-                    Layout.alignment: Qt.AlignLeft
-                    Layout.topMargin: Kirigami.Units.smallSpacing
-                    text: i18n("THEN")
-                }
-
-                ActionListView {
-                    Layout.fillWidth: true
-                    actionsJson: parent._ruleJson.actions || []
-                    actionTypeOptions: row.actionTypeOptions
-                    appSettings: row.appSettings
-                }
+            ActionListView {
+                Layout.fillWidth: true
+                actionsJson: parent._ruleJson.actions || []
+                actionTypeOptions: row.actionTypeOptions
+                appSettings: row.appSettings
             }
         }
     }

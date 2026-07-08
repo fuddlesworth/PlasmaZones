@@ -668,4 +668,21 @@ QString rectToJson(const QRect& rect)
     return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 
+QRect insetRect(const QRect& rect, int inset)
+{
+    if (inset <= 0 || rect.isEmpty()) {
+        return rect;
+    }
+    QRect r = rect.adjusted(inset, inset, -inset, -inset);
+    // Degenerate clamp: a rect too small to absorb 2*inset keeps a >= 1 px
+    // extent rather than collapsing to an empty or inverted rect.
+    if (r.width() < 1) {
+        r.setWidth(1);
+    }
+    if (r.height() < 1) {
+        r.setHeight(1);
+    }
+    return r;
+}
+
 } // namespace PhosphorGeometry

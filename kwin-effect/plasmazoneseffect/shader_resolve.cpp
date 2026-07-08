@@ -24,6 +24,7 @@
 #include <PhosphorRules/WindowQuery.h>
 
 #include <QColor>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QtGlobal>
@@ -84,7 +85,8 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorRules:
     // cache. `resolveCached` keyed by the composite windowId reuses the
     // result across both slot reads AND across subsequent shader events
     // for the same window until the rule set's revision changes.
-    const PhosphorRules::ResolvedActions resolved = evaluator.resolveCached(windowId, query);
+    const PhosphorRules::ResolvedActions resolved =
+        windowId.isEmpty() ? evaluator.resolve(query) : evaluator.resolveCached(windowId, query);
 
     // Shader slot: rule wins verbatim (engaged-empty effectId is the
     // user's "block tree fallthrough for this app/event" sentinel and
@@ -240,12 +242,11 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
         }
         return v.toBool();
     };
-    // Upper bounds mirror the load-time descriptor validators in
-    // ruleaction.cpp (kMaxBorderWidth / kMaxBorderRadius) so the consumer
-    // re-validation is genuinely symmetric — a programmatically-built /
-    // hand-edited payload with width:5000 is rejected here, not drawn.
-    constexpr double kMaxBorderWidth = 10.0;
-    constexpr double kMaxBorderRadius = 20.0;
+    // Upper bounds are the SHARED PhosphorRules::MaxBorderWidth / MaxBorderRadius
+    // constants that the load-time descriptor validators (ruleaction.cpp) also
+    // use, so this consumer re-validation is genuinely symmetric — a
+    // programmatically-built / hand-edited payload with width:5000 is rejected
+    // here, not drawn — and the two boundaries can never silently drift.
     const auto intSlot = [&resolved](QLatin1StringView slot, double maxValue) -> std::optional<int> {
         const auto action = resolved.slot(QString(slot));
         if (!action) {
@@ -273,7 +274,7 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
         if (!action) {
             return std::nullopt;
         }
-        const QJsonValue v = action->params.value(QString(PhosphorRules::ActionParam::Value));
+        const QJsonValue v = action->params.value(PhosphorRules::ActionParam::Value);
         if (!v.isString()) {
             return std::nullopt;
         }
@@ -291,8 +292,8 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
     ResolvedWindowAppearance out;
     out.hideTitleBar = boolSlot(PhosphorRules::ActionSlot::HideTitleBar);
     out.showBorder = boolSlot(PhosphorRules::ActionSlot::BorderVisible);
-    out.borderWidth = intSlot(PhosphorRules::ActionSlot::BorderWidth, kMaxBorderWidth);
-    out.borderRadius = intSlot(PhosphorRules::ActionSlot::BorderRadius, kMaxBorderRadius);
+    out.borderWidth = intSlot(PhosphorRules::ActionSlot::BorderWidth, PhosphorRules::MaxBorderWidth);
+    out.borderRadius = intSlot(PhosphorRules::ActionSlot::BorderRadius, PhosphorRules::MaxBorderRadius);
     out.activeColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorActive, accentColor);
     out.inactiveColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorInactive, inactiveColor);
     // An omitted `inactive` mirrors the active colour, matching the retired
@@ -304,6 +305,43 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
     if (!out.any()) {
         return std::nullopt;
     }
+    return out;
+}
+
+std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRules::ResolvedActions& resolved)
+{
+    // Constant slot id — same static-hoist rationale as resolveWindowOpacity.
+    static const QString kChainSlot = QString(PhosphorRules::ActionSlot::DecorationChain);
+    const auto action = resolved.slot(kChainSlot);
+    if (!action) {
+        return std::nullopt;
+    }
+    // The load-time validator guarantees `chain` is present and an array;
+    // re-check here (defence in depth against programmatic construction
+    // paths) and drop non-string entries plus the reserved rule-owned
+    // "border" id, which SetBorderVisible governs — a hand-edited rule must
+    // not inject a second base border into the fold.
+    const QJsonValue chainVal = action->params.value(PhosphorRules::ActionParam::Chain);
+    if (!chainVal.isArray()) {
+        return std::nullopt;
+    }
+    ResolvedDecorationChain out;
+    const QJsonArray arr = chainVal.toArray();
+    for (const QJsonValue& entry : arr) {
+        const QString id = entry.toString();
+        if (id.isEmpty() || id == QLatin1String("border")) {
+            continue;
+        }
+        out.chain.append(id);
+    }
+    // Optional per-pack params override, same nested-object shape the tree
+    // profile uses ({packId -> {paramId -> value}}); mirrors how the
+    // animation override reads ActionParam::Params in
+    // resolveAnimationShaderAndDuration. Drop any "border" entry for symmetry
+    // with the chain filter above — the reserved rule-owned border pack's
+    // params come from the resolved appearance (SetBorder*), never the chain.
+    out.params = action->params.value(PhosphorRules::ActionParam::Params).toObject().toVariantMap();
+    out.params.remove(QStringLiteral("border"));
     return out;
 }
 

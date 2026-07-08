@@ -29,6 +29,10 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PhosphorSurfaceShaders {
+class SurfaceShaderRegistry;
+}
+
 namespace PhosphorRules {
 // Forward-declared for the `std::unique_ptr<RuleStore>` member
 // below. The complete type is needed only in settingscontroller.cpp
@@ -70,6 +74,7 @@ class RegistryShaderPreviewBackend;
 #include "snappingeffectscontroller.h"
 #include "snappingshaderspagecontroller.h"
 #include "snappingzoneselectorcontroller.h"
+#include "decorationpagecontroller.h"
 #include "stagingservice.h"
 #include "tilingalgorithmcontroller.h"
 #include "windowappearancecontroller.h"
@@ -125,6 +130,10 @@ class SettingsController : public QObject
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
     Q_PROPERTY(AnimationsPageController* animationsPage READ animationsPage CONSTANT)
+    // Decoration drill-down — per-surface chains of decoration shader packs,
+    // resolved through a DecorationProfileTree. QML reads
+    // `settingsController.decorationPage.<invokable>()`.
+    Q_PROPERTY(DecorationPageController* decorationPage READ decorationPage CONSTANT)
     // Rules page — the unified rule surface. The controller owns one
     // RuleModel and talks to the daemon's org.plasmazones.Rules
     // adaptor; QML reads `settingsController.rulesPage.model`.
@@ -419,6 +428,10 @@ public:
     {
         return m_animationsPage;
     }
+    DecorationPageController* decorationPage() const
+    {
+        return m_decorationPage;
+    }
     RuleController* rulesPage() const
     {
         return m_rulesPage;
@@ -652,6 +665,10 @@ private:
     // any page whose isPageDirty is value-based — manifest, ordering, shortcuts,
     // and animation pages.
     void reconcilePageDirty(const QString& page);
+    // Batched variant for shared-domain groups (animation / decoration leaves):
+    // reconciles every listed page but emits dirtyPagesChanged at most once,
+    // matching the discard paths' single-emit discipline.
+    void reconcilePagesDirty(const QSet<QString>& pages);
     // Value-based dirty attribution for the Rules page (the only page backed by
     // the RuleController model now that appearance is config): set m_dirtyPages
     // membership for "rules" (= userRulesDirty), emitting dirtyPagesChanged on a
@@ -698,6 +715,14 @@ private:
     /// outlives the page through child-destruction order.
     PhosphorAnimationShaders::AnimationShaderRegistry* m_animationShaderRegistry = nullptr;
     AnimationsPageController* m_animationsPage = nullptr;
+    /// Settings-side mirror of the daemon's/compositor's surface-shader
+    /// registry — drives the Decoration page's per-surface pack chains. Same
+    /// parent / declaration-order rationale as `m_animationShaderRegistry`
+    /// above: a QObject child of `this`, constructed before
+    /// `m_decorationPage` so the page controller's non-owned registry
+    /// pointer outlives the page through child-destruction order.
+    PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
+    DecorationPageController* m_decorationPage = nullptr;
     /// Rules page sub-controller. Parented to `this`; owns its
     /// RuleModel internally. Constructed after m_animationsPage so its
     /// dirty-tracking connection is wired in the same ctor block.

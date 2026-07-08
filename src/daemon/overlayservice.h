@@ -68,6 +68,10 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PhosphorSurfaceShaders {
+class SurfaceShaderRegistry;
+}
+
 namespace PlasmaZones {
 class ShaderRegistry;
 class SnapAssistThumbnailProvider;
@@ -179,6 +183,13 @@ public:
     void updateLayout(PhosphorZones::Layout* layout) override;
     void updateSettings(ISettings* settings) override;
     void setAnimationShaderRegistry(PhosphorAnimationShaders::AnimationShaderRegistry* registry);
+    /// Borrowed Daemon-owned surface-shader registry, used to resolve the OSD's
+    /// decoration pack (Stage d). Same lifetime contract as the animation
+    /// registry: the registry is declared AFTER m_overlayService in daemon.h, so
+    /// Daemon::stop() nulls this borrow (setSurfaceShaderRegistry(nullptr))
+    /// BEFORE resetting the registry — the explicit teardown, not declaration
+    /// order, is what prevents a dangling pointer during shutdown.
+    void setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry);
     void updateGeometries() override;
 
     // PhosphorZones::Zone highlighting for overlay display (IOverlayService interface)
@@ -461,6 +472,11 @@ private:
     // whether the overlay is actually displaying content — CAVA runs only while
     // the overlay (un-idled) or shader preview is on screen.
     void syncCavaState();
+    // Decoration slots (OSD / popups, across screens) that are visible AND carry
+    // an audio-reactive surface pack right now. Drives CAVA gating + the
+    // per-frame audio-spectrum push for daemon-surface decoration audio; empty
+    // for the common case (no audio decoration), so it adds nothing then.
+    QList<QQuickItem*> visibleAudioDecorationSlots() const;
     // Whether the overlay is actively displaying content right now: visible and
     // not in the warm-idled drag-pause/drag-end state (or the shader preview is
     // up). The overlay QQuickWindows are kept alive across drags to dodge an
@@ -605,11 +621,18 @@ private:
     // raw pointers to the other two).
     std::unique_ptr<PhosphorLayer::IScreenProvider> m_screenProvider;
     std::unique_ptr<PhosphorLayer::ILayerShellTransport> m_transport;
-    /// Raw pointer to Daemon-owned registry. Valid for the lifetime of
-    /// this OverlayService because m_animationShaderRegistry is declared
-    /// before m_overlayService in daemon.h - reverse destruction order
-    /// guarantees the registry outlives this service.
+    /// Raw pointer to Daemon-owned registry. m_animationShaderRegistry is
+    /// declared AFTER m_overlayService in daemon.h; the pointer stays valid
+    /// because Daemon::stop() nulls this borrow (setAnimationShaderRegistry
+    /// (nullptr)) before resetting the registry — explicit teardown, not
+    /// declaration order, prevents dangling access during shutdown.
     PhosphorAnimationShaders::AnimationShaderRegistry* m_animShaderRegistry = nullptr;
+
+    /// Borrowed Daemon-owned surface-shader registry (Stage d). Resolves the
+    /// "osd" decoration pack's fragment shader + translated params for the OSD
+    /// slot. Same teardown contract as m_animShaderRegistry: Daemon::stop()
+    /// nulls this borrow before the registry is reset.
+    PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
 
     /// Phase-5 SurfaceAnimator. Drives show/hide visual transitions for
     /// every Surface this service creates. Forward-declared to keep the
@@ -867,6 +890,15 @@ private:
         int masterCount = 1;
     };
     void pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdContentParams& params);
+
+    /// Resolve a surface-decoration pack from the settings' DecorationProfileTree
+    /// (@p surfacePath, e.g. "osd" / "popup.snapAssist" / "popup.zoneSelector" /
+    /// "popup.layoutPicker") and push it onto @p slot's decoration properties
+    /// (Stage d). Shared by every OSD show path (all modes: layout / locked /
+    /// disabled / navigation) and the three transient popup show paths. Clears
+    /// the slot's decorationChain (and decorationOuterPadding) when no pack
+    /// resolves so a stale decoration never renders.
+    void applyDecoration(QObject* slot, const QString& surfacePath);
 
     void destroyIfTypeMismatch(const QString& screenId);
     void createShaderPreviewWindow(QScreen* screen, const QString& screenId = QString());
