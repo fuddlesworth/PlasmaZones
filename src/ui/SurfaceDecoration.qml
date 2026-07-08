@@ -82,12 +82,17 @@ Item {
     ///     composite ping-pong, so a border + glow chain composes here too.
     ///   • decorationOuterPadding  — the chain's LARGEST declared paddingParam
     ///                               value (logical px, e.g. glow's glowSize).
-    ///                               The capture + shader items are inflated by
-    ///                               this margin on every side so an OUTER
-    ///                               effect has transparent room to draw —
-    ///                               the daemon analogue of the compositor's
-    ///                               padded capture canvas. 0 for margin-less
-    ///                               chains keeps the classic 1:1 geometry.
+    ///                               The capture + shader items grow by twice
+    ///                               this margin as a TRAILING bottom/right
+    ///                               band (content stays at the canvas
+    ///                               top-left, so the stage draws at the
+    ///                               anchor's QML coordinates) — transparent
+    ///                               room for an OUTER effect, the daemon
+    ///                               analogue of the compositor's padded
+    ///                               capture canvas. Top/left halo room is
+    ///                               the anchor's own glow ring. 0 for
+    ///                               margin-less chains keeps the classic
+    ///                               1:1 geometry.
     property var decorationChain: []
     // Live CAVA audio spectrum, forwarded to every stage's SurfaceShaderItem so
     // an audio-reactive pack (one that includes surface_audio.glsl) reacts.
@@ -356,13 +361,15 @@ Item {
 
                 // Surface-state inputs (device px). The whole padded canvas is
                 // uTexture0; the FRAME rect within it (shaderContentRect,
-                // anchor-local logical px, shifted inward by the outer margin)
-                // scaled to device px is what the border rounds to — so the
-                // pack outlines the visible card while a halo lands in the
-                // transparent band (uSurfaceSize > uSurfaceFrameSize by
-                // 2 × outerPad, exactly like the compositor's padded
-                // composite canvas). Identical for every stage, mirroring the
-                // compositor's fold where each pack sees the same canvas.
+                // anchor-local logical px — the content sits at the canvas
+                // top-left, so no outer-margin inset applies) scaled to
+                // device px is what the border rounds to — so the pack
+                // outlines the visible card while a halo lands in the
+                // transparent trailing band (uSurfaceSize exceeds
+                // uSurfaceFrameSize by the 2 × outerPad extension, like the
+                // compositor's padded composite canvas). Identical for every
+                // stage, mirroring the compositor's fold where each pack
+                // sees the same canvas.
                 surfaceScale: root.surfaceScale
                 // These overlays (OSD + transient popups) are always shown for
                 // the active context — the focused colour params are the
