@@ -750,6 +750,21 @@ Kirigami.Dialog {
                     continue;
                 next[p.id] = (r.shaderParams[p.id] !== undefined) ? r.shaderParams[p.id] : (p.default !== undefined ? p.default : root._liveParams[p.id]);
             }
+            // Carry SVG image params' `<id>_svgSize` companion (not a schema
+            // param, so the loop above skips it): preset value where present,
+            // else the current size. Without this, loading a preset would
+            // revert a custom SVG render size to the default, unlike the editor
+            // dialog and the randomize path which preserve it.
+            for (var j = 0; j < params.length; j++) {
+                var ip = params[j];
+                if (!ip || ip.id === undefined || ip.type !== "image")
+                    continue;
+                var svgKey = ip.id + "_svgSize";
+                if (r.shaderParams[svgKey] !== undefined)
+                    next[svgKey] = r.shaderParams[svgKey];
+                else if (root._liveParams[svgKey] !== undefined)
+                    next[svgKey] = root._liveParams[svgKey];
+            }
             root._liveParams = next;
             root._recompute();
         }
