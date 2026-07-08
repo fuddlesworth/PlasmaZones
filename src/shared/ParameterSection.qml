@@ -48,12 +48,32 @@ ColumnLayout {
     property alias contentComponent: contentLoader.sourceComponent
     property var lockedParams: ({})
     property bool enableLocking: true
+    /// Show the group-level randomize button (right of the group lock),
+    /// which rolls fresh values for every unlocked param in this group.
+    property bool enableRandomize: true
+    /// True when every param in the group is locked. Reading
+    /// `lockedParams[p.id]` in the loop registers the map as a binding
+    /// dependency directly, so the derived value stays reactive.
+    readonly property bool allLocked: {
+        if (!groupParams || groupParams.length === 0 || !lockedParams)
+            return false;
+
+        for (var i = 0; i < groupParams.length; i++) {
+            var p = groupParams[i];
+            if (p && p.id !== undefined && lockedParams[p.id] !== true)
+                return false;
+        }
+        return true;
+    }
 
     signal toggled
     /// Emitted when the group-lock button is clicked. `lock` is the new
     /// state (true = lock all, false = unlock all). Host applies it as a
     /// single batched mutation across all `groupParams`.
     signal groupLockToggled(bool lock)
+    /// Emitted when the group-randomize button is clicked. The host rolls
+    /// every unlocked param in this group and persists them in one batch.
+    signal groupRandomizeRequested
 
     Layout.fillWidth: true
     spacing: 0
@@ -111,34 +131,35 @@ ColumnLayout {
                 }
 
                 QQC.ToolButton {
-                    // Reads `root.lockedParams[p.id]` inside the loop register
-                    // the parent map as a binding dependency directly — no
-                    // separate proxy property is needed for reactivity.
-                    readonly property bool allLocked: {
-                        if (!root.groupParams || root.groupParams.length === 0 || !root.lockedParams)
-                            return false;
-
-                        for (var i = 0; i < root.groupParams.length; i++) {
-                            var p = root.groupParams[i];
-                            if (p && p.id !== undefined && root.lockedParams[p.id] !== true)
-                                return false;
-                        }
-                        return true;
-                    }
-
                     // Hide the lock button on empty groups too — there's
                     // nothing to lock there, and rendering the unlocked-icon
                     // button on an empty section is just visual noise.
                     visible: root.enableLocking && root.paramCount > 0
-                    icon.name: allLocked ? "object-locked" : "object-unlocked"
+                    icon.name: root.allLocked ? "object-locked" : "object-unlocked"
                     icon.width: Kirigami.Units.iconSizes.small
                     icon.height: Kirigami.Units.iconSizes.small
-                    opacity: allLocked ? 1 : 0.4
+                    opacity: root.allLocked ? 1 : 0.4
                     display: QQC.ToolButton.IconOnly
-                    QQC.ToolTip.text: allLocked ? i18nc("@info:tooltip", "Unlock all in %1", root.title) : i18nc("@info:tooltip", "Lock all in %1", root.title)
+                    QQC.ToolTip.text: root.allLocked ? i18nc("@info:tooltip", "Unlock all in %1", root.title) : i18nc("@info:tooltip", "Lock all in %1", root.title)
                     QQC.ToolTip.visible: hovered
                     QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
-                    onClicked: root.groupLockToggled(!allLocked)
+                    onClicked: root.groupLockToggled(!root.allLocked)
+                }
+
+                QQC.ToolButton {
+                    // Rolls every unlocked param in the group. Disabled when
+                    // all are locked (nothing to roll); hidden on empty groups.
+                    visible: root.enableRandomize && root.paramCount > 0
+                    enabled: !root.allLocked
+                    icon.name: "roll"
+                    icon.width: Kirigami.Units.iconSizes.small
+                    icon.height: Kirigami.Units.iconSizes.small
+                    display: QQC.ToolButton.IconOnly
+                    QQC.ToolTip.text: i18nc("@info:tooltip", "Randomize all in %1", root.title)
+                    QQC.ToolTip.visible: hovered
+                    QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
+                    Accessible.name: i18nc("@action:button", "Randomize all in %1", root.title)
+                    onClicked: root.groupRandomizeRequested()
                 }
 
                 Rectangle {

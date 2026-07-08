@@ -1146,6 +1146,20 @@ ColumnLayout {
                 params[packId] = packParams;
                 row.actionEdited(row._withParam(row._decorationParamsKey, params));
             }
+            onParamsResetRequested: function (packId, defaults) {
+                var cur = row.action[row._decorationParamsKey] || {};
+                var params = {};
+                for (var pid in cur)
+                    params[pid] = cur[pid];
+                var packParams = {};
+                var curPack = params[packId] || {};
+                for (var k in curPack)
+                    packParams[k] = curPack[k];
+                for (var d in defaults)
+                    packParams[d] = defaults[d];
+                params[packId] = packParams;
+                row.actionEdited(row._withParam(row._decorationParamsKey, params));
+            }
         }
     }
 
@@ -1236,6 +1250,11 @@ ColumnLayout {
                 // current value, the rest are rolled per their schema range.
                 row.actionEdited(row._withParam("params", rolled));
             }
+            onResetRequested: function (defaults) {
+                // Full defaults map replaces the rule's param overrides in
+                // one write, mirroring the randomize batch above.
+                row.actionEdited(row._withParam("params", defaults));
+            }
         }
     }
 
@@ -1244,17 +1263,28 @@ ColumnLayout {
         // param UIs, minus the lock / randomize affordances. The algorithm
         // schema is adapted to the descriptor shape via row._adapted*.
         PZCommon.ParameterEditor {
+            id: algorithmParamEditor
+
             Layout.fillWidth: true
             parameters: row._adaptedAlgorithmParamSchema
             currentValues: row._algorithmParamValues
             compact: true
             enableLocking: false
             enableRandomize: false
+            // No lock/randomize for algorithm params, but reset-to-default is
+            // useful on its own — clears the rule's overrides back to the
+            // algorithm's declared defaults.
+            enableReset: true
             enableImage: false
             enableGroups: false
             showParametersHeader: true
             onValueChanged: function (paramId, value) {
                 row._writeAlgorithmParam(paramId, value);
+            }
+            onResetRequested: {
+                // Replace the override map with every param's default in one
+                // write (batch, like the shader action's reset).
+                row.actionEdited(row._withParam("params", algorithmParamEditor.computeDefaults()));
             }
         }
     }

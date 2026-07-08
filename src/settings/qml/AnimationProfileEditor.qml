@@ -25,9 +25,9 @@ import org.plasmazones.common as PZCommon
  * (@c availableShaders / @c shaderParamSchema) so the editor doesn't
  * reach a global context itself.
  *
- * The shader-parameter sub-editor exposes locking / randomize /
- * colour-picker affordances via the @c enableLocking / @c enableRandomize
- * / @c enableImage flags.
+ * The shader-parameter sub-editor exposes reset / locking / randomize /
+ * colour-picker affordances via the @c enableReset / @c enableLocking /
+ * @c enableRandomize / @c enableImage flags.
  */
 ColumnLayout {
     id: root
@@ -90,6 +90,9 @@ ColumnLayout {
     property bool enableLocking: false
     /// Randomize same.
     property bool enableRandomize: false
+    /// Reset-all-to-defaults, defaulting to `enableRandomize` so it tracks
+    /// the same contexts (per-event card on, global-defaults page off).
+    property bool enableReset: enableRandomize
     /// Image picker is reserved for shader textures (overlay packs);
     /// animation packs don't use it.
     property bool enableImage: false
@@ -140,6 +143,11 @@ ColumnLayout {
     /// the editor's state — a consumer with randomize disabled (the
     /// global-defaults page) never emits it.
     signal randomizeRequested(var rolled)
+    /// Reset all shader params to their schema defaults. Same self-update
+    /// contract as `randomizeRequested`: the editor stages the defaults map
+    /// onto `shaderParams` before emitting, and the payload carries the map
+    /// so the consumer persists it in one batch write.
+    signal resetRequested(var defaults)
 
     // ── Helpers ─────────────────────────────────────────────────────
     /// "Easing · Cubic In-Out" / "Spring · Snappy" (or "Custom").
@@ -316,12 +324,13 @@ ColumnLayout {
         // header and rows hug the card's left edge.
         Layout.leftMargin: Kirigami.Units.largeSpacing
         Layout.rightMargin: Kirigami.Units.largeSpacing
-        visible: root.shaderLegSupported && root.showShaderSection && root.shaderEffectId.length > 0 && _paramSchema.length > 0
+        visible: root.shaderLegSupported && root.shaderEffectId.length > 0 && _paramSchema.length > 0
         parameters: _paramSchema
         currentValues: root.shaderParams
         effectId: root.shaderEffectId
         enableLocking: root.enableLocking
         enableRandomize: root.enableRandomize
+        enableReset: root.enableReset
         enableImage: root.enableImage
         compact: true
         // The shared editor owns the lock map (aliased onto
@@ -343,6 +352,12 @@ ColumnLayout {
             // persistence round-trips it back through `shaderParams`.
             root.shaderParams = rolled;
             root.randomizeRequested(rolled);
+        }
+        onResetRequested: function (defaults) {
+            // Same staging as randomize: reflect the defaults immediately,
+            // then hand the map up for the consumer to persist.
+            root.shaderParams = defaults;
+            root.resetRequested(defaults);
         }
     }
 

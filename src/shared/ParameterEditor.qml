@@ -24,16 +24,17 @@ import org.kde.kirigami as Kirigami
  *   - feeds `parameters` (the schema) and `currentValues` (the live map)
  *   - listens for `valueChanged(id, value)` and writes back into its map
  *   - optionally listens for `lockToggled` / `randomizeRequested` /
- *     `lockAllRequested` and updates its locks map / runs randomize
+ *     `lockAllRequested` / `resetRequested` and updates its locks map /
+ *     runs randomize / resets to defaults
  *   - listens for `requestColorPicker` / `requestImagePicker` and opens
  *     the platform dialog at the parent level (image dialogs in
  *     particular need to outlive their delegate row)
  *
- * Three pure helpers (`lockedAfterToggle`, `lockedAfterAllToggle`,
- * `computeRandomized`) compute new maps from the component's current
- * props for hosts that wire the lock + randomize toolbar — both
- * consumers route their handler bodies through them so the transforms
- * live in one place.
+ * Four map-computing helpers (`lockedAfterToggle`, `lockedAfterAllToggle`,
+ * `computeRandomized`, `computeDefaults`) return fresh maps from the
+ * component's current props for hosts that wire the lock / randomize /
+ * reset toolbar — consumers route their handler bodies through them so
+ * the transforms live in one place.
  *
  * Accordion behavior: when `enableGroups: true` and the parameter list
  * declares any `group` field, rows are split into ParameterSection
@@ -50,6 +51,11 @@ ColumnLayout {
     property var lockedParams: ({})
     property bool enableLocking: true
     property bool enableRandomize: true
+    /// Show the header "reset all to defaults" button (left of Lock-All).
+    /// Defaults to `enableRandomize` so it appears wherever the bulk
+    /// randomize does; a host with its own reset affordance (the shader
+    /// browser's "Default" button) sets this false to avoid duplication.
+    property bool enableReset: enableRandomize
     property bool enableGroups: true
     property bool enableImage: true
     /// Compact mode renders rows in the settings-app style: title left,
@@ -63,9 +69,9 @@ ColumnLayout {
     property int colorButtonSize: compact ? Kirigami.Units.gridUnit * 2 : Kirigami.Units.gridUnit * 3
     property int colorLabelWidth: compact ? Kirigami.Units.gridUnit * 5 : Kirigami.Units.gridUnit * 7
     property int labelColumnWidth: Kirigami.Units.gridUnit * 8
-    /// The toolbar row (Lock-all / Randomize) is on by default but can
-    /// be hidden when neither button is wanted (animation settings).
-    readonly property bool _showToolbar: enableLocking || enableRandomize || toolbarTrailing !== null
+    /// The toolbar row (Reset / Lock-all / Randomize) is on by default but
+    /// can be hidden when no button is wanted (animation settings).
+    readonly property bool _showToolbar: enableLocking || enableRandomize || enableReset || toolbarTrailing !== null
     /// Show the "Parameters" heading independently of the lock / randomize
     /// buttons. Defaults to the toolbar's own visibility so existing
     /// consumers are unchanged; a host with both buttons disabled (e.g. the
@@ -148,6 +154,11 @@ ColumnLayout {
     signal lockToggled(string paramId, bool locked)
     signal lockAllRequested(bool locked)
     signal randomizeRequested
+    /// Reset every parameter to its schema default. Arg-less like
+    /// `randomizeRequested`: the host computes the defaults map via
+    /// `computeDefaults()` (or its own equivalent) and persists it in one
+    /// batch write, mirroring the randomize round-trip.
+    signal resetRequested
     signal requestColorPicker(string paramId, string paramName, color current)
     signal requestImagePicker(string paramId)
 
@@ -188,12 +199,21 @@ ColumnLayout {
         return isFinite(n) ? n : fallback;
     }
 
-    /// Roll a fresh value for every unlocked parameter within its
-    /// metadata range. Locked entries and `image`-typed entries are
-    /// preserved verbatim from `currentValues` (or the param default
-    /// when missing). Returns a new full values map. Hosts can
-    /// either feed it back via `currentValues` (editor pattern) or
-    /// push it through their write-back API (settings pattern).
+    /// Transient scope for `computeRandomized`: when a group-randomize is
+    /// in flight this holds that group's param ids so only they roll (the
+    /// rest keep their current value). Null means "roll every param" (the
+    /// header Randomize-All). Set and cleared synchronously around the
+    /// `randomizeRequested` emission, which every consumer handles inline,
+    /// so the scope is always live when `computeRandomized` reads it.
+    property var _randomizeScopeIds: null
+
+    /// Roll a fresh value for every unlocked, in-scope parameter within its
+    /// metadata range. Out-of-scope entries (when `_randomizeScopeIds` is
+    /// set), locked entries, and `image`-typed entries are preserved
+    /// verbatim from `currentValues` (or the param default when missing).
+    /// Returns a new full values map. Hosts can either feed it back via
+    /// `currentValues` (editor pattern) or push it through their write-back
+    /// API (settings pattern).
     function computeRandomized() {
         var next = {};
         if (!root.parameters)
@@ -204,7 +224,8 @@ ColumnLayout {
             if (!param || param.id === undefined)
                 continue;
 
-            if ((root.lockedParams && root.lockedParams[param.id] === true) || param.type === "image") {
+            var inScope = !root._randomizeScopeIds || root._randomizeScopeIds.indexOf(param.id) >= 0;
+            if (!inScope || (root.lockedParams && root.lockedParams[param.id] === true) || param.type === "image") {
                 // Mirror the switch-path's undefined guard below — a
                 // schema with a missing `default` and a currentValues
                 // map missing this id would otherwise write
@@ -216,61 +237,119 @@ ColumnLayout {
 
                 continue;
             }
-            var value;
-            switch (param.type) {
-            case "number":
-            case "float":
-                // Coerce bounds/step to finite numbers: raw JSON metadata can
-                // carry strings/NaN, which would otherwise yield string
-                // concatenation ("0.5" + ...) or NaN in the persisted value.
-                var minF = root._finiteOr(param.min, 0);
-                var maxF = root._finiteOr(param.max, 1);
-                var stepF = root._finiteOr(param.step, 0);
-                value = minF + Math.random() * (maxF - minF);
-                if (stepF > 0) {
-                    value = Math.round(value / stepF) * stepF;
-                    // Step-rounding can escape the range when a bound is not
-                    // a step multiple (e.g. max 1.6, step 1 -> 2.0); the
-                    // emitted value is what persists, so clamp it back.
-                    value = Math.min(maxF, Math.max(minF, value));
-                }
-                break;
-            case "int":
-                var minI = Math.round(root._finiteOr(param.min, 0));
-                var maxI = Math.round(root._finiteOr(param.max, 100));
-                value = Math.floor(minI + Math.random() * (maxI - minI + 1));
-                // Clamp defensively — fractional/garbage bounds can push the
-                // draw above max (same range-escape class as the float step).
-                value = Math.min(maxI, Math.max(minI, value));
-                break;
-            case "bool":
-                value = Math.random() < 0.5;
-                break;
-            case "enum":
-                var opts = param.enumOptions || [];
-                // Preserve the current value when the vocabulary is empty
-                // rather than writing undefined into the rolled map.
-                value = opts.length > 0 ? opts[Math.floor(Math.random() * opts.length)] : param.default;
-                break;
-            case "color":
-                var r = Math.floor(Math.random() * 256);
-                var g = Math.floor(Math.random() * 256);
-                var b = Math.floor(Math.random() * 256);
-                value = "#" + r.toString(16).padStart(2, "0") + g.toString(16).padStart(2, "0") + b.toString(16).padStart(2, "0");
-                break;
-            default:
-                value = param.default;
-                break;
-            }
+            var value = root._rollParam(param);
             if (value !== undefined)
                 next[param.id] = value;
+        }
+        // Carry SVG image params' non-schema `<id>_svgSize` companion (written
+        // by ParameterRow) through the full-map replace. Randomize never rolls
+        // it, so dropping it here would silently revert the SVG render size —
+        // and a scoped group randomize must not touch an out-of-scope param's
+        // size at all.
+        if (root.currentValues) {
+            for (var c = 0; c < root.parameters.length; c++) {
+                var cp = root.parameters[c];
+                if (!cp || cp.id === undefined || cp.type !== "image")
+                    continue;
+
+                var svgKey = cp.id + "_svgSize";
+                if (root.currentValues[svgKey] !== undefined)
+                    next[svgKey] = root.currentValues[svgKey];
+            }
+        }
+        return next;
+    }
+
+    /// Roll a fresh value for one @p param within its metadata range,
+    /// returning it (or `undefined` for an unrollable type). Shared by
+    /// the bulk `computeRandomized` and the per-row `_randomizeOne` so the
+    /// per-type roll logic lives in one place.
+    function _rollParam(param) {
+        switch (param.type) {
+        case "number":
+        case "float":
+            // Coerce bounds/step to finite numbers: raw JSON metadata can
+            // carry strings/NaN, which would otherwise yield string
+            // concatenation ("0.5" + ...) or NaN in the persisted value.
+            var minF = root._finiteOr(param.min, 0);
+            var maxF = root._finiteOr(param.max, 1);
+            var stepF = root._finiteOr(param.step, 0);
+            var f = minF + Math.random() * (maxF - minF);
+            if (stepF > 0) {
+                f = Math.round(f / stepF) * stepF;
+                // Step-rounding can escape the range when a bound is not
+                // a step multiple (e.g. max 1.6, step 1 -> 2.0); the
+                // emitted value is what persists, so clamp it back.
+                f = Math.min(maxF, Math.max(minF, f));
+            }
+            return f;
+        case "int":
+            var minI = Math.round(root._finiteOr(param.min, 0));
+            var maxI = Math.round(root._finiteOr(param.max, 100));
+            // Clamp defensively — fractional/garbage bounds can push the
+            // draw above max (same range-escape class as the float step).
+            return Math.min(maxI, Math.max(minI, Math.floor(minI + Math.random() * (maxI - minI + 1))));
+        case "bool":
+            return Math.random() < 0.5;
+        case "enum":
+            var opts = param.enumOptions || [];
+            // Preserve the current value when the vocabulary is empty
+            // rather than writing undefined into the rolled map.
+            return opts.length > 0 ? opts[Math.floor(Math.random() * opts.length)] : param.default;
+        case "color":
+            var r = Math.floor(Math.random() * 256);
+            var g = Math.floor(Math.random() * 256);
+            var b = Math.floor(Math.random() * 256);
+            return "#" + r.toString(16).padStart(2, "0") + g.toString(16).padStart(2, "0") + b.toString(16).padStart(2, "0");
+        default:
+            return param.default;
+        }
+    }
+
+    /// Roll a single parameter and emit it through `valueChanged` (the
+    /// normal per-param write path — a per-row randomize is one value, so
+    /// unlike the bulk reset/randomize it needs no batch signal). `image`
+    /// params are skipped (no sensible random image); the per-row button
+    /// is hidden for them anyway.
+    function _randomizeOne(paramId) {
+        if (!root.parameters)
+            return;
+
+        for (var i = 0; i < root.parameters.length; i++) {
+            var p = root.parameters[i];
+            if (!p || p.id !== paramId)
+                continue;
+
+            if (p.type === "image")
+                return;
+
+            var value = root._rollParam(p);
+            if (value !== undefined)
+                root.valueChanged(paramId, value);
+            return;
+        }
+    }
+
+    /// Every parameter's schema default, keyed by id. Params with no
+    /// declared default are omitted (a reset can't invent one). Hosts feed
+    /// it back through their batch-persist path in the `resetRequested`
+    /// handler, mirroring how `computeRandomized` feeds the randomize path.
+    function computeDefaults() {
+        var next = {};
+        if (!root.parameters)
+            return next;
+
+        for (var i = 0; i < root.parameters.length; i++) {
+            var param = root.parameters[i];
+            if (param && param.id !== undefined && param.default !== undefined)
+                next[param.id] = param.default;
         }
         return next;
     }
 
     spacing: Kirigami.Units.smallSpacing
 
-    // ── Toolbar (Lock-all / Randomize) ───────────────────────────────
+    // ── Toolbar (Reset / Lock-all / Randomize) ───────────────────────
     RowLayout {
         Layout.fillWidth: true
         visible: (root.showParametersHeader || root._showToolbar) && root.parameters && root.parameters.length > 0
@@ -281,6 +360,16 @@ ColumnLayout {
             text: i18nc("@title:group", "Parameters")
             font.weight: Font.DemiBold
             visible: root.showParametersHeader
+        }
+
+        ToolButton {
+            visible: root.enableReset
+            icon.name: "edit-reset"
+            display: ToolButton.IconOnly
+            ToolTip.text: i18nc("@info:tooltip", "Reset all parameters to their defaults")
+            Accessible.name: i18nc("@action:button", "Reset to Defaults")
+            Accessible.description: ToolTip.text
+            onClicked: root.resetRequested()
         }
 
         ToolButton {
@@ -316,7 +405,7 @@ ColumnLayout {
         // `parameters: []` — undefined would otherwise hide every layout
         // branch and produce a blank component.
         visible: !root.parameters || root.parameters.length === 0
-        text: i18nc("@info", "This effect has no configurable parameters.")
+        text: i18nc("@info", "No configurable parameters.")
         wrapMode: Text.WordWrap
         opacity: 0.7
     }
@@ -344,8 +433,30 @@ ColumnLayout {
                 expanded: root.expandedGroupIndex === index
                 lockedParams: root.lockedParams
                 enableLocking: root.enableLocking
+                enableRandomize: root.enableRandomize
                 onToggled: {
                     root.expandedGroupIndex = expanded ? -1 : index;
+                }
+                onGroupRandomizeRequested: {
+                    // Scope the roll to this group's ids, then emit the
+                    // arg-less randomizeRequested the consumer already handles
+                    // (it calls computeRandomized synchronously, which reads
+                    // the scope). Cleared right after so a later Randomize-All
+                    // rolls everything again.
+                    var ids = [];
+                    for (var k = 0; k < paramSection.groupParams.length; k++) {
+                        var gp = paramSection.groupParams[k];
+                        if (gp && gp.id !== undefined)
+                            ids.push(gp.id);
+                    }
+                    root._randomizeScopeIds = ids;
+                    // finally-clear so a throwing consumer handler can't leave
+                    // a stale scope that would mis-scope the next Randomize-All.
+                    try {
+                        root.randomizeRequested();
+                    } finally {
+                        root._randomizeScopeIds = null;
+                    }
                 }
                 onGroupLockToggled: function (lock) {
                     // Synthesise per-id `lockToggled` signals so the host
@@ -412,6 +523,7 @@ ColumnLayout {
                 currentValues: root.currentValues
                 lockedParams: root.lockedParams
                 enableLocking: root.enableLocking
+                enableRandomize: root.enableRandomize
                 enableImage: root.enableImage
                 sliderValueLabelWidth: root.sliderValueLabelWidth
                 colorButtonSize: root.colorButtonSize
@@ -421,6 +533,9 @@ ColumnLayout {
                 }
                 onLockToggled: function (id, locked) {
                     root.lockToggled(id, locked);
+                }
+                onRandomizeRequested: function (id) {
+                    root._randomizeOne(id);
                 }
                 onRequestColorPicker: function (id, name, current) {
                     root.requestColorPicker(id, name, current);
@@ -480,6 +595,7 @@ ColumnLayout {
                 currentValues: root.currentValues
                 lockedParams: root.lockedParams
                 enableLocking: root.enableLocking
+                enableRandomize: root.enableRandomize
                 enableImage: root.enableImage
                 sliderValueLabelWidth: root.sliderValueLabelWidth
                 colorButtonSize: root.colorButtonSize
@@ -489,6 +605,9 @@ ColumnLayout {
                 }
                 onLockToggled: function (id, locked) {
                     root.lockToggled(id, locked);
+                }
+                onRandomizeRequested: function (id) {
+                    root._randomizeOne(id);
                 }
                 onRequestColorPicker: function (id, name, current) {
                     root.requestColorPicker(id, name, current);
