@@ -392,9 +392,10 @@ ColumnLayout {
         }
 
         // Categorized action-type picker — the shared cascading category-menu
-        // button (PZCommon.CategoryMenuButton). Grouped into Layout & engine /
-        // Gaps / Window / Appearance / Animation. Context-domain actions that
-        // can't fire against a window-property match render dimmed with a
+        // button (PZCommon.CategoryMenuButton). Grouped into Gaps / Engine /
+        // Snapping / Tiling / Overlay / Animation / Appearance / Window, with
+        // Tiling nesting Algorithm and Behavior submenus. Context-domain actions
+        // that can't fire against a window-property match render dimmed with a
         // warning tooltip (the picker's `dimmed` item flag); the per-row chip
         // below + the sheet's InlineMessage reinforce it for an action that's
         // already selected.
