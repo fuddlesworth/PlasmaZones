@@ -1146,6 +1146,20 @@ ColumnLayout {
                 params[packId] = packParams;
                 row.actionEdited(row._withParam(row._decorationParamsKey, params));
             }
+            onParamsResetRequested: function (packId, defaults) {
+                var cur = row.action[row._decorationParamsKey] || {};
+                var params = {};
+                for (var pid in cur)
+                    params[pid] = cur[pid];
+                var packParams = {};
+                var curPack = params[packId] || {};
+                for (var k in curPack)
+                    packParams[k] = curPack[k];
+                for (var d in defaults)
+                    packParams[d] = defaults[d];
+                params[packId] = packParams;
+                row.actionEdited(row._withParam(row._decorationParamsKey, params));
+            }
         }
     }
 
