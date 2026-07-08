@@ -36,6 +36,13 @@ void ShaderNodeRhi::setUniformExtension(std::shared_ptr<PhosphorShaders::IUnifor
     m_ubo.reset();
     m_initialized = false;
     m_didFullUploadOnce = false;
+    // The prepare() init block (gated on !m_initialized) unconditionally
+    // recreates the fullscreen-quad VBO, but the quad upload is gated on
+    // !m_vboUploaded. Clear it here so the recreated VBO is repopulated;
+    // otherwise a runtime extension attach/swap/resize after the first frame
+    // would draw the quad from an uninitialized vertex buffer (blank/garbage).
+    // Mirrors releaseRhiResources(), which resets the same buffers.
+    m_vboUploaded = false;
     // The recreated UBO starts uninitialized. Mark uniforms dirty so the next
     // upload takes the full-upload path (which is gated on m_uniformsDirty) and
     // re-writes the base region. Without this, a resize landing on an

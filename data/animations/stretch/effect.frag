@@ -4,11 +4,11 @@
 // Stretch fragment shader — samples the elastic-deformed window content.
 //
 // The vertex stage (effect.vert) does the rubber-band deformation and
-// hands each fragment its sampling card uv, a shade factor, and the
-// old->new cross-fade through vStretch. This stage samples the window at
-// the card uv, cross-fades the captured old frame into the live content as
-// the move settles (so a resize re-lays correctly), applies the shade, and
-// masks the window's [0, 1] card rect.
+// hands each fragment its sampling card uv and the old->new cross-fade
+// through vStretch. This stage samples the window at the card uv,
+// cross-fades the captured old frame into the live content as the move
+// settles (so a resize re-lays correctly), and masks the window's [0, 1]
+// card rect.
 
 #ifdef PLASMAZONES_KWIN
 // .xy = sampling card uv, .z = old->new cross-fade.

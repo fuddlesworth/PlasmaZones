@@ -121,7 +121,7 @@ static_assert(sizeof(BaseUniforms) == 672, "BaseUniforms must be exactly 672 byt
 // Every field declared in `animation_uniforms.glsl` is pinned here. A
 // previous revision asserted only iTime / iResolution / customParams /
 // customColors, which left the door open to a reorder that swapped
-// {iTimeDelta, iFrame, _appField0, _appField1, iMouse, iDate} amongst
+// {iTimeDelta, iFrame, appField0, appField1, iMouse, iDate} amongst
 // themselves while preserving the four asserted offsets — silent
 // miscompile for any future animation shader that reads the in-between
 // fields. The full coverage below catches that.

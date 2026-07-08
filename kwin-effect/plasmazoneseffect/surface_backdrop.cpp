@@ -52,7 +52,11 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     if (textureSize.isEmpty()) {
         return;
     }
-    SurfaceMultipassState& state = m_surfaceMultipass[getWindowId(w)];
+    const QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return; // no stable id — don't orphan a default-inserted entry under ""
+    }
+    SurfaceMultipassState& state = m_surfaceMultipass[windowId];
     // ── Multi-output accumulation ───────────────────────────────────────
     // paintWindow runs once per OUTPUT, and each output can only blit the
     // slice of the canvas its viewport covers. OUTPUTS HAVE INDEPENDENT
@@ -76,6 +80,11 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // on EVERY exit path, mid scene-walk. Its scope covers the realloc clear,
     // the clear below, and the blit.
     const ShaderInternal::ScopedGlState glStateGuard;
+    // Disable scissor for the WHOLE capture: the init clear below and the blit
+    // must not be clipped to whatever scissor box the scene walk left enabled.
+    // A scissored init clear would leave a freshly-allocated texture's margin
+    // undefined. The guard restores the ambient scissor on exit.
+    glDisable(GL_SCISSOR_TEST);
     if (state.backdropSize != textureSize || !state.backdropTex) {
         state.backdropTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
         if (!state.backdropTex) {
@@ -129,10 +138,6 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     }
     const bool sameGeneration =
         state.backdropFrameMs >= 0 && qAbs(frameStamp - state.backdropFrameMs) < kAccumulationWindowMs;
-    // The clear below and the blit both honour scissor; disable it for them.
-    // GL state is restored by glStateGuard, constructed above (before the
-    // realloc clear) so it captures the pristine clear colour.
-    glDisable(GL_SCISSOR_TEST);
     KWin::GLFramebuffer fbo(state.backdropTex.get());
     if (!fbo.valid()) {
         state.backdropTex.reset();

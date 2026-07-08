@@ -72,13 +72,15 @@ inline QVariantMap effectToMap(const PhosphorSurfaceShaders::SurfaceShaderEffect
     return m;
 }
 
-/// Project the ENGAGED fields of @p p into a sparse QVariantMap, mirroring
-/// `DecorationProfile::toJson()` keys but as a QVariant projection (chain as
-/// a QStringList, parameters as a nested QVariantMap). Only fields whose
-/// optional is engaged appear — an inherited (nullopt) field is omitted, so
-/// QML can tell "set here" from "inherited" by key presence. Border width /
-/// radius / colour are NOT decoration fields — they live in
-/// `parameters["border"]` and ride the parameters projection.
+/// Project the ENGAGED chain/parameters fields of @p p into a sparse
+/// QVariantMap as a QVariant projection (chain as a QStringList, parameters as
+/// a nested QVariantMap). Only fields whose optional is engaged appear — an
+/// inherited (nullopt) field is omitted, so QML can tell "set here" from
+/// "inherited" by key presence. The third engaged field, disabledPacks, is
+/// deliberately NOT projected here — it is surfaced through the dedicated
+/// disabledPacksAt() invokable, not this map. Border width / radius / colour
+/// are NOT decoration fields — they live in `parameters["border"]` and ride
+/// the parameters projection.
 inline QVariantMap profileToSparseMap(const PhosphorSurfaceShaders::DecorationProfile& p)
 {
     using DP = PhosphorSurfaceShaders::DecorationProfile;
@@ -91,9 +93,10 @@ inline QVariantMap profileToSparseMap(const PhosphorSurfaceShaders::DecorationPr
 }
 
 /// Project @p p with library defaults filled in (via withDefaults()) into a
-/// fully-populated QVariantMap. Used for the resolved/effective view so QML
-/// always reads concrete values. Same key/value encoding as
-/// profileToSparseMap, but every field is present.
+/// QVariantMap. Used for the resolved/effective view so QML always reads
+/// concrete values. Same key/value encoding as profileToSparseMap, so every
+/// chain/parameters field is present (disabledPacks is likewise surfaced via
+/// disabledPacksAt(), not this map).
 inline QVariantMap profileToResolvedMap(const PhosphorSurfaceShaders::DecorationProfile& profile)
 {
     return profileToSparseMap(profile.withDefaults());

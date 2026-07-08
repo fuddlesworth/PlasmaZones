@@ -85,7 +85,8 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorRules:
     // cache. `resolveCached` keyed by the composite windowId reuses the
     // result across both slot reads AND across subsequent shader events
     // for the same window until the rule set's revision changes.
-    const PhosphorRules::ResolvedActions resolved = evaluator.resolveCached(windowId, query);
+    const PhosphorRules::ResolvedActions resolved =
+        windowId.isEmpty() ? evaluator.resolve(query) : evaluator.resolveCached(windowId, query);
 
     // Shader slot: rule wins verbatim (engaged-empty effectId is the
     // user's "block tree fallthrough for this app/event" sentinel and
