@@ -697,9 +697,17 @@ void PlasmaZonesEffect::loadCachedSettings()
     // decoration cross-fade, not a window animation. 0 = instant switch.
     // No repaint needed on change — the new duration applies from the next
     // focus change; in-flight ramps keep their pace via the step divisor.
+    // Reject a non-numeric reply instead of coercing it: getSetting answers an
+    // UNKNOWN key with a valid empty-string variant (an older daemon without
+    // this key), and toInt() would silently turn that into 0 — forcing instant
+    // mode on version skew. Keeping the seeded default is the safe fallback.
     loadSettingAsync(QStringLiteral("focusFadeDuration"), [this](const QVariant& v) {
-        m_focusFadeDurationMs = qBound(PhosphorCompositor::DecorationDefaults::FocusFadeMsMin, v.toInt(),
-                                       PhosphorCompositor::DecorationDefaults::FocusFadeMsMax);
+        bool ok = false;
+        const int ms = v.toInt(&ok);
+        if (ok) {
+            m_focusFadeDurationMs = qBound(PhosphorCompositor::DecorationDefaults::FocusFadeMsMin, ms,
+                                           PhosphorCompositor::DecorationDefaults::FocusFadeMsMax);
+        }
     });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
         m_snapAssistHandler->setEnabled(v.toBool());

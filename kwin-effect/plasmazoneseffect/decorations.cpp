@@ -319,14 +319,18 @@ ResolvedWindowAppearance PlasmaZonesEffect::resolveEffectiveWindowAppearance(KWi
     return out;
 }
 
-void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w)
+void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w,
+                                               std::optional<bool> wasDecoratedHint)
 {
     // Did this window already have a decoration? Captured BEFORE the remove-first
     // below so the focus cross-fade can tell a genuine undecorated→decorated
     // transition (must SNAP to the current focus) from a plain refresh (focus
     // change / snap flip / rule edit — all of which remove-then-readd and must
     // keep easing). See the m_focusFade reconcile after the insert.
-    const bool wasDecorated = m_windowDecorations.contains(windowId);
+    // updateAllDecorations supplies the hint: it clears the whole decoration map
+    // before re-adding, so the local lookup would report false for EVERY window
+    // and scrub every in-flight ramp — the fade would snap on each focus change.
+    const bool wasDecorated = wasDecoratedHint.value_or(m_windowDecorations.contains(windowId));
     // Remove existing border for this window first
     removeWindowDecoration(windowId);
 
@@ -578,6 +582,16 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
 
 void PlasmaZonesEffect::updateAllDecorations()
 {
+    // Snapshot which windows were decorated BEFORE the bulk clear: the hint
+    // passed to updateWindowDecoration below is what lets the focus cross-fade
+    // survive this reconcile (a post-clear contains() lookup would report every
+    // window as freshly decorated and snap its ramp).
+    QSet<QString> previouslyDecorated;
+    previouslyDecorated.reserve(m_windowDecorations.size());
+    for (auto it = m_windowDecorations.constBegin(); it != m_windowDecorations.constEnd(); ++it) {
+        previouslyDecorated.insert(it.key());
+    }
+
     clearAllDecorations();
 
     // Iterate all effect windows and reconcile each window's border + title-bar
@@ -612,7 +626,7 @@ void PlasmaZonesEffect::updateAllDecorations()
         // a hide (rule or config default) applying to a window on another
         // virtual desktop would not take effect until next activation.
         if (w->isOnCurrentDesktop()) {
-            updateWindowDecoration(wid, w);
+            updateWindowDecoration(wid, w, previouslyDecorated.contains(wid));
         }
         reconcileRuleHiddenTitleBar(wid, w);
     }

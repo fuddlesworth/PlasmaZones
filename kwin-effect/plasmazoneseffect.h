@@ -44,6 +44,7 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -851,7 +852,14 @@ private:
     QRect m_resizeStartGeometry;
     void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry);
 
-    void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
+    /// wasDecoratedHint: whether @p windowId was decorated BEFORE this
+    /// reconcile cycle began. Per-window callers omit it (the internal
+    /// m_windowDecorations lookup is authoritative); updateAllDecorations MUST
+    /// supply it because it clears the whole decoration map before re-adding,
+    /// which would make every window look freshly decorated and scrub its
+    /// in-flight focus cross-fade (the fade would snap on every focus change).
+    void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w,
+                                std::optional<bool> wasDecoratedHint = std::nullopt);
     /// windowHint: the EffectWindow when the caller still holds it and the
     /// window is already deleted (close / delete paths) — findWindowById
     /// cannot resolve a deleted id, and without the pointer the GL release
