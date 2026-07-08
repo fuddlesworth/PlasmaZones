@@ -108,20 +108,40 @@ SnapState* SnapEngine::stateForWindowOnScreen(const QString& windowId, const QSt
     // An already-tracked window keeps its existing owning store — a screen-carrying
     // write only updates the per-window screen VALUE in place, it does not re-home
     // the window (cross-monitor re-homing is an explicit migrateWindowToScreen).
+    SnapState* owner = nullptr;
     if (const auto existing = m_states.windowKey(canonical)) {
-        if (SnapState* state = m_states.stateForKey(*existing)) {
-            return state;
+        owner = m_states.stateForKey(*existing);
+    }
+    if (!owner) {
+        // First placement (or the reverse-map key pointed at a since-pruned store):
+        // derive the key from the screen, lazily create the store, and record the
+        // reverse-map entry. A screenless call resolves to the global holder and is
+        // NOT recorded in the reverse map (untracked stays untracked).
+        const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
+        owner = ensureStateForKey(key);
+        if (owner && !key.screenId.isEmpty()) {
+            m_states.setKeyForWindow(canonical, key);
         }
     }
-    // First placement: derive the key from the screen, lazily create the store, and
-    // record the reverse-map entry. A screenless call resolves to the global holder
-    // and is NOT recorded in the reverse map (untracked stays untracked).
-    const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
-    SnapState* state = ensureStateForKey(key);
-    if (state && !key.screenId.isEmpty()) {
-        m_states.setKeyForWindow(canonical, key);
+    // Single-owner invariant: a window's zone/screen/desktop data must live in
+    // exactly ONE store. Re-keying a window moves only the reverse-map pointer —
+    // PerScreenStates::migrate / setKeyForWindow deliberately "do not touch state
+    // objects" — so a former owner store can retain stale data for the window. That
+    // phantom is invisible to owner-map reads (like the autotile engine's) but the
+    // snap resnap's forEachZoneAssignedWindow raw-scans every store and would read
+    // the phantom's stale desktop, resnapping a window off its real desktop (the
+    // cross-desktop leak). Since every write path resolves its store through here
+    // first, evicting the window from every non-owner store at resolution time keeps
+    // the phantom from ever forming. removeWindowData is a no-op where absent, so the
+    // common single-store case costs only a handful of empty hash lookups.
+    if (owner) {
+        for (SnapState* state : m_states.states()) {
+            if (state && state != owner) {
+                state->removeWindowData(canonical);
+            }
+        }
     }
-    return state;
+    return owner;
 }
 
 bool SnapEngine::migrateWindowToScreen(const QString& windowId, const QString& newScreenId)
