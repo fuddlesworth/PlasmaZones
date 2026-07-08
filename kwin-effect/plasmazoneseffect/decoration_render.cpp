@@ -134,8 +134,13 @@ float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
         // windowSurfaceAnimates) so lastMs goes stale, and an uncapped
         // now - lastMs would jump the whole ramp on the first frame after a
         // focus change — the instant-snap bug. A live window's real frame delta
-        // is far below the cap, so normal ramps are unaffected.
-        const qint64 dt = qMin(now - fs.lastMs, kFocusFadeMaxStepMs);
+        // is far below the cap, so normal ramps are unaffected. The cap is
+        // additionally bounded to half the configured duration so a short
+        // duration (≤ 2 × kFocusFadeMaxStepMs) still spans at least two frames
+        // instead of completing inside the single 50 ms resume step; the
+        // qBound floor of 1 keeps dt non-zero for a 1 ms duration.
+        const qint64 maxStep = qBound(qint64(1), qint64(m_focusFadeDurationMs) / 2, kFocusFadeMaxStepMs);
+        const qint64 dt = qMin(now - fs.lastMs, maxStep);
         const float step = static_cast<float>(dt) / static_cast<float>(m_focusFadeDurationMs);
         if (fs.value < target) {
             fs.value = qMin(target, fs.value + step);

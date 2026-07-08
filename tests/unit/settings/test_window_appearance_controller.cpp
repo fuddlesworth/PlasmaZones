@@ -15,7 +15,6 @@
  *      per-monitor override, falling back to the global value when absent.
  */
 
-#include <QSignalSpy>
 #include <QTest>
 
 #include "settings/windowappearancecontroller.h"

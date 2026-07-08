@@ -149,16 +149,16 @@ private Q_SLOTS:
         // Animations
         QVERIFY(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDurationMin());
         QVERIFY(ConfigDefaults::animationDuration() <= ConfigDefaults::animationDurationMax());
-
-        // Window decoration focus cross-fade
-        QVERIFY(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDurationMin());
-        QVERIFY(ConfigDefaults::focusFadeDuration() <= ConfigDefaults::focusFadeDurationMax());
         QVERIFY(ConfigDefaults::animationMinDistance() >= ConfigDefaults::animationMinDistanceMin());
         QVERIFY(ConfigDefaults::animationMinDistance() <= ConfigDefaults::animationMinDistanceMax());
         QVERIFY(ConfigDefaults::animationSequenceMode() >= ConfigDefaults::animationSequenceModeMin());
         QVERIFY(ConfigDefaults::animationSequenceMode() <= ConfigDefaults::animationSequenceModeMax());
         QVERIFY(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin());
         QVERIFY(ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax());
+
+        // Window decoration focus cross-fade
+        QVERIFY(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDurationMin());
+        QVERIFY(ConfigDefaults::focusFadeDuration() <= ConfigDefaults::focusFadeDurationMax());
     }
 
     /**

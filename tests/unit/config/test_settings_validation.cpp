@@ -8,7 +8,7 @@
  * The tests here seed the backing JSON config with deliberately-invalid or
  * out-of-range values, then construct a Settings object and verify that the
  * schema validator coerces the value on read. Covers:
- *  1. clampInt validator -- out-of-range int snaps to the schema default.
+ *  1. clampInt validator -- out-of-range int snaps to the violated clamp bound.
  *  2. validColorOr validator -- invalid color string falls back to default.
  *  3. Trigger list JSON parse -- invalid JSON drops back to the default,
  *     max-size cap at MaxTriggersPerAction is enforced.

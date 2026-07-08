@@ -840,6 +840,8 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
 // the effect agree on, snapped to the default on an unknown on-disk value.
 // Width/radius are clamped ints reusing the generic Width/Radius keys (the Windows
 // group disambiguates them from the Snapping.Zones.Border keys of the same spelling).
+// FocusFadeDuration is a clamped int: the decoration focus cross-fade in ms
+// (uSurfaceFocused ramp), 0 = instant.
 
 void appendWindowsSchema(PhosphorConfig::Schema& schema)
 {
