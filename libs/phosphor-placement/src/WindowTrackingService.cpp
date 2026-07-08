@@ -785,6 +785,25 @@ void WindowTrackingService::forEachZoneAssignedWindow(
         const QHash<QString, QString>& screens = state->screenAssignments();
         const QHash<QString, int>& desktops = state->desktopAssignments();
         for (auto it = zones.constBegin(); it != zones.constEnd(); ++it) {
+            // Single-owner guard: a window's authoritative store is the one the
+            // reverse map points at (snapForWindow). Re-keying a window to a new
+            // per-(screen,desktop,activity) store only moves that pointer — it does
+            // NOT evict the window's zone/desktop data from the old store (see
+            // PerScreenStates::setKeyForWindow / removeWindow, which "do not touch
+            // state objects"). Iterating the raw stores therefore sees a re-keyed
+            // window twice, once per store, with each store's own (possibly stale)
+            // desktop value — the cross-desktop resnap leak (a VD1 window read as
+            // VD2 from a leftover store, then resnapped off its real desktop). The
+            // autotile engine never hits this because it resolves windows through
+            // the same reverse map instead of scanning raw stores. Match that here:
+            // report a window only from its owning store, skipping stale leftovers.
+            // A window untracked by the reverse map (owner == nullptr, e.g. the
+            // global holder's screenless entries) is left to the callback's own
+            // screen/desktop guards, preserving prior behaviour.
+            const PhosphorSnapEngine::SnapState* owner = snapForWindow(it.key());
+            if (owner && owner != state) {
+                continue;
+            }
             fn(it.key(), it.value(), screens.value(it.key()), desktops.value(it.key(), 0));
         }
     }

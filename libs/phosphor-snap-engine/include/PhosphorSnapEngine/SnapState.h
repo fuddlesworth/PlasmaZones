@@ -185,6 +185,17 @@ public:
     /// No-op when @p target is null/this or the window has no entry in this store.
     void migrateWindowTo(SnapState* target, const QString& windowId, const QString& newScreenId);
 
+    /// Remove ALL of @p windowId's per-window data from this store (zone/screen/
+    /// desktop assignment, floating bit, pre-float zone/screen, auto-snap flag),
+    /// returning true if anything was removed. Emits NO signal: this is the snap
+    /// engine's single-owner enforcement primitive — it evicts a window from every
+    /// store EXCEPT the one the reverse map owns it in, so a re-keyed window never
+    /// leaves a phantom copy behind (see SnapEngine::stateForWindowOnScreen). An
+    /// evicted phantom was never a legitimate resident here, so firing
+    /// windowUnassigned/stateChanged for it would be wrong. windowClosed() is the
+    /// signalling wrapper for the genuine "this window went away" case.
+    bool removeWindowData(const QString& windowId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Last-Used Zone Tracking
     //
@@ -298,8 +309,6 @@ private:
     /// bare-appId alias writes (addPreFloat*/clearPreFloatZone) safe. See the
     /// .cpp header comment.
     QString canonicalizeForLookup(const QString& rawWindowId) const;
-
-    bool removeWindowData(const QString& windowId);
 
     /// Shared body of unassignWindow / unsnapForFloat. Removes the window's
     /// zone assignment and (optionally) its screen+desktop assignment, clears
