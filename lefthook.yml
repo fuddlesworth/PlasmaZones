@@ -36,6 +36,7 @@ pre-commit:
         - "data/curves/*.json"
         - "data/animations/*/metadata.json"
         - "data/shaders/*/metadata.json"
+        - "data/surface/*/metadata.json"
         - "data/schemas/*.json"
         - "data/whatsnew.json"
       # Hard gate: when a schema-governed data file or a schema itself is
@@ -60,6 +61,16 @@ pre-commit:
         sh -c 'bin=build/bin/plasmazones-shader-validate;
         if [ -x "$bin" ]; then exec "$bin" --quiet data/shaders;
         else echo "plasmazones-shader-validate not built (build/bin/) — skipping shader validation; build the target to enable this local gate" >&2; fi'
+    shader-validate-surface:
+      glob: "data/surface/**/*.{frag,vert,glsl,json}"
+      # Surface (decoration) packs use a distinct authoring model, so validate
+      # them with --surface separately from the overlay packs above. Same
+      # best-effort skip when the binary isn't built; CI's
+      # shader_validate_surface is the hard gate.
+      run: >
+        sh -c 'bin=build/bin/plasmazones-shader-validate;
+        if [ -x "$bin" ]; then exec "$bin" --quiet --surface data/surface;
+        else echo "plasmazones-shader-validate not built (build/bin/) — skipping surface shader validation; build the target to enable this local gate" >&2; fi'
 
 commit-msg:
   commands:

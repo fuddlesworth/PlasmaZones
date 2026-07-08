@@ -3,12 +3,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Validate bundled data JSON against the committed JSON Schemas.
 
-The schemas under data/schemas/ are the single source of truth shared
+Most schemas under data/schemas/ are the single source of truth shared
 with runtime validation: phosphor-fsloader's SchemaValidator (valijson)
-compiles the same schema files at load time. This script is the
-author-time gate — run from lefthook on commit and from CI — so a
-malformed bundled data file fails review rather than shipping and being
-skipped at runtime.
+compiles the same schema files at load time. A few (surface-metadata) are
+an author-time-only contract, because that document type validates its
+metadata directly in C++ rather than through a runtime schema. Either way
+this script is the author-time gate — run from lefthook on commit and from
+CI — so a malformed bundled data file fails review rather than shipping and
+being skipped at runtime.
 
 The schema dialect is Draft 7 (what valijson supports), validated here
 with the `jsonschema` package's Draft7Validator so the two engines agree.
@@ -36,12 +38,15 @@ _BOOTSTRAP_ENV = "PZ_JSONSCHEMA_BOOTSTRAPPED"
 
 # Maps a schema (relative to the source root) to the glob(s) of data
 # files it governs. Add an entry here when a new document type gets a
-# schema; the runtime side embeds the same schema file via RCC.
+# schema. Most schemas are also embedded via RCC and compiled by the
+# runtime SchemaValidator; a few (surface-metadata) are validated only
+# here, where the runtime checks that document type in C++ directly.
 SCHEMA_MAP: dict[str, list[str]] = {
     "data/schemas/layout.schema.json": ["data/layouts/*.json"],
     "data/schemas/curve.schema.json": ["data/curves/*.json"],
     "data/schemas/animation-metadata.schema.json": ["data/animations/*/metadata.json"],
     "data/schemas/shader-metadata.schema.json": ["data/shaders/*/metadata.json"],
+    "data/schemas/surface-metadata.schema.json": ["data/surface/*/metadata.json"],
     "data/schemas/whatsnew.schema.json": ["data/whatsnew.json"],
 }
 
