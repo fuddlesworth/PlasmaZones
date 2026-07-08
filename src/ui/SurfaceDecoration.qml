@@ -82,12 +82,17 @@ Item {
     ///     composite ping-pong, so a border + glow chain composes here too.
     ///   • decorationOuterPadding  — the chain's LARGEST declared paddingParam
     ///                               value (logical px, e.g. glow's glowSize).
-    ///                               The capture + shader items are inflated by
-    ///                               this margin on every side so an OUTER
-    ///                               effect has transparent room to draw —
-    ///                               the daemon analogue of the compositor's
-    ///                               padded capture canvas. 0 for margin-less
-    ///                               chains keeps the classic 1:1 geometry.
+    ///                               The capture + shader items grow by twice
+    ///                               this margin as a TRAILING bottom/right
+    ///                               band (content stays at the canvas
+    ///                               top-left, so the stage draws at the
+    ///                               anchor's QML coordinates) — transparent
+    ///                               room for an OUTER effect, the daemon
+    ///                               analogue of the compositor's padded
+    ///                               capture canvas. Top/left halo room is
+    ///                               the anchor's own glow ring. 0 for
+    ///                               margin-less chains keeps the classic
+    ///                               1:1 geometry.
     property var decorationChain: []
     // Live CAVA audio spectrum, forwarded to every stage's SurfaceShaderItem so
     // an audio-reactive pack (one that includes surface_audio.glsl) reacts.
@@ -201,9 +206,17 @@ Item {
         // Padded capture: when the pack declares an outer margin, capture a
         // sourceRect inflated past the anchor's bounds — the out-of-bounds
         // band renders TRANSPARENT, which is exactly the room an outer
-        // effect (glow) lights up. The all-zero rect is the documented
-        // "whole item" default for the margin-less case.
-        sourceRect: root.outerPad > 0 ? Qt.rect(-root.outerPad, -root.outerPad, (root.shaderAnchorItem ? root.shaderAnchorItem.width : 0) + root.outerPad * 2, (root.shaderAnchorItem ? root.shaderAnchorItem.height : 0) + root.outerPad * 2) : Qt.rect(0, 0, 0, 0)
+        // effect (glow) lights up. The rect starts at the anchor's OWN
+        // origin (0, 0) so the anchor content sits at the texture TOP-LEFT
+        // and the extension is a trailing bottom/right band: the stage item
+        // can then be drawn at the anchor's QML position with no negative
+        // offset. (A symmetric -outerPad origin here forced the stage to
+        // -outerPad coordinates, and that extended-FBO-based placement is
+        // what mis-drew the whole surface — coordinates must come from the
+        // QML item, the FBO extension is offset inside it.) The all-zero
+        // rect is the documented "whole item" default for the margin-less
+        // case.
+        sourceRect: root.outerPad > 0 ? Qt.rect(0, 0, (root.shaderAnchorItem ? root.shaderAnchorItem.width : 0) + root.outerPad * 2, (root.shaderAnchorItem ? root.shaderAnchorItem.height : 0) + root.outerPad * 2) : Qt.rect(0, 0, 0, 0)
         width: (root.shaderAnchorItem ? root.shaderAnchorItem.width : 0) + root.outerPad * 2
         height: (root.shaderAnchorItem ? root.shaderAnchorItem.height : 0) + root.outerPad * 2
         x: offscreenCoord
@@ -319,8 +332,16 @@ Item {
                 // draw by the next stage's hideSource capture instead; only
                 // the last stage actually reaches the screen.
                 visible: root.decorationActive
-                x: anchorOrigin.x - root.outerPad
-                y: anchorOrigin.y - root.outerPad
+                // Drawn at the anchor's QML coordinates — NOT shifted by the
+                // FBO extension. The capture puts the anchor content at the
+                // texture top-left (sourceRect origin 0,0 above), so the
+                // padded band trails bottom/right past the item's natural
+                // rect and the visible frame stays exactly where the QML
+                // placed it. Positioning the stage at anchorOrigin - outerPad
+                // (the extended FBO's coordinate frame) is what drew the whole
+                // decorated surface in the wrong place.
+                x: anchorOrigin.x
+                y: anchorOrigin.y
                 width: (root.shaderAnchorItem ? root.shaderAnchorItem.width : 0) + root.outerPad * 2
                 height: (root.shaderAnchorItem ? root.shaderAnchorItem.height : 0) + root.outerPad * 2
 
@@ -340,20 +361,27 @@ Item {
 
                 // Surface-state inputs (device px). The whole padded canvas is
                 // uTexture0; the FRAME rect within it (shaderContentRect,
-                // anchor-local logical px, shifted inward by the outer margin)
-                // scaled to device px is what the border rounds to — so the
-                // pack outlines the visible card while a halo lands in the
-                // transparent band (uSurfaceSize > uSurfaceFrameSize by
-                // 2 × outerPad, exactly like the compositor's padded
-                // composite canvas). Identical for every stage, mirroring the
-                // compositor's fold where each pack sees the same canvas.
+                // anchor-local logical px — the content sits at the canvas
+                // top-left, so no outer-margin inset applies) scaled to
+                // device px is what the border rounds to — so the pack
+                // outlines the visible card while a halo lands in the
+                // transparent trailing band (uSurfaceSize exceeds
+                // uSurfaceFrameSize by the 2 × outerPad extension, like the
+                // compositor's padded composite canvas). Identical for every
+                // stage, mirroring the compositor's fold where each pack
+                // sees the same canvas.
                 surfaceScale: root.surfaceScale
                 // These overlays (OSD + transient popups) are always shown for
                 // the active context — the focused colour params are the
                 // intended look. A literal true is correct here.
                 surfaceFocused: true
                 surfaceSize: root.shaderAnchorItem ? Qt.size((root.shaderAnchorItem.width + root.outerPad * 2) * root.surfaceScale, (root.shaderAnchorItem.height + root.outerPad * 2) * root.surfaceScale) : Qt.size(0, 0)
-                surfaceFrameTopLeft: (root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? Qt.point((root.shaderAnchorItem.shaderContentRect.x + root.outerPad) * root.surfaceScale, (root.shaderAnchorItem.shaderContentRect.y + root.outerPad) * root.surfaceScale) : Qt.point(root.outerPad * root.surfaceScale, root.outerPad * root.surfaceScale)
+                // No outer-margin inset: the capture places the anchor content
+                // at the canvas TOP-LEFT (trailing extension), so the frame
+                // sits at its anchor-local rect directly. Adding outerPad here
+                // belonged to the old symmetric capture and would push the
+                // border/shadow off the visible card by the pad.
+                surfaceFrameTopLeft: (root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? Qt.point(root.shaderAnchorItem.shaderContentRect.x * root.surfaceScale, root.shaderAnchorItem.shaderContentRect.y * root.surfaceScale) : Qt.point(0, 0)
                 // No published shaderContentRect (root-as-anchor content like
                 // snap-assist): the frame IS the whole anchor, per this
                 // component's documented fallback. A (0, 0) fallback here
