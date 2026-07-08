@@ -1,0 +1,57 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "urn:plasmazones:schema:surface-metadata",
+    "title": "PlasmaZones Surface Shader Metadata",
+    "description": "metadata.json for a bundled or user surface (decoration) shader pack. Core identity and the parameter contract are enforced. Optional compositing and multipass keys (handlesOpacity, needsBackdrop, multipass, bufferShaders, bufferScale, animated, audio, paddingParam, vertexShader) and descriptive metadata (description, author, version, category) are allowed through.",
+    "type": "object",
+    "required": ["id", "name", "fragmentShader", "parameters"],
+    "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "author": { "type": "string" },
+        "version": { "type": "string" },
+        "category": { "type": "string" },
+        "fragmentShader": { "type": "string", "minLength": 1 },
+        "vertexShader": { "type": "string" },
+        "animated": { "type": "boolean" },
+        "audio": { "type": "boolean" },
+        "handlesOpacity": { "type": "boolean" },
+        "needsBackdrop": { "type": "boolean" },
+        "multipass": { "type": "boolean" },
+        "bufferShaders": {
+            "type": "array",
+            "items": { "type": "string" }
+        },
+        "bufferScale": { "type": "number" },
+        "paddingParam": { "type": "string" },
+        "parameters": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/parameter" }
+        }
+    },
+    "definitions": {
+        "parameter": {
+            "type": "object",
+            "required": ["id", "name", "type", "default"],
+            "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "name": { "type": "string", "minLength": 1 },
+                "description": { "type": "string" },
+                "group": { "type": "string" },
+                "type": {
+                    "type": "string",
+                    "enum": ["float", "int", "bool", "color", "image"],
+                    "description": "Marshalling type of the uniform (image binds a texture slot). An unknown type cannot be bound, so it is rejected."
+                },
+                "default": {
+                    "type": ["number", "string", "boolean"],
+                    "description": "Default value. Use a string for color (#aarrggbb), a number for float or int, and a boolean for bool."
+                },
+                "min": { "type": "number" },
+                "max": { "type": "number" },
+                "slot": { "type": "integer" }
+            }
+        }
+    }
+}
