@@ -4,9 +4,9 @@ CapabilityBadgeRow 1.0 CapabilityBadgeRow.qml
 ZonePreview 1.0 ZonePreview.qml
 CategoryBadge 1.0 CategoryBadge.qml
 CategoryMenuButton 1.0 CategoryMenuButton.qml
-ShaderParameterRow 1.0 ShaderParameterRow.qml
-ShaderParameterSection 1.0 ShaderParameterSection.qml
-ShaderParameterEditor 1.0 ShaderParameterEditor.qml
+ParameterRow 1.0 ParameterRow.qml
+ParameterSection 1.0 ParameterSection.qml
+ParameterEditor 1.0 ParameterEditor.qml
 ShaderParamsEditor 1.0 ShaderParamsEditor.qml
 ShaderCompileErrorBanner 1.0 ShaderCompileErrorBanner.qml
 ZoneShaderRenderer 1.0 ZoneShaderRenderer.qml

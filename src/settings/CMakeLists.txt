@@ -420,9 +420,9 @@ qt_add_resources(plasmazones-settings "shared_common_qml"
         ${CMAKE_SOURCE_DIR}/src/shared/ZonePreview.qml
         ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml
         ${CMAKE_SOURCE_DIR}/src/shared/CategoryMenuButton.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterRow.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterSection.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterEditor.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/ParameterRow.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/ParameterSection.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/ParameterEditor.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ShaderParamsEditor.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ShaderCompileErrorBanner.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ZoneShaderRenderer.qml

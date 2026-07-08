@@ -11,7 +11,7 @@ import org.kde.kirigami as Kirigami
  * @brief Shader parameter editor bundled with its colour-picker dialog
  *        and lock / randomize working state.
  *
- * Wraps ShaderParameterEditor and hosts the QtQuick.Dialogs.ColorDialog
+ * Wraps ParameterEditor and hosts the QtQuick.Dialogs.ColorDialog
  * that every consumer previously hand-wired (the animation profile editor,
  * the App-Rules action row, and the decoration chain editor). Owns the
  * session-only lock map internally and rolls randomized values via the
@@ -62,7 +62,7 @@ ColumnLayout {
 
     spacing: Kirigami.Units.smallSpacing
 
-    ShaderParameterEditor {
+    ParameterEditor {
         id: editor
 
         Layout.fillWidth: true
