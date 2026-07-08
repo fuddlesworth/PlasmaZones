@@ -7,12 +7,17 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Reusable parameter editor for a shader.
+ * @brief Reusable parameter editor for a schema-described parameter set.
  *
- * Wraps the Lock-all / Randomize toolbar plus the flat-or-grouped row
- * rendering. Both the editor's `ShaderSettingsDialog` and the settings
- * app's `AnimationEventCard` consume it; each toggles the affordances
- * it wants via the `enable*` flags below.
+ * Renders a labelled control per parameter (slider / spinbox / switch /
+ * combo / colour / image) from a descriptor list, with an optional
+ * Lock-all / Randomize toolbar and flat-or-grouped rows. Shader effects,
+ * decoration packs, and autotile algorithm params all feed it; each host
+ * toggles the affordances it wants via the `enable*` flags below.
+ *
+ * The descriptor shape is `{ id, name, type, default?, min?, max?, step?,
+ * description?, group?, enumOptions? }`. `type` is one of `number`/`float`
+ * (interchangeable), `int`, `bool`, `enum`, `color`, `image`.
  *
  * The component is fully props-and-signals — it does not own state.
  * The host:
@@ -31,7 +36,7 @@ import org.kde.kirigami as Kirigami
  * live in one place.
  *
  * Accordion behavior: when `enableGroups: true` and the parameter list
- * declares any `group` field, rows are split into ShaderParameterSection
+ * declares any `group` field, rows are split into ParameterSection
  * accordions. Exactly one group is expanded at a time;
  * `expandedGroupIndex` is read/write so the host can choose "first
  * open" (default 0), open a specific group (any non-negative index), or
@@ -52,7 +57,7 @@ ColumnLayout {
     /// Default (false) keeps the editor's wide-slider aesthetic.
     property bool compact: false
     property int expandedGroupIndex: 0
-    // Visual size hints forwarded to ShaderParameterRow. Defaults shift in
+    // Visual size hints forwarded to ParameterRow. Defaults shift in
     // compact mode to match the settings-app SettingsSlider sizing.
     property int sliderValueLabelWidth: compact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 4
     property int colorButtonSize: compact ? Kirigami.Units.gridUnit * 2 : Kirigami.Units.gridUnit * 3
@@ -61,6 +66,11 @@ ColumnLayout {
     /// The toolbar row (Lock-all / Randomize) is on by default but can
     /// be hidden when neither button is wanted (animation settings).
     readonly property bool _showToolbar: enableLocking || enableRandomize || toolbarTrailing !== null
+    /// Show the "Parameters" heading independently of the lock / randomize
+    /// buttons. Defaults to the toolbar's own visibility so existing
+    /// consumers are unchanged; a host with both buttons disabled (e.g. the
+    /// rule-action algorithm-param editor) sets this true to keep the heading.
+    property bool showParametersHeader: _showToolbar
     /// Optional trailing item for the toolbar row, instantiated after the
     /// Lock-all / Randomize buttons. The editor dialog uses it for its
     /// metadata-driven preset menu so the affordance stays in line with
@@ -170,7 +180,7 @@ ColumnLayout {
     }
 
     /// Coerce @p v to a finite number, falling back to @p fallback for
-    /// undefined / non-numeric / NaN / Infinity. Mirrors ShaderParameterRow's
+    /// undefined / non-numeric / NaN / Infinity. Mirrors ParameterRow's
     /// `_numberOr` boundary defence: raw JSON metadata bounds can be strings
     /// or NaN and must not leak into computed values.
     function _finiteOr(v, fallback) {
@@ -208,6 +218,7 @@ ColumnLayout {
             }
             var value;
             switch (param.type) {
+            case "number":
             case "float":
                 // Coerce bounds/step to finite numbers: raw JSON metadata can
                 // carry strings/NaN, which would otherwise yield string
@@ -235,6 +246,12 @@ ColumnLayout {
             case "bool":
                 value = Math.random() < 0.5;
                 break;
+            case "enum":
+                var opts = param.enumOptions || [];
+                // Preserve the current value when the vocabulary is empty
+                // rather than writing undefined into the rolled map.
+                value = opts.length > 0 ? opts[Math.floor(Math.random() * opts.length)] : param.default;
+                break;
             case "color":
                 var r = Math.floor(Math.random() * 256);
                 var g = Math.floor(Math.random() * 256);
@@ -256,13 +273,14 @@ ColumnLayout {
     // ── Toolbar (Lock-all / Randomize) ───────────────────────────────
     RowLayout {
         Layout.fillWidth: true
-        visible: root._showToolbar && root.parameters && root.parameters.length > 0
+        visible: (root.showParametersHeader || root._showToolbar) && root.parameters && root.parameters.length > 0
         spacing: Kirigami.Units.smallSpacing
 
         Label {
             Layout.fillWidth: true
             text: i18nc("@title:group", "Parameters")
             font.weight: Font.DemiBold
+            visible: root.showParametersHeader
         }
 
         ToolButton {
@@ -314,7 +332,7 @@ ColumnLayout {
 
             model: root._parameterGroups
 
-            delegate: ShaderParameterSection {
+            delegate: ParameterSection {
                 id: paramSection
 
                 required property var modelData
@@ -386,7 +404,7 @@ ColumnLayout {
                 elide: Text.ElideRight
             }
 
-            ShaderParameterRow {
+            ParameterRow {
                 Layout.fillWidth: true
                 Kirigami.Theme.inherit: true
                 compact: false
@@ -454,7 +472,7 @@ ColumnLayout {
                 }
             }
 
-            ShaderParameterRow {
+            ParameterRow {
                 Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                 Kirigami.Theme.inherit: true
                 compact: true

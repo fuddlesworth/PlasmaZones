@@ -8,13 +8,13 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 /**
- * @brief Collapsible accordion section for a group of shader parameters.
+ * @brief Collapsible accordion section for a group of parameters.
  *
  * Header shows the group title, a parameter-count badge, and an optional
  * group-level lock toggle. Bind `expanded` to a shared index and react to
  * `toggled()` for accordion behavior:
  *
- *   ShaderParameterSection {
+ *   ParameterSection {
  *       title: groupName
  *       groupParams: paramsForGroup
  *       expanded: sharedIndex === myIndex

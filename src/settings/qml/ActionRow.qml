@@ -145,6 +145,48 @@ ColumnLayout {
             return row.appSettings.tilingAlgorithmPage.customParamsForAlgorithm(row._algorithmParamAlgoId);
         return [];
     }
+    /// The algorithm schema adapted to the shared ParameterEditor's descriptor
+    /// shape: the algorithm's `name` is a code identifier so it becomes the
+    /// `id` (value key), and its human `description` becomes the display
+    /// `name`; `minValue`/`maxValue`/`defaultValue` map to `min`/`max`/
+    /// `default`. Depends only on the value-stable schema, so it rebuilds on
+    /// algorithm change, not on every param write.
+    readonly property var _adaptedAlgorithmParamSchema: {
+        var schema = row._activeAlgorithmParamSchema || [];
+        var out = [];
+        for (var i = 0; i < schema.length; i++) {
+            var p = schema[i];
+            if (!p || p.name === undefined)
+                continue;
+
+            out.push({
+                "id": p.name,
+                "name": (p.description && p.description.length > 0) ? p.description : p.name,
+                "type": p.type,
+                "default": p.defaultValue,
+                "min": p.minValue,
+                "max": p.maxValue,
+                "enumOptions": p.enumOptions
+            });
+        }
+        return out;
+    }
+    /// The live id→value map ParameterEditor renders: the rule's stored
+    /// override wins, else the algorithm's saved value, else its default.
+    /// Reassigned (fresh identity) on every write so the editor re-syncs.
+    readonly property var _algorithmParamValues: {
+        var vals = {};
+        var schema = row._activeAlgorithmParamSchema || [];
+        var overrides = (row.action && row.action.params) ? row.action.params : {};
+        for (var i = 0; i < schema.length; i++) {
+            var p = schema[i];
+            if (!p || p.name === undefined)
+                continue;
+
+            vals[p.name] = overrides[p.name] !== undefined ? overrides[p.name] : (p.value !== undefined ? p.value : p.defaultValue);
+        }
+        return vals;
+    }
     /// Write one custom-param value into the action's nested `params` object
     /// (shallow-cloned so the binding re-triggers), mirroring the shader editor's
     /// per-uniform write via _withParam("params", …).
@@ -540,10 +582,9 @@ ColumnLayout {
 
     // ── Bottom: custom-parameter editor for SetAlgorithmParam ────────────────
     // Surfaces when the action is `setAlgorithmParam`, the user has picked an
-    // algorithm, and that algorithm declares custom params. The autotile analogue
-    // of the shader-params editor above; a dedicated editor rather than the
-    // shader one because the schema shape (name / type / minValue / maxValue) and
-    // the number/bool/enum vocabulary differ.
+    // algorithm, and that algorithm declares custom params. Reuses the shared
+    // ParameterEditor (as the shader-params editor above does); the algorithm
+    // schema is adapted to the descriptor shape by row._adaptedAlgorithmParamSchema.
     Loader {
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
@@ -1199,92 +1240,21 @@ ColumnLayout {
     }
 
     _algorithmParamsEditor: Component {
-        ColumnLayout {
-            spacing: Kirigami.Units.smallSpacing
-
-            Repeater {
-                model: row._activeAlgorithmParamSchema
-
-                delegate: RowLayout {
-                    required property var modelData
-
-                    // Current value: the rule's stored override, else the
-                    // algorithm's saved/default value from the schema.
-                    readonly property var _pValue: {
-                        if (row.action.params && row.action.params[modelData.name] !== undefined)
-                            return row.action.params[modelData.name];
-                        return modelData.value !== undefined ? modelData.value : modelData.defaultValue;
-                    }
-                    readonly property real _pMin: modelData.minValue !== undefined ? modelData.minValue : 0
-                    readonly property real _pMax: {
-                        var mx = modelData.maxValue !== undefined ? modelData.maxValue : 1;
-                        return mx > _pMin ? mx : _pMin + 1; // guard degenerate range
-                    }
-                    readonly property real _pRange: _pMax - _pMin
-
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: modelData.description ? modelData.description : modelData.name
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                    }
-
-                    // Number → slider (fractional-range aware, mirroring the
-                    // per-algorithm editor on the tiling settings page).
-                    SettingsSlider {
-                        visible: modelData.type === "number"
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-                        Accessible.name: modelData.description ? modelData.description : modelData.name
-                        from: parent._pMin
-                        to: parent._pMax
-                        stepSize: parent._pRange <= 1 ? 0.01 : (parent._pRange <= 10 ? 0.1 : 1)
-                        // A number param that declares neither value nor
-                        // defaultValue yields undefined → NaN into the slider;
-                        // fall back to the min so from/to stay finite.
-                        value: Number.isFinite(parent._pValue) ? parent._pValue : parent._pMin
-                        formatValue: function (v) {
-                            if (parent._pRange <= 1)
-                                return Math.round(v * 100) + "%";
-                            if (parent._pRange <= 10)
-                                return v.toFixed(1);
-                            return Math.round(v).toString();
-                        }
-                        onMoved: value => row._writeAlgorithmParam(modelData.name, value)
-                    }
-
-                    SettingsSwitch {
-                        visible: modelData.type === "bool"
-                        accessibleName: modelData.description ? modelData.description : modelData.name
-                        checked: parent._pValue === true
-                        onToggled: function (newValue) {
-                            row._writeAlgorithmParam(modelData.name, newValue);
-                        }
-                    }
-
-                    WideComboBox {
-                        visible: modelData.type === "enum"
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-                        Accessible.name: modelData.description ? modelData.description : modelData.name
-                        model: modelData.enumOptions || []
-                        currentIndex: {
-                            // -1 (not 0) when the stored value is out of vocabulary
-                            // (e.g. the algorithm's schema changed and dropped an
-                            // option), matching the sibling pickers (screen/activity/
-                            // layout/mode). Falling back to 0 would silently display a
-                            // different option than the rule holds until the user
-                            // touches the control.
-                            var opts = modelData.enumOptions || [];
-                            return opts.indexOf(parent._pValue);
-                        }
-                        // On an out-of-vocab miss (currentIndex -1) surface the stored
-                        // raw value rather than a blank combo, matching the sibling
-                        // pickers' dangling-value fallback.
-                        displayText: currentIndex >= 0 ? currentText : (parent._pValue !== undefined ? String(parent._pValue) : "")
-                        onActivated: row._writeAlgorithmParam(modelData.name, currentText)
-                    }
-                }
+        // The shared parameter editor, same as the shader / decoration-pack
+        // param UIs, minus the lock / randomize affordances. The algorithm
+        // schema is adapted to the descriptor shape via row._adapted*.
+        PZCommon.ParameterEditor {
+            Layout.fillWidth: true
+            parameters: row._adaptedAlgorithmParamSchema
+            currentValues: row._algorithmParamValues
+            compact: true
+            enableLocking: false
+            enableRandomize: false
+            enableImage: false
+            enableGroups: false
+            showParametersHeader: true
+            onValueChanged: function (paramId, value) {
+                row._writeAlgorithmParam(paramId, value);
             }
         }
     }

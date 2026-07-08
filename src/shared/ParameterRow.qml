@@ -7,11 +7,13 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief One parameter editor row for a shader (props in, signals out).
+ * @brief One parameter editor row (props in, signals out).
  *
- * Handles every shader parameter type (float / int / bool / color / image)
- * with visibility-based switching — avoids the Loader/onLoaded timing
- * issues that bit the dialog-coupled predecessor.
+ * Handles every parameter type (float / number / int / bool / enum /
+ * color / image) with visibility-based switching — avoids the
+ * Loader/onLoaded timing issues that bit the dialog-coupled predecessor.
+ * `number` and `float` are interchangeable numeric types (shader effects
+ * emit `float`, autotile algorithms emit `number`).
  *
  * The host owns the parameter map. Bind `paramData` to the parameter
  * schema, `currentValues` to the live value map, and react to
@@ -22,8 +24,9 @@ import org.kde.kirigami as Kirigami
  *
  * Required:
  *   - `paramData`: var — `{ id, name, type, default?, min?, max?, step?,
- *      description?, group? }` (canonical shape, matches both
- *      ShaderRegistry and AnimationsPageController output)
+ *      description?, group?, enumOptions? }` (canonical shape, matches
+ *      ShaderRegistry, AnimationsPageController, and the ActionRow
+ *      algorithm-param adapter output)
  *   - `currentValues`: var — full parameter map; tracking the whole map
  *      keeps reactivity consistent across multi-param resets (preset
  *      load, randomize) without per-row rebinds. **The host must
@@ -60,6 +63,9 @@ Item {
     // Sized for the 9-char #AARRGGBB hex the swatch label shows (alpha-first).
     property int colorLabelWidth: compact ? Kirigami.Units.gridUnit * 6 : Kirigami.Units.gridUnit * 8
     readonly property string paramType: paramData ? (paramData.type || "") : ""
+    /// `number` and `float` render identically (a slider + value readout);
+    /// shader effects declare `float`, autotile algorithms declare `number`.
+    readonly property bool _isNumber: paramType === "float" || paramType === "number"
     readonly property bool isSvgImage: paramType === "image" && imagePickerButton.currentPath.length > 0 && (imagePickerButton.currentPath.toLowerCase().endsWith(".svg") || imagePickerButton.currentPath.toLowerCase().endsWith(".svgz"))
 
     signal valueChanged(string paramId, var value)
@@ -112,7 +118,7 @@ Item {
         Slider {
             id: floatSlider
 
-            visible: paramDelegate.paramType === "float"
+            visible: paramDelegate._isNumber
             Layout.fillWidth: !paramDelegate.compact
             Layout.preferredWidth: paramDelegate.compact ? paramDelegate.sliderControlWidth : -1
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
@@ -151,7 +157,7 @@ Item {
         }
 
         Label {
-            visible: paramDelegate.paramType === "float"
+            visible: paramDelegate._isNumber
             text: floatSlider.value.toFixed(2)
             Layout.preferredWidth: paramDelegate.sliderValueLabelWidth
             horizontalAlignment: Text.AlignRight
@@ -231,6 +237,46 @@ Item {
         Item {
             visible: paramDelegate.paramType === "bool" && !paramDelegate.compact
             Layout.fillWidth: true
+        }
+
+        // ── ENUM ─────────────────────────────────────────────────────
+        ComboBox {
+            id: enumCombo
+
+            visible: paramDelegate.paramType === "enum"
+            // Fill the row in wide mode; take the fixed slider-column width in
+            // compact mode so it lines up with the numeric rows above/below.
+            Layout.fillWidth: !paramDelegate.compact
+            Layout.preferredWidth: paramDelegate.compact ? paramDelegate.sliderControlWidth : -1
+            Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
+            model: paramDelegate.paramData ? (paramDelegate.paramData.enumOptions || []) : []
+            // -1 (not 0) when the stored value is out of vocabulary (e.g. the
+            // schema changed and dropped an option) so the combo doesn't
+            // silently display a different option than the value holds.
+            currentIndex: {
+                if (!paramDelegate.paramData)
+                    return -1;
+
+                var opts = paramDelegate.paramData.enumOptions || [];
+                var fallback = paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : (opts.length > 0 ? opts[0] : "");
+                return opts.indexOf(paramDelegate._value(fallback));
+            }
+            // On an out-of-vocab miss (currentIndex -1) surface the stored raw
+            // value rather than a blank combo.
+            displayText: {
+                if (currentIndex >= 0)
+                    return currentText;
+
+                var v = paramDelegate.paramData ? paramDelegate._value(undefined) : undefined;
+                return v !== undefined ? String(v) : "";
+            }
+            ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
+            ToolTip.visible: hovered && paramDelegate.paramData && paramDelegate.paramData.description !== undefined && paramDelegate.paramData.description !== ""
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+            onActivated: {
+                if (paramDelegate.paramData)
+                    paramDelegate.valueChanged(paramDelegate.paramData.id, currentText);
+            }
         }
 
         // ── COLOR ────────────────────────────────────────────────────

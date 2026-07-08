@@ -17,7 +17,7 @@ import org.plasmazones.common as PZCommon
  *
  * The picker, parameter rows, accordion sections and lock/randomize
  * toolbar live in `org.plasmazones.common` (PZCommon.CategoryMenuButton /
- * ShaderParameterEditor) so the animation-settings page can reuse them.
+ * ParameterEditor) so the animation-settings page can reuse them.
  * This dialog owns the editor-specific bits: the live preview pane, the
  * shader-preset load/save flow, color/image platform dialogs, and the
  * pending-state buffering until "Apply" is clicked.
@@ -516,7 +516,7 @@ Kirigami.Dialog {
             }
 
             // ── Parameters editor (toolbar + flat/grouped rows) ───────
-            PZCommon.ShaderParameterEditor {
+            PZCommon.ParameterEditor {
                 id: paramEditor
 
                 Layout.fillWidth: true

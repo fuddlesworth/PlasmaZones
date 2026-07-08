@@ -22,7 +22,7 @@ import org.plasmazones.common as PZCommon
  * When the bridge also exposes a `previewController` (zone/overlay browser
  * only — see SnappingShadersPageController), the right pane is a LIVE
  * ZoneShaderItem preview and the left column an editable
- * ShaderParameterEditor whose changes are transient (never persisted). The
+ * ParameterEditor whose changes are transient (never persisted). The
  * animation browser has no previewController, so it shows no preview pane —
  * just a read-only parameter list.
  *
@@ -394,7 +394,7 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
                         active: root._livePreview && root._hasParameters
 
-                        sourceComponent: PZCommon.ShaderParameterEditor {
+                        sourceComponent: PZCommon.ParameterEditor {
                             id: paramEditor
 
                             compact: false
