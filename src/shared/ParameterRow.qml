@@ -24,8 +24,9 @@ import org.kde.kirigami as Kirigami
  *
  * Required:
  *   - `paramData`: var — `{ id, name, type, default?, min?, max?, step?,
- *      description?, group? }` (canonical shape, matches both
- *      ShaderRegistry and AnimationsPageController output)
+ *      description?, group?, enumOptions? }` (canonical shape, matches
+ *      ShaderRegistry, AnimationsPageController, and the ActionRow
+ *      algorithm-param adapter output)
  *   - `currentValues`: var — full parameter map; tracking the whole map
  *      keeps reactivity consistent across multi-param resets (preset
  *      load, randomize) without per-row rebinds. **The host must

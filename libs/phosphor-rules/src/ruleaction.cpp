@@ -745,7 +745,7 @@ void ActionRegistry::registerBuiltins()
             },
         .terminal = false,
         // Params carries the optional shader-uniform overrides, mirroring
-        // OverrideAnimationShader; the inline ShaderParameterEditor writes it.
+        // OverrideAnimationShader; the inline ParameterEditor writes it.
         .allowedKeys = {QString(ActionParam::EffectId), QString(ActionParam::Params)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("overlayShader")}},
