@@ -295,20 +295,29 @@ Item {
                 // resolution — the ordering class behind "the border draws
                 // statically at final size while the card animates in".
                 //
-                // Card rect for the animator's card-space remap: with an outer
-                // margin the WHOLE padded canvas is published as the card. The
-                // margin band carries drawn decoration (the glow halo), and a
-                // sub-canvas card rect would leave that band OUTSIDE the
-                // animation shader's card space, where transition shaders
-                // resolve to a static 1:1 passthrough — the halo then sits at
-                // full final size while the card animates (the glow flavour of
-                // the detachment bug). Publishing the full canvas makes the
-                // transition sweep the halo together with the card. Margin-less
-                // chains keep mirroring the raw card's frame rect, the geometry
-                // the border-detachment fix shipped with.
+                // Card rect for the animator's card-space remap, in this stage
+                // item's local coords. It is the VISIBLE FRAME sub-rect within
+                // the (possibly padded) canvas, NOT the whole canvas. Publishing
+                // the frame DECOUPLES the transition's card geometry (iResolution
+                // / iAnchorSize / iSurfaceScreenPos, which the animator derives
+                // from this rect — all then card-sized) from the extended FBO, so
+                // a padded surface animates and centres at its ORIGINAL size and
+                // position rather than the inflated canvas. animation.vert maps
+                // the frame to card-space [0,1] and the surrounding band (glow
+                // margin + outer decoration padding) to the extended range, which
+                // surfaceColor still samples from uTexture0 — the daemon analogue
+                // of the compositor's extended-texcoord + iLayerRectInTexture path
+                // (kwin-effect/plasmazoneseffect/paint_pipeline.cpp). Clip
+                // transitions (boundaryMask) crop that band outside [0,1] exactly
+                // as the compositor does with the same effect.frag; the halo
+                // returns once the transition ends and the static decoration draws
+                // the full canvas. When padded, the frame sits at outerPad + its
+                // in-anchor offset; root-as-anchor content (no shaderContentRect,
+                // e.g. snap-assist) treats the whole anchor as the frame.
                 property bool shaderAnchor: root.decorationActive && stage.isLast
                 property bool shaderAnchorOverride: root.decorationActive && stage.isLast
-                property rect shaderContentRect: root.outerPad > 0 ? Qt.rect(0, 0, width, height) : ((root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? root.shaderAnchorItem.shaderContentRect : Qt.rect(0, 0, width, height))
+                readonly property rect _anchorFrameRect: (root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? root.shaderAnchorItem.shaderContentRect : Qt.rect(0, 0, (root.shaderAnchorItem ? root.shaderAnchorItem.width : 0), (root.shaderAnchorItem ? root.shaderAnchorItem.height : 0))
+                property rect shaderContentRect: root.outerPad > 0 ? Qt.rect(root.outerPad + _anchorFrameRect.x, root.outerPad + _anchorFrameRect.y, _anchorFrameRect.width, _anchorFrameRect.height) : _anchorFrameRect
 
                 // Every stage stays VISIBLE while active: an explicitly
                 // invisible item generates no scene-graph nodes, so the next

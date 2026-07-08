@@ -289,9 +289,16 @@ inline void syncShaderGeometryNow(QQuickItem* anchor, PhosphorRendering::ShaderE
             fieldH = parent->height();
         }
         if (fieldW > 0.0 && fieldH > 0.0) {
-            ext->setISurfaceScreenPos(QVector4D(static_cast<float>(anchorScene.x()),
-                                                static_cast<float>(anchorScene.y()), static_cast<float>(fieldW),
-                                                static_cast<float>(fieldH)));
+            // .xy is the CARD's top-left in the field, not the captured anchor's.
+            // The anchor can be larger than the card (PopupFrame glow margin,
+            // decoration outer padding), so add the card's in-anchor offset
+            // (contentRect) to report the ORIGINAL card origin — matching the
+            // compositor (paint_pipeline.cpp uses frameGeometry) so screen-centred
+            // and position-seeded transitions land at the card, not the padded
+            // canvas corner.
+            ext->setISurfaceScreenPos(QVector4D(static_cast<float>(anchorScene.x() + contentRect.x()),
+                                                static_cast<float>(anchorScene.y() + contentRect.y()),
+                                                static_cast<float>(fieldW), static_cast<float>(fieldH)));
         }
     }
 }
