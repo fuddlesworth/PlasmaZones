@@ -57,7 +57,8 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         // to a top-level entry; no redirect needed because there is no
         // longer a parent id to land on.
         // The *-cat virtual headers (registered as collapsible category
-        // entries in buildApplicationController above) are real entries
+        // entries in buildApplicationController() in the sibling
+        // _pageregistration.cpp) are real entries
         // in the framework PageRegistry — without an explicit redirect,
         // anything that drives setCurrentPageId("snapping-overlay-cat")
         // would land on a page id that isn't in validPageNames() and
@@ -92,7 +93,8 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // silently miss the top-level dirty propagation.
     //
     // Keep the per-group leaf lists in sync with the parentId arguments
-    // in `buildApplicationController()` above — that function is the
+    // in `buildApplicationController()` in the sibling _pageregistration.cpp —
+    // that function is the
     // registry's source of truth for the page tree; this static map
     // exists because `isPageDirty()` is a hot path and the per-call walk
     // over `m_app->pageRegistry()->allPages()` to derive the parent→leaf
@@ -136,7 +138,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // return false even when a leaf inside the collapsed section is
     // dirty (mirrors the snapping/tiling parent entries above, just one
     // level deeper). Keep in sync with the regVirtual *-cat registrations
-    // in buildApplicationController() above.
+    // in buildApplicationController() in the sibling _pageregistration.cpp.
     static const QSet<QString> kSnappingOverlayChildren{
         QStringLiteral("snapping-overlay-behavior"),
         QStringLiteral("snapping-overlay-appearance"),
@@ -191,7 +193,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // dirty state from their leaves — without these entries the
         // sidebar's collapsed dirty badge stays cold even when a
         // child page is dirty. Mirrors the registry topology in
-        // buildApplicationController() above.
+        // buildApplicationController() in the sibling _pageregistration.cpp.
         {QStringLiteral("display"), {QStringLiteral("virtualscreens"), QStringLiteral("layouts")}},
         // No "rules" entry — Rules is a top-level leaf so its
         // dirty state propagates without a parent-bucket intermediary.
@@ -375,7 +377,8 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
 const QSet<QString>& SettingsController::validPageNames()
 {
     // Keep in sync with the `regPage` / `regVirtual` registrations in
-    // `buildApplicationController` above — every entry here must resolve
+    // `buildApplicationController` in the sibling _pageregistration.cpp — every
+    // entry here must resolve
     // to a registered page, otherwise external --page invocations and
     // sidebar navigation will silently fall through to the default page.
     // (The legacy `_pageComponents` Main.qml map this comment used to

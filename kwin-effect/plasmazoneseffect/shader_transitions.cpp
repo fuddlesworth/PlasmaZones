@@ -602,7 +602,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // event). Refuse it so the window keeps its normal behavior. Guarding on the
     // desktop class specifically — not full class-matching — keeps geometry /
     // appearance / universal shaders untouched.
-    if (eff.appliesTo.contains(QLatin1String("desktop"))) {
+    if (eff.appliesTo.contains(PhosphorAnimation::ProfilePaths::EventClassDesktop)) {
         qCWarning(lcEffect) << "beginShaderTransition: refusing desktop-contract shader" << effectId
                             << "on a per-window event — desktop packs sample unbound uFromDesktop/uToDesktop";
         return false;

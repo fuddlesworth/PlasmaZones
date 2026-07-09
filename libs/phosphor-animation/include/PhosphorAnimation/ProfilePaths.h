@@ -171,10 +171,11 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassDesktop;
 
 /// Classify @p path into an event class, or empty string when the path has
 /// no single class (a mixed ancestor like `window`, or a path outside the
-/// window/OSD/popup families — editor / panel / widget / cursor / shader /
-/// global). Resolution is leaf-aware: the OSD and popup roots and all their
-/// descendants are `appearance`; the window leaves split by
-/// motion-vs-lifecycle; the `window` root itself is mixed → empty.
+/// classified families — editor / panel / widget / cursor / shader / global).
+/// Resolution is leaf-aware: the OSD and popup roots and all their descendants
+/// are `appearance`; the window leaves split by motion-vs-lifecycle; the
+/// `desktop` root and every `desktop.*` leaf are `desktop`; the `window` root
+/// itself is mixed → empty.
 PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 
 /// Full list of built-in paths in taxonomy order.

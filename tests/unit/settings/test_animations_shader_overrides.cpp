@@ -13,6 +13,9 @@
  *   - No-op short-circuit when the request matches the existing tree
  *     state (prevents the QML two-way binding from re-dirtying on every
  *     refresh)
+ *   - clearShaderOverride on an unset path is a no-op (false, no signal)
+ *   - a populated registry rejects an unknown effectId (false, no write,
+ *     no signal) while an empty registry stays permissive
  */
 
 #include <QDir>
