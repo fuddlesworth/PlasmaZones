@@ -262,7 +262,7 @@ void SettingsController::buildApplicationController()
                QStringLiteral("virtual-desktops"));
 
     regVirtual(QStringLiteral("animations-window-motion"), QStringLiteral("animations-motion"),
-               PhosphorI18n::tr("Windows"), QStringLiteral("AnimationsWindowMotionPage.qml"),
+               PhosphorI18n::tr("Window Motion"), QStringLiteral("AnimationsWindowMotionPage.qml"),
                QStringLiteral("window-new"));
     regVirtual(QStringLiteral("animations-side-panels"), QStringLiteral("animations-motion"),
                PhosphorI18n::tr("Side Panels"), QStringLiteral("AnimationsSidePanelsPage.qml"),

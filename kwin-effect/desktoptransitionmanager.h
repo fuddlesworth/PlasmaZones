@@ -183,6 +183,13 @@ private:
     /// active-fullscreen-effect claim.
     void endOutput(KWin::LogicalOutput* screen);
 
+    /// Make the compositor GL context current so GLTexture/GLShader frees issue
+    /// their glDelete* against a live context. Every off-paint-thread mutator that
+    /// releases captured GL objects (begin's re-switch, output/desktop removal,
+    /// shader-cache invalidation, reset) calls this first. A no-op at teardown
+    /// (!effects), where the driver reclaims the objects regardless.
+    void ensureGlContextCurrent();
+
     PlasmaZonesEffect* m_effect;
     // Move-only mapped values (unique_ptr GL handles) — std::unordered_map, not
     // QHash, which is copy-on-write and would instantiate a deleted copy ctor.

@@ -174,11 +174,8 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     // an output (a re-switch inside the transition window), freeing its captured
     // GLTextures. begin() runs from the desktopChanged signal handler, off the
     // paint thread, so make the compositor context current first — the same
-    // discipline the shader-registry reload path uses. Teardown (!effects) needs
-    // no make-current; the driver reclaims the textures regardless.
-    if (KWin::effects) {
-        KWin::effects->makeOpenGLContextCurrent();
-    }
+    // discipline the shader-registry reload path uses.
+    ensureGlContextCurrent();
 
     for (KWin::LogicalOutput* screen : outputs) {
         if (!screen) {
@@ -481,9 +478,16 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
 void DesktopTransitionManager::endOutput(KWin::LogicalOutput* screen)
 {
     m_active.erase(screen);
-    if (m_active.empty() && m_fullScreenClaimed) {
+    if (m_active.empty() && m_fullScreenClaimed && KWin::effects) {
         KWin::effects->setActiveFullScreenEffect(nullptr);
         m_fullScreenClaimed = false;
+    }
+}
+
+void DesktopTransitionManager::ensureGlContextCurrent()
+{
+    if (KWin::effects) {
+        KWin::effects->makeOpenGLContextCurrent();
     }
 }
 
@@ -508,9 +512,7 @@ void DesktopTransitionManager::outputRemoved(KWin::LogicalOutput* screen)
     // screenRemoved fires off the paint thread; endOutput() erases the entry and
     // frees its captured GLTextures, which want a current GL context (endOutput's
     // other caller, paintOutput, is already on the paint thread with one current).
-    if (KWin::effects) {
-        KWin::effects->makeOpenGLContextCurrent();
-    }
+    ensureGlContextCurrent();
     endOutput(screen);
 }
 
@@ -522,23 +524,22 @@ void DesktopTransitionManager::desktopRemoved(KWin::VirtualDesktop* desktop)
     // never derefs it, so this is not a crash — but a freed pointer must not
     // linger and be compared against a live desktop. Drop every transition whose
     // outgoing desktop just vanished.
-    if (m_active.empty()) {
-        return;
-    }
-    // Erasing an entry frees its captured GLTextures; desktopRemoved fires off the
-    // paint thread, so make the compositor context current first (same discipline
-    // as outputRemoved()).
-    if (KWin::effects) {
-        KWin::effects->makeOpenGLContextCurrent();
-    }
+    bool erasedAny = false;
     for (auto it = m_active.begin(); it != m_active.end();) {
         if (it->second.from == desktop) {
+            // Erasing frees the entry's captured GLTextures; desktopRemoved fires
+            // off the paint thread, so make the context current before the first
+            // free — only when there is actually something to free.
+            if (!erasedAny) {
+                ensureGlContextCurrent();
+                erasedAny = true;
+            }
             it = m_active.erase(it);
         } else {
             ++it;
         }
     }
-    if (m_active.empty() && m_fullScreenClaimed && KWin::effects) {
+    if (erasedAny && m_active.empty() && m_fullScreenClaimed && KWin::effects) {
         KWin::effects->setActiveFullScreenEffect(nullptr);
         m_fullScreenClaimed = false;
     }
@@ -550,9 +551,7 @@ void DesktopTransitionManager::invalidateShaderCache()
     // compositor GL context is NOT current. m_shaderCache owns GLShaders whose
     // destruction issues glDelete* calls that want a current context — the same
     // discipline reset() applies. Teardown (!effects) reclaims them regardless.
-    if (KWin::effects) {
-        KWin::effects->makeOpenGLContextCurrent();
-    }
+    ensureGlContextCurrent();
     m_shaderCache.clear();
 }
 
@@ -565,9 +564,7 @@ void DesktopTransitionManager::reset()
     // Clearing m_shaderCache HERE — not leaving it for ~DesktopTransitionManager,
     // which deliberately can't make a context current — is what makes this the
     // real "release GL resources" path the header documents.
-    if (KWin::effects) {
-        KWin::effects->makeOpenGLContextCurrent();
-    }
+    ensureGlContextCurrent();
     m_active.clear();
     m_shaderCache.clear();
     if (m_fullScreenClaimed && KWin::effects) {

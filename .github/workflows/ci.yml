@@ -107,6 +107,11 @@ jobs:
           # headless without xvfb. Tests that need an RHI surface (e.g.
           # shader-render tool tests) launch xvfb-run themselves.
           QT_QPA_PLATFORM: offscreen
+          # Force Mesa's software rasteriser (llvmpipe) so the GL-dependent
+          # shader-bake test (test_animation_shader_kwin_bake) gets a real
+          # GL >= 4.5 context on this headless runner and actually compiles the
+          # KWin-branch shaders instead of QSKIP-ing. mesa is installed above.
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           # The container has no session, so XDG_RUNTIME_DIR is unset and Qt
           # emits a "QStandardPaths: XDG_RUNTIME_DIR not set" warning the first
@@ -193,6 +198,9 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
+          # Software GL (llvmpipe) so the shader-bake test gets a GL >= 4.5
+          # context instead of QSKIP-ing (see the default build job's rationale).
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           # Private XDG_RUNTIME_DIR so Qt's "XDG_RUNTIME_DIR not set" warning
           # does not pollute tests that assert no warnings (see the default
