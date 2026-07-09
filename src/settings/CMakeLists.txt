@@ -31,6 +31,7 @@ set(plasmazones_settings_SRCS
     # construction → lifecycle → page registry → per-domain CRUD.
     settingscontroller_lifecycle.cpp
     settingscontroller_pageregistration.cpp
+    settingscontroller_pagetopology.cpp
     settingscontroller_layouts.cpp
     settingscontroller_session.cpp
     # Per-screen autotile/snapping/zone-selector override wrappers — split
@@ -333,9 +334,11 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationEventCardList.qml
         qml/AnimationProfileEditor.qml
         qml/AnimationsWindowsPage.qml
-        qml/AnimationsEditorPage.qml
+        qml/AnimationsWindowMotionPage.qml
         qml/AnimationsOsdsPage.qml
         qml/AnimationsOverlaysPage.qml
+        qml/AnimationsDesktopsPage.qml
+        qml/AnimationsEditorPage.qml
         qml/AnimationsSidePanelsPage.qml
         qml/AnimationsWidgetsPage.qml
         qml/AnimationsGeneralPage.qml

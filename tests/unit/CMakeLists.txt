@@ -598,6 +598,16 @@ target_link_libraries(test_animation_shader_preamble_bake PRIVATE Qt6::Test Qt6:
 target_compile_definitions(test_animation_shader_preamble_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_preamble_bake COMMAND test_animation_shader_preamble_bake)
 
+# Bakes the KWIN-PATH variant (#define PLASMAZONES_KWIN) of every animation pack
+# through a real offscreen OpenGL context — the branch qsb/SPIR-V rejects and the
+# daemon preamble bake therefore never compiles. Catches GLSL errors in the KWin
+# branch (getFromColor/getToColor, surfaceColor's kwin flip, customColors/iFrame
+# usage). Skips when no desktop-GL >= 4.5 context is available (headless CI).
+add_executable(test_animation_shader_kwin_bake ui/test_animation_shader_kwin_bake.cpp)
+target_link_libraries(test_animation_shader_kwin_bake PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_animation_shader_kwin_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_animation_shader_kwin_bake COMMAND test_animation_shader_kwin_bake)
+
 # End-to-end: an entry-only animation shader (author writes only pTransition,
 # or pIn+pOut) assembles through the harness scaffold and bakes against the
 # real animation UBO; lone pIn falls through; traditional main() passes (T1.5).
@@ -802,6 +812,7 @@ target_link_libraries(test_animations_shader_overrides
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
+target_compile_definitions(test_animations_shader_overrides PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
 
 # Decoration page (per-surface DecorationProfileTree editor): reader /

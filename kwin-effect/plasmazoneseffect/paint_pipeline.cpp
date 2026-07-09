@@ -103,6 +103,18 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
         data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
     }
 
+    // A live desktop-switch transition replaces the whole screen with its own
+    // two-desktop blend, so force a full-screen paint (our paintScreen skips the
+    // normal scene for the transitioning output). Gate on THIS output's liveness:
+    // a per-output switch (Plasma 6.7 per-output desktops) must not push the
+    // non-transitioning outputs through the transformed-paint path. When the output
+    // is unknown (null screen) fall back to the global flag as the safe default.
+    const bool transitionOnThisOutput =
+        data.screen ? m_desktopTransition.isRunningForOutput(data.screen) : m_desktopTransition.isRunning();
+    if (transitionOnThisOutput) {
+        data.mask |= PAINT_SCREEN_TRANSFORMED;
+    }
+
     // Cache cursor pos once per frame for shader-transition iMouse uniform.
     // paintWindow runs once per active transition (and may run multiple
     // times across outputs); reading KWin::effects->cursorPos() at every
@@ -131,10 +143,26 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     KWin::effects->prePaintScreen(data);
 }
 
+void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                    int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
+{
+    // While a desktop-switch transition is live for this output, paintOutput
+    // draws the two-desktop blend into the screen target and returns true, so we
+    // skip the normal scene paint. Otherwise (no transition, or it just settled)
+    // chain straight through to the standard scene — this override is a no-op for
+    // every non-transitioning frame.
+    if (m_desktopTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
+        return;
+    }
+    KWin::effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
+}
+
 void PlasmaZonesEffect::postPaintScreen()
 {
     // Schedule targeted repaints for active animations instead of full-screen
     m_windowAnimator->scheduleRepaints();
+    // Keep the desktop-switch transition ticking (per-output repaints) while live.
+    m_desktopTransition.scheduleRepaints();
     // Time-based shader transitions (window.*) ride a steady-clock
     // timer, not m_windowAnimator, so paintWindow would only fire on
     // surface damage and iTime would stall. Mirror KWin's own

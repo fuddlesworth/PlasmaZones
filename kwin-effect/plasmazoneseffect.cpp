@@ -94,7 +94,7 @@ bool PlasmaZonesEffect::isActive() const
     // survives idle. O(1) — a QHash emptiness check, safe in this per-frame
     // hot path.
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
-        || m_shaderManager.hasOpacityRules() || !m_windowDecorations.isEmpty();
+        || m_shaderManager.hasOpacityRules() || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)

@@ -177,8 +177,9 @@ public:
     static const QHash<QString, QString>& parentPageRedirects();
     /// Parent name → set of leaf child page names. Covers top-level sidebar
     /// parents (snapping / tiling / animations) AND mid-level virtual parents
-    /// (animations-surfaces / animations-library) whose children don't share
-    /// their name prefix. Drives dirty-state propagation in `isPageDirty`.
+    /// (animations-transitions / animations-motion / animations-library) whose
+    /// children don't share their name prefix. Drives dirty-state propagation in
+    /// `isPageDirty`.
     static const QHash<QString, QSet<QString>>& pageGroupChildren();
 
     bool needsSave() const

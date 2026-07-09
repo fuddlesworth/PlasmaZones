@@ -2,14 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 
-// Overlays animation page: the `popup.*` resolver subtree (zone selector,
-// layout picker, snap assist; the resolver path keeps the historical
-// name). The "All Overlays" parent is a parent-node card whose override
-// cascades to `popup.zoneSelector.*`, `popup.layoutPicker.*` and
-// `popup.snapAssist.*` via ShaderProfileTree::resolve's walk-up (`popup`
-// is the closest common ancestor of all three surfaces). In-app side
-// panels (settings nav rail, editor property panel) live under `panel.*`
-// and have their own dedicated Side Panels page.
+// Overlay animation events: the transient popups invoked by user action (zone
+// selector, layout picker, snap assist), each with a show and hide leg. "All
+// Overlays" is the `popup` cascade parent. All rows are the appearance
+// contract; the shader picker is filtered accordingly.
 //
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
@@ -22,32 +18,32 @@ AnimationEventCardList {
         },
         {
             "eventPath": "popup.zoneSelector.show",
-            "eventLabel": i18n("Zone Selector: Show"),
+            "eventLabel": i18n("Zone Selector Shown"),
             "isParentNode": false
         },
         {
             "eventPath": "popup.zoneSelector.hide",
-            "eventLabel": i18n("Zone Selector: Hide"),
+            "eventLabel": i18n("Zone Selector Hidden"),
             "isParentNode": false
         },
         {
             "eventPath": "popup.layoutPicker.show",
-            "eventLabel": i18n("Layout Picker: Show"),
+            "eventLabel": i18n("Layout Picker Shown"),
             "isParentNode": false
         },
         {
             "eventPath": "popup.layoutPicker.hide",
-            "eventLabel": i18n("Layout Picker: Hide"),
+            "eventLabel": i18n("Layout Picker Hidden"),
             "isParentNode": false
         },
         {
             "eventPath": "popup.snapAssist.show",
-            "eventLabel": i18n("Snap Assist: Show"),
+            "eventLabel": i18n("Snap Assist Shown"),
             "isParentNode": false
         },
         {
             "eventPath": "popup.snapAssist.hide",
-            "eventLabel": i18n("Snap Assist: Hide"),
+            "eventLabel": i18n("Snap Assist Hidden"),
             "isParentNode": false
         }
     ]

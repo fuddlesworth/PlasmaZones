@@ -13,8 +13,12 @@
  *   - No-op short-circuit when the request matches the existing tree
  *     state (prevents the QML two-way binding from re-dirtying on every
  *     refresh)
+ *   - clearShaderOverride on an unset path is a no-op (false, no signal)
+ *   - a populated registry rejects an unknown effectId (false, no write,
+ *     no signal) while an empty registry stays permissive
  */
 
+#include <QDir>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -140,6 +144,56 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("expected >=2 emissions, got ") + QString::number(spy.count())));
     }
 
+    /// clearShaderOverride on a path with NO override is a no-op: it returns
+    /// false and emits nothing (mirrors clearOverride_noFileReturnsFalseNoSignal
+    /// and the clearShaderOverrideDescendants no-op case). Without this the QML
+    /// refresh would re-dirty the page on every combo tick.
+    void clearShaderOverride_noOverrideReturnsFalseNoSignal()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QVERIFY(!c.clearShaderOverride(QStringLiteral("osd.show")));
+        QCOMPARE(spy.count(), 0);
+    }
+
+    /// The unknown-effectId gate (rejecting a typo'd id before it corrupts the
+    /// shader-profile tree) only engages when the registry is populated — an
+    /// empty registry can't tell "unknown" from "not yet scanned", so it stays
+    /// permissive (every other test here relies on that). With a real registry a
+    /// bogus id MUST be refused (no write, no dirty), while a registered id still
+    /// succeeds.
+    void setShaderOverride_rejectsUnknownEffectIdWithPopulatedRegistry()
+    {
+        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        if (!QDir(dataDir).exists())
+            QSKIP("data/animations not found — running outside source tree");
+
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off); // synchronous initial scan
+        QVERIFY2(!registry.effectIds().isEmpty(), "precondition: registry populated so the gate is armed");
+        AnimationsPageController c(&registry, &settings);
+
+        const QString path = QStringLiteral("osd.show");
+
+        // A typo'd id is refused: false, no tree write, no pendingChangesChanged.
+        QSignalSpy spy(&c, &AnimationsPageController::pendingChangesChanged);
+        QVERIFY(!c.setShaderOverride(path, QStringLiteral("no-such-effect"), {}));
+        QCOMPARE(spy.count(), 0);
+        QVERIFY2(c.rawShaderProfile(path).isEmpty(), "refused write must not touch the tree");
+
+        // A registered id still succeeds and writes through.
+        QVERIFY(registry.hasEffect(QStringLiteral("pixelate")));
+        QVERIFY(c.setShaderOverride(path, QStringLiteral("pixelate"), {}));
+        QCOMPARE(c.resolvedShaderProfile(path).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("pixelate"));
+    }
+
     /// User-reported scenario: parent ("All Window Events" / "All
     /// Popups" / etc.) has an explicit shader. The user wants to override
     /// a CHILD event with a different shader. Each step's resolution
@@ -158,28 +212,35 @@ private Q_SLOTS:
         QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window")).value(QStringLiteral("effectId")).toString(),
                  QStringLiteral("matrix"));
         // Child inherits matrix.
-        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.appearance.open"))
+                     .value(QStringLiteral("effectId"))
+                     .toString(),
                  QStringLiteral("matrix"));
         // Child has NO direct override yet.
-        QVERIFY(c.rawShaderProfile(QStringLiteral("window.open")).isEmpty());
+        QVERIFY(c.rawShaderProfile(QStringLiteral("window.appearance.open")).isEmpty());
 
         // Child overrides to a DIFFERENT shader.
-        QVERIFY(c.setShaderOverride(QStringLiteral("window.open"), QStringLiteral("dissolve"), {}));
+        QVERIFY(c.setShaderOverride(QStringLiteral("window.appearance.open"), QStringLiteral("dissolve"), {}));
 
         // Child must resolve to dissolve (direct override wins over
         // parent's matrix). Parent's window resolution is unchanged.
-        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.appearance.open"))
+                     .value(QStringLiteral("effectId"))
+                     .toString(),
                  QStringLiteral("dissolve"));
         QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window")).value(QStringLiteral("effectId")).toString(),
                  QStringLiteral("matrix"));
         // Direct override is now visible at the child path.
-        QCOMPARE(c.rawShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
-                 QStringLiteral("dissolve"));
+        QCOMPARE(
+            c.rawShaderProfile(QStringLiteral("window.appearance.open")).value(QStringLiteral("effectId")).toString(),
+            QStringLiteral("dissolve"));
 
         // Switch the child to a third shader — must take effect with no
         // residual influence from the prior child override.
-        QVERIFY(c.setShaderOverride(QStringLiteral("window.open"), QStringLiteral("glitch"), {}));
-        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
+        QVERIFY(c.setShaderOverride(QStringLiteral("window.appearance.open"), QStringLiteral("glitch"), {}));
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.appearance.open"))
+                     .value(QStringLiteral("effectId"))
+                     .toString(),
                  QStringLiteral("glitch"));
     }
 

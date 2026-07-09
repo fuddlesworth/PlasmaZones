@@ -1,0 +1,11 @@
+{
+    "id": "desktop-fade",
+    "name": "Desktop Fade",
+    "description": "Cross-fades the outgoing virtual desktop into the incoming one when you switch desktops.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Fade",
+    "appliesTo": ["desktop"],
+    "fragmentShader": "effect.frag",
+    "parameters": []
+}

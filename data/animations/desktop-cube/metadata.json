@@ -1,0 +1,44 @@
+{
+    "id": "desktop-cube",
+    "name": "Desktop Cube",
+    "description": "Rotates the two desktops past each other like the faces of a spinning cube. This is the classic desktop switcher look.",
+    "author": "PlasmaZones (ported from GL-Transitions cube by gre, MIT)",
+    "version": "1.0",
+    "category": "Cube",
+    "appliesTo": ["desktop"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "persp",
+            "name": "Perspective",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "unzoom",
+            "name": "Unzoom",
+            "type": "float",
+            "default": 0.3,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "reflection",
+            "name": "Reflection",
+            "type": "float",
+            "default": 0.4,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "floating",
+            "name": "Floating",
+            "type": "float",
+            "default": 3.0,
+            "min": 0.0,
+            "max": 10.0
+        }
+    ]
+}

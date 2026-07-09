@@ -236,7 +236,7 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // Family ease-out for open/move/resize/focus/maximize;
         // close is the notable ease-in exception.
         {QLatin1StringView{"window"}, QLatin1StringView{"widget-out"}, 200.0},
-        {QLatin1StringView{"window.close"}, QLatin1StringView{"cubic-in"}, 150.0},
+        {QLatin1StringView{"window.appearance.close"}, QLatin1StringView{"cubic-in"}, 150.0},
 
         // ── Editor ────────────────────────────────────────────────
         // Layout-editor fill-preview / snap-resize animations on the
@@ -250,10 +250,12 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // highlight family root inherits the widget OutCubic feel.
         {QLatin1StringView{"widget.zoneHighlight"}, QLatin1StringView{"widget-out"}, 200.0},
 
-        // No `workspace.*` seeds: virtual-desktop transitions are KWin's
-        // compositor-level domain (Slide / Fade Desktop / etc.). PZ does
-        // not run a parallel animation in that lane to avoid double
-        // transforms and bypassing the user's KWin effect choice.
+        // No `workspace.*` / `desktop.*` motion seeds: the opt-in desktop
+        // switch transition (desktop.switch) carries no motion-Profile seed
+        // because its timing rides the shader path (the kwin-effect's
+        // DesktopTransitionManager), not this per-event Profile tree. It stays
+        // off until the user assigns a desktop shader, coexisting with KWin's
+        // own Slide via an effect-only fullscreen claim.
     }};
 
     for (const auto& seed : seeds) {

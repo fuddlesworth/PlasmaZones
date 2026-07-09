@@ -13,20 +13,32 @@ const QString Global = QStringLiteral("global");
 // compare cheaply against AnimationShaderEffect::appliesTo entries.
 const QString EventClassGeometry = QStringLiteral("geometry");
 const QString EventClassAppearance = QStringLiteral("appearance");
+const QString EventClassDesktop = QStringLiteral("desktop");
 
-// window.*
+// window.* — split into two contract sub-trees so each has a real cascade
+// parent for its "All": appearance (a surface materialising / dissolving) and
+// movement (an old-rect → new-rect geometry morph). Setting window.appearance
+// cascades to only the appearance leaves, window.movement to only the movement
+// leaves; the `window` root still spans both.
 const QString Window = QStringLiteral("window");
-const QString WindowOpen = QStringLiteral("window.open");
-const QString WindowClose = QStringLiteral("window.close");
-const QString WindowMinimize = QStringLiteral("window.minimize");
-const QString WindowMaximize = QStringLiteral("window.maximize");
-const QString WindowMove = QStringLiteral("window.move");
-const QString WindowResize = QStringLiteral("window.resize");
-const QString WindowFocus = QStringLiteral("window.focus");
-const QString WindowSnapIn = QStringLiteral("window.snapIn");
-const QString WindowSnapOut = QStringLiteral("window.snapOut");
-const QString WindowSnapResize = QStringLiteral("window.snapResize");
-const QString WindowLayoutSwitch = QStringLiteral("window.layoutSwitch");
+const QString WindowAppearance = QStringLiteral("window.appearance");
+const QString WindowOpen = QStringLiteral("window.appearance.open");
+const QString WindowClose = QStringLiteral("window.appearance.close");
+const QString WindowMinimize = QStringLiteral("window.appearance.minimize");
+const QString WindowFocus = QStringLiteral("window.appearance.focus");
+const QString WindowMovement = QStringLiteral("window.movement");
+const QString WindowMaximize = QStringLiteral("window.movement.maximize");
+const QString WindowMove = QStringLiteral("window.movement.move");
+const QString WindowResize = QStringLiteral("window.movement.resize");
+const QString WindowSnapIn = QStringLiteral("window.movement.snapIn");
+const QString WindowSnapOut = QStringLiteral("window.movement.snapOut");
+const QString WindowSnapResize = QStringLiteral("window.movement.snapResize");
+const QString WindowLayoutSwitch = QStringLiteral("window.movement.layoutSwitch");
+
+// desktop.* — full-screen virtual-desktop switch transitions (two-texture
+// from/to blend), driven by the kwin-effect's screen-level paint pass.
+const QString Desktop = QStringLiteral("desktop");
+const QString DesktopSwitch = QStringLiteral("desktop.switch");
 
 // editor.* — Layout-editor-only zone manipulation. NOT runtime
 // window snapping (that's KWin's domain).
@@ -107,17 +119,21 @@ QStringList allBuiltInPaths()
     static const QStringList kAllPaths = {
         Global,
         Window,
+        WindowAppearance,
         WindowOpen,
         WindowClose,
         WindowMinimize,
+        WindowFocus,
+        WindowMovement,
         WindowMaximize,
         WindowMove,
         WindowResize,
-        WindowFocus,
         WindowSnapIn,
         WindowSnapOut,
         WindowSnapResize,
         WindowLayoutSwitch,
+        Desktop,
+        DesktopSwitch,
         Editor,
         EditorSnapIn,
         EditorSnapOut,
@@ -192,25 +208,31 @@ QString parentPath(const QString& path)
 QString eventClassForPath(const QString& path)
 {
     // Geometry legs carry an old rect and a new rect (move/resize/snap/
-    // tile/layoutSwitch/maximize). Mirrors the geometry set that
-    // defaultShaderEffectIdForPath seeds with window-morph, plus maximize
-    // (a maximize IS a geometry change with a before/after rect — morph can
-    // drive it even though it isn't a built-in default there).
-    if (path == WindowMove || path == WindowResize || path == WindowSnapIn || path == WindowSnapOut
-        || path == WindowSnapResize || path == WindowLayoutSwitch || path == WindowMaximize) {
+    // layoutSwitch/maximize) — the whole window.movement sub-tree, including
+    // its cascade parent. Maximize IS a geometry change with a before/after
+    // rect, so morph can drive it even though it isn't a built-in default.
+    if (path == WindowMovement || path.startsWith(WindowMovement + QLatin1Char('.'))) {
         return EventClassGeometry;
     }
-    // Appearance legs animate a single surface in or out. Window lifecycle
-    // leaves (open/close/minimize/focus) plus every OSD and popup surface —
-    // the osd/popup roots and all their show/hide/pop descendants. A
-    // `startsWith` on the family roots keeps future popup sub-surfaces
-    // classified without touching this list.
-    if (path == WindowOpen || path == WindowClose || path == WindowMinimize || path == WindowFocus) {
+    // Appearance legs animate a single surface in or out: the whole
+    // window.appearance sub-tree (open/close/minimize/focus) plus every OSD and
+    // popup surface — the osd/popup roots and all their show/hide/pop
+    // descendants. `startsWith` keeps future sub-surfaces classified without
+    // touching this list.
+    if (path == WindowAppearance || path.startsWith(WindowAppearance + QLatin1Char('.'))) {
         return EventClassAppearance;
     }
     if (path == Osd || path == Popup || path.startsWith(Osd + QLatin1Char('.'))
         || path.startsWith(Popup + QLatin1Char('.'))) {
         return EventClassAppearance;
+    }
+    // Desktop family — the full-screen two-texture switch contract. The
+    // `desktop` root and every `desktop.*` leaf carry the desktop class so a
+    // desktop-transition shader validates on the root or the leaf, and the
+    // single-surface shaders are dimmed (see shaderEffectAppliesToEventPath,
+    // which makes this class opt-in rather than universal-permissive).
+    if (path == Desktop || path.startsWith(Desktop + QLatin1Char('.'))) {
+        return EventClassDesktop;
     }
     // `window` root (mixed: spans both classes), `global`, and the
     // editor/panel/widget/cursor/shader families have no single class — the
@@ -241,6 +263,11 @@ QString defaultShaderEffectIdForPath(const QString& path)
         || path == PopupSnapAssistHide) {
         return QStringLiteral("fade");
     }
+    // Virtual-desktop switch has NO built-in default: it is a full-screen,
+    // intrusive transition that also contends with KWin's own Slide effect, so
+    // it stays opt-in. A fresh config animates desktop switches only once the
+    // user picks a desktop pack (e.g. Desktop Fade) on the Virtual Desktops
+    // animation page.
     // Every other event defaults to no shader.
     return QString();
 }

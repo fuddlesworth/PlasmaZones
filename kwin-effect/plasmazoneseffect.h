@@ -49,6 +49,7 @@
 #include <vector>
 
 #include "shadertransitionmanager.h"
+#include "desktoptransitionmanager.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
@@ -141,10 +142,14 @@ public:
     void prePaintScreen(KWin::ScreenPrePaintData& data) override;
     void postPaintScreen() override;
     void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data) override;
-    // paintScreen override removed — per-window borders are rendered by routing
-    // the redirected window through the offscreen border MapTexture shader (see
-    // the drawWindow override below + decorations.cpp); no separate paintScreen-level
-    // GL drawing is needed.
+    // Per-window borders are rendered by routing the redirected window through
+    // the offscreen border MapTexture shader (see the drawWindow override below +
+    // decorations.cpp), NOT here. paintScreen is overridden solely for the
+    // full-screen virtual-desktop switch transition: while one is live,
+    // m_desktopTransition.paintOutput draws the two-desktop blend for that output
+    // and we skip the normal scene; otherwise this chains straight through.
+    void paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, int mask,
+                     const KWin::Region& deviceRegion, KWin::LogicalOutput* screen) override;
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                      KWin::WindowPaintData& data) override;
@@ -695,6 +700,7 @@ private:
     friend class DragTracker;
     friend class KWinCompositorBridge;
     friend class ShaderTransitionManager;
+    friend class DesktopTransitionManager;
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -1274,6 +1280,11 @@ private:
     // Shader/texture cache, LRU eviction, warm-up pipeline, profile tree,
     // and transition lifecycle are managed by ShaderTransitionManager.
     ShaderTransitionManager m_shaderManager;
+
+    // Full-screen virtual-desktop switch transition. By-value + `this` ctor,
+    // same ownership shape as m_shaderManager; must be initialised AFTER it in
+    // the ctor init list to match declaration order.
+    DesktopTransitionManager m_desktopTransition;
 
     // Shader transition methods — implementations in shader_transitions.cpp,
     // operating on m_shaderManager state.

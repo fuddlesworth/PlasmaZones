@@ -85,23 +85,6 @@ struct MutatingShaderTreeScope
     MutatingShaderTreeScope& operator=(const MutatingShaderTreeScope&) = delete;
 };
 
-/// Human-readable tooltip for an effect that can't drive an event row of
-/// class @p pathClass. Only called when a mismatch is proven, so @p
-/// pathClass is always a concrete class and the effect supports the OTHER
-/// one. The two messages name the events the effect DOES apply to so the
-/// user knows where to use it instead.
-QString shaderPathMismatchReason(const PhosphorAnimationShaders::AnimationShaderEffect& effect,
-                                 const QString& pathClass)
-{
-    namespace PP = PhosphorAnimation::ProfilePaths;
-    if (pathClass == PP::EventClassAppearance) {
-        // Effect is geometry-only (e.g. window-morph) on an appearance row.
-        return PhosphorI18n::tr("“%1” only applies to move, resize, snap, and tile events.").arg(effect.name);
-    }
-    // pathClass == geometry: effect is appearance-only on a geometry row.
-    return PhosphorI18n::tr("“%1” only applies to show and hide events, not move, resize, snap, or tile.")
-        .arg(effect.name);
-}
 } // namespace
 
 bool AnimationsPageController::supportsShaderLeg(const QString& path) const
@@ -127,18 +110,21 @@ QVariantList AnimationsPageController::availableShaderEffectsForPath(const QStri
     if (!m_shaderRegistry)
         return result;
 
-    // Class of this event row — drives the dim reason. Computed once; empty
-    // for an ambiguous row, in which case nothing dims (the predicate
-    // returns true for every effect).
-    const QString pathClass = PhosphorAnimation::ProfilePaths::eventClassForPath(path);
-
     const auto effects = m_shaderRegistry->availableEffects();
     result.reserve(effects.size());
     for (const auto& effect : effects) {
+        // Only offer shaders whose contract matches this event's class — a
+        // geometry-morph on an appearance leg, or a window shader on a desktop
+        // switch, would silently no-op. Filtering (rather than dimming) keeps
+        // each picker to one coherent set: appearance shaders on the Appearance
+        // page, the morph shaders on Movement, the two-texture packs on Virtual
+        // Desktops. `dimmed` is retained (always false) for QML compatibility.
+        if (!PhosphorAnimationShaders::shaderEffectAppliesToEventPath(effect, path)) {
+            continue;
+        }
         QVariantMap m = effectToMap(effect);
-        const bool compatible = PhosphorAnimationShaders::shaderEffectAppliesToEventPath(effect, path);
-        m.insert(QLatin1String("dimmed"), !compatible);
-        m.insert(QLatin1String("dimReason"), compatible ? QString() : shaderPathMismatchReason(effect, pathClass));
+        m.insert(QLatin1String("dimmed"), false);
+        m.insert(QLatin1String("dimReason"), QString());
         result.append(m);
     }
     return result;

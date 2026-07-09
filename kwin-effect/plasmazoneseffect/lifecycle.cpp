@@ -3,6 +3,8 @@
 
 #include "../plasmazoneseffect.h"
 
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -61,6 +63,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_motionClockFallback(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
     , m_shaderManager(this)
+    , m_desktopTransition(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(*this))
     , m_decorationManager(std::make_unique<DecorationManager>(*m_compositorBridge))
@@ -194,6 +197,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 ++m_shaderManager.m_textureCacheGeneration;
                 m_shaderManager.m_textureLoadsInFlight.clear();
                 m_shaderManager.m_textureCache.clear();
+                // Desktop-switch packs are served by the SAME AnimationShaderRegistry
+                // as the per-window effects, so a reloaded `desktop.switch` pack must
+                // invalidate the DesktopTransitionManager's parallel compiled-shader
+                // cache too — otherwise the next switch renders with the stale shader.
+                m_desktopTransition.invalidateShaderCache();
             });
 
     // Surface shader pack hot-reload: when a data/surface pack changes on disk,
@@ -562,6 +570,51 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     }
                 }
             });
+
+    // Full-screen desktop-switch TRANSITION (separate from the daemon-reporting
+    // connection above). Resolve the `desktop.switch` shader from the profile
+    // tree; when one is assigned, run the two-desktop blend. An empty resolve
+    // (default state / user picked None) is a no-op, so KWin's normal switch —
+    // or its built-in Slide — proceeds untouched.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this,
+            [this](KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow*,
+                   KWin::LogicalOutput* output) {
+                if (!oldDesktop || !newDesktop) {
+                    return;
+                }
+                // Honour the global animations master toggle, exactly as the two
+                // per-window shader paths do (beginShaderTransition /
+                // tryBeginShaderForEvent). `animationsEnabled` drives
+                // m_windowAnimator->setEnabled(); a user who turns all animations
+                // off must not still get a full-screen desktop-switch blend.
+                if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
+                    return;
+                }
+                const PhosphorAnimationShaders::ShaderProfile profile =
+                    PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
+                                                                       PhosphorAnimation::ProfilePaths::DesktopSwitch);
+                const QString effectId = profile.effectiveEffectId();
+                if (effectId.isEmpty()) {
+                    return;
+                }
+                // Honour the configured duration for the desktop switch. A
+                // `desktop.switch` (or ancestor) override in the motion profile tree
+                // wins; otherwise fall back to the MASTER animation-duration setting,
+                // exactly as the per-window legs do (they pass animationDurationMs()
+                // as their base). So the global animation-duration slider retimes the
+                // desktop switch too, not only a per-event override.
+                const int durationMs = resolveMotionTreeBaseDuration(PhosphorAnimation::ProfilePaths::DesktopSwitch,
+                                                                     animationDurationMs());
+                m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, profile.effectiveParameters(),
+                                          durationMs);
+            });
+
+    // Reap any live desktop transition whose OUTGOING desktop is removed from the
+    // pager mid-switch: it captured a raw VirtualDesktop* in begin() that the
+    // deferred captureDesktop() dereferences up to the transition's duration later.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopRemoved, this, [this](KWin::VirtualDesktop* desktop) {
+        m_desktopTransition.desktopRemoved(desktop);
+    });
 
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred
     // timer re-adds one between windowClosed and windowDeleted, the Item tree
@@ -940,6 +993,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 void PlasmaZonesEffect::clearDaemonCompositorState()
 {
     qCInfo(lcEffect) << "Clearing daemon compositor drag/overlay state before effect shutdown";
+
+    // Drop any in-flight desktop-switch transition and release its
+    // active-fullscreen-effect claim. reset() is null-safe (it guards every
+    // KWin::effects access), so it is fine to run here even though this can be
+    // reached from the destructor before the KWin::effects teardown guards.
+    m_desktopTransition.reset();
 
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
                                                 QStringLiteral("clearForCompositorReconnect"));

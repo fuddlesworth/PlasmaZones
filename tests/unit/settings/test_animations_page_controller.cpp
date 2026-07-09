@@ -76,9 +76,11 @@ private Q_SLOTS:
 
     // ─── Path discovery ───────────────────────────────────────────────────
 
-    void sectionForPath_extractsFirstSegment()
+    void sectionForPath_mapsTopLevelToUiSection()
     {
         AnimationsPageController c;
+        // sectionForPath maps a path's top level to its UI section — which is NOT
+        // always the first segment: osd/popup/panel all collapse into "overlays".
         QCOMPARE(c.sectionForPath(QStringLiteral("global")), QStringLiteral("global"));
         QCOMPARE(c.sectionForPath(QStringLiteral("editor")), QStringLiteral("editor"));
         QCOMPARE(c.sectionForPath(QStringLiteral("editor.snapIn")), QStringLiteral("editor"));
@@ -130,9 +132,8 @@ private Q_SLOTS:
         QCOMPARE(totalListed, paths.size());
 
         // Every listed path is a built-in path.
-        const QStringList builtIn = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
         for (const QString& p : allListed) {
-            QVERIFY2(builtIn.contains(p), qPrintable(QStringLiteral("unknown path in UI: ") + p));
+            QVERIFY2(paths.contains(p), qPrintable(QStringLiteral("unknown path in UI: ") + p));
         }
     }
 
@@ -473,13 +474,13 @@ private Q_SLOTS:
         // windowFinishUserMovedResized, maximized, minimized,
         // focusChanged) and runs the resolved shader on the
         // OffscreenEffect's redirected texture quad.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.open")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.close")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.minimize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.maximize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.move")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.resize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.focus")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.open")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.close")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.minimize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.maximize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.move")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.focus")));
 
         // Ancestors of consumed leaves — supported because the
         // daemon's resolver walks them on the way to the leaf, so a

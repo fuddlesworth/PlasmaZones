@@ -15,10 +15,10 @@ import org.kde.kirigami as Kirigami
  * `~/.local/share/plasmazones/profiles/`; the daemon's existing
  * `ProfileLoader` watches that dir and live-reloads the registry.
  *
- * Phase 3 scope: timing-mode (Easing/Spring), curve thumbnail with
- * "Customize…" dialog, duration slider, inheritance breadcrumb. The
- * Animation-style combo + shader-param editor + scale-start slider
- * land in Phase 6 alongside the shader-picker controller.
+ * Controls: timing-mode (Easing/Spring), curve thumbnail with
+ * "Customize…" dialog, duration slider, inheritance breadcrumb, and — on
+ * shader-supported paths — the shader picker and its per-shader parameter
+ * editor (both wired through the shared AnimationProfileEditor).
  *
  * Required properties:
  *   - eventPath:  full path string from `ProfilePaths::` (e.g. "editor.snapIn")
@@ -491,11 +491,11 @@ Item {
                 // Picker model fed via the registry-tick dependency
                 // so the binding re-evaluates on
                 // `shaderEffectsChanged`.
-                // Path-aware list: each effect carries `dimmed`/`dimReason`
-                // for this event, so the category picker greys out shaders
-                // that can't drive this row (e.g. the geometry-only
-                // window-morph on a show/hide event) with a warning tooltip —
-                // the same affordance the window-rule action picker uses.
+                // Path-aware list: pre-filtered to the shaders that can drive
+                // this event, so the category picker only offers compatible
+                // shaders (e.g. the geometry-only window-morph is omitted on a
+                // show/hide event). `dimmed`/`dimReason` remain on each row as
+                // always-false QML-compat fields.
                 availableShaders: {
                     void (root._shaderRegistryRev);
                     return settingsController.animationsPage.availableShaderEffectsForPath(root.eventPath);

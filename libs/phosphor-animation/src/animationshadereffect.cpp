@@ -203,24 +203,26 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.version = obj.value(QLatin1String("version")).toString();
     e.category = obj.value(QLatin1String("category")).toString();
     // `appliesTo` (array of event-class tokens). Only the documented
-    // vocabulary — "geometry" / "appearance" — is accepted; an unknown
-    // token is a typo or a foreign import and is dropped with a warning so
-    // it neither restricts the picker on a class that doesn't exist nor
+    // vocabulary — "geometry" / "appearance" / "desktop" — is accepted; an
+    // unknown token is a typo or a foreign import and is dropped with a warning
+    // so it neither restricts the picker on a class that doesn't exist nor
     // round-trips the typo back to disk via toJson. An array that validates
     // down to empty is indistinguishable from "universal", which is the
-    // correct fallback (the effect applies everywhere).
+    // correct fallback (the effect applies everywhere except the opt-in
+    // desktop class — see shaderEffectAppliesToEventPath).
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
         const QJsonArray appliesArr = obj.value(QLatin1String("appliesTo")).toArray();
         for (const QJsonValue& v : appliesArr) {
             const QString token = v.toString().trimmed();
-            if (token == PP::EventClassGeometry || token == PP::EventClassAppearance) {
+            if (token == PP::EventClassGeometry || token == PP::EventClassAppearance
+                || token == PP::EventClassDesktop) {
                 if (!e.appliesTo.contains(token))
                     e.appliesTo.append(token);
             } else if (!token.isEmpty()) {
                 qCWarning(lcAnimationShader)
                     << "AnimationShaderEffect::fromJson: unknown appliesTo token" << token << "for effect" << e.id
-                    << "— accepted values are \"geometry\" and \"appearance\"; dropping.";
+                    << "— accepted values are \"geometry\", \"appearance\" and \"desktop\"; dropping.";
             }
         }
     }
@@ -407,16 +409,30 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
 
 bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const QString& path)
 {
-    // Universal effect (no declared constraint) runs everywhere.
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    const QString cls = PP::eventClassForPath(path);
+    // The desktop class is a SEPARATE two-texture (from/to) contract, so it is
+    // opt-in rather than universal-permissive: only an effect that explicitly
+    // lists `desktop` in appliesTo runs on a desktop path. A universal
+    // single-surface effect (empty appliesTo) must NOT bleed onto desktop
+    // paths, where its lone surface sampler would be unbound; conversely a
+    // desktop effect declaring appliesTo:["desktop"] is dimmed on window/OSD
+    // paths (their class isn't `desktop`) by the concrete-mismatch check below.
+    if (cls == PP::EventClassDesktop)
+        return effect.appliesTo.contains(cls);
+    // Universal effect (no declared constraint) runs on every single-surface path.
     if (effect.appliesTo.isEmpty())
         return true;
     // Only report false on a PROVABLE mismatch: the path resolves to a
     // concrete class AND the effect doesn't list it. An ambiguous row
     // (mixed ancestor / non-window path → empty class) is left compatible
-    // so the picker never dims an effect on a row it can't classify.
-    const QString cls = PhosphorAnimation::ProfilePaths::eventClassForPath(path);
+    // so the picker never dims an effect on a row it can't classify — EXCEPT a
+    // desktop-declaring effect. Its two-texture (from/to) contract must never be
+    // offered on a non-desktop or ambiguous row, where its second sampler is
+    // unbound. This is the inverse of the universal-excluded-from-desktop rule
+    // above, keeping the desktop opt-in symmetric in both directions.
     if (cls.isEmpty())
-        return true;
+        return !effect.appliesTo.contains(PP::EventClassDesktop);
     return effect.appliesTo.contains(cls);
 }
 

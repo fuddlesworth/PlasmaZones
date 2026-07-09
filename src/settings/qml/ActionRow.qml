@@ -1167,16 +1167,16 @@ ColumnLayout {
     _shaderEffectEditor: Component {
         // Cascading category menu (same widget as the action-type picker above
         // and the animations page's shader picker) instead of a flat combo, so
-        // shaders group by category. The list is path-aware: each effect
-        // carries `dimmed`/`dimReason` for this action's target event, so a
-        // geometry-only shader (window-morph) is greyed out with a warning
-        // tooltip on a show/hide event — matching the animations page and the
-        // WHEN/THEN pickers in this same editor.
+        // shaders group by category. The list is path-aware: it is pre-filtered
+        // to the shaders that can drive this action's target event, so a
+        // geometry-only shader (window-morph) is omitted on a show/hide event,
+        // matching the animations page and the WHEN/THEN pickers in this same
+        // editor.
         PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
-            // Reading `row.action.event` makes the dim state re-evaluate when
-            // the user changes the action's target event. Empty event → the
-            // controller leaves every shader compatible (nothing to dim yet).
+            // Reading `row.action.event` re-filters the list when the user
+            // changes the action's target event. Empty event → the controller
+            // leaves every shader compatible (nothing to filter yet).
             readonly property var _effects: {
                 var controller = row.appSettings ? row.appSettings.animationsController : null;
                 if (!controller)

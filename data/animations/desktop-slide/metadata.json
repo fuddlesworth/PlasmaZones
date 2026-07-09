@@ -1,0 +1,28 @@
+{
+    "id": "desktop-slide",
+    "name": "Desktop Slide",
+    "description": "Slides the incoming desktop in as the outgoing one slides out.",
+    "author": "PlasmaZones (ported from GL-Transitions directional by gre, MIT)",
+    "version": "1.0",
+    "category": "Slide",
+    "appliesTo": ["desktop"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "dirX",
+            "name": "Direction X",
+            "type": "float",
+            "default": 1.0,
+            "min": -1.0,
+            "max": 1.0
+        },
+        {
+            "id": "dirY",
+            "name": "Direction Y",
+            "type": "float",
+            "default": 0.0,
+            "min": -1.0,
+            "max": 1.0
+        }
+    ]
+}

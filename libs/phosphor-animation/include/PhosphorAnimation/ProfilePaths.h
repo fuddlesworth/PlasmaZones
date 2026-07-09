@@ -33,17 +33,31 @@ PHOSPHORANIMATION_EXPORT extern const QString Global;
 // interaction (the WINDOW animates when it snaps into/out of a zone
 // or when a layout switch repositions it).
 PHOSPHORANIMATION_EXPORT extern const QString Window;
+// window.appearance.* — a window surface materialising / dissolving (the
+// appearance shader contract). WindowAppearance is the cascade parent.
+PHOSPHORANIMATION_EXPORT extern const QString WindowAppearance;
 PHOSPHORANIMATION_EXPORT extern const QString WindowOpen;
 PHOSPHORANIMATION_EXPORT extern const QString WindowClose;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMinimize;
+PHOSPHORANIMATION_EXPORT extern const QString WindowFocus;
+// window.movement.* — a window changing geometry, old-rect → new-rect (the
+// geometry-morph shader contract). WindowMovement is the cascade parent.
+PHOSPHORANIMATION_EXPORT extern const QString WindowMovement;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMaximize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMove;
 PHOSPHORANIMATION_EXPORT extern const QString WindowResize;
-PHOSPHORANIMATION_EXPORT extern const QString WindowFocus;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapOut;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapResize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
+
+// desktop.* — full-screen virtual-desktop switch transitions driven by the
+// kwin-effect's screen-level paint pass. Unlike the per-window window.*
+// events, a desktop switch blends the OUTGOING desktop against the INCOMING
+// desktop (two full-screen textures), so it uses the desktop event class and
+// its own two-texture shader contract rather than the single-surface pipeline.
+PHOSPHORANIMATION_EXPORT extern const QString Desktop;
+PHOSPHORANIMATION_EXPORT extern const QString DesktopSwitch;
 
 // editor.* — Layout-editor-only zone manipulation animations
 // (fill-preview, drag-resize-preview). NOT triggered by runtime
@@ -146,18 +160,29 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassGeometry;
 /// popup show/hide — a single surface materialising or dissolving.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassAppearance;
 
+/// Desktop transitions: a full-screen virtual-desktop switch blending the
+/// outgoing desktop against the incoming one. A distinct TWO-texture contract
+/// (from/to full-screen samplers), incompatible with the single-surface
+/// geometry/appearance shaders — a shader must opt into it explicitly via
+/// `appliesTo: ["desktop"]`. A universal single-surface effect (empty
+/// `appliesTo`) does NOT apply to desktop paths, because its lone surface
+/// sampler would be unbound in the two-texture pass.
+PHOSPHORANIMATION_EXPORT extern const QString EventClassDesktop;
+
 /// Classify @p path into an event class, or empty string when the path has
 /// no single class (a mixed ancestor like `window`, or a path outside the
-/// window/OSD/popup families — editor / panel / widget / cursor / shader /
-/// global). Resolution is leaf-aware: the OSD and popup roots and all their
-/// descendants are `appearance`; the window leaves split by
-/// motion-vs-lifecycle; the `window` root itself is mixed → empty.
+/// classified families — editor / panel / widget / cursor / shader / global).
+/// Resolution is leaf-aware: the OSD and popup roots and all their descendants
+/// are `appearance`; the window leaves split by motion-vs-lifecycle; the
+/// `desktop` root and every `desktop.*` leaf are `desktop`; the `window` root
+/// itself is mixed → empty.
 PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 
 /// Full list of built-in paths in taxonomy order.
 PHOSPHORANIMATION_EXPORT QStringList allBuiltInPaths();
 
-/// Walk @p path up one level ("window.open" -> "window" -> "global" -> "").
+/// Walk @p path up one level
+/// ("window.appearance.open" -> "window.appearance" -> "window" -> "global" -> "").
 PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
 
 /// Built-in default shader effect id for an event @p path, or empty for none.

@@ -81,6 +81,8 @@ set(plasmazones_effect_SRCS
     autotilehandler/wiring.cpp
     snaphandler.cpp
     snaphandler.h
+    desktoptransitionmanager.cpp
+    desktoptransitionmanager.h
     navigationhandler.cpp
     navigationhandler.h
     screenchangehandler.cpp
@@ -115,6 +117,10 @@ kcoreaddons_add_plugin(kwin_effect_plasmazones
 # KWin's GL headers) would break that ordering. Mirrors the daemon's identical
 # guard on dmabufglimport.cpp (src/CMakeLists.txt).
 set_source_files_properties(snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+# desktoptransitionmanager.cpp defines a file-local drawDesktopBlendQuad + a
+# fullscreen vertex-source constant; keep it out of the Unity blob so those
+# never ODR-collide with surfacelayers.cpp's equivalents.
+set_source_files_properties(desktoptransitionmanager.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE
