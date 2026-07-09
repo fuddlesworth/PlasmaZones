@@ -184,6 +184,44 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
     return tex;
 }
 
+std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int mask, KWin::LogicalOutput* screen)
+{
+    const qreal scale = screen->scale();
+    const QRectF logicalGeometry = screen->geometryF();
+    const QSize textureSize = (logicalGeometry.size() * scale).toSize();
+    if (textureSize.isEmpty()) {
+        return nullptr;
+    }
+
+    const ShaderInternal::ScopedGlState glStateGuard;
+
+    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+    if (!tex) {
+        return nullptr;
+    }
+    tex->setFilter(GL_LINEAR);
+    tex->setWrapMode(GL_CLAMP_TO_EDGE);
+
+    KWin::GLFramebuffer fbo(tex.get());
+    if (!fbo.valid()) {
+        return nullptr;
+    }
+
+    {
+        KWin::RenderTarget renderTarget(&fbo);
+        KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
+        KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        // Render the live scene (the now-current INCOMING desktop) into the FBO
+        // via KWin's own composite. This is the downstream chain call (effects
+        // below us + the scene), NOT a re-entry into our own paintScreen.
+        KWin::effects->paintScreen(renderTarget, viewport, mask, KWin::Region(screen->geometry()), screen);
+        KWin::GLFramebuffer::popFramebuffer();
+    }
+    return tex;
+}
+
 DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compiledShader(const QString& effectId)
 {
     auto cached = m_shaderCache.find(effectId);
@@ -260,7 +298,6 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
 bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                            int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
 {
-    Q_UNUSED(mask)
     Q_UNUSED(deviceRegion)
     if (!screen) {
         return false;
@@ -281,11 +318,13 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     }
     const float t = tr.durationMs > 0 ? float(qBound<qreal>(0.0, qreal(elapsed) / qreal(tr.durationMs), 1.0)) : 1.0f;
 
-    // Deferred capture: both desktops are still alive and renderable here (the
-    // switch has completed, but off-desktop windows persist). Capture once.
+    // Deferred capture (once). The OUTGOING desktop is no longer current, so its
+    // windows are reconstructed via drawWindow. The INCOMING desktop IS the live
+    // scene now, so it is captured via effects->paintScreen — drawWindow on the
+    // current desktop's already-visible windows renders black.
     if (!tr.captured) {
         tr.fromTex = captureDesktop(tr.from, screen);
-        tr.toTex = captureDesktop(tr.to, screen);
+        tr.toTex = captureLiveScene(mask, screen);
         tr.captured = true;
     }
     CompiledDesktopShader* cs = compiledShader(tr.effectId);

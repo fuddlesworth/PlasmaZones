@@ -110,8 +110,17 @@ private:
 
     /// Render every window on @p desktop that intersects @p screen into a fresh
     /// output-sized FBO, bottom-to-top in stacking order (wallpaper included —
-    /// it is an on-all-desktops window). Returns null on allocation failure.
+    /// it is an on-all-desktops window). Used for the OUTGOING desktop, which is
+    /// no longer current so its windows aren't in the live scene and must be
+    /// reconstructed via drawWindow. Returns null on allocation failure.
     std::unique_ptr<KWin::GLTexture> captureDesktop(KWin::VirtualDesktop* desktop, KWin::LogicalOutput* screen);
+
+    /// Capture the LIVE composited scene for @p screen into a fresh output-sized
+    /// FBO via effects->paintScreen. Used for the INCOMING desktop: it is the
+    /// current desktop after the switch, so its already-visible windows render
+    /// black through drawWindow (they belong to the ongoing scene paint) — the
+    /// scene composite is the correct, reliable source. Returns null on failure.
+    std::unique_ptr<KWin::GLTexture> captureLiveScene(int mask, KWin::LogicalOutput* screen);
 
     /// Compile (or fetch from cache) the desktop-transition shader for @p effectId.
     /// Returns nullptr when the effect id is unknown or compilation failed.
