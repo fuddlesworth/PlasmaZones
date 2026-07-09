@@ -597,7 +597,15 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 if (effectId.isEmpty()) {
                     return;
                 }
-                m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, profile.effectiveParameters());
+                // Honour the user-configured duration for the desktop switch: the
+                // Desktops settings card writes a `desktop.switch` duration into the
+                // motion profile tree, resolved here the same way the per-window
+                // paths resolve their leg durations. Falls back to the default when
+                // no override is set anywhere up the ancestor chain.
+                const int durationMs = resolveMotionTreeBaseDuration(PhosphorAnimation::ProfilePaths::DesktopSwitch,
+                                                                     DesktopTransitionManager::DefaultDurationMs);
+                m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, profile.effectiveParameters(),
+                                          durationMs);
             });
 
     // Reap any live desktop transition whose OUTGOING desktop is removed from the
@@ -986,7 +994,9 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     qCInfo(lcEffect) << "Clearing daemon compositor drag/overlay state before effect shutdown";
 
     // Drop any in-flight desktop-switch transition and release its
-    // active-fullscreen-effect claim while KWin::effects is still valid.
+    // active-fullscreen-effect claim. reset() is null-safe (it guards every
+    // KWin::effects access), so it is fine to run here even though this can be
+    // reached from the destructor before the KWin::effects teardown guards.
     m_desktopTransition.reset();
 
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,

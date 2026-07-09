@@ -38,12 +38,20 @@
 namespace PlasmaZones {
 
 namespace {
+// Output device-pixel size for @p screen (logical geometry scaled to the
+// physical framebuffer). The capture textures and the blend viewport both key on
+// this, so it is derived in one place.
+QSize deviceSizeForOutput(KWin::LogicalOutput* screen)
+{
+    return (screen->geometryF().size() * screen->scale()).toSize();
+}
+
 // Allocate an output-sized RGBA8 texture for @p screen (LINEAR filter,
 // CLAMP_TO_EDGE) — the shared preamble of both desktop captures. Returns null
 // when the output's device size is empty or GL allocation fails.
 std::unique_ptr<KWin::GLTexture> allocateOutputTexture(KWin::LogicalOutput* screen)
 {
-    const QSize textureSize = (screen->geometryF().size() * screen->scale()).toSize();
+    const QSize textureSize = deviceSizeForOutput(screen);
     if (textureSize.isEmpty()) {
         return nullptr;
     }
@@ -73,9 +81,6 @@ void drawDesktopBlendQuad()
     vbo->render(GL_TRIANGLE_STRIP);
 }
 
-// The full-screen desktop pass has no per-path motion-tree duration (that tree
-// drives the per-window quad, not this pass); it runs at a fixed switch duration.
-constexpr int kDesktopSwitchDurationMs = 300;
 } // namespace
 
 DesktopTransitionManager::DesktopTransitionManager(PlasmaZonesEffect* effect)
@@ -91,11 +96,15 @@ DesktopTransitionManager::~DesktopTransitionManager()
 }
 
 void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
-                                     const QString& effectId, const QVariantMap& params)
+                                     const QString& effectId, const QVariantMap& params, int durationMs)
 {
     if (!from || !to || from == to || effectId.isEmpty()) {
         return; // nothing to animate (no shader assigned, or a no-op switch)
     }
+    // A non-positive resolve (corrupt/absent motion-tree node) falls back to the
+    // default so the transition can't settle on its first paint (durationMs <= 0
+    // would make elapsed >= durationMs true immediately).
+    const int effectiveDurationMs = durationMs > 0 ? durationMs : DefaultDurationMs;
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
 
     // Resolve p_<name> parameter values into customParams[] slots. Same for
@@ -187,7 +196,7 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         tr.customParams = customParams;
         tr.customColors = customColors;
         tr.startTimeMs = nowMs;
-        tr.durationMs = kDesktopSwitchDurationMs;
+        tr.durationMs = effectiveDurationMs;
         tr.captured = false; // capture is deferred to the first paintOutput (live GL context)
         m_active.insert_or_assign(screen, std::move(tr));
     }
@@ -423,10 +432,23 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
         return false;
     }
 
-    const QSize deviceSize = (screen->geometryF().size() * screen->scale()).toSize();
+    const QSize deviceSize = deviceSizeForOutput(screen);
 
     const ShaderInternal::ScopedGlState glStateGuard;
-    glViewport(0, 0, deviceSize.width(), deviceSize.height());
+    // Draw into the framebuffer KWin handed us, sized to that target, instead of
+    // assuming the default backbuffer at the device origin. Under a non-default
+    // render target (HDR / colour-management intermediate) the target FB is
+    // authoritative; on the common path it is the output's device-sized backbuffer,
+    // so this matches the previous behaviour there. The fullscreen NDC quad needs no
+    // projection matrix, so the viewport is intentionally unused; iResolution below
+    // stays the OUTPUT device resolution (what the packs do aspect/texel maths
+    // against), independent of the draw target's pixel size.
+    KWin::GLFramebuffer* const targetFb = renderTarget.framebuffer();
+    if (targetFb) {
+        KWin::GLFramebuffer::pushFramebuffer(targetFb);
+    }
+    const QSize targetSize = targetFb ? targetFb->size() : deviceSize;
+    glViewport(0, 0, targetSize.width(), targetSize.height());
     glDisable(GL_BLEND); // the blend of two opaque desktops is itself opaque — replace the screen
 
     KWin::ShaderBinder binder(cs->shader.get());
@@ -469,9 +491,11 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     }
     glActiveTexture(GL_TEXTURE0);
 
-    Q_UNUSED(renderTarget)
     Q_UNUSED(viewport)
     drawDesktopBlendQuad();
+    if (targetFb) {
+        KWin::GLFramebuffer::popFramebuffer();
+    }
     return true;
 }
 
@@ -493,6 +517,9 @@ void DesktopTransitionManager::ensureGlContextCurrent()
 
 void DesktopTransitionManager::scheduleRepaints() const
 {
+    if (!KWin::effects) {
+        return; // only reached from postPaintScreen (effects live), guard for parity
+    }
     // Keys are always non-null: begin() skips null outputs and outputRemoved()
     // reaps a disconnected one, so a null screen can never be stored.
     for (const auto& entry : m_active) {

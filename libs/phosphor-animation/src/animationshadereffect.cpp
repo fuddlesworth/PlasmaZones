@@ -426,9 +426,13 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     // Only report false on a PROVABLE mismatch: the path resolves to a
     // concrete class AND the effect doesn't list it. An ambiguous row
     // (mixed ancestor / non-window path → empty class) is left compatible
-    // so the picker never dims an effect on a row it can't classify.
+    // so the picker never dims an effect on a row it can't classify — EXCEPT a
+    // desktop-declaring effect. Its two-texture (from/to) contract must never be
+    // offered on a non-desktop or ambiguous row, where its second sampler is
+    // unbound. This is the inverse of the universal-excluded-from-desktop rule
+    // above, keeping the desktop opt-in symmetric in both directions.
     if (cls.isEmpty())
-        return true;
+        return !effect.appliesTo.contains(PP::EventClassDesktop);
     return effect.appliesTo.contains(cls);
 }
 

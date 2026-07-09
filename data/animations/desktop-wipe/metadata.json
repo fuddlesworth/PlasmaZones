@@ -4,7 +4,7 @@
     "description": "Sweeps the incoming desktop across the screen behind a soft edge.",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Slide",
+    "category": "Reveal",
     "appliesTo": ["desktop"],
     "fragmentShader": "effect.frag",
     "parameters": [

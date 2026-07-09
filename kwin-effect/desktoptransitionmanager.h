@@ -56,13 +56,19 @@ public:
     DesktopTransitionManager(const DesktopTransitionManager&) = delete;
     DesktopTransitionManager& operator=(const DesktopTransitionManager&) = delete;
 
+    /// Fallback switch duration (ms) when the motion profile tree carries no
+    /// `desktop.switch` (or ancestor) duration override.
+    static constexpr int DefaultDurationMs = 300;
+
     /// Start a transition. @p output is the switched output, or nullptr for a
     /// global (all-output) switch — in which case every output transitions from
     /// @p from to @p to. Resolves nothing itself: the caller passes the already
-    /// resolved @p effectId (empty → no-op). Capture is deferred to the first
-    /// paintOutput() for each output, where a live GL context exists.
+    /// resolved @p effectId (empty → no-op) and @p durationMs (the motion-tree
+    /// resolved duration; <= 0 falls back to DefaultDurationMs). Capture is
+    /// deferred to the first paintOutput() for each output, where a live GL
+    /// context exists.
     void begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
-               const QString& effectId, const QVariantMap& params);
+               const QString& effectId, const QVariantMap& params, int durationMs);
 
     /// True while any output has a live transition. Feeds PlasmaZonesEffect::isActive()
     /// so KWin keeps the effect in the paint chain.
@@ -139,7 +145,7 @@ private:
         qint64 startTimeMs = 0;
         int durationMs = 0;
         // Monotonic paint counter uploaded as iFrame, so glitch-style desktop
-        // packs get a per-frame stutter that is independent of the eased iTime
+        // packs get a per-frame stutter that is independent of the linear iTime
         // progress — matching the canonical animation contract's iFrame.
         int frameCount = 0;
         bool captured = false;

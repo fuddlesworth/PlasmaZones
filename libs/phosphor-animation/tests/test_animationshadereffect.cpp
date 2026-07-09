@@ -392,6 +392,15 @@ private Q_SLOTS:
         QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::WindowOpen));
         QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::WindowMove));
         QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::OsdShow));
+        // Also refused on AMBIGUOUS rows (empty class): the mixed `window` root
+        // and the `global` baseline. A two-texture desktop pack must never be
+        // offered on a non-desktop row, even one that resolves to no class —
+        // symmetric with the universal-effect exclusion from desktop paths.
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::Window));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::Global));
+        // A universal effect stays permissive on those same ambiguous rows.
+        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::Window));
+        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::Global));
     }
 };
 
