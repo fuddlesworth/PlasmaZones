@@ -203,24 +203,26 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.version = obj.value(QLatin1String("version")).toString();
     e.category = obj.value(QLatin1String("category")).toString();
     // `appliesTo` (array of event-class tokens). Only the documented
-    // vocabulary — "geometry" / "appearance" — is accepted; an unknown
-    // token is a typo or a foreign import and is dropped with a warning so
-    // it neither restricts the picker on a class that doesn't exist nor
+    // vocabulary — "geometry" / "appearance" / "desktop" — is accepted; an
+    // unknown token is a typo or a foreign import and is dropped with a warning
+    // so it neither restricts the picker on a class that doesn't exist nor
     // round-trips the typo back to disk via toJson. An array that validates
     // down to empty is indistinguishable from "universal", which is the
-    // correct fallback (the effect applies everywhere).
+    // correct fallback (the effect applies everywhere except the opt-in
+    // desktop class — see shaderEffectAppliesToEventPath).
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
         const QJsonArray appliesArr = obj.value(QLatin1String("appliesTo")).toArray();
         for (const QJsonValue& v : appliesArr) {
             const QString token = v.toString().trimmed();
-            if (token == PP::EventClassGeometry || token == PP::EventClassAppearance) {
+            if (token == PP::EventClassGeometry || token == PP::EventClassAppearance
+                || token == PP::EventClassDesktop) {
                 if (!e.appliesTo.contains(token))
                     e.appliesTo.append(token);
             } else if (!token.isEmpty()) {
                 qCWarning(lcAnimationShader)
                     << "AnimationShaderEffect::fromJson: unknown appliesTo token" << token << "for effect" << e.id
-                    << "— accepted values are \"geometry\" and \"appearance\"; dropping.";
+                    << "— accepted values are \"geometry\", \"appearance\" and \"desktop\"; dropping.";
             }
         }
     }
