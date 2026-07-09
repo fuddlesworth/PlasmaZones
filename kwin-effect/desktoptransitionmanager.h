@@ -59,11 +59,10 @@ public:
     /// Start a transition. @p output is the switched output, or nullptr for a
     /// global (all-output) switch — in which case every output transitions from
     /// @p from to @p to. Resolves nothing itself: the caller passes the already
-    /// resolved @p effectId (empty → no-op) and @p durationMs. Capture is
-    /// deferred to the first paintOutput() for each output, where a live GL
-    /// context exists.
+    /// resolved @p effectId (empty → no-op). Capture is deferred to the first
+    /// paintOutput() for each output, where a live GL context exists.
     void begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
-               const QString& effectId, const QVariantMap& params, int durationMs);
+               const QString& effectId, const QVariantMap& params);
 
     /// True while any output has a live transition. Feeds PlasmaZonesEffect::isActive()
     /// so KWin keeps the effect in the paint chain, and prePaintScreen's mask.
@@ -84,6 +83,13 @@ public:
     /// Schedule the next frame while any transition is live (called from
     /// postPaintScreen). No-op when idle.
     void scheduleRepaints() const;
+
+    /// Drop a removed output's live transition (if any). Called from the effect's
+    /// screenRemoved handler: a disconnected LogicalOutput* left in m_active would
+    /// dangle — paintOutput()/scheduleRepaints() deref the key, and the fullscreen
+    /// claim would never release once its output vanished. Releases the claim when
+    /// the last transition goes.
+    void outputRemoved(KWin::LogicalOutput* screen);
 
     /// Drop all live transitions and release GL resources (effect teardown /
     /// compositor reset). Clears the active-fullscreen-effect claim.

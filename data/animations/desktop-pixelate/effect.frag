@@ -3,7 +3,8 @@
 //
 // Desktop Pixelate — the two desktops crossfade while the whole screen quantises
 // into pixel blocks that grow toward the midpoint of the switch and shrink back
-// to sharp by the end. Ported from the GL-Transitions "pixelize" pattern.
+// to sharp by the end. Ported from GL-Transitions "pixelize" by gre
+// (https://github.com/gl-transitions/gl-transitions, MIT). progress -> t;
 // p_blocks sets the block density at the sharp ends.
 #include <desktop_transition.glsl>
 

@@ -2,7 +2,7 @@
     "id": "desktop-slide",
     "name": "Desktop Slide",
     "description": "Slides the incoming desktop in as the outgoing one slides out.",
-    "author": "PlasmaZones",
+    "author": "PlasmaZones (ported from GL-Transitions directional by gre, MIT)",
     "version": "1.0",
     "category": "Slide",
     "appliesTo": ["desktop"],

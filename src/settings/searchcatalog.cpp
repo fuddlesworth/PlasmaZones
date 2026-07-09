@@ -118,6 +118,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
         {PhosphorI18n::tr("osd"), PhosphorI18n::tr("notification"), PhosphorI18n::tr("on-screen display")});
     search->setPageKeywords(QStringLiteral("animations-overlays"),
                             {PhosphorI18n::tr("overlay"), PhosphorI18n::tr("popup"), PhosphorI18n::tr("animation")});
+    search->setPageKeywords(QStringLiteral("animations-desktops"),
+                            {PhosphorI18n::tr("desktop"), PhosphorI18n::tr("virtual desktop"),
+                             PhosphorI18n::tr("workspace"), PhosphorI18n::tr("switch")});
     search->setPageKeywords(QStringLiteral("animations-side-panels"),
                             {PhosphorI18n::tr("side panel"), PhosphorI18n::tr("panel"), PhosphorI18n::tr("drawer")});
     search->setPageKeywords(QStringLiteral("animations-widgets"),
@@ -538,17 +541,17 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("animations-osds"), QStringLiteral("osd.hide"), PhosphorI18n::tr("Hidden"));
     // Overlays page.
     addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.zoneSelector.show"),
-               PhosphorI18n::tr("Zone Selector: Show"));
+               PhosphorI18n::tr("Zone Selector Shown"));
     addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.zoneSelector.hide"),
-               PhosphorI18n::tr("Zone Selector: Hide"));
+               PhosphorI18n::tr("Zone Selector Hidden"));
     addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.layoutPicker.show"),
-               PhosphorI18n::tr("Layout Picker: Show"));
+               PhosphorI18n::tr("Layout Picker Shown"));
     addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.layoutPicker.hide"),
-               PhosphorI18n::tr("Layout Picker: Hide"));
+               PhosphorI18n::tr("Layout Picker Hidden"));
     addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.snapAssist.show"),
-               PhosphorI18n::tr("Snap Assist: Show"));
+               PhosphorI18n::tr("Snap Assist Shown"));
     addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.snapAssist.hide"),
-               PhosphorI18n::tr("Snap Assist: Hide"));
+               PhosphorI18n::tr("Snap Assist Hidden"));
     // Desktop page.
     addSetting(search, QStringLiteral("animations-desktops"), QStringLiteral("desktop.switch"),
                PhosphorI18n::tr("Switch Desktop"));

@@ -3,8 +3,9 @@
 //
 // Desktop Slide — full-screen virtual-desktop push. Both desktops translate in
 // the same direction; the outgoing one exits while the incoming one follows
-// behind. Ported from the GL-Transitions "directional" pattern (getFromColor /
-// getToColor over forward progress t). Direction is the p_dirX / p_dirY vector.
+// behind. Ported from GL-Transitions "directional" by gre
+// (https://github.com/gl-transitions/gl-transitions, MIT). progress -> t;
+// direction is the p_dirX / p_dirY vector.
 #include <desktop_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {

@@ -417,9 +417,9 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     // Parent sidebar categories have no QML component — resolve them to their
     // first child so D-Bus / CLI / Q_INVOKABLE callers get a sensible result.
     // Includes both top-level parents AND mid-level virtual parents
-    // (`animations-surfaces`, `animations-library`) so any of those names
-    // passed via `--page` or D-Bus lands on a real leaf instead of triggering
-    // the generic "Unknown settings page" warning.
+    // (`animations-transitions`, `animations-motion`, `animations-library`) so
+    // any of those names passed via `--page` or D-Bus lands on a real leaf
+    // instead of triggering the generic "Unknown settings page" warning.
     static const QHash<QString, QString> redirects{
         {QStringLiteral("display"), QStringLiteral("virtualscreens")},
         // "appearance" is the inline-collapsible parent of the Animations and
@@ -464,14 +464,16 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // leaf to any group it belongs to. Covers parents at every level:
     // top-level categories (placement / display / animations) AND the
     // mid-level virtual parents nested beneath them (snapping / tiling
-    // under placement; animations-surfaces / animations-library; the
-    // *-cat headers) whose children don't share their name prefix — the
+    // under placement; animations-transitions / animations-motion /
+    // animations-library; the *-cat headers) whose children don't share
+    // their name prefix — the
     // explicit set sidesteps the asymmetry between prefix-walk and
     // direct membership lookup.
     //
     // The "animations" entry is built at static-init by unioning the
-    // virtual sub-buckets (`animations-surfaces`, `animations-library`)
-    // with the leaf that hangs directly off `animations` (general).
+    // virtual sub-buckets (`animations-transitions`, `animations-motion`,
+    // `animations-library`) with the leaf that hangs directly off
+    // `animations` (general).
     // Without this, a future leaf added to a virtual parent only would
     // silently miss the top-level dirty propagation.
     //

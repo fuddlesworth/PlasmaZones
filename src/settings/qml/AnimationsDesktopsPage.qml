@@ -7,8 +7,8 @@ import QtQuick
 // outgoing desktop blended into the incoming one), driven by the
 // kwin-effect's DesktopTransitionManager. Only desktop-class shaders
 // (metadata appliesTo ["desktop"], e.g. Desktop Fade) are selectable here;
-// single-surface effects are dimmed by eventClassForPath's opt-in desktop
-// class.
+// single-surface effects are filtered out of the shader picker by
+// eventClassForPath's opt-in desktop class.
 //
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {

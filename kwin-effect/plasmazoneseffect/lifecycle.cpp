@@ -584,7 +584,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 if (effectId.isEmpty()) {
                     return;
                 }
-                m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, profile.effectiveParameters(), 0);
+                m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, profile.effectiveParameters());
             });
 
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred

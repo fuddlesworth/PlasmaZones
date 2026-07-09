@@ -116,7 +116,7 @@ public:
     ///   "paths": [ { "path": "window", "label": "Window (inherited)",
     ///                "parent": "global", "isCategory": true },
     ///              { "path": "window.appearance.open", "label": "Open",
-    ///                "parent": "window", "isCategory": false }, ... ] }
+    ///                "parent": "window.appearance", "isCategory": false }, ... ] }
     /// ```
     /// All built-in paths from `ProfilePaths::allBuiltInPaths()` are included.
     Q_INVOKABLE QVariantList eventSections() const;

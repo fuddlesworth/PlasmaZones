@@ -315,8 +315,9 @@ bool SettingsController::isPageDirty(const QString& page) const
     // the group is dirty. Single direct-membership lookup against
     // `pageGroupChildren()` rather than the old prefix-walk-or-hash-
     // lookup branch — top-level parents (snapping / tiling /
-    // animations) and virtual mid-level parents (animations-surfaces /
-    // animations-library) share the same code path now. Recurse through
+    // animations) and virtual mid-level parents (animations-transitions /
+    // animations-motion / animations-library) share the same code path now.
+    // Recurse through
     // isPageDirty (not a bare m_dirtyPages lookup) so a manifest-backed child
     // contributes its value-based dirty state to the collapsed parent badge.
     const auto& groups = pageGroupChildren();

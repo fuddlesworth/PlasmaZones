@@ -462,6 +462,14 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // so it fires even for an output that never had an animation clock.
     m_lastScreenDesktop.remove(outputScreenId(output));
 
+    // Drop any live desktop-switch transition on this output. A disconnected
+    // LogicalOutput* left in the transition manager's active map would dangle:
+    // scheduleRepaints()/paintOutput() deref the key, and the fullscreen-effect
+    // claim would never release once its output vanished mid-transition. Runs
+    // before the motion-clock early-return so it fires even for an output that
+    // never had an animation clock.
+    m_desktopTransition.outputRemoved(output);
+
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the
     // unique_ptr. Reap only the animations bound to THIS output's clock

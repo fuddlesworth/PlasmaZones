@@ -29,6 +29,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QScopeGuard>
 #include <QVector2D>
 
 #include <array>
@@ -53,9 +54,9 @@ void drawDesktopBlendQuad()
     vbo->render(GL_TRIANGLE_STRIP);
 }
 
-// The desktop transition has no per-path motion duration wired yet (that is a
-// motion-tree setting, a later phase); use a sensible built-in switch duration.
-constexpr int kDefaultDesktopSwitchDurationMs = 300;
+// The full-screen desktop pass has no per-path motion-tree duration (that tree
+// drives the per-window quad, not this pass); it runs at a fixed switch duration.
+constexpr int kDesktopSwitchDurationMs = 300;
 } // namespace
 
 DesktopTransitionManager::DesktopTransitionManager(PlasmaZonesEffect* effect)
@@ -71,12 +72,11 @@ DesktopTransitionManager::~DesktopTransitionManager()
 }
 
 void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
-                                     const QString& effectId, const QVariantMap& params, int durationMs)
+                                     const QString& effectId, const QVariantMap& params)
 {
     if (!from || !to || from == to || effectId.isEmpty()) {
         return; // nothing to animate (no shader assigned, or a no-op switch)
     }
-    const int duration = durationMs > 0 ? durationMs : kDefaultDesktopSwitchDurationMs;
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
 
     // Resolve p_<name> parameter values into customParams[] slots. Same for
@@ -143,7 +143,7 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         tr.customParams = customParams;
         tr.customColors = customColors;
         tr.startTimeMs = nowMs;
-        tr.durationMs = duration;
+        tr.durationMs = kDesktopSwitchDurationMs;
         tr.captured = false; // capture is deferred to the first paintOutput (live GL context)
         m_active.insert_or_assign(screen, std::move(tr));
     }
@@ -192,8 +192,14 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
 
     // Route every window of this desktop through the raw draw path: set the
     // effect's capturing guard so its own paintWindow/apply short-circuit (no
-    // border/morph shader) and we capture the plain composited content.
+    // border/morph shader) and we capture the plain composited content. Guard
+    // the flag against a throw from the draw chain — a leaked m_capturingSnapshot
+    // would corrupt every subsequent paint. Same pattern as the per-window
+    // capture in paint_pipeline.cpp and the surface-layer sites.
     m_effect->m_capturingSnapshot = true;
+    auto resetCapture = qScopeGuard([this] {
+        m_effect->m_capturingSnapshot = false;
+    });
 
     {
         KWin::RenderTarget renderTarget(&fbo);
@@ -226,7 +232,6 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
         KWin::GLFramebuffer::popFramebuffer();
     }
 
-    m_effect->m_capturingSnapshot = false;
     return tex;
 }
 
@@ -451,19 +456,32 @@ void DesktopTransitionManager::endOutput(KWin::LogicalOutput* screen)
 
 void DesktopTransitionManager::scheduleRepaints() const
 {
+    // Keys are always non-null: begin() skips null outputs and outputRemoved()
+    // reaps a disconnected one, so a null screen can never be stored.
     for (const auto& entry : m_active) {
-        if (KWin::LogicalOutput* screen = entry.first) {
-            KWin::effects->addRepaint(screen->geometry());
-        } else {
-            KWin::effects->addRepaintFull();
-        }
+        KWin::effects->addRepaint(entry.first->geometry());
     }
+}
+
+void DesktopTransitionManager::outputRemoved(KWin::LogicalOutput* screen)
+{
+    // A disconnected output must not linger as a key in m_active: paintOutput()
+    // and scheduleRepaints() deref the key (UAF), and the fullscreen-effect claim
+    // would never release once its output vanished mid-transition. endOutput()
+    // drops the entry and releases the claim when the last transition goes.
+    if (m_active.find(screen) == m_active.end()) {
+        return; // no live transition for this output
+    }
+    endOutput(screen);
 }
 
 void DesktopTransitionManager::reset()
 {
     m_active.clear();
-    if (m_fullScreenClaimed) {
+    // reset() is the teardown path (compositor reset / plugin unload), where
+    // KWin::effects may already be gone — guard the deref, unlike endOutput()
+    // which only runs while the compositor is live.
+    if (m_fullScreenClaimed && KWin::effects) {
         KWin::effects->setActiveFullScreenEffect(nullptr);
         m_fullScreenClaimed = false;
     }
