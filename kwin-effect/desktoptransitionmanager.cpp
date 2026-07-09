@@ -186,7 +186,6 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         }
         OutputTransition tr;
         tr.from = from;
-        tr.to = to;
         tr.effectId = effectId;
         tr.customParams = customParams;
         tr.customColors = customColors;
@@ -513,6 +512,48 @@ void DesktopTransitionManager::outputRemoved(KWin::LogicalOutput* screen)
         KWin::effects->makeOpenGLContextCurrent();
     }
     endOutput(screen);
+}
+
+void DesktopTransitionManager::desktopRemoved(KWin::VirtualDesktop* desktop)
+{
+    // A desktop removed mid-switch leaves any OutputTransition still referencing
+    // it as `from` holding a dangling VirtualDesktop*: the deferred
+    // captureDesktop(tr.from, ...) only ever compares the pointer (isOnDesktop),
+    // never derefs it, so this is not a crash — but a freed pointer must not
+    // linger and be compared against a live desktop. Drop every transition whose
+    // outgoing desktop just vanished.
+    if (m_active.empty()) {
+        return;
+    }
+    // Erasing an entry frees its captured GLTextures; desktopRemoved fires off the
+    // paint thread, so make the compositor context current first (same discipline
+    // as outputRemoved()).
+    if (KWin::effects) {
+        KWin::effects->makeOpenGLContextCurrent();
+    }
+    for (auto it = m_active.begin(); it != m_active.end();) {
+        if (it->second.from == desktop) {
+            it = m_active.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (m_active.empty() && m_fullScreenClaimed && KWin::effects) {
+        KWin::effects->setActiveFullScreenEffect(nullptr);
+        m_fullScreenClaimed = false;
+    }
+}
+
+void DesktopTransitionManager::invalidateShaderCache()
+{
+    // Fires from the AnimationShaderRegistry file watcher between frames, where the
+    // compositor GL context is NOT current. m_shaderCache owns GLShaders whose
+    // destruction issues glDelete* calls that want a current context — the same
+    // discipline reset() applies. Teardown (!effects) reclaims them regardless.
+    if (KWin::effects) {
+        KWin::effects->makeOpenGLContextCurrent();
+    }
+    m_shaderCache.clear();
 }
 
 void DesktopTransitionManager::reset()

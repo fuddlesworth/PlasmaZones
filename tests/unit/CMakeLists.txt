@@ -812,6 +812,7 @@ target_link_libraries(test_animations_shader_overrides
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
+target_compile_definitions(test_animations_shader_overrides PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
 
 # Decoration page (per-surface DecorationProfileTree editor): reader /

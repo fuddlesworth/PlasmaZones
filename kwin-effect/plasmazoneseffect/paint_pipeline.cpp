@@ -105,8 +105,13 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 
     // A live desktop-switch transition replaces the whole screen with its own
     // two-desktop blend, so force a full-screen paint (our paintScreen skips the
-    // normal scene for the transitioning output).
-    if (m_desktopTransition.isRunning()) {
+    // normal scene for the transitioning output). Gate on THIS output's liveness:
+    // a per-output switch (Plasma 6.7 per-output desktops) must not push the
+    // non-transitioning outputs through the transformed-paint path. When the output
+    // is unknown (null screen) fall back to the global flag as the safe default.
+    const bool transitionOnThisOutput =
+        data.screen ? m_desktopTransition.isRunningForOutput(data.screen) : m_desktopTransition.isRunning();
+    if (transitionOnThisOutput) {
         data.mask |= PAINT_SCREEN_TRANSFORMED;
     }
 

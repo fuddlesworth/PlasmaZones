@@ -197,6 +197,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 ++m_shaderManager.m_textureCacheGeneration;
                 m_shaderManager.m_textureLoadsInFlight.clear();
                 m_shaderManager.m_textureCache.clear();
+                // Desktop-switch packs are served by the SAME AnimationShaderRegistry
+                // as the per-window effects, so a reloaded `desktop.switch` pack must
+                // invalidate the DesktopTransitionManager's parallel compiled-shader
+                // cache too — otherwise the next switch renders with the stale shader.
+                m_desktopTransition.invalidateShaderCache();
             });
 
     // Surface shader pack hot-reload: when a data/surface pack changes on disk,
@@ -577,6 +582,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 if (!oldDesktop || !newDesktop) {
                     return;
                 }
+                // Honour the global animations master toggle, exactly as the two
+                // per-window shader paths do (beginShaderTransition /
+                // tryBeginShaderForEvent). `animationsEnabled` drives
+                // m_windowAnimator->setEnabled(); a user who turns all animations
+                // off must not still get a full-screen desktop-switch blend.
+                if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
+                    return;
+                }
                 const PhosphorAnimationShaders::ShaderProfile profile =
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
                                                                        PhosphorAnimation::ProfilePaths::DesktopSwitch);
@@ -586,6 +599,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 }
                 m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, profile.effectiveParameters());
             });
+
+    // Reap any live desktop transition whose OUTGOING desktop is removed from the
+    // pager mid-switch: it captured a raw VirtualDesktop* in begin() that the
+    // deferred captureDesktop() dereferences up to the transition's duration later.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopRemoved, this, [this](KWin::VirtualDesktop* desktop) {
+        m_desktopTransition.desktopRemoved(desktop);
+    });
 
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred
     // timer re-adds one between windowClosed and windowDeleted, the Item tree

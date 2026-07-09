@@ -31,6 +31,7 @@ set(plasmazones_settings_SRCS
     # construction → lifecycle → page registry → per-domain CRUD.
     settingscontroller_lifecycle.cpp
     settingscontroller_pageregistration.cpp
+    settingscontroller_pagetopology.cpp
     settingscontroller_layouts.cpp
     settingscontroller_session.cpp
     # Per-screen autotile/snapping/zone-selector override wrappers — split

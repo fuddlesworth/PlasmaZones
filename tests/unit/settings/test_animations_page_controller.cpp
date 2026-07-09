@@ -76,9 +76,11 @@ private Q_SLOTS:
 
     // ─── Path discovery ───────────────────────────────────────────────────
 
-    void sectionForPath_extractsFirstSegment()
+    void sectionForPath_mapsTopLevelToUiSection()
     {
         AnimationsPageController c;
+        // sectionForPath maps a path's top level to its UI section — which is NOT
+        // always the first segment: osd/popup/panel all collapse into "overlays".
         QCOMPARE(c.sectionForPath(QStringLiteral("global")), QStringLiteral("global"));
         QCOMPARE(c.sectionForPath(QStringLiteral("editor")), QStringLiteral("editor"));
         QCOMPARE(c.sectionForPath(QStringLiteral("editor.snapIn")), QStringLiteral("editor"));
@@ -130,9 +132,8 @@ private Q_SLOTS:
         QCOMPARE(totalListed, paths.size());
 
         // Every listed path is a built-in path.
-        const QStringList builtIn = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
         for (const QString& p : allListed) {
-            QVERIFY2(builtIn.contains(p), qPrintable(QStringLiteral("unknown path in UI: ") + p));
+            QVERIFY2(paths.contains(p), qPrintable(QStringLiteral("unknown path in UI: ") + p));
         }
     }
 

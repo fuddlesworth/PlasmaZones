@@ -65,10 +65,19 @@ public:
                const QString& effectId, const QVariantMap& params);
 
     /// True while any output has a live transition. Feeds PlasmaZonesEffect::isActive()
-    /// so KWin keeps the effect in the paint chain, and prePaintScreen's mask.
+    /// so KWin keeps the effect in the paint chain.
     bool isRunning() const
     {
         return !m_active.empty();
+    }
+
+    /// True while @p screen specifically has a live transition. prePaintScreen gates
+    /// the full-screen PAINT_SCREEN_TRANSFORMED mask on this so a per-output switch
+    /// (Plasma 6.7 per-output desktops) doesn't force every NON-transitioning output
+    /// through the transformed-paint path for the transition's duration.
+    bool isRunningForOutput(KWin::LogicalOutput* screen) const
+    {
+        return m_active.find(screen) != m_active.end();
     }
 
     /// Paint one output's transition. Returns true when the blend was drawn (the
@@ -83,6 +92,21 @@ public:
     /// Schedule the next frame while any transition is live (called from
     /// postPaintScreen). No-op when idle.
     void scheduleRepaints() const;
+
+    /// Drop every compiled desktop-transition shader so the next switch recompiles
+    /// against freshly reloaded pack source. Called from the AnimationShaderRegistry
+    /// hot-reload handler: desktop packs are served by the SAME registry as the
+    /// per-window effects, so editing a `desktop.switch` pack must invalidate this
+    /// cache too (the per-window ShaderTransitionManager cache clears in the same
+    /// handler). Makes the compositor context current to free the GLShaders.
+    void invalidateShaderCache();
+
+    /// Drop any live transition whose OUTGOING desktop @p desktop was just removed
+    /// from the pager. begin() stores a raw VirtualDesktop* that the deferred
+    /// captureDesktop() consumes later; a removed desktop leaves that pointer
+    /// dangling, so reap the entry (releasing the fullscreen claim when the last
+    /// one goes). Wired to EffectsHandler::desktopRemoved.
+    void desktopRemoved(KWin::VirtualDesktop* desktop);
 
     /// Drop a removed output's live transition (if any). Called from the effect's
     /// screenRemoved handler: a disconnected LogicalOutput* left in m_active would
@@ -99,7 +123,6 @@ private:
     struct OutputTransition
     {
         KWin::VirtualDesktop* from = nullptr;
-        KWin::VirtualDesktop* to = nullptr;
         std::unique_ptr<KWin::GLTexture> fromTex;
         std::unique_ptr<KWin::GLTexture> toTex;
         QString effectId;

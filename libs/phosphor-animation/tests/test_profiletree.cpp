@@ -33,8 +33,25 @@ private Q_SLOTS:
         QCOMPARE(PP::parentPath(PP::WindowMove), PP::WindowMovement);
         QCOMPARE(PP::parentPath(PP::WindowMovement), PP::Window);
         QCOMPARE(PP::parentPath(PP::Window), PP::Global);
+        // Desktop-switch transition family walks up desktop.switch → desktop → global.
+        QCOMPARE(PP::parentPath(PP::DesktopSwitch), PP::Desktop);
+        QCOMPARE(PP::parentPath(PP::Desktop), PP::Global);
         QCOMPARE(PP::parentPath(PP::Global), QString());
         QCOMPARE(PP::parentPath(QString()), QString());
+    }
+
+    // The desktop-switch classifier underpins the whole opt-in policy: a
+    // desktop.switch path must classify as EventClassDesktop so the two-texture
+    // packs surface only there, and desktop's parent 'global' must NOT.
+    void testEventClassForDesktopPaths()
+    {
+        QCOMPARE(PP::eventClassForPath(PP::DesktopSwitch), PP::EventClassDesktop);
+        QCOMPARE(PP::eventClassForPath(PP::Desktop), PP::EventClassDesktop);
+        // A geometry/appearance path never classifies as desktop.
+        QVERIFY(PP::eventClassForPath(PP::WindowOpen) != PP::EventClassDesktop);
+        QVERIFY(PP::eventClassForPath(PP::WindowMove) != PP::EventClassDesktop);
+        // Global root carries no single class.
+        QCOMPARE(PP::eventClassForPath(PP::Global), QString());
     }
 
     void testAllBuiltInPathsNonEmpty()
@@ -67,6 +84,9 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::WidgetZoneHighlightPop));
         QVERIFY(paths.contains(PP::WidgetZoneHighlightBorder));
         QVERIFY(paths.contains(PP::WidgetZoneOverlayFlash));
+        // Desktop-switch transition family (full-screen two-texture blend).
+        QVERIFY(paths.contains(PP::Desktop));
+        QVERIFY(paths.contains(PP::DesktopSwitch));
         // No regression: legacy zone.* strings must not reappear.
         for (const QString& path : paths) {
             QVERIFY2(!path.startsWith(QLatin1String("zone.")) && path != QLatin1String("zone"),

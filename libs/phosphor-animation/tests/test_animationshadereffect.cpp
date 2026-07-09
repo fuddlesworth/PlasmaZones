@@ -292,6 +292,18 @@ private Q_SLOTS:
         const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
         QCOMPARE(e.appliesTo, (QStringList{QStringLiteral("geometry")}));
 
+        // "desktop" is part of the accepted vocabulary (the two-texture switch
+        // contract). A regression that dropped it would silently discard every
+        // desktop pack's constraint, making it universal (and then refused
+        // everywhere by the opt-in rule), so pin it explicitly.
+        QJsonObject desktopObj;
+        desktopObj.insert(QLatin1String("id"), QStringLiteral("d"));
+        desktopObj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray desktopArr;
+        desktopArr.append(QStringLiteral("desktop"));
+        desktopObj.insert(QLatin1String("appliesTo"), desktopArr);
+        QCOMPARE(AnimationShaderEffect::fromJson(desktopObj).appliesTo, (QStringList{QStringLiteral("desktop")}));
+
         QJsonObject allBad = obj;
         QJsonArray bad;
         bad.append(QStringLiteral("nonsense"));
@@ -353,6 +365,10 @@ private Q_SLOTS:
         fade.fragmentShaderPath = QStringLiteral("effect.frag");
         QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowOpen));
         QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowMove));
+        // The desktop class is opt-in: a universal single-surface effect must NOT
+        // bleed onto a desktop path (its lone surface sampler would be unbound).
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::Desktop));
 
         // Appearance-only effect: mirror image — incompatible on geometry legs,
         // compatible on appearance legs.
@@ -362,6 +378,20 @@ private Q_SLOTS:
         appearanceOnly.appliesTo = QStringList{QStringLiteral("appearance")};
         QVERIFY(shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowOpen));
         QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowMove));
+        // A single-surface (non-desktop) effect never runs on a desktop path.
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::DesktopSwitch));
+
+        // Desktop two-texture effect: accepted ONLY on desktop paths, refused on
+        // every single-surface (window / OSD) leg.
+        AnimationShaderEffect desktop;
+        desktop.id = QStringLiteral("desktop-cube");
+        desktop.fragmentShaderPath = QStringLiteral("effect.frag");
+        desktop.appliesTo = QStringList{QStringLiteral("desktop")};
+        QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::DesktopSwitch));
+        QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::Desktop));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::WindowOpen));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::WindowMove));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::OsdShow));
     }
 };
 

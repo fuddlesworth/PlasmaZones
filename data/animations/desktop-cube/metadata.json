@@ -1,7 +1,7 @@
 {
     "id": "desktop-cube",
     "name": "Desktop Cube",
-    "description": "Rotates the two desktops past each other like the faces of a spinning cube, the classic desktop switcher look.",
+    "description": "Rotates the two desktops past each other like the faces of a spinning cube. This is the classic desktop switcher look.",
     "author": "PlasmaZones (ported from GL-Transitions cube by gre, MIT)",
     "version": "1.0",
     "category": "Cube",
