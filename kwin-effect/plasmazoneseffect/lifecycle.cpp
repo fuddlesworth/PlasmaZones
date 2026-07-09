@@ -3,6 +3,8 @@
 
 #include "../plasmazoneseffect.h"
 
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -61,6 +63,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_motionClockFallback(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
     , m_shaderManager(this)
+    , m_desktopTransition(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(*this))
     , m_decorationManager(std::make_unique<DecorationManager>(*m_compositorBridge))
@@ -563,6 +566,27 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 }
             });
 
+    // Full-screen desktop-switch TRANSITION (separate from the daemon-reporting
+    // connection above). Resolve the `desktop.switch` shader from the profile
+    // tree; when one is assigned, run the two-desktop blend. An empty resolve
+    // (default state / user picked None) is a no-op, so KWin's normal switch —
+    // or its built-in Slide — proceeds untouched.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this,
+            [this](KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow*,
+                   KWin::LogicalOutput* output) {
+                if (!oldDesktop || !newDesktop) {
+                    return;
+                }
+                const QString effectId =
+                    PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
+                                                                       PhosphorAnimation::ProfilePaths::DesktopSwitch)
+                        .effectiveEffectId();
+                if (effectId.isEmpty()) {
+                    return;
+                }
+                m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, 0);
+            });
+
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred
     // timer re-adds one between windowClosed and windowDeleted, the Item tree
     // will be torn down while an animation entry still references the window.
@@ -940,6 +964,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 void PlasmaZonesEffect::clearDaemonCompositorState()
 {
     qCInfo(lcEffect) << "Clearing daemon compositor drag/overlay state before effect shutdown";
+
+    // Drop any in-flight desktop-switch transition and release its
+    // active-fullscreen-effect claim while KWin::effects is still valid.
+    m_desktopTransition.reset();
 
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
                                                 QStringLiteral("clearForCompositorReconnect"));

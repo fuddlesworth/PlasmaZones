@@ -1,0 +1,132 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <QHash> // std::hash<QString> specialization (used by the unordered_map key below)
+#include <QString>
+
+#include <chrono>
+#include <memory>
+#include <unordered_map>
+
+namespace KWin {
+class EffectWindow;
+class GLFramebuffer;
+class GLShader;
+class GLTexture;
+class LogicalOutput;
+class RenderTarget;
+class RenderViewport;
+class Region;
+class VirtualDesktop;
+}
+
+namespace PlasmaZones {
+
+class PlasmaZonesEffect;
+
+/// Full-screen virtual-desktop switch transition.
+///
+/// Unlike the per-window shader transitions (ShaderTransitionManager, which runs
+/// on the OffscreenEffect's redirected per-window quad), a desktop switch is a
+/// full-screen TWO-texture blend: it captures the OUTGOING desktop and the
+/// INCOMING desktop into per-output FBOs and cross-fades between them with a
+/// `desktop.switch` transition shader (data/animations/<id>, appliesTo
+/// ["desktop"], sampling uFromDesktop / uToDesktop via desktop_transition.glsl).
+///
+/// The effect owns one instance. On `desktopChanged` the effect resolves the
+/// `desktop.switch` shader from the shader profile tree and calls begin(); if no
+/// shader is assigned begin() is a no-op and KWin's normal switch proceeds. When
+/// a transition is live the effect claims `setActiveFullScreenEffect(this)` so
+/// KWin's built-in Slide bows out, forces a full-screen paint via the mask, and
+/// routes paintScreen through paintOutput() which draws the blend instead of the
+/// live scene until progress reaches 1.
+class DesktopTransitionManager
+{
+public:
+    explicit DesktopTransitionManager(PlasmaZonesEffect* effect);
+    ~DesktopTransitionManager();
+
+    DesktopTransitionManager(const DesktopTransitionManager&) = delete;
+    DesktopTransitionManager& operator=(const DesktopTransitionManager&) = delete;
+
+    /// Start a transition. @p output is the switched output, or nullptr for a
+    /// global (all-output) switch — in which case every output transitions from
+    /// @p from to @p to. Resolves nothing itself: the caller passes the already
+    /// resolved @p effectId (empty → no-op) and @p durationMs. Capture is
+    /// deferred to the first paintOutput() for each output, where a live GL
+    /// context exists.
+    void begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
+               const QString& effectId, int durationMs);
+
+    /// True while any output has a live transition. Feeds PlasmaZonesEffect::isActive()
+    /// so KWin keeps the effect in the paint chain, and prePaintScreen's mask.
+    bool isRunning() const
+    {
+        return !m_active.empty();
+    }
+
+    /// Paint one output's transition. Returns true when the blend was drawn (the
+    /// caller must then SKIP the normal scene paint for this output); false when
+    /// this output has no live transition (or it just settled) and the normal
+    /// KWin scene paint should proceed. Performs the deferred capture on the
+    /// first call for an output, advances progress, and tears the output's
+    /// transition down when it completes.
+    bool paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, int mask,
+                     const KWin::Region& deviceRegion, KWin::LogicalOutput* screen);
+
+    /// Schedule the next frame while any transition is live (called from
+    /// postPaintScreen). No-op when idle.
+    void scheduleRepaints() const;
+
+    /// Drop all live transitions and release GL resources (effect teardown /
+    /// compositor reset). Clears the active-fullscreen-effect claim.
+    void reset();
+
+private:
+    struct OutputTransition
+    {
+        KWin::VirtualDesktop* from = nullptr;
+        KWin::VirtualDesktop* to = nullptr;
+        std::unique_ptr<KWin::GLTexture> fromTex;
+        std::unique_ptr<KWin::GLTexture> toTex;
+        QString effectId;
+        qint64 startTimeMs = 0;
+        int durationMs = 0;
+        bool captured = false;
+    };
+
+    /// Compiled desktop-transition shader + cached uniform locations. Keyed by
+    /// effectId, mirroring ShaderTransitionManager's per-effect cache.
+    struct CompiledDesktopShader
+    {
+        std::unique_ptr<KWin::GLShader> shader; // null == compile failed (sentinel, don't retry)
+        int iFromDesktopLoc = -1;
+        int iToDesktopLoc = -1;
+        int iTimeLoc = -1;
+        int iResolutionLoc = -1;
+    };
+
+    /// Render every window on @p desktop that intersects @p screen into a fresh
+    /// output-sized FBO, bottom-to-top in stacking order (wallpaper included —
+    /// it is an on-all-desktops window). Returns null on allocation failure.
+    std::unique_ptr<KWin::GLTexture> captureDesktop(KWin::VirtualDesktop* desktop, KWin::LogicalOutput* screen);
+
+    /// Compile (or fetch from cache) the desktop-transition shader for @p effectId.
+    /// Returns nullptr when the effect id is unknown or compilation failed.
+    CompiledDesktopShader* compiledShader(const QString& effectId);
+
+    /// Free an output's transition and, when the last one goes, release the
+    /// active-fullscreen-effect claim.
+    void endOutput(KWin::LogicalOutput* screen);
+
+    PlasmaZonesEffect* m_effect;
+    // Move-only mapped values (unique_ptr GL handles) — std::unordered_map, not
+    // QHash, which is copy-on-write and would instantiate a deleted copy ctor.
+    std::unordered_map<KWin::LogicalOutput*, OutputTransition> m_active;
+    std::unordered_map<QString, CompiledDesktopShader> m_shaderCache;
+    bool m_fullScreenClaimed = false;
+};
+
+} // namespace PlasmaZones
