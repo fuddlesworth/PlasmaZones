@@ -257,12 +257,11 @@ QString defaultShaderEffectIdForPath(const QString& path)
         || path == PopupSnapAssistHide) {
         return QStringLiteral("fade");
     }
-    // Virtual-desktop switch defaults to the two-texture cross-fade pack so a
-    // fresh config animates desktop switches out of the box (run by the
-    // kwin-effect's screen-level pass, not the per-window pipeline).
-    if (path == DesktopSwitch) {
-        return QStringLiteral("desktop-fade");
-    }
+    // Virtual-desktop switch has NO built-in default: it is a full-screen,
+    // intrusive transition that also contends with KWin's own Slide effect, so
+    // it stays opt-in. A fresh config animates desktop switches only once the
+    // user picks a desktop pack (e.g. Desktop Fade) on the Virtual Desktops
+    // animation page.
     // Every other event defaults to no shader.
     return QString();
 }

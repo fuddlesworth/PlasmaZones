@@ -64,6 +64,12 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::WindowSnapIn,
         PP::WindowSnapOut,
         PP::WindowLayoutSwitch,
+        // Full-screen virtual-desktop switch — consumed by the kwin-effect's
+        // DesktopTransitionManager (resolveShaderWithDefault(tree,
+        // DesktopSwitch) in the desktopChanged handler, lifecycle.cpp), NOT a
+        // per-window tryBeginShaderForEvent leg. Its shaders are the two-texture
+        // desktop class (appliesTo ["desktop"]).
+        PP::DesktopSwitch,
     };
 }
 

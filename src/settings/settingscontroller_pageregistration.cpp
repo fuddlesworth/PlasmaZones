@@ -242,6 +242,9 @@ void SettingsController::buildApplicationController()
 
     regVirtual(QStringLiteral("animations-windows"), QStringLiteral("animations-surfaces"), PhosphorI18n::tr("Windows"),
                QStringLiteral("AnimationsWindowsPage.qml"), QStringLiteral("window-new"));
+    regVirtual(QStringLiteral("animations-desktops"), QStringLiteral("animations-surfaces"),
+               PhosphorI18n::tr("Virtual Desktops"), QStringLiteral("AnimationsDesktopsPage.qml"),
+               QStringLiteral("virtual-desktops"));
     regVirtual(QStringLiteral("animations-osds"), QStringLiteral("animations-surfaces"), PhosphorI18n::tr("OSDs"),
                QStringLiteral("AnimationsOsdsPage.qml"), QStringLiteral("dialog-information"));
     regVirtual(QStringLiteral("animations-overlays"), QStringLiteral("animations-surfaces"),
@@ -469,9 +472,10 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // (The historical "_childItems" reference in Main.qml is obsolete —
     // the chrome now consumes registry topology directly via Sidebar.qml.)
     static const QSet<QString> kAnimationsSurfacesChildren{
-        QStringLiteral("animations-windows"),  QStringLiteral("animations-osds"),
-        QStringLiteral("animations-overlays"), QStringLiteral("animations-side-panels"),
-        QStringLiteral("animations-widgets"),  QStringLiteral("animations-editor")};
+        QStringLiteral("animations-windows"),     QStringLiteral("animations-desktops"),
+        QStringLiteral("animations-osds"),        QStringLiteral("animations-overlays"),
+        QStringLiteral("animations-side-panels"), QStringLiteral("animations-widgets"),
+        QStringLiteral("animations-editor")};
     static const QSet<QString> kAnimationsLibraryChildren{QStringLiteral("animations-presets"),
                                                           QStringLiteral("animations-motionsets"),
                                                           QStringLiteral("animations-shaders")};
@@ -774,6 +778,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("virtualscreens"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),
+        QStringLiteral("animations-desktops"),
         QStringLiteral("animations-editor"),
         QStringLiteral("animations-osds"),
         QStringLiteral("animations-overlays"),
