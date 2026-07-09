@@ -5,11 +5,13 @@
  * @file test_window_appearance_controller.cpp
  * @brief Tests for the config-backed @c WindowAppearanceController.
  *
- * The controller is a thin Q_PROPERTY surface over ISettings: border / title-bar
- * and the shared inner/outer gap values forward to the matching ISettings
- * getter/setter. On top of that it exposes the scope-aware gapValue()/writeGap()
- * invokables the Gaps card's monitor scope chip drives. These tests pin:
- *   1. Border / title-bar / gap properties round-trip through ISettings.
+ * The controller is a thin Q_PROPERTY surface over ISettings: border / title-bar,
+ * the focus fade duration, and the shared inner/outer gap values forward to the
+ * matching ISettings getter/setter. On top of that it exposes the scope-aware
+ * gapValue()/writeGap() invokables the Gaps card's monitor scope chip drives.
+ * These tests pin:
+ *   1. Border / title-bar / focus-fade / gap properties round-trip through
+ *      ISettings.
  *   2. gapValue("", key) / writeGap("", key, v) read and write the GLOBAL config.
  *   3. gapValue(monitor, key) / writeGap(monitor, key, v) read and write the
  *      per-monitor override, falling back to the global value when absent.

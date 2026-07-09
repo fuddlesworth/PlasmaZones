@@ -586,11 +586,7 @@ void PlasmaZonesEffect::updateAllDecorations()
     // passed to updateWindowDecoration below is what lets the focus cross-fade
     // survive this reconcile (a post-clear contains() lookup would report every
     // window as freshly decorated and snap its ramp).
-    QSet<QString> previouslyDecorated;
-    previouslyDecorated.reserve(m_windowDecorations.size());
-    for (auto it = m_windowDecorations.constBegin(); it != m_windowDecorations.constEnd(); ++it) {
-        previouslyDecorated.insert(it.key());
-    }
+    const QSet<QString> previouslyDecorated(m_windowDecorations.keyBegin(), m_windowDecorations.keyEnd());
 
     clearAllDecorations();
 

@@ -695,8 +695,9 @@ void PlasmaZonesEffect::loadCachedSettings()
     // decoration setting, deliberately independent of animationsEnabled /
     // animationDuration / the window.focus motion node: the fade is a
     // decoration cross-fade, not a window animation. 0 = instant switch.
-    // No repaint needed on change — the new duration applies from the next
-    // focus change; in-flight ramps keep their pace via the step divisor.
+    // No repaint needed on change — an idle window picks the new duration up
+    // on its next focus change, and an in-flight ramp re-times to it on its
+    // next frame (the step divisor reads the live value).
     // Reject a non-numeric reply instead of coercing it: getSetting answers an
     // UNKNOWN key with a valid empty-string variant (an older daemon without
     // this key), and toInt() would silently turn that into 0 — forcing instant

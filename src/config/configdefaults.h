@@ -1612,8 +1612,9 @@ private:
     ConfigDefaults() = delete;
 };
 
-// Compile-time bound checks for retuned animation defaults so a future
-// bump can never silently exceed the declared slider range. Mirrors the
+// Compile-time bound checks for retuned defaults that declare min/max
+// accessors, so a future bump can never silently exceed the declared
+// slider range. Mirrors the
 // pattern in AnimationLimits.h where library defaults assert against
 // their own min/max. Mirrored at runtime by QVERIFY in
 // tests/unit/config/test_configdefaults.cpp; the compile-time form

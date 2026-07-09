@@ -90,6 +90,28 @@ private Q_SLOTS:
         QCOMPARE(settings.focusFadeDuration(), ConfigDefaults::focusFadeDurationMax());
     }
 
+    /**
+     * The min side of the same clamp: a negative on-disk value snaps up to the
+     * declared minimum (0 = instant), so the effect never divides by a negative
+     * duration. Without this case a validator that only clamps the upper bound
+     * would pass the suite.
+     */
+    void testReadValidatedFocusFadeDuration_belowMin_clampsToMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeInt(ConfigDefaults::focusFadeDurationKey(), -50);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.focusFadeDuration(), ConfigDefaults::focusFadeDurationMin());
+    }
+
     // =========================================================================
     // Schema validColorOr validator (invalid color string)
     // =========================================================================
