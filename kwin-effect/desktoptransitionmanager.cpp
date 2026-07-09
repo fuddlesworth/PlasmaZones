@@ -9,6 +9,7 @@
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
@@ -114,14 +115,16 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         // blank transition that the first paintOutput would only then abandon.
         return;
     }
-    if (!eff.appliesTo.contains(QLatin1String("desktop"))) {
+    if (!PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff,
+                                                                  PhosphorAnimation::ProfilePaths::DesktopSwitch)) {
         // The resolved shader is not a desktop-contract pack — a window/surface
         // or universal shader inherited from a broader profile scope (the desktop
         // settings page only offers appliesTo:["desktop"] packs, but a `window`
         // or `global` scope override cascades here). It has no getFromColor /
         // getToColor, so it would sample the unbound uFromDesktop / uToDesktop and
-        // render garbage. Refuse it and let KWin's native switch play. Mirrors the
-        // opt-in desktop gate in shaderEffectAppliesToEventPath.
+        // render garbage. Refuse it and let KWin's native switch play. Routes
+        // through the same predicate the settings picker filters on, so the
+        // runtime and the picker share one opt-in desktop policy.
         return;
     }
     {
