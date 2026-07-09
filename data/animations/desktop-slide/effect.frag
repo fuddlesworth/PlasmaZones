@@ -10,8 +10,16 @@
 
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
-    vec2 dir = vec2(p_dirX, p_dirY);
-    vec2 p = uv + t * sign(dir);
+    // Push both desktops along the sign of the direction vector. Guard the
+    // degenerate all-zero case (both sliders at 0) so the switch still moves
+    // instead of holding the outgoing desktop and cutting; a zero direction
+    // falls back to a horizontal push. Non-zero directions (including pure
+    // vertical) are unaffected — only sign() of an exact zero is redirected.
+    vec2 s = sign(vec2(p_dirX, p_dirY));
+    if (s == vec2(0.0)) {
+        s = vec2(1.0, 0.0);
+    }
+    vec2 p = uv + t * s;
     vec2 f = fract(p);
     // In-bounds fragments still belong to the outgoing desktop; wrapped ones
     // reveal the incoming desktop sliding in behind.

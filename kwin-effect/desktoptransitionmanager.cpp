@@ -114,6 +114,16 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         // blank transition that the first paintOutput would only then abandon.
         return;
     }
+    if (!eff.appliesTo.contains(QLatin1String("desktop"))) {
+        // The resolved shader is not a desktop-contract pack — a window/surface
+        // or universal shader inherited from a broader profile scope (the desktop
+        // settings page only offers appliesTo:["desktop"] packs, but a `window`
+        // or `global` scope override cascades here). It has no getFromColor /
+        // getToColor, so it would sample the unbound uFromDesktop / uToDesktop and
+        // render garbage. Refuse it and let KWin's native switch play. Mirrors the
+        // opt-in desktop gate in shaderEffectAppliesToEventPath.
+        return;
+    }
     {
         const QVariantMap translated =
             PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, params);
@@ -504,10 +514,18 @@ void DesktopTransitionManager::outputRemoved(KWin::LogicalOutput* screen)
 
 void DesktopTransitionManager::reset()
 {
+    // Teardown path (compositor reset / plugin unload). Make the compositor
+    // context current so the captured GLTextures (m_active) and compiled
+    // GLShaders (m_shaderCache) free on a live context; when KWin::effects is
+    // already gone the driver is tearing GL down and reclaims them regardless.
+    // Clearing m_shaderCache HERE — not leaving it for ~DesktopTransitionManager,
+    // which deliberately can't make a context current — is what makes this the
+    // real "release GL resources" path the header documents.
+    if (KWin::effects) {
+        KWin::effects->makeOpenGLContextCurrent();
+    }
     m_active.clear();
-    // reset() is the teardown path (compositor reset / plugin unload), where
-    // KWin::effects may already be gone — guard the deref, unlike endOutput()
-    // which only runs while the compositor is live.
+    m_shaderCache.clear();
     if (m_fullScreenClaimed && KWin::effects) {
         KWin::effects->setActiveFullScreenEffect(nullptr);
         m_fullScreenClaimed = false;

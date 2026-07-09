@@ -1,7 +1,7 @@
 {
     "id": "desktop-dissolve",
     "name": "Desktop Dissolve",
-    "description": "Dissolves the outgoing desktop into the incoming one through a random speckle.",
+    "description": "Dissolves the outgoing desktop into the incoming one through a field of random speckles.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Dissolve",
