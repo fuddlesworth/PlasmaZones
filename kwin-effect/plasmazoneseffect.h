@@ -364,6 +364,21 @@ private:
     bool shouldAnimateWindow(KWin::EffectWindow* w) const;
 
     /**
+     * @brief Per-window gate for the border / decoration pass.
+     *
+     * Modeled on shouldAnimateWindow rather than shouldHandleWindow so the
+     * transient family is a real toggle (m_decorationExcludeTransientWindows):
+     * with it off the effect draws borders onto dialogs / popups. Rejects the
+     * always-wrong surfaces (own overlay / editor, xdg-portal, plasma-shell,
+     * special / desktop / dock / fullscreen / skipSwitcher, notification / OSD),
+     * honours the same user Exclude rule slice shouldHandleWindow uses (so an
+     * excluded app stays undecorated), then applies the transient toggle and the
+     * min-size threshold. Defaults preserve the prior behavior (transient on,
+     * size off), so a default config decorates exactly what it did before.
+     */
+    bool shouldDecorateWindow(KWin::EffectWindow* w) const;
+
+    /**
      * @brief Reject Plasma shell layer-shell surfaces by window class.
      *
      * On Wayland, KDE notification popups, system tray overlays, the emoji
@@ -1413,6 +1428,18 @@ private:
     bool m_animationExcludeNotificationsAndOsd = true;
     int m_animationMinWindowWidth = 0;
     int m_animationMinWindowHeight = 0;
+
+    // Decoration window filtering — gates the border / decoration pass,
+    // populated over D-Bus from the `Decorations.WindowFiltering` config group
+    // (loadCachedSettings). Initialised to the config defaults so a pre-D-Bus
+    // decoration pass matches the prior behavior: transients were already never
+    // decorated (exclude-transient on), and no size threshold was ever applied
+    // (min-size 0). The transient/min-size filters here reuse the snapping
+    // exclusion rule set (m_snappingExclusionEvaluator) rather than a dedicated
+    // decoration rule slice, so no new rule action is involved.
+    bool m_decorationExcludeTransientWindows = true;
+    int m_decorationMinWindowWidth = 0;
+    int m_decorationMinWindowHeight = 0;
 
     // Animation exclusion rule set — the `ExcludeAnimations`-action slice
     // of the unified Rule store the effect mirrors over D-Bus.

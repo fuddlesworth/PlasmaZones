@@ -282,6 +282,22 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("fade"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("dim"),
                 PhosphorI18n::tr("cross-fade")});
 
+    // Window filtering (Decorations.WindowFiltering) — the shared WindowFilterCard
+    // on the Window Appearance page. Same anchors the card emits, mirroring the
+    // General and Animations filtering entries.
+    addSection(search, QStringLiteral("window-appearance"), QStringLiteral("windowFiltering"),
+               PhosphorI18n::tr("Window filtering"));
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("excludeTransient"),
+               PhosphorI18n::tr("Exclude transient windows"),
+               {PhosphorI18n::tr("dialogs"), PhosphorI18n::tr("popups"), PhosphorI18n::tr("menus"),
+                PhosphorI18n::tr("border")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("minimumWindowWidth"),
+               PhosphorI18n::tr("Minimum window width"),
+               {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("narrow"), PhosphorI18n::tr("size")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("minimumWindowHeight"),
+               PhosphorI18n::tr("Minimum window height"),
+               {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("short"), PhosphorI18n::tr("size")});
+
     // Gaps (shared inner/outer gap model) — folded onto the Window Appearance
     // page, which edits the same config-backed model.
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("gaps"), PhosphorI18n::tr("Gaps"));
@@ -414,7 +430,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("skip"), PhosphorI18n::tr("geometry")});
     addSection(search, QStringLiteral("animations-general"), QStringLiteral("windowFiltering"),
                PhosphorI18n::tr("Window Filtering"));
-    addSetting(search, QStringLiteral("animations-general"), QStringLiteral("excludeTransientWindows"),
+    addSetting(search, QStringLiteral("animations-general"), QStringLiteral("excludeTransient"),
                PhosphorI18n::tr("Exclude transient windows"),
                {PhosphorI18n::tr("dialogs"), PhosphorI18n::tr("popups"), PhosphorI18n::tr("tooltips"),
                 PhosphorI18n::tr("menus")});

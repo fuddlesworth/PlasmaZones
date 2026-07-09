@@ -252,6 +252,15 @@ public:
                    NOTIFY animationMinimumWindowWidthChanged)
     Q_PROPERTY(int animationMinimumWindowHeight READ animationMinimumWindowHeight WRITE setAnimationMinimumWindowHeight
                    NOTIFY animationMinimumWindowHeightChanged)
+
+    // Decoration window filtering — separate group from snapping/tiling and
+    // animation filtering so the border pass can be tuned independently.
+    Q_PROPERTY(bool decorationExcludeTransientWindows READ decorationExcludeTransientWindows WRITE
+                   setDecorationExcludeTransientWindows NOTIFY decorationExcludeTransientWindowsChanged)
+    Q_PROPERTY(int decorationMinimumWindowWidth READ decorationMinimumWindowWidth WRITE setDecorationMinimumWindowWidth
+                   NOTIFY decorationMinimumWindowWidthChanged)
+    Q_PROPERTY(int decorationMinimumWindowHeight READ decorationMinimumWindowHeight WRITE
+                   setDecorationMinimumWindowHeight NOTIFY decorationMinimumWindowHeightChanged)
     // The animationExcludedApplications / animationExcludedWindowClasses
     // Q_PROPERTYs retired in v4 — the lists folded into `ExcludeAnimations`
     // Rules and the effect's `shouldAnimateWindow` gate now resolves
@@ -747,6 +756,15 @@ public:
     void setAnimationMinimumWindowWidth(int width) override;
     int animationMinimumWindowHeight() const override;
     void setAnimationMinimumWindowHeight(int height) override;
+
+    // Decoration window filtering — same shape as the animation filter but
+    // stored under `Decorations.WindowFiltering`.
+    bool decorationExcludeTransientWindows() const override;
+    void setDecorationExcludeTransientWindows(bool exclude) override;
+    int decorationMinimumWindowWidth() const override;
+    void setDecorationMinimumWindowWidth(int width) override;
+    int decorationMinimumWindowHeight() const override;
+    void setDecorationMinimumWindowHeight(int height) override;
     // animationExcludedApplications / animationExcludedWindowClasses
     // (+ their add*/remove* convenience methods) retired in v4 — see the
     // Q_PROPERTY block above for the migration notes.

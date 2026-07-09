@@ -341,13 +341,15 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         return;
     }
 
-    // APP-WINDOW GATE: decoration applies to application windows only. Reuse the
-    // same structural app-window filter that snapping / zone management already
-    // use (shouldHandleWindow) — exactly as the animation path reuses it via
-    // shouldAnimateWindow — so no border is ever painted onto a non-window surface
-    // (docks, panels, the desktop, popups, dialogs, OSDs, tooltips, notifications,
-    // portal / plasma-shell surfaces, our own overlays).
-    if (!shouldHandleWindow(w)) {
+    // APP-WINDOW GATE: decoration-specific filter (shouldDecorateWindow), NOT
+    // the snapping shouldHandleWindow. It rejects the always-wrong surfaces
+    // (docks, panels, desktop, OSDs, notifications, portal / plasma-shell,
+    // our own overlays) and honours the user Exclude rules, but the
+    // transient family and a minimum-size threshold are user-tunable via the
+    // Decorations.WindowFiltering settings (m_decorationExcludeTransientWindows /
+    // m_decorationMinWindow{Width,Height}). Defaults preserve the prior
+    // shouldHandleWindow behavior (transients skipped, no size threshold).
+    if (!shouldDecorateWindow(w)) {
         return;
     }
 

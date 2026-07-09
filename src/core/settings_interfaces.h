@@ -273,9 +273,13 @@ public:
 };
 
 /**
- * @brief Settings related to window exclusion rules
+ * @brief Global window-filtering knobs for the KWin effect
  *
- * Used by: KWin Effect only (not exposed in KCM visualization)
+ * Two independent filter sets, same shape: the snapping/tiling exclusion
+ * globals (excludeTransientWindows + min-size) and the decoration/border
+ * filter (decoration* + min-size). Both are consumed by the KWin effect; the
+ * decoration knobs are also surfaced in the standalone Window Appearance
+ * settings page. Not exposed in the KCM.
  */
 class PLASMAZONES_EXPORT IWindowExclusionSettings
 {
@@ -294,6 +298,20 @@ public:
     virtual void setMinimumWindowWidth(int width) = 0;
     virtual int minimumWindowHeight() const = 0;
     virtual void setMinimumWindowHeight(int height) = 0;
+
+    // Decoration window filtering — gates the KWin effect's border /
+    // decoration pass, independent of the snapping filter above so a user can
+    // tune which windows get a border separately from which windows snap.
+    // Unlike the snapping filter, exclude-transient is a real toggle here: with
+    // it off the effect draws borders onto dialogs / popups. Defaults preserve
+    // the prior behavior (transients were already never decorated; no size
+    // threshold was ever applied).
+    virtual bool decorationExcludeTransientWindows() const = 0;
+    virtual void setDecorationExcludeTransientWindows(bool exclude) = 0;
+    virtual int decorationMinimumWindowWidth() const = 0;
+    virtual void setDecorationMinimumWindowWidth(int width) = 0;
+    virtual int decorationMinimumWindowHeight() const = 0;
+    virtual void setDecorationMinimumWindowHeight(int height) = 0;
 };
 
 /**

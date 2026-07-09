@@ -66,6 +66,10 @@ class GeneralPageController : public PhosphorControl::PageController
     Q_PROPERTY(int animationMinimumWindowWidthMax READ animationMinimumWindowWidthMax CONSTANT)
     Q_PROPERTY(int animationMinimumWindowHeightMin READ animationMinimumWindowHeightMin CONSTANT)
     Q_PROPERTY(int animationMinimumWindowHeightMax READ animationMinimumWindowHeightMax CONSTANT)
+    Q_PROPERTY(int decorationMinimumWindowWidthMin READ decorationMinimumWindowWidthMin CONSTANT)
+    Q_PROPERTY(int decorationMinimumWindowWidthMax READ decorationMinimumWindowWidthMax CONSTANT)
+    Q_PROPERTY(int decorationMinimumWindowHeightMin READ decorationMinimumWindowHeightMin CONSTANT)
+    Q_PROPERTY(int decorationMinimumWindowHeightMax READ decorationMinimumWindowHeightMax CONSTANT)
 
 public:
     /// Reference parameter, not pointer: the ISettings instance is required
@@ -155,6 +159,22 @@ public:
     int animationMinimumWindowHeightMax() const
     {
         return ConfigDefaults::animationMinimumWindowHeightMax();
+    }
+    int decorationMinimumWindowWidthMin() const
+    {
+        return ConfigDefaults::decorationMinimumWindowWidthMin();
+    }
+    int decorationMinimumWindowWidthMax() const
+    {
+        return ConfigDefaults::decorationMinimumWindowWidthMax();
+    }
+    int decorationMinimumWindowHeightMin() const
+    {
+        return ConfigDefaults::decorationMinimumWindowHeightMin();
+    }
+    int decorationMinimumWindowHeightMax() const
+    {
+        return ConfigDefaults::decorationMinimumWindowHeightMax();
     }
 
 private:

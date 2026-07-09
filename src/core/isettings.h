@@ -411,6 +411,12 @@ Q_SIGNALS:
     void excludeTransientWindowsChanged();
     void minimumWindowWidthChanged();
     void minimumWindowHeightChanged();
+    // Decoration window filtering — paired with the IWindowExclusionSettings
+    // decoration virtuals. Consumed by the kwin-effect (via the generic
+    // settingsChanged D-Bus broadcast) and the decorations settings page.
+    void decorationExcludeTransientWindowsChanged();
+    void decorationMinimumWindowWidthChanged();
+    void decorationMinimumWindowHeightChanged();
     // Animation window filtering — paired with the IAnimationSettings
     // virtuals. Same shape as the snapping/tiling exclusion signals; lives
     // in its own change-set so animation-only consumers (the kwin-effect,

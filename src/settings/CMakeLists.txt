@@ -370,6 +370,7 @@ qt_add_qml_module(plasmazones-settings
         qml/SpringPhysics.js
         qml/SettingsCard.qml
         qml/GapsSettingsCard.qml
+        qml/WindowFilterCard.qml
         qml/OsdCard.qml
         qml/ShortcutCaptureField.qml
         qml/ModifierComboBox.qml

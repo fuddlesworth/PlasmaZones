@@ -295,103 +295,59 @@ SettingsFlickable {
             text: i18n("Filtered windows are not animated. Use a Rule to keep a specific application animated even when a filter would exclude it.")
         }
 
-        SettingsCard {
-            id: filteringCard
-
+        WindowFilterCard {
             Layout.fillWidth: true
-            headerText: i18n("Window Filtering")
-            searchAnchor: "windowFiltering"
-            collapsible: true
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+            excludeTransient: page.appSettings.animationExcludeTransientWindows
+            transientDescription: i18n("Skip animations for dialogs, popups, tooltips, and dropdown menus")
+            transientAccessibleName: i18n("Exclude transient windows from animations")
+            onExcludeTransientToggled: value => {
+                page.appSettings.animationExcludeTransientWindows = value;
+            }
 
-                SettingsRow {
-                    title: i18n("Exclude transient windows")
-                    searchAnchor: "excludeTransientWindows"
-                    description: i18n("Skip animations for dialogs, popups, tooltips, and dropdown menus")
+            // Animations-only extra row: exclude notifications / OSDs. Supplies
+            // its own leading separator so it composes under the transient row.
+            insertAfterTransient: Component {
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
 
-                    SettingsSwitch {
-                        checked: page.appSettings.animationExcludeTransientWindows
-                        accessibleName: i18n("Exclude transient windows from animations")
-                        onToggled: function (newValue) {
-                            page.appSettings.animationExcludeTransientWindows = newValue;
+                    SettingsSeparator {}
+
+                    SettingsRow {
+                        title: i18n("Exclude notifications and OSDs")
+                        searchAnchor: "excludeNotificationsAndOsds"
+                        description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
+
+                        SettingsSwitch {
+                            checked: page.appSettings.animationExcludeNotificationsAndOsd
+                            accessibleName: i18n("Exclude notifications and on-screen displays from animations")
+                            onToggled: function (newValue) {
+                                page.appSettings.animationExcludeNotificationsAndOsd = newValue;
+                            }
                         }
                     }
                 }
+            }
 
-                SettingsSeparator {}
+            minWidth: page.appSettings.animationMinimumWindowWidth
+            minWidthFrom: settingsController.generalPage.animationMinimumWindowWidthMin
+            minWidthTo: settingsController.generalPage.animationMinimumWindowWidthMax
+            minWidthDescription: i18n("Windows narrower than this will not animate")
+            minWidthDisabledDescription: i18n("Disabled. No width threshold.")
+            minWidthAccessibleName: i18n("Minimum window width for animations")
+            onMinWidthModified: value => {
+                page.appSettings.animationMinimumWindowWidth = value;
+            }
 
-                SettingsRow {
-                    title: i18n("Exclude notifications and OSDs")
-                    searchAnchor: "excludeNotificationsAndOsds"
-                    description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
-
-                    SettingsSwitch {
-                        checked: page.appSettings.animationExcludeNotificationsAndOsd
-                        accessibleName: i18n("Exclude notifications and on-screen displays from animations")
-                        onToggled: function (newValue) {
-                            page.appSettings.animationExcludeNotificationsAndOsd = newValue;
-                        }
-                    }
-                }
-
-                SettingsSeparator {}
-
-                SettingsRow {
-                    title: i18n("Minimum window width")
-                    searchAnchor: "minimumWindowWidth"
-                    description: page.appSettings.animationMinimumWindowWidth === 0 ? i18n("Disabled. No width threshold.") : i18n("Windows narrower than this will not animate")
-
-                    SettingsSpinBox {
-                        // Schema-driven bounds — see GeneralPageController's
-                        // animationMinimumWindowWidthMin/Max Q_PROPERTYs.
-                        // Literal bounds would silently truncate any saved
-                        // value outside the literal range when the SpinBox
-                        // clamped the bound `value` on render.
-                        from: settingsController.generalPage.animationMinimumWindowWidthMin
-                        to: settingsController.generalPage.animationMinimumWindowWidthMax
-                        stepSize: 10
-                        value: page.appSettings.animationMinimumWindowWidth
-                        // textFromValue already emits the localised "%1 px" suffix; suppress
-                        // SettingsSpinBox's default "px" Label so the displayed value reads
-                        // "100 px" rather than "100 px px" (and "Off" rather than "Off px").
-                        unitText: ""
-                        Accessible.name: i18n("Minimum window width for animations")
-                        onValueModified: value => {
-                            page.appSettings.animationMinimumWindowWidth = value;
-                        }
-                        textFromValue: function (value) {
-                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
-                        }
-                    }
-                }
-
-                SettingsSeparator {}
-
-                SettingsRow {
-                    title: i18n("Minimum window height")
-                    searchAnchor: "minimumWindowHeight"
-                    description: page.appSettings.animationMinimumWindowHeight === 0 ? i18n("Disabled. No height threshold.") : i18n("Windows shorter than this will not animate")
-
-                    SettingsSpinBox {
-                        from: settingsController.generalPage.animationMinimumWindowHeightMin
-                        to: settingsController.generalPage.animationMinimumWindowHeightMax
-                        stepSize: 10
-                        value: page.appSettings.animationMinimumWindowHeight
-                        // textFromValue already emits the localised "%1 px" suffix; see the
-                        // width SettingsSpinBox above for rationale on suppressing
-                        // SettingsSpinBox's default "px" Label.
-                        unitText: ""
-                        Accessible.name: i18n("Minimum window height for animations")
-                        onValueModified: value => {
-                            page.appSettings.animationMinimumWindowHeight = value;
-                        }
-                        textFromValue: function (value) {
-                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
-                        }
-                    }
-                }
+            minHeight: page.appSettings.animationMinimumWindowHeight
+            minHeightFrom: settingsController.generalPage.animationMinimumWindowHeightMin
+            minHeightTo: settingsController.generalPage.animationMinimumWindowHeightMax
+            minHeightDescription: i18n("Windows shorter than this will not animate")
+            minHeightDisabledDescription: i18n("Disabled. No height threshold.")
+            minHeightAccessibleName: i18n("Minimum window height for animations")
+            onMinHeightModified: value => {
+                page.appSettings.animationMinimumWindowHeight = value;
             }
         }
     }

@@ -668,6 +668,48 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Decoration Window Filtering Settings
+    //
+    // Mirrors the Animation Window Filtering settings but lives in its own
+    // `Decorations.WindowFiltering` group so a user can tune which windows get a
+    // border independently of which windows snap or animate. The defaults
+    // preserve the pre-existing decoration behavior: transients were already
+    // never decorated (the effect's app-window gate rejected them structurally),
+    // so exclude-transient defaults on; no size threshold was ever applied, so
+    // the min-size axes default off (0). On upgrade nothing changes until the
+    // user opts into decorating transients or into a size threshold.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool decorationExcludeTransientWindows()
+    {
+        return true;
+    }
+    static int decorationMinimumWindowWidth()
+    {
+        return 0;
+    }
+    static constexpr int decorationMinimumWindowWidthMin()
+    {
+        return 0;
+    }
+    static constexpr int decorationMinimumWindowWidthMax()
+    {
+        return 2000;
+    }
+    static int decorationMinimumWindowHeight()
+    {
+        return 0;
+    }
+    static constexpr int decorationMinimumWindowHeightMin()
+    {
+        return 0;
+    }
+    static constexpr int decorationMinimumWindowHeightMax()
+    {
+        return 2000;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Zone Selector Settings
     // ═══════════════════════════════════════════════════════════════════════════
 

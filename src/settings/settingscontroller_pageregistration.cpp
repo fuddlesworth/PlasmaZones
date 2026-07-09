@@ -706,6 +706,11 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::windowsAppearanceGroup(), CD::hideTitleBarsKey()},
              {CD::windowsAppearanceGroup(), CD::titleBarScopeKey()},
              {CD::windowsAppearanceGroup(), CD::focusFadeDurationKey()},
+             // Window filtering — the Decorations → General page hosts the
+             // WindowFilterCard bound to the Decorations.WindowFiltering group.
+             {CD::decorationsWindowFilteringGroup(), CD::transientWindowsKey()},
+             {CD::decorationsWindowFilteringGroup(), CD::minimumWindowWidthKey()},
+             {CD::decorationsWindowFilteringGroup(), CD::minimumWindowHeightKey()},
              {CD::gapsGroup(), CD::innerGapKey()},
              {CD::gapsGroup(), CD::outerGapKey()},
              {CD::gapsGroup(), CD::usePerSideOuterGapKey()},

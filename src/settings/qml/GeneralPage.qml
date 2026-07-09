@@ -228,76 +228,34 @@ SettingsFlickable {
         // Exclude rules), so the page itself was deleted; these three global
         // knobs survive here because they apply to ALL windows uniformly
         // rather than matching specific applications.
-        SettingsCard {
-            headerText: i18n("Window filtering")
-            collapsible: true
-            searchAnchor: "windowFiltering"
+        WindowFilterCard {
+            Layout.fillWidth: true
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+            excludeTransient: appSettings.excludeTransientWindows
+            transientDescription: i18n("Skip dialogs, popups, and toolbars for snapping and tiling")
+            transientAccessibleName: i18n("Exclude transient windows")
+            onExcludeTransientToggled: value => {
+                appSettings.excludeTransientWindows = value;
+            }
 
-                SettingsRow {
-                    title: i18n("Exclude transient windows")
-                    description: i18n("Skip dialogs, popups, and toolbars for snapping and tiling")
-                    searchAnchor: "excludeTransient"
+            minWidth: appSettings.minimumWindowWidth
+            minWidthFrom: settingsController.generalPage.minimumWindowWidthMin
+            minWidthTo: settingsController.generalPage.minimumWindowWidthMax
+            minWidthDescription: i18n("Windows narrower than this are excluded")
+            minWidthDisabledDescription: i18n("Disabled (no width threshold)")
+            minWidthAccessibleName: i18n("Minimum window width")
+            onMinWidthModified: value => {
+                appSettings.minimumWindowWidth = value;
+            }
 
-                    SettingsSwitch {
-                        checked: appSettings.excludeTransientWindows
-                        accessibleName: i18n("Exclude transient windows")
-                        onToggled: function (newValue) {
-                            appSettings.excludeTransientWindows = newValue;
-                        }
-                    }
-                }
-
-                SettingsSeparator {}
-
-                SettingsRow {
-                    title: i18n("Minimum window width")
-                    description: appSettings.minimumWindowWidth === 0 ? i18n("Disabled (no width threshold)") : i18n("Windows narrower than this are excluded")
-
-                    SettingsSpinBox {
-                        // Schema-driven bounds — see GeneralPageController's
-                        // minimumWindowWidthMin/Max Q_PROPERTYs. Literal
-                        // bounds would silently truncate any saved value
-                        // outside the literal range when the SpinBox clamped
-                        // the bound `value` on render.
-                        from: settingsController.generalPage.minimumWindowWidthMin
-                        to: settingsController.generalPage.minimumWindowWidthMax
-                        stepSize: 10
-                        value: appSettings.minimumWindowWidth
-                        unitText: ""
-                        Accessible.name: i18n("Minimum window width")
-                        onValueModified: value => {
-                            appSettings.minimumWindowWidth = value;
-                        }
-                        textFromValue: function (value) {
-                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
-                        }
-                    }
-                }
-
-                SettingsSeparator {}
-
-                SettingsRow {
-                    title: i18n("Minimum window height")
-                    description: appSettings.minimumWindowHeight === 0 ? i18n("Disabled (no height threshold)") : i18n("Windows shorter than this are excluded")
-
-                    SettingsSpinBox {
-                        from: settingsController.generalPage.minimumWindowHeightMin
-                        to: settingsController.generalPage.minimumWindowHeightMax
-                        stepSize: 10
-                        value: appSettings.minimumWindowHeight
-                        unitText: ""
-                        Accessible.name: i18n("Minimum window height")
-                        onValueModified: value => {
-                            appSettings.minimumWindowHeight = value;
-                        }
-                        textFromValue: function (value) {
-                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
-                        }
-                    }
-                }
+            minHeight: appSettings.minimumWindowHeight
+            minHeightFrom: settingsController.generalPage.minimumWindowHeightMin
+            minHeightTo: settingsController.generalPage.minimumWindowHeightMax
+            minHeightDescription: i18n("Windows shorter than this are excluded")
+            minHeightDisabledDescription: i18n("Disabled (no height threshold)")
+            minHeightAccessibleName: i18n("Minimum window height")
+            onMinHeightModified: value => {
+                appSettings.minimumWindowHeight = value;
             }
         }
 

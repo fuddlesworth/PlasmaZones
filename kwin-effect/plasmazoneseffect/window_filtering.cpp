@@ -393,6 +393,80 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     return true;
 }
 
+bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return false;
+    }
+
+    const QString windowClass = w->windowClass();
+
+    // Always-wrong surfaces — never draw a border here regardless of any
+    // toggle. Our own overlay/editor windows and xdg-portal surfaces mirror the
+    // structural rejects in shouldHandleWindow; plasma-shell + the special/
+    // desktop/dock/fullscreen/skipSwitcher set is the structural clause shared
+    // with shouldAnimateWindow. (fullscreen is also rejected earlier in
+    // updateWindowDecoration, but keep it here so the gate stands alone.)
+    if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass) || isPlasmaShellSurface(windowClass)) {
+        return false;
+    }
+    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()) {
+        return false;
+    }
+
+    // Notification / OSD surfaces — hard-excluded with no toggle. A border on a
+    // notification popup or a volume OSD is never sensible, so these are split
+    // off from the transient family below (which IS toggleable) and always
+    // rejected. There is no decoration NotificationsAndOsd knob.
+    if (w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay()) {
+        return false;
+    }
+
+    // User Exclude rules — reuse the SAME snapping exclusion slice
+    // shouldHandleWindow gates on, so a window the user excluded from
+    // management is not decorated either (preserves prior behavior, since the
+    // decoration path used to run through shouldHandleWindow). No dedicated
+    // decoration rule slice, so no new rule action. The `!isEmpty()` fast path
+    // keeps a no-exclusions user at two pointer reads.
+    if (!m_snappingExclusionRuleSet.isEmpty()) {
+        if (m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded()) {
+            return false;
+        }
+    }
+
+    // Keep-above overlays (Spectacle, colour pickers, screen rulers) — same
+    // rejection shouldHandleWindow applies, preserved so upgrading doesn't
+    // start bordering these lingering utility windows.
+    if (w->keepAbove()) {
+        return false;
+    }
+
+    // Transient-window filter — dialogs / popups / tooltips / dropdowns /
+    // menus / utility / splash windows, plus any window with a transient
+    // parent. Unlike shouldHandleWindow (which rejects these unconditionally),
+    // this is a user toggle: with it off the effect draws borders onto
+    // transients. Defaults on, so today's behavior (no borders on transients)
+    // is preserved.
+    if (m_decorationExcludeTransientWindows
+        && (w->isDialog() || w->isUtility() || w->isSplash() || w->isModal() || w->isPopupWindow() || w->isPopupMenu()
+            || w->isDropdownMenu() || w->isMenu() || w->isTooltip() || w->transientFor())) {
+        return false;
+    }
+
+    // Min-size filter — windows narrower or shorter than the threshold are not
+    // decorated. Zero (the default) disables each axis independently. Frame
+    // geometry is read live, consistent with the animation min-size gate.
+    const QRectF frame = w->frameGeometry();
+    if (m_decorationMinWindowWidth > 0 && frame.width() < m_decorationMinWindowWidth) {
+        return false;
+    }
+    if (m_decorationMinWindowHeight > 0 && frame.height() < m_decorationMinWindowHeight) {
+        return false;
+    }
+
+    return true;
+}
+
 bool PlasmaZonesEffect::isTileableWindow(KWin::EffectWindow* w, QString* rejectReason) const
 {
     if (rejectReason) {
