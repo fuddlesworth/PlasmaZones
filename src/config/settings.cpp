@@ -325,7 +325,8 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::windowsAppearanceGroup(), // "Windows" — window border + title bar decoration
         ConfigDefaults::decorationsWindowFilteringGroup(), // "Decorations.WindowFiltering" — border-pass window filter
         ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
-        ConfigDefaults::surfaceGroup(), // "Surface" — per-surface decoration tree (DecorationProfileTree blob)
+        ConfigDefaults::decorationsGroup(), // "Decorations" — per-surface decoration tree (DecorationProfileTree blob)
+                                            // + WindowFiltering sub-group
     };
 }
 
@@ -1309,8 +1310,8 @@ void Settings::setShaderProfileTreeJson(const QString& json)
     setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
 }
 
-// ── Surface decoration tree (PhosphorConfig::Store-backed) ──────────────────
-// Persisted as one nested JSON entry under Surface/DecorationProfileTree,
+// ── Decorations tree (PhosphorConfig::Store-backed) ─────────────────────────
+// Persisted as one nested JSON entry under Decorations/DecorationProfileTree,
 // mirroring how the animation shaderProfileTree persists under
 // Animations/ShaderProfileTree. The read-side falls back to the
 // ConfigDefaults tree (EMPTY / neutral: no baseline chain, no overrides —
@@ -1321,8 +1322,8 @@ void Settings::setShaderProfileTreeJson(const QString& json)
 PhosphorSurfaceShaders::DecorationProfileTree Settings::decorationProfileTree() const
 {
     const QVariantMap map =
-        m_store->read<QVariantMap>(ConfigDefaults::surfaceGroup(), ConfigDefaults::surfaceDecorationTreeKey());
-    // The Surface schema registers a NON-empty default for this key (the
+        m_store->read<QVariantMap>(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey());
+    // The Decorations schema registers a NON-empty default for this key (the
     // serialized ConfigDefaults::decorationProfileTree), so a store built with
     // the schema never returns empty here. The guard covers a store constructed
     // WITHOUT the schema default (e.g. a bare test stub): fall back to the same
@@ -1348,7 +1349,7 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
     // back over an empty store is correctly a no-op.
     if (pruned == decorationProfileTree())
         return;
-    m_store->write(ConfigDefaults::surfaceGroup(), ConfigDefaults::surfaceDecorationTreeKey(),
+    m_store->write(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey(),
                    pruned.toJson().toVariantMap());
     Q_EMIT decorationProfileTreeChanged();
     Q_EMIT settingsChanged();

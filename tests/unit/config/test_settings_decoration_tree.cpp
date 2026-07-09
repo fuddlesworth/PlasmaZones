@@ -7,7 +7,7 @@
  *
  * The decoration analogue of test_settings_shader_tree.cpp. The
  * per-surface decoration tree persists as one nested JSON entry under
- * Surface/DecorationProfileTree, mirroring how the animation
+ * Decorations/DecorationProfileTree, mirroring how the animation
  * shaderProfileTree persists under Animations/ShaderProfileTree. Pinned
  * behaviour:
  *   - a fresh Settings returns the EMPTY/neutral ConfigDefaults tree
@@ -66,7 +66,7 @@ class TestSettingsDecorationTree : public QObject
 
 private Q_SLOTS:
 
-    /// A fresh config has no Surface/DecorationProfileTree entry, so
+    /// A fresh config has no Decorations/DecorationProfileTree entry, so
     /// Settings::decorationProfileTree() must fall back to the canonical
     /// ConfigDefaults default — the EMPTY/neutral tree. Border and
     /// titlebar visuals are owned by the window rules, so the tree starts
@@ -86,7 +86,7 @@ private Q_SLOTS:
     /// save() and reload through a fresh Settings instance. This is the
     /// cross-process path: the daemon's Settings reads the same disk file
     /// the settings app wrote. Regression guard mirroring the shader-tree
-    /// round-trip (a missing Surface-schema key would drop the blob at
+    /// round-trip (a missing Decorations-schema key would drop the blob at
     /// the Store gate and silently reset the picker).
     void testDecorationProfileTree_setRoundTripsThroughDisk()
     {

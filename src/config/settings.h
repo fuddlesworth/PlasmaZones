@@ -964,7 +964,7 @@ public:
     void setShaderProfileTreeJson(const QString& json);
 
     // Per-surface decoration tree (DecorationProfile: shader-pack chain + its
-    // per-pack parameters), persisted under the Surface group. Typed accessors
+    // per-pack parameters), persisted under the Decorations group. Typed accessors
     // mirror shaderProfileTree; the JSON-string facade backs the Q_PROPERTY
     // above.
     PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override;

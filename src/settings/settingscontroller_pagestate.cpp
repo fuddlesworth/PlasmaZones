@@ -100,7 +100,7 @@ const Settings::ConfigKeyList& decorationConfigKeys()
 {
     using CD = ConfigDefaults;
     static const Settings::ConfigKeyList keys{
-        {CD::surfaceGroup(), CD::surfaceDecorationTreeKey()},
+        {CD::decorationsGroup(), CD::decorationProfileTreeKey()},
     };
     return keys;
 }
