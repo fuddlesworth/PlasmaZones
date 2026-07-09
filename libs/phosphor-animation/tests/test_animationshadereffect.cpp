@@ -330,13 +330,15 @@ private Q_SLOTS:
         // Every geometry leg eventClassForPath classifies must be compatible
         // with a geometry-only effect — pin the full disjunction so dropping
         // any leg from the classifier is caught.
-        for (const char* geo : {"window.move", "window.resize", "window.snapIn", "window.snapOut", "window.snapResize",
-                                "window.layoutSwitch", "window.maximize"}) {
+        for (const char* geo :
+             {"window.movement.move", "window.movement.resize", "window.movement.snapIn", "window.movement.snapOut",
+              "window.movement.snapResize", "window.movement.layoutSwitch", "window.movement.maximize"}) {
             QVERIFY2(shaderEffectAppliesToEventPath(morph, QString::fromLatin1(geo)), geo);
         }
         // Every appearance leg must be incompatible with a geometry-only effect.
-        for (const char* app : {"window.open", "window.close", "window.minimize", "window.focus", "osd.show",
-                                "osd.hide", "popup.layoutPicker.show", "popup.zoneSelector.hide"}) {
+        for (const char* app : {"window.appearance.open", "window.appearance.close", "window.appearance.minimize",
+                                "window.appearance.focus", "osd.show", "osd.hide", "popup.layoutPicker.show",
+                                "popup.zoneSelector.hide"}) {
             QVERIFY2(!shaderEffectAppliesToEventPath(morph, QString::fromLatin1(app)), app);
         }
         // Unclassified paths (mixed `window` root, non-window families) are
@@ -348,8 +350,8 @@ private Q_SLOTS:
         AnimationShaderEffect fade; // universal (no appliesTo)
         fade.id = QStringLiteral("fade");
         fade.fragmentShaderPath = QStringLiteral("effect.frag");
-        QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.open")));
-        QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.move")));
+        QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.appearance.open")));
+        QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.movement.move")));
 
         // Appearance-only effect: mirror image — incompatible on geometry legs,
         // compatible on appearance legs.
@@ -357,8 +359,8 @@ private Q_SLOTS:
         appearanceOnly.id = QStringLiteral("aretha-materialize");
         appearanceOnly.fragmentShaderPath = QStringLiteral("effect.frag");
         appearanceOnly.appliesTo = QStringList{QStringLiteral("appearance")};
-        QVERIFY(shaderEffectAppliesToEventPath(appearanceOnly, QStringLiteral("window.open")));
-        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, QStringLiteral("window.move")));
+        QVERIFY(shaderEffectAppliesToEventPath(appearanceOnly, QStringLiteral("window.appearance.open")));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, QStringLiteral("window.movement.move")));
     }
 };
 

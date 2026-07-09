@@ -32,14 +32,8 @@ import "SearchAnchorHelpers.js" as SearchAnchors
 SettingsFlickable {
     id: page
 
-    /// Ordered list of rows, in order. Row shapes:
-    ///   event   — `{ eventPath, eventLabel, isParentNode: bool }`
-    ///             (one AnimationEventCard; isParentNode = an "All X" cascade row)
-    ///   group   — `{ eventPath, eventLabel, isParentNode: true, groupPaths: [...] }`
-    ///             (a scoped "All" that bulk-applies to the leaf set groupPaths;
-    ///             eventPath is a representative leaf for the picker filter)
-    ///   section — `{ isSection: true, eventLabel: string }`
-    ///             (a non-interactive sub-group header, e.g. "Appearance")
+    /// Ordered list of `{ eventPath: string, eventLabel: string,
+    /// isParentNode: bool }` — one AnimationEventCard per entry, in order.
     property var eventModel: []
 
     // Build-ahead margin above/below the visible viewport so a card is
@@ -85,13 +79,10 @@ SettingsFlickable {
                 // only, no expand). Registration is purely additive: it never
                 // touches the viewport/latching logic above.
                 readonly property string searchAnchor: cardLoader.modelData.eventPath || ""
-                // Section rows (isSection) are non-interactive sub-group labels
-                // ("Appearance" / "Movement" inside the Windows page), not events.
-                readonly property bool isSection: cardLoader.modelData.isSection === true
                 // Only leaf events are addressable. Parent rows ("All X
                 // Events") carry isParentNode: true and are page-level group
-                // headers, not a single animation event; section rows carry none.
-                readonly property bool searchable: !cardLoader.isSection && cardLoader.modelData.isParentNode !== true && cardLoader.searchAnchor.length > 0
+                // headers, not a single animation event.
+                readonly property bool searchable: cardLoader.modelData.isParentNode !== true && cardLoader.searchAnchor.length > 0
 
                 Layout.fillWidth: true
                 // Reserve the real card height once built (a Loader's
@@ -100,10 +91,8 @@ SettingsFlickable {
                 // rather than `item.implicitHeight` keeps the access typed —
                 // `Loader.item` is an untyped QtObject. `> 0` covers the
                 // async window where active is true but item not yet built.
-                // Section headers are cheap and always built (no viewport gate),
-                // so they size to their own height, not the card placeholder.
-                Layout.preferredHeight: cardLoader.isSection ? cardLoader.implicitHeight : (cardLoader.active && cardLoader.implicitHeight > 0 ? cardLoader.implicitHeight : page.placeholderHeight)
-                active: cardLoader.isSection || _everInView
+                Layout.preferredHeight: cardLoader.active && cardLoader.implicitHeight > 0 ? cardLoader.implicitHeight : page.placeholderHeight
+                active: _everInView
                 asynchronous: true
                 // Deliberately NOT `visible: active`. QtQuick.Layouts
                 // excludes invisible items from layout entirely, so an
@@ -183,41 +172,13 @@ SettingsFlickable {
                     }
                 }
 
-                // Section rows load a lightweight header label; event rows load
-                // the heavy AnimationEventCard (curve canvas, shader picker, ...).
-                sourceComponent: cardLoader.isSection ? sectionHeaderComponent : eventCardComponent
-
-                Component {
-                    id: eventCardComponent
-                    AnimationEventCard {
-                        // Width is driven by the Loader (Layout.fillWidth →
-                        // Loader.width → item.width); the card's implicitHeight
-                        // drives Layout.preferredHeight above.
-                        eventPath: cardLoader.modelData.eventPath
-                        eventLabel: cardLoader.modelData.eventLabel
-                        isParentNode: cardLoader.modelData.isParentNode === true
-                        // Scoped "All" cards carry a leaf set; writes fan out to it.
-                        groupPaths: cardLoader.modelData.groupPaths || []
-                    }
-                }
-
-                Component {
-                    id: sectionHeaderComponent
-                    Item {
-                        implicitHeight: sectionHeading.implicitHeight + Kirigami.Units.largeSpacing
-                        Kirigami.Heading {
-                            id: sectionHeading
-                            level: 4
-                            text: cardLoader.modelData.eventLabel
-                            opacity: 0.7
-                            anchors {
-                                left: parent.left
-                                right: parent.right
-                                bottom: parent.bottom
-                                bottomMargin: Kirigami.Units.smallSpacing
-                            }
-                        }
-                    }
+                sourceComponent: AnimationEventCard {
+                    // Width is driven by the Loader (Layout.fillWidth →
+                    // Loader.width → item.width); the card's implicitHeight
+                    // drives Layout.preferredHeight above.
+                    eventPath: cardLoader.modelData.eventPath
+                    eventLabel: cardLoader.modelData.eventLabel
+                    isParentNode: cardLoader.modelData.isParentNode === true
                 }
             }
         }

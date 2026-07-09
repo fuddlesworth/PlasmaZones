@@ -4,40 +4,39 @@ import QtQuick
 
 // Window APPEARANCE events (a window materialising or dissolving: open, close,
 // minimize, focus). The window MOVEMENT events (move/resize/snap/...) live on
-// the Motion → Windows page. Each row's shader picker is filtered to the
-// appearance-compatible set.
+// the Motion → Windows page under their own window.movement parent.
 //
-// "All Windows" here is a scoped group applicator over the four appearance
-// leaves (not the `window` path cascade, which would also hit the movement
-// events on the other page). Its representative path is window.open.
+// "All Windows" is the real window.appearance cascade parent (osd/popup
+// pattern): its shader + timing apply to the four leaves by inheritance, an
+// individual event override shadows it, and clearing a child re-inherits. It
+// does NOT reach the movement leaves (those hang off window.movement).
 //
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("Window appearance animation events")
     eventModel: [
         {
-            "eventPath": "window.open",
+            "eventPath": "window.appearance",
             "eventLabel": i18n("All Windows"),
-            "isParentNode": true,
-            "groupPaths": ["window.open", "window.close", "window.minimize", "window.focus"]
+            "isParentNode": true
         },
         {
-            "eventPath": "window.open",
+            "eventPath": "window.appearance.open",
             "eventLabel": i18n("Opened"),
             "isParentNode": false
         },
         {
-            "eventPath": "window.close",
+            "eventPath": "window.appearance.close",
             "eventLabel": i18n("Closed"),
             "isParentNode": false
         },
         {
-            "eventPath": "window.minimize",
+            "eventPath": "window.appearance.minimize",
             "eventLabel": i18n("Minimized"),
             "isParentNode": false
         },
         {
-            "eventPath": "window.focus",
+            "eventPath": "window.appearance.focus",
             "eventLabel": i18n("Focused"),
             "isParentNode": false
         }

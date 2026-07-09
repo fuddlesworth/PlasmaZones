@@ -236,7 +236,7 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // Family ease-out for open/move/resize/focus/maximize;
         // close is the notable ease-in exception.
         {QLatin1StringView{"window"}, QLatin1StringView{"widget-out"}, 200.0},
-        {QLatin1StringView{"window.close"}, QLatin1StringView{"cubic-in"}, 150.0},
+        {QLatin1StringView{"window.appearance.close"}, QLatin1StringView{"cubic-in"}, 150.0},
 
         // ── Editor ────────────────────────────────────────────────
         // Layout-editor fill-preview / snap-resize animations on the

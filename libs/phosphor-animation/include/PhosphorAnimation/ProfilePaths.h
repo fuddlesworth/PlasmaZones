@@ -33,13 +33,19 @@ PHOSPHORANIMATION_EXPORT extern const QString Global;
 // interaction (the WINDOW animates when it snaps into/out of a zone
 // or when a layout switch repositions it).
 PHOSPHORANIMATION_EXPORT extern const QString Window;
+// window.appearance.* — a window surface materialising / dissolving (the
+// appearance shader contract). WindowAppearance is the cascade parent.
+PHOSPHORANIMATION_EXPORT extern const QString WindowAppearance;
 PHOSPHORANIMATION_EXPORT extern const QString WindowOpen;
 PHOSPHORANIMATION_EXPORT extern const QString WindowClose;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMinimize;
+PHOSPHORANIMATION_EXPORT extern const QString WindowFocus;
+// window.movement.* — a window changing geometry, old-rect → new-rect (the
+// geometry-morph shader contract). WindowMovement is the cascade parent.
+PHOSPHORANIMATION_EXPORT extern const QString WindowMovement;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMaximize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMove;
 PHOSPHORANIMATION_EXPORT extern const QString WindowResize;
-PHOSPHORANIMATION_EXPORT extern const QString WindowFocus;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapOut;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapResize;
@@ -174,7 +180,8 @@ PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 /// Full list of built-in paths in taxonomy order.
 PHOSPHORANIMATION_EXPORT QStringList allBuiltInPaths();
 
-/// Walk @p path up one level ("window.open" -> "window" -> "global" -> "").
+/// Walk @p path up one level
+/// ("window.appearance.open" -> "window.appearance" -> "window" -> "global" -> "").
 PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
 
 /// Built-in default shader effect id for an event @p path, or empty for none.

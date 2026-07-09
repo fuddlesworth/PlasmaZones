@@ -115,7 +115,7 @@ public:
     /// { "section": "window", "label": "Window",
     ///   "paths": [ { "path": "window", "label": "Window (inherited)",
     ///                "parent": "global", "isCategory": true },
-    ///              { "path": "window.open", "label": "Open",
+    ///              { "path": "window.appearance.open", "label": "Open",
     ///                "parent": "window", "isCategory": false }, ... ] }
     /// ```
     /// All built-in paths from `ProfilePaths::allBuiltInPaths()` are included.

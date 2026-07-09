@@ -158,28 +158,35 @@ private Q_SLOTS:
         QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window")).value(QStringLiteral("effectId")).toString(),
                  QStringLiteral("matrix"));
         // Child inherits matrix.
-        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.appearance.open"))
+                     .value(QStringLiteral("effectId"))
+                     .toString(),
                  QStringLiteral("matrix"));
         // Child has NO direct override yet.
-        QVERIFY(c.rawShaderProfile(QStringLiteral("window.open")).isEmpty());
+        QVERIFY(c.rawShaderProfile(QStringLiteral("window.appearance.open")).isEmpty());
 
         // Child overrides to a DIFFERENT shader.
-        QVERIFY(c.setShaderOverride(QStringLiteral("window.open"), QStringLiteral("dissolve"), {}));
+        QVERIFY(c.setShaderOverride(QStringLiteral("window.appearance.open"), QStringLiteral("dissolve"), {}));
 
         // Child must resolve to dissolve (direct override wins over
         // parent's matrix). Parent's window resolution is unchanged.
-        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.appearance.open"))
+                     .value(QStringLiteral("effectId"))
+                     .toString(),
                  QStringLiteral("dissolve"));
         QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window")).value(QStringLiteral("effectId")).toString(),
                  QStringLiteral("matrix"));
         // Direct override is now visible at the child path.
-        QCOMPARE(c.rawShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
-                 QStringLiteral("dissolve"));
+        QCOMPARE(
+            c.rawShaderProfile(QStringLiteral("window.appearance.open")).value(QStringLiteral("effectId")).toString(),
+            QStringLiteral("dissolve"));
 
         // Switch the child to a third shader — must take effect with no
         // residual influence from the prior child override.
-        QVERIFY(c.setShaderOverride(QStringLiteral("window.open"), QStringLiteral("glitch"), {}));
-        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.open")).value(QStringLiteral("effectId")).toString(),
+        QVERIFY(c.setShaderOverride(QStringLiteral("window.appearance.open"), QStringLiteral("glitch"), {}));
+        QCOMPARE(c.resolvedShaderProfile(QStringLiteral("window.appearance.open"))
+                     .value(QStringLiteral("effectId"))
+                     .toString(),
                  QStringLiteral("glitch"));
     }
 

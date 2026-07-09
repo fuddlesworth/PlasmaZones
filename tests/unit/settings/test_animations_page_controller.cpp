@@ -473,13 +473,13 @@ private Q_SLOTS:
         // windowFinishUserMovedResized, maximized, minimized,
         // focusChanged) and runs the resolved shader on the
         // OffscreenEffect's redirected texture quad.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.open")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.close")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.minimize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.maximize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.move")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.resize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.focus")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.open")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.close")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.minimize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.maximize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.move")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.focus")));
 
         // Ancestors of consumed leaves — supported because the
         // daemon's resolver walks them on the way to the leaf, so a

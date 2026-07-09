@@ -67,7 +67,7 @@ Rule animationRule(const QString& windowClass, const QString& name)
     rule.match = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, windowClass);
     RuleAction shader;
     shader.type = QString(ActionType::OverrideAnimationShader);
-    shader.params.insert(ActionParam::Event, QStringLiteral("window.open"));
+    shader.params.insert(ActionParam::Event, QStringLiteral("window.appearance.open"));
     shader.params.insert(ActionParam::EffectId, QStringLiteral("dissolve"));
     rule.actions = {shader};
     return rule;

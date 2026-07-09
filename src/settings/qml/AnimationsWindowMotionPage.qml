@@ -3,52 +3,52 @@
 import QtQuick
 
 // Window MOVEMENT events (a window changing geometry, cross-faded from its old
-// rect to its new one: move, resize, maximize, snap in/out, layout switch).
-// Window APPEARANCE events (open/close/...) live on the Transitions → Windows
-// page. Each row's shader picker is filtered to the geometry-morph set.
+// rect to its new one: move, resize, maximize, snap in/out, layout switch). The
+// window APPEARANCE events (open/close/...) live on the Transitions → Windows
+// page under their own window.appearance parent.
 //
-// "All Windows" here is a scoped group applicator over the movement leaves (its
-// own "All", independent of the appearance page's). Representative path is
-// window.move. `window.snapResize` is omitted (no kwin-effect callsite routes
-// it, so a row would be runtime-dead).
+// "All Windows" is the real window.movement cascade parent: its shader + timing
+// apply to the movement leaves by inheritance, an individual override shadows
+// it, and clearing a child re-inherits. Independent of the appearance page's
+// "All" (a sibling under `window`, not an ancestor). `window.movement.snapResize`
+// is omitted (no kwin-effect callsite routes it, so a row would be runtime-dead).
 //
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("Window movement animation events")
     eventModel: [
         {
-            "eventPath": "window.move",
+            "eventPath": "window.movement",
             "eventLabel": i18n("All Windows"),
-            "isParentNode": true,
-            "groupPaths": ["window.move", "window.resize", "window.maximize", "window.snapIn", "window.snapOut", "window.layoutSwitch"]
+            "isParentNode": true
         },
         {
-            "eventPath": "window.move",
+            "eventPath": "window.movement.move",
             "eventLabel": i18n("Moved"),
             "isParentNode": false
         },
         {
-            "eventPath": "window.resize",
+            "eventPath": "window.movement.resize",
             "eventLabel": i18n("Resized"),
             "isParentNode": false
         },
         {
-            "eventPath": "window.maximize",
+            "eventPath": "window.movement.maximize",
             "eventLabel": i18n("Maximized"),
             "isParentNode": false
         },
         {
-            "eventPath": "window.snapIn",
+            "eventPath": "window.movement.snapIn",
             "eventLabel": i18n("Snapped Into Zone"),
             "isParentNode": false
         },
         {
-            "eventPath": "window.snapOut",
+            "eventPath": "window.movement.snapOut",
             "eventLabel": i18n("Snapped Out of Zone"),
             "isParentNode": false
         },
         {
-            "eventPath": "window.layoutSwitch",
+            "eventPath": "window.movement.layoutSwitch",
             "eventLabel": i18n("Layout Switch"),
             "isParentNode": false
         }

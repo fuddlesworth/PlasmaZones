@@ -28,7 +28,10 @@ private Q_SLOTS:
 
     void testParentPath()
     {
-        QCOMPARE(PP::parentPath(PP::WindowOpen), PP::Window);
+        QCOMPARE(PP::parentPath(PP::WindowOpen), PP::WindowAppearance);
+        QCOMPARE(PP::parentPath(PP::WindowAppearance), PP::Window);
+        QCOMPARE(PP::parentPath(PP::WindowMove), PP::WindowMovement);
+        QCOMPARE(PP::parentPath(PP::WindowMovement), PP::Window);
         QCOMPARE(PP::parentPath(PP::Window), PP::Global);
         QCOMPARE(PP::parentPath(PP::Global), QString());
         QCOMPARE(PP::parentPath(QString()), QString());

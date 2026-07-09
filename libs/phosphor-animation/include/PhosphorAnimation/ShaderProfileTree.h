@@ -23,11 +23,12 @@ namespace PhosphorAnimationShaders {
  *
  * ## Walk-up inheritance
  *
- * For `"window.open"`, resolve() walks:
- *   1. `"window.open"`  (leaf override)
- *   2. `"window"`       (category)
- *   3. `"global"`       (baseline)
- *   4. library default  (empty ShaderProfile — no effect)
+ * For `"window.appearance.open"`, resolve() walks:
+ *   1. `"window.appearance.open"`  (leaf override)
+ *   2. `"window.appearance"`       (contract group — the "All Windows" node)
+ *   3. `"window"`                  (category)
+ *   4. `"global"`                  (baseline)
+ *   5. library default             (empty ShaderProfile — no effect)
  *
  * At each step, engaged optionals replace the accumulator. Unset fields
  * pass through.
