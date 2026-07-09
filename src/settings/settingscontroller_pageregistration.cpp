@@ -247,14 +247,15 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("animations-library"), QStringLiteral("animations"), PhosphorI18n::tr("Library"),
                QString(), QStringLiteral("folder-open"), /*collapsible=*/true);
 
-    regVirtual(QStringLiteral("animations-appearance"), QStringLiteral("animations-transitions"),
-               PhosphorI18n::tr("Appearance"), QStringLiteral("AnimationsAppearancePage.qml"),
-               QStringLiteral("window-new"));
-    regVirtual(QStringLiteral("animations-movement"), QStringLiteral("animations-transitions"),
-               PhosphorI18n::tr("Movement"), QStringLiteral("AnimationsMovementPage.qml"),
-               QStringLiteral("transform-move"));
+    regVirtual(QStringLiteral("animations-windows"), QStringLiteral("animations-transitions"),
+               PhosphorI18n::tr("Windows"), QStringLiteral("AnimationsWindowsPage.qml"), QStringLiteral("window-new"));
+    regVirtual(QStringLiteral("animations-osds"), QStringLiteral("animations-transitions"), PhosphorI18n::tr("OSDs"),
+               QStringLiteral("AnimationsOsdsPage.qml"), QStringLiteral("dialog-information"));
+    regVirtual(QStringLiteral("animations-overlays"), QStringLiteral("animations-transitions"),
+               PhosphorI18n::tr("Overlays"), QStringLiteral("AnimationsOverlaysPage.qml"),
+               QStringLiteral("view-presentation"));
     regVirtual(QStringLiteral("animations-desktops"), QStringLiteral("animations-transitions"),
-               PhosphorI18n::tr("Virtual Desktops"), QStringLiteral("AnimationsDesktopsPage.qml"),
+               PhosphorI18n::tr("Desktop"), QStringLiteral("AnimationsDesktopsPage.qml"),
                QStringLiteral("virtual-desktops"));
 
     regVirtual(QStringLiteral("animations-side-panels"), QStringLiteral("animations-motion"),
@@ -429,7 +430,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         // Tiling's first child is the Window category → its first leaf is Behavior.
         {QStringLiteral("tiling"), QStringLiteral("tiling-behavior")},
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
-        {QStringLiteral("animations-transitions"), QStringLiteral("animations-appearance")},
+        {QStringLiteral("animations-transitions"), QStringLiteral("animations-windows")},
         {QStringLiteral("animations-motion"), QStringLiteral("animations-side-panels")},
         {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
         {QStringLiteral("decorations"), QStringLiteral("window-appearance")},
@@ -479,9 +480,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // mapping would otherwise re-scan every page on every dirty-check.
     // (The historical "_childItems" reference in Main.qml is obsolete —
     // the chrome now consumes registry topology directly via Sidebar.qml.)
-    static const QSet<QString> kAnimationsTransitionsChildren{QStringLiteral("animations-appearance"),
-                                                              QStringLiteral("animations-movement"),
-                                                              QStringLiteral("animations-desktops")};
+    static const QSet<QString> kAnimationsTransitionsChildren{
+        QStringLiteral("animations-windows"), QStringLiteral("animations-osds"), QStringLiteral("animations-overlays"),
+        QStringLiteral("animations-desktops")};
     static const QSet<QString> kAnimationsMotionChildren{QStringLiteral("animations-side-panels"),
                                                          QStringLiteral("animations-widgets"),
                                                          QStringLiteral("animations-editor")};
@@ -787,8 +788,9 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("about"),
         QStringLiteral("virtualscreens"),
         QStringLiteral("animations-general"),
-        QStringLiteral("animations-appearance"),
-        QStringLiteral("animations-movement"),
+        QStringLiteral("animations-windows"),
+        QStringLiteral("animations-osds"),
+        QStringLiteral("animations-overlays"),
         QStringLiteral("animations-desktops"),
         QStringLiteral("animations-editor"),
         QStringLiteral("animations-side-panels"),
