@@ -25,12 +25,15 @@
 uniform sampler2D uFromDesktop;
 uniform sampler2D uToDesktop;
 
+// The captured desktop FBOs are KWin Y-up (origin bottom-left), while the
+// full-screen quad hands us a top-down uv, so flip Y on the sample — same
+// convention as surfaceColor / oldColor in the per-window path.
 vec4 getFromColor(vec2 uv) {
-    return texture(uFromDesktop, uv);
+    return texture(uFromDesktop, vec2(uv.x, 1.0 - uv.y));
 }
 
 vec4 getToColor(vec2 uv) {
-    return texture(uToDesktop, uv);
+    return texture(uToDesktop, vec2(uv.x, 1.0 - uv.y));
 }
 #endif // PLASMAZONES_KWIN
 
