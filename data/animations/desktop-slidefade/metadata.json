@@ -1,7 +1,7 @@
 {
     "id": "desktop-slidefade",
     "name": "Desktop Slide & Fade",
-    "description": "Slides the desktops a short way while crossfading between them, the way Hyprland's slidefade switches workspaces.",
+    "description": "Slides the desktops a short way while cross-fading between them, the way Hyprland's slidefade switches workspaces.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Slide",

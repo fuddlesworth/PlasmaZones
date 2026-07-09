@@ -17,11 +17,19 @@
 // customColors slot that isn't bound, a type mismatch) shipped undetected. This
 // test compiles that branch through the driver, closing the gap.
 //
-// It assembles the variant exactly as the runtime does: entry scaffold → include
-// expansion → param preamble → the KWin `#extension`/`#define` block that
-// ShaderInternal::injectKwinDefineAfterVersion splices in. It compiles the
-// fragment stage only (no link) — enough to surface every compile-time error in
-// the branch without needing the matching vertex attributes.
+// It assembles the variant the way the runtime does: entry scaffold → include
+// expansion → param preamble → the KWin `#extension`/`#define` block. It
+// replicates that final block locally (see kwinDefineBlock) rather than linking
+// ShaderInternal::injectKwinDefineAfterVersion, which lives in a KWin-linked TU;
+// the two are equivalent for every bundled pack (all lead with a bare
+// `#version 450`, the only input where injectKwinDefineAfterVersion's BOM /
+// comment-scan branches would diverge from a plain post-#version splice).
+//
+// It compiles both stages the runtime's KWin path touches — the fragment stage
+// always, and, for packs that ship a custom `effect.vert`, the vertex stage too
+// (a vertex-driven pack like wobble reads its `p_<id>` params in the VERT, whose
+// PLASMAZONES_KWIN branch the daemon qsb bake never compiles either). No link —
+// enough to surface every compile-time error in each branch.
 //
 // Skips cleanly when no desktop OpenGL >= 4.5 offscreen context is available
 // (headless CI without a GL driver): a skip is not a pass, but it never blocks
@@ -62,14 +70,19 @@ class TestAnimationShaderKwinBake : public QObject
         AnimationShaderEffect eff = AnimationShaderEffect::fromJson(obj);
         eff.sourceDir = dir;
         eff.fragmentShaderPath = dir + QStringLiteral("/effect.frag");
+        const QString vertPath = dir + QStringLiteral("/effect.vert");
+        if (QFileInfo::exists(vertPath)) {
+            eff.vertexShaderPath = vertPath;
+        }
         return eff;
     }
 
-    // The exact header ShaderInternal::injectKwinDefineAfterVersion splices in
+    // Replicates the block ShaderInternal::injectKwinDefineAfterVersion splices in
     // after #version on the KWin path (kwin-effect/plasmazoneseffect/
-    // shader_transitions.cpp is the source of truth). The two ARB `: enable`
-    // directives are no-ops on the fragment stage but must match so this bake
-    // stays byte-faithful to the runtime assembly.
+    // shader_transitions.cpp is the source of truth). Equivalent to calling that
+    // helper for every bundled pack, which all lead with a bare `#version 450`;
+    // the ARB `: enable` directives select explicit-location layouts in the
+    // vertex stage and are no-ops in the fragment stage.
     static QString kwinDefineBlock()
     {
         return QStringLiteral(
@@ -187,17 +200,41 @@ private Q_SLOTS:
         src = PhosphorShaders::spliceAfterVersion(src, kwinDefineBlock());
 
         QString log;
-        const bool ok = compileFragment(src, &log);
-        QVERIFY2(ok, qPrintable(QStringLiteral("KWin-path bake failed: ") + dir + QStringLiteral("\n") + log));
+        const bool ok = compileStage(GL_FRAGMENT_SHADER, src, &log);
+        QVERIFY2(ok, qPrintable(QStringLiteral("KWin-path frag bake failed: ") + dir + QStringLiteral("\n") + log));
+
+        // Packs that ship a custom effect.vert have a PLASMAZONES_KWIN vertex
+        // branch the daemon qsb bake never compiles either — assemble and compile
+        // it the same way the runtime custom-vertex path does (expand → param
+        // preamble → KWin define block), so a vertex-side KWin GLSL error can't
+        // ship undetected.
+        if (!eff.vertexShaderPath.isEmpty()) {
+            QFile vert(eff.vertexShaderPath);
+            QVERIFY2(vert.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(eff.vertexShaderPath));
+            const QString rawVert = QString::fromUtf8(vert.readAll());
+            QString vertErr;
+            QString vsrc = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
+                rawVert, QFileInfo(eff.vertexShaderPath).absolutePath(), includePaths, &vertErr);
+            QVERIFY2(
+                !vsrc.isEmpty(),
+                qPrintable(QStringLiteral("vertex include expand failed: ") + dir + QStringLiteral(" — ") + vertErr));
+            vsrc = PhosphorShaders::spliceAfterVersion(vsrc, AnimationShaderRegistry::paramPreamble(eff));
+            vsrc = PhosphorShaders::spliceAfterVersion(vsrc, kwinDefineBlock());
+            QString vlog;
+            const bool vok = compileStage(GL_VERTEX_SHADER, vsrc, &vlog);
+            QVERIFY2(vok,
+                     qPrintable(QStringLiteral("KWin-path vert bake failed: ") + dir + QStringLiteral("\n") + vlog));
+        }
     }
 
 private:
-    // Compile @p source as a fragment shader in the current context. Returns the
-    // GL_COMPILE_STATUS; on failure @p outLog carries the driver info log.
-    bool compileFragment(const QString& source, QString* outLog)
+    // Compile @p source as a @p stageType (GL_FRAGMENT_SHADER / GL_VERTEX_SHADER)
+    // shader in the current context. Returns the GL_COMPILE_STATUS; on failure
+    // @p outLog carries the driver info log.
+    bool compileStage(GLenum stageType, const QString& source, QString* outLog)
     {
         QOpenGLFunctions* f = m_ctx->functions();
-        const GLuint sh = f->glCreateShader(GL_FRAGMENT_SHADER);
+        const GLuint sh = f->glCreateShader(stageType);
         const QByteArray bytes = source.toUtf8();
         const char* srcPtr = bytes.constData();
         const GLint srcLen = bytes.size();

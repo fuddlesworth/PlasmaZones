@@ -17,7 +17,12 @@ vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
     float n = pz_hash(floor(uv * max(p_scale, 1.0)));
     float soft = max(p_softness, 1.0e-3);
-    float a = smoothstep(n - soft, n + soft, t);
+    // Pad progress by the fade width so every speckle is fully outgoing at t=0
+    // and fully incoming at t=1 — otherwise speckles whose threshold n lands
+    // within `soft` of the ends show a partial blend and the switch pops. Same
+    // padding the wipe and aretha packs use.
+    float p = t * (1.0 + 2.0 * soft) - soft;
+    float a = smoothstep(n - soft, n + soft, p);
     return mix(getFromColor(uv), getToColor(uv), a);
 #else
     return vec4(0.0);

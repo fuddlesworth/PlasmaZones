@@ -49,7 +49,7 @@ AnimationEventCardList {
         },
         {
             "eventPath": "window.movement.layoutSwitch",
-            "eventLabel": i18n("Layout Switch"),
+            "eventLabel": i18n("Layout Switched"),
             "isParentNode": false
         }
     ]

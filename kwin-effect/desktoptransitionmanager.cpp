@@ -37,6 +37,24 @@
 namespace PlasmaZones {
 
 namespace {
+// Allocate an output-sized RGBA8 texture for @p screen (LINEAR filter,
+// CLAMP_TO_EDGE) — the shared preamble of both desktop captures. Returns null
+// when the output's device size is empty or GL allocation fails.
+std::unique_ptr<KWin::GLTexture> allocateOutputTexture(KWin::LogicalOutput* screen)
+{
+    const QSize textureSize = (screen->geometryF().size() * screen->scale()).toSize();
+    if (textureSize.isEmpty()) {
+        return nullptr;
+    }
+    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+    if (!tex) {
+        return nullptr;
+    }
+    tex->setFilter(GL_LINEAR);
+    tex->setWrapMode(GL_CLAMP_TO_EDGE);
+    return tex;
+}
+
 // A full-screen NDC quad with 0..1 texcoords. Local copy (unique name) so the
 // Unity build cannot ODR-collide with surfacelayers.cpp's drawFullscreenQuad —
 // this TU is also excluded from the Unity blob in CMakeLists as belt-and-braces.
@@ -89,7 +107,14 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     std::array<QVector4D, ASC::kMaxCustomColors> customColors{};
     const PhosphorAnimationShaders::AnimationShaderEffect eff =
         m_effect->m_shaderManager.shaderRegistry().effect(effectId);
-    if (eff.isValid()) {
+    if (!eff.isValid()) {
+        // The resolved shader id is not installed (e.g. the profile references an
+        // uninstalled pack). Do NOT claim the fullscreen effect or populate
+        // m_active — bail so KWin's native desktop switch plays instead of a
+        // blank transition that the first paintOutput would only then abandon.
+        return;
+    }
+    {
         const QVariantMap translated =
             PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, params);
         for (int slot = 0; slot < ASC::kMaxCustomParams; ++slot) {
@@ -132,6 +157,16 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         outputs = KWin::effects->screens();
     }
 
+    // insert_or_assign below destroys any prior OutputTransition still mapped to
+    // an output (a re-switch inside the transition window), freeing its captured
+    // GLTextures. begin() runs from the desktopChanged signal handler, off the
+    // paint thread, so make the compositor context current first — the same
+    // discipline the shader-registry reload path uses. Teardown (!effects) needs
+    // no make-current; the driver reclaims the textures regardless.
+    if (KWin::effects) {
+        KWin::effects->makeOpenGLContextCurrent();
+    }
+
     for (KWin::LogicalOutput* screen : outputs) {
         if (!screen) {
             continue;
@@ -169,22 +204,15 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
 {
     const qreal scale = screen->scale();
     const QRectF logicalGeometry = screen->geometryF();
-    const QSize textureSize = (logicalGeometry.size() * scale).toSize();
-    if (textureSize.isEmpty()) {
-        return nullptr;
-    }
 
     // Never leak the capture's GL state (blend/viewport/clear/active texture)
     // into the on-screen draw that follows in this same frame.
     const ShaderInternal::ScopedGlState glStateGuard;
 
-    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+    std::unique_ptr<KWin::GLTexture> tex = allocateOutputTexture(screen);
     if (!tex) {
         return nullptr;
     }
-    tex->setFilter(GL_LINEAR);
-    tex->setWrapMode(GL_CLAMP_TO_EDGE);
-
     KWin::GLFramebuffer fbo(tex.get());
     if (!fbo.valid()) {
         return nullptr;
@@ -239,20 +267,13 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int 
 {
     const qreal scale = screen->scale();
     const QRectF logicalGeometry = screen->geometryF();
-    const QSize textureSize = (logicalGeometry.size() * scale).toSize();
-    if (textureSize.isEmpty()) {
-        return nullptr;
-    }
 
     const ShaderInternal::ScopedGlState glStateGuard;
 
-    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+    std::unique_ptr<KWin::GLTexture> tex = allocateOutputTexture(screen);
     if (!tex) {
         return nullptr;
     }
-    tex->setFilter(GL_LINEAR);
-    tex->setWrapMode(GL_CLAMP_TO_EDGE);
-
     KWin::GLFramebuffer fbo(tex.get());
     if (!fbo.valid()) {
         return nullptr;
@@ -471,6 +492,12 @@ void DesktopTransitionManager::outputRemoved(KWin::LogicalOutput* screen)
     // drops the entry and releases the claim when the last transition goes.
     if (m_active.find(screen) == m_active.end()) {
         return; // no live transition for this output
+    }
+    // screenRemoved fires off the paint thread; endOutput() erases the entry and
+    // frees its captured GLTextures, which want a current GL context (endOutput's
+    // other caller, paintOutput, is already on the paint thread with one current).
+    if (KWin::effects) {
+        KWin::effects->makeOpenGLContextCurrent();
     }
     endOutput(screen);
 }

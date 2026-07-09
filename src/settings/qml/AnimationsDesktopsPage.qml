@@ -16,7 +16,7 @@ AnimationEventCardList {
     eventModel: [
         {
             "eventPath": "desktop.switch",
-            "eventLabel": i18n("Switch Desktop"),
+            "eventLabel": i18n("Desktop Switched"),
             "isParentNode": false
         }
     ]

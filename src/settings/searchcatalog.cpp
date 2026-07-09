@@ -535,7 +535,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.snapOut"),
                PhosphorI18n::tr("Snapped Out of Zone"));
     addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.layoutSwitch"),
-               PhosphorI18n::tr("Layout Switch"));
+               PhosphorI18n::tr("Layout Switched"));
     // OSDs page.
     addSetting(search, QStringLiteral("animations-osds"), QStringLiteral("osd.show"), PhosphorI18n::tr("Shown"));
     addSetting(search, QStringLiteral("animations-osds"), QStringLiteral("osd.hide"), PhosphorI18n::tr("Hidden"));
@@ -554,7 +554,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Snap Assist Hidden"));
     // Desktop page.
     addSetting(search, QStringLiteral("animations-desktops"), QStringLiteral("desktop.switch"),
-               PhosphorI18n::tr("Switch Desktop"));
+               PhosphorI18n::tr("Desktop Switched"));
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideIn"),
                PhosphorI18n::tr("Slide In"));
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideOut"),

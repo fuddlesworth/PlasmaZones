@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -327,31 +328,31 @@ private Q_SLOTS:
         morph.fragmentShaderPath = QStringLiteral("effect.frag");
         morph.appliesTo = QStringList{QStringLiteral("geometry")};
 
-        // Every geometry leg eventClassForPath classifies must be compatible
-        // with a geometry-only effect — pin the full disjunction so dropping
-        // any leg from the classifier is caught.
-        for (const char* geo :
-             {"window.movement.move", "window.movement.resize", "window.movement.snapIn", "window.movement.snapOut",
-              "window.movement.snapResize", "window.movement.layoutSwitch", "window.movement.maximize"}) {
-            QVERIFY2(shaderEffectAppliesToEventPath(morph, QString::fromLatin1(geo)), geo);
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        // Every geometry leg eventClassForPath classifies must be compatible with
+        // a geometry-only effect. Reference the taxonomy constants (not literals)
+        // so a leaf rename can't silently keep these passing, and pin the full
+        // disjunction so dropping any leg from the classifier is caught.
+        for (const QString& geo : {PP::WindowMove, PP::WindowResize, PP::WindowSnapIn, PP::WindowSnapOut,
+                                   PP::WindowSnapResize, PP::WindowLayoutSwitch, PP::WindowMaximize}) {
+            QVERIFY2(shaderEffectAppliesToEventPath(morph, geo), qPrintable(geo));
         }
         // Every appearance leg must be incompatible with a geometry-only effect.
-        for (const char* app : {"window.appearance.open", "window.appearance.close", "window.appearance.minimize",
-                                "window.appearance.focus", "osd.show", "osd.hide", "popup.layoutPicker.show",
-                                "popup.zoneSelector.hide"}) {
-            QVERIFY2(!shaderEffectAppliesToEventPath(morph, QString::fromLatin1(app)), app);
+        for (const QString& app : {PP::WindowOpen, PP::WindowClose, PP::WindowMinimize, PP::WindowFocus, PP::OsdShow,
+                                   PP::OsdHide, PP::PopupLayoutPickerShow, PP::PopupZoneSelectorHide}) {
+            QVERIFY2(!shaderEffectAppliesToEventPath(morph, app), qPrintable(app));
         }
         // Unclassified paths (mixed `window` root, non-window families) are
         // never provably incompatible — the predicate stays permissive.
-        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("window")));
-        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("editor.snapIn")));
-        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("panel.slideIn")));
+        QVERIFY(shaderEffectAppliesToEventPath(morph, PP::Window));
+        QVERIFY(shaderEffectAppliesToEventPath(morph, PP::EditorSnapIn));
+        QVERIFY(shaderEffectAppliesToEventPath(morph, PP::PanelSlideIn));
 
         AnimationShaderEffect fade; // universal (no appliesTo)
         fade.id = QStringLiteral("fade");
         fade.fragmentShaderPath = QStringLiteral("effect.frag");
-        QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.appearance.open")));
-        QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.movement.move")));
+        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowOpen));
+        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowMove));
 
         // Appearance-only effect: mirror image — incompatible on geometry legs,
         // compatible on appearance legs.
@@ -359,8 +360,8 @@ private Q_SLOTS:
         appearanceOnly.id = QStringLiteral("aretha-materialize");
         appearanceOnly.fragmentShaderPath = QStringLiteral("effect.frag");
         appearanceOnly.appliesTo = QStringList{QStringLiteral("appearance")};
-        QVERIFY(shaderEffectAppliesToEventPath(appearanceOnly, QStringLiteral("window.appearance.open")));
-        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, QStringLiteral("window.movement.move")));
+        QVERIFY(shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowOpen));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowMove));
     }
 };
 

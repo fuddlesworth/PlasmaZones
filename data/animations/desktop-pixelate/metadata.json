@@ -1,7 +1,7 @@
 {
     "id": "desktop-pixelate",
     "name": "Desktop Pixelate",
-    "description": "Crossfades between desktops through a mosaic of pixel blocks that grow then shrink.",
+    "description": "Cross-fades between desktops through a mosaic of pixel blocks that grow then shrink.",
     "author": "PlasmaZones (ported from GL-Transitions pixelize by gre, MIT)",
     "version": "1.0",
     "category": "Pixelate",

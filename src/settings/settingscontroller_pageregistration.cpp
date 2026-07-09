@@ -231,7 +231,7 @@ void SettingsController::buildApplicationController()
                PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("TilingQuickShortcutsPage.qml"),
                QStringLiteral("bookmark"));
 
-    // Animations children — Surfaces / Library categories drill in.
+    // Animations children — Transitions / Motion / Library categories drill in.
     regVirtual(QStringLiteral("animations-general"), QStringLiteral("animations"), PhosphorI18n::tr("General"),
                QStringLiteral("AnimationsGeneralPage.qml"), QStringLiteral("configure"), /*collapsible=*/false,
                /*divider=*/true);
