@@ -547,6 +547,45 @@ public:
         m_minimumWindowHeight = h;
     }
 
+    // Decoration window filtering — stub accessors backed by m_decoration*
+    // state, mirroring the animation-filter stubs below.
+    bool decorationExcludeTransientWindows() const override
+    {
+        return m_decorationExcludeTransientWindows;
+    }
+    void setDecorationExcludeTransientWindows(bool exclude) override
+    {
+        if (m_decorationExcludeTransientWindows == exclude) {
+            return;
+        }
+        m_decorationExcludeTransientWindows = exclude;
+        Q_EMIT decorationExcludeTransientWindowsChanged();
+    }
+    int decorationMinimumWindowWidth() const override
+    {
+        return m_decorationMinimumWindowWidth;
+    }
+    void setDecorationMinimumWindowWidth(int width) override
+    {
+        if (m_decorationMinimumWindowWidth == width) {
+            return;
+        }
+        m_decorationMinimumWindowWidth = width;
+        Q_EMIT decorationMinimumWindowWidthChanged();
+    }
+    int decorationMinimumWindowHeight() const override
+    {
+        return m_decorationMinimumWindowHeight;
+    }
+    void setDecorationMinimumWindowHeight(int height) override
+    {
+        if (m_decorationMinimumWindowHeight == height) {
+            return;
+        }
+        m_decorationMinimumWindowHeight = height;
+        Q_EMIT decorationMinimumWindowHeightChanged();
+    }
+
     // Animation window filtering — pure-stub no-op accessors backed by
     // m_animation* state so tests that exercise the filter cascade can
     // round-trip values through the stub without involving the real
@@ -1239,6 +1278,11 @@ private:
     bool m_animationExcludeNotificationsAndOsd = ConfigDefaults::animationExcludeNotificationsAndOsd();
     int m_animationMinimumWindowWidth = ConfigDefaults::animationMinimumWindowWidth();
     int m_animationMinimumWindowHeight = ConfigDefaults::animationMinimumWindowHeight();
+    // Decoration-filter defaults, routed through ConfigDefaults like the
+    // animation-filter defaults above.
+    bool m_decorationExcludeTransientWindows = ConfigDefaults::decorationExcludeTransientWindows();
+    int m_decorationMinimumWindowWidth = ConfigDefaults::decorationMinimumWindowWidth();
+    int m_decorationMinimumWindowHeight = ConfigDefaults::decorationMinimumWindowHeight();
     QVariantMap m_autotilePerAlgorithmSettings;
     QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();
     QString m_editorSplitHorizontalShortcut = ConfigDefaults::editorSplitHorizontalShortcut();

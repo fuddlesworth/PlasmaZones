@@ -791,6 +791,45 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("animationMinimumWindowHeight"), [this](const QVariant& v) {
         m_animationMinWindowHeight = qBound(0, v.toInt(), 2000);
     });
+
+    // Decoration window filtering — independent of the snapping/tiling and
+    // animation filters cached above. Used by `shouldDecorateWindow()` to gate
+    // the border / decoration pass. Re-fetched on every settingsChanged, and a
+    // value change schedules a full border sweep so a Decorations page edit
+    // adds/removes borders on open windows live (mirroring the appearance
+    // loaders below) — unlike the animation filter, decorations are persistent
+    // state and won't self-correct on the next window event.
+    // Default true (exclude transients). Guard on isValid() so a failed reply
+    // leaves the member at its `true` init rather than `toBool()`'s
+    // false-on-invalid — otherwise a missed fetch would start drawing borders
+    // onto dialogs/popups until the next successful settings load.
+    loadSettingAsync(QStringLiteral("decorationExcludeTransientWindows"), [this](const QVariant& v) {
+        if (!v.isValid()) {
+            return;
+        }
+        const bool b = v.toBool();
+        if (m_decorationExcludeTransientWindows != b) {
+            m_decorationExcludeTransientWindows = b;
+            scheduleBorderSweep();
+        }
+    });
+    // Clamp on the effect side as defence-in-depth, symmetric with the
+    // animation min-size fetches above — the daemon schema already bounds
+    // these to [0, 2000].
+    loadSettingAsync(QStringLiteral("decorationMinimumWindowWidth"), [this](const QVariant& v) {
+        const int i = qBound(0, v.toInt(), 2000);
+        if (m_decorationMinWindowWidth != i) {
+            m_decorationMinWindowWidth = i;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("decorationMinimumWindowHeight"), [this](const QVariant& v) {
+        const int i = qBound(0, v.toInt(), 2000);
+        if (m_decorationMinWindowHeight != i) {
+            m_decorationMinWindowHeight = i;
+            scheduleBorderSweep();
+        }
+    });
     // animationExcludedApplications / animationExcludedWindowClasses are
     // GONE — the v4 migration folded those lists into the unified
     // Rule store as `ExcludeAnimations`-action rules, and

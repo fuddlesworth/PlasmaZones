@@ -529,6 +529,15 @@ void SettingsAdaptor::initializeRegistry()
                           setAnimationExcludeNotificationsAndOsd)
     REGISTER_INT_SETTING("animationMinimumWindowWidth", animationMinimumWindowWidth, setAnimationMinimumWindowWidth)
     REGISTER_INT_SETTING("animationMinimumWindowHeight", animationMinimumWindowHeight, setAnimationMinimumWindowHeight)
+
+    // Decoration window filtering — same getSetting/setSetting wire, stored
+    // independently so the KWin effect's border pass can be tuned separately
+    // from snapping and animation filtering.
+    REGISTER_BOOL_SETTING("decorationExcludeTransientWindows", decorationExcludeTransientWindows,
+                          setDecorationExcludeTransientWindows)
+    REGISTER_INT_SETTING("decorationMinimumWindowWidth", decorationMinimumWindowWidth, setDecorationMinimumWindowWidth)
+    REGISTER_INT_SETTING("decorationMinimumWindowHeight", decorationMinimumWindowHeight,
+                         setDecorationMinimumWindowHeight)
     // animationExcludedApplications / animationExcludedWindowClasses
     // retired in v4 — folded into ExcludeAnimations Rules; the
     // effect derives its animation exclusion rule set from the unified

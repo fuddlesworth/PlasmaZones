@@ -394,6 +394,49 @@ SettingsFlickable {
         }
 
         // =================================================================
+        // Window Filtering Card — which windows get a border at all. Shared
+        // component (also on Snapping → General and Animations), bound here to
+        // the independent Decorations.WindowFiltering group. Unlike the snapping
+        // filter, the transient toggle is real: turning it off draws borders
+        // onto dialogs / popups. Defaults preserve prior behavior (transients
+        // skipped, no size threshold).
+        // =================================================================
+        WindowFilterCard {
+            Layout.fillWidth: true
+
+            excludeTransient: appSettings.decorationExcludeTransientWindows
+            transientDescription: i18n("Skip borders for dialogs, popups, and menus")
+            transientAccessibleName: i18n("Exclude transient windows from decorations")
+            onExcludeTransientToggled: value => {
+                appSettings.decorationExcludeTransientWindows = value;
+            }
+
+            // Spin-box bounds come from generalPage (the shared schema-bounds
+            // controller that also serves the animation filter card), not
+            // root.ctl — the same cross-controller sourcing AnimationsGeneralPage
+            // uses for its filter bounds.
+            minWidth: appSettings.decorationMinimumWindowWidth
+            minWidthFrom: settingsController.generalPage.decorationMinimumWindowWidthMin
+            minWidthTo: settingsController.generalPage.decorationMinimumWindowWidthMax
+            minWidthDescription: i18n("Windows narrower than this get no border")
+            minWidthDisabledDescription: i18n("Disabled (no width threshold)")
+            minWidthAccessibleName: i18n("Minimum window width for decorations")
+            onMinWidthModified: value => {
+                appSettings.decorationMinimumWindowWidth = value;
+            }
+
+            minHeight: appSettings.decorationMinimumWindowHeight
+            minHeightFrom: settingsController.generalPage.decorationMinimumWindowHeightMin
+            minHeightTo: settingsController.generalPage.decorationMinimumWindowHeightMax
+            minHeightDescription: i18n("Windows shorter than this get no border")
+            minHeightDisabledDescription: i18n("Disabled (no height threshold)")
+            minHeightAccessibleName: i18n("Minimum window height for decorations")
+            onMinHeightModified: value => {
+                appSettings.decorationMinimumWindowHeight = value;
+            }
+        }
+
+        // =================================================================
         // Gaps Card — the unified inner/outer gap model, config-backed. Smart
         // gaps is tiling-only and lives on the Tiling → Window page, so it is
         // hidden here.

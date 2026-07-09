@@ -323,6 +323,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
         ConfigDefaults::orderingGroup(), // "Ordering"
         ConfigDefaults::windowsAppearanceGroup(), // "Windows" — window border + title bar decoration
+        ConfigDefaults::decorationsWindowFilteringGroup(), // "Decorations.WindowFiltering" — border-pass window filter
         ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
         ConfigDefaults::surfaceGroup(), // "Surface" — per-surface decoration tree (DecorationProfileTree blob)
     };
@@ -2016,6 +2017,26 @@ P_STORE_SET_INT(setAnimationMinimumWindowWidth, animationsWindowFilteringGroup, 
 P_STORE_GET(int, animationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey, int)
 P_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey,
                 animationMinimumWindowHeightChanged)
+
+// ── Decoration Window Filtering (PhosphorConfig::Store-backed) ─────────────
+//
+// Three global decoration-filtering knobs in `Decorations.WindowFiltering`:
+// `decorationExcludeTransientWindows`, `decorationMinimumWindowWidth`,
+// `decorationMinimumWindowHeight`. Mirrors the Exclusions block, stored
+// independently so the KWin effect's border pass can be tuned separately
+// from snapping and animation filtering. Reuses the shared leaf keys; only
+// the group differs. Consumed effect-side via the generic settingsChanged
+// D-Bus broadcast (see kwin-effect loadCachedSettings).
+
+P_STORE_GET(bool, decorationExcludeTransientWindows, decorationsWindowFilteringGroup, transientWindowsKey, bool)
+P_STORE_SET_BOOL(setDecorationExcludeTransientWindows, decorationsWindowFilteringGroup, transientWindowsKey,
+                 decorationExcludeTransientWindowsChanged)
+P_STORE_GET(int, decorationMinimumWindowWidth, decorationsWindowFilteringGroup, minimumWindowWidthKey, int)
+P_STORE_SET_INT(setDecorationMinimumWindowWidth, decorationsWindowFilteringGroup, minimumWindowWidthKey,
+                decorationMinimumWindowWidthChanged)
+P_STORE_GET(int, decorationMinimumWindowHeight, decorationsWindowFilteringGroup, minimumWindowHeightKey, int)
+P_STORE_SET_INT(setDecorationMinimumWindowHeight, decorationsWindowFilteringGroup, minimumWindowHeightKey,
+                decorationMinimumWindowHeightChanged)
 
 // animationExcludedApplications / animationExcludedWindowClasses (+ their
 // add*/remove* convenience methods) retired in v4 — the v4 migration drains

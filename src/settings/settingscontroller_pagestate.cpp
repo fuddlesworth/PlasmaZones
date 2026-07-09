@@ -92,6 +92,10 @@ bool isDecorationPage(const QString& page)
 // is entirely resetKeys/discardKeys, and the decorationProfileTreeChanged
 // re-emit drives DecorationPageController::profilesChanged so open cards
 // refresh.
+//
+// The Decorations.WindowFiltering knobs are NOT here — they live on the
+// Decorations → General (window-appearance) page and ride that page's
+// pageOwnedConfigKeys manifest entry, not this shared surface-tree domain.
 const Settings::ConfigKeyList& decorationConfigKeys()
 {
     using CD = ConfigDefaults;

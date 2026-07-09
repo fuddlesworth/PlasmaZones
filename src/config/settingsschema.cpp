@@ -525,15 +525,16 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
     };
 }
 
-// ─── Exclusions + Animation Window Filtering ────────────────────────────────
-// Two distinct schema groups declared together:
+// ─── Exclusions + Animation + Decoration Window Filtering ───────────────────
+// Three distinct schema groups declared together:
 //   1. `Exclusions` — snapping/tiling minimum-size + transient-window
 //      globals.
 //   2. `Animations.WindowFiltering` — animation-side equivalents plus a
 //      NotificationsAndOsd knob.
-// Both retired their per-app / per-class string lists in v4 (folded into
-// Application-subject Rules); only the global behavioural knobs
-// survive. Ints are clamped via schema validators.
+//   3. `Decorations.WindowFiltering` — border/decoration-side equivalents.
+// The first two retired their per-app / per-class string lists in v4 (folded
+// into Application-subject Rules); only the global behavioural knobs survive.
+// Ints are clamped via schema validators.
 
 void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 {
@@ -578,6 +579,24 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::animationMinimumWindowHeightMin(), CD::animationMinimumWindowHeightMax())},
+    };
+
+    // Decoration window filtering — same shape as the Exclusions group,
+    // stored independently so the KWin effect's border pass can be tuned
+    // separately from snapping and animation filtering. Reuses the shared
+    // leaf keys; only the group differs.
+    schema.groups[CD::decorationsWindowFilteringGroup()] = {
+        {CD::transientWindowsKey(), CD::decorationExcludeTransientWindows(), QMetaType::Bool},
+        {CD::minimumWindowWidthKey(),
+         CD::decorationMinimumWindowWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::decorationMinimumWindowWidthMin(), CD::decorationMinimumWindowWidthMax())},
+        {CD::minimumWindowHeightKey(),
+         CD::decorationMinimumWindowHeight(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::decorationMinimumWindowHeightMin(), CD::decorationMinimumWindowHeightMax())},
     };
 }
 

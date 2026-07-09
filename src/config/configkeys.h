@@ -109,6 +109,13 @@ public:
     // Animations sub-groups
     P_CONFIG_GROUP(animationsWindowFilteringGroup, "Animations.WindowFiltering")
 
+    // Decorations sub-groups — window filtering for the KWin effect's border /
+    // decoration pass. Independent of the Animations and Exclusions groups so a
+    // user can tune which windows get a border separately from which windows
+    // snap or animate. Reuses the shared leaf keys (transientWindowsKey,
+    // minimumWindowWidthKey, minimumWindowHeightKey); only the group differs.
+    P_CONFIG_GROUP(decorationsWindowFilteringGroup, "Decorations.WindowFiltering")
+
     // Tiling sub-groups
     P_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
     P_CONFIG_GROUP(tilingBehaviorGroup, "Tiling.Behavior")

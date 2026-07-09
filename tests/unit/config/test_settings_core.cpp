@@ -142,6 +142,35 @@ private Q_SLOTS:
     }
 
     /**
+     * The decoration window-filtering knobs (Decorations.WindowFiltering group)
+     * must return to their defaults on reset(). Regression: the group has to be
+     * listed in managedGroupNames() or reset() leaves the user's values on disk,
+     * and the schema-claimed group is never otherwise purged, so a factory reset
+     * would silently fail to restore the three Window Appearance filter knobs.
+     */
+    void testDecorationWindowFiltering_defaultsAndReset()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.decorationExcludeTransientWindows(), ConfigDefaults::decorationExcludeTransientWindows());
+        QCOMPARE(settings.decorationMinimumWindowWidth(), ConfigDefaults::decorationMinimumWindowWidth());
+        QCOMPARE(settings.decorationMinimumWindowHeight(), ConfigDefaults::decorationMinimumWindowHeight());
+
+        settings.setDecorationExcludeTransientWindows(false);
+        settings.setDecorationMinimumWindowWidth(300);
+        settings.setDecorationMinimumWindowHeight(200);
+        QCOMPARE(settings.decorationExcludeTransientWindows(), false);
+        QCOMPARE(settings.decorationMinimumWindowWidth(), 300);
+        QCOMPARE(settings.decorationMinimumWindowHeight(), 200);
+
+        settings.reset();
+        QCOMPARE(settings.decorationExcludeTransientWindows(), ConfigDefaults::decorationExcludeTransientWindows());
+        QCOMPARE(settings.decorationMinimumWindowWidth(), ConfigDefaults::decorationMinimumWindowWidth());
+        QCOMPARE(settings.decorationMinimumWindowHeight(), ConfigDefaults::decorationMinimumWindowHeight());
+    }
+
+    /**
      * After save() then load(), every property must equal what was set.
      * This validates the full round-trip for a representative subset of settings
      * across all config groups.
