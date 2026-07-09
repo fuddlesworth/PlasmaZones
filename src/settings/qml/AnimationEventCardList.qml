@@ -32,11 +32,14 @@ import "SearchAnchorHelpers.js" as SearchAnchors
 SettingsFlickable {
     id: page
 
-    /// Ordered list of rows, in order. Two row shapes:
-    ///   event  — `{ eventPath: string, eventLabel: string, isParentNode: bool }`
-    ///            (one AnimationEventCard; isParentNode = an "All X" cascade row)
+    /// Ordered list of rows, in order. Row shapes:
+    ///   event   — `{ eventPath, eventLabel, isParentNode: bool }`
+    ///             (one AnimationEventCard; isParentNode = an "All X" cascade row)
+    ///   group   — `{ eventPath, eventLabel, isParentNode: true, groupPaths: [...] }`
+    ///             (a scoped "All" that bulk-applies to the leaf set groupPaths;
+    ///             eventPath is a representative leaf for the picker filter)
     ///   section — `{ isSection: true, eventLabel: string }`
-    ///            (a non-interactive sub-group header, e.g. "Appearance")
+    ///             (a non-interactive sub-group header, e.g. "Appearance")
     property var eventModel: []
 
     // Build-ahead margin above/below the visible viewport so a card is
@@ -193,6 +196,8 @@ SettingsFlickable {
                         eventPath: cardLoader.modelData.eventPath
                         eventLabel: cardLoader.modelData.eventLabel
                         isParentNode: cardLoader.modelData.isParentNode === true
+                        // Scoped "All" cards carry a leaf set; writes fan out to it.
+                        groupPaths: cardLoader.modelData.groupPaths || []
                     }
                 }
 

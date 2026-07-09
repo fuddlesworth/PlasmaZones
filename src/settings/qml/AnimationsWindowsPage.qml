@@ -2,29 +2,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 
-// Window animation events. Windows are the one surface that spans two shader
-// contracts, so the page is split into "Appearance" (single-surface in/out:
-// open/close/minimize/focus) and "Movement" (geometry morph: move/resize/snap/
-// maximize/layout-switch) sub-sections. Each row's shader picker is filtered to
-// the compatible set for its contract, so the two never mix in a menu.
+// Window APPEARANCE events (a window materialising or dissolving: open, close,
+// minimize, focus). The window MOVEMENT events (move/resize/snap/...) live on
+// the Motion → Windows page. Each row's shader picker is filtered to the
+// appearance-compatible set.
 //
-// "All Windows" is the `window` cascade parent: its shader (and reset) applies
-// to every window event via ShaderProfileTree walk-up. `window.snapResize` is
-// omitted (no kwin-effect callsite routes it, so a row would be runtime-dead).
+// "All Windows" here is a scoped group applicator over the four appearance
+// leaves (not the `window` path cascade, which would also hit the movement
+// events on the other page). Its representative path is window.open.
 //
-// Card list is viewport-virtualized by AnimationEventCardList; section rows are
-// lightweight non-interactive headers.
+// Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
-    Accessible.name: i18n("Window animation events")
+    Accessible.name: i18n("Window appearance animation events")
     eventModel: [
         {
-            "eventPath": "window",
+            "eventPath": "window.open",
             "eventLabel": i18n("All Windows"),
-            "isParentNode": true
-        },
-        {
-            "isSection": true,
-            "eventLabel": i18n("Appearance")
+            "isParentNode": true,
+            "groupPaths": ["window.open", "window.close", "window.minimize", "window.focus"]
         },
         {
             "eventPath": "window.open",
@@ -44,40 +39,6 @@ AnimationEventCardList {
         {
             "eventPath": "window.focus",
             "eventLabel": i18n("Focused"),
-            "isParentNode": false
-        },
-        {
-            "isSection": true,
-            "eventLabel": i18n("Movement")
-        },
-        {
-            "eventPath": "window.move",
-            "eventLabel": i18n("Moved"),
-            "isParentNode": false
-        },
-        {
-            "eventPath": "window.resize",
-            "eventLabel": i18n("Resized"),
-            "isParentNode": false
-        },
-        {
-            "eventPath": "window.maximize",
-            "eventLabel": i18n("Maximized"),
-            "isParentNode": false
-        },
-        {
-            "eventPath": "window.snapIn",
-            "eventLabel": i18n("Snapped Into Zone"),
-            "isParentNode": false
-        },
-        {
-            "eventPath": "window.snapOut",
-            "eventLabel": i18n("Snapped Out of Zone"),
-            "isParentNode": false
-        },
-        {
-            "eventPath": "window.layoutSwitch",
-            "eventLabel": i18n("Layout Switch"),
             "isParentNode": false
         }
     ]

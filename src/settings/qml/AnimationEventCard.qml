@@ -43,6 +43,14 @@ Item {
     property bool isParentNode: false
     property bool alwaysEnabled: false
     property bool collapsible: false
+    // Scoped "All" mode. When non-empty, this card is a bulk applicator over a
+    // SET of leaf paths (e.g. every window MOVEMENT event) rather than a single
+    // event or a path-cascade parent — used where no single ancestor path spans
+    // exactly the group (window.* spans both appearance and movement). Reads use
+    // `eventPath` (a representative leaf: drives the picker's compatible filter
+    // and the "Current:" preview); every write fans out to all groupPaths.
+    property var groupPaths: []
+    readonly property bool _isGroup: Array.isArray(root.groupPaths) && root.groupPaths.length > 0
     // ── Internal state — one source of truth per UX axis ────────────
     // The on-disk schema is `Profile::toJson()` — a single `curve`
     // string that's either an easing wire format ("x1,y1,x2,y2",
@@ -162,7 +170,7 @@ Item {
         var next = Object.assign({}, root.currentShaderParams || {});
         next[paramId] = value;
         root.currentShaderParams = next;
-        settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, next);
+        root._applyShaderOverride(effectId, next);
     }
 
     /// Batch write — randomize rolls N values that should land as one
@@ -173,7 +181,45 @@ Item {
             return;
 
         root.currentShaderParams = allParams;
-        settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, allParams);
+        root._applyShaderOverride(effectId, allParams);
+    }
+
+    // ── Fan-out write helpers (group-aware) ─────────────────────────
+    // In scoped "All" mode a single user action targets every leaf in
+    // groupPaths; otherwise the single eventPath. All write sites below
+    // route through these so group vs single is decided in one place.
+    function _applyShaderOverride(effectId, params) {
+        if (root._isGroup) {
+            for (var i = 0; i < root.groupPaths.length; ++i)
+                settingsController.animationsPage.setShaderOverride(root.groupPaths[i], effectId, params);
+        } else {
+            settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, params);
+        }
+    }
+    function _applyTimingOverride(profile) {
+        if (root._isGroup) {
+            for (var i = 0; i < root.groupPaths.length; ++i)
+                settingsController.animationsPage.setOverride(root.groupPaths[i], profile);
+        } else {
+            settingsController.animationsPage.setOverride(root.eventPath, profile);
+        }
+    }
+    // Disable every leg (inheritance-blocking empty-shader sentinel + timing
+    // clear), the group form of the single-event OFF toggle.
+    function _applyDisable() {
+        var targets = root._isGroup ? root.groupPaths : [root.eventPath];
+        for (var i = 0; i < targets.length; ++i) {
+            if (root._shaderLegSupported)
+                settingsController.animationsPage.setShaderOverride(targets[i], "", ({}));
+            settingsController.animationsPage.clearOverride(targets[i]);
+        }
+    }
+    // Reset every leaf back to its library default (remove both overrides).
+    function _resetGroup() {
+        for (var i = 0; i < root.groupPaths.length; ++i) {
+            settingsController.animationsPage.clearShaderOverride(root.groupPaths[i]);
+            settingsController.animationsPage.clearOverride(root.groupPaths[i]);
+        }
     }
 
     function refreshShaderFromTree() {
@@ -257,7 +303,7 @@ Item {
             "curve": root.currentCurveString,
             "duration": root.currentDuration
         };
-        settingsController.animationsPage.setOverride(root.eventPath, profile);
+        root._applyTimingOverride(profile);
     }
 
     // Current emitters that pass empty-path: `shaderProfileChanged`
@@ -270,7 +316,18 @@ Item {
         if (path === "")
             return true;
 
-        return path === root.eventPath || root.eventPath.startsWith(path + ".");
+        if (path === root.eventPath || root.eventPath.startsWith(path + "."))
+            return true;
+
+        // A group "All" card mirrors any of its leaves, so a change to any of
+        // them should refresh its representative-leaf preview.
+        if (root._isGroup) {
+            for (var i = 0; i < root.groupPaths.length; ++i) {
+                if (path === root.groupPaths[i] || root.groupPaths[i].startsWith(path + "."))
+                    return true;
+            }
+        }
+        return false;
     }
 
     implicitHeight: card.implicitHeight
@@ -391,10 +448,7 @@ Item {
                 // shader tree even if the timing-side write rolls back.
                 // The reverse order would record neither on a partial
                 // failure, dropping the disable intent entirely.
-                if (root._shaderLegSupported)
-                    settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({}));
-
-                settingsController.animationsPage.clearOverride(root.eventPath);
+                root._applyDisable();
             }
         }
 
@@ -436,7 +490,7 @@ Item {
                 Layout.leftMargin: Kirigami.Units.largeSpacing
                 Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Warning
-                visible: root.isParentNode && root._shadowingChildrenCount > 0
+                visible: root.isParentNode && !root._isGroup && root._shadowingChildrenCount > 0
                 text: i18np("%n descendant event has a shader override that shadows this parent.", "%n descendant events have shader overrides that shadow this parent.", root._shadowingChildrenCount)
                 actions: [
                     Kirigami.Action {
@@ -444,6 +498,28 @@ Item {
                         icon.name: "edit-clear-all"
                         onTriggered: {
                             settingsController.animationsPage.clearShaderOverrideDescendants(root.eventPath);
+                        }
+                    }
+                ]
+            }
+
+            // ── Scoped "All" banner + reset (group mode only) ─────────
+            // A group card applies to a fixed set of leaves (not a path
+            // cascade), so it can't offer "clear shadowing children"; instead
+            // it resets every leaf in the set back to its library default.
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
+                type: Kirigami.MessageType.Information
+                visible: root._isGroup
+                text: i18n("Applies to every event below.")
+                actions: [
+                    Kirigami.Action {
+                        text: i18n("Reset all to defaults")
+                        icon.name: "edit-reset"
+                        onTriggered: {
+                            root._resetGroup();
                         }
                     }
                 ]
@@ -519,18 +595,21 @@ Item {
                         if (alreadyDisabled)
                             return;
 
-                        settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({}));
+                        root._applyShaderOverride("", ({}));
                         return;
                     }
                     // No-op when the user re-picks the value already
-                    // sitting at this path's DIRECT override.
-                    if (sid === directEffectId)
+                    // sitting at this path's DIRECT override. In group mode the
+                    // representative leaf stands in for the set (they move
+                    // together), so a re-pick of the group's current value is
+                    // still a no-op.
+                    if (!root._isGroup && sid === directEffectId)
                         return;
 
                     // Switching effect (or promoting an inherited
                     // value to a direct override): drop the previous
                     // effect's parameter map.
-                    settingsController.animationsPage.setShaderOverride(root.eventPath, sid, ({}));
+                    root._applyShaderOverride(sid, ({}));
                 }
                 onShaderParamWriteRequested: function (effectId, paramId, value) {
                     root._writeShaderParam(effectId, paramId, value);
