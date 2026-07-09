@@ -101,8 +101,18 @@ private:
         // defaults merged with the profile's overrides). Same value for every
         // output in one begin(); copied per-output for the paint upload.
         std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParams{};
+        // Resolved color params packed into customColors[] slots as normalised
+        // rgba, in declaration order — the color pool the per-window path also
+        // uploads (see shader_transitions.cpp). A `"type":"color"` pack param's
+        // `p_<name>` define resolves to `customColors[N]`, so without this a
+        // desktop pack's colors read transparent black.
+        std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColors{};
         qint64 startTimeMs = 0;
         int durationMs = 0;
+        // Monotonic paint counter uploaded as iFrame, so glitch-style desktop
+        // packs get a per-frame stutter that is independent of the eased iTime
+        // progress — matching the canonical animation contract's iFrame.
+        int frameCount = 0;
         bool captured = false;
     };
 
@@ -115,8 +125,11 @@ private:
         int iToDesktopLoc = -1;
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
-        // customParams[slot] uniform locations (-1 when the shader omits the slot).
+        int iFrameLoc = -1;
+        // customParams[slot] / customColors[slot] uniform locations (-1 when the
+        // shader omits the slot — the GLSL compiler prunes unreferenced ones).
         std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsLoc{};
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColorsLoc{};
     };
 
     /// Render every window on @p desktop that intersects @p screen into a fresh

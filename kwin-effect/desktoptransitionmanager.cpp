@@ -25,6 +25,7 @@
 #include <opengl/glvertexbuffer.h>
 #include <scene/windowitem.h>
 
+#include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -85,6 +86,7 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     // no speckle scale, etc.) and appear broken.
     namespace ASC = PhosphorAnimationShaders::AnimationShaderContract;
     std::array<QVector4D, ASC::kMaxCustomParams> customParams{};
+    std::array<QVector4D, ASC::kMaxCustomColors> customColors{};
     const PhosphorAnimationShaders::AnimationShaderEffect eff =
         m_effect->m_shaderManager.shaderRegistry().effect(effectId);
     if (eff.isValid()) {
@@ -101,6 +103,22 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
                 return ok ? v : 0.0f;
             };
             customParams[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
+        }
+        // Color params resolve into the customColors pool as normalised rgba,
+        // exactly as the per-window transition path uploads them (see
+        // shader_transitions.cpp). translateAnimationParams coerces every color
+        // to a valid QColor (default → Qt::transparent), so the isValid guard is
+        // defence-in-depth against a caller that bypasses the registry encoder.
+        for (int slot = 0; slot < ASC::kMaxCustomColors; ++slot) {
+            const auto it = translated.constFind(ASC::colorKey(slot));
+            if (it == translated.constEnd()) {
+                continue;
+            }
+            const QColor c = it->value<QColor>();
+            if (!c.isValid()) {
+                continue;
+            }
+            customColors[slot] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());
         }
     }
 
@@ -123,6 +141,7 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         tr.to = to;
         tr.effectId = effectId;
         tr.customParams = customParams;
+        tr.customColors = customColors;
         tr.startTimeMs = nowMs;
         tr.durationMs = duration;
         tr.captured = false; // capture is deferred to the first paintOutput (live GL context)
@@ -317,8 +336,12 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
         compiled.iToDesktopLoc = shader->uniformLocation("uToDesktop");
         compiled.iTimeLoc = shader->uniformLocation("iTime");
         compiled.iResolutionLoc = shader->uniformLocation("iResolution");
+        compiled.iFrameLoc = shader->uniformLocation("iFrame");
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
             compiled.customParamsLoc[slot] = shader->uniformLocation(ShaderInternal::kCustomParamsElementNames[slot]);
+        }
+        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
+            compiled.customColorsLoc[slot] = shader->uniformLocation(ShaderInternal::kCustomColorsElementNames[slot]);
         }
         compiled.shader = std::move(shader);
     }
@@ -378,10 +401,25 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     if (cs->iResolutionLoc >= 0) {
         cs->shader->setUniform(cs->iResolutionLoc, QVector2D(float(deviceSize.width()), float(deviceSize.height())));
     }
+    // Monotonic frame counter for glitch-style packs. Advance after the upload
+    // so the first painted frame is iFrame == 0, matching the per-window path's
+    // zero-based leg frame.
+    if (cs->iFrameLoc >= 0) {
+        cs->shader->setUniform(cs->iFrameLoc, tr.frameCount);
+    }
+    ++tr.frameCount;
     // The p_<name> pack parameters (slide direction, dissolve scale, etc.).
     for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
         if (cs->customParamsLoc[slot] >= 0) {
             cs->shader->setUniform(cs->customParamsLoc[slot], tr.customParams[slot]);
+        }
+    }
+    // Color params (customColors[N]) — the pool a `"type":"color"` pack param's
+    // p_<name> define resolves to. Bound here so desktop packs get tunable
+    // colors, at parity with the per-window transition and surface contracts.
+    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
+        if (cs->customColorsLoc[slot] >= 0) {
+            cs->shader->setUniform(cs->customColorsLoc[slot], tr.customColors[slot]);
         }
     }
     if (cs->iFromDesktopLoc >= 0) {
