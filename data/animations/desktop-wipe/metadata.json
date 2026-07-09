@@ -1,0 +1,36 @@
+{
+    "id": "desktop-wipe",
+    "name": "Desktop Wipe",
+    "description": "Sweeps the incoming desktop across the screen behind a soft edge.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Slide",
+    "appliesTo": ["desktop"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "dirX",
+            "name": "Direction X",
+            "type": "float",
+            "default": 1.0,
+            "min": -1.0,
+            "max": 1.0
+        },
+        {
+            "id": "dirY",
+            "name": "Direction Y",
+            "type": "float",
+            "default": 0.0,
+            "min": -1.0,
+            "max": 1.0
+        },
+        {
+            "id": "softness",
+            "name": "Edge Softness",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.01,
+            "max": 0.5
+        }
+    ]
+}
