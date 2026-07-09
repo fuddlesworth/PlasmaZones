@@ -577,14 +577,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 if (!oldDesktop || !newDesktop) {
                     return;
                 }
-                const QString effectId =
+                const PhosphorAnimationShaders::ShaderProfile profile =
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
-                                                                       PhosphorAnimation::ProfilePaths::DesktopSwitch)
-                        .effectiveEffectId();
+                                                                       PhosphorAnimation::ProfilePaths::DesktopSwitch);
+                const QString effectId = profile.effectiveEffectId();
                 if (effectId.isEmpty()) {
                     return;
                 }
-                m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, 0);
+                m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, profile.effectiveParameters(), 0);
             });
 
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred

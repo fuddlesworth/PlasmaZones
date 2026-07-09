@@ -70,13 +70,39 @@ DesktopTransitionManager::~DesktopTransitionManager()
 }
 
 void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
-                                     const QString& effectId, int durationMs)
+                                     const QString& effectId, const QVariantMap& params, int durationMs)
 {
     if (!from || !to || from == to || effectId.isEmpty()) {
         return; // nothing to animate (no shader assigned, or a no-op switch)
     }
     const int duration = durationMs > 0 ? durationMs : kDefaultDesktopSwitchDurationMs;
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+
+    // Resolve p_<name> parameter values into customParams[] slots. Same for
+    // every output this begin() touches, so compute once. translateAnimationParams
+    // fills the metadata defaults when the profile carries no override — WITHOUT
+    // this the shaders run at customParams == 0 (slide has no direction, dissolve
+    // no speckle scale, etc.) and appear broken.
+    namespace ASC = PhosphorAnimationShaders::AnimationShaderContract;
+    std::array<QVector4D, ASC::kMaxCustomParams> customParams{};
+    const PhosphorAnimationShaders::AnimationShaderEffect eff =
+        m_effect->m_shaderManager.shaderRegistry().effect(effectId);
+    if (eff.isValid()) {
+        const QVariantMap translated =
+            PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, params);
+        for (int slot = 0; slot < ASC::kMaxCustomParams; ++slot) {
+            auto pull = [&](char comp) -> float {
+                const auto it = translated.constFind(ASC::slotKey(slot, comp));
+                if (it == translated.constEnd()) {
+                    return 0.0f;
+                }
+                bool ok = false;
+                const float v = it->toFloat(&ok);
+                return ok ? v : 0.0f;
+            };
+            customParams[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
+        }
+    }
 
     // Resolve the affected outputs: a specific output for a per-output switch
     // (Plasma 6.7 per-output desktops, #648), otherwise every output for a
@@ -96,6 +122,7 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         tr.from = from;
         tr.to = to;
         tr.effectId = effectId;
+        tr.customParams = customParams;
         tr.startTimeMs = nowMs;
         tr.durationMs = duration;
         tr.captured = false; // capture is deferred to the first paintOutput (live GL context)
@@ -290,6 +317,9 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
         compiled.iToDesktopLoc = shader->uniformLocation("uToDesktop");
         compiled.iTimeLoc = shader->uniformLocation("iTime");
         compiled.iResolutionLoc = shader->uniformLocation("iResolution");
+        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
+            compiled.customParamsLoc[slot] = shader->uniformLocation(ShaderInternal::kCustomParamsElementNames[slot]);
+        }
         compiled.shader = std::move(shader);
     }
     return &compiled;
@@ -347,6 +377,12 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     }
     if (cs->iResolutionLoc >= 0) {
         cs->shader->setUniform(cs->iResolutionLoc, QVector2D(float(deviceSize.width()), float(deviceSize.height())));
+    }
+    // The p_<name> pack parameters (slide direction, dissolve scale, etc.).
+    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
+        if (cs->customParamsLoc[slot] >= 0) {
+            cs->shader->setUniform(cs->customParamsLoc[slot], tr.customParams[slot]);
+        }
     }
     if (cs->iFromDesktopLoc >= 0) {
         cs->shader->setUniform(cs->iFromDesktopLoc, 0);

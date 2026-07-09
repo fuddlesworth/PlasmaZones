@@ -3,9 +3,14 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimationShaderContract.h> // kMaxCustomParams
+
 #include <QHash> // std::hash<QString> specialization (used by the unordered_map key below)
 #include <QString>
+#include <QVariant> // QVariantMap
+#include <QVector4D>
 
+#include <array>
 #include <chrono>
 #include <memory>
 #include <unordered_map>
@@ -58,7 +63,7 @@ public:
     /// deferred to the first paintOutput() for each output, where a live GL
     /// context exists.
     void begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
-               const QString& effectId, int durationMs);
+               const QString& effectId, const QVariantMap& params, int durationMs);
 
     /// True while any output has a live transition. Feeds PlasmaZonesEffect::isActive()
     /// so KWin keeps the effect in the paint chain, and prePaintScreen's mask.
@@ -92,6 +97,10 @@ private:
         std::unique_ptr<KWin::GLTexture> fromTex;
         std::unique_ptr<KWin::GLTexture> toTex;
         QString effectId;
+        // Resolved p_<name> values packed into customParams[] slots (metadata
+        // defaults merged with the profile's overrides). Same value for every
+        // output in one begin(); copied per-output for the paint upload.
+        std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParams{};
         qint64 startTimeMs = 0;
         int durationMs = 0;
         bool captured = false;
@@ -106,6 +115,8 @@ private:
         int iToDesktopLoc = -1;
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
+        // customParams[slot] uniform locations (-1 when the shader omits the slot).
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsLoc{};
     };
 
     /// Render every window on @p desktop that intersects @p screen into a fresh
