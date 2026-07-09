@@ -1311,7 +1311,7 @@ void Settings::setShaderProfileTreeJson(const QString& json)
 }
 
 // ── Decorations tree (PhosphorConfig::Store-backed) ─────────────────────────
-// Persisted as one nested JSON entry under Surface/DecorationProfileTree,
+// Persisted as one nested JSON entry under Decorations/DecorationProfileTree,
 // mirroring how the animation shaderProfileTree persists under
 // Animations/ShaderProfileTree. The read-side falls back to the
 // ConfigDefaults tree (EMPTY / neutral: no baseline chain, no overrides —
