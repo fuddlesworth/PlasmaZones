@@ -15,11 +15,6 @@ AnimationEventCardList {
     Accessible.name: i18n("Virtual desktop animation events")
     eventModel: [
         {
-            "eventPath": "desktop",
-            "eventLabel": i18n("All Desktop Events"),
-            "isParentNode": true
-        },
-        {
             "eventPath": "desktop.switch",
             "eventLabel": i18n("Switch Desktop"),
             "isParentNode": false

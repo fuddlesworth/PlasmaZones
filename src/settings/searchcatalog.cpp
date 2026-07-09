@@ -105,14 +105,13 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("animations-general"),
                             {PhosphorI18n::tr("animation"), PhosphorI18n::tr("duration"), PhosphorI18n::tr("easing"),
                              PhosphorI18n::tr("curve"), PhosphorI18n::tr("spring"), PhosphorI18n::tr("speed")});
-    search->setPageKeywords(QStringLiteral("animations-windows"),
-                            {PhosphorI18n::tr("window"), PhosphorI18n::tr("animation"), PhosphorI18n::tr("open"),
-                             PhosphorI18n::tr("close")});
-    search->setPageKeywords(
-        QStringLiteral("animations-osds"),
-        {PhosphorI18n::tr("osd"), PhosphorI18n::tr("notification"), PhosphorI18n::tr("on-screen display")});
-    search->setPageKeywords(QStringLiteral("animations-overlays"),
-                            {PhosphorI18n::tr("overlay"), PhosphorI18n::tr("animation")});
+    search->setPageKeywords(QStringLiteral("animations-appearance"),
+                            {PhosphorI18n::tr("appearance"), PhosphorI18n::tr("window"), PhosphorI18n::tr("animation"),
+                             PhosphorI18n::tr("open"), PhosphorI18n::tr("close"), PhosphorI18n::tr("osd"),
+                             PhosphorI18n::tr("notification"), PhosphorI18n::tr("overlay"), PhosphorI18n::tr("popup")});
+    search->setPageKeywords(QStringLiteral("animations-movement"),
+                            {PhosphorI18n::tr("movement"), PhosphorI18n::tr("move"), PhosphorI18n::tr("resize"),
+                             PhosphorI18n::tr("snap"), PhosphorI18n::tr("morph"), PhosphorI18n::tr("window")});
     search->setPageKeywords(QStringLiteral("animations-side-panels"),
                             {PhosphorI18n::tr("side panel"), PhosphorI18n::tr("panel"), PhosphorI18n::tr("drawer")});
     search->setPageKeywords(QStringLiteral("animations-widgets"),
@@ -506,36 +505,45 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Saved sets"));
 
     // Animation events (reveal-tagged on the event list's outer delegates)
-    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.open"), PhosphorI18n::tr("Open"));
-    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.close"), PhosphorI18n::tr("Close"));
-    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.minimize"),
-               PhosphorI18n::tr("Minimize"));
-    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.maximize"),
-               PhosphorI18n::tr("Maximize"));
-    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.move"), PhosphorI18n::tr("Move"));
-    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.resize"),
-               PhosphorI18n::tr("Resize"));
-    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.focus"), PhosphorI18n::tr("Focus"));
-    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.snapIn"),
-               PhosphorI18n::tr("Snap Into Zone"));
-    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.snapOut"),
-               PhosphorI18n::tr("Snap Out of Zone"));
-    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.layoutSwitch"),
-               PhosphorI18n::tr("Layout Switch"));
-    addSetting(search, QStringLiteral("animations-osds"), QStringLiteral("osd.show"), PhosphorI18n::tr("Show"));
-    addSetting(search, QStringLiteral("animations-osds"), QStringLiteral("osd.hide"), PhosphorI18n::tr("Hide"));
-    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.zoneSelector.show"),
+    // Appearance page: window lifecycle + OSD + popup show/hide.
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("window.open"),
+               PhosphorI18n::tr("Window Opened"));
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("window.close"),
+               PhosphorI18n::tr("Window Closed"));
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("window.minimize"),
+               PhosphorI18n::tr("Window Minimized"));
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("window.focus"),
+               PhosphorI18n::tr("Window Focused"));
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("osd.show"), PhosphorI18n::tr("Show"));
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("osd.hide"), PhosphorI18n::tr("Hide"));
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("popup.zoneSelector.show"),
                PhosphorI18n::tr("Zone Selector: Show"));
-    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.zoneSelector.hide"),
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("popup.zoneSelector.hide"),
                PhosphorI18n::tr("Zone Selector: Hide"));
-    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.layoutPicker.show"),
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("popup.layoutPicker.show"),
                PhosphorI18n::tr("Layout Picker: Show"));
-    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.layoutPicker.hide"),
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("popup.layoutPicker.hide"),
                PhosphorI18n::tr("Layout Picker: Hide"));
-    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.snapAssist.show"),
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("popup.snapAssist.show"),
                PhosphorI18n::tr("Snap Assist: Show"));
-    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.snapAssist.hide"),
+    addSetting(search, QStringLiteral("animations-appearance"), QStringLiteral("popup.snapAssist.hide"),
                PhosphorI18n::tr("Snap Assist: Hide"));
+    // Movement page: window geometry legs.
+    addSetting(search, QStringLiteral("animations-movement"), QStringLiteral("window.maximize"),
+               PhosphorI18n::tr("Window Maximized"));
+    addSetting(search, QStringLiteral("animations-movement"), QStringLiteral("window.move"),
+               PhosphorI18n::tr("Window Moved"));
+    addSetting(search, QStringLiteral("animations-movement"), QStringLiteral("window.resize"),
+               PhosphorI18n::tr("Window Resized"));
+    addSetting(search, QStringLiteral("animations-movement"), QStringLiteral("window.snapIn"),
+               PhosphorI18n::tr("Snapped Into Zone"));
+    addSetting(search, QStringLiteral("animations-movement"), QStringLiteral("window.snapOut"),
+               PhosphorI18n::tr("Snapped Out of Zone"));
+    addSetting(search, QStringLiteral("animations-movement"), QStringLiteral("window.layoutSwitch"),
+               PhosphorI18n::tr("Layout Switch"));
+    // Virtual desktops page.
+    addSetting(search, QStringLiteral("animations-desktops"), QStringLiteral("desktop.switch"),
+               PhosphorI18n::tr("Switch Desktop"));
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideIn"),
                PhosphorI18n::tr("Slide In"));
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideOut"),
