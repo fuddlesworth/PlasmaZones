@@ -597,13 +597,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 if (effectId.isEmpty()) {
                     return;
                 }
-                // Honour the user-configured duration for the desktop switch: the
-                // Desktops settings card writes a `desktop.switch` duration into the
-                // motion profile tree, resolved here the same way the per-window
-                // paths resolve their leg durations. Falls back to the default when
-                // no override is set anywhere up the ancestor chain.
+                // Honour the configured duration for the desktop switch. A
+                // `desktop.switch` (or ancestor) override in the motion profile tree
+                // wins; otherwise fall back to the MASTER animation-duration setting,
+                // exactly as the per-window legs do (they pass animationDurationMs()
+                // as their base). So the global animation-duration slider retimes the
+                // desktop switch too, not only a per-event override.
                 const int durationMs = resolveMotionTreeBaseDuration(PhosphorAnimation::ProfilePaths::DesktopSwitch,
-                                                                     DesktopTransitionManager::DefaultDurationMs);
+                                                                     animationDurationMs());
                 m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, profile.effectiveParameters(),
                                           durationMs);
             });

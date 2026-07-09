@@ -15,10 +15,10 @@ import org.kde.kirigami as Kirigami
  * `~/.local/share/plasmazones/profiles/`; the daemon's existing
  * `ProfileLoader` watches that dir and live-reloads the registry.
  *
- * Phase 3 scope: timing-mode (Easing/Spring), curve thumbnail with
- * "Customize…" dialog, duration slider, inheritance breadcrumb. The
- * Animation-style combo + shader-param editor + scale-start slider
- * land in Phase 6 alongside the shader-picker controller.
+ * Controls: timing-mode (Easing/Spring), curve thumbnail with
+ * "Customize…" dialog, duration slider, inheritance breadcrumb, and — on
+ * shader-supported paths — the shader picker and its per-shader parameter
+ * editor (both wired through the shared AnimationProfileEditor).
  *
  * Required properties:
  *   - eventPath:  full path string from `ProfilePaths::` (e.g. "editor.snapIn")
