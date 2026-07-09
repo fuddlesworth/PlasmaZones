@@ -37,7 +37,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendAutotilingSchema(s);
     appendWindowsSchema(s);
     appendGapsSchema(s);
-    appendSurfaceSchema(s);
+    appendDecorationsSchema(s);
 
     return s;
 }
@@ -950,21 +950,23 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
     };
 }
 
-// ─── Surface ────────────────────────────────────────────────────────────────
+// ─── Decorations ──────────────────────────────────────────────────────────────
 // Per-surface decoration tree: a DecorationProfileTree (the user-applied surface
 // shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested
 // JSON object — same QVariantMap storage shape as the autotile PerAlgorithmSettings
 // entry above and the animation ShaderProfileTree blob, with no sanitizer because
-// the per-pack override schema is not known to the config layer.
+// the per-pack override schema is not known to the config layer. The blob is a
+// leaf key under Decorations, mirroring ShaderProfileTree under Animations; the
+// Decorations.WindowFiltering sub-group is registered separately.
 
-void appendSurfaceSchema(PhosphorConfig::Schema& schema)
+void appendDecorationsSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
-    schema.groups[CD::surfaceGroup()] = {
+    schema.groups[CD::decorationsGroup()] = {
         // Per-surface decoration tree. The default is the (empty) ConfigDefaults
         // baseline serialized to a map; a user engages packs from the Decoration
         // pages.
-        {CD::surfaceDecorationTreeKey(), CD::decorationProfileTree().toJson().toVariantMap(), QMetaType::QVariantMap},
+        {CD::decorationProfileTreeKey(), CD::decorationProfileTree().toJson().toVariantMap(), QMetaType::QVariantMap},
     };
 }
 

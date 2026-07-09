@@ -122,13 +122,13 @@ public:
     P_CONFIG_GROUP(tilingBehaviorTriggersGroup, "Tiling.Behavior.Triggers")
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
 
-    // Surface — per-surface decoration tree (DecorationProfileTree: shader-pack
-    // chain + per-pack parameters, keyed on a dot-path surface namespace; any
-    // border appearance rides as the border pack's parameters). A flat
-    // top-level group rather than a per-mode sub-group of Tiling/Snapping
-    // because decoration is product-wide, not bound to a tiling/snapping
-    // appearance axis.
-    P_CONFIG_GROUP(surfaceGroup, "Surface")
+    // Decorations — per-surface decoration tree (DecorationProfileTree:
+    // shader-pack chain + per-pack parameters, keyed on a dot-path surface
+    // namespace; any border appearance rides as the border pack's parameters).
+    // The DecorationProfileTree blob is a leaf key directly under this group,
+    // mirroring how the animation ShaderProfileTree sits under Animations; the
+    // Decorations.WindowFiltering sub-group is the border-pass window filter.
+    P_CONFIG_GROUP(decorationsGroup, "Decorations")
 
     // Parent groups (for purge enumeration — covers all sub-groups)
     P_CONFIG_GROUP(shortcutsGroup, "Shortcuts")
@@ -382,16 +382,16 @@ public:
     P_CONFIG_KEY(lockedScreensKey, "LockedScreens")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Surface
+    // Config Keys — Decorations
     // ═══════════════════════════════════════════════════════════════════════════
 
     // DecorationProfileTree JSON blob — the user-applied per-surface decoration
     // (shader-pack chain). Mirrors the animation ShaderProfileTree blob under
-    // Animations, persisted as a nested JSON object under the Surface group —
-    // with one materialization difference: the surface schema default is the
+    // Animations, persisted as a nested JSON object under the Decorations group —
+    // with one materialization difference: the decoration schema default is the
     // serialized empty tree ({"baseline":…,"overrides":[]}, non-empty as a
     // map), whereas the animation default is a bare {}.
-    P_CONFIG_KEY(surfaceDecorationTreeKey, "DecorationProfileTree")
+    P_CONFIG_KEY(decorationProfileTreeKey, "DecorationProfileTree")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Gaps

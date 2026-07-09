@@ -1008,16 +1008,16 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Surface shader Settings
+    // Decoration shader Settings
     //
-    // The group/key accessors (surfaceGroup / surfaceDecorationTreeKey) are
+    // The group/key accessors (decorationsGroup / decorationProfileTreeKey) are
     // inherited from ConfigKeys — no forwarding accessors needed here (same as
     // every other group: ConfigDefaults derives from ConfigKeys).
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Default DecorationProfileTree — the fallback the typed
-    /// `Settings::decorationProfileTree()` returns when the Surface group holds
-    /// no `DecorationProfileTree` entry.
+    /// `Settings::decorationProfileTree()` returns when the Decorations group
+    /// holds no `DecorationProfileTree` entry.
     ///
     /// The decoration tree is the user-applied surface-shader pack stack. Window
     /// border and title-bar appearance are owned by the window rules, not by this
