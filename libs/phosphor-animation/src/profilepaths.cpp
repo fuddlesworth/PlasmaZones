@@ -13,6 +13,7 @@ const QString Global = QStringLiteral("global");
 // compare cheaply against AnimationShaderEffect::appliesTo entries.
 const QString EventClassGeometry = QStringLiteral("geometry");
 const QString EventClassAppearance = QStringLiteral("appearance");
+const QString EventClassDesktop = QStringLiteral("desktop");
 
 // window.*
 const QString Window = QStringLiteral("window");
@@ -27,6 +28,11 @@ const QString WindowSnapIn = QStringLiteral("window.snapIn");
 const QString WindowSnapOut = QStringLiteral("window.snapOut");
 const QString WindowSnapResize = QStringLiteral("window.snapResize");
 const QString WindowLayoutSwitch = QStringLiteral("window.layoutSwitch");
+
+// desktop.* — full-screen virtual-desktop switch transitions (two-texture
+// from/to blend), driven by the kwin-effect's screen-level paint pass.
+const QString Desktop = QStringLiteral("desktop");
+const QString DesktopSwitch = QStringLiteral("desktop.switch");
 
 // editor.* — Layout-editor-only zone manipulation. NOT runtime
 // window snapping (that's KWin's domain).
@@ -118,6 +124,8 @@ QStringList allBuiltInPaths()
         WindowSnapOut,
         WindowSnapResize,
         WindowLayoutSwitch,
+        Desktop,
+        DesktopSwitch,
         Editor,
         EditorSnapIn,
         EditorSnapOut,
@@ -212,6 +220,14 @@ QString eventClassForPath(const QString& path)
         || path.startsWith(Popup + QLatin1Char('.'))) {
         return EventClassAppearance;
     }
+    // Desktop family — the full-screen two-texture switch contract. The
+    // `desktop` root and every `desktop.*` leaf carry the desktop class so a
+    // desktop-transition shader validates on the root or the leaf, and the
+    // single-surface shaders are dimmed (see shaderEffectAppliesToEventPath,
+    // which makes this class opt-in rather than universal-permissive).
+    if (path == Desktop || path.startsWith(Desktop + QLatin1Char('.'))) {
+        return EventClassDesktop;
+    }
     // `window` root (mixed: spans both classes), `global`, and the
     // editor/panel/widget/cursor/shader families have no single class — the
     // predicate treats empty as "don't dim" so an ambiguous row never
@@ -240,6 +256,12 @@ QString defaultShaderEffectIdForPath(const QString& path)
         || path == PopupLayoutPickerShow || path == PopupLayoutPickerHide || path == PopupSnapAssistShow
         || path == PopupSnapAssistHide) {
         return QStringLiteral("fade");
+    }
+    // Virtual-desktop switch defaults to the two-texture cross-fade pack so a
+    // fresh config animates desktop switches out of the box (run by the
+    // kwin-effect's screen-level pass, not the per-window pipeline).
+    if (path == DesktopSwitch) {
+        return QStringLiteral("desktop-fade");
     }
     // Every other event defaults to no shader.
     return QString();

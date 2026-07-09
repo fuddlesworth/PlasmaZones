@@ -407,14 +407,24 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
 
 bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const QString& path)
 {
-    // Universal effect (no declared constraint) runs everywhere.
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    const QString cls = PP::eventClassForPath(path);
+    // The desktop class is a SEPARATE two-texture (from/to) contract, so it is
+    // opt-in rather than universal-permissive: only an effect that explicitly
+    // lists `desktop` in appliesTo runs on a desktop path. A universal
+    // single-surface effect (empty appliesTo) must NOT bleed onto desktop
+    // paths, where its lone surface sampler would be unbound; conversely a
+    // desktop effect declaring appliesTo:["desktop"] is dimmed on window/OSD
+    // paths (their class isn't `desktop`) by the concrete-mismatch check below.
+    if (cls == PP::EventClassDesktop)
+        return effect.appliesTo.contains(cls);
+    // Universal effect (no declared constraint) runs on every single-surface path.
     if (effect.appliesTo.isEmpty())
         return true;
     // Only report false on a PROVABLE mismatch: the path resolves to a
     // concrete class AND the effect doesn't list it. An ambiguous row
     // (mixed ancestor / non-window path → empty class) is left compatible
     // so the picker never dims an effect on a row it can't classify.
-    const QString cls = PhosphorAnimation::ProfilePaths::eventClassForPath(path);
     if (cls.isEmpty())
         return true;
     return effect.appliesTo.contains(cls);

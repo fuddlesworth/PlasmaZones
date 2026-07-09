@@ -45,6 +45,14 @@ PHOSPHORANIMATION_EXPORT extern const QString WindowSnapOut;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapResize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
 
+// desktop.* — full-screen virtual-desktop switch transitions driven by the
+// kwin-effect's screen-level paint pass. Unlike the per-window window.*
+// events, a desktop switch blends the OUTGOING desktop against the INCOMING
+// desktop (two full-screen textures), so it uses the desktop event class and
+// its own two-texture shader contract rather than the single-surface pipeline.
+PHOSPHORANIMATION_EXPORT extern const QString Desktop;
+PHOSPHORANIMATION_EXPORT extern const QString DesktopSwitch;
+
 // editor.* — Layout-editor-only zone manipulation animations
 // (fill-preview, drag-resize-preview). NOT triggered by runtime
 // window snapping — window-snap animations are KWin's
@@ -145,6 +153,15 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassGeometry;
 /// Appearance transitions: open, close, minimize, focus, and every OSD /
 /// popup show/hide — a single surface materialising or dissolving.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassAppearance;
+
+/// Desktop transitions: a full-screen virtual-desktop switch blending the
+/// outgoing desktop against the incoming one. A distinct TWO-texture contract
+/// (from/to full-screen samplers), incompatible with the single-surface
+/// geometry/appearance shaders — a shader must opt into it explicitly via
+/// `appliesTo: ["desktop"]`. A universal single-surface effect (empty
+/// `appliesTo`) does NOT apply to desktop paths, because its lone surface
+/// sampler would be unbound in the two-texture pass.
+PHOSPHORANIMATION_EXPORT extern const QString EventClassDesktop;
 
 /// Classify @p path into an event class, or empty string when the path has
 /// no single class (a mixed ancestor like `window`, or a path outside the
