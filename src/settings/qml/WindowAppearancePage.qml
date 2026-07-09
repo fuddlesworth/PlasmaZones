@@ -411,6 +411,10 @@ SettingsFlickable {
                 appSettings.decorationExcludeTransientWindows = value;
             }
 
+            // Spin-box bounds come from generalPage (the shared schema-bounds
+            // controller that also serves the animation filter card), not
+            // root.ctl — the same cross-controller sourcing AnimationsGeneralPage
+            // uses for its filter bounds.
             minWidth: appSettings.decorationMinimumWindowWidth
             minWidthFrom: settingsController.generalPage.decorationMinimumWindowWidthMin
             minWidthTo: settingsController.generalPage.decorationMinimumWindowWidthMax
