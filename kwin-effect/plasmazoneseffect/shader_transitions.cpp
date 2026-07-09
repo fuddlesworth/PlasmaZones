@@ -591,6 +591,22 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                             << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
         return false;
     }
+    // Symmetric mirror of the desktop-pass guard (DesktopTransitionManager::
+    // begin). This is exclusively the per-window OffscreenEffect path —
+    // desktop.switch never routes here — so a desktop-contract pack
+    // (appliesTo:["desktop"], two-texture getFromColor/getToColor sampling
+    // uFromDesktop/uToDesktop) is always misassigned: on a per-window surface
+    // those samplers are unbound and it would paint garbage. It can only reach
+    // here via a hand-edited config that assigns a desktop pack at window/global
+    // scope (the settings pickers filter desktop packs out of every window
+    // event). Refuse it so the window keeps its normal behavior. Guarding on the
+    // desktop class specifically — not full class-matching — keeps geometry /
+    // appearance / universal shaders untouched.
+    if (eff.appliesTo.contains(QLatin1String("desktop"))) {
+        qCWarning(lcEffect) << "beginShaderTransition: refusing desktop-contract shader" << effectId
+                            << "on a per-window event — desktop packs sample unbound uFromDesktop/uToDesktop";
+        return false;
+    }
 
     // KWin-specific default vertex stage. Hardcoded here rather than
     // loaded from `data/animations/shared/animation.vert` because that
