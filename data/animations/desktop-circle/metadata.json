@@ -1,0 +1,42 @@
+{
+    "id": "desktop-circle",
+    "name": "Desktop Circle",
+    "description": "Reveals the incoming desktop through a growing circle, or closes the outgoing one into a shrinking circle.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Reveal",
+    "appliesTo": ["desktop"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "centerX",
+            "name": "Center X",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "centerY",
+            "name": "Center Y",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "softness",
+            "name": "Edge Softness",
+            "type": "float",
+            "default": 0.05,
+            "min": 0.001,
+            "max": 0.5
+        },
+        {
+            "id": "invert",
+            "name": "Close Instead of Open",
+            "type": "bool",
+            "default": false
+        }
+    ]
+}
