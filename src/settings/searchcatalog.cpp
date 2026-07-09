@@ -256,7 +256,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("flashOnLayoutSwitch"),
                PhosphorI18n::tr("Flash on layout switch"), {PhosphorI18n::tr("blink"), PhosphorI18n::tr("animation")});
 
-    // Window Appearance (shared baseline-rule editor)
+    // Window Appearance (config-backed Windows.* / Gaps.* page)
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("borders"), PhosphorI18n::tr("Borders"));
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("colors"), PhosphorI18n::tr("Colors"));
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("decorations"),
@@ -283,7 +283,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                 PhosphorI18n::tr("cross-fade")});
 
     // Gaps (shared inner/outer gap model) — folded onto the Window Appearance
-    // page, which edits the same rule-backed model.
+    // page, which edits the same config-backed model.
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("gaps"), PhosphorI18n::tr("Gaps"));
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("primaryGap"), PhosphorI18n::tr("Inner gap"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),

@@ -697,7 +697,7 @@ private:
     // sentinel (first decorate snaps to the current state, no fade on
     // appearance); `lastMs` dedupes the per-frame advance across the chain's
     // packs. windowSurfaceAnimates keeps the window repainting while a value
-    // is strictly between 0 and 1, so the ramp runs to completion.
+    // is inside its near-0/near-1 thresholds, so the ramp runs to completion.
     struct FocusFadeState
     {
         float value = -1.0f;

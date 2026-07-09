@@ -212,7 +212,10 @@ void PlasmaZonesEffect::reconcileDecorationOnPlacementFlip(const QString& window
     if (w && getWindowId(w) == windowId && w->isOnCurrentDesktop()) {
         updateWindowDecoration(windowId, w);
     } else {
-        removeWindowDecoration(windowId, w);
+        // Same exact-id discipline for the remove hint: a fuzzy same-app
+        // sibling must not stand in for the dead window's GL release, so only
+        // pass w through when it really is windowId (e.g. merely off-desktop).
+        removeWindowDecoration(windowId, (w && getWindowId(w) == windowId) ? w : nullptr);
     }
 }
 
