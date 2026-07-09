@@ -834,12 +834,16 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Windows (window decoration appearance) ─────────────────────────────────
-// Mode-neutral window border + title bar. Border colours are the "accent"
-// sentinel (or a hex string) so no colour validator applies. The border/title-bar
-// scope is a closed-set token ("tiled" / "normal" / "all") the Appearance page and
-// the effect agree on, snapped to the default on an unknown on-disk value.
+// Mode-neutral window border + title bar. Border colours are strings (the
+// "accent" sentinel, or a hex/named colour) validated by the string-form
+// validBorderColorOr rather than the QColor-coercing validColorOr. The
+// border/title-bar scope is a closed-set token ("tiled" / "normal" / "all")
+// the Appearance page and the effect agree on, snapped to the default on an
+// unknown on-disk value.
 // Width/radius are clamped ints reusing the generic Width/Radius keys (the Windows
 // group disambiguates them from the Snapping.Zones.Border keys of the same spelling).
+// FocusFadeDuration is a clamped int: the decoration focus cross-fade in ms
+// (uSurfaceFocused ramp), 0 = instant.
 
 void appendWindowsSchema(PhosphorConfig::Schema& schema)
 {
@@ -884,6 +888,11 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          QMetaType::QString,
          {},
          scopeValidator(CD::windowTitleBarScope())},
+        {CD::focusFadeDurationKey(),
+         CD::focusFadeDuration(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::focusFadeDurationMin(), CD::focusFadeDurationMax())},
     };
 }
 

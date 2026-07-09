@@ -8,7 +8,7 @@
  * The tests here seed the backing JSON config with deliberately-invalid or
  * out-of-range values, then construct a Settings object and verify that the
  * schema validator coerces the value on read. Covers:
- *  1. clampInt validator -- out-of-range int snaps to the schema default.
+ *  1. clampInt validator -- out-of-range int snaps to the violated clamp bound.
  *  2. validColorOr validator -- invalid color string falls back to default.
  *  3. Trigger list JSON parse -- invalid JSON drops back to the default,
  *     max-size cap at MaxTriggersPerAction is enforced.
@@ -67,6 +67,49 @@ private Q_SLOTS:
 
         Settings settings;
         QCOMPARE(settings.adjacentThreshold(), ConfigDefaults::adjacentThresholdMax());
+    }
+
+    /**
+     * Same clampInt contract on the decoration focus cross-fade duration
+     * (Windows/FocusFadeDuration): a hand-written out-of-range value snaps to
+     * the declared max rather than reaching the effect raw.
+     */
+    void testReadValidatedFocusFadeDuration_outOfRange_clampsToMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeInt(ConfigDefaults::focusFadeDurationKey(), 999999);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.focusFadeDuration(), ConfigDefaults::focusFadeDurationMax());
+    }
+
+    /**
+     * The min side of the same clamp: a negative on-disk value snaps up to the
+     * declared minimum (0 = instant), so the effect never divides by a negative
+     * duration. Without this case a validator that only clamps the upper bound
+     * would pass the suite.
+     */
+    void testReadValidatedFocusFadeDuration_belowMin_clampsToMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeInt(ConfigDefaults::focusFadeDurationKey(), -50);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.focusFadeDuration(), ConfigDefaults::focusFadeDurationMin());
     }
 
     // =========================================================================

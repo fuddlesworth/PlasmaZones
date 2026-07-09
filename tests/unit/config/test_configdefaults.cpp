@@ -155,6 +155,10 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::animationSequenceMode() <= ConfigDefaults::animationSequenceModeMax());
         QVERIFY(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin());
         QVERIFY(ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax());
+
+        // Window decoration focus cross-fade
+        QVERIFY(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDurationMin());
+        QVERIFY(ConfigDefaults::focusFadeDuration() <= ConfigDefaults::focusFadeDurationMax());
     }
 
     /**

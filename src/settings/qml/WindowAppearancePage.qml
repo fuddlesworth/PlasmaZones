@@ -369,6 +369,27 @@ SettingsFlickable {
                         onActivated: index => root.ctl.titleBarScope = root.scopeOptions[index].scope
                     }
                 }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Focus fade duration")
+                    searchAnchor: "focusFadeDuration"
+                    description: i18n("How long decorations take to fade between focused and unfocused. Zero switches instantly.")
+
+                    SettingsSlider {
+                        Accessible.name: i18n("Focus fade duration")
+                        from: root.ctl.focusFadeDurationMin
+                        to: root.ctl.focusFadeDurationMax
+                        stepSize: 10
+                        value: root.ctl.focusFadeDuration
+                        valueSuffix: " ms"
+                        labelWidth: Kirigami.Units.gridUnit * 4
+                        onMoved: value => {
+                            root.ctl.focusFadeDuration = Math.round(value);
+                        }
+                    }
+                }
             }
         }
 

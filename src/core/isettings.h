@@ -225,6 +225,11 @@ public:
     virtual void setHideWindowTitleBars(bool hide) = 0;
     virtual QString windowTitleBarScope() const = 0;
     virtual void setWindowTitleBarScope(const QString& scope) = 0;
+    // Decoration focus cross-fade duration (ms): how long uSurfaceFocused
+    // ramps between focused and unfocused for the decoration packs that mix
+    // by focus. Independent of the window animation system; 0 = instant.
+    virtual int focusFadeDuration() const = 0;
+    virtual void setFocusFadeDuration(int ms) = 0;
 
     // Editor settings — used by EditorPageController. Editor-scope rather
     // than Snapping/Tiling-scope, so they don't fit any sub-interface.
@@ -441,6 +446,7 @@ Q_SIGNALS:
     void windowBorderColorInactiveChanged();
     void hideWindowTitleBarsChanged();
     void windowTitleBarScopeChanged();
+    void focusFadeDurationChanged();
     // Editor
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();

@@ -330,6 +330,7 @@ public:
     P_CONFIG_KEY(titleBarScopeKey, "TitleBarScope")
     P_CONFIG_KEY(borderColorActiveKey, "BorderColorActive")
     P_CONFIG_KEY(borderColorInactiveKey, "BorderColorInactive")
+    P_CONFIG_KEY(focusFadeDurationKey, "FocusFadeDuration")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Gaps (shared inner/outer gap model)

@@ -104,9 +104,10 @@ void PlasmaZonesEffect::reconcileDecorationShader(const QString& windowId, KWin:
 float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
 {
     // Ramp the smoothed focus value toward the hard 0/1 target over
-    // kFocusFadeMs so a focus change fades rather than snaps. Called from
-    // pushBorderUniforms only for a pack that reads focus, with @p windowId
-    // threaded from the fold so getWindowId(w) is not recomputed per pack.
+    // m_focusFadeDurationMs (the standalone focusFadeDuration setting) so a
+    // focus change fades rather than snaps. Called from pushBorderUniforms
+    // only for a pack that reads focus, with @p windowId threaded from the
+    // fold so getWindowId(w) is not recomputed per pack.
     // Uses the PINNED per-frame clock: a second call within the same frame (a
     // chain with several focus-reading packs) reads now == lastMs and is an
     // exact no-op, so the ramp advances at most once per frame and the step
@@ -118,10 +119,9 @@ float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
     if (now < 0) {
         now = ShaderInternal::shaderClockNowMs();
     }
-    // Instant mode: the resolved window.focus duration is 0 (animations
-    // disabled, or a window.focus node set to 0 — see refreshFocusFadeDuration),
-    // so snap to the hard target with no ramp. windowSurfaceAnimates then never
-    // sees an in-flight value and forces no repaints — the switch is immediate.
+    // Instant mode: the user set focusFadeDuration to 0, so snap to the hard
+    // target with no ramp. windowSurfaceAnimates then never sees an in-flight
+    // value and forces no repaints — the switch is immediate.
     if (m_focusFadeDurationMs <= 0) {
         fs.value = target;
         fs.lastMs = now;
@@ -134,8 +134,13 @@ float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
         // windowSurfaceAnimates) so lastMs goes stale, and an uncapped
         // now - lastMs would jump the whole ramp on the first frame after a
         // focus change — the instant-snap bug. A live window's real frame delta
-        // is far below the cap, so normal ramps are unaffected.
-        const qint64 dt = qMin(now - fs.lastMs, kFocusFadeMaxStepMs);
+        // is far below the cap, so normal ramps are unaffected. The cap is
+        // additionally bounded to half the configured duration so a short
+        // duration (≤ 2 × kFocusFadeMaxStepMs) still spans at least two frames
+        // instead of completing inside the single 50 ms resume step; the
+        // qBound floor of 1 keeps dt non-zero for a 1 ms duration.
+        const qint64 maxStep = qBound(qint64(1), qint64(m_focusFadeDurationMs) / 2, kFocusFadeMaxStepMs);
+        const qint64 dt = qMin(now - fs.lastMs, maxStep);
         const float step = static_cast<float>(dt) / static_cast<float>(m_focusFadeDurationMs);
         if (fs.value < target) {
             fs.value = qMin(target, fs.value + step);

@@ -44,6 +44,7 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -696,33 +697,26 @@ private:
     // sentinel (first decorate snaps to the current state, no fade on
     // appearance); `lastMs` dedupes the per-frame advance across the chain's
     // packs. windowSurfaceAnimates keeps the window repainting while a value
-    // is strictly between 0 and 1, so the ramp runs to completion.
+    // is inside its near-0/near-1 thresholds, so the ramp runs to completion.
     struct FocusFadeState
     {
         float value = -1.0f;
         qint64 lastMs = -1;
     };
     QHash<QString, FocusFadeState> m_focusFade;
-    // Default focus ramp duration (ms) — the fallback before the animation
-    // settings / motion-profile tree land. The live value is m_focusFadeDurationMs.
-    static constexpr qreal kFocusFadeMs = 160.0;
     // Live focus cross-fade duration (ms) for the uSurfaceFocused ramp (border
-    // colour mix + the focus-fade content pack). NOT a standalone setting: it
-    // tracks the window.focus animation timing via refreshFocusFadeDuration()
-    // (resolved window.focus duration, or 0 when animations are disabled — an
-    // instant switch). Seeded to the constant default until the first refresh.
-    int m_focusFadeDurationMs = static_cast<int>(kFocusFadeMs);
-    // Recompute m_focusFadeDurationMs from the animation system: 0 when
-    // animations are disabled, else the resolved window.focus event duration
-    // (motion-tree per-event override → global animationDuration). Called when
-    // animationsEnabled / animationDuration / the motion profile tree change.
-    void refreshFocusFadeDuration();
+    // colour mix + the focus-fade content pack). A STANDALONE decoration
+    // setting ("focusFadeDuration", loaded in loadCachedSettings), deliberately
+    // independent of the window animation system: the fade is a decoration
+    // cross-fade, not a window animation, so disabling animations or retuning
+    // the window.focus event no longer snaps or retimes it. 0 = instant.
+    // Seeded to the shared default until the async settings load lands.
+    int m_focusFadeDurationMs = PhosphorCompositor::DecorationDefaults::FocusFadeMs;
     // Resolve a per-event base duration (ms) from the motion profile tree: a
     // motion-tree override anywhere up @p profilePath's ancestor chain replaces
     // @p fallbackMs with the node's resolved effectiveDuration(), else the
-    // fallback stands. Shared by tryBeginShaderForEvent (per-event transition
-    // timing) and refreshFocusFadeDuration (the decoration focus fade), so the
-    // two never drift out of sync.
+    // fallback stands. Used by tryBeginShaderForEvent (per-event transition
+    // timing).
     int resolveMotionTreeBaseDuration(const QString& profilePath, int fallbackMs) const;
     // Cap on the per-frame ramp delta. A window at rest (value pinned at 0 or 1)
     // stops being force-repainted by windowSurfaceAnimates, so its FocusFadeState
@@ -858,7 +852,14 @@ private:
     QRect m_resizeStartGeometry;
     void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry);
 
-    void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
+    /// wasDecoratedHint: whether @p windowId was decorated BEFORE this
+    /// reconcile cycle began. Per-window callers omit it (the internal
+    /// m_windowDecorations lookup is authoritative); updateAllDecorations MUST
+    /// supply it because it clears the whole decoration map before re-adding,
+    /// which would make every window look freshly decorated and scrub its
+    /// in-flight focus cross-fade (the fade would snap on every focus change).
+    void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w,
+                                std::optional<bool> wasDecoratedHint = std::nullopt);
     /// windowHint: the EffectWindow when the caller still holds it and the
     /// window is already deleted (close / delete paths) — findWindowById
     /// cannot resolve a deleted id, and without the pointer the GL release

@@ -327,6 +327,21 @@ public:
     {
         return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
     }
+    // Decoration focus cross-fade (uSurfaceFocused ramp) duration, ms. A
+    // standalone decoration setting, independent of the window animation
+    // system; 0 switches instantly.
+    static constexpr int focusFadeDuration()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::FocusFadeMs;
+    }
+    static constexpr int focusFadeDurationMin()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::FocusFadeMsMin;
+    }
+    static constexpr int focusFadeDurationMax()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::FocusFadeMsMax;
+    }
     static bool hideWindowTitleBars()
     {
         return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
@@ -1597,8 +1612,9 @@ private:
     ConfigDefaults() = delete;
 };
 
-// Compile-time bound checks for retuned animation defaults so a future
-// bump can never silently exceed the declared slider range. Mirrors the
+// Compile-time bound checks for defaults that declare min/max accessors,
+// so a future bump can never silently exceed the declared slider range.
+// Mirrors the
 // pattern in AnimationLimits.h where library defaults assert against
 // their own min/max. Mirrored at runtime by QVERIFY in
 // tests/unit/config/test_configdefaults.cpp; the compile-time form
@@ -1607,6 +1623,9 @@ private:
 static_assert(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDurationMin()
                   && ConfigDefaults::animationDuration() <= ConfigDefaults::animationDurationMax(),
               "ConfigDefaults::animationDuration() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDurationMin()
+                  && ConfigDefaults::focusFadeDuration() <= ConfigDefaults::focusFadeDurationMax(),
+              "ConfigDefaults::focusFadeDuration() outside declared [min, max] slider range");
 static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin()
                   && ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax(),
               "ConfigDefaults::animationStaggerInterval() outside declared [min, max] slider range");

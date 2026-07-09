@@ -23,8 +23,9 @@ class ISettings;
 /// plain config settings on ISettings (Windows.* and Gaps.*), so this controller
 /// forwards each value's READ/WRITE to the matching ISettings getter/setter and
 /// re-emits the ISettings::*Changed NOTIFY to QML. It also carries the CONSTANT
-/// slider bounds (border width/radius + the shared gap range) sourced from the
-/// same defaults the schema clamps against so the UI range can never drift.
+/// slider bounds (border width/radius, focus fade duration, and the shared gap
+/// range) sourced from the same defaults the schema clamps against so the UI
+/// range can never drift.
 ///
 /// Dirty tracking: the underlying values ARE Q_PROPERTY on Settings, so
 /// SettingsController's meta-object loop already wires their NOTIFY to
@@ -53,6 +54,8 @@ class WindowAppearanceController : public PhosphorControl::PageController
                    hideWindowTitleBarsChanged)
     Q_PROPERTY(
         QString titleBarScope READ windowTitleBarScope WRITE setWindowTitleBarScope NOTIFY windowTitleBarScopeChanged)
+    // Decoration focus cross-fade duration (ms); 0 switches instantly.
+    Q_PROPERTY(int focusFadeDuration READ focusFadeDuration WRITE setFocusFadeDuration NOTIFY focusFadeDurationChanged)
 
     // ── Shared inner/outer gap model (Gaps.*) ─────────────────────────────────
     Q_PROPERTY(int innerGap READ innerGap WRITE setInnerGap NOTIFY innerGapChanged)
@@ -83,6 +86,8 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
     Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
+    Q_PROPERTY(int focusFadeDurationMin READ focusFadeDurationMin CONSTANT)
+    Q_PROPERTY(int focusFadeDurationMax READ focusFadeDurationMax CONSTANT)
     Q_PROPERTY(int innerGapMin READ innerGapMin CONSTANT)
     Q_PROPERTY(int innerGapMax READ innerGapMax CONSTANT)
     Q_PROPERTY(int outerGapMin READ outerGapMin CONSTANT)
@@ -111,6 +116,7 @@ public:
     QString windowBorderColorInactive() const;
     bool hideWindowTitleBars() const;
     QString windowTitleBarScope() const;
+    int focusFadeDuration() const;
 
     void setShowWindowBorder(bool show);
     void setWindowBorderScope(const QString& scope);
@@ -120,6 +126,7 @@ public:
     void setWindowBorderColorInactive(const QString& color);
     void setHideWindowTitleBars(bool hide);
     void setWindowTitleBarScope(const QString& scope);
+    void setFocusFadeDuration(int ms);
 
     // Shared inner/outer gaps — forward to ISettings.
     int innerGap() const;
@@ -188,6 +195,14 @@ public:
     {
         return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
     }
+    int focusFadeDurationMin() const
+    {
+        return ::PhosphorCompositor::DecorationDefaults::FocusFadeMsMin;
+    }
+    int focusFadeDurationMax() const
+    {
+        return ::PhosphorCompositor::DecorationDefaults::FocusFadeMsMax;
+    }
     int innerGapMin() const
     {
         return ConfigDefaults::innerGapMin();
@@ -214,6 +229,7 @@ Q_SIGNALS:
     void windowBorderColorInactiveChanged();
     void hideWindowTitleBarsChanged();
     void windowTitleBarScopeChanged();
+    void focusFadeDurationChanged();
     void innerGapChanged();
     void outerGapChanged();
     void usePerSideOuterGapChanged();

@@ -705,6 +705,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::windowsAppearanceGroup(), CD::borderColorInactiveKey()},
              {CD::windowsAppearanceGroup(), CD::hideTitleBarsKey()},
              {CD::windowsAppearanceGroup(), CD::titleBarScopeKey()},
+             {CD::windowsAppearanceGroup(), CD::focusFadeDurationKey()},
              {CD::gapsGroup(), CD::innerGapKey()},
              {CD::gapsGroup(), CD::outerGapKey()},
              {CD::gapsGroup(), CD::usePerSideOuterGapKey()},
