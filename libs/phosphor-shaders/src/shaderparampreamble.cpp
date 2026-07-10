@@ -14,7 +14,7 @@ namespace {
 
 /// Overlay/zone image params bind to `uTexture0..3`. Animation packs never
 /// use the Image pool (their textures are a separate top-level list bound to
-/// `iChannel1..3`), so this cap only governs the zone path.
+/// `uTexture1..3`), so this cap only governs the zone path.
 constexpr int kMaxImageSlots = 4;
 
 QString imageAccessor(int slot)

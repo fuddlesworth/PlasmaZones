@@ -647,7 +647,7 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
                                          << "x" << shaderAnchor->height();
 
     // Render the anchor into a separate FBO via QQuickShaderEffectSource;
-    // the ShaderEffect samples that FBO as iChannel0. The separate FBO
+    // the ShaderEffect samples that FBO as uTexture0. The separate FBO
     // is what sidesteps the "Texture used with different accesses within
     // the same pass" Vulkan validation: the source FBO render and the
     // shader effect's read are different render passes.
@@ -655,20 +655,20 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // **Gated on `foundExplicitAnchor`**: only created when a descendant
     // tagged `shaderAnchor: true` was found. The fallback path (no tag,
     // anchor==target==QML root) leaves `shaderSource` null and skips the
-    // `setSourceItem` call below, so iChannel0 is unbound for the whole
+    // `setSourceItem` call below, so uTexture0 is unbound for the whole
     // leg — the shader runs without a content texture and any
-    // `texture(iChannel0, …)` call returns whatever the GL spec does for
+    // `texture(uTexture0, …)` call returns whatever the GL spec does for
     // an unbound sampler (typically transparent black). This is
     // intentional: layer-enabling a QQuickRootItem-rooted target breaks
     // scene-graph rendering for the consumer's whole window. Animation
-    // shaders that need an iChannel0 sample MUST be paired with a
+    // shaders that need an uTexture0 sample MUST be paired with a
     // `shaderAnchor: true` descendant in the consumer's QML; the
     // explicit=false case in the qCDebug above is the operator's signal
     // that a shader is running source-less.
     //
     // live=true: open animations have no prior frame to snapshot. A
     // one-shot grab (live=false) races the source's first layout/paint
-    // and captures an empty FBO, leaving iChannel0 transparent for the
+    // and captures an empty FBO, leaving uTexture0 transparent for the
     // whole animation. Re-rendering each frame also lets the shader
     // pick up content that moves during the leg.
     //
@@ -677,7 +677,7 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     //
     // Width/Height MUST be non-zero — Qt's QQuickShaderEffectSource
     // skips updatePaintNode (and the FBO render along with it) at 0×0,
-    // leaving iChannel0 unpopulated even with hideSource set.
+    // leaving uTexture0 unpopulated even with hideSource set.
     //
     // Position is parked far off-screen. QQuickShaderEffectSource is
     // itself a renderable item: its updatePaintNode returns a node that

@@ -140,6 +140,7 @@ private Q_SLOTS:
         original.bufferFilter = QStringLiteral("linear");
         original.bufferFilters = {QStringLiteral("nearest"), QStringLiteral("linear")};
         original.useDepthBuffer = true;
+        original.useAudio = true;
         original.geometryGridSubdivisions = 40;
 
         const AnimationShaderEffect restored = AnimationShaderEffect::fromJson(original.toJson());
