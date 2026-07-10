@@ -65,9 +65,8 @@ return pluau.algorithm {
                 if #minSizes > 0 then
                     for j = 0, windowsInThisRow - 1 do
                         local idx = row * cols + j
-                        local e = minSizes[idx + 1]
-                        lastRowMinWidths[#lastRowMinWidths + 1] =
-                            (idx < #minSizes and e and e.w and e.w > 0) and e.w or 0
+                        local mw = pluau.minSizeAt(minSizes, idx)
+                        lastRowMinWidths[#lastRowMinWidths + 1] = mw
                     end
                 end
                 local lastRowWidths = pluau.distributeWithOptionalMins(area.width, windowsInThisRow, gap, lastRowMinWidths)

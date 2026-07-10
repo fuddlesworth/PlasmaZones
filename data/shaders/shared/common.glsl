@@ -135,9 +135,10 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
 
-// 2D rotation matrix. mat2 is column-major, so rot(a) * p rotates a column
-// vector by a; p * rot(a) applies the transpose (rotation by -a), which is the
-// form the *drift fbm and the pass-shader flow warps rely on.
+// 2D rotation matrix. mat2 is column-major, so p * rot(a) rotates by +a,
+// while rot(a) * p applies the transpose (rotation by -a). The *drift fbm
+// keeps its historical matrix-first rot(a) * uv form; the pass-shader flow
+// warps (e.g. nexus-cascade) use the p * rot(a) form.
 mat2 rot(float a) {
     float c = cos(a), s = sin(a);
     return mat2(c, -s, s, c);
@@ -298,6 +299,7 @@ vec3 triStopPalette(float t, vec3 primary, vec3 secondary, vec3 accent) {
 }
 
 // Inigo Quilez cosine palette: a + b * cos(TAU * (c * t + d)).
+// Currently single-consumer (cosmic-flow); prismata's copy was dead code.
 vec3 iqPalette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
     return a + b * cos(TAU * (c * t + d));
 }

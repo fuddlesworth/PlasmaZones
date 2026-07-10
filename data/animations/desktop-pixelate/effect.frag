@@ -15,7 +15,7 @@ vec4 pTransition(vec2 uv, float t) {
     float dist = ceil(d * steps) / steps;
     vec2 squareSize = 2.0 * dist / vec2(max(p_blocks, 1.0));
     vec2 p = dist > 0.0 ? (floor(uv / squareSize) + 0.5) * squareSize : uv;
-    return mix(getFromColor(p), getToColor(p), t);
+    return crossFade(p, t);
 #else
     return vec4(0.0);
 #endif

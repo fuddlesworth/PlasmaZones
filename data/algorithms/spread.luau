@@ -29,7 +29,7 @@ return pluau.algorithm {
         local gap = ctx.innerGap
         local minSizes = ctx.minSizes
 
-        local widthFraction = pluau.clamp(ctx.splitRatio, SpreadMinFraction, 1.0)
+        local widthFraction = pluau.clamp(ctx.splitRatio, SpreadMinFraction, 1.0) or SpreadMinFraction
 
         local minWidths = {}
         local slotMinWidths = {}

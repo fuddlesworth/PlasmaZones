@@ -94,8 +94,11 @@ float turingPattern(vec2 p, float time) {
 }
 
 // ── 2D Curl noise ────────────────────────────────────────────
+// Forward-difference variant (eps 0.01, time-advected); deliberately NOT the
+// central-difference curlNoise in flow-noise.glsl. Named curlNoiseFwd so a
+// future #include <flow-noise.glsl> here cannot collide.
 
-vec2 curlNoise(vec2 p, float time) {
+vec2 curlNoiseFwd(vec2 p, float time) {
     float eps = 0.01;
     float n  = noise2D(p + time * 0.1);
     float nx = noise2D(p + vec2(eps, 0.0) + time * 0.1);
@@ -536,7 +539,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
                 vec2 pos = seed;
                 for (int step = 0; step < 3; step++) {
-                    pos += curlNoise(pos * 3.0, time * windSpeed + fi) * 0.015;
+                    pos += curlNoiseFwd(pos * 3.0, time * windSpeed + fi) * 0.015;
                 }
                 pos = fract(pos);
 

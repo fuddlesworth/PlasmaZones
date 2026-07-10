@@ -204,8 +204,9 @@ public:
 
     /// Resolve a `builtin:` buffer-shader token (e.g. `builtin:gaussian-h`)
     /// to the absolute path of the standard pass shipped in the surface
-    /// `shared/` directory, looking beside @p effectDir's parent first and
-    /// falling back to the installed `plasmazones/surface/shared` data dirs
+    /// `shared/` directory, probing @p effectDir's sibling `shared/` dir
+    /// first (both are children of the same search root) and falling back
+    /// to the installed `plasmazones/surface/shared` data dirs
     /// (so user packs outside the system tree can still opt in). The token
     /// vocabulary is a fixed whitelist — authors cannot smuggle arbitrary
     /// paths through it, which keeps the pack-dir traversal guard intact.

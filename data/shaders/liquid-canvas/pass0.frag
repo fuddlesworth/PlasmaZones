@@ -21,11 +21,10 @@ vec2 fbmCurl(vec2 p, float t, int octaves) {
     vec2 flow = vec2(0.0);
     float amp = 1.0;
     float freq = 1.0;
-    float c = cos(0.4), s = sin(0.4);
-    mat2 rot = mat2(c, -s, s, c);
+    mat2 octaveRot = rot(0.4);
     for (int i = 0; i < octaves && i < 8; i++) {
         flow += curlNoise(p * freq, t * (0.8 + float(i) * 0.15)) * amp;
-        p = rot * p;
+        p = octaveRot * p;
         freq *= 2.0;
         amp *= 0.55;
     }

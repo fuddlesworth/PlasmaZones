@@ -37,8 +37,8 @@ const vec3 EOS_GLOW   = vec3(0.565, 0.506, 0.733); // Lavender glow
 const vec2 LOGO_CENTER = vec2(0.583, 0.52);
 
 
-// simplex2D / simplexFBM (and simplexMod289/Permute), sdSegment(), and
-// catmullRom() come from logo-drift.glsl / common.glsl.
+// simplex2D / simplexFBM (and simplexMod289/Permute) and catmullRom()
+// come from logo-drift.glsl.
 
 vec3 eosPaletteCR(float t, vec3 primary, vec3 secondary, vec3 accent, vec3 glow) {
     t = fract(t);

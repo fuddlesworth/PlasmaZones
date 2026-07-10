@@ -143,7 +143,7 @@ export type Pluau = {
     appendGracefulDegradation: (zones: { Zone }, remaining: Rect, leftover: number, innerGap: number) -> (),
     -- shared algorithm helpers
     guardArea: (area: Rect, count: number) -> { Zone }?,
-    clamp: (v: number, lo: number, hi: number) -> number?,
+    clamp: (v: any, lo: number, hi: number) -> number?,
     center: (start: number, total: number, size: number) -> number,
     gridShape: (count: number) -> (number, number),
     cumulativeOffsets: (start: number, sizes: { number }, gap: number) -> { number },

@@ -30,7 +30,7 @@ return pluau.algorithm {
         local early = pluau.guardArea(area, count)
         if early then return early end
 
-        local sizeRatio = pluau.clamp(ctx.splitRatio, StairMinSizeRatio, StairMaxSizeRatio)
+        local sizeRatio = pluau.clamp(ctx.splitRatio, StairMinSizeRatio, StairMaxSizeRatio) or StairMaxSizeRatio
 
         local winWidth = math.max(StairMinWindowPx, math.floor(area.width * sizeRatio))
         local winHeight = math.max(StairMinWindowPx, math.floor(area.height * sizeRatio))

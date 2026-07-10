@@ -5,7 +5,8 @@
 // pack whose buffer passes blur the backdrop (blur / duotone / frosted-glass /
 // glass / rain-glass / rippled-glass). The two halves of a 9-tap separable
 // Gaussian (sigma ~ radius/3), previously copy-pasted into each pack's
-// buffer0.frag / buffer1.frag, live here once.
+// buffer0.frag / buffer1.frag, live here once and are called by the shared
+// gaussian_h.frag / gaussian_v.frag standard passes (builtin:gaussian-h/-v).
 //
 // BUFFER-PASS CONVENTION: buffer shaders compile WITHOUT the generated p_<id>
 // parameter preamble (bakeBufferShaders), so parameters are read by their RAW

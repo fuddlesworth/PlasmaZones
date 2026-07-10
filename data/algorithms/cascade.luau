@@ -32,6 +32,7 @@ return pluau.algorithm {
         if early then return early end
 
         local offsetRatio = pluau.clamp(ctx.splitRatio, CascadeMinOffsetRatio, CascadeMaxOffsetRatio)
+            or CascadeMaxOffsetRatio
 
         -- Guard the divisor (the host short-circuits single-window layouts, so
         -- this is defensive); identical to `count - 1` for the reachable count>=2

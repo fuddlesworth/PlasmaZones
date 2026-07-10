@@ -57,7 +57,7 @@ return pluau.algorithm {
         if old.width <= 0 or oldRatio <= 0 then return nil end
         if edges.left or edges.right then
             local newColumnWidth = 2 * new.width - old.width
-            return { splitRatio = newColumnWidth * oldRatio / old.width }
+            return { splitRatio = pluau.resizeRatioGrow(newColumnWidth, old.width, oldRatio) }
         end
         return nil
     end,

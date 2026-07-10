@@ -8,9 +8,11 @@
 #include <QColor>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 
@@ -460,6 +462,34 @@ private Q_SLOTS:
         QVERIFY(e.isValid());
         QVERIFY2(!e.isMultipass, "unknown builtin token must fail-close to single-pass");
         QVERIFY(e.bufferShaderPaths.isEmpty());
+    }
+
+    void resolveBuiltinBufferShader_falls_back_to_standard_paths_for_user_packs()
+    {
+        // A user pack (~/.local/share/plasmazones/surface/<pack>) has no
+        // sibling shared/ dir, so resolution falls back to
+        // QStandardPaths::locate. Exercise that branch under
+        // QStandardPaths test mode with the shared pass installed into the
+        // test-mode data location. Assertions run only after test mode is
+        // switched off again so a failure cannot leak global state into
+        // sibling tests.
+        QTemporaryDir packRoot; // deliberately WITHOUT a shared/ sibling
+        const bool packRootValid = packRoot.isValid();
+
+        QStandardPaths::setTestModeEnabled(true);
+        const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+        const QString installed = dataDir + QStringLiteral("/plasmazones/surface/shared/gaussian_h.frag");
+        const bool wrote = writeFile(installed, QByteArrayLiteral("// stub\n"));
+        const QString resolved = SurfaceShaderRegistry::resolveBuiltinBufferShader(
+            QStringLiteral("builtin:gaussian-h"), packRoot.path() + QStringLiteral("/user-pack"));
+        QFile::remove(installed);
+        QStandardPaths::setTestModeEnabled(false);
+
+        QVERIFY(packRootValid);
+        QVERIFY(wrote);
+        QVERIFY2(!resolved.isEmpty(), "user pack without a sibling shared/ dir must resolve via QStandardPaths");
+        QCOMPARE(QFileInfo(resolved).fileName(), QStringLiteral("gaussian_h.frag"));
+        QVERIFY(QFileInfo(resolved).isAbsolute());
     }
 
     void fromJson_leaves_multipass_flag_raw_without_normalizing()

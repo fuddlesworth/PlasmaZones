@@ -1032,7 +1032,8 @@ end
 
 -- Running start offsets for a run of `sizes` beginning at `start`, each separated
 -- by `gap`. offsets[1] = start; offsets[i + 1] = offsets[i] + sizes[i] + gap.
--- Length equals #sizes.
+-- Length equals #sizes for non-empty input; an empty `sizes` still yields
+-- { start } (both consumers pass at least one size after guardArea).
 local function cumulativeOffsets(start, sizes, gap)
     local offsets = { start }
     for i = 1, #sizes - 1 do
