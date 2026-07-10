@@ -563,6 +563,16 @@ void ShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>
         bindings.append(
             QRhiShaderResourceBinding::sampledTexture(kUserTextureBaseBinding, QRhiShaderResourceBinding::FragmentStage,
                                                       m_userTextures[0].get(), m_userTextureSamplers[0].get()));
+    } else if (m_dummyChannelTexture && m_dummyChannelSampler) {
+        // Neither a provider nor a QImage at slot 0: bind the dummy 1x1
+        // transparent texture so binding 7 (uTexture0, declared by every
+        // family's shared header and referenced by most packs) always has an
+        // SRB entry — same rationale as the slots 1-3 fallback below. Hosts
+        // normally wire a source before first paint; this covers the gap on
+        // strict backends.
+        bindings.append(
+            QRhiShaderResourceBinding::sampledTexture(kUserTextureBaseBinding, QRhiShaderResourceBinding::FragmentStage,
+                                                      m_dummyChannelTexture.get(), m_dummyChannelSampler.get()));
     }
 
     // Slots 1-3 always come from the QImage path; the source-provider

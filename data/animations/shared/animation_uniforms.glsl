@@ -440,9 +440,10 @@ vec4 surfaceColor(vec2 uv) {
 // equality test (branching on `!= 0` was the documented footgun).
 #define p_reversed (iIsReversed == 1)
 
-// Un-flipped, always-forward 0→1 leg progress. 24 of the bundled shaders
+// Un-flipped, always-forward 0→1 leg progress. Bundled shaders used to
 // hand-roll exactly this `(iIsReversed == 1) ? (1.0 - iTime) : iTime` to
-// recover direction-independent progress; call this instead.
+// recover direction-independent progress; the T1.5 migration replaced
+// every hand-rolled copy with this helper — new packs call it directly.
 float legProgress() {
     return p_reversed ? (1.0 - iTime) : iTime;
 }

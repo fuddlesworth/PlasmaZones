@@ -248,7 +248,9 @@ inline constexpr const char* kIDate = "iDate";
 /// Authoring rule: branch with `iIsReversed == 1` (NOT `iIsReversed != 0`
 /// or implicit-truthy). This pins the behaviour against any future
 /// runtime that elects to extend the encoding (e.g. negative for
-/// "unknown direction"). The matrix shader follows this convention.
+/// "unknown direction"). Bundled packs read direction through the
+/// `p_reversed` / `legProgress()` helpers in the canonical header, which
+/// encode this rule once.
 inline constexpr const char* kIIsReversed = "iIsReversed";
 
 /// `vec4 iSurfaceScreenPos` — the shader surface's position in screen

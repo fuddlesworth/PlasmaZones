@@ -1110,7 +1110,8 @@ private:
 
     /// The effect's own CAVA spectrum source. Constructed lazily on first need
     /// (syncEffectAudioState) so a session that never uses an audio decoration
-    /// pays nothing. Owns a `cava` child process while running.
+    /// or animation pack pays nothing. Owns a `cava` child process while
+    /// running.
     std::unique_ptr<PhosphorAudio::IAudioSpectrumProvider> m_audioProvider;
 
     /// Session-global spectrum texture (`bars×1`, R = bar value 0..1). Uploaded

@@ -5,9 +5,14 @@
 
 ## Status
 
-**Tier 1 implemented** (T1.1–T1.5 + T1.2; all 53 animation + 26 zone packs migrated,
+**Tier 1 implemented** (T1.1–T1.5 + T1.2; all bundled animation + zone packs migrated,
 offline validator + CI gate landed). Tiers 2–3 remain proposed. This document covers
 the full scope across all tiers; the Tier-2/3 sections are the forward design.
+
+Pack counts throughout this document reflect the v3.1 tree at design time (53
+animation + 26 zone packs); the animation tree has since grown (69 packs as of
+v3.2) and every pack added after the T1.5 migration follows the migrated
+conventions from day one.
 
 ## Motivation
 

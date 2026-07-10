@@ -298,7 +298,7 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     }
 
     // Cap the texture list at the contract budget. Surplus entries are
-    // silently dropped — the canonical UBO only declares iChannel1..3
+    // silently dropped — the canonical UBO only declares uTexture1..3
     // and exposing more would require both runtimes to grow more
     // sampler bindings. A future contract bump (kMaxUserTextureSlots > 3)
     // would loosen this cap automatically.
@@ -335,8 +335,8 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
         // slot-index field; an empty entry preceding a populated one
         // SHIFTS the populated entry's runtime slot. e.g. authoring
         // [{path:""}, {path:"foo.png"}, {path:"bar.png"}] yields
-        // textures bound at iChannel1+iChannel2 instead of iChannel2+
-        // iChannel3 as the metadata reads. Loud so authors notice the
+        // textures bound at uTexture1+uTexture2 instead of uTexture2+
+        // uTexture3 as the metadata reads. Loud so authors notice the
         // implicit re-mapping.
         if (t.path.isEmpty()) {
             ++droppedEmpty;
