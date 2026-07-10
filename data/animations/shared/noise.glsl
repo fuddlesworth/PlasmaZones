@@ -92,7 +92,7 @@ float surfaceSeed() {
 // (127.1, 311.7))) * 43758.5453)` pattern. Used by the niri-derived
 // ports for per-cell / per-instance pseudo-random in [0, 1). Lifted
 // from the file-scope copies that previously lived in dissolve,
-// glitch, ink-splash, plasma-flow, smoke, snap, and soft-warp-fade
+// glitch, ink-splash, smoke, snap, and soft-warp-fade
 // — all bit-equivalent except for sub-ULP variance in the
 // constant's last decimals (43758.5453 vs 43758.5453123, identical
 // in float32). Other niri ports keep their own hashes when the
@@ -118,9 +118,9 @@ float classicHash(vec2 p) {
 }
 
 // niri-style bilinear value noise on niriHash (smooth-step interp
-// at integer lattice corners). Used by the 4 niri ports that need
-// procedural noise — plasma-flow, soft-warp-fade, ink-splash,
-// smoke. Identical body across all four; lifting deduplicates ~10
+// at integer lattice corners). Used by the 3 niri ports that need
+// procedural noise — soft-warp-fade, ink-splash,
+// smoke. Identical body across all three; lifting deduplicates ~10
 // lines per shader. Perlin's perlin_noise stays local because it
 // uses an alternative bilinear formulation tied to perlin_random's
 // non-shareable hash.
@@ -159,7 +159,7 @@ float fbm(vec2 p, int octaves, float lacunarity) {
 //
 // Bands sit OUTSIDE [0, 1] so identity sampling (sample_uv ∈
 // [0, 1]) gets mask = 1 everywhere — no inner-edge alpha clipping.
-// Used by morph, popin, fade, inkwell-drop, plasma-flow, ripple,
+// Used by morph, popin, fade, inkwell-drop, ripple,
 // smoke, snap, soft-warp-fade, and glide. See PR #425 for the
 // inside-vs-outside-band fix history.
 float boundaryMask(vec2 uv) {
