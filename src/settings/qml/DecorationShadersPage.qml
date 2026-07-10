@@ -17,6 +17,7 @@ import QtQuick
  */
 ShaderBrowserPage {
     bridge: settingsController.decorationPage
+    settingsCategory: "DecorationShadersFilterBar"
     infoBannerText: i18n("Browse installed decoration packs. Stack packs onto a surface's chain from the Windows, OSDs, and Popups pages.")
     usageHeaderTextFn: function (count) {
         return i18ncp("@info shader usage section header (decoration)", "Used on %n surface", "Used on %n surfaces", count);
