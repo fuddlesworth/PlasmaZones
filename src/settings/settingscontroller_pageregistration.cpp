@@ -264,6 +264,13 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("animations-window-motion"), QStringLiteral("animations-motion"),
                PhosphorI18n::tr("Window Motion"), QStringLiteral("AnimationsWindowMotionPage.qml"),
                QStringLiteral("window-new"));
+    // Window Dragging is deliberately its own page, not a row under Window
+    // Motion: the drag event is its own opt-in shader class (`move`) that
+    // takes no inherited shader, so parking it under the "All Windows"
+    // cascade parent would misrepresent the inheritance.
+    regVirtual(QStringLiteral("animations-window-dragging"), QStringLiteral("animations-motion"),
+               PhosphorI18n::tr("Window Dragging"), QStringLiteral("AnimationsWindowDraggingPage.qml"),
+               QStringLiteral("transform-move"));
     regVirtual(QStringLiteral("animations-side-panels"), QStringLiteral("animations-motion"),
                PhosphorI18n::tr("Side Panels"), QStringLiteral("AnimationsSidePanelsPage.qml"),
                QStringLiteral("sidebar-collapse-symbolic"));

@@ -713,30 +713,31 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         if (m_resizingWindow) {
             m_resizeStartGeometry = window->frameGeometry().toRect();
         }
-        // window.move / window.resize shader transitions: KWin's interactive
-        // move/resize is its own animation system (Window::moveResize via
-        // pointer drag), but we layer an effect-side shader for visual
-        // feedback. windowStartUserMovedResized doesn't disambiguate the
-        // two; w->isUserResize() does — interactive resize sets it, plain
-        // move leaves it false. Each direction can take its own shader
-        // assignment. tryBeginShaderForEvent silently no-ops if the user
-        // didn't assign a shader to the path.
-        if (window) {
-            tryBeginShaderForEvent(window,
-                                   window->isUserResize() ? PhosphorAnimation::ProfilePaths::WindowResize
-                                                          : PhosphorAnimation::ProfilePaths::WindowMove,
-                                   animationDurationMs());
-            // Genuine old-content capture for cross-fade shaders: a
-            // move/resize begins with the window ALIVE and its pre-drag
-            // content still current, so a shader that declares uOldWindow
-            // (ripple-snap, window-morph, ...) gets a real decorated
-            // snapshot to fade FROM — matching the drag-snap morph path —
-            // instead of leaning on the iHasOldWindow fallback (which
-            // collapses the old side to the live content). Especially
-            // material for resizes, where the old content re-lays. The
-            // !oldSnapshot guard preserves an existing capture on a
-            // retargeted transition, mirroring drag_snap; a failed capture
-            // clears needsSnapshot and the shader-side fallback covers it.
+        // window.movement.move shader transition: KWin's interactive move is
+        // its own animation system (Window::moveResize via pointer drag), but
+        // we layer an effect-side shader for visual feedback.
+        // windowStartUserMovedResized doesn't disambiguate move from resize;
+        // w->isUserResize() does — interactive resize sets it, plain move
+        // leaves it false. Interactive RESIZE deliberately starts NO shader
+        // event: it is a held gesture with no discrete before/after until
+        // release (the compositor repaints the re-laid content live the whole
+        // time), so a crossfade pack has nothing meaningful to play, and the
+        // soft-body sim omits KWin's resize edge-lock logic (mesh_sim.cpp) so
+        // the move-physics packs have no real story there either. Discrete
+        // resizes are covered by the snapIn / layoutSwitch / maximize events.
+        // tryBeginShaderForEvent silently no-ops if the user didn't assign a
+        // shader to the path.
+        if (window && !window->isUserResize()) {
+            tryBeginShaderForEvent(window, PhosphorAnimation::ProfilePaths::WindowMove, animationDurationMs());
+            // Genuine old-content capture for cross-fade legs: the drag
+            // begins with the window ALIVE and its pre-drag content still
+            // current, so a move pack that declares uOldWindow gets a real
+            // decorated snapshot to fade FROM — matching the drag-snap morph
+            // path — instead of leaning on the iHasOldWindow fallback (which
+            // collapses the old side to the live content). The !oldSnapshot
+            // guard preserves an existing capture on a retargeted transition,
+            // mirroring drag_snap; a failed capture clears needsSnapshot and
+            // the shader-side fallback covers it.
             if (auto* st = m_shaderManager.findTransition(window); st && st->cached) {
                 if (st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
                     st->needsSnapshot = true;

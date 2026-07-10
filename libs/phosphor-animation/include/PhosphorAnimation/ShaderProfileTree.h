@@ -33,6 +33,11 @@ namespace PhosphorAnimationShaders {
  * At each step, engaged optionals replace the accumulator. Unset fields
  * pass through.
  *
+ * EXCEPTION: the interactive-drag leaf (`window.movement.move`) takes no
+ * inherited shader — resolve() reads only its direct override. Ancestor
+ * picks are single-surface crossfade packs by construction and cannot
+ * drive the held drag transition (see EventClassMove in ProfilePaths.h).
+ *
  * ## Thread safety
  *
  * Value type, not internally synchronized. Same as ProfileTree.
@@ -89,7 +94,7 @@ private:
 
 /// Resolve @p path against @p tree, applying the built-in per-event default
 /// shader (ProfilePaths::defaultShaderEffectIdForPath, e.g. "window-morph" for
-/// window-move events) when the path is TRULY UNSET — i.e. neither it nor any
+/// window snap events) when the path is TRULY UNSET — i.e. neither it nor any
 /// ancestor carries an override. An explicit "None" (an engaged-empty
 /// override) IS an override, so it is respected and the default is NOT applied.
 ///

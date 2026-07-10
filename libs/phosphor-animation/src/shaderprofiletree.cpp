@@ -16,6 +16,23 @@ namespace PhosphorAnimationShaders {
 
 ShaderProfile ShaderProfileTree::resolve(const QString& path) const
 {
+    // The interactive-drag leaf takes NO inherited shader. Every pack a user
+    // can assign on an ancestor ("window.movement", "window", the baseline)
+    // is a single-surface crossfade — the pickers refuse move-class packs
+    // everywhere but this leaf — and a crossfade cannot drive the held drag
+    // transition (no from/to plays while the pointer is down). Inheriting one
+    // here would install a dead transition that pins full-output repaints for
+    // the whole drag, and would show a "current shader" in settings that
+    // never visibly runs. Only a direct override at the leaf applies; timing
+    // inheritance is unaffected (that lives in the motion ProfileTree).
+    if (path == PhosphorAnimation::ProfilePaths::WindowMove) {
+        ShaderProfile effective;
+        auto it = m_overrides.constFind(path);
+        if (it != m_overrides.constEnd())
+            ShaderProfile::overlay(effective, it.value());
+        return effective.withDefaults();
+    }
+
     QStringList chain;
     QString cursor = path;
     while (!cursor.isEmpty()) {

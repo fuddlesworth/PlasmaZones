@@ -228,13 +228,14 @@ private Q_SLOTS:
 
     void testDefaultShaderForPathMoveEvents()
     {
-        // Move/resize events default to window-morph; others to none.
+        // Snap events default to window-morph; others to none.
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapIn), QStringLiteral("window-morph"));
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapOut), QStringLiteral("window-morph"));
-        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapResize), QStringLiteral("window-morph"));
-        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowMove), QStringLiteral("window-morph"));
-        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowResize), QStringLiteral("window-morph"));
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowLayoutSwitch), QStringLiteral("window-morph"));
+        // The interactive-drag leaf carries NO default: a crossfade pack
+        // cannot drive the held drag transition, and the move-class packs
+        // (wobble) are opt-in.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowMove).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowOpen).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowClose).isEmpty());
     }
@@ -352,11 +353,38 @@ private Q_SLOTS:
         ShaderProfileTree tree;
         ShaderProfile paramsOnly;
         paramsOnly.parameters = QVariantMap({{QStringLiteral("speed"), 0.5}});
-        tree.setOverride(PP::WindowMove, paramsOnly);
-        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMove);
+        tree.setOverride(PP::WindowSnapIn, paramsOnly);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
         QCOMPARE(r.effectiveEffectId(), QStringLiteral("window-morph"));
         QVERIFY(r.parameters.has_value());
         QCOMPARE(r.parameters->value(QStringLiteral("speed")).toDouble(), 0.5);
+    }
+
+    void testResolveMoveLeafTakesNoInheritedShader()
+    {
+        // The interactive-drag leaf (window.movement.move) takes NO inherited
+        // shader: an ancestor pick is by construction a crossfade pack that
+        // cannot drive the held drag, so resolve() reads only the direct leaf
+        // override. Sibling legs inherit normally.
+        ShaderProfileTree tree;
+        ShaderProfile parent;
+        parent.effectId = QStringLiteral("ripple-snap");
+        tree.setOverride(PP::WindowMovement, parent);
+        QVERIFY(tree.resolve(PP::WindowMove).effectiveEffectId().isEmpty());
+        QCOMPARE(tree.resolve(PP::WindowSnapIn).effectiveEffectId(), QStringLiteral("ripple-snap"));
+        // resolveShaderWithDefault injects no default either (move has none).
+        QVERIFY(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMove).effectiveEffectId().isEmpty());
+        // A direct leaf override applies untouched.
+        ShaderProfile leaf;
+        leaf.effectId = QStringLiteral("wobble");
+        tree.setOverride(PP::WindowMove, leaf);
+        QCOMPARE(tree.resolve(PP::WindowMove).effectiveEffectId(), QStringLiteral("wobble"));
+        // The baseline is skipped too, exactly like named ancestors.
+        tree.clearOverride(PP::WindowMove);
+        ShaderProfile base;
+        base.effectId = QStringLiteral("fade");
+        tree.setBaseline(base);
+        QVERIFY(tree.resolve(PP::WindowMove).effectiveEffectId().isEmpty());
     }
 };
 

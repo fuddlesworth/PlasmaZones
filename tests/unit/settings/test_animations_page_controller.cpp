@@ -479,8 +479,13 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.minimize")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.maximize")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.move")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.focus")));
+        // The resize legs were dropped from the taxonomy: the interactive
+        // edge-drag has no discrete before/after for a shader to play, and
+        // snapResize never had a callsite. Stale config overrides on these
+        // paths must prune, so they stay unsupported.
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.snapResize")));
 
         // Ancestors of consumed leaves — supported because the
         // daemon's resolver walks them on the way to the leaf, so a

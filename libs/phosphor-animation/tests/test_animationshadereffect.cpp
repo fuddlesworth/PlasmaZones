@@ -305,6 +305,15 @@ private Q_SLOTS:
         desktopObj.insert(QLatin1String("appliesTo"), desktopArr);
         QCOMPARE(AnimationShaderEffect::fromJson(desktopObj).appliesTo, (QStringList{QStringLiteral("desktop")}));
 
+        // "move" (the held interactive drag) is part of the accepted vocabulary.
+        QJsonObject moveObj;
+        moveObj.insert(QLatin1String("id"), QStringLiteral("m"));
+        moveObj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray moveArr;
+        moveArr.append(QStringLiteral("move"));
+        moveObj.insert(QLatin1String("appliesTo"), moveArr);
+        QCOMPARE(AnimationShaderEffect::fromJson(moveObj).appliesTo, (QStringList{QStringLiteral("move")}));
+
         QJsonObject allBad = obj;
         QJsonArray bad;
         bad.append(QStringLiteral("nonsense"));
@@ -346,8 +355,11 @@ private Q_SLOTS:
         // a geometry-only effect. Reference the taxonomy constants (not literals)
         // so a leaf rename can't silently keep these passing, and pin the full
         // disjunction so dropping any leg from the classifier is caught.
-        for (const QString& geo : {PP::WindowMove, PP::WindowResize, PP::WindowSnapIn, PP::WindowSnapOut,
-                                   PP::WindowSnapResize, PP::WindowLayoutSwitch, PP::WindowMaximize}) {
+        // `WindowMove` is NOT in this set: the interactive-drag leaf is its own
+        // opt-in `move` class (see the move-effect block below). There are no
+        // resize legs at all — the interactive-resize and snapResize events
+        // were dropped from the taxonomy.
+        for (const QString& geo : {PP::WindowSnapIn, PP::WindowSnapOut, PP::WindowLayoutSwitch, PP::WindowMaximize}) {
             QVERIFY2(shaderEffectAppliesToEventPath(morph, geo), qPrintable(geo));
         }
         // Every appearance leg must be incompatible with a geometry-only effect.
@@ -365,11 +377,14 @@ private Q_SLOTS:
         fade.id = QStringLiteral("fade");
         fade.fragmentShaderPath = QStringLiteral("effect.frag");
         QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowOpen));
-        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowMove));
+        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowSnapIn));
         // The desktop class is opt-in: a universal single-surface effect must NOT
         // bleed onto a desktop path (its lone surface sampler would be unbound).
         QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::DesktopSwitch));
         QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::Desktop));
+        // The move class is opt-in for the same structural reason: a universal
+        // pack cannot drive the held interactive drag.
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::WindowMove));
 
         // Appearance-only effect: mirror image — incompatible on geometry legs,
         // compatible on appearance legs.
@@ -378,7 +393,7 @@ private Q_SLOTS:
         appearanceOnly.fragmentShaderPath = QStringLiteral("effect.frag");
         appearanceOnly.appliesTo = QStringList{QStringLiteral("appearance")};
         QVERIFY(shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowOpen));
-        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowMove));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowSnapIn));
         // A single-surface (non-desktop) effect never runs on a desktop path.
         QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::DesktopSwitch));
 
@@ -402,6 +417,37 @@ private Q_SLOTS:
         // A universal effect stays permissive on those same ambiguous rows.
         QVERIFY(shaderEffectAppliesToEventPath(fade, PP::Window));
         QVERIFY(shaderEffectAppliesToEventPath(fade, PP::Global));
+
+        // Move (interactive drag) effect: opt-in exactly like desktop.
+        // Accepted only on the move leaf; refused on the crossfade movement
+        // legs and their cascade parent, appearance legs, desktop paths, and
+        // ambiguous rows (the move leaf takes no inherited shader, so a
+        // move-only pack on an ancestor row is provably runtime-dead).
+        AnimationShaderEffect moveOnly;
+        moveOnly.id = QStringLiteral("wobble");
+        moveOnly.fragmentShaderPath = QStringLiteral("effect.frag");
+        moveOnly.appliesTo = QStringList{QStringLiteral("move")};
+        QVERIFY(shaderEffectAppliesToEventPath(moveOnly, PP::WindowMove));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowMovement));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowSnapIn));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowOpen));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::Window));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::Global));
+        // Geometry-only and appearance-only effects are refused on the move
+        // leaf (opt-in in both directions).
+        QVERIFY(!shaderEffectAppliesToEventPath(morph, PP::WindowMove));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowMove));
+        // A hybrid declaring geometry AND move drives both sides and stays
+        // available on ambiguous rows (it can feed the geometry legs there).
+        AnimationShaderEffect hybrid;
+        hybrid.id = QStringLiteral("hybrid");
+        hybrid.fragmentShaderPath = QStringLiteral("effect.frag");
+        hybrid.appliesTo = QStringList{QStringLiteral("geometry"), QStringLiteral("move")};
+        QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::WindowMove));
+        QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::WindowSnapIn));
+        QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::Window));
+        QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::WindowOpen));
     }
 };
 

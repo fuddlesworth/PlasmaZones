@@ -117,8 +117,9 @@ QVariantList AnimationsPageController::availableShaderEffectsForPath(const QStri
         // geometry-morph on an appearance leg, or a window shader on a desktop
         // switch, would silently no-op. Filtering (rather than dimming) keeps
         // each picker to one coherent set: appearance shaders on the Appearance
-        // page, the morph shaders on Movement, the two-texture packs on Virtual
-        // Desktops. `dimmed` is retained (always false) for QML compatibility.
+        // page, the morph shaders on Movement, the drag-physics packs on the
+        // "Moved" leaf, the two-texture packs on Virtual Desktops. `dimmed` is
+        // retained (always false) for QML compatibility.
         if (!PhosphorAnimationShaders::shaderEffectAppliesToEventPath(effect, path)) {
             continue;
         }

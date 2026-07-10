@@ -14,6 +14,7 @@ const QString Global = QStringLiteral("global");
 const QString EventClassGeometry = QStringLiteral("geometry");
 const QString EventClassAppearance = QStringLiteral("appearance");
 const QString EventClassDesktop = QStringLiteral("desktop");
+const QString EventClassMove = QStringLiteral("move");
 
 // window.* — split into two contract sub-trees so each has a real cascade
 // parent for its "All": appearance (a surface materialising / dissolving) and
@@ -26,13 +27,20 @@ const QString WindowOpen = QStringLiteral("window.appearance.open");
 const QString WindowClose = QStringLiteral("window.appearance.close");
 const QString WindowMinimize = QStringLiteral("window.appearance.minimize");
 const QString WindowFocus = QStringLiteral("window.appearance.focus");
+// window.movement has NO resize legs. `window.movement.resize` (the
+// interactive edge-drag) was dropped: it is a held gesture the crossfade
+// packs cannot drive (no discrete before/after until release, and KWin
+// repaints the re-laid content live anyway), and the soft-body sim
+// deliberately omits KWin's resize edge-lock logic, so no pack class had a
+// real story there. Discrete resizes are covered by snapIn / layoutSwitch /
+// maximize. `window.movement.snapResize` was dropped with it: no callsite
+// ever routed it. Stale config overrides on either path are filtered by the
+// allBuiltInPaths()/shaderSupportedEventPaths() membership checks.
 const QString WindowMovement = QStringLiteral("window.movement");
 const QString WindowMaximize = QStringLiteral("window.movement.maximize");
 const QString WindowMove = QStringLiteral("window.movement.move");
-const QString WindowResize = QStringLiteral("window.movement.resize");
 const QString WindowSnapIn = QStringLiteral("window.movement.snapIn");
 const QString WindowSnapOut = QStringLiteral("window.movement.snapOut");
-const QString WindowSnapResize = QStringLiteral("window.movement.snapResize");
 const QString WindowLayoutSwitch = QStringLiteral("window.movement.layoutSwitch");
 
 // desktop.* — full-screen virtual-desktop switch transitions (two-texture
@@ -127,10 +135,8 @@ QStringList allBuiltInPaths()
         WindowMovement,
         WindowMaximize,
         WindowMove,
-        WindowResize,
         WindowSnapIn,
         WindowSnapOut,
-        WindowSnapResize,
         WindowLayoutSwitch,
         Desktop,
         DesktopSwitch,
@@ -207,9 +213,20 @@ QString parentPath(const QString& path)
 
 QString eventClassForPath(const QString& path)
 {
-    // Geometry legs carry an old rect and a new rect (move/resize/snap/
-    // layoutSwitch/maximize) — the whole window.movement sub-tree, including
-    // its cascade parent. Maximize IS a geometry change with a before/after
+    // The interactive-drag leaf is its own opt-in class. A drag installs a
+    // HELD transition: there is no old→new crossfade to play (iFromRect stays
+    // invalid, progress clamps while the pointer is down), so a geometry
+    // crossfade pack is a guaranteed no-op there. Only a pack consuming the
+    // move-physics inputs (iMoveMesh / iMoveOffset / iMoveVelocity* /
+    // iMoveTrail — position / mesh backed) can drive it, and such a pack
+    // declares `move` in appliesTo (wobble). Checked BEFORE the sub-tree
+    // match below so the leaf wins over its geometry-classed ancestors.
+    if (path == WindowMove) {
+        return EventClassMove;
+    }
+    // Geometry legs carry an old rect and a new rect (snap/layoutSwitch/
+    // maximize) — the rest of the window.movement sub-tree, including its
+    // cascade parent. Maximize IS a geometry change with a before/after
     // rect, so morph can drive it even though it isn't a built-in default.
     if (path == WindowMovement || path.startsWith(WindowMovement + QLatin1Char('.'))) {
         return EventClassGeometry;
@@ -243,14 +260,16 @@ QString eventClassForPath(const QString& path)
 
 QString defaultShaderEffectIdForPath(const QString& path)
 {
-    // Window move/resize events default to the geometry-morph shader so a
-    // window animates via shader cross-fade when it snaps/tiles/reflows.
-    // This is the same geometry leg set `eventClassForPath` classes as
+    // Window snap events default to the geometry-morph shader so a window
+    // animates via shader cross-fade when it snaps/tiles/reflows. This is
+    // the same geometry leg set `eventClassForPath` classes as
     // EventClassGeometry, MINUS maximize (maximize is geometry-classed so
     // morph is selectable there, but it isn't a built-in default) — keep the
-    // two lists in sync if a new geometry leg is added.
-    if (path == WindowMove || path == WindowResize || path == WindowSnapIn || path == WindowSnapOut
-        || path == WindowSnapResize || path == WindowLayoutSwitch) {
+    // two lists in sync if a new geometry leg is added. `window.movement.move`
+    // is EXCLUDED: the interactive drag is a held transition a crossfade pack
+    // cannot drive (see eventClassForPath), so it carries no built-in default
+    // and its move-class packs (wobble) stay opt-in.
+    if (path == WindowSnapIn || path == WindowSnapOut || path == WindowLayoutSwitch) {
         return QStringLiteral("window-morph");
     }
     // Overlay surface show/hide (OSD + popups) default to the fade-and-scale

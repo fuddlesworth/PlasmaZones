@@ -1715,6 +1715,26 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         }
         return;
     }
+    // Interactive-drag contract guard — the runtime mirror of the picker
+    // filter. window.movement.move installs a HELD transition (no from/to
+    // crossfade plays while the pointer is down), so only a pack declaring
+    // the `move` class (consumes iMoveMesh / iMoveOffset / iMoveVelocity* /
+    // iMoveTrail) does anything there. The tree cannot deliver a non-move
+    // pack here (ShaderProfileTree::resolve takes no ancestor overlay for
+    // the move leaf), but a Rule's OverrideAnimationShader slot or a stale
+    // pre-split config override still can — refuse it instead of installing
+    // a dead transition that pins full-output repaints for the whole drag.
+    // An unknown effect id falls through: beginShaderTransition already
+    // rejects it with its own registry-miss warning.
+    if (profilePath == PhosphorAnimation::ProfilePaths::WindowMove) {
+        const auto eff = m_shaderManager.m_animationShaderRegistry.effect(profile.effectiveEffectId());
+        if (eff.isValid() && !eff.appliesTo.contains(PhosphorAnimation::ProfilePaths::EventClassMove)) {
+            qCDebug(lcEffect) << "tryBeginShader[" << profilePath << "]: refusing non-move pack"
+                              << profile.effectiveEffectId()
+                              << "on the interactive-drag event (declares no `move` capability)";
+            return;
+        }
+    }
     const bool installed =
         beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab, holdAddedGrab);
     if (!installed) {
