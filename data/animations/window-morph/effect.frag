@@ -46,7 +46,7 @@ vec4 pTransition(vec2 uv, float t) {
     // origin (iSurfaceScreenPos.xy is the window origin; subtracting the
     // window's in-output offset iAnchorPosInFbo yields the output's top-left).
     vec2 outputOrigin = iSurfaceScreenPos.xy - iAnchorPosInFbo;
-    vec2 screenPx = outputOrigin + uv * max(iResolution, vec2(1.0));
+    vec2 screenPx = outputOrigin + uv * resolutionSafe();
 
     // Interpolated rect (old -> new), then normalise the fragment into it.
     vec4 rect = mix(iFromRect, iToRect, t);

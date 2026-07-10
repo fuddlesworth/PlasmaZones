@@ -14,14 +14,10 @@
 // Not animated — the wash flips with uSurfaceFocused, which the host
 // pushes on every focus change; no per-frame tick is needed.
 
-#version 450
-#include <surface_uniforms.glsl>
+#include <surface_color.glsl>
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
-    vec4 c = surfaceTexel(vTexCoord);
+vec4 pSurface(vec2 uv) {
+    vec4 c = surfaceTexel(uv);
 
     // Fully-unfocused look, computed unconditionally so the shader can BLEND
     // between it and the untouched content by uSurfaceFocused. The host ramps
@@ -30,7 +26,7 @@ void main() {
     // hard threshold.
 
     // Desaturate toward (premultiplied) luminance.
-    float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+    float luma = luma709(c.rgb);
     vec3 faded = mix(c.rgb, vec3(luma), clamp(p_desaturate, 0.0, 1.0));
 
     // Optional wash: map luminance through the tint colour (sepia by
@@ -49,5 +45,5 @@ void main() {
     // Cross-fade: 1 = focused (untouched content), 0 = fully faded.
     vec3 rgb = mix(faded, c.rgb, clamp(uSurfaceFocused, 0.0, 1.0));
 
-    fragColor = vec4(rgb, c.a);
+    return vec4(rgb, c.a);
 }

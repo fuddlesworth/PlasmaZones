@@ -16,14 +16,8 @@
 // handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
 // the pane stays solid and translucency reveals the frosted backdrop.
 
-#version 450
-#include <surface_lib.glsl>
-#include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
 
 // Animated two-colour gradient, ported from the shell's gradient.frag
 // computeGradient(): the direction turns continuously with time and the
@@ -48,16 +42,12 @@ float frostedTexture(vec2 p, float time) {
     return crystal * 0.6 + fine * 0.3 + micro * 0.1;
 }
 
-void main() {
-    vec4 window = surfaceTexel(vTexCoord) * uSurfaceOpacity;
-
-    vec2 px = surfacePixel(vTexCoord);
-    FrameSDF fs = frameSdf(px, p_cornerRadius * uSurfaceScale);
-    float mask = frameMask(fs.d);
+vec4 pSurface(vec2 uv) {
+    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
 
     // Frame-normalized coordinate for the grain and vignette, so the look
     // scales with the pane like the original's uv did with the panel.
-    vec2 fuv = frameUv(px);
+    vec2 fuv = frameUv(slab.px);
 
     // Crystalline frost variation, centered around zero (both directions —
     // one-sided clamping made the grain read as dark speckles only).
@@ -73,18 +63,18 @@ void main() {
     if (uHasBackdrop >= 0.5) {
         // Real frosting: blurred backdrop tinted by the turning gradient,
         // grained, vignetted.
-        vec4 blurred = texture(iChannel1, vTexCoord);
+        vec4 blurred = texture(iChannel1, uv);
         vec3 color = mix(blurred.rgb, grad * blurred.a, gradStrength);
         color = clamp(color + vec3(variation) * blurred.a, 0.0, max(blurred.a, 0.0001));
         color *= vignette;
-        pane = vec4(color, blurred.a) * mask;
+        pane = vec4(color, blurred.a) * slab.mask;
     } else {
         // Original pseudo look (the shell TopPanel): a translucent animated
         // gradient slab with the same grain and vignette.
         float slabAlpha = clamp(0.4 + 0.6 * gradStrength, 0.0, 1.0);
         vec3 color = clamp(grad + vec3(variation), 0.0, 1.0) * vignette;
-        pane = vec4(color, 1.0) * slabAlpha * mask;
+        pane = vec4(color, 1.0) * slabAlpha * slab.mask;
     }
 
-    fragColor = slabComposite(window, pane);
+    return slabComposite(slab.window, pane);
 }

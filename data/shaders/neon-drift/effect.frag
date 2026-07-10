@@ -23,6 +23,7 @@
  */
 
 #include <audio.glsl>
+#include <logo-drift.glsl>
 
 
 // ── Sunset palette constants (from KDE Neon theme wallpaper) ────
@@ -32,31 +33,11 @@ const vec3 SUNSET_PURPLE = vec3(0.420, 0.247, 0.627);
 const vec3 SUNSET_WARM   = vec3(0.910, 0.627, 0.753);
 
 
-float fbm(in vec2 uv, int octaves, float rotAngle) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    float c = cos(rotAngle), s = sin(rotAngle);
-    mat2 rot = mat2(c, -s, s, c);
-    for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * noise2D(uv);
-        uv = rot * uv * 2.0 + vec2(180.0);
-        amplitude *= 0.55;
-    }
-    return value;
-}
-
-
-// ── KDE Neon palette ─────────────────────────────────────────────
-
-vec3 neonPalette(float t, vec3 primary, vec3 secondary, vec3 accent) {
-    t = fract(t);
-    if (t < 0.33)      return mix(primary, secondary, t * 3.0);
-    else if (t < 0.66) return mix(secondary, accent, (t - 0.33) * 3.0);
-    else                return mix(accent, primary, (t - 0.66) * 3.0);
-}
+// fbm() and the tri-stop palette (triStopPalette; KDE Neon uses it) come from
+// common.glsl.
 
 // Sunset-warm variant: blends sunset colors into the neon palette
-vec3 sunsetPalette(float t, float warmth) {
+vec3 sunsetPalette(float t) {
     t = fract(t);
     vec3 cool;
     if (t < 0.33)      cool = mix(SUNSET_PURPLE, SUNSET_PINK, t * 3.0);
@@ -66,14 +47,7 @@ vec3 sunsetPalette(float t, float warmth) {
 }
 
 
-// ── SDF primitives ──────────────────────────────────────────────
-
-float sdSegment(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a, ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return length(pa - ba * h);
-}
-
+// sdSegment() comes from common.glsl.
 
 // ═══════════════════════════════════════════════════════════════
 //  NEON TUBE RENDERING
@@ -95,12 +69,7 @@ vec3 neonTube(float dist, vec3 tubeColor, float intensity) {
     return col * intensity;
 }
 
-float neonFlicker(float time, float seed, float trebleEnv) {
-    float base = 0.94 + 0.06 * sin(time * 8.0 + seed * 100.0);
-    float buzz = step(0.97, noise2D(vec2(time * 4.0, seed * 7.0))) * 0.2;
-    float trebleBuzz = trebleEnv * step(0.93, noise2D(vec2(time * 5.0, seed * 13.0))) * 0.25;
-    return clamp(base - buzz - trebleBuzz, 0.6, 1.0);
-}
+// neonFlicker() comes from logo-drift.glsl.
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -160,8 +129,8 @@ float gearSDF(vec2 p, float rotOuter, float ringBreath, float toothScatter, floa
     return d;
 }
 
-vec3 evalGearNeon(vec2 p, float rotOuter, float rotInner, float time,
-                   float bassEnv, float midsEnv, float trebleEnv,
+vec3 evalGearNeon(vec2 p, float rotOuter, float time,
+                   float midsEnv, float trebleEnv,
                    float toothScatter,
                    vec3 palTeal, vec3 palBlue, vec3 palCyan, vec3 palGlow,
                    float intensity, float flickerSeed) {
@@ -273,7 +242,7 @@ vec3 plasmaTendrils(vec2 p, float time, float bassEnv, float midsEnv,
         tendril *= flow * radialMask;
 
         float surge = 1.0 + bassEnv * 2.0;
-        vec3 tendrilCol = neonPalette(float(i) / float(tendrilCount) + time * 0.05,
+        vec3 tendrilCol = triStopPalette(float(i) / float(tendrilCount) + time * 0.05,
                                        palTeal, palCyan, palTeal);
         col += tendrilCol * tendril * 0.35 * surge;
     }
@@ -312,7 +281,7 @@ vec3 orbitalElectrons(vec2 p, float time, float trebleEnv,
             trail += exp(-trailDist * 80.0) * 0.1 / float(t);
         }
 
-        vec3 eCol = neonPalette(h + time * 0.1, palGlow, vec3(1.0), palGlow);
+        vec3 eCol = triStopPalette(h + time * 0.1, palGlow, vec3(1.0), palGlow);
         col += eCol * (point + bloom + trail);
     }
 
@@ -350,8 +319,8 @@ vec3 auroraBands(vec2 uv, float time, float bassEnv, float midsEnv,
 
         float t = fi * 0.25 + time * 0.03 + midsEnv * 0.15;
         vec3 auroraCol = mix(
-            sunsetPalette(t, 1.0),
-            neonPalette(t + 0.3, palPrimary, palAccent, SUNSET_PURPLE),
+            sunsetPalette(t),
+            triStopPalette(t + 0.3, palPrimary, palAccent, SUNSET_PURPLE),
             0.5 + 0.5 * sin(time * 0.2 + fi)
         );
 
@@ -413,70 +382,11 @@ vec3 emberParticles(vec2 uv, float time, float trebleEnv, float bassEnv,
 
 
 // ═══════════════════════════════════════════════════════════════
-//  PER-INSTANCE UV COMPUTATION
-// ═══════════════════════════════════════════════════════════════
-
-vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse,
-                       float sizeMin, float sizeMax, out float instScale) {
-    vec2 uv = globalUV;
-    uv.x = (uv.x - 0.5) * aspect + 0.5;
-
-    if (totalCount <= 1) {
-        vec2 drift = vec2(
-            timeSin(0.13) * 0.015 + timeSin(0.29) * 0.008,
-            timeCos(0.19) * 0.012 + timeCos(0.11) * 0.006
-        );
-        uv -= drift;
-        // Gentle rotation
-        float rotAng = timeSin(0.12) * 0.04;
-        vec2 lp = uv - vec2(0.5);
-        uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-                   lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
-        float breathe = 1.0 + timeSin(0.6) * 0.02;
-        float springT = fract(time * 1.2);
-        float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
-        instScale = logoScale * breathe * spring;
-        uv = (uv - 0.5) / instScale + GEAR_CENTER;
-        return uv;
-    }
-
-    float h1 = hash21(vec2(float(idx) * 7.31, 3.17));
-    float h2 = hash21(vec2(float(idx) * 13.71, 7.23));
-    float h3 = hash21(vec2(float(idx) * 5.13, 11.37));
-    float h4 = hash21(vec2(float(idx) * 9.77, 17.53));
-
-    float roam = 0.35;
-    float f1 = 0.06 + float(idx) * 0.021;
-    float f2 = 0.04 + float(idx) * 0.017;
-    vec2 drift = vec2(
-        timeSin(f1, h1 * TAU) * roam + timeSin(f1 * 2.1, h3 * TAU) * roam * 0.3,
-        timeCos(f2, h2 * TAU) * roam * 0.9 + timeCos(f2 * 1.6, h4 * TAU) * roam * 0.25
-    );
-    uv -= drift;
-
-    // Per-instance rotation oscillation
-    float rotAng = timeSin(0.08 + float(idx) * 0.025, h4 * TAU) * 0.05;
-    vec2 lp = uv - vec2(0.5);
-    uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-               lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
-
-    instScale = mix(sizeMin, sizeMax, h3) * logoScale;
-    float breathe = 1.0 + timeSin(0.5 + float(idx) * 0.11, h1 * TAU) * 0.02;
-    float springT = fract(time * 1.2 + h2);
-    float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
-    instScale *= breathe * spring;
-    uv = (uv - 0.5) / instScale + GEAR_CENTER;
-    return uv;
-}
-
-
-// ═══════════════════════════════════════════════════════════════
 //  MAIN ZONE RENDER
 // ═══════════════════════════════════════════════════════════════
 
 vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
-                     bool isHighlighted, float bass, float mids, float treble, float overall,
+                     bool isHighlighted, float bass, float mids, float treble,
                      bool hasAudio) {
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
@@ -580,12 +490,12 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
         // Tint with user palette — keep saturation high
         float colorT = cloudDetail * contrast + audioColorShift;
-        vec3 palTint = neonPalette(colorT, palPrimary, palSecondary, palAccent);
+        vec3 palTint = triStopPalette(colorT, palPrimary, palSecondary, palAccent);
         col = mix(col, palTint, 0.35);
         col *= brightness * 0.85;
 
         // Warm shift on bass — saturated sunset blend
-        vec3 warmCol = sunsetPalette(colorT + time * 0.02, warmth);
+        vec3 warmCol = sunsetPalette(colorT + time * 0.02);
         col = mix(col, warmCol * brightness * 0.7, warmth * 0.4);
 
         // ── Aurora bands ────────────────────────────────────────
@@ -595,15 +505,16 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         vec3 hex = hexGrid(centeredUV + time * speed * 0.15, gridScale);
         float hexEdge = smoothstep(0.05, 0.0, hex.x);
         float gridAudio = 1.0 + trebleEnv * 0.8;
-        vec3 hexColor = neonPalette(hex.y + colorT * 0.3, palPrimary, palSecondary, palAccent);
+        vec3 hexColor = triStopPalette(hex.y + colorT * 0.3, palPrimary, palSecondary, palAccent);
         col = mix(col, hexColor * 0.6 * gridAudio, hexEdge * gridStrength);
 
         // ── Multi-instance gear rendering ─────────────────────────
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
-            vec2 iGearUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, bassEnv, logoPulse,
-                                              logoSizeMin, logoSizeMax, instScale);
+            vec2 iGearUV = driftInstanceUV(li, logoCount, globalUV, aspect, time,
+                                            logoScale, bassEnv,
+                                            logoSizeMin, logoSizeMax,
+                                            GEAR_CENTER, 0.05, instScale);
 
             // Wide bounding check
             if (iGearUV.x < -0.4 || iGearUV.x > 1.4 ||
@@ -639,7 +550,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             // ── Neon light casting (warm halo in fog) ──────────────
             float lightCast = exp(-max(gDist, 0.0) * 20.0) * 0.2;
             vec3 logoLight = mix(
-                neonPalette(time * 0.08 + iGearUV.y + float(li) * 0.3,
+                triStopPalette(time * 0.08 + iGearUV.y + float(li) * 0.3,
                               palGlow, palPrimary, palAccent),
                 SUNSET_WARM,
                 warmth * 0.4
@@ -654,7 +565,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 float shockDist = abs(gearR - iShockRadius);
                 float shockMask = smoothstep(0.06, 0.0, shockDist) * iShockStr;
                 vec3 shockCol = mix(
-                    neonPalette(iShockRadius * 3.0 + time * 0.2 + float(li),
+                    triStopPalette(iShockRadius * 3.0 + time * 0.2 + float(li),
                                   palGlow, palPrimary, palAccent),
                     SUNSET_PINK,
                     warmth * 0.3
@@ -663,8 +574,8 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             }
 
             // ── Gear neon tubes ───────────────────────────────────
-            gearCol += evalGearNeon(gearP, rotOuter, rotInner, time,
-                                     bassEnv, midsEnv, trebleEnv,
+            gearCol += evalGearNeon(gearP, rotOuter, time,
+                                     midsEnv, trebleEnv,
                                      toothScatter,
                                      palPrimary, palSecondary, palAccent, palGlow,
                                      instIntensity, float(li))
@@ -787,8 +698,8 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float edgeAngle = atan(p.y, p.x);
         float iriT = edgeAngle / TAU + time * 0.05 + midsEnv * 0.2;
         vec3 iriCol = mix(
-            neonPalette(iriT, palPrimary, palSecondary, palAccent),
-            sunsetPalette(iriT + 0.2, 1.0),
+            triStopPalette(iriT, palPrimary, palSecondary, palAccent),
+            sunsetPalette(iriT + 0.2),
             0.3
         );
         col += iriCol * innerGlow * innerGlowStr;
@@ -806,9 +717,9 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // FBM-animated border with sunset warmth
         float borderFlow = fbm(vec2(sin(angle), cos(angle)) * 2.0 + time * 0.4, 3, 0.5);
         vec3 borderCol = mix(
-            neonPalette(borderFlow * contrast + midsEnv * 0.2,
+            triStopPalette(borderFlow * contrast + midsEnv * 0.2,
                           palPrimary, palSecondary, palAccent),
-            sunsetPalette(borderFlow + time * 0.03, 1.0),
+            sunsetPalette(borderFlow + time * 0.03),
             0.2
         );
         vec3 zoneBorderTint = colorWithFallback(borderColor.rgb, borderCol);
@@ -841,8 +752,8 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.06) + midsEnv * 0.1;
         vec3 glowCol = mix(
-            neonPalette(glowT, palPrimary, palSecondary, palAccent),
-            sunsetPalette(glowT, 1.0),
+            triStopPalette(glowT, palPrimary, palSecondary, palAccent),
+            sunsetPalette(glowT),
             0.15
         );
         glowCol *= mix(0.3, 1.0, vitality);
@@ -873,39 +784,13 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
     float time = iTime;
 
     // ── Multi-layer neon halo (tight core + colored bloom + wide haze) ──
-    float haloTight = 0.0;
-    float haloWide = 0.0;
-    float haloVWide = 0.0;
     // Chromatic aberration offsets for retro neon look
-    float haloR = 0.0, haloG = 0.0, haloB = 0.0;
     vec2 chromOff = vec2(px.x * 2.5, px.y * 0.8);
-
-    for (int dy = -2; dy <= 2; dy++) {
-        for (int dx = -2; dx <= 2; dx++) {
-            float r2 = float(dx * dx + dy * dy);
-            vec2 off = vec2(float(dx), float(dy)) * px;
-
-            float wTight = exp(-r2 * 0.6);
-            float wWide = exp(-r2 * 0.2);
-            float wVWide = exp(-r2 * 0.1);
-
-            float s = texture(uZoneLabels, uv + off * labelGlowSpread).a;
-            haloTight += s * wTight;
-            haloWide += s * wWide;
-            haloVWide += s * wVWide;
-
-            // Chromatic channels (slightly offset samples)
-            haloR += texture(uZoneLabels, uv + off * labelGlowSpread + chromOff).a * wWide;
-            haloG += texture(uZoneLabels, uv + off * labelGlowSpread).a * wWide;
-            haloB += texture(uZoneLabels, uv + off * labelGlowSpread - chromOff).a * wWide;
-        }
-    }
-    haloTight /= 10.0;
-    haloWide /= 16.5;
-    haloVWide /= 20.0;
-    haloR /= 16.5;
-    haloG /= 16.5;
-    haloB /= 16.5;
+    LabelHalo halo = gatherLabelHalo(uv, px, labelGlowSpread, chromOff);
+    float haloTight = halo.tight;
+    float haloWide = halo.wide;
+    float haloVWide = halo.vWide;
+    float haloR = halo.chroma.r, haloG = halo.chroma.g, haloB = halo.chroma.b;
 
     // ── Neon sign flicker (per-region, not uniform) ──────────────────
     float flickerRegion = floor(uv.x * 6.0 + uv.y * 3.0);
@@ -929,8 +814,8 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
 
         // Animated color that cycles through sunset + neon palette
         float t = uv.x * 2.0 + time * 0.12;
-        vec3 haloCol1 = neonPalette(t, palPrimary, palSecondary, palAccent);
-        vec3 haloCol2 = sunsetPalette(t + 0.3, 1.0);
+        vec3 haloCol1 = triStopPalette(t, palPrimary, palSecondary, palAccent);
+        vec3 haloCol2 = sunsetPalette(t + 0.3);
         vec3 haloCol = mix(haloCol1, haloCol2, 0.3 + 0.2 * sin(time * 0.3));
 
         // Bass warmth shift
@@ -977,8 +862,8 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
         // Color sweep in pixel space — visible within each character
         float neonWave = sin(fragCoord.x * 0.2 - time * 2.5 + fragCoord.y * 0.12) * 0.5 + 0.5;
         vec3 tubeColor = mix(
-            neonPalette(neonWave + time * 0.08, palPrimary, palAccent, palSecondary),
-            sunsetPalette(neonWave + 0.15, 1.0),
+            triStopPalette(neonWave + time * 0.08, palPrimary, palAccent, palSecondary),
+            sunsetPalette(neonWave + 0.15),
             0.3
         );
 
@@ -1021,7 +906,6 @@ vec4 pImage(vec2 fragCoord) {
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
     float treble  = getTrebleSoft();
-    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
@@ -1029,7 +913,7 @@ vec4 pImage(vec2 fragCoord) {
 
         vec4 zoneColor = renderNeonZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio);
+            bass, mids, treble, hasAudio);
         color = blendOver(color, zoneColor);
     }
 

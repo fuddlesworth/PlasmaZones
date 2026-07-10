@@ -25,14 +25,12 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
         local area = ctx.area
 
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
 
-        local sizeRatio = math.max(StairMinSizeRatio, math.min(StairMaxSizeRatio, ctx.splitRatio))
+        local sizeRatio = pluau.clamp(ctx.splitRatio, StairMinSizeRatio, StairMaxSizeRatio) or StairMaxSizeRatio
 
         local winWidth = math.max(StairMinWindowPx, math.floor(area.width * sizeRatio))
         local winHeight = math.max(StairMinWindowPx, math.floor(area.height * sizeRatio))

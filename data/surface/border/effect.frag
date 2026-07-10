@@ -30,20 +30,9 @@ vec4 pSurface(vec2 uv) {
         return tex;
     }
 
-    // Fragment's top-down device pixel; the content rect sits at
-    // uSurfaceFrameTopLeft..+uSurfaceFrameSize (device px).
-    vec2 p = surfacePixel(uv);
-    const float aa = 0.7;
-
-    // Pack params are logical px — scale to the device-px geometry space.
-    float width = p_borderWidth * uSurfaceScale;
-    // OUTER radius = content radius + width, so the band sits inside it and the
-    // content corner ends one band-width in, at p_cornerRadius.
-    float radius = (p_cornerRadius + p_borderWidth) * uSurfaceScale;
-
-    FrameSDF fs = frameSdf(p, radius);
-    float insideMask = 1.0 - smoothstep(-aa, aa, fs.d);
-    float edge = smoothstep(-width - aa, -width + aa, fs.d);
+    // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
+    // and band edge from this pack's logical-px width and corner radius.
+    BorderBand bb = standardBorderBand(surfacePixel(uv), p_borderWidth, p_cornerRadius);
 
     // Focus-mixed border colour (the shader picks active vs inactive).
     vec4 outlineColor = mix(p_inactiveColor, p_activeColor, clamp(uSurfaceFocused, 0.0, 1.0));
@@ -51,5 +40,5 @@ vec4 pSurface(vec2 uv) {
     // Clip content to the inner rounded rect; lay the band over transparency,
     // premultiplied. width <= 0 (no border in the chain's params) leaves the
     // content rounded with no band.
-    return borderComposite(tex, outlineColor, edge, insideMask);
+    return borderComposite(tex, outlineColor, bb.edge, bb.insideMask);
 }

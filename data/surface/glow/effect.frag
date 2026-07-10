@@ -26,52 +26,32 @@
 // Focus-tracking like Oxygen: full strength on the focused surface, dimmed
 // otherwise. Static (no iTime).
 
-#version 450
-#include <surface_lib.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
-    vec4 base = surfaceTexel(vTexCoord);          // the input surface (prior pack's output)
+vec4 pSurface(vec2 uv) {
+    vec4 base = surfaceTexel(uv);          // the input surface (prior pack's output)
 
     // Degenerate frame (a host that has not wired geometry yet): the SDF
     // below would collapse to the top-left point and bleed halo over the
     // whole surface for that transient, so pass the content through untouched
     // until a real frame arrives. Mirrors border/effect.frag's guard.
     if (surfaceFrameDegenerate()) {
-        fragColor = base;
-        return;
+        return base;
     }
 
     // Rounded-rect SDF over the frame rect (same construction as the border
     // pack). d > 0 outside the frame — the region the halo lives in.
-    vec2 p = surfacePixel(vTexCoord);
+    vec2 p = surfacePixel(uv);
     FrameSDF fs = frameSdf(p, p_cornerRadius * uSurfaceScale);
-    float d = fs.d;
 
-    // Gaussian-profile falloff outward from the edge: brightest right against
-    // the window, effectively zero by d == reach. exp(-4t²) reads as a soft
-    // shadow rather than a flood (it drops to ~2% at the reach distance).
+    // Gaussian-profile reach falloff (exp(-4t²), a soft shadow not a flood),
+    // feathered to zero just inside the texture edge so a slim capture margin
+    // yields a smaller glow instead of a hard-cut rectangle, confined to the
+    // transparent margin, and focus-dimmed like Oxygen's active-window cue —
+    // the shared glow/shadow halo.
     float reach = max(p_glowSize * uSurfaceScale, 1.0);
-    float t = max(d, 0.0) / reach;
-    float halo = exp(-4.0 * t * t);
-
-    // Never clip at the capture boundary: feather to zero just inside the
-    // texture edge so a slim shadow margin yields a smaller glow, not a halo
-    // cut off in a hard rectangle. (With NO margin — a borderless window whose
-    // expandedGeometry equals its frame — this zeroes the halo entirely.)
-    float edgeDist = min(min(p.x, p.y), min(uSurfaceSize.x - p.x, uSurfaceSize.y - p.y));
-    halo *= smoothstep(0.0, min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), edgeDist);
-
-    // Outer-only: confined to where the surface itself is transparent, so the
-    // content is passed through byte-for-byte and the AA rim blends. Focus
-    // tracking dims the unfocused surface, like Oxygen's active-window cue.
-    halo *= (1.0 - base.a);
-    halo *= p_glowStrength * focusDim(0.30);
+    float halo = haloFalloff(fs.d, reach, p, base.a, p_glowStrength, 0.30);
 
     // Premultiplied additive-over: the halo lights the margin under its own
     // alpha; the content term is untouched.
     float haloA = clamp(halo * p_glowColor.a, 0.0, 1.0);
-    fragColor = marginComposite(base, p_glowColor.rgb, haloA);
+    return marginComposite(base, p_glowColor.rgb, haloA);
 }

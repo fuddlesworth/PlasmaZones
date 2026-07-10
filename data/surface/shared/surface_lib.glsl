@@ -86,6 +86,75 @@ vec4 marginComposite(vec4 base, vec3 col, float a) {
     return vec4(base.rgb + col * a, clamp(base.a + a, 0.0, 1.0));
 }
 
+// The border family's shared band assembly: the OUTER-radius rounded-rect SDF
+// (content radius + border width, both logical px scaled to device px by
+// uSurfaceScale), the content-clip mask, and the band edge. `p` is the
+// device-px fragment (surfacePixel); `borderWidth` / `cornerRadius` are the
+// pack's logical-px params (pack macros the shared code can't name, so they are
+// passed in). The aa feather is the family's fixed 0.7 px. Packs whose band
+// geometry differs (border-double's three-width stack) build their own.
+struct BorderBand {
+    FrameSDF fs;
+    float insideMask;
+    float edge;
+};
+BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius) {
+    const float aa = 0.7;
+    float width = borderWidth * uSurfaceScale;
+    float radius = (cornerRadius + borderWidth) * uSurfaceScale;
+    BorderBand b;
+    b.fs = frameSdf(p, radius);
+    b.insideMask = 1.0 - smoothstep(-aa, aa, b.fs.d);
+    b.edge = smoothstep(-width - aa, -width + aa, b.fs.d);
+    return b;
+}
+
+// Backdrop-slab family shared open (blur / duotone / frosted-glass / glass /
+// rain-glass / rippled-glass / mosaic): the window content sample dimmed by the
+// rule opacity (these packs declare handlesOpacity), the device-px fragment,
+// the frame SDF at the pack's corner radius, and the AA slab mask — the four
+// lines every backdrop-slab pack repeats before its pack-specific pane.
+// `cornerRadiusPx` is the pack's p_cornerRadius already scaled to device px.
+struct SurfaceSlab {
+    vec4 window;
+    vec2 px;
+    FrameSDF fs;
+    float mask;
+};
+SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
+    SurfaceSlab s;
+    s.window = surfaceTexel(uv) * uSurfaceOpacity;
+    s.px = surfacePixel(uv);
+    s.fs = frameSdf(s.px, cornerRadiusPx);
+    s.mask = frameMask(s.fs.d);
+    return s;
+}
+
+// The backdrop-slab family's shared no-backdrop fallback (daemon hosts, where
+// uHasBackdrop is 0): a faint premultiplied tint slab at 0.35 * tintStrength,
+// clipped to the slab `mask`. Only packs that use exactly this constant (blur /
+// glass / rippled-glass) call it; siblings with a different fallback keep theirs.
+vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
+    return vec4(tint, 1.0) * (0.35 * tintStrength) * mask;
+}
+
+// Glow/shadow outer-margin falloff (the ~12 lines glow and shadow shared): the
+// exp(-4t²) reach profile from SDF distance `d`, feathered to zero just inside
+// the texture edge so a thin capture margin fades out instead of clipping in a
+// hard rectangle, confined to the transparent margin (1 - baseAlpha), and
+// scaled by `strength` and the focus dim at floor `focusFloor`. `edgePx` is the
+// REAL (undisplaced) fragment position for the edge feather — the shadow pack
+// evaluates `d` against a displaced frame but feathers on the true position.
+float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor) {
+    float t = max(d, 0.0) / reach;
+    float halo = exp(-4.0 * t * t);
+    float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
+    halo *= smoothstep(0.0, min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), edgeDist);
+    halo *= (1.0 - baseAlpha);
+    halo *= strength * focusDim(focusFloor);
+    return halo;
+}
+
 // Frame-normalized [0,1] UV for a device-px fragment.
 vec2 frameUv(vec2 px) {
     return (px - uSurfaceFrameTopLeft) / max(uSurfaceFrameSize, vec2(1.0));

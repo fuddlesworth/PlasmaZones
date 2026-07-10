@@ -17,45 +17,28 @@
 // daemon host ticks the item; the compositor detects the linked iTime
 // uniform itself and repaints the window continuously while decorated.
 
-#version 450
-#include <surface_lib.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
-    vec4 tex = surfaceTexel(vTexCoord);
+vec4 pSurface(vec2 uv) {
+    vec4 tex = surfaceTexel(uv);
 
     if (surfaceFrameDegenerate()) {
-        fragColor = tex;
-        return;
+        return tex;
     }
 
-    // Fragment's top-down device pixel; the content rect sits at
-    // uSurfaceFrameTopLeft..+uSurfaceFrameSize (device px).
-    vec2 p = surfacePixel(vTexCoord);
-    const float aa = 0.7;
-
-    // Pack params are logical px — scale to the device-px geometry space.
-    float width = p_borderWidth * uSurfaceScale;
-    // OUTER radius = content radius + width, so the band sits inside it and
-    // the content corner ends one band-width in, at p_cornerRadius.
-    float radius = (p_cornerRadius + p_borderWidth) * uSurfaceScale;
-
-    FrameSDF fs = frameSdf(p, radius);
-    float insideMask = 1.0 - smoothstep(-aa, aa, fs.d);
-    float edge = smoothstep(-width - aa, -width + aa, fs.d);
+    // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
+    // and band edge from this pack's logical-px width and corner radius.
+    vec2 p = surfacePixel(uv);
+    BorderBand bb = standardBorderBand(p, p_borderWidth, p_cornerRadius);
 
     // Travelling sweep: the fragment's aspect-normalised angle around the
     // frame centre, offset by time, picks a phase in a seamless two-colour
     // loop. cos makes the A -> B -> A blend continuous across the wrap, so
     // no seam ever shows.
-    float angle = framePerimeter(p, fs.center, fs.halfSize); // -0.5 .. 0.5
+    float angle = framePerimeter(p, bb.fs.center, bb.fs.halfSize); // -0.5 .. 0.5
     float phase = angle - iTime * p_sweepSpeed;
     vec4 sweep = mix(p_colorA, p_colorB, 0.5 - 0.5 * cos(phase * TAU));
 
     // Focus cue: full-strength sweep on the focused surface, dimmed otherwise.
     sweep.a *= focusDim(0.55);
 
-    fragColor = borderComposite(tex, sweep, edge, insideMask);
+    return borderComposite(tex, sweep, bb.edge, bb.insideMask);
 }

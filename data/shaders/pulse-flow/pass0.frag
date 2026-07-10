@@ -25,6 +25,7 @@ layout(location = 0) out vec4 fragColor;
 #include <common.glsl>
 #include <multipass.glsl>
 #include <audio.glsl>
+#include <flow-noise.glsl>
 
 // ─── Parameters ─────────────────────────────────────────────────────────────
 
@@ -37,21 +38,6 @@ float getRotationSpeed()  { return customParams[1].y >= 0.0 ? customParams[1].y 
 float getAudioReact()     { return customParams[1].z >= 0.0 ? customParams[1].z : 1.0; }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-vec2 rotate2d(vec2 p, float a) {
-    float c = cos(a), s = sin(a);
-    return vec2(p.x * c - p.y * s, p.x * s + p.y * c);
-}
-
-// Single-octave curl noise — 4 noise2D calls (vs 12-16 in multi-octave)
-vec2 curlNoise(vec2 p, float t) {
-    float eps = 0.5;
-    float n  = noise2D(p + vec2(0.0, eps) + t);
-    float ns = noise2D(p - vec2(0.0, eps) + t);
-    float ne = noise2D(p + vec2(eps, 0.0) + t);
-    float nw = noise2D(p - vec2(eps, 0.0) + t);
-    return vec2(n - ns, -(ne - nw)) / (2.0 * eps);
-}
 
 // Minimum distance to any zone border (borderRadius scaled by pxScale for
 // resolution-independent corner shapes matching the effect pass).
@@ -126,7 +112,7 @@ void main() {
     // Feedback strength: 0 = no contraction (static), 1 = strong inward pull
     float contraction = 0.999 - clamp(feedbackStr, 0.0, 1.0) * 0.003;
 
-    vec2 feedbackUv = rotate2d(fromCenter, feedbackAngle) * contraction;
+    vec2 feedbackUv = fromCenter * rot(feedbackAngle) * contraction;
     feedbackUv.x /= aspect;
     feedbackUv += ctr;
 

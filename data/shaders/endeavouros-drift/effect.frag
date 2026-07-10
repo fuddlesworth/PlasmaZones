@@ -25,6 +25,7 @@
  */
 
 #include <audio.glsl>
+#include <logo-drift.glsl>
 
 
 // -- EndeavourOS brand constants ------------------------------------------
@@ -36,85 +37,8 @@ const vec3 EOS_GLOW   = vec3(0.565, 0.506, 0.733); // Lavender glow
 const vec2 LOGO_CENTER = vec2(0.583, 0.52);
 
 
-// -- Simplex noise --------------------------------------------------------
-
-vec3 simplexMod289(vec3 x) { return x - floor(x / 289.0) * 289.0; }
-vec2 simplexMod289v2(vec2 x) { return x - floor(x / 289.0) * 289.0; }
-vec3 simplexPermute(vec3 x) { return simplexMod289((x * 34.0 + 1.0) * x); }
-
-float simplex2D(vec2 v) {
-    const vec4 C = vec4(0.211324865405, 0.366025403784,
-                        -0.577350269189, 0.024390243902);
-    vec2 i = floor(v + dot(v, C.yy));
-    vec2 x0 = v - i + dot(i, C.xx);
-    vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-    vec4 x12 = x0.xyxy + C.xxzz;
-    x12.xy -= i1;
-    i = simplexMod289v2(i);
-    vec3 p = simplexPermute(simplexPermute(i.y + vec3(0.0, i1.y, 1.0))
-                            + i.x + vec3(0.0, i1.x, 1.0));
-    vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy),
-                             dot(x12.zw, x12.zw)), 0.0);
-    m = m * m;
-    m = m * m;
-    vec3 x_ = 2.0 * fract(p * C.www) - 1.0;
-    vec3 h = abs(x_) - 0.5;
-    vec3 ox = floor(x_ + 0.5);
-    vec3 a0 = x_ - ox;
-    m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
-    vec3 g;
-    g.x = a0.x * x0.x + h.x * x0.y;
-    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-    return 130.0 * dot(m, g);
-}
-
-float simplexFBM(vec2 uv, int octaves) {
-    float value = 0.0;
-    float amplitude = 0.6;
-    float freq = 1.0;
-    for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * (simplex2D(uv * freq) * 0.5 + 0.5);
-        freq *= 2.1;
-        amplitude *= 0.45;
-    }
-    return value;
-}
-
-// -- SDF primitives -------------------------------------------------------
-float sdSegment(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a, ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return length(pa - ba * h);
-}
-
-// -- Catmull-Rom palette interpolation ------------------------------------
-vec3 catmullRom(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float t) {
-    float t2 = t * t;
-    float t3 = t2 * t;
-    return 0.5 * ((2.0 * p1) +
-                   (-p0 + p2) * t +
-                   (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 +
-                   (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3);
-}
-
-vec3 eosPaletteCR(float t, vec3 primary, vec3 secondary, vec3 accent, vec3 glow) {
-    t = fract(t);
-    float seg = t * 4.0;
-    int idx = int(seg);
-    float f = fract(seg);
-    vec3 colors[5] = vec3[5](primary, secondary, accent, glow, primary);
-    int i0 = max(idx - 1, 0);
-    int i1 = idx;
-    int i2 = min(idx + 1, 4);
-    int i3 = min(idx + 2, 4);
-    return clamp(catmullRom(colors[i0], colors[i1], colors[i2], colors[i3], f), 0.0, 1.0);
-}
-
-vec3 paletteSweep(float t, vec3 primary, vec3 secondary, vec3 accent, vec3 glow,
-                  float audioShift) {
-    float shifted = t + audioShift * 0.08;
-    return eosPaletteCR(shifted, primary, secondary, accent, glow);
-}
+// simplex2D / simplexFBM (and simplexMod289/Permute), catmullRom(),
+// logoPaletteCR(), and paletteSweep() come from logo-drift.glsl.
 
 // =========================================================================
 //  ENDEAVOUROS LOGO -- 3 overlapping sail polygons
@@ -293,7 +217,7 @@ SailHit evalEosSails(vec2 p, vec3 colBlue, vec3 colCoral, vec3 colPurple) {
 
 // -- Per-instance UV computation ------------------------------------------
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse,
+                       float logoScale,
                        float sizeMin, float sizeMax, out float instScale) {
     vec2 uv = globalUV;
     float wobbleAmp = p_logoWobble >= 0.0 ? p_logoWobble : 0.12;
@@ -350,14 +274,13 @@ float sailSilhouette(vec2 uv, vec2 pos, float size, float lean) {
 // =========================================================================
 
 vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
-                   bool isHighlighted, float bass, float mids, float treble, float overall,
+                   bool isHighlighted, float bass, float mids, float treble,
                    bool hasAudio) {
     float borderRadius = max(params.x, 8.0), borderWidth = max(params.y, 2.0);
     float speed      = p_speed >= 0.0 ? p_speed : 0.10;
     float flowSpeed  = p_flowSpeed >= 0.0 ? p_flowSpeed : 0.20;
     float noiseScale = p_interiorScale >= 0.0 ? p_interiorScale : 3.5;
     int octaves      = int(p_octaves >= 0.0 ? p_octaves : 6.0);
-    float gridScale    = p_orbitRadius >= 0.0 ? p_orbitRadius : 5.0;
     float gridStrength = p_lineStrength >= 0.0 ? p_lineStrength : 0.20;
     float brightness   = p_brightness >= 0.0 ? p_brightness : 0.7;
     float contrast     = p_contrast >= 0.0 ? p_contrast : 0.9;
@@ -369,7 +292,6 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
     float particleStr  = p_particleStrength >= 0.0 ? p_particleStrength : 0.4;
     float innerGlowStr = p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.35;
     float sparkleStr   = p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;
-    float connThreshold = p_packetDirection >= 0.0 ? p_packetDirection : 0.25;
     float logoScale     = p_logoScale >= 0.0 ? p_logoScale : 0.5;
     float logoIntensity = p_logoIntensity >= 0.0 ? p_logoIntensity : 0.75;
     float logoPulse     = p_logoPulse >= 0.0 ? p_logoPulse : 0.8;
@@ -509,7 +431,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
             vec2 iLogoUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, bassEnv, logoPulse,
+                                              logoScale,
                                               logoSizeMin, logoSizeMax, instScale);
 
             if (iLogoUV.x < -0.3 || iLogoUV.x > 1.3 ||
@@ -920,14 +842,13 @@ vec4 pImage(vec2 fragCoord) {
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
     float treble  = getTrebleSoft();
-    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
         vec4 zoneColor = renderEosZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio);
+            bass, mids, treble, hasAudio);
         color = blendOver(color, zoneColor);
     }
 

@@ -14,54 +14,34 @@
 // below keeps a large offset from cutting off in a hard rectangle at the
 // canvas boundary. Static (no iTime).
 
-#version 450
-#include <surface_lib.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
-    vec4 base = surfaceTexel(vTexCoord);
+vec4 pSurface(vec2 uv) {
+    vec4 base = surfaceTexel(uv);
 
     // Degenerate frame guard — mirrors glow/effect.frag: an unwired frame
     // rect would bleed shadow over the whole surface for a transient frame.
     if (surfaceFrameDegenerate()) {
-        fragColor = base;
-        return;
+        return base;
     }
 
     // Rounded-rect SDF over the frame rect DISPLACED by the cast offset:
     // evaluating the fragment against the shifted frame moves the whole
     // shadow body down/right, the classic dropped look.
     vec2 offset = vec2(p_offsetX, p_offsetY) * uSurfaceScale;
-    vec2 p = surfacePixel(vTexCoord) - offset;
+    vec2 realPx = surfacePixel(uv);
+    vec2 p = realPx - offset;
     FrameSDF fs = frameSdf(p, p_cornerRadius * uSurfaceScale);
-    float d = fs.d;
 
-    // Gaussian-profile falloff outward from the (shifted) edge — same
-    // exp(-4t²) profile as the glow pack, brightest against the window and
-    // effectively gone by the reach distance.
+    // Same exp(-4t²) reach falloff as the glow pack, but the edge feather is
+    // evaluated at the REAL (undisplaced) fragment position so a large offset
+    // pushing the shadow toward the canvas edge fades out instead of ending in
+    // a hard rectangle. Confined to the transparent margin and only mildly
+    // focus-softened (a real shadow persists unfocused) — the shared halo.
     float reach = max(p_shadowSize * uSurfaceScale, 1.0);
-    float t = max(d, 0.0) / reach;
-    float body = exp(-4.0 * t * t);
-
-    // Never clip at the capture boundary: feather to zero just inside the
-    // texture edge (evaluated at the REAL fragment position, not the shifted
-    // one) so an offset pushing the shadow toward the canvas edge fades out
-    // instead of ending in a hard rectangle.
-    vec2 rp = surfacePixel(vTexCoord);
-    float edgeDist = min(min(rp.x, rp.y), min(uSurfaceSize.x - rp.x, uSurfaceSize.y - rp.y));
-    body *= smoothstep(0.0, min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), edgeDist);
-
-    // Outer-only: confined to where the surface is transparent, so content
-    // and the AA rim pass through untouched. Mild focus softening — a real
-    // shadow persists on unfocused windows, it just lightens a little.
-    body *= (1.0 - base.a);
-    body *= p_shadowStrength * focusDim(0.65);
+    float body = haloFalloff(fs.d, reach, realPx, base.a, p_shadowStrength, 0.65);
 
     // Premultiplied over: the dark veil fills the margin under its own
     // alpha; with the default black colour the rgb term contributes nothing
     // and the shadow reads as pure darkening of whatever is behind.
     float sa = clamp(body * p_shadowColor.a, 0.0, 1.0);
-    fragColor = marginComposite(base, p_shadowColor.rgb, sa);
+    return marginComposite(base, p_shadowColor.rgb, sa);
 }

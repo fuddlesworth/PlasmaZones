@@ -22,33 +22,8 @@
 #include <audio.glsl>
 
 
-// ── Noise helpers ───────────────────────────────────────────────
-// Uses common.glsl's integer-based hash21/noise2D for cross-backend
-// consistency (sin()-based hashes produce different values on Vulkan
-// vs OpenGL due to transcendental precision differences).
-
-float fbm(in vec2 uv, int octaves, float rotAngle) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    float c = cos(rotAngle);
-    float s = sin(rotAngle);
-    mat2 rot = mat2(c, -s, s, c);
-    for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * noise2D(uv);
-        uv = rot * uv * 2.0 + vec2(180.0);
-        amplitude *= 0.55;
-    }
-    return value;
-}
-
-// ── CachyOS palette ─────────────────────────────────────────────
-
-vec3 cachyPalette(float t, vec3 primary, vec3 secondary, vec3 accent) {
-    t = fract(t);
-    if (t < 0.33)      return mix(primary, secondary, t * 3.0);
-    else if (t < 0.66) return mix(secondary, accent, (t - 0.33) * 3.0);
-    else                return mix(accent, primary, (t - 0.66) * 3.0);
-}
+// fbm(), sdSegment(), and the tri-stop palette (triStopPalette) come from
+// common.glsl.
 
 // ── SDF primitives ──────────────────────────────────────────────
 
@@ -66,11 +41,6 @@ float sdTriangle(vec2 p, vec2 a, vec2 b, vec2 c) {
     return -sqrt(d.x) * sign(d.y);
 }
 
-float sdSegment(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a, ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return length(pa - ba * h);
-}
 
 // Polygon SDF — correct for any simple polygon (convex or concave).
 // Uses winding-number sign rule (Inigo Quilez).
@@ -324,7 +294,7 @@ vec3 facetGrid(vec2 p, float scale) {
 
 
 vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
-                     bool isHighlighted, float bass, float mids, float treble, float overall,
+                     bool isHighlighted, float bass, float mids, float treble,
                      bool hasAudio) {
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
@@ -439,16 +409,16 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         float veinPulse = 1.0 + bassEnv * 0.4 * sin(veinNoise * 12.0 - time * 4.0);
 
         float colorT = r * contrast + audioColorShift;
-        vec3 col = cachyPalette(colorT, palPrimary, palSecondary, palAccent);
+        vec3 col = triStopPalette(colorT, palPrimary, palSecondary, palAccent);
         col *= brightness * 0.55;
 
-        vec3 veinCol = cachyPalette(colorT + 0.2 + audioColorShift, palAccent, palGlow, palPrimary);
+        vec3 veinCol = triStopPalette(colorT + 0.2 + audioColorShift, palAccent, palGlow, palPrimary);
         col += veinCol * veins * veinPulse;
 
         vec3 grid = facetGrid(centeredUV + time * speed * 0.3, gridScale);
         float edgeLine = smoothstep(0.05, 0.0, grid.x * 0.5);
         float gridAudio = 1.0 + trebleEnv * 0.8;
-        vec3 gridColor = cachyPalette(grid.y + colorT * 0.3, palPrimary, palSecondary, palAccent);
+        vec3 gridColor = triStopPalette(grid.y + colorT * 0.3, palPrimary, palSecondary, palAccent);
         col = mix(col, gridColor * 0.4 * gridAudio, edgeLine * gridStrength);
 
         // ── Multi-instance logo rendering ─────────────────────────
@@ -474,7 +444,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
             // ── Light casting (neon sign in fog) ──────────────────
             float lightCast = exp(-max(iLogo.dist, 0.0) * 15.0) * 0.25;
-            vec3 logoLight = cachyPalette(time * 0.08 + iLogoUV.y + float(li) * 0.3,
+            vec3 logoLight = triStopPalette(time * 0.08 + iLogoUV.y + float(li) * 0.3,
                                            palGlow, palPrimary, palAccent);
             col += logoLight * lightCast * instIntensity * (1.0 + bassEnv * 0.2) * depthFactor;
 
@@ -486,7 +456,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                 float iShockRadius = iShockPhase * 0.5;
                 float shockDist = abs(iLogoDist - iShockRadius);
                 float shockMask = smoothstep(0.06, 0.0, shockDist) * iShockStr;
-                vec3 shockCol = cachyPalette(iShockRadius * 3.0 + time * 0.2 + float(li),
+                vec3 shockCol = triStopPalette(iShockRadius * 3.0 + time * 0.2 + float(li),
                                               palGlow, palPrimary, palAccent);
                 col += shockCol * shockMask * 0.15 * depthFactor;
             }
@@ -510,7 +480,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                     float colorWave = sin(spatialT * 8.0 - time * 2.0) * midsEnv * 0.5;
                     facetColorT += colorWave;
 
-                    vec3 facetCol = cachyPalette(facetColorT, palPrimary, palAccent, palGlow) * brightness * 1.8;
+                    vec3 facetCol = triStopPalette(facetColorT, palPrimary, palAccent, palGlow) * brightness * 1.8;
 
                     float wavePos = fract(time * 0.25 + float(li) * 0.11);
                     float facetT = float(iLogo.facetId) / 12.0;
@@ -542,7 +512,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                 float glow1 = exp(-max(iLogo.dist, 0.0) * 80.0) * 0.5;
                 float glow2 = exp(-max(iLogo.dist, 0.0) * 25.0) * 0.25;
                 float glow3 = exp(-max(iLogo.dist, 0.0) * 8.0) * 0.12;
-                vec3 edgeCol = cachyPalette(time * 0.12 + iLogoUV.y + float(li) * 0.2,
+                vec3 edgeCol = triStopPalette(time * 0.12 + iLogoUV.y + float(li) * 0.2,
                                              palGlow, palPrimary, palAccent);
                 float flare = 1.0 + bassEnv * 0.6;
                 col += edgeCol * glow1 * flare * particleStr * 2.0 * depthFactor;
@@ -623,7 +593,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         float innerGlow = exp(-innerDist / 12.0);
         float edgeAngle = atan(p.y, p.x);
         float iriT = edgeAngle / TAU + time * 0.05 + midsEnv * 0.2;
-        vec3 iriCol = cachyPalette(iriT, palPrimary, palSecondary, palAccent);
+        vec3 iriCol = triStopPalette(iriT, palPrimary, palSecondary, palAccent);
         col += iriCol * innerGlow * innerGlowStr;
 
         col = mix(col, fillColor.rgb * luminance(col), 0.15);
@@ -637,7 +607,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     if (border > 0.0) {
         float angle = atan(p.y, p.x) * 2.0;
         float borderFlow = fbm(vec2(sin(angle), cos(angle)) * 2.0 + time * 0.4, 3, 0.5);
-        vec3 borderCol = cachyPalette(borderFlow * contrast + midsEnv * 0.2,
+        vec3 borderCol = triStopPalette(borderFlow * contrast + midsEnv * 0.2,
                                        palPrimary, palSecondary, palAccent);
         vec3 zoneBorderTint = colorWithFallback(borderColor.rgb, borderCol);
         borderCol = mix(borderCol, zoneBorderTint * luminance(borderCol), 0.25);
@@ -664,7 +634,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         float glow = expGlow(d, 7.0, borderGlow);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.08) + midsEnv * 0.15;
-        vec3 glowCol = cachyPalette(glowT, palPrimary, palSecondary, palAccent);
+        vec3 glowCol = triStopPalette(glowT, palPrimary, palSecondary, palAccent);
         glowCol *= mix(0.3, 1.0, vitality);
         result.rgb += glowCol * glow * 0.5;
         result.a = max(result.a, glow * 0.4);
@@ -738,7 +708,7 @@ vec4 compositeCachyLabels(vec4 color, vec2 fragCoord,
 
         // Angular color sweep
         float sweep = fract(haloAngle / TAU + iTime * 0.12 + midsR * 0.4);
-        vec3 haloCol = cachyPalette(sweep, palPrimary, palSecondary, palAccent);
+        vec3 haloCol = triStopPalette(sweep, palPrimary, palSecondary, palAccent);
 
         // Inner ring: bright, tight, chromatic
         vec3 innerCol = vec3(chromR * 1.5, innerMask, chromB * 1.5) * labelChroma
@@ -780,7 +750,7 @@ vec4 compositeCachyLabels(vec4 color, vec2 fragCoord,
 
         // Quantize noise into 4 distinct bands — hard color boundaries
         float band = floor(n1 * 4.0) / 3.0;  // 0.0, 0.33, 0.67, 1.0
-        vec3 bandCol = cachyPalette(band + iTime * 0.06, palPrimary, palSecondary, palAccent);
+        vec3 bandCol = triStopPalette(band + iTime * 0.06, palPrimary, palSecondary, palAccent);
 
         // Second noise layer for brightness variation
         float bright = 0.6 + n2 * 0.8;  // range 0.6–1.4
@@ -848,7 +818,6 @@ vec4 pImage(vec2 fragCoord) {
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
     float treble  = getTrebleSoft();
-    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
@@ -856,7 +825,7 @@ vec4 pImage(vec2 fragCoord) {
 
         vec4 zoneColor = renderCachyZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio);
+            bass, mids, treble, hasAudio);
         color = blendOver(color, zoneColor);
     }
 

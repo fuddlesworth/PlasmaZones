@@ -19,16 +19,8 @@
 
 #include <noise.glsl>
 
-float is_fbm(vec2 p) {
-    float v = 0.0;
-    float amp = 0.5;
-    for (int i = 0; i < 5; i++) {
-        v += amp * niriNoise(p);
-        p *= 2.1;
-        amp *= 0.5;
-    }
-    return v;
-}
+// The 5-octave, lacunarity-2.1 fBm over niriNoise this pack used as is_fbm
+// is now the shared fbm(p, 5, 2.1) from noise.glsl, called inline below.
 
 vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
@@ -42,8 +34,8 @@ vec4 pTransition(vec2 uv, float t) {
     // popup vs. maximized windows. Matches niri's reference on full-
     // screen (multiplier = 1.0 there).
     vec2 screenScale = max(iAnchorSize, vec2(1.0)) / max(iSurfaceScreenPos.zw, vec2(1.0));
-    float blob = is_fbm(uv * p_blobScale * screenScale);
-    float fingers = is_fbm(uv * p_fingerScale * screenScale);
+    float blob = fbm(uv * p_blobScale * screenScale, 5, 2.1);
+    float fingers = fbm(uv * p_fingerScale * screenScale, 5, 2.1);
     float distortion = (blob - 0.5) * 0.5 + (fingers - 0.5) * 0.18;
     vec2 c = uv - vec2(0.5);
     c.x *= iAnchorSize.x / max(iAnchorSize.y, 0.0001);

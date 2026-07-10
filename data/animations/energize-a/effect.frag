@@ -127,7 +127,7 @@ vec4 pTransition(vec2 uv, float t)
     // collapse pixelUV to (0,0) and flatten the entire sparkle field
     // for one paint. Matches the early-frame defence used by
     // pixelate/doom/honeycomb at the same divide site.
-    vec2 pixelUV = (uv - 0.5) * max(iResolution, vec2(1.0)) / max(pScale, 0.05);
+    vec2 pixelUV = (uv - 0.5) * resolutionSafe() / max(pScale, 0.05);
 
     // Layer A: dense fine sparkles — small cells, fast-evolving offset.
     // The 2D-offset trick (animating the lookup position via a slowly

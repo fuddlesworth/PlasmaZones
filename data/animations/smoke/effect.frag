@@ -31,16 +31,11 @@
 // coefficient (default 0.4) and the open leg uses `* 0.875` to preserve the
 // niri 0.4-vs-0.35 ratio so defaults reproduce the original visual exactly.
 
-float sm_fbm(vec2 p) {
-    float v = 0.0;
-    float amp = 0.5;
-    for (int i = 0; i < 6; i++) {
-        v += amp * niriNoise(p);
-        p *= 2.0;
-        amp *= 0.5;
-    }
-    return v;
-}
+// 6-octave, lacunarity-2.0 fBm over niriNoise. Delegates to the shared
+// parameterised fbm in noise.glsl (the octave loop lives there once); kept as
+// a named local because sm_warpedFbm and the domain-warp below call it ~15
+// times and the short name keeps those call sites readable.
+float sm_fbm(vec2 p) { return fbm(p, 6, 2.0); }
 
 float sm_warpedFbm(vec2 p, float t) {
     vec2 q = vec2(sm_fbm(p + vec2(0.0, 0.0)),

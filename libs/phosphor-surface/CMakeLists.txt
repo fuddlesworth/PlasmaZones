@@ -92,6 +92,7 @@ set(phosphorsurface_SRCS
     src/surfaceuniformprofile.cpp
     src/surfaceshadereffect.cpp
     src/surfaceshaderregistry.cpp
+    src/surfacebuiltinbuffers.cpp
     src/decorationprofile.cpp
     src/decorationprofiletree.cpp
     src/surface_contract_pins.cpp

@@ -448,4 +448,19 @@ float legProgress() {
     return p_reversed ? (1.0 - iTime) : iTime;
 }
 
+// ─── Small shared helpers ──────────────────────────────────────────────
+// Premultiply a straight-alpha colour (scale rgb by alpha). Many shaders
+// build a straight-alpha result and premultiply once at output for the
+// premultiplied-alpha blend pipeline; this is that final step by name.
+vec4 premultiply(vec4 c) {
+    return vec4(c.rgb * c.a, c.a);
+}
+
+// iResolution floored to at least 1 px per axis. Guards the early-frame
+// `iResolution = (0, 0)` case (Qt resets it to the QQuickItem bounds on
+// geometry change) so per-pixel math never divides by zero.
+vec2 resolutionSafe() {
+    return max(iResolution, vec2(1.0));
+}
+
 #endif // PLASMAZONES_ANIMATION_UNIFORMS_GLSL

@@ -20,14 +20,13 @@
 // daemon host ticks the item; the compositor detects the linked iTime
 // uniform itself and repaints the window continuously while decorated.
 
-#version 450
-#include <surface_lib.glsl>
-#include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
+// Droplet cell shape: cells ~2.5x taller than wide so each drop has a real
+// run and trails read vertically. Shared by dropLayer and the per-cell
+// culling in pSurface.
+const vec2 kRainCellDim = vec2(1.0, 2.5);
 
 // One layer of falling droplets on a tall cell grid. `st` is glass-space
 // (device px / cell size, y down). Returns (offset.xy, wetness): offset
@@ -41,9 +40,7 @@ layout(location = 0) out vec4 fragColor;
 // the position from the cell coordinate alone, which only scrolled the
 // whole field a few px/s and read as a still image.
 vec3 dropLayer(vec2 st, float t) {
-    // Cells ~2.5x taller than wide so each drop has a real run and trails
-    // read vertically.
-    vec2 cellDim = vec2(1.0, 2.5);
+    vec2 cellDim = kRainCellDim;
     vec2 grid = st / cellDim;
     vec2 id = floor(grid);
     vec2 f = fract(grid); // 0..1 in-cell, y = 0 at the top
@@ -74,12 +71,10 @@ vec3 dropLayer(vec2 st, float t) {
     return vec3(offset, clamp(drop + trail * 0.6, 0.0, 1.0));
 }
 
-void main() {
-    vec4 window = surfaceTexel(vTexCoord) * uSurfaceOpacity;
-
-    vec2 px = surfacePixel(vTexCoord);
-    FrameSDF fs = frameSdf(px, p_cornerRadius * uSurfaceScale);
-    float mask = frameMask(fs.d);
+vec4 pSurface(vec2 uv) {
+    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    vec2 px = slab.px;
+    float mask = slab.mask;
 
     // Glass space: device px scaled so dropletScale 1.0 gives ~90 px cells.
     float cellPx = 90.0 * clamp(p_dropletScale, 0.25, 4.0) * max(uSurfaceScale, 0.001);
@@ -88,12 +83,11 @@ void main() {
 
     // Two falling layers at offset scales/speeds plus one static bead layer;
     // rainAmount thins the field by culling whole cells on a hash.
-    const vec2 kCellDim = vec2(1.0, 2.5); // keep in sync with dropLayer
     float amount = clamp(p_rainAmount, 0.0, 1.0);
     vec3 layer1 = dropLayer(st, t);
     vec3 layer2 = dropLayer(st * 1.6 + 4.3, t * 1.35);
-    layer1 *= step(1.0 - amount, hash13(floor(st / kCellDim) + 2.7));
-    layer2 *= step(1.0 - amount, hash13(floor((st * 1.6 + 4.3) / kCellDim) + 8.1));
+    layer1 *= step(1.0 - amount, hash13(floor(st / kRainCellDim) + 2.7));
+    layer2 *= step(1.0 - amount, hash13(floor((st * 1.6 + 4.3) / kRainCellDim) + 8.1));
 
     // Static micro-beads: tiny fixed droplets that never move, filling the
     // pane so dry stretches still read as wet glass.
@@ -117,8 +111,8 @@ void main() {
         // Fog everywhere; droplets refract the fogged scene toward their
         // centres (the blurred buffer keeps the lensed image soft and cheap).
         // refraction 40 = the geometric offset as-is; other values scale it.
-        vec2 uv = clamp(vTexCoord + pxToUv(offsetPx * (p_refraction / 40.0)), 0.0, 1.0);
-        vec4 fog = texture(iChannel1, uv);
+        vec2 sampleUv = clamp(uv + pxToUv(offsetPx * (p_refraction / 40.0)), 0.0, 1.0);
+        vec4 fog = texture(iChannel1, sampleUv);
         // Top-light: a small highlight on each droplet's upper edge (the
         // offset points down toward the centre there, so +y in px space).
         float hi = wet * clamp(offsetPx.y / max(cellPx, 1.0) * 8.0, 0.0, 1.0) * 0.3;
@@ -126,9 +120,9 @@ void main() {
     } else {
         // Original pseudo look for daemon surfaces: droplets glint over a
         // dark glass slab.
-        vec3 slab = vec3(0.10, 0.11, 0.14) + wet * 0.12;
-        pane = vec4(slab, 1.0) * 0.5 * mask;
+        vec3 glassSlab = vec3(0.10, 0.11, 0.14) + wet * 0.12;
+        pane = vec4(glassSlab, 1.0) * 0.5 * mask;
     }
 
-    fragColor = slabComposite(window, pane);
+    return slabComposite(slab.window, pane);
 }

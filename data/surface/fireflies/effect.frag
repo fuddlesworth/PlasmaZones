@@ -14,24 +14,18 @@
 // daemon host ticks the item; the compositor detects the linked iTime
 // uniform itself and repaints the window continuously while decorated.
 
-#version 450
-#include <surface_lib.glsl>
 #include <surface_noise.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
 
 const int kMaxFlies = 16;
 
-void main() {
-    vec4 window = surfaceTexel(vTexCoord);
+vec4 pSurface(vec2 uv) {
+    vec4 window = surfaceTexel(uv);
 
     if (surfaceFrameDegenerate()) {
-        fragColor = window;
-        return;
+        return window;
     }
 
-    vec2 px = surfacePixel(vTexCoord);
+    vec2 px = surfacePixel(uv);
     vec2 halfSz = 0.5 * uSurfaceFrameSize;
     vec2 cen = uSurfaceFrameTopLeft + halfSz;
 
@@ -77,5 +71,5 @@ void main() {
 
     // Behind-the-window composite: sparks light only the transparent
     // margin (and any translucency), never crossing the content.
-    fragColor = slabComposite(window, pane);
+    return slabComposite(window, pane);
 }

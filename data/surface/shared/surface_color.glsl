@@ -10,6 +10,17 @@
 #ifndef PLASMAZONES_SURFACE_COLOR_GLSL
 #define PLASMAZONES_SURFACE_COLOR_GLSL
 
+// Rec.709 relative-luminance weights (the sRGB primaries' Y coefficients).
+float luma709(vec3 c) {
+    return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+// Rec.601 luma weights (the classic NTSC greyscale mix). A different convention
+// from luma709 on purpose — packs pick the one their look was tuned against.
+float luma601(vec3 c) {
+    return dot(c, vec3(0.299, 0.587, 0.114));
+}
+
 // HSV -> RGB (h,s,v in [0,1]).
 vec3 hsv2rgb(vec3 c) {
     vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);

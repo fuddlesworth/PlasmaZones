@@ -24,15 +24,7 @@ vec4 pSurface(vec2 uv) {
         return tex;
     }
 
-    vec2 p = surfacePixel(uv);
-    const float aa = 0.7;
-
-    float width = p_borderWidth * uSurfaceScale;
-    float radius = (p_cornerRadius + p_borderWidth) * uSurfaceScale;
-
-    FrameSDF fs = frameSdf(p, radius);
-    float insideMask = 1.0 - smoothstep(-aa, aa, fs.d);
-    float edge = smoothstep(-width - aa, -width + aa, fs.d);
+    BorderBand bb = standardBorderBand(surfacePixel(uv), p_borderWidth, p_cornerRadius);
 
     // Base focus-mixed border colour, then react to the bass. getBassSoft() is
     // 0 when the audio visualizer is off, so the reactive terms vanish and this
@@ -44,5 +36,5 @@ vec4 pSurface(vec2 uv) {
 
     band.a *= focusDim(0.55);
 
-    return borderComposite(tex, band, edge, insideMask);
+    return borderComposite(tex, band, bb.edge, bb.insideMask);
 }

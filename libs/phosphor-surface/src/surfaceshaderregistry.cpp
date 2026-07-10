@@ -235,6 +235,20 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
             QStringList resolved;
             QStringList missing;
             for (const QString& bufPath : e.bufferShaderPaths) {
+                // `builtin:` tokens resolve to the standard passes in the
+                // surface shared/ dir (fixed whitelist, see
+                // resolveBuiltinBufferShader) instead of the pack dir; an
+                // unknown token or absent shared file funnels into the same
+                // fail-closed missing path as a pack-local buffer.
+                if (SurfaceShaderRegistry::isBuiltinBufferShader(bufPath)) {
+                    const QString builtin = SurfaceShaderRegistry::resolveBuiltinBufferShader(bufPath, effectDir);
+                    if (!builtin.isEmpty()) {
+                        resolved.append(builtin);
+                    } else {
+                        missing.append(bufPath + QLatin1String(" (unknown or unlocatable builtin)"));
+                    }
+                    continue;
+                }
                 // Confine buffer shaders to the pack dir with the same guard as
                 // frag/vert/textures; a `..`-traversal path (nullopt) or a
                 // missing file both funnel to the fail-closed single-pass

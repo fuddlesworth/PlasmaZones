@@ -141,6 +141,18 @@ export type Pluau = {
     computeCumulativeMinDims: (windowCount: number, minSizes: { MinSize }, innerGap: number)
         -> { minW: { number }, minH: { number } },
     appendGracefulDegradation: (zones: { Zone }, remaining: Rect, leftover: number, innerGap: number) -> (),
+    -- shared algorithm helpers
+    guardArea: (area: Rect, count: number) -> { Zone }?,
+    clamp: (v: any, lo: number, hi: number) -> number?,
+    center: (start: number, total: number, size: number) -> number,
+    gridShape: (count: number) -> (number, number),
+    cumulativeOffsets: (start: number, sizes: { number }, gap: number) -> { number },
+    minSizeAt: (minSizes: { MinSize }?, i: number) -> (number, number),
+    resizeRatioGrow: (newSize: number, oldSize: number, oldRatio: number) -> number,
+    resizeRatioShrink: (newSize: number, oldSize: number, oldRatio: number) -> number,
+    masterStackResize: (state: any, resize: ResizeEvent, horizontal: boolean) -> { [string]: any }?,
+    stripLayout: (zones: { Zone }, startX: number, startY: number, panelW: number, panelH: number,
+        count: number, gap: number, horizontal: boolean) -> (),
 }
 
 declare pluau: Pluau

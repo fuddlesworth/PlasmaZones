@@ -17,14 +17,8 @@
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the pane degrades to a faint tint slab with the same corner rounding.
 
-#version 450
-#include <surface_lib.glsl>
-#include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
 
 // The glass surface's height at ripple-space q: a dominant swell plus a
 // finer counter-drifting octave, so the warp reads as organic ripples
@@ -35,12 +29,10 @@ float rippleHeight(vec2 q, float t) {
     return swell * 0.65 + detail * 0.35;
 }
 
-void main() {
-    vec4 window = surfaceTexel(vTexCoord) * uSurfaceOpacity;
-
-    vec2 px = surfacePixel(vTexCoord);
-    FrameSDF fs = frameSdf(px, p_cornerRadius * uSurfaceScale);
-    float mask = frameMask(fs.d);
+vec4 pSurface(vec2 uv) {
+    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    vec2 px = slab.px;
+    float mask = slab.mask;
 
     vec3 tint = p_tintColor.rgb;
     float tintStrength = clamp(p_tintStrength, 0.0, 1.0);
@@ -66,11 +58,11 @@ void main() {
         vec2 dispPx = grad * clamp(p_refractionStrength, 0.0, 40.0) * uSurfaceScale;
         vec2 shift = pxToUv(dispPx);
         float fringe = clamp(p_fringing, 0.0, 1.0) * 0.3;
-        vec4 g = texture(iChannel1, clamp(vTexCoord + shift, 0.0, 1.0));
+        vec4 g = texture(iChannel1, clamp(uv + shift, 0.0, 1.0));
         vec3 lit = g.rgb;
         if (fringe > 0.001) {
-            lit.r = texture(iChannel1, clamp(vTexCoord + shift * (1.0 + fringe), 0.0, 1.0)).r;
-            lit.b = texture(iChannel1, clamp(vTexCoord + shift * (1.0 - fringe), 0.0, 1.0)).b;
+            lit.r = texture(iChannel1, clamp(uv + shift * (1.0 + fringe), 0.0, 1.0)).r;
+            lit.b = texture(iChannel1, clamp(uv + shift * (1.0 - fringe), 0.0, 1.0)).b;
         }
 
         // Soft directional highlight: slopes facing the up-left "light"
@@ -87,8 +79,8 @@ void main() {
         lit = mix(lit, tint * g.a, tintStrength);
         pane = vec4(lit, g.a) * mask;
     } else {
-        pane = vec4(tint, 1.0) * (0.35 * tintStrength) * mask;
+        pane = faintTintSlab(tint, tintStrength, mask);
     }
 
-    fragColor = slabComposite(window, pane);
+    return slabComposite(slab.window, pane);
 }

@@ -77,11 +77,6 @@ vec3 chromaticSample(float baseVal, float edgeDist, float strength) {
     return vec3(r, g, b);
 }
 
-// IQ palette
-vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
-    return a + b * cos(TAU * (c * t + d));
-}
-
 // === ZONE RENDER (uses global effect, applies zone tint + novel highlight) ===
 
 vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,

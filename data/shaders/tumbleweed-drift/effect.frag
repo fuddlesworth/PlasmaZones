@@ -43,7 +43,6 @@ float pErosionStrength() { return p_erosionStrength >= 0.0 ? p_erosionStrength :
 float pLabelGlowSpread() { return p_labelGlowSpread >= 0.0 ? p_labelGlowSpread : 3.0;  }
 float pLabelBrightness() { return p_labelBrightness >= 0.0 ? p_labelBrightness : 2.5;  }
 float pLabelAudioReact() { return p_labelAudioReact >= 0.0 ? p_labelAudioReact : 1.0;  }
-float pLabelChroma()     { return customParams[4].w >= 0.0 ? customParams[4].w : 0.5;  }
 float pLogoScale()       { return p_logoScale >= 0.0 ? p_logoScale : 0.35; }
 float pLogoIntensity()   { return p_logoIntensity >= 0.0 ? p_logoIntensity : 0.8;  }
 float pLogoPulse()       { return p_logoPulse >= 0.0 ? p_logoPulse : 0.8;  }
@@ -52,9 +51,7 @@ float pLogoSizeMin()     { return p_logoSizeMin >= 0.0 ? p_logoSizeMin : 0.4;  }
 float pLogoSizeMax()     { return p_logoSizeMax >= 0.0 ? p_logoSizeMax : 1.0;  }
 float pLogoSpin()        { return p_logoSpin >= 0.0 ? p_logoSpin : 0.3;  }
 float pIdleStrength()    { return p_idleStrength >= 0.0 ? p_idleStrength : 0.6;  }
-float pFlowCenterX()     { return customParams[7].x >= -1.5 ? customParams[7].x : 0.4; }
 float pShowLabels()      { return p_showLabels >= 0.0 ? p_showLabels : 1.0;  }
-float pFlowCenterY()     { return customParams[7].z >= -1.5 ? customParams[7].z : 0.5; }
 float pSparkleIntensity(){ return p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;  }
 
 // ─── Palette ───────────────────────────────────────────────────────
@@ -64,37 +61,8 @@ vec3 colSecondary() { return colorWithFallback(p_secondaryColor.rgb, vec3(0.769,
 vec3 colAccent()    { return colorWithFallback(p_accentColor.rgb, vec3(0.208, 0.725, 0.671)); }
 vec3 colGlow()      { return colorWithFallback(p_glowColor.rgb, vec3(0.451, 0.729, 0.145)); }
 
-// ─── Rotation matrix ───────────────────────────────────────────────
-
-mat2 rot2(float a) {
-    float c = cos(a), s = sin(a);
-    return mat2(c, -s, s, c);
-}
-
-// ─── FBM ───────────────────────────────────────────────────────────
-
-float fbm(in vec2 uv, int octaves, float rotAngle) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    float c = cos(rotAngle);
-    float s = sin(rotAngle);
-    mat2 rot = mat2(c, -s, s, c);
-    for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * noise2D(uv);
-        uv = rot * uv * 2.0 + vec2(180.0);
-        amplitude *= 0.55;
-    }
-    return value;
-}
-
-// ─── Desert palette interpolation ──────────────────────────────────
-
-vec3 tumbleweedPalette(float t, vec3 primary, vec3 secondary, vec3 accent) {
-    t = fract(t);
-    if (t < 0.33)      return mix(primary, secondary, t * 3.0);
-    else if (t < 0.66) return mix(secondary, accent, (t - 0.33) * 3.0);
-    else               return mix(accent, primary, (t - 0.66) * 3.0);
-}
+// fbm() and the tri-stop palette (triStopPalette, "desert" here) come from
+// common.glsl.
 
 // ─── Wind field (curl-noise based) ─────────────────────────────────
 
@@ -400,7 +368,7 @@ float sdTumbleweed(vec2 p) {
 const vec2 TW_LOGO_CENTER = vec2(0.0);
 
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse, float spinRate,
+                       float logoScale, float bassEnv, float spinRate,
                        float sizeMin, float sizeMax, out float instScale) {
     vec2 uv = globalUV;
     uv.x = (uv.x - 0.5) * aspect + 0.5;
@@ -461,7 +429,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 // continuous across zone boundaries instead of resetting per zone.
 // Mirrors the chrome-protocol / opensuse-drift / fedora-drift pattern.
 
-vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebleEnv, bool hasAudio) {
+vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebleEnv) {
     float time = iTime;
     vec2 uv = fragCoord / max(iResolution, vec2(1.0));
     float gAspect = iResolution.x / max(iResolution.y, 1.0);
@@ -508,7 +476,7 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
     float q = fbm(duneUV + duneFlow, 4, 0.6);
     float r = fbm(duneUV + q * 1.2 + duneFlow * 0.7, 4, 0.6);
     float duneT = r * contrast + time * 0.04;
-    vec3 duneColor = tumbleweedPalette(duneT, palSecondary, horizonMid, palAccent);
+    vec3 duneColor = triStopPalette(duneT, palSecondary, horizonMid, palAccent);
     float duneMix = 0.4 * smoothstep(1.2, 0.05, uv.y);
     col = mix(col, duneColor * brightness, duneMix);
 
@@ -565,7 +533,7 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
     for (int li = 0; li < logoCount && li < 8; li++) {
         float instScale;
         vec2 iLogoUV = computeInstanceUV(li, logoCount, uv, gAspect, time,
-                                          logoScale, bassEnv, logoPulse, spinRate,
+                                          logoScale, bassEnv, spinRate,
                                           sizeMin, sizeMax, instScale);
 
         if (iLogoUV.x < -0.7 || iLogoUV.x > 0.7 ||
@@ -580,7 +548,7 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
 
         // Light casting (warm glow in sand haze)
         float lightCast = exp(-max(logoD, 0.0) * 12.0) * 0.35;
-        vec3 logoLight = tumbleweedPalette(time * 0.15 + iLogoUV.y + float(li) * 0.3,
+        vec3 logoLight = triStopPalette(time * 0.15 + iLogoUV.y + float(li) * 0.3,
                                             palGlow, palAccent, palSecondary);
         col += logoLight * lightCast * instIntensity * (1.0 + bassEnv * 0.8) * depthFactor;
 
@@ -593,7 +561,7 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
             float shockDist = abs(iLogoDist - iShockRadius);
             float shockWidth = 0.04 + bassEnv * 0.03;
             float shockMask = smoothstep(shockWidth, 0.0, shockDist) * iShockStr;
-            vec3 shockCol = tumbleweedPalette(iShockRadius * 3.0 + time * 0.3 + float(li),
+            vec3 shockCol = triStopPalette(iShockRadius * 3.0 + time * 0.3 + float(li),
                                                palGlow, palAccent, palSecondary);
             col += shockCol * shockMask * 0.8 * depthFactor;
         }
@@ -629,7 +597,7 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
             float glow1 = exp(-max(logoD, 0.0) * 60.0) * 0.6;
             float glow2 = exp(-max(logoD, 0.0) * 20.0) * 0.35;
             float glow3 = exp(-max(logoD, 0.0) * 6.0) * 0.18;
-            vec3 edgeCol = tumbleweedPalette(time * 0.2 + iLogoUV.y + float(li) * 0.2,
+            vec3 edgeCol = triStopPalette(time * 0.2 + iLogoUV.y + float(li) * 0.2,
                                               palGlow, palAccent, palSecondary);
             float flare = 1.0 + bassEnv * 0.8;
             col += edgeCol * glow1 * flare * pParticleStrength() * 2.5 * depthFactor;
@@ -723,7 +691,7 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
         float innerGlow = exp(-innerDist / 12.0);
         float edgeAngle = atan(p.y, p.x);
         float iriT = edgeAngle / TAU + time * 0.05;
-        vec3 iriCol = tumbleweedPalette(iriT, palSecondary, palAccent, palGlow);
+        vec3 iriCol = triStopPalette(iriT, palSecondary, palAccent, palGlow);
         col += iriCol * innerGlow * innerGlowStr;
 
         // Zone fillColor tint
@@ -739,7 +707,7 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
     if (border > 0.0) {
         float angle = atan(p.y, p.x) * 2.0;
         float borderFlow = fbm(vec2(sin(angle), cos(angle)) * 2.0 + time * 0.12, 3, 0.5);
-        vec3 borderCol = tumbleweedPalette(borderFlow * contrast,
+        vec3 borderCol = triStopPalette(borderFlow * contrast,
                                             palSecondary, palAccent, palGlow);
         vec3 zoneBorderTint = colorWithFallback(borderColor.rgb, borderCol);
         borderCol = mix(borderCol, zoneBorderTint * luminance(borderCol), 0.25);
@@ -767,7 +735,7 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
         float glow = expGlow(d, 7.0, pBorderGlow());
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.08);
-        vec3 glowCol = tumbleweedPalette(glowT, palSecondary, palAccent, palGlow);
+        vec3 glowCol = triStopPalette(glowT, palSecondary, palAccent, palGlow);
         glowCol *= mix(0.3, 1.0, vitality);
         result.rgb += glowCol * glow * 0.5;
         result.a = max(result.a, glow * 0.4);
@@ -863,7 +831,7 @@ vec4 compositeTumbleweedLabels(vec4 color, vec2 fragCoord,
         float layerSoft = strata2;  // continuous variation within each layer
 
         // Per-layer color — warm palette cycles through sand/tan/teal
-        vec3 layerCol = tumbleweedPalette(layerBand * 0.7 + iTime * 0.015,
+        vec3 layerCol = triStopPalette(layerBand * 0.7 + iTime * 0.015,
                                            palSecondary, mix(palSecondary, palAccent, 0.3), palAccent);
 
         // Fine sand grain texture within each layer
@@ -947,7 +915,7 @@ vec4 pImage(vec2 fragCoord) {
     // Render the desert scene + drifting Tumbleweed logos once in
     // overlay-space. Each zone below renders a window onto this shared
     // scene plus its own border/glow/vitality treatment.
-    vec3 sceneCol = renderGlobalScene(fragCoord, bassEnv, midsEnv, trebleEnv, hasAudio);
+    vec3 sceneCol = renderGlobalScene(fragCoord, bassEnv, midsEnv, trebleEnv);
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];

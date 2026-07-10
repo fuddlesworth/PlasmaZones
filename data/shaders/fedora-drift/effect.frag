@@ -15,6 +15,7 @@
 // the per-zone loop, so this is a pImage entry point.
 
 #include <audio.glsl>
+#include <logo-drift.glsl>
 
 
 // ── Frost palette constants ─────────────────────────────────────
@@ -24,44 +25,8 @@ const vec3 FROST_ICE    = vec3(0.475, 0.745, 0.910);   // #79BEE8
 const vec3 FROST_SILVER = vec3(0.831, 0.937, 1.000);   // #D4EFFF
 
 
-float fbm(in vec2 uv, int octaves, float rotAngle) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    float c = cos(rotAngle), s = sin(rotAngle);
-    mat2 rot = mat2(c, -s, s, c);
-    for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * noise2D(uv);
-        uv = rot * uv * 2.0 + vec2(180.0);
-        amplitude *= 0.55;
-    }
-    return value;
-}
-
-
-// ── Frost palette function ──────────────────────────────────────
-
-vec3 frostPalette(float t, vec3 primary, vec3 secondary, vec3 accent) {
-    t = fract(t);
-    if (t < 0.33)      return mix(primary, secondary, t * 3.0);
-    else if (t < 0.66) return mix(secondary, accent, (t - 0.33) * 3.0);
-    else               return mix(accent, primary, (t - 0.66) * 3.0);
-}
-
-
-// ── SDF primitives ──────────────────────────────────────────────
-
-float sdSegment(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a, ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return length(pa - ba * h);
-}
-
-float neonFlicker(float time, float seed, float trebleEnv) {
-    float base = 0.94 + 0.06 * sin(time * 8.0 + seed * 100.0);
-    float buzz = step(0.97, noise2D(vec2(time * 4.0, seed * 7.0))) * 0.2;
-    float trebleBuzz = trebleEnv * step(0.93, noise2D(vec2(time * 5.0, seed * 13.0))) * 0.25;
-    return clamp(base - buzz - trebleBuzz, 0.6, 1.0);
-}
+// fbm(), sdSegment(), and the tri-stop palette (triStopPalette) come from
+// common.glsl. neonFlicker() comes from logo-drift.glsl.
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -423,65 +388,6 @@ vec3 flowLines(vec2 p, float fDist, float time, float bassEnv, float midsEnv,
 
 
 // ═══════════════════════════════════════════════════════════════
-//  PER-INSTANCE UV COMPUTATION (adapted for Fedora logo)
-// ═══════════════════════════════════════════════════════════════
-
-vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse,
-                       float sizeMin, float sizeMax, out float instScale) {
-    vec2 uv = globalUV;
-    uv.x = (uv.x - 0.5) * aspect + 0.5;
-
-    if (totalCount <= 1) {
-        vec2 drift = vec2(
-            timeSin(0.13) * 0.015 + timeSin(0.29) * 0.008,
-            timeCos(0.19) * 0.012 + timeCos(0.11) * 0.006
-        );
-        uv -= drift;
-        // Gentle rotation
-        float rotAng = timeSin(0.12) * 0.04;
-        vec2 lp = uv - vec2(0.5);
-        uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-                   lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
-        float breathe = 1.0 + timeSin(0.6) * 0.02;
-        float springT = fract(time * 1.2);
-        float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
-        instScale = logoScale * breathe * spring;
-        uv = (uv - 0.5) / instScale + LOGO_CENTER;
-        return uv;
-    }
-
-    float h1 = hash21(vec2(float(idx) * 7.31, 3.17));
-    float h2 = hash21(vec2(float(idx) * 13.71, 7.23));
-    float h3 = hash21(vec2(float(idx) * 5.13, 11.37));
-    float h4 = hash21(vec2(float(idx) * 9.77, 17.53));
-
-    float roam = 0.35;
-    float f1 = 0.06 + float(idx) * 0.021;
-    float f2 = 0.04 + float(idx) * 0.017;
-    vec2 mdrift = vec2(
-        timeSin(f1, h1 * TAU) * roam + timeSin(f1 * 2.1, h3 * TAU) * roam * 0.3,
-        timeCos(f2, h2 * TAU) * roam * 0.9 + timeCos(f2 * 1.6, h4 * TAU) * roam * 0.25
-    );
-    uv -= mdrift;
-
-    // Minimal per-instance tilt (keep "f" essentially upright)
-    float rotAng = timeSin(0.08 + float(idx) * 0.025, h4 * TAU) * 0.01;
-    vec2 lp = uv - vec2(0.5);
-    uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-               lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
-
-    instScale = mix(sizeMin, sizeMax, h3) * logoScale;
-    float breathe = 1.0 + timeSin(0.5 + float(idx) * 0.11, h1 * TAU) * 0.02;
-    float springT = fract(time * 1.2 + h2);
-    float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
-    instScale *= breathe * spring;
-    uv = (uv - 0.5) / instScale + LOGO_CENTER;
-    return uv;
-}
-
-
-// ═══════════════════════════════════════════════════════════════
 //  MAIN ZONE RENDER
 // ═══════════════════════════════════════════════════════════════
 
@@ -604,9 +510,10 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // ── Multi-instance logo rendering ───────────────────────
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
-            vec2 iLogoUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, bassEnv, logoPulse,
-                                              logoSizeMin, logoSizeMax, instScale);
+            vec2 iLogoUV = driftInstanceUV(li, logoCount, globalUV, aspect, time,
+                                            logoScale, bassEnv,
+                                            logoSizeMin, logoSizeMax,
+                                            LOGO_CENTER, 0.01, instScale);
 
             // Wide bounding check
             if (iLogoUV.x < -0.4 || iLogoUV.x > 1.4 ||
@@ -750,7 +657,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float angle = atan(p.y, p.x) * 2.0;
         // FBM-animated border with frost colors
         float borderFlow = fbm(vec2(sin(angle), cos(angle)) * 2.0 + time * speed * 3.0, 3, 0.5);
-        vec3 borderCol = frostPalette(borderFlow * contrast + midsEnv * 0.2,
+        vec3 borderCol = triStopPalette(borderFlow * contrast + midsEnv * 0.2,
                                       palPrimary, palSecondary, palAccent);
         vec3 zoneBorderTint = colorWithFallback(borderColor.rgb, borderCol);
         borderCol = mix(borderCol, zoneBorderTint * luminance(borderCol), 0.25);
@@ -781,7 +688,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float glow = expGlow(d, 8.0, borderGlow);
         float oAngle = atan(p.y, p.x);
         float glowT = angularNoise(oAngle, 1.5, time * 0.06) + midsEnv * 0.1;
-        vec3 glowCol = frostPalette(glowT, palPrimary, palSecondary, palAccent);
+        vec3 glowCol = triStopPalette(glowT, palPrimary, palSecondary, palAccent);
         glowCol *= mix(0.3, 1.0, vitality);
         result.rgb += glowCol * glow * 0.8;
         result.a = max(result.a, glow * 0.6);
@@ -818,37 +725,12 @@ vec4 compositeFedoraLabels(vec4 color, vec2 fragCoord,
     float trebleEnv = hasAudio ? smoothstep(0.05, 0.5, treble) * labelAudioReact : 0.0;
 
     // ── Multi-layer frost halo ──────────────────────────────────
-    float haloTight = 0.0;
-    float haloWide = 0.0;
-    float haloVWide = 0.0;
-    float haloR = 0.0, haloG = 0.0, haloB = 0.0;
     vec2 chromOff = vec2(px.x * 2.0, px.y * 0.6);
-
-    for (int dy = -2; dy <= 2; dy++) {
-        for (int dx = -2; dx <= 2; dx++) {
-            float r2 = float(dx * dx + dy * dy);
-            vec2 off = vec2(float(dx), float(dy)) * px;
-
-            float wTight = exp(-r2 * 0.6);
-            float wWide = exp(-r2 * 0.2);
-            float wVWide = exp(-r2 * 0.1);
-
-            float s = texture(uZoneLabels, uv + off * labelGlowSpread).a;
-            haloTight += s * wTight;
-            haloWide += s * wWide;
-            haloVWide += s * wVWide;
-
-            haloR += texture(uZoneLabels, uv + off * labelGlowSpread + chromOff).a * wWide;
-            haloG += texture(uZoneLabels, uv + off * labelGlowSpread).a * wWide;
-            haloB += texture(uZoneLabels, uv + off * labelGlowSpread - chromOff).a * wWide;
-        }
-    }
-    haloTight /= 10.0;
-    haloWide /= 16.5;
-    haloVWide /= 20.0;
-    haloR /= 16.5;
-    haloG /= 16.5;
-    haloB /= 16.5;
+    LabelHalo halo = gatherLabelHalo(uv, px, labelGlowSpread, chromOff);
+    float haloTight = halo.tight;
+    float haloWide = halo.wide;
+    float haloVWide = halo.vWide;
+    float haloR = halo.chroma.r, haloG = halo.chroma.g, haloB = halo.chroma.b;
 
     // ── Gentle pulse (not aggressive neon flicker) ──────────────
     float pulse = 0.92 + 0.08 * sin(time * 3.0);
@@ -867,7 +749,7 @@ vec4 compositeFedoraLabels(vec4 color, vec2 fragCoord,
 
         // Animated color cycling through frost palette
         float t = uv.x * 2.0 + time * 0.10;
-        vec3 haloCol = frostPalette(t, palPrimary, palAccent, palGlow);
+        vec3 haloCol = triStopPalette(t, palPrimary, palAccent, palGlow);
 
         // Tight core: near-white
         vec3 coreCol = mix(FROST_SILVER, haloCol, 0.25);
@@ -895,7 +777,7 @@ vec4 compositeFedoraLabels(vec4 color, vec2 fragCoord,
     if (labels.a > 0.01) {
         // Diagonal frost gradient in pixel space — visible within each character
         float frostWave = sin(fragCoord.x * 0.25 - time * 2.0 + fragCoord.y * 0.15) * 0.5 + 0.5;
-        vec3 tubeColor = frostPalette(frostWave + time * 0.06, palPrimary, palAccent, palGlow);
+        vec3 tubeColor = triStopPalette(frostWave + time * 0.06, palPrimary, palAccent, palGlow);
 
         // Frost crystalline noise — breaks up the solid fill
         float frost = noise2D(fragCoord * 0.12 + time * 0.5);

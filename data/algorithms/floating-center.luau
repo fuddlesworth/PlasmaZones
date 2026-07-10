@@ -3,33 +3,6 @@
 
 local pluau = pluau
 
-local function renderPanel(zones, startX, startY, panelW, panelH, count, gap, horizontal)
-    if count <= 0 then return end
-    local totalSize = horizontal and panelW or panelH
-
-    -- Degenerate gap: equal-split without gaps
-    if (count - 1) * gap >= totalSize then
-        local equalSize = math.max(1, math.floor(totalSize / count))
-        local fill
-        if horizontal then
-            fill = pluau.fillRegion(startX, startY, equalSize, panelH, count)
-        else
-            fill = pluau.fillRegion(startX, startY, panelW, equalSize, count)
-        end
-        for i = 1, #fill do zones[#zones + 1] = fill[i] end
-        return
-    end
-
-    local slots = pluau.distributeEvenly(horizontal and startX or startY, totalSize, count, gap)
-    for i = 1, #slots do
-        if horizontal then
-            zones[#zones + 1] = { x = slots[i].pos, y = startY, width = slots[i].size, height = panelH }
-        else
-            zones[#zones + 1] = { x = startX, y = slots[i].pos, width = panelW, height = slots[i].size }
-        end
-    end
-end
-
 return pluau.algorithm {
     metadata = {
         name = "Floating Center",
@@ -49,20 +22,18 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
         local area = ctx.area
         local gap = ctx.innerGap
 
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
 
         if count == 1 then
             local splitRatio1 = pluau.clampSplitRatio(ctx.splitRatio)
             local cw = math.floor(area.width * splitRatio1)
             local ch = math.floor(area.height * splitRatio1)
-            local cx = area.x + math.floor((area.width - cw) / 2)
-            local cy = area.y + math.floor((area.height - ch) / 2)
+            local cx = pluau.center(area.x, area.width, cw)
+            local cy = pluau.center(area.y, area.height, ch)
             return { { x = cx, y = cy, width = cw, height = ch } }
         end
 
@@ -106,29 +77,20 @@ return pluau.algorithm {
 
         zones[#zones + 1] = { x = centerX, y = centerY, width = centerW, height = centerH }
 
+        -- rightW/leftW/topH are floored at 1 by math.max(1, ...), so their old
+        -- `>= 1` guards were always true; the overlapping-fallback else arms were
+        -- dead. bottomH keeps its guard: the ANDed bounds check can be false.
         if rightCount > 0 then
-            if rightW >= 1 then
-                renderPanel(zones, rightX, sideTop, rightW, sideH, rightCount, gap, false)
-            else
-                for _ = 1, rightCount do
-                    zones[#zones + 1] = { x = centerX, y = centerY, width = centerW, height = centerH }
-                end
-            end
+            pluau.stripLayout(zones, rightX, sideTop, rightW, sideH, rightCount, gap, false)
         end
 
         if leftCount > 0 then
-            if leftW >= 1 then
-                renderPanel(zones, area.x, sideTop, leftW, sideH, leftCount, gap, false)
-            else
-                for _ = 1, leftCount do
-                    zones[#zones + 1] = { x = centerX, y = centerY, width = centerW, height = centerH }
-                end
-            end
+            pluau.stripLayout(zones, area.x, sideTop, leftW, sideH, leftCount, gap, false)
         end
 
         if bottomCount > 0 then
             if bottomH >= 1 and bottomY < area.y + area.height then
-                renderPanel(zones, area.x, bottomY, area.width, bottomH, bottomCount, gap, true)
+                pluau.stripLayout(zones, area.x, bottomY, area.width, bottomH, bottomCount, gap, true)
             else
                 for _ = 1, bottomCount do
                     zones[#zones + 1] = { x = centerX, y = centerY, width = centerW, height = centerH }
@@ -137,13 +99,7 @@ return pluau.algorithm {
         end
 
         if topCount > 0 then
-            if topH >= 1 then
-                renderPanel(zones, area.x, area.y, area.width, topH, topCount, gap, true)
-            else
-                for _ = 1, topCount do
-                    zones[#zones + 1] = { x = centerX, y = centerY, width = centerW, height = centerH }
-                end
-            end
+            pluau.stripLayout(zones, area.x, area.y, area.width, topH, topCount, gap, true)
         end
 
         return zones

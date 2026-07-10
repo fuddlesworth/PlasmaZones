@@ -19,21 +19,18 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
         local area = ctx.area
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
         local gap = ctx.innerGap
 
         local minHeights = pluau.extractMinHeights(ctx.minSizes, count)
         local rowHeights = pluau.distributeWithOptionalMins(area.height, count, gap, minHeights)
+        local rowYs = pluau.cumulativeOffsets(area.y, rowHeights, gap)
 
         local zones = {}
-        local currentY = area.y
         for i = 1, count do
-            zones[i] = { x = area.x, y = currentY, width = area.width, height = rowHeights[i] }
-            currentY = currentY + rowHeights[i] + gap
+            zones[i] = { x = area.x, y = rowYs[i], width = area.width, height = rowHeights[i] }
         end
         return zones
     end,

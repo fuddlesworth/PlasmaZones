@@ -21,8 +21,9 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
         local area = ctx.area
+        local early = pluau.guardArea(area, count)
+        if early then return early end
         local gap = ctx.innerGap
         local splitRatio = pluau.clampSplitRatio(ctx.splitRatio)
 

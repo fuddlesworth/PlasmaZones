@@ -83,8 +83,8 @@ vec4 pTransition(vec2 uv, float t) {
   // letting the dissolve mask take the surface cleanly to transparent.
   // The mask's bands sit OUTSIDE [0, 1] so identity sampling at
   // progress == 0 gets mask = 1 everywhere with no inner-edge clipping.
-  // Same fix glide, fade, morph, popin, inkwell-drop, plasma-flow,
-  // ripple, smoke, snap, and soft-warp-fade already apply.
+  // Same fix glide, fade, popin, inkwell-drop, ripple, smoke, snap,
+  // and soft-warp-fade already apply.
   vec4 oColor = getInputColor(coords) * boundaryMask(coords);
 
   // Compute several layers of moving wisps.
@@ -121,5 +121,5 @@ vec4 pTransition(vec2 uv, float t) {
   // oColor = vec4(vec3(noise), 1.0);
   // oColor = vec4(vec3(mask*min(wispsIn, 1.0 - wispsOut)), 1.0);
 
-  return vec4(oColor.rgb * oColor.a, oColor.a);
+  return premultiply(oColor);
 }

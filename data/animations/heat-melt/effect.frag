@@ -17,7 +17,7 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-float hm_rand(vec2 co) { return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453); }
+#include <noise.glsl>
 vec3 hm_mod289_3(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec2 hm_mod289_2(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec3 hm_permute(vec3 x) { return hm_mod289_3(((x * 34.0) + 1.0) * x); }
@@ -59,7 +59,7 @@ vec4 pTransition(vec2 uv, float t) {
     float perScreenScaleX = p_meltNoiseScale * max(iAnchorSize.x, 1.0)
                                            / max(iSurfaceScreenPos.z, 1.0);
     float dist = distance(center, uv) - p * exp(hm_snoise(vec2(uv.x * perScreenScaleX, 0.0)) * p_meltAggressiveness);
-    float r = p - hm_rand(vec2(uv.x, 0.1));
+    float r = p - classicHash(vec2(uv.x, 0.1));
     float reveal = (dist <= r) ? 1.0 : (p * p * p);
 
     return win * reveal;

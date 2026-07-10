@@ -21,7 +21,7 @@ end
 
 local function clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio, firstDim, secondDim)
     if minFirstRatio <= maxFirstRatio then
-        return math.max(minFirstRatio, math.min(maxFirstRatio, ratio))
+        return pluau.clamp(ratio, minFirstRatio, maxFirstRatio) or maxFirstRatio
     end
     local totalMin = firstDim + secondDim
     if totalMin > 0 then
@@ -41,11 +41,8 @@ local function computeSubtreeMinDims(node, minSizes, leafStartIdx, innerGap, dep
     depth = depth or 0
     if not node or depth > pluau.MAX_TREE_DEPTH then return { w = 0, h = 0, leafCount = 0 } end
     if isLeaf(node) then
-        if leafStartIdx < #minSizes then
-            local ms = minSizes[leafStartIdx + 1]
-            return { w = math.max(ms.w or 0, 0), h = math.max(ms.h or 0, 0), leafCount = 1 }
-        end
-        return { w = 0, h = 0, leafCount = 1 }
+        local mw, mh = pluau.minSizeAt(minSizes, leafStartIdx)
+        return { w = mw, h = mh, leafCount = 1 }
     end
     local firstResult = computeSubtreeMinDims(node.first, minSizes, leafStartIdx, innerGap, depth + 1)
     local secondResult =
@@ -223,16 +220,13 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
-
         local area = ctx.area
         local gap = ctx.innerGap
         local minSizes = ctx.minSizes
         local splitRatio = ctx.splitRatio
 
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
 
         local root = buildTree(count, splitRatio, area)
         bspApplyGeometry(root, area, gap, minSizes, 0, 0)

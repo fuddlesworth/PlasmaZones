@@ -14,19 +14,12 @@
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the pack renders a still tint slab with the same corner rounding.
 
-#version 450
-#include <surface_lib.glsl>
 #include <surface_backdrop.glsl>
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
-    vec4 window = surfaceTexel(vTexCoord) * uSurfaceOpacity;
-
-    vec2 px = surfacePixel(vTexCoord);
-    FrameSDF fs = frameSdf(px, p_cornerRadius * uSurfaceScale);
-    float mask = frameMask(fs.d);
+vec4 pSurface(vec2 uv) {
+    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    vec2 px = slab.px;
+    float mask = slab.mask;
 
     vec4 pane;
     if (uHasBackdrop >= 0.5) {
@@ -36,7 +29,7 @@ void main() {
         float cell = max(p_cellSize, 2.0) * max(uSurfaceScale, 0.001);
         vec2 local = px - uSurfaceFrameTopLeft;
         vec2 snapped = (floor(local / cell) + 0.5) * cell;
-        vec4 b = backdropTexel(vTexCoord + pxToUv(snapped - local));
+        vec4 b = backdropTexel(uv + pxToUv(snapped - local));
         vec3 rgb = mix(b.rgb, p_tintColor.rgb * b.a, clamp(p_tintStrength, 0.0, 1.0));
         pane = vec4(rgb, b.a) * mask;
     } else {
@@ -44,5 +37,5 @@ void main() {
         pane = vec4(p_tintColor.rgb, 1.0) * 0.4 * mask;
     }
 
-    fragColor = slabComposite(window, pane);
+    return slabComposite(slab.window, pane);
 }

@@ -19,6 +19,7 @@
  */
 
 #include <audio.glsl>
+#include <logo-drift.glsl>
 
 
 // ── Arch brand constants ─────────────────────────────────────────
@@ -28,37 +29,8 @@ const vec3 ARCH_ICE  = vec3(0.310, 0.765, 0.969);
 const vec3 ARCH_SNOW = vec3(0.702, 0.898, 0.988);
 
 
-// ── Simplex noise (unique to Arch shader) ────────────────────────
-
-vec3 simplexMod289(vec3 x) { return x - floor(x / 289.0) * 289.0; }
-vec2 simplexMod289v2(vec2 x) { return x - floor(x / 289.0) * 289.0; }
-vec3 simplexPermute(vec3 x) { return simplexMod289((x * 34.0 + 1.0) * x); }
-
-float simplex2D(vec2 v) {
-    const vec4 C = vec4(0.211324865405, 0.366025403784,
-                        -0.577350269189, 0.024390243902);
-    vec2 i = floor(v + dot(v, C.yy));
-    vec2 x0 = v - i + dot(i, C.xx);
-    vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-    vec4 x12 = x0.xyxy + C.xxzz;
-    x12.xy -= i1;
-    i = simplexMod289v2(i);
-    vec3 p = simplexPermute(simplexPermute(i.y + vec3(0.0, i1.y, 1.0))
-                            + i.x + vec3(0.0, i1.x, 1.0));
-    vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy),
-                             dot(x12.zw, x12.zw)), 0.0);
-    m = m * m;
-    m = m * m;
-    vec3 x_ = 2.0 * fract(p * C.www) - 1.0;
-    vec3 h = abs(x_) - 0.5;
-    vec3 ox = floor(x_ + 0.5);
-    vec3 a0 = x_ - ox;
-    m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
-    vec3 g;
-    g.x = a0.x * x0.x + h.x * x0.y;
-    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-    return 130.0 * dot(m, g);
-}
+// simplex2D / simplexFBM (and the simplexMod289/Permute helpers) come from
+// logo-drift.glsl.
 
 // ── Terminal rain column ──────────────────────────────────────────
 // Simulates a single column of scrolling terminal output.
@@ -116,46 +88,7 @@ float dataPacket(vec2 uv, float pathY, float time, float seed) {
 }
 
 
-// ── Catmull-Rom palette interpolation ────────────────────────────
-
-vec3 catmullRom(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float t) {
-    float t2 = t * t;
-    float t3 = t2 * t;
-    return 0.5 * ((2.0 * p1) +
-                   (-p0 + p2) * t +
-                   (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 +
-                   (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3);
-}
-
-vec3 archPaletteCR(float t, vec3 primary, vec3 secondary, vec3 accent, vec3 glow) {
-    t = fract(t);
-    float seg = t * 4.0;
-    int idx = int(seg);
-    float f = fract(seg);
-    // Wrap-around: primary -> secondary -> accent -> glow -> primary
-    vec3 colors[5] = vec3[5](primary, secondary, accent, glow, primary);
-    int i0 = max(idx - 1, 0);
-    int i1 = idx;
-    int i2 = min(idx + 1, 4);
-    int i3 = min(idx + 2, 4);
-    return clamp(catmullRom(colors[i0], colors[i1], colors[i2], colors[i3], f), 0.0, 1.0);
-}
-
-vec3 paletteSweep(float t, vec3 primary, vec3 secondary, vec3 accent, vec3 glow,
-                  float audioShift) {
-    // Subtle hue shift from audio stays within Arch color family
-    float shifted = t + audioShift * 0.08;
-    return archPaletteCR(shifted, primary, secondary, accent, glow);
-}
-
-
-// ── SDF primitives ──────────────────────────────────────────────
-
-float sdSegment(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a, ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return length(pa - ba * h);
-}
+// catmullRom(), logoPaletteCR(), and paletteSweep() come from logo-drift.glsl.
 
 
 // =================================================================
@@ -214,29 +147,6 @@ const vec2 ARCH_AABB_LO = vec2(0.000, 0.000);
 const vec2 ARCH_AABB_HI = vec2(1.000, 1.000);
 
 
-// ── Signed distance to the 95-vertex Arch polygon ───────────────
-
-float sdArchPolygon(vec2 p) {
-    vec2 dLo = ARCH_AABB_LO - p;
-    vec2 dHi = p - ARCH_AABB_HI;
-    vec2 outside = max(max(dLo, dHi), vec2(0.0));
-    float boxDist2 = dot(outside, outside);
-    if (boxDist2 > 0.04) return sqrt(boxDist2);
-
-    float d = dot(p - ARCH[0], p - ARCH[0]);
-    float s = 1.0;
-    for (int i = 0, j = ARCH_N - 1; i < ARCH_N; j = i, i++) {
-        vec2 e = ARCH[j] - ARCH[i];
-        vec2 w = p - ARCH[i];
-        vec2 b = w - e * clamp(dot(w, e) / dot(e, e), 0.0, 1.0);
-        d = min(d, dot(b, b));
-        bvec3 cond = bvec3(p.y >= ARCH[i].y, p.y < ARCH[j].y, e.x * w.y > e.y * w.x);
-        if (all(cond) || all(not(cond))) s *= -1.0;
-    }
-    return s * sqrt(d);
-}
-
-
 // ── Logo hit result ─────────────────────────────────────────────
 
 struct LogoHit {
@@ -284,7 +194,7 @@ LogoHit evalArchLogo(vec2 p) {
 // ── Per-instance UV computation ─────────────────────────────────
 
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse,
+                       float logoScale,
                        float sizeMin, float sizeMax, out float instScale) {
     vec2 uv = globalUV;
     float wobbleAmp = p_logoWobble >= 0.0 ? p_logoWobble : 0.12;
@@ -322,19 +232,6 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 }
 
 
-// ── Simplex FBM (used only for interior cloud flow) ─────────────
-
-float simplexFBM(vec2 uv, int octaves) {
-    float value = 0.0;
-    float amplitude = 0.6;
-    float freq = 1.0;
-    for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * (simplex2D(uv * freq) * 0.5 + 0.5);
-        freq *= 2.1;
-        amplitude *= 0.45;
-    }
-    return value;
-}
 
 
 // =================================================================
@@ -342,7 +239,7 @@ float simplexFBM(vec2 uv, int octaves) {
 // =================================================================
 
 vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
-                    bool isHighlighted, float bass, float mids, float treble, float overall,
+                    bool isHighlighted, float bass, float mids, float treble,
                     bool hasAudio) {
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
@@ -529,7 +426,7 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
             vec2 iLogoUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, bassEnv, logoPulse,
+                                              logoScale,
                                               logoSizeMin, logoSizeMax, instScale);
 
             if (iLogoUV.x < -0.3 || iLogoUV.x > 1.3 ||
@@ -999,7 +896,6 @@ vec4 compositeArchLabels(vec4 color, vec2 fragCoord,
     // ── Text body ────────────────────────────────────────────────
     if (labels.a > 0.01) {
         // Sharp CRT scan lines
-        float scanFreq = iResolution.y * 0.5;
         float scanlines = 0.8 + 0.2 * step(0.5, fract(fragCoord.y / 2.0));
 
         // Edge detection for glow outline
@@ -1062,14 +958,13 @@ vec4 pImage(vec2 fragCoord) {
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
     float treble  = getTrebleSoft();
-    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
         vec4 zoneColor = renderArchZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio);
+            bass, mids, treble, hasAudio);
         color = blendOver(color, zoneColor);
     }
 

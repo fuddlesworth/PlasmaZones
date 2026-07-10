@@ -26,29 +26,20 @@ local pluau = pluau
 local MIN_RATIO = 0.2
 local MAX_RATIO = 1.0
 
-local function clampRatio(r)
-    if type(r) ~= "number" or r ~= r then
-        return nil
-    end
-    if r < MIN_RATIO then return MIN_RATIO end
-    if r > MAX_RATIO then return MAX_RATIO end
-    return r
-end
-
 -- Resolve the spotlight width fraction. Priority:
 --   1. a width the user dragged on this screen (stored in ctx.state, in pixels)
 --   2. the widthRatio custom-param default from Settings
 local function resolveWidthRatio(ctx, area)
-    local wr = clampRatio(ctx.custom and ctx.custom.widthRatio) or 0.6
+    local wr = pluau.clamp(ctx.custom and ctx.custom.widthRatio, MIN_RATIO, MAX_RATIO) or 0.6
     local bag = ctx.state
     if bag and type(bag.singleW) == "number" and area.width > 0 then
-        wr = clampRatio(bag.singleW / area.width) or wr
+        wr = pluau.clamp(bag.singleW / area.width, MIN_RATIO, MAX_RATIO) or wr
     end
     return wr
 end
 
 local function resolveHeightRatio(ctx)
-    return clampRatio(ctx.custom and ctx.custom.heightRatio) or 0.85
+    return pluau.clamp(ctx.custom and ctx.custom.heightRatio, MIN_RATIO, MAX_RATIO) or 0.85
 end
 
 return pluau.algorithm {
@@ -78,22 +69,19 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
-
         local area = ctx.area
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
 
         local gap = ctx.innerGap
         local wr = resolveWidthRatio(ctx, area)
         local hr = resolveHeightRatio(ctx)
         local ch = math.max(pluau.MIN_ZONE_SIZE, math.floor(area.height * hr))
-        local cy = area.y + math.floor((area.height - ch) / 2)
+        local cy = pluau.center(area.y, area.height, ch)
 
         if count == 1 then
             local bandW = math.max(pluau.MIN_ZONE_SIZE, math.floor(area.width * wr))
-            local bandX = area.x + math.floor((area.width - bandW) / 2)
+            local bandX = pluau.center(area.x, area.width, bandW)
             return { { x = bandX, y = cy, width = bandW, height = ch } }
         end
 

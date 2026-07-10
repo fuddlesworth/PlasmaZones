@@ -19,16 +19,13 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
         local area = ctx.area
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
         local gap = ctx.innerGap
         local minSizes = ctx.minSizes
 
-        local cols = math.ceil(math.sqrt(count))
-        local rows = math.ceil(count / cols)
+        local cols, rows = pluau.gridShape(count)
 
         -- 1-indexed; the original 0-based col/row indices map to [idx + 1].
         local colMinWidths = {}
@@ -41,9 +38,7 @@ return pluau.algorithm {
             for i = 0, count - 1 do
                 local row = math.floor(i / cols)
                 local col = i % cols
-                local entry = minSizes[i + 1]
-                local mw = (i < #minSizes and entry and entry.w and entry.w > 0) and entry.w or 0
-                local mh = (i < #minSizes and entry and entry.h and entry.h > 0) and entry.h or 0
+                local mw, mh = pluau.minSizeAt(minSizes, i)
                 if row < fullRows then
                     if mw > colMinWidths[col + 1] then colMinWidths[col + 1] = mw end
                     if mh > rowMinHeights[row + 1] then rowMinHeights[row + 1] = mh end
@@ -56,16 +51,8 @@ return pluau.algorithm {
         local columnWidths = pluau.distributeWithOptionalMins(area.width, cols, gap, colMinWidths)
         local rowHeights = pluau.distributeWithOptionalMins(area.height, rows, gap, rowMinHeights)
 
-        local colX = {}
-        colX[1] = area.x
-        for c = 1, cols - 1 do
-            colX[c + 1] = colX[c] + columnWidths[c] + gap
-        end
-        local rowY = {}
-        rowY[1] = area.y
-        for r = 1, rows - 1 do
-            rowY[r + 1] = rowY[r] + rowHeights[r] + gap
-        end
+        local colX = pluau.cumulativeOffsets(area.x, columnWidths, gap)
+        local rowY = pluau.cumulativeOffsets(area.y, rowHeights, gap)
 
         local zones = {}
         for i = 0, count - 1 do
@@ -78,9 +65,8 @@ return pluau.algorithm {
                 if #minSizes > 0 then
                     for j = 0, windowsInThisRow - 1 do
                         local idx = row * cols + j
-                        local e = minSizes[idx + 1]
-                        lastRowMinWidths[#lastRowMinWidths + 1] =
-                            (idx < #minSizes and e and e.w and e.w > 0) and e.w or 0
+                        local mw = pluau.minSizeAt(minSizes, idx)
+                        lastRowMinWidths[#lastRowMinWidths + 1] = mw
                     end
                 end
                 local lastRowWidths = pluau.distributeWithOptionalMins(area.width, windowsInThisRow, gap, lastRowMinWidths)

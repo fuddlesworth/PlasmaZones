@@ -14,27 +14,17 @@ layout(location = 0) out vec4 fragColor;
 
 #include <common.glsl>
 #include <audio.glsl>
-
-// Curl noise from 2D value noise -- produces divergence-free flow
-vec2 curlNoise(vec2 p, float t) {
-    float eps = 0.5;
-    float n  = noise2D(p + vec2(0.0, eps) + t);
-    float ns = noise2D(p - vec2(0.0, eps) + t);
-    float ne = noise2D(p + vec2(eps, 0.0) + t);
-    float nw = noise2D(p - vec2(eps, 0.0) + t);
-    return vec2(n - ns, -(ne - nw)) / (2.0 * eps);
-}
+#include <flow-noise.glsl>
 
 // Multi-octave curl noise for complex, organic flow
 vec2 fbmCurl(vec2 p, float t, int octaves) {
     vec2 flow = vec2(0.0);
     float amp = 1.0;
     float freq = 1.0;
-    float c = cos(0.4), s = sin(0.4);
-    mat2 rot = mat2(c, -s, s, c);
+    mat2 octaveRot = rot(0.4);
     for (int i = 0; i < octaves && i < 8; i++) {
         flow += curlNoise(p * freq, t * (0.8 + float(i) * 0.15)) * amp;
-        p = rot * p;
+        p = octaveRot * p;
         freq *= 2.0;
         amp *= 0.55;
     }

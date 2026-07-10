@@ -36,7 +36,7 @@ return pluau.algorithm {
         local old, new, edges, idx = resize.oldRect, resize.newRect, resize.edges, resize.index
         if old.height <= 0 or oldRatio <= 0 then return nil end
         if idx == 0 and edges.bottom then
-            return { splitRatio = new.height * oldRatio / old.height }
+            return { splitRatio = pluau.resizeRatioGrow(new.height, old.height, oldRatio) }
         end
         return nil
     end,
