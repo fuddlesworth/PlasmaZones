@@ -111,7 +111,7 @@ vec4 pTransition(vec2 uv, float t)
     // ----- Particle field -------------------------------------------------
 
     // Match the defence-in-depth pattern in energize-a/effect.frag: even
-    // though `pScale` is already clamped above (line 78), the
+    // though `pScale` is already clamped at the top of pTransition, the
     // redundant max here makes a future refactor that drops the
     // source-side clamp safe. Without it, energize-a and energize-b
     // would diverge — energize-a still floors at the divide site,
