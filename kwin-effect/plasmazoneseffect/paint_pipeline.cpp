@@ -1227,6 +1227,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                                 fallback->bind();
                             }
                         }
+                        // The fallback is a 1x1 transparent, so this slot's
+                        // declared size is zero. Push it explicitly: this
+                        // cached program persists uniform state across
+                        // transitions, so a slot that carried a real texture
+                        // (and its size) on a prior leg would otherwise leave a
+                        // stale non-zero iTextureResolution here.
+                        if (cached->iTextureResolutionLoc[slot] >= 0) {
+                            shader->setUniform(cached->iTextureResolutionLoc[slot], QVector4D(0.0f, 0.0f, 0.0f, 0.0f));
+                        }
                         continue;
                     }
                     KWin::GLTexture* tex = entry->texture.get();
