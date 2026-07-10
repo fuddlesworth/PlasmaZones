@@ -13,6 +13,7 @@ import QtQuick
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("OSD animation events")
+    headerText: i18n("Animations for on-screen displays. \"All OSDs\" is the default. Each event can override it.")
     eventModel: [
         {
             "eventPath": "osd",

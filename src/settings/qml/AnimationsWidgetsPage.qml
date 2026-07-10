@@ -6,6 +6,7 @@ import QtQuick
 // (only visible AnimationEventCards build) — see that component.
 AnimationEventCardList {
     Accessible.name: i18n("Widget animation events")
+    headerText: i18n("Animations for widget interactions. \"All Widget Events\" is the default. Each event can override it.")
     eventModel: [
         {
             "eventPath": "widget",

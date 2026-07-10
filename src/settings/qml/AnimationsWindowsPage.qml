@@ -14,6 +14,7 @@ import QtQuick
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("Window appearance animation events")
+    headerText: i18n("Animations for windows opening, closing, and focusing. \"All Windows\" is the default. Each event can override it.")
     eventModel: [
         {
             "eventPath": "window.appearance",
