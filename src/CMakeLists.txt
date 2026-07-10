@@ -863,7 +863,11 @@ install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 # only, no GPU/Wayland). The CI gate for the bundled sets; pre-commit-friendly for
 # pack authors. Links plasmazones_rendering for the zone entry scaffold and
 # PhosphorAnimation for the animation effect parser + entry scaffold.
-add_executable(plasmazones-shader-validate shadervalidate/main.cpp)
+add_executable(plasmazones-shader-validate
+    shadervalidate/main.cpp
+    shadervalidate/packvalidators.cpp
+    shadervalidate/packvalidatorcommon.cpp
+)
 target_link_libraries(plasmazones-shader-validate
     PRIVATE
         plasmazones_rendering
