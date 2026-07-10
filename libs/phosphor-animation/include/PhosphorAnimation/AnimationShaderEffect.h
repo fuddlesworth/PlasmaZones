@@ -145,6 +145,17 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// can sample window depth. Daemon-only.
     bool useDepthBuffer = false;
 
+    /// Audio-reactive opt-in (JSON key `audio`, matching the surface pack
+    /// vocabulary). The pack samples the CAVA spectrum via
+    /// `data/animations/shared/audio.glsl`. Unlike the overlay family, where
+    /// audio is implicit/session-global, animation packs must declare it:
+    /// the kwin-effect keys its CAVA run-gate on this flag (an assigned
+    /// audio pack keeps the provider warm so a transition's first frame has
+    /// a spectrum), and the daemon's SurfaceAnimator feeds the spectrum
+    /// unconditionally. Helpers read 0 (render static) when the visualizer
+    /// is off or cava is unavailable.
+    bool useAudio = false;
+
     /// How wide the shader effect's render target is — relative to its
     /// anchor (default), or filling the surface scene root.
     ///
@@ -227,10 +238,10 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     QList<ParameterInfo> parameters;
 
     /// User texture slot. Each entry binds an asset file to one of the
-    /// canonical samplers `iChannel1` / `iChannel2` / `iChannel3` (slots
+    /// canonical samplers `uTexture1` / `uTexture2` / `uTexture3` (slots
     /// 0 / 1 / 2 here, which the runtimes map to texture-unit
     /// allocations 1 / 2 / 3 — slot 0 of the binding-7+ region is the
-    /// surface itself / `iChannel0`, never user-declared).
+    /// surface itself / `uTexture0`, never user-declared).
     ///
     /// `path` is resolved relative to the effect's `sourceDir`. Loading
     /// failures are non-fatal — the effect still installs and the
@@ -243,8 +254,8 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// the default rather than silently re-persisting the typo. Filter
     /// mode is not exposed here — both runtimes use linear filtering
     /// for user textures today. The slot index is the 0-based position
-    /// in this list: the first entry binds to `iChannel1`, the second
-    /// to `iChannel2`, etc. Up to three textures per effect; surplus
+    /// in this list: the first entry binds to `uTexture1`, the second
+    /// to `uTexture2`, etc. Up to three textures per effect; surplus
     /// entries are silently dropped at parse time.
     struct TextureSlot
     {

@@ -1164,6 +1164,15 @@ private:
     /// needed) so the run gate resolves before first paint.
     bool hasAudioReactiveDecoration() const;
 
+    /// True when an audio-reactive ANIMATION pack (AnimationShaderEffect::
+    /// useAudio) is assigned anywhere transitions can resolve it from: the
+    /// shader profile tree's baseline or overrides, or an animation rule's
+    /// effectId payload. Keeps cava warm while such a pack is assigned so a
+    /// transition's FIRST frame already has a spectrum — a lazy start at
+    /// transition begin would eat the whole leg in cava spawn latency. Like
+    /// its decoration sibling, reads pack metadata only.
+    bool hasAudioReactiveAnimation() const;
+
     /// True when audio is live: the toggle is on, the provider is running, and a
     /// non-empty spectrum has arrived. Gates pushing iAudioSpectrumSize > 0 and
     /// binding the spectrum texture. NOT the repaint gate — use

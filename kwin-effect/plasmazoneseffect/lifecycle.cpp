@@ -202,6 +202,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // invalidate the DesktopTransitionManager's parallel compiled-shader
                 // cache too — otherwise the next switch renders with the stale shader.
                 m_desktopTransition.invalidateShaderCache();
+                // A pack reload can flip a pack's `audio` metadata flag, which
+                // feeds the cava run gate via hasAudioReactiveAnimation().
+                scheduleEffectAudioSync();
             });
 
     // Surface shader pack hot-reload: when a data/surface pack changes on disk,

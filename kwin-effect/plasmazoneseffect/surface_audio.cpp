@@ -11,6 +11,8 @@
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleAction.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
 #include <QImage>
@@ -74,6 +76,45 @@ bool PlasmaZonesEffect::hasAudioReactiveDecoration() const
     return false;
 }
 
+bool PlasmaZonesEffect::hasAudioReactiveAnimation() const
+{
+    // Metadata-only scan, mirroring hasAudioReactiveDecoration: collect every
+    // effect id a transition could resolve (tree baseline + direct overrides +
+    // animation-rule effectId payloads) and test the pack's audio flag. The
+    // scan is small (a handful of overrides and rules) and only runs from
+    // syncEffectAudioState, so no caching is needed.
+    const auto& registry = m_shaderManager.shaderRegistry();
+    const auto isAudioPack = [&registry](const QString& id) {
+        return !id.isEmpty() && registry.effect(id).useAudio;
+    };
+    const auto& tree = m_shaderManager.profileTree();
+    if (isAudioPack(tree.baseline().effectiveEffectId())) {
+        return true;
+    }
+    const QStringList paths = tree.overriddenPaths();
+    for (const QString& path : paths) {
+        if (isAudioPack(tree.directOverride(path).effectiveEffectId())) {
+            return true;
+        }
+    }
+    // Rules: any enabled rule action carrying an EffectId param can route a
+    // transition to that pack (the anim-shader slot). Reading the param off
+    // every action over-approximates slightly (a non-shader action never
+    // carries EffectId, so the extra reads are cheap misses), which errs on
+    // the safe side for a run gate.
+    for (const PhosphorRules::Rule& rule : m_shaderManager.m_ruleAnimationRules) {
+        if (!rule.enabled) {
+            continue;
+        }
+        for (const PhosphorRules::RuleAction& action : rule.actions) {
+            if (isAudioPack(action.params.value(PhosphorRules::ActionParam::EffectId).toString())) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void PlasmaZonesEffect::onEffectAudioSpectrum(const QVector<float>& spectrum)
 {
     // Store on the compositor thread; the composite fold uploads it to the GL
@@ -125,7 +166,7 @@ void PlasmaZonesEffect::scheduleEffectAudioSync()
 
 void PlasmaZonesEffect::syncEffectAudioState()
 {
-    const bool wantRun = m_enableAudioVisualizer && hasAudioReactiveDecoration();
+    const bool wantRun = m_enableAudioVisualizer && (hasAudioReactiveDecoration() || hasAudioReactiveAnimation());
     if (wantRun) {
         if (!m_audioProvider) {
             // Lazily created on first need so a session that never uses an audio

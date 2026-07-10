@@ -139,11 +139,35 @@ struct CompiledSurfacePack
     /// (syncEffectAudioState) and the per-frame repaint gate (windowSurfaceAnimates).
     int iAudioSpectrumSizeLoc = -1;
     int uAudioSpectrumLoc = -1;
+    /// iMouse — cursor in the surface texture's top-down device-px space,
+    /// (-1, -1) off-canvas. -1 for packs that never read the cursor (the
+    /// common case); pushBorderUniforms then skips the push entirely.
+    int iMouseLoc = -1;
 
     /// MAIN-pass iChannel0..3 sampler + iChannelResolution[0..3] element
     /// locations. -1 when the linker dropped the uniform (single-pass pack).
     std::array<int, 4> iChannelLoc{{-1, -1, -1, -1}};
     std::array<int, 4> iChannelResolutionLoc{{-1, -1, -1, -1}};
+
+    /// User-declared image textures (metadata `textures`): sampler +
+    /// iTextureResolution[N] element locations, plus the textures themselves,
+    /// loaded once at compile time (decorations are persistent, so the
+    /// pack-lifetime cache is the natural owner — freed with the shader on
+    /// cache clear, where the GL context discipline already applies). Slot N
+    /// feeds uTexture<N+1>. A slot with no loadable file stays null and the
+    /// fold skips its bind (the sampler then reads transparent black).
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> userTextureLoc = []() {
+        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> a;
+        a.fill(-1);
+        return a;
+    }();
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> iTextureResolutionLoc = []() {
+        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> a;
+        a.fill(-1);
+        return a;
+    }();
+    std::array<std::unique_ptr<KWin::GLTexture>, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots>
+        userTextures;
 
     /// Pack-declared parameter uniform locations + resolved-default values.
     /// float/int/bool params pack into customParams[N], colours into
@@ -451,6 +475,12 @@ struct CachedShader
     /// surfaceColor() for its "old" side instead of sampling the raw window
     /// through the unit-0 alias).
     int iHasOldWindowLoc = -1;
+    /// Audio-spectrum uniforms (opt-in module
+    /// `data/animations/shared/audio.glsl` + metadata `"audio": true`).
+    /// -1 when the pack doesn't include the module — paintWindow then skips
+    /// the spectrum push and bind entirely.
+    int iAudioSpectrumSizeLoc = -1;
+    int uAudioSpectrumLoc = -1;
     /// Interactive-move motion uniforms (held move/resize transitions).
     int iMoveVelocityLoc = -1;
     int iMoveOffsetLoc = -1;

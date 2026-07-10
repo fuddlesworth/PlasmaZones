@@ -137,6 +137,8 @@ QJsonObject AnimationShaderEffect::toJson() const
     }
     if (useDepthBuffer)
         obj.insert(QLatin1String("depthBuffer"), true);
+    if (useAudio)
+        obj.insert(QLatin1String("audio"), true);
 
     if (!parameters.isEmpty()) {
         QJsonArray params;
@@ -254,6 +256,7 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
             e.bufferFilters.append(f);
     }
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
+    e.useAudio = obj.value(QLatin1String("audio")).toBool(false);
 
     // `fboExtent` (string). Accepted forms:
     //   "anchor"        Anchor extent — FBO == captured anchor (default)
@@ -381,7 +384,7 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
     if (geometryGridSubdivisions != other.geometryGridSubdivisions)
         return false;
     if (isMultipass != other.isMultipass || useWallpaper != other.useWallpaper || bufferFeedback != other.bufferFeedback
-        || useDepthBuffer != other.useDepthBuffer)
+        || useDepthBuffer != other.useDepthBuffer || useAudio != other.useAudio)
         return false;
     if (!qFuzzyCompare(bufferScale + 1.0, other.bufferScale + 1.0))
         return false;

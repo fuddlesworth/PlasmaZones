@@ -115,12 +115,14 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
         data.mask |= PAINT_SCREEN_TRANSFORMED;
     }
 
-    // Cache cursor pos once per frame for shader-transition iMouse uniform.
-    // paintWindow runs once per active transition (and may run multiple
-    // times across outputs); reading KWin::effects->cursorPos() at every
-    // call multiplies up. Caching here also guarantees every transition
-    // this frame reads an identical iMouse, eliminating sub-frame jitter.
-    if (KWin::effects && !m_shaderManager.empty()) {
+    // Cache cursor pos once per frame for the iMouse uniforms. paintWindow
+    // runs once per active transition (and may run multiple times across
+    // outputs); reading KWin::effects->cursorPos() at every call multiplies
+    // up. Caching here also guarantees every consumer this frame reads an
+    // identical iMouse, eliminating sub-frame jitter. Decorated windows read
+    // it too (hover-reactive surface packs via pushBorderUniforms), so the
+    // refresh also runs while any decoration exists, not only mid-transition.
+    if (KWin::effects && (!m_shaderManager.empty() || !m_windowDecorations.isEmpty())) {
         m_shaderManager.m_cachedCursorGlobal = KWin::effects->cursorPos();
     }
 
@@ -1301,6 +1303,17 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 // would otherwise leak into this draw.
                 if (cached->uTexture0Loc >= 0) {
                     shader->setUniform(cached->uTexture0Loc, retargetUTexture0 ? kSurfaceLayerUnit : 0);
+                }
+                // Audio spectrum (opt-in via the audio.glsl module + metadata
+                // `"audio": true`). Reuses the surface-decoration CAVA
+                // provider and texture: bindSurfaceAudio pushes the bar count
+                // (0 while the visualizer is off or cava is absent, so the
+                // pack's helpers render static) and binds the spectrum at
+                // kSurfaceAudioUnit, clear of this draw's units 0..5. The
+                // upload is a no-op when the texture is already current.
+                if (cached->iAudioSpectrumSizeLoc >= 0 || cached->uAudioSpectrumLoc >= 0) {
+                    ensureAudioSpectrumTexture();
+                    bindSurfaceAudio(shader, cached->iAudioSpectrumSizeLoc, cached->uAudioSpectrumLoc);
                 }
                 // Restore TEXTURE0 as the active unit so KWin's
                 // OffscreenData::paint binds the redirected surface

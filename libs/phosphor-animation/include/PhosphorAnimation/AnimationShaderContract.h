@@ -72,7 +72,7 @@ namespace PhosphorAnimationShaders {
 ///
 /// Shader authors do NOT need their own `#ifdef PLASMAZONES_KWIN` blocks
 /// — both branches expose the same identifiers (`iTime`, `iResolution`,
-/// `customParams[N]`, `iChannel0`, etc.). The macro switch describes the
+/// `customParams[N]`, `uTexture0`, etc.). The macro switch describes the
 /// uniform-binding ABI, not the runtime feature set.
 ///
 /// @par Per-effect declared parameters
@@ -122,23 +122,32 @@ namespace PhosphorAnimationShaders {
 ///     containment.
 ///   • `customParams[N]` / `customColors[N]` — per-effect declared
 ///     parameters resolved at transition begin time.
-///   • `iChannel0` — redirected surface texture. Daemon: live FBO
+///   • `uTexture0` — redirected surface texture. Daemon: live FBO
 ///     from the layer-enabled shader anchor. Kwin: KWin's
 ///     `OffscreenEffect`-managed window snapshot.
+///   • `iTextureResolution[]` — pixel sizes of the bound user textures.
+///     Daemon: node-resolved live. Kwin: pushed by paintWindow's
+///     per-effect texture loop.
+///
+/// @par Audio spectrum (opt-in module, both runtimes)
+/// `iAudioSpectrumSize` + the `uAudioSpectrum` sampler are an opt-in
+/// module: a pack includes `data/animations/shared/audio.glsl` (after the
+/// canonical header) and declares `"audio": true` in its metadata. The
+/// daemon feeds them via `SurfaceAnimator::setAudioSpectrum` (the
+/// `OverlayService` wires CAVA's `IAudioSpectrumProvider::spectrumUpdated`
+/// here); the kwin-effect reuses its surface-decoration CAVA provider and
+/// pushes both per frame from `paintWindow`. The metadata flag is what
+/// keys the kwin CAVA run-gate — an assigned audio pack keeps the
+/// provider warm so a transition's first frame already has a spectrum.
+/// The helpers read 0 (render static) while the visualizer is off.
 ///
 /// @par Daemon-only extensions
 /// These fields receive zero values on the compositor path; shaders
 /// that need them must run on the daemon overlay path until the
 /// compositor wires the matching producers:
 ///
-///   • `iAudioSpectrumSize` and the audio spectrum binding — fed by
-///     `SurfaceAnimator::setAudioSpectrum` (the daemon's
-///     `OverlayService` wires CAVA's `IAudioSpectrumProvider::spectrumUpdated`
-///     here)
 ///   • `iChannelResolution[]` — auto-populated when multipass buffer
 ///     shaders are bound
-///   • `iTextureResolution[]` — auto-populated when user textures are
-///     bound (bindings 7-10)
 ///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`
 ///
 /// @par Spatial uniforms — per-runtime capture geometry
@@ -317,9 +326,12 @@ inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
 /// (new frame) by `iTime`, cross-fading the captured old content
 /// (`uOldWindow`) into the live new content. Both default to `(0,0,0,0)`
 /// for non-morph transitions (window.open/close/etc.), which a shader can
-/// treat as "no morph". kwin-effect: pushed via classic-GL `setUniform`;
-/// daemon: reserved in the UBO contract for source parity (the morph runs
-/// compositor-side, but the shared header declares them on both branches).
+/// treat as "no morph". COMPOSITOR PATH ONLY, and deliberately NOT
+/// declared by the canonical shared header: each geometry-morph pack
+/// (flow, fold, ripple-snap, stretch, window-morph) declares the pair
+/// itself inside its own `#ifdef PLASMAZONES_KWIN` block — geometry
+/// events never run on the daemon, and the guard keeps the daemon's
+/// strict SPIR-V bake from ever seeing the loose declarations.
 inline constexpr const char* kIFromRect = "iFromRect";
 inline constexpr const char* kIToRect = "iToRect";
 
@@ -329,7 +341,11 @@ inline constexpr const char* kIToRect = "iToRect";
 /// content in `uTexture0` (alpha `iTime`), each mapped at native aspect,
 /// so an aspect-ratio-changing resize doesn't stretch the content. Bound
 /// to a dedicated texture unit on the kwin path; a transparent 1×1
-/// fallback is bound when no snapshot was captured.
+/// fallback is bound when no snapshot was captured. The sampler is NOT
+/// declared by the canonical header — only the `iHasOldWindow` gate int
+/// is; packs that sample old content opt in via
+/// `data/animations/shared/old_content.glsl`, which declares the sampler
+/// inside its own `#ifdef PLASMAZONES_KWIN` guard.
 inline constexpr const char* kUOldWindow = "uOldWindow";
 
 /// `sampler2D uSurfaceLayer` — COMPOSITOR PATH ONLY. The window's surface
@@ -426,8 +442,8 @@ inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 /// Maximum number of user-declared textures per animation effect.
 ///
 /// Each declared texture binds to one of the canonical samplers
-/// `iChannel1` / `iChannel2` / `iChannel3`. The redirected surface
-/// itself (`iChannel0`, binding 7 on the daemon, TEXTURE0 on KWin) is
+/// `uTexture1` / `uTexture2` / `uTexture3`. The redirected surface
+/// itself (`uTexture0`, binding 7 on the daemon, TEXTURE0 on KWin) is
 /// not counted here — that's a separate runtime-managed slot. The
 /// daemon's `PhosphorRendering::kMaxUserTextures = 4` includes slot 0,
 /// hence the off-by-one in the budget. Pinned to the daemon constant
@@ -438,6 +454,21 @@ inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 /// why the assert can't sit in this header (epoxy/Qt typedef collision
 /// in the kwin-effect TU).
 inline constexpr int kMaxUserTextureSlots = 3;
+
+/// `int iAudioSpectrumSize` — CAVA bar count, 0 while the audio visualizer
+/// is off or cava is unavailable. Daemon: BaseUniforms UBO member fed by
+/// `SurfaceAnimator::setAudioSpectrum`. Kwin: default-block uniform
+/// declared by the opt-in `data/animations/shared/audio.glsl` module,
+/// pushed per frame via `bindSurfaceAudio` (shared with the surface
+/// decoration path).
+inline constexpr const char* kIAudioSpectrumSize = "iAudioSpectrumSize";
+
+/// `sampler2D uAudioSpectrum` — the CAVA spectrum texture (`bars×1`,
+/// R = bar value in 0..1). Declared by the opt-in audio.glsl module:
+/// binding 6 on the daemon (the overlay convention), a named sampler
+/// bound to a dedicated unit at draw time on the kwin path. Never
+/// sampled while `iAudioSpectrumSize` is 0.
+inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";
 
 /// `vec4 iMouse` — cursor position in shader-local pixels.
 /// `.xy = (cursorX, cursorY)` relative to the shader surface's origin
