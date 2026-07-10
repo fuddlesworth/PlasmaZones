@@ -183,8 +183,8 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // Padded composite path: the target texture's canvas is the expanded rect
     // inflated by the chain's outer margin (renderSurfaceChainComposite uses
     // the same construction), so the geometry uniforms must describe that
-    // padded space. @p texturePaddingLogical is 0 on the unpadded callers
-    // (idle blit, transition capture).
+    // padded space. @p texturePaddingLogical is 0 when the chain declares no
+    // padding pack.
     if (texturePaddingLogical > 0.0) {
         expanded.adjust(-texturePaddingLogical, -texturePaddingLogical, texturePaddingLogical, texturePaddingLogical);
     }
@@ -194,13 +194,10 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
                                  static_cast<float>((frame.top() - expanded.top()) * scale));
     const QVector2D frameSize(static_cast<float>(frame.width() * scale), static_cast<float>(frame.height() * scale));
 
-    // The caller has the border shader bound (a KWin::ShaderBinder). What
-    // carries the values into the eventual draw is PROGRAM-OBJECT persistence
-    // (uniform values survive the binder pop; OffscreenData::paint re-binds the
-    // same program) — the idle drawWindow caller's binder actually pops before
-    // its draw. Either way, setUniform writes to the currently bound program,
-    // so we must NOT bind/unbind here or the uniforms would land on the wrong
-    // (or no) program.
+    // The caller (the composite fold) has the pack shader bound via a
+    // KWin::ShaderBinder and draws inside that same scope. setUniform writes
+    // to the CURRENTLY BOUND program, so we must NOT bind/unbind here or the
+    // uniforms would land on the wrong (or no) program.
     if (pack.uSurfaceSizeLoc >= 0) {
         shader->setUniform(pack.uSurfaceSizeLoc, windowExpandedSize);
     }

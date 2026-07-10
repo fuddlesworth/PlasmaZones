@@ -29,9 +29,9 @@ class Item;
 
 namespace PlasmaZones {
 
-/// One compiled buffer pass of a multipass SURFACE pack (the idle drawWindow
-/// path). Each buffer.frag is a fullscreen-quad fragment that samples the
-/// captured window surface (uTexture0) plus any prior buffer outputs
+/// One compiled buffer pass of a multipass SURFACE pack (run in the
+/// composite fold). Each buffer.frag is a fullscreen-quad fragment that
+/// samples the captured window surface (uTexture0) plus any prior buffer outputs
 /// (iChannel0..N-1) and writes into its own FBO; the main effect.frag then
 /// samples the final buffer output(s) as iChannel0..3. Compiled in
 /// compiledPack() right after the main pack shader, cleared (fail-closed) if any
@@ -189,10 +189,10 @@ struct CompiledSurfacePack
     std::array<QVector4D, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsValues{};
     std::array<QVector4D, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomColors> customColorsValues{};
 
-    /// Compiled multipass buffer passes (idle drawWindow path). Empty for a
-    /// single-pass pack (the border). Cleared fail-closed if any pass fails to
-    /// compile (the pack then renders single-pass). The per-window FBO targets
-    /// live in m_surfaceMultipass.
+    /// Compiled multipass buffer passes (run in the composite fold). Empty for
+    /// a single-pass pack (the border). Cleared fail-closed if any pass fails
+    /// to compile (the pack then renders single-pass). The per-window FBO
+    /// targets live in m_surfaceMultipass.
     std::vector<CompiledSurfaceBufferPass> bufferPasses;
 };
 

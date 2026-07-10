@@ -607,9 +607,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 glActiveTexture(GL_TEXTURE0);
                 mainUserTexturesBound = true;
             }
-            // Contract uniforms + pack params (shared with the OffscreenData path).
-            // windowId threaded in so the focus-fade ramp doesn't recompute
-            // getWindowId(w) per pack.
+            // Contract uniforms + pack params. windowId threaded in so the
+            // focus-fade ramp doesn't recompute getWindowId(w) per pack.
             pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, pad, windowId);
             drawFullscreenQuad();
         }

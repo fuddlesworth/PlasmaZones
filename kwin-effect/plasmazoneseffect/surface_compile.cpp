@@ -376,7 +376,7 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     }
 
     // MAIN-pass multipass channel locations: the buffer-pass outputs are bound
-    // here (idle drawWindow path) as iChannel0..3 so the main effect.frag can
+    // in the composite fold as iChannel0..3 so the main effect.frag can
     // sample the pre-rendered buffer textures. -1 for a single-pass pack (the
     // border never references these — the linker drops them). The literal
     // element names match the surface contract declarations in
@@ -409,12 +409,12 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     packState.customParamsValues = baked.params;
     packState.customColorsValues = baked.colors;
 
-    // ── Multipass buffer passes (idle drawWindow path) ──────────────────────
+    // ── Multipass buffer passes (composite fold) ────────────────────────────
     //
     // Only a multipass pack with declared buffers compiles passes here;
     // single-pass packs (the border) leave packState.bufferPasses empty and pay
-    // nothing — the cheap OffscreenData path in drawWindow is byte-for-byte
-    // unchanged for them. If ANY buffer pass fails to compile we leave the vector
+    // nothing — they skip the buffer loop and render only their main pass in
+    // the composite fold. If ANY buffer pass fails to compile we leave the vector
     // empty and warn: the pack then renders single-pass (fail closed), exactly
     // like the daemon/animation degradation. (packState.bufferPasses starts empty
     // for this freshly-inserted cache slot.)

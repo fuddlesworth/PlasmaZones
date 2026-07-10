@@ -142,13 +142,18 @@ namespace PhosphorAnimationShaders {
 /// The helpers read 0 (render static) while the visualizer is off.
 ///
 /// @par Daemon-only extensions
-/// These fields receive zero values on the compositor path; shaders
-/// that need them must run on the daemon overlay path until the
-/// compositor wires the matching producers:
+/// Shaders that need these must run on the daemon overlay path until
+/// the compositor wires the matching producers — but the two fail in
+/// DIFFERENT ways on the compositor:
 ///
 ///   • `iChannelResolution[]` — auto-populated when multipass buffer
-///     shaders are bound
-///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`
+///     shaders are bound. NOT declared by the canonical header's
+///     `#ifdef PLASMAZONES_KWIN` branch (the compositor is single-pass,
+///     no buffer FBOs), so reaching for it there is a COMPILE error,
+///     not a zero read.
+///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`. Declared
+///     on both branches for source parity; reads zero on the
+///     compositor.
 ///
 /// @par Spatial uniforms — per-runtime capture geometry
 /// These four fields describe where the captured card sits inside the
@@ -293,12 +298,17 @@ inline constexpr const char* kIAnchorSize = "iAnchorSize";
 ///   vec2 anchorSizeUv    = iAnchorSize    / iResolution;
 ///   vec2 anchorUv        = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
 /// Daemon-side written via `AnimationUniformExtension`; kwin-effect
-/// uses classic-GL `setUniform`. On kwin the value is (0, 0) today
-/// (the OffscreenEffect FBO covers the window's frameGeometry 1:1,
-/// no actor expansion), which makes the anchor-space remap collapse
-/// to identity. Equivalent to the pre-refactor `customParams[7].x = 0`
-/// fallback that morph documented as the kwin path. A future actor-
-/// expansion PR would push (padW, padH) instead.
+/// uses classic-GL `setUniform`. On kwin the value is the anchor's
+/// top-left offset within whatever rect the FBO spans: the shadow /
+/// decoration inset within the EXPANDED window geometry for an
+/// anchor-extent transition (KWin's OffscreenEffect redirects the whole
+/// window item — see `kIAnchorRectInTexture` below), or the window's
+/// position within the output for a surface-extent transition. It
+/// collapses to (0, 0) only when the expanded geometry equals the frame
+/// (an undecorated, shadowless window). Shaders MUST apply the
+/// anchor-space remap (`anchorRemap` in anchor_remap.glsl) on both
+/// runtimes; `tests/unit/ui/test_anchor_uniforms.cpp` pins the kwin
+/// inset values.
 inline constexpr const char* kIAnchorPosInFbo = "iAnchorPosInFbo";
 
 /// `vec4 iAnchorRectInTexture` — the card's UV sub-rect within
