@@ -475,13 +475,13 @@ RowLayout {
         category: "LayoutsPageFilterBar"
     }
 
-    // Checkable menu item that writes back to a named root filter property.
-    // Uses an explicit Binding so the checked state survives imperative
-    // toggles (checkable breaks declarative bindings on user click).
-    component FilterMenuItem: MenuItem {
+    // Checkable menu item that writes back to a named root filter property
+    // and keeps the menu open on toggle (StayOpenMenuItem). Uses an explicit
+    // Binding so the checked state survives imperative toggles (checkable
+    // breaks declarative bindings on user click).
+    component FilterMenuItem: StayOpenMenuItem {
         required property string filterProperty
 
-        checkable: true
         onToggled: {
             if (root._resetting)
                 return;
