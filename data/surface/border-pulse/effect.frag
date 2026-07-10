@@ -12,29 +12,16 @@
 // daemon host ticks the item; the compositor detects the linked iTime
 // uniform itself and repaints the window continuously while decorated.
 
-#version 450
-#include <surface_lib.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
-    vec4 tex = surfaceTexel(vTexCoord);
+vec4 pSurface(vec2 uv) {
+    vec4 tex = surfaceTexel(uv);
 
     if (surfaceFrameDegenerate()) {
-        fragColor = tex;
-        return;
+        return tex;
     }
 
-    vec2 p = surfacePixel(vTexCoord);
-    const float aa = 0.7;
-
-    float width = p_borderWidth * uSurfaceScale;
-    float radius = (p_cornerRadius + p_borderWidth) * uSurfaceScale;
-
-    FrameSDF fs = frameSdf(p, radius);
-    float insideMask = 1.0 - smoothstep(-aa, aa, fs.d);
-    float edge = smoothstep(-width - aa, -width + aa, fs.d);
+    // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
+    // and band edge from this pack's logical-px width and corner radius.
+    BorderBand bb = standardBorderBand(surfacePixel(uv), p_borderWidth, p_cornerRadius);
 
     // Breathe: 0 at the A end, 1 at the B end, continuous across the wrap.
     float phase = 0.5 - 0.5 * cos(iTime * max(p_pulseSpeed, 0.0) * TAU);
@@ -46,5 +33,5 @@ void main() {
     // Focus cue: full-strength pulse on the focused surface, dimmed otherwise.
     band.a *= focusDim(0.55);
 
-    fragColor = borderComposite(tex, band, edge, insideMask);
+    return borderComposite(tex, band, bb.edge, bb.insideMask);
 }

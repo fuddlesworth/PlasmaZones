@@ -12,41 +12,30 @@
 // daemon host ticks the item; the compositor detects the linked iTime
 // uniform itself and repaints the window continuously while decorated.
 
-#version 450
-#include <surface_lib.glsl>
 #include <surface_color.glsl>
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
-    vec4 tex = surfaceTexel(vTexCoord);
+vec4 pSurface(vec2 uv) {
+    vec4 tex = surfaceTexel(uv);
 
     if (surfaceFrameDegenerate()) {
-        fragColor = tex;
-        return;
+        return tex;
     }
 
-    vec2 p = surfacePixel(vTexCoord);
-    const float aa = 0.7;
-
-    float width = p_borderWidth * uSurfaceScale;
-    float radius = (p_cornerRadius + p_borderWidth) * uSurfaceScale;
-
-    FrameSDF fs = frameSdf(p, radius);
-    float insideMask = 1.0 - smoothstep(-aa, aa, fs.d);
-    float edge = smoothstep(-width - aa, -width + aa, fs.d);
+    // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
+    // and band edge from this pack's logical-px width and corner radius.
+    vec2 p = surfacePixel(uv);
+    BorderBand bb = standardBorderBand(p, p_borderWidth, p_cornerRadius);
 
     // Hue = perimeter angle scaled by the rainbow count, rotated by time.
     // hueTurns 1.0 wraps exactly one wheel around the frame so the seam at
     // the wrap point is invisible; fractional turn counts show a seam by
     // design (the parameter floor of 0.5 keeps it a soft one).
-    float u = framePerimeter(p, fs.center, fs.halfSize);
+    float u = framePerimeter(p, bb.fs.center, bb.fs.halfSize);
     float hue = fract(u * max(p_hueTurns, 0.5) - iTime * p_cycleSpeed);
     vec4 band = vec4(hsv2rgb(vec3(hue, clamp(p_saturation, 0.0, 1.0), clamp(p_brightness, 0.0, 1.0))), 1.0);
 
     // Focus cue: full-strength ring on the focused surface, dimmed otherwise.
     band.a *= focusDim(0.55);
 
-    fragColor = borderComposite(tex, band, edge, insideMask);
+    return borderComposite(tex, band, bb.edge, bb.insideMask);
 }

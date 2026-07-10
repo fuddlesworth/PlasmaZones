@@ -10,21 +10,14 @@
 // repaint the window for it. Dims when the surface is unfocused,
 // matching the family's focus cue.
 
-#version 450
-#include <surface_lib.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
-    vec4 tex = surfaceTexel(vTexCoord);
+vec4 pSurface(vec2 uv) {
+    vec4 tex = surfaceTexel(uv);
 
     if (surfaceFrameDegenerate()) {
-        fragColor = tex;
-        return;
+        return tex;
     }
 
-    vec2 p = surfacePixel(vTexCoord);
+    vec2 p = surfacePixel(uv);
     const float aa = 0.7;
 
     float wOuter = p_outerWidth * uSurfaceScale;
@@ -61,5 +54,5 @@ void main() {
     float ia = innerLine * innerCol.a;
     vec4 contentPx = tex * (1.0 - stackEdge);
     vec4 lines = vec4(outerCol.rgb * oa, oa) + vec4(innerCol.rgb * ia, ia) * (1.0 - oa);
-    fragColor = lines + contentPx * (1.0 - lines.a);
+    return lines + contentPx * (1.0 - lines.a);
 }

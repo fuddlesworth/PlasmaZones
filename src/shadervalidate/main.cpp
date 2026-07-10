@@ -581,6 +581,14 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         return 1;
     }
     for (QString& b : eff.bufferShaderPaths) {
+        // `builtin:` tokens resolve against the surface shared/ dir (fixed
+        // whitelist, same resolver as the runtime registry) rather than the
+        // pack dir; an unknown token resolves empty and is linted below as a
+        // missing buffer, mirroring the runtime's fail-closed path.
+        if (SurfaceShaderRegistry::isBuiltinBufferShader(b)) {
+            b = SurfaceShaderRegistry::resolveBuiltinBufferShader(b, QDir(packDir).absolutePath());
+            continue;
+        }
         if (!confineToPack(b)) {
             out << name
                 << "\n  metadata      ERROR\n    bufferShaders path escapes the pack directory (path traversal "
@@ -648,6 +656,13 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         for (const QJsonValue& v : declaredBuffers) {
             const QString bufName = v.toString();
             if (bufName.isEmpty()) {
+                continue;
+            }
+            if (SurfaceShaderRegistry::isBuiltinBufferShader(bufName)) {
+                if (SurfaceShaderRegistry::resolveBuiltinBufferShader(bufName, QDir(packDir).absolutePath())
+                        .isEmpty()) {
+                    lints << QStringLiteral("unknown or unlocatable builtin buffer shader: %1").arg(bufName);
+                }
                 continue;
             }
             const auto confined = confinedPackPath(packDir, bufName);

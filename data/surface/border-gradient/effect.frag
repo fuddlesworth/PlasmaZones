@@ -8,29 +8,17 @@
 // compositor never has to repaint the window for it. Dims when the
 // surface is unfocused, matching the family's focus cue.
 
-#version 450
-#include <surface_lib.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
-    vec4 tex = surfaceTexel(vTexCoord);
+vec4 pSurface(vec2 uv) {
+    vec4 tex = surfaceTexel(uv);
 
     if (surfaceFrameDegenerate()) {
-        fragColor = tex;
-        return;
+        return tex;
     }
 
-    vec2 p = surfacePixel(vTexCoord);
-    const float aa = 0.7;
-
-    float width = p_borderWidth * uSurfaceScale;
-    float radius = (p_cornerRadius + p_borderWidth) * uSurfaceScale;
-
-    FrameSDF fs = frameSdf(p, radius);
-    float insideMask = 1.0 - smoothstep(-aa, aa, fs.d);
-    float edge = smoothstep(-width - aa, -width + aa, fs.d);
+    // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
+    // and band edge from this pack's logical-px width and corner radius.
+    vec2 p = surfacePixel(uv);
+    BorderBand bb = standardBorderBand(p, p_borderWidth, p_cornerRadius);
 
     // Frame-normalised position projected onto the gradient direction, so
     // the blend spans the frame corner to corner at any angle and does not
@@ -44,5 +32,5 @@ void main() {
     // Focus cue: full-strength band on the focused surface, dimmed otherwise.
     band.a *= focusDim(0.55);
 
-    fragColor = borderComposite(tex, band, edge, insideMask);
+    return borderComposite(tex, band, bb.edge, bb.insideMask);
 }

@@ -15,32 +15,21 @@
 // daemon host ticks the item; the compositor detects the linked iTime
 // uniform itself and repaints the window continuously while decorated.
 
-#version 450
-#include <surface_lib.glsl>
 #include <surface_noise.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
 
 const int kMaxPulses = 6;
 
-void main() {
-    vec4 tex = surfaceTexel(vTexCoord);
+vec4 pSurface(vec2 uv) {
+    vec4 tex = surfaceTexel(uv);
 
     if (surfaceFrameDegenerate()) {
-        fragColor = tex;
-        return;
+        return tex;
     }
 
-    vec2 p = surfacePixel(vTexCoord);
-    const float aa = 0.7;
-
-    float width = p_borderWidth * uSurfaceScale;
-    float radius = (p_cornerRadius + p_borderWidth) * uSurfaceScale;
-
-    FrameSDF fs = frameSdf(p, radius);
-    float insideMask = 1.0 - smoothstep(-aa, aa, fs.d);
-    float edge = smoothstep(-width - aa, -width + aa, fs.d);
+    // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
+    // and band edge from this pack's logical-px width and corner radius.
+    vec2 p = surfacePixel(uv);
+    BorderBand bb = standardBorderBand(p, p_borderWidth, p_cornerRadius);
 
     // ── Hex circuit texture in device px, so cells stay square-ish at any
     // window size and DPI. Walls carry the grid colour; interiors stay
@@ -54,7 +43,7 @@ void main() {
 
     // ── Perimeter pulses: evenly-phased bright points orbiting the band,
     // each a tight falloff along the perimeter coordinate.
-    float u = framePerimeter(p, fs.center, fs.halfSize); // -0.5 .. 0.5
+    float u = framePerimeter(p, bb.fs.center, bb.fs.halfSize); // -0.5 .. 0.5
     float count = clamp(p_pulseCount, 1.0, float(kMaxPulses));
     float pulse = 0.0;
     for (int i = 0; i < kMaxPulses; ++i) {
@@ -78,5 +67,5 @@ void main() {
     // Focus cue: full-strength circuit on the focused surface, dimmed otherwise.
     band.a *= focusDim(0.55);
 
-    fragColor = borderComposite(tex, band, edge, insideMask);
+    return borderComposite(tex, band, bb.edge, bb.insideMask);
 }

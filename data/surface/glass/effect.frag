@@ -30,27 +30,20 @@
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the pane degrades to a faint tint slab with the same corner rounding.
 
-#version 450
-#include <surface_lib.glsl>
 #include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
 #include <surface_color.glsl>
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
-    vec4 window = surfaceTexel(vTexCoord) * uSurfaceOpacity;
-
-    vec2 px = surfacePixel(vTexCoord);
-    FrameSDF fs = frameSdf(px, p_cornerRadius * uSurfaceScale);
-    vec2 halfSz = fs.halfSize;
-    vec2 pos = px - fs.center; // pane-centered, top-down device px
+vec4 pSurface(vec2 uv) {
+    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    vec2 px = slab.px;
+    vec2 halfSz = slab.fs.halfSize;
+    vec2 pos = px - slab.fs.center; // pane-centered, top-down device px
     float minHalf = min(halfSz.x, halfSz.y);
-    float radius = fs.radius;
-    float d = fs.d;
-    float mask = frameMask(d);
+    float radius = slab.fs.radius;
+    float d = slab.fs.d;
+    float mask = slab.mask;
 
     vec3 tint = p_tintColor.rgb;
     float tintStrength = clamp(p_tintStrength, 0.0, 1.0);
@@ -99,13 +92,13 @@ void main() {
             vec2 dirPx = length(refractG.xy) > 0.001 ? normalize(refractG.xy) : vec2(0.0);
             float magnitude = lensMagnitude * strength;
             vec2 shiftG = pxToUv(dirPx * magnitude) + lensShift;
-            vec4 g = texture(iChannel1, clamp(vTexCoord + shiftG, 0.0, 1.0));
+            vec4 g = texture(iChannel1, clamp(uv + shiftG, 0.0, 1.0));
             lit = g.rgb;
             if (fringe > 0.001) {
                 vec2 shiftR = pxToUv(dirPx * (magnitude * (1.0 + fringe))) + lensShift;
                 vec2 shiftB = pxToUv(dirPx * (magnitude * (1.0 - fringe))) + lensShift;
-                lit.r = texture(iChannel1, clamp(vTexCoord + shiftR, 0.0, 1.0)).r;
-                lit.b = texture(iChannel1, clamp(vTexCoord + shiftB, 0.0, 1.0)).b;
+                lit.r = texture(iChannel1, clamp(uv + shiftR, 0.0, 1.0)).r;
+                lit.b = texture(iChannel1, clamp(uv + shiftB, 0.0, 1.0)).b;
             }
             pane.a = g.a;
         } else {
@@ -116,9 +109,9 @@ void main() {
             vec2 inward = length(grad) > 0.001 ? -normalize(grad) : vec2(0.0, 1.0);
             float strengthUv = min(0.4 * concave * strength, 1.0);
             vec2 dirUv = vec2(inward.x, -inward.y) * strengthUv * (uSurfaceFrameSize / max(uSurfaceSize, vec2(1.0)));
-            vec4 g = texture(iChannel1, clamp(vTexCoord + dirUv, 0.0, 1.0));
-            lit = vec3(texture(iChannel1, clamp(vTexCoord + dirUv * (1.0 + fringe), 0.0, 1.0)).r, g.g,
-                       texture(iChannel1, clamp(vTexCoord + dirUv * (1.0 - fringe), 0.0, 1.0)).b);
+            vec4 g = texture(iChannel1, clamp(uv + dirUv, 0.0, 1.0));
+            lit = vec3(texture(iChannel1, clamp(uv + dirUv * (1.0 + fringe), 0.0, 1.0)).r, g.g,
+                       texture(iChannel1, clamp(uv + dirUv * (1.0 - fringe), 0.0, 1.0)).b);
             pane.a = g.a;
         }
 
@@ -148,16 +141,15 @@ void main() {
 
         // Luminance-adaptive tint (reference adjustedTintStrength), then
         // OKLab saturation, then grain — the reference's pass order.
-        const vec3 grayW = vec3(0.299, 0.587, 0.114);
-        float tintAdj = tintStrength * clamp(abs(dot(lit, grayW) - dot(tint, grayW)), 0.0, 1.0);
+        float tintAdj = tintStrength * clamp(abs(luma601(lit) - luma601(tint)), 0.0, 1.0);
         lit = mix(lit, tint * pane.a, tintAdj);
         lit = oklabSaturate(lit, clamp(p_saturation, 0.0, 2.0));
         lit += (hashSin(px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2);
 
         pane = vec4(lit, pane.a) * mask;
     } else {
-        pane = vec4(tint, 1.0) * (0.35 * tintStrength) * mask;
+        pane = faintTintSlab(tint, tintStrength, mask);
     }
 
-    fragColor = slabComposite(window, pane);
+    return slabComposite(slab.window, pane);
 }

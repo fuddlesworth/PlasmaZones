@@ -396,6 +396,72 @@ private Q_SLOTS:
                  "single-pass pack must not carry orphan (unresolved relative) bufferShaderPaths");
     }
 
+    void parseEffect_resolves_builtin_buffer_tokens_against_shared_dir()
+    {
+        // `builtin:gaussian-h` / `builtin:gaussian-v` resolve to the standard
+        // passes in the search root's shared/ dir (sibling of the pack dir),
+        // bypassing the pack-dir confinement guard via a fixed whitelist.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeFile(tmp.path() + QStringLiteral("/shared/gaussian_h.frag"), QByteArrayLiteral("// stub\n")));
+        QVERIFY(writeFile(tmp.path() + QStringLiteral("/shared/gaussian_v.frag"), QByteArrayLiteral("// stub\n")));
+
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("builtin-blur"));
+        meta.insert(QLatin1String("name"), QStringLiteral("Builtin Blur"));
+        meta.insert(QLatin1String("description"), QStringLiteral("Uses the standard gaussian buffer passes."));
+        meta.insert(QLatin1String("category"), QStringLiteral("Decoration"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("multipass"), true);
+        QJsonArray buffers;
+        buffers.append(QStringLiteral("builtin:gaussian-h"));
+        buffers.append(QStringLiteral("builtin:gaussian-v"));
+        meta.insert(QLatin1String("bufferShaders"), buffers);
+        QVERIFY(writePack(tmp.path(), QStringLiteral("builtin-blur"), meta, {QStringLiteral("effect.frag")}));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const SurfaceShaderEffect e = registry.effect(QStringLiteral("builtin-blur"));
+        QVERIFY(e.isValid());
+        QVERIFY(e.isMultipass);
+        QCOMPARE(e.bufferShaderPaths.size(), 2);
+        QCOMPARE(QFileInfo(e.bufferShaderPaths.at(0)).fileName(), QStringLiteral("gaussian_h.frag"));
+        QCOMPARE(QFileInfo(e.bufferShaderPaths.at(1)).fileName(), QStringLiteral("gaussian_v.frag"));
+        for (const QString& p : e.bufferShaderPaths) {
+            QVERIFY2(QFileInfo(p).isAbsolute(), "builtin buffer paths must resolve to absolute files");
+            QVERIFY(QFile::exists(p));
+        }
+    }
+
+    void parseEffect_fails_closed_on_unknown_builtin_buffer_token()
+    {
+        // An unknown `builtin:` token funnels into the same fail-closed
+        // single-pass fallback as a missing pack-local buffer file.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("bad-builtin"));
+        meta.insert(QLatin1String("name"), QStringLiteral("Bad Builtin"));
+        meta.insert(QLatin1String("description"), QStringLiteral("Declares an unknown builtin buffer token."));
+        meta.insert(QLatin1String("category"), QStringLiteral("Decoration"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("multipass"), true);
+        QJsonArray buffers;
+        buffers.append(QStringLiteral("builtin:no-such-pass"));
+        meta.insert(QLatin1String("bufferShaders"), buffers);
+        QVERIFY(writePack(tmp.path(), QStringLiteral("bad-builtin"), meta, {QStringLiteral("effect.frag")}));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const SurfaceShaderEffect e = registry.effect(QStringLiteral("bad-builtin"));
+        QVERIFY(e.isValid());
+        QVERIFY2(!e.isMultipass, "unknown builtin token must fail-close to single-pass");
+        QVERIFY(e.bufferShaderPaths.isEmpty());
+    }
+
     void fromJson_leaves_multipass_flag_raw_without_normalizing()
     {
         // fromJson itself does NOT fail closed on multipass-with-no-buffers —
