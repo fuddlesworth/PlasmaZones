@@ -159,8 +159,8 @@ float fbm(vec2 p, int octaves, float lacunarity) {
 //
 // Bands sit OUTSIDE [0, 1] so identity sampling (sample_uv ∈
 // [0, 1]) gets mask = 1 everywhere — no inner-edge alpha clipping.
-// Used by morph, popin, fade, inkwell-drop, ripple,
-// smoke, snap, soft-warp-fade, and glide. See PR #425 for the
+// Used by many niri-derived packs (e.g. popin, fade, inkwell-drop,
+// ripple, smoke, snap, soft-warp-fade, glide). See PR #425 for the
 // inside-vs-outside-band fix history.
 float boundaryMask(vec2 uv) {
     vec2 lo = smoothstep(vec2(-0.005), vec2(0.0),   uv);
