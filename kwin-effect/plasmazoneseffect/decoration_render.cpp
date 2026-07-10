@@ -157,10 +157,12 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
                                            const QString& windowId)
 {
     // The caller (renderSurfaceChainComposite's per-pack fold) has already
-    // resolved @p pack and @p wb, confirmed the border is applied, ruled out a
-    // transition owning the slot, and bound pack.shader, so this just computes
-    // and writes the uniforms onto the bound program. The border APPEARANCE is
-    // not a
+    // resolved @p pack and @p wb, confirmed the border is applied, and bound
+    // pack.shader, so this just computes and writes the uniforms onto the
+    // bound program. The fold also runs while a TRANSITION owns the window's
+    // draw slot (it produces the layered surface the animation composites
+    // over); that is fine — this function only writes the fold's own bound
+    // pack program, never the redirect slot. The border APPEARANCE is not a
     // parameter here — it rides the pack's baked customParams/customColors,
     // pushed below (with @p wb's per-window rule override when set).
     KWin::GLShader* shader = pack.shader.get();
@@ -183,8 +185,8 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // Padded composite path: the target texture's canvas is the expanded rect
     // inflated by the chain's outer margin (renderSurfaceChainComposite uses
     // the same construction), so the geometry uniforms must describe that
-    // padded space. @p texturePaddingLogical is 0 on the unpadded callers
-    // (idle blit, transition capture).
+    // padded space. @p texturePaddingLogical is 0 when the chain declares no
+    // padding pack.
     if (texturePaddingLogical > 0.0) {
         expanded.adjust(-texturePaddingLogical, -texturePaddingLogical, texturePaddingLogical, texturePaddingLogical);
     }
@@ -194,13 +196,10 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
                                  static_cast<float>((frame.top() - expanded.top()) * scale));
     const QVector2D frameSize(static_cast<float>(frame.width() * scale), static_cast<float>(frame.height() * scale));
 
-    // The caller has the border shader bound (a KWin::ShaderBinder). What
-    // carries the values into the eventual draw is PROGRAM-OBJECT persistence
-    // (uniform values survive the binder pop; OffscreenData::paint re-binds the
-    // same program) — the idle drawWindow caller's binder actually pops before
-    // its draw. Either way, setUniform writes to the currently bound program,
-    // so we must NOT bind/unbind here or the uniforms would land on the wrong
-    // (or no) program.
+    // The caller (the composite fold) has the pack shader bound via a
+    // KWin::ShaderBinder and draws inside that same scope. setUniform writes
+    // to the CURRENTLY BOUND program, so we must NOT bind/unbind here or the
+    // uniforms would land on the wrong (or no) program.
     if (pack.uSurfaceSizeLoc >= 0) {
         shader->setUniform(pack.uSurfaceSizeLoc, windowExpandedSize);
     }
@@ -245,6 +244,33 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // decoration neither pays this push nor forces per-frame repaints.
     if (pack.uTimeLoc >= 0) {
         shader->setUniform(pack.uTimeLoc, surfaceShaderTimeSeconds());
+    }
+    // Cursor position for hover-reactive packs, in the same top-down device-px
+    // space as the geometry uniforms above (origin at the padded canvas's
+    // top-left); (-1, -1) when the cursor is outside the canvas. .zw is .xy
+    // normalized by the canvas size (negative alongside the sentinel),
+    // matching the daemon branch's convention. Uses the per-frame cached
+    // cursor from prePaintScreen — same rationale as the animation path.
+    // Hover packs declare `animated: true` so the vsync repaint loop keeps
+    // this fresh; there is no per-cursor-move damage path.
+    if (pack.iMouseLoc >= 0) {
+        const QPointF cursorGlobal = m_shaderManager.m_cachedCursorGlobal;
+        float localX = -1.0f;
+        float localY = -1.0f;
+        const bool inside = cursorGlobal.x() >= expanded.left() && cursorGlobal.x() < expanded.right()
+            && cursorGlobal.y() >= expanded.top() && cursorGlobal.y() < expanded.bottom();
+        if (inside) {
+            localX = static_cast<float>((cursorGlobal.x() - expanded.left()) * scale);
+            localY = static_cast<float>((cursorGlobal.y() - expanded.top()) * scale);
+        }
+        QVector4D iMouseValue(localX, localY, 0.0f, 0.0f);
+        if (windowExpandedSize.x() > 0.0f) {
+            iMouseValue.setZ(localX / windowExpandedSize.x());
+        }
+        if (windowExpandedSize.y() > 0.0f) {
+            iMouseValue.setW(localY / windowExpandedSize.y());
+        }
+        shader->setUniform(pack.iMouseLoc, iMouseValue);
     }
     // Pack-declared parameters (customParams / customColors). Seed from THIS
     // window's resolved values (updateWindowDecoration fills packParamValues from

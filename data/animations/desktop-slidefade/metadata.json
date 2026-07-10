@@ -9,6 +9,12 @@
     "fragmentShader": "effect.frag",
     "parameters": [
         {
+            "id": "followSwitch",
+            "name": "Follow Switch Direction",
+            "type": "bool",
+            "default": true
+        },
+        {
             "id": "dirX",
             "name": "Direction X",
             "type": "float",

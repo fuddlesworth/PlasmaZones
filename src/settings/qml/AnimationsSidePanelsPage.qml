@@ -13,6 +13,7 @@ import QtQuick
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("Side panel animation events")
+    headerText: i18n("Animations for side panels that slide in from an edge. \"All Side Panels\" is the default. Each event can override it.")
     eventModel: [
         {
             "eventPath": "panel",

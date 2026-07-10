@@ -10,7 +10,10 @@
 
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
-    vec2 off = sign(vec2(p_dirX, p_dirY)) * p_travel;
+    // Slide axis follows the actual switch direction when p_followSwitch is
+    // on; the configured p_dirX / p_dirY vector is the fallback / override.
+    vec2 cfg = vec2(p_dirX, p_dirY);
+    vec2 off = sign((p_followSwitch > 0.5) ? switchDirection(cfg) : cfg) * p_travel;
     vec4 fromC = getFromColor(uv + t * off);         // slides toward its exit
     vec4 toC = getToColor(uv - (1.0 - t) * off);     // slides in from the far side
     return mix(fromC, toC, smoothstep(0.0, 1.0, t)); // crossfade over the slide

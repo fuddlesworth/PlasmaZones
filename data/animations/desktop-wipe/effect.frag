@@ -9,7 +9,10 @@
 
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
-    vec2 dir = normalize(vec2(p_dirX, p_dirY) + vec2(1.0e-6, 0.0));
+    // Sweep direction follows the actual switch when p_followSwitch is on; the
+    // configured p_dirX / p_dirY vector is the fallback / override.
+    vec2 cfg = vec2(p_dirX, p_dirY);
+    vec2 dir = normalize(((p_followSwitch > 0.5) ? switchDirection(cfg) : cfg) + vec2(1.0e-6, 0.0));
     // Project onto the sweep direction, normalised by the direction's L1 extent
     // so proj spans exactly [0,1] corner-to-corner for ANY direction. A plain
     // dot()+0.5 overshoots [0,1] on diagonals (a unit diagonal reaches ±0.707),

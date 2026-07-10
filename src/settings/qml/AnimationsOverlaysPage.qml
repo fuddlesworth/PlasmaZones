@@ -10,6 +10,7 @@ import QtQuick
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("Overlay animation events")
+    headerText: i18n("Animations for overlays like the zone selector and snap assist. \"All Overlays\" is the default. Each event can override it.")
     eventModel: [
         {
             "eventPath": "popup",

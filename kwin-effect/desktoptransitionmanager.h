@@ -143,6 +143,12 @@ private:
         // `p_<name>` define resolves to `customColors[N]`, so without this a
         // desktop pack's colors read transparent black.
         std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColors{};
+        // Actual switch direction for direction-aware packs: wrap-corrected
+        // desktop-grid delta in cells (.xy, +x = one column right, +y = one
+        // row down) and the same delta normalized (.zw). Zeros when the grid
+        // positions could not be resolved. Computed once in begin(), uploaded
+        // as `iSwitchDelta` (declared in desktop_transition.glsl).
+        QVector4D switchDelta;
         qint64 startTimeMs = 0;
         int durationMs = 0;
         // Monotonic paint counter uploaded as iFrame, so glitch-style desktop
@@ -162,6 +168,7 @@ private:
         int iTimeLoc = -1;
         int iResolutionLoc = -1;
         int iFrameLoc = -1;
+        int iSwitchDeltaLoc = -1;
         // customParams[slot] / customColors[slot] uniform locations (-1 when the
         // shader omits the slot — the GLSL compiler prunes unreferenced ones).
         std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsLoc{};

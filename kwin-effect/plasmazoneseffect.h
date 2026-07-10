@@ -1101,13 +1101,17 @@ private:
     // every audio-reactive decoration pass, mirroring the daemon's RGBA8
     // R-channel layout. A pack opts in purely by including surface_audio.glsl and
     // reading getBass/audioBar (its compiled iAudioSpectrumSizeLoc then resolves
-    // >= 0). Cava is gated by syncEffectAudioState on `enableAudioVisualizer` AND
-    // at least one decorated window carrying an audio pack, so capture only spins
-    // up when a border can actually react.
+    // >= 0). Animation packs share the same texture through their own opt-in
+    // module (data/animations/shared/audio.glsl) plus an `audio` metadata flag.
+    // Cava is gated by syncEffectAudioState on `enableAudioVisualizer` AND at
+    // least one audio consumer being present — a decorated window carrying an
+    // audio pack, or an audio animation pack assigned where transitions can
+    // resolve it — so capture only spins up when something can actually react.
 
     /// The effect's own CAVA spectrum source. Constructed lazily on first need
     /// (syncEffectAudioState) so a session that never uses an audio decoration
-    /// pays nothing. Owns a `cava` child process while running.
+    /// or animation pack pays nothing. Owns a `cava` child process while
+    /// running.
     std::unique_ptr<PhosphorAudio::IAudioSpectrumProvider> m_audioProvider;
 
     /// Session-global spectrum texture (`bars×1`, R = bar value 0..1). Uploaded
@@ -1115,6 +1119,17 @@ private:
     /// (m_audioSpectrumDirty), reused across every audio-reactive window that
     /// frame. Lives on the GL thread (allocated/uploaded only inside paint).
     std::unique_ptr<KWin::GLTexture> m_audioSpectrumTex;
+
+    /// Shared 1x1 transparent texture bound in place of a referenced but
+    /// unsupplied user-texture sampler (surface fold + animation paths), so
+    /// the contract's "reads transparent black" holds instead of the sampler
+    /// defaulting to unit 0 (live window content). Lazily created by
+    /// transparentFallbackTexture() on a paint path; freed with the effect.
+    std::unique_ptr<KWin::GLTexture> m_transparentFallbackTex;
+
+    /// Lazily create + return the shared transparent fallback texture; null
+    /// only when GL allocation fails (callers then skip the bind).
+    KWin::GLTexture* transparentFallbackTexture();
 
     /// Latest spectrum delivered by the provider signal (values 0..1). Copied on
     /// the compositor thread; consumed (uploaded) during the next paint.
@@ -1129,7 +1144,8 @@ private:
 
     /// The daemon's audio-viz master toggle + bar count, pulled via getSetting in
     /// loadCachedSettings exactly like snapAssistEnabled. The effect's cava run
-    /// gate ANDs the toggle with an audio decoration being present.
+    /// gate ANDs the toggle with an audio decoration or an audio animation pack
+    /// being present.
     bool m_enableAudioVisualizer = false;
     int m_audioSpectrumBarCount = PhosphorAudio::Defaults::DefaultBarCount;
     /// Coalescing latch for scheduleEffectAudioSync: many decoration/settings
@@ -1148,9 +1164,10 @@ private:
     void onEffectAudioSpectrum(const QVector<float>& spectrum);
 
     /// Start/stop/reconfigure the effect's cava instance to match the run gate
-    /// (m_enableAudioVisualizer && hasAudioReactiveDecoration()). Lazily creates
-    /// m_audioProvider on first run. Prefer scheduleEffectAudioSync from
-    /// high-frequency callers (decoration refresh, settings replies).
+    /// (m_enableAudioVisualizer && (hasAudioReactiveDecoration() ||
+    /// hasAudioReactiveAnimation())). Lazily creates m_audioProvider on first
+    /// run. Prefer scheduleEffectAudioSync from high-frequency callers
+    /// (decoration refresh, settings replies).
     void syncEffectAudioState();
 
     /// Coalesced, deferred syncEffectAudioState: sets a pending latch and posts a
@@ -1163,6 +1180,15 @@ private:
     /// pack (SurfaceShaderEffect::audio). Read from pack METADATA (no compile
     /// needed) so the run gate resolves before first paint.
     bool hasAudioReactiveDecoration() const;
+
+    /// True when an audio-reactive ANIMATION pack (AnimationShaderEffect::
+    /// useAudio) is assigned anywhere transitions can resolve it from: the
+    /// shader profile tree's baseline or overrides, or an animation rule's
+    /// effectId payload. Keeps cava warm while such a pack is assigned so a
+    /// transition's FIRST frame already has a spectrum — a lazy start at
+    /// transition begin would eat the whole leg in cava spawn latency. Like
+    /// its decoration sibling, reads pack metadata only.
+    bool hasAudioReactiveAnimation() const;
 
     /// True when audio is live: the toggle is on, the provider is running, and a
     /// non-empty spectrum has arrived. Gates pushing iAudioSpectrumSize > 0 and

@@ -523,6 +523,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         const bool backdropAvailable = state.backdropTex && state.backdropRect.z() > 0.0f;
         const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && backdropAvailable;
         bool mainAudioBound = false;
+        bool mainUserTexturesBound = false;
         {
             KWin::ShaderBinder binder(pk->shader.get());
             // Identity MVP so the NDC fullscreen quad from drawFullscreenQuad maps
@@ -568,9 +569,46 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // off, so getBass* reads 0 and the pack renders static) and binds
             // the spectrum texture only when live.
             mainAudioBound = bindSurfaceAudio(pk->shader.get(), pk->iAudioSpectrumSizeLoc, pk->uAudioSpectrumLoc);
-            // Contract uniforms + pack params (shared with the OffscreenData path).
-            // windowId threaded in so the focus-fade ramp doesn't recompute
-            // getWindowId(w) per pack.
+            // User-declared image textures (metadata `textures`), units
+            // kSurfaceUserTextureBaseUnit.. — loaded once at compile time onto
+            // the pack state. Every slot the shader REFERENCES gets a bind: a
+            // loaded texture, or the shared 1x1 transparent fallback when the
+            // metadata file failed to load (or the pack referenced a sampler
+            // it never declared). Without the fallback a referenced classic
+            // default-block sampler reads unit 0 — the running composite —
+            // instead of the contract's transparent black. iTextureResolution
+            // is pushed only for real textures (stays 0 for the fallback).
+            for (int t = 0; t < PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots; ++t) {
+                if (pk->userTextureLoc[t] < 0) {
+                    continue;
+                }
+                KWin::GLTexture* userTex = pk->userTextures[t].get();
+                if (!userTex) {
+                    // Park the destination unit BEFORE the call: the
+                    // first-ever call creates the texture, and
+                    // GLTexture::upload binds it on the CURRENTLY ACTIVE
+                    // unit — which is TEXTURE0 here, holding the running
+                    // composite this pass samples.
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceUserTextureBaseUnit + t);
+                    userTex = transparentFallbackTexture();
+                    glActiveTexture(GL_TEXTURE0);
+                    if (!userTex) {
+                        continue; // allocation failed — keep the old omit behaviour
+                    }
+                } else if (pk->iTextureResolutionLoc[t] >= 0) {
+                    pk->shader->setUniform(pk->iTextureResolutionLoc[t],
+                                           QVector4D(static_cast<float>(userTex->width()),
+                                                     static_cast<float>(userTex->height()), 0.0f, 0.0f));
+                }
+                const int unit = ShaderInternal::kSurfaceUserTextureBaseUnit + t;
+                pk->shader->setUniform(pk->userTextureLoc[t], unit);
+                glActiveTexture(GL_TEXTURE0 + unit);
+                userTex->bind();
+                glActiveTexture(GL_TEXTURE0);
+                mainUserTexturesBound = true;
+            }
+            // Contract uniforms + pack params. windowId threaded in so the
+            // focus-fade ramp doesn't recompute getWindowId(w) per pack.
             pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, pad, windowId);
             drawFullscreenQuad();
         }
@@ -585,6 +623,12 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         if (mainAudioBound) {
             glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
             glBindTexture(GL_TEXTURE_2D, 0);
+        }
+        if (mainUserTexturesBound) {
+            for (int t = 0; t < PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots; ++t) {
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceUserTextureBaseUnit + t);
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
         }
         glActiveTexture(GL_TEXTURE0);
         KWin::GLFramebuffer::popFramebuffer();

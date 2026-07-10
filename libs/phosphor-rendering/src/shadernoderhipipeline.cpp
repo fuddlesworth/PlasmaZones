@@ -481,6 +481,14 @@ bool ShaderNodeRhi::ensurePipeline()
             return false;
         }
     }
+    // The dummy 1x1 transparent texture also backs UNSUPPLIED user-texture
+    // slots 1-3 (appendUserTextureBindings): a shader that references
+    // uTexture<N> without a loaded texture must read the documented
+    // transparent black rather than leave the declared binding without an
+    // SRB entry (strict backends reject the mismatch; lenient ones sample
+    // undefined). Best-effort — a failed create falls back to the previous
+    // omit-the-binding behaviour.
+    ensureDummyChannelResources(rhi);
 
     if (!m_srb) {
         if (multiBufferMode) {
@@ -555,15 +563,36 @@ void ShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>
         bindings.append(
             QRhiShaderResourceBinding::sampledTexture(kUserTextureBaseBinding, QRhiShaderResourceBinding::FragmentStage,
                                                       m_userTextures[0].get(), m_userTextureSamplers[0].get()));
+    } else if (m_dummyChannelTexture && m_dummyChannelSampler) {
+        // Neither a provider nor a QImage at slot 0: bind the dummy 1x1
+        // transparent texture so binding 7 (uTexture0, declared by every
+        // family's shared header and referenced by most packs) always has an
+        // SRB entry — same rationale as the slots 1-3 fallback below. Hosts
+        // normally wire a source before first paint; this covers the gap on
+        // strict backends.
+        bindings.append(
+            QRhiShaderResourceBinding::sampledTexture(kUserTextureBaseBinding, QRhiShaderResourceBinding::FragmentStage,
+                                                      m_dummyChannelTexture.get(), m_dummyChannelSampler.get()));
     }
 
     // Slots 1-3 always come from the QImage path; the source-provider
-    // override is slot-0-only by design.
+    // override is slot-0-only by design. An unsupplied slot binds the dummy
+    // 1x1 transparent texture instead of omitting the binding: the shared
+    // GLSL headers declare uTexture1..3 unconditionally, and a shader that
+    // references one without a loaded texture must read the documented
+    // transparent black — an absent SRB entry for a declared-and-referenced
+    // binding is rejected by strict backends and samples undefined on
+    // lenient ones. Extra SRB entries for bindings a shader never declares
+    // are ignored by QRhi, so the unconditional dummy append is safe.
     for (int t = 1; t < kMaxUserTextures; ++t) {
         if (m_userTextures[t] && m_userTextureSamplers[t]) {
             bindings.append(QRhiShaderResourceBinding::sampledTexture(
                 kUserTextureBaseBinding + t, QRhiShaderResourceBinding::FragmentStage, m_userTextures[t].get(),
                 m_userTextureSamplers[t].get()));
+        } else if (m_dummyChannelTexture && m_dummyChannelSampler) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                kUserTextureBaseBinding + t, QRhiShaderResourceBinding::FragmentStage, m_dummyChannelTexture.get(),
+                m_dummyChannelSampler.get()));
         }
     }
 }

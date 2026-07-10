@@ -16,6 +16,7 @@ import QtQuick
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("Window movement animation events")
+    headerText: i18n("Animations for windows moving and snapping. \"All Windows\" is the default. Each event can override it.")
     eventModel: [
         {
             "eventPath": "window.movement",

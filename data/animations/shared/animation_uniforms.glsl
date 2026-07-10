@@ -53,7 +53,7 @@
 // `static_assert(offsetof(...))` in `<PhosphorShaders/BaseUniforms.h>`
 // for every BASE field declared below (through iIsReversed at 660); the
 // anchor-extension tail (iSurfaceScreenPos .. iAnchorRectInTexture,
-// bytes 672-720) is supplied by AnimationUniformExtension and pinned by
+// bytes 672-719, 720 total) is supplied by AnimationUniformExtension and pinned by
 // the size static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
 // If any assert fails after a C++-side change, this header has to move
 // in lockstep. The bake test in
@@ -90,15 +90,20 @@ uniform vec4 iMouse;
 uniform vec4 iDate;
 uniform vec4 customParams[8];
 uniform vec4 customColors[16];
-// `iChannelResolution[4]` and `iAudioSpectrumSize` from the UBO branch
-// are intentionally absent here: kwin-effect/plasmazoneseffect.cpp
-// never calls `setUniform` for either, and no animation shader in
-// `data/animations/` references them. Adding default-block declarations
-// would compile but read garbage at runtime — better to surface the
-// gap as a compile error if a future shader reaches for them on the
-// kwin path. (The UBO branch keeps both fields for std140 layout
-// parity with `PhosphorShaders::BaseUniforms`; see static_asserts in
-// `<PhosphorShaders/BaseUniforms.h>`.)
+// `iChannelResolution[4]` from the UBO branch is intentionally absent
+// here: the kwin-effect never calls `setUniform` for it (single-pass, no
+// buffer FBOs), and no animation shader references it. Adding a
+// default-block declaration would compile but read garbage at runtime —
+// better to surface the gap as a compile error if a future shader
+// reaches for it on the kwin path. (The UBO branch keeps the field for
+// std140 layout parity with `PhosphorShaders::BaseUniforms`; see
+// static_asserts in `<PhosphorShaders/BaseUniforms.h>`.)
+// `iAudioSpectrumSize` is likewise absent from THIS header on the kwin
+// branch, but it is not a dead end: the opt-in audio module
+// (data/animations/shared/audio.glsl) declares it as a default-block
+// uniform alongside the `uAudioSpectrum` sampler, and paint_pipeline.cpp
+// pushes both per frame for packs that include the module. A pack that
+// reaches for it WITHOUT the module still gets the compile error.
 // `iTextureResolution[4]` IS populated on the kwin path: the per-effect
 // uTexture<N> setter loop in `paint_pipeline.cpp::paintWindow` writes the
 // pixel size of each user texture into this uniform array before
@@ -435,9 +440,10 @@ vec4 surfaceColor(vec2 uv) {
 // equality test (branching on `!= 0` was the documented footgun).
 #define p_reversed (iIsReversed == 1)
 
-// Un-flipped, always-forward 0→1 leg progress. 24 of the bundled shaders
+// Un-flipped, always-forward 0→1 leg progress. Bundled shaders used to
 // hand-roll exactly this `(iIsReversed == 1) ? (1.0 - iTime) : iTime` to
-// recover direction-independent progress; call this instead.
+// recover direction-independent progress; the T1.5 migration replaced
+// every hand-rolled copy with this helper — new packs call it directly.
 float legProgress() {
     return p_reversed ? (1.0 - iTime) : iTime;
 }

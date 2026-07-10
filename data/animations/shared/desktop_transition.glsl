@@ -25,6 +25,29 @@
 uniform sampler2D uFromDesktop;
 uniform sampler2D uToDesktop;
 
+// vec4 iSwitchDelta — the actual switch direction, pushed once per transition
+// by the kwin-effect (DesktopTransitionManager::begin computes it from the
+// pager grid). .xy is the wrap-corrected desktop-grid delta in cells: +x = the
+// switch moved one column right, +y = one row down, and a wrapping
+// next-desktop jump off the last column reads as +1, not a full-row jump
+// backwards. .zw is the same delta normalized to unit length. All zeros when
+// the grid positions could not be resolved. Direction-aware packs read it
+// through switchDirection() below so their configured direction params still
+// apply as the fallback (and as the forced direction when the pack's
+// followSwitch toggle is off).
+uniform vec4 iSwitchDelta;
+
+// The switch direction as a unit vector, falling back to `fallback` (a pack's
+// configured direction params, passed through un-normalized) when the runtime
+// supplied no usable delta. +x is right, +y is down, matching the top-down uv
+// space pTransition receives. Only .zw is consumed here; the .xy cell delta
+// is contract surface for packs that scale travel by the switch DISTANCE
+// (e.g. a two-desktop jump travelling twice as far) — no bundled pack reads
+// it yet.
+vec2 switchDirection(vec2 fallback) {
+    return dot(iSwitchDelta.zw, iSwitchDelta.zw) > 1.0e-6 ? iSwitchDelta.zw : fallback;
+}
+
 // The captured desktop FBOs are KWin Y-up (origin bottom-left), while the
 // full-screen quad hands us a top-down uv, so flip Y on the sample — same
 // convention as surfaceColor / oldColor in the per-window path.
