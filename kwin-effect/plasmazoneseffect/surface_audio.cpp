@@ -21,10 +21,12 @@
 #include <memory>
 #include <epoxy/gl.h>
 
-// Audio-reactive surface decorations (CAVA). The compositor has no daemon-style
-// audio path, so the effect runs its own CavaSpectrumProvider and feeds the
-// spectrum to audio-reactive decoration packs through surface_audio.glsl. Split
-// out of surfacelayers.cpp to keep that TU under the 800-line limit; the fold
+// Audio-reactive surface decorations and animation packs (CAVA). The
+// compositor has no daemon-style audio path, so the effect runs its own
+// CavaSpectrumProvider and feeds the spectrum to audio-reactive decoration
+// packs (surface_audio.glsl) and animation packs (the animation family's
+// audio.glsl module, bound from paint_pipeline's transition draw). Split out
+// of surfacelayers.cpp to keep that TU under the 800-line limit; the fold
 // itself (which binds the uploaded texture) still lives there. See the member
 // docs in plasmazoneseffect.h.
 
@@ -209,7 +211,8 @@ void PlasmaZonesEffect::syncEffectAudioState()
         }
         return;
     }
-    // Not wanted (toggle off or no audio decoration left): stop capture and clear
+    // Not wanted (toggle off, or no audio decoration or animation pack left):
+    // stop capture and clear
     // the spectrum so audioActive() goes false and any lingering audio border
     // falls back to static on its next paint.
     const bool wasLive = (m_audioProvider && m_audioProvider->isRunning()) || m_audioSpectrumSize > 0;
@@ -289,8 +292,11 @@ KWin::GLTexture* PlasmaZonesEffect::transparentFallbackTexture()
 
 bool PlasmaZonesEffect::bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc)
 {
-    // The texture was uploaded up front by renderSurfaceChainComposite (see the
-    // note there); here we only bind the ready texture — no upload mid-pass.
+    // This helper only binds the ready texture — it never uploads. The fold
+    // uploads up front (renderSurfaceChainComposite, see the note there); the
+    // animation path uploads inline just before calling, with the active unit
+    // parked on kSurfaceAudioUnit so the upload lands on its destination
+    // (paint_pipeline.cpp's audio block).
     const bool live = audioActive() && m_audioSpectrumTex != nullptr;
     // Push the bar count (0 when not live) so surface_audio.glsl's helpers gate
     // themselves off and the pack renders static without a bound sampler. Derive

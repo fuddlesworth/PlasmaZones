@@ -713,10 +713,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
         m_snapAssistHandler->setEnabled(v.toBool());
     });
-    // Audio-reactive surface decorations: the same daemon audio-viz toggle + bar
-    // count that gate the daemon's overlay audio also gate the effect's own cava
-    // instance (syncEffectAudioState ANDs the toggle with an audio decoration
-    // being present). scheduleEffectAudioSync (deferred + coalesced) so these two
+    // Audio-reactive surface decorations and animation packs: the same daemon
+    // audio-viz toggle + bar count that gate the daemon's overlay audio also
+    // gate the effect's own cava instance (syncEffectAudioState ANDs the toggle
+    // with an audio decoration or an audio animation pack being present).
+    // scheduleEffectAudioSync (deferred + coalesced) so these two
     // independent async replies collapse to ONE sync — otherwise an early
     // enable-reply could start cava at the default bar count and the later
     // bar-count reply would immediately restart it.

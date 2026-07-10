@@ -53,7 +53,7 @@
 // `static_assert(offsetof(...))` in `<PhosphorShaders/BaseUniforms.h>`
 // for every BASE field declared below (through iIsReversed at 660); the
 // anchor-extension tail (iSurfaceScreenPos .. iAnchorRectInTexture,
-// bytes 672-720) is supplied by AnimationUniformExtension and pinned by
+// bytes 672-719, 720 total) is supplied by AnimationUniformExtension and pinned by
 // the size static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
 // If any assert fails after a C++-side change, this header has to move
 // in lockstep. The bake test in

@@ -232,6 +232,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         if (haveContext) {
             KWin::effects->addRepaintFull();
         }
+        // A pack reload can flip a decoration pack's `audio` metadata flag,
+        // which feeds the cava run gate via hasAudioReactiveDecoration() —
+        // mirror the animation registry's effectsChanged handler above.
+        scheduleEffectAudioSync();
     });
 
     // Frame-geometry shadow flush timer. Debounces per-window

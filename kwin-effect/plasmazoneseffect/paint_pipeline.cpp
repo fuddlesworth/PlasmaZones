@@ -1215,9 +1215,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                         // silently composite live content where the pack
                         // expects nothing.
                         if (cached->userTextureLoc[slot] >= 0) {
+                            // Park the destination unit BEFORE the call: the
+                            // first-ever call creates the texture, and
+                            // GLTexture::upload binds it on the CURRENTLY
+                            // ACTIVE unit — the previous iteration may have
+                            // left an earlier slot's unit active. Same
+                            // discipline as the audio upload below.
+                            glActiveTexture(GL_TEXTURE1 + slot);
                             if (KWin::GLTexture* fallback = transparentFallbackTexture()) {
                                 shader->setUniform(cached->userTextureLoc[slot], 1 + slot);
-                                glActiveTexture(GL_TEXTURE1 + slot);
                                 fallback->bind();
                             }
                         }
@@ -1341,7 +1347,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // lands on the audio unit, its destination anyway.
                     glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
                     ensureAudioSpectrumTexture();
-                    audioBound = bindSurfaceAudio(shader, cached->iAudioSpectrumSizeLoc, cached->uAudioSpectrumLoc);
+                    bindSurfaceAudio(shader, cached->iAudioSpectrumSizeLoc, cached->uAudioSpectrumLoc);
+                    // Unconditional, NOT bindSurfaceAudio's return: a dirty
+                    // upload above can leave the spectrum texture bound on
+                    // the parked unit even when the bind reports not-live
+                    // (size-only shader, audio toggled off mid-frame), and
+                    // unbinding a clear unit in the hygiene block is a
+                    // harmless no-op.
+                    audioBound = true;
                 }
                 // Restore TEXTURE0 as the active unit so KWin's
                 // OffscreenData::paint binds the redirected surface

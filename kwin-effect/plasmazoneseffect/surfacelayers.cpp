@@ -584,7 +584,14 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 }
                 KWin::GLTexture* userTex = pk->userTextures[t].get();
                 if (!userTex) {
+                    // Park the destination unit BEFORE the call: the
+                    // first-ever call creates the texture, and
+                    // GLTexture::upload binds it on the CURRENTLY ACTIVE
+                    // unit — which is TEXTURE0 here, holding the running
+                    // composite this pass samples.
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceUserTextureBaseUnit + t);
                     userTex = transparentFallbackTexture();
+                    glActiveTexture(GL_TEXTURE0);
                     if (!userTex) {
                         continue; // allocation failed — keep the old omit behaviour
                     }
