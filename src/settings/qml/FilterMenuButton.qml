@@ -18,7 +18,8 @@ import org.kde.kirigami as Kirigami
  * `excluded` holds the keys the user has unchecked (empty = everything shown),
  * so options default to checked and a newly-appearing option shows up checked
  * rather than silently hidden. The button reflects an active state while any
- * option is unchecked.
+ * option is unchecked. Toggling an option keeps the menu open
+ * (StayOpenMenuItem); it closes on Escape, click-outside, or Reset.
  *
  * Every row (item, separator, reset) flows through one Repeater + a
  * DelegateChooser so the menu order is purely model-driven — mixing a Repeater
@@ -120,17 +121,17 @@ ToolButton {
             delegate: DelegateChooser {
                 role: "type"
 
-                // Checkable filter item. `checked` is held by a Binding so it
+                // Checkable filter item that keeps the menu open on toggle
+                // (StayOpenMenuItem). `checked` is held by a Binding so it
                 // survives the imperative toggle (checkable otherwise breaks the
                 // declarative binding on user click — same idiom as
                 // LayoutFilterBar.FilterMenuItem).
                 DelegateChoice {
                     roleValue: "item"
 
-                    MenuItem {
+                    StayOpenMenuItem {
                         required property var modelData
 
-                        checkable: true
                         text: (modelData.count !== undefined) ? i18nc("@option:check filter item with item count", "%1 (%2)", modelData.label, modelData.count) : modelData.label
                         Accessible.name: modelData.label
                         onToggled: root._setIncluded(modelData.key, checked)
