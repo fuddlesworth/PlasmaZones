@@ -114,8 +114,8 @@ vec4 alphaOver(vec4 under, vec4 over) {
 
 // ── Easing curves ────────────────────────────────────────────────────
 // easeOutQuad / easeInQuad / easeOutCubic / easeInOutCubic now live in the
-// shared LGPL easing.glsl (included above); the BMW-verbatim bodies are
-// unchanged there.
+// shared LGPL easing.glsl (included above); the canonical Penner bodies
+// (the same forms BMW uses) are unchanged there.
 
 // ── Hue rotation: BMW common.glsl:218 verbatim ──────────────────────
 vec3 offsetHue(vec3 color, float hueOffset) {
