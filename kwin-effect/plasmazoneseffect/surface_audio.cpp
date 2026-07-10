@@ -88,6 +88,13 @@ bool PlasmaZonesEffect::hasAudioReactiveAnimation() const
         return !id.isEmpty() && registry.effect(id).useAudio;
     };
     const auto& tree = m_shaderManager.profileTree();
+    // Built-in per-event DEFAULT packs (resolveShaderWithDefault injects
+    // window-morph / fade for a truly-unset path) are deliberately NOT
+    // scanned: no built-in default pack declares `audio: true`, so an unset
+    // path can never resolve to an audio pack. If a future built-in default
+    // ever declares audio, this scan must route through
+    // resolveShaderWithDefault instead of raw overrides or cava never warms
+    // for it.
     if (isAudioPack(tree.baseline().effectiveEffectId())) {
         return true;
     }
@@ -103,6 +110,9 @@ bool PlasmaZonesEffect::hasAudioReactiveAnimation() const
     // carries EffectId, so the extra reads are cheap misses), which errs on
     // the safe side for a run gate.
     for (const PhosphorRules::Rule& rule : m_shaderManager.m_ruleAnimationRules) {
+        // Defensive only: loadRuleAnimationsFromDbus already prunes disabled
+        // rules before populating this list; the check stays so this scan
+        // remains correct if that upstream filter ever changes.
         if (!rule.enabled) {
             continue;
         }
@@ -180,10 +190,10 @@ void PlasmaZonesEffect::syncEffectAudioState()
             // Graceful fallback: the pack already renders as a plain static
             // border when iAudioSpectrumSize stays 0 (no spectrum ever arrives).
             // Warn ONCE — this path is re-entered on every sync while the audio
-            // decoration is present, so an unconditional warn would spam the log.
+            // pack is present, so an unconditional warn would spam the log.
             if (!m_audioUnavailableWarned) {
-                qCWarning(lcEffect) << "Audio-reactive decoration active but cava is not installed; "
-                                       "border renders static";
+                qCWarning(lcEffect) << "Audio-reactive pack active (decoration or animation) but cava is not "
+                                       "installed; audio-reactive visuals render static";
                 m_audioUnavailableWarned = true;
             }
             return;
@@ -254,6 +264,27 @@ bool PlasmaZonesEffect::ensureAudioSpectrumTexture()
         m_audioSpectrumDirty = false;
     }
     return m_audioSpectrumTex != nullptr;
+}
+
+KWin::GLTexture* PlasmaZonesEffect::transparentFallbackTexture()
+{
+    // Shared 1x1 transparent texture bound in place of a REFERENCED but
+    // unsupplied user-texture sampler (surface fold units 7-9, animation
+    // units 1-3). A classic default-block sampler with no bind reads unit 0
+    // — live window content — instead of the contract's documented
+    // transparent black; this fallback makes the documented behaviour real.
+    // Lazily created on a paint path (GL context current); freed with the
+    // effect. Mirrors the daemon's dummy-channel fallback in ShaderNodeRhi.
+    if (!m_transparentFallbackTex) {
+        QImage img(1, 1, QImage::Format_RGBA8888);
+        img.fill(Qt::transparent);
+        m_transparentFallbackTex = KWin::GLTexture::upload(img);
+        if (m_transparentFallbackTex) {
+            m_transparentFallbackTex->setFilter(GL_LINEAR);
+            m_transparentFallbackTex->setWrapMode(GL_CLAMP_TO_EDGE);
+        }
+    }
+    return m_transparentFallbackTex.get();
 }
 
 bool PlasmaZonesEffect::bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc)

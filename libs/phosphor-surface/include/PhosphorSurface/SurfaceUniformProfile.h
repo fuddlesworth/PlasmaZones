@@ -11,17 +11,18 @@
 namespace PhosphorSurfaceShaders {
 
 /// IUboProfile implementation for the surface-decoration runtime — the leaner
-/// 576-byte SurfaceUniforms layout.
+/// 656-byte SurfaceUniforms layout.
 ///
 /// Reuses the shared PhosphorRendering::ShaderNodeRhi engine with the surface
-/// UBO. The surface binding map (UBO@0, iChannel0-3@2-5, uTexture0@7) is a
-/// strict subset of the overlay map, so only the UBO concern differs — this
-/// class is that difference.
+/// UBO. The surface binding map (UBO@0, iChannel0-3@2-5, uTexture0@7,
+/// uTexture1-3@8-10) is a strict subset of the overlay map, so only the UBO
+/// concern differs — this class is that difference.
 ///
 /// fill() reads the surface-only fields of UboFrameState (qtOpacity,
 /// surfaceScale, surfaceFocused, time, surfaceSize/FrameTopLeft/FrameSize) plus
-/// the shared customParams/customColors/channelResolution; it ignores the
-/// overlay-only fields BaseUniformProfile uses.
+/// the shared customParams/customColors/channelResolution/mouse/
+/// textureResolution; it ignores the overlay-only fields BaseUniformProfile
+/// uses.
 class PHOSPHORSURFACE_EXPORT SurfaceUniformProfile : public PhosphorShaders::IUboProfile
 {
 public:

@@ -88,7 +88,7 @@ SurfaceShaderItem::~SurfaceShaderItem()
 PhosphorRendering::ShaderNodeRhi* SurfaceShaderItem::createShaderNode()
 {
     // The surface UBO profile is the ONLY thing that differs from the base/
-    // overlay render path — a stock ShaderNodeRhi driven by the 576-byte
+    // overlay render path — a stock ShaderNodeRhi driven by the 656-byte
     // SurfaceUniformProfile rather than a SurfaceShaderItem-specific subclass.
     return new PhosphorRendering::ShaderNodeRhi(this,
                                                 std::make_unique<PhosphorSurfaceShaders::SurfaceUniformProfile>());

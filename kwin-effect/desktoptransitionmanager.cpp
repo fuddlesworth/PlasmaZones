@@ -184,6 +184,10 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         if (fromCoords.x() >= 0 && fromCoords.y() >= 0 && toCoords.x() >= 0 && toCoords.y() >= 0) {
             float dx = float(toCoords.x() - fromCoords.x());
             float dy = float(toCoords.y() - fromCoords.y());
+            // Strict `>`: a delta of EXACTLY half the grid (even grids, e.g.
+            // col0 -> col2 on a 4-wide pager) is ambiguous — both directions
+            // are equally short — and the tie deliberately keeps the literal
+            // (non-wrapped) delta.
             if (grid.width() > 1 && std::abs(dx) > float(grid.width()) / 2.0f) {
                 dx -= std::copysign(float(grid.width()), dx);
             }

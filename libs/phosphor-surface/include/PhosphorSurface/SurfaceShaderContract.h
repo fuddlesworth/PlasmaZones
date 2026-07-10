@@ -200,11 +200,13 @@ inline constexpr const char* kUHasBackdrop = "uHasBackdrop";
 
 /// `vec4 iMouse` — cursor position for hover-reactive packs. `.xy` is the
 /// cursor in the SAME top-down device-px space as the geometry uniforms
-/// (origin at the padded canvas's top-left), `(-1, -1)` when the cursor is
-/// outside the canvas (or, on the daemon, when the host wires no hover
-/// source — SurfaceShaderItem seeds the sentinel). `.zw` is `.xy` normalized
+/// (origin at the padded canvas's top-left); negative when the cursor is
+/// off the canvas — exactly `(-1, -1)` on the compositor, and the seeded
+/// `(-1, -1)` sentinel scaled by the dpr on a daemon host that wires no
+/// hover source (SurfaceShaderItem seeds it). `.zw` is `.xy` normalized
 /// by `uSurfaceSize`, negative alongside the sentinel, so `iMouse.x < 0.0`
-/// is the canonical off-surface test on both runtimes. A pack that reads
+/// is the canonical off-surface test on both runtimes; do not test
+/// `iMouse.x == -1.0` exactly. A pack that reads
 /// iMouse should also declare `"animated": true`: the host repaints on its
 /// vsync loop while a pack animates, and there is no per-cursor-move damage
 /// path for static packs.

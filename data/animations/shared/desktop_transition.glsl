@@ -40,7 +40,10 @@ uniform vec4 iSwitchDelta;
 // The switch direction as a unit vector, falling back to `fallback` (a pack's
 // configured direction params, passed through un-normalized) when the runtime
 // supplied no usable delta. +x is right, +y is down, matching the top-down uv
-// space pTransition receives.
+// space pTransition receives. Only .zw is consumed here; the .xy cell delta
+// is contract surface for packs that scale travel by the switch DISTANCE
+// (e.g. a two-desktop jump travelling twice as far) — no bundled pack reads
+// it yet.
 vec2 switchDirection(vec2 fallback) {
     return dot(iSwitchDelta.zw, iSwitchDelta.zw) > 1.0e-6 ? iSwitchDelta.zw : fallback;
 }

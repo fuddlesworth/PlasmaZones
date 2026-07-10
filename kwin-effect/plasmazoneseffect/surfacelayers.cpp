@@ -571,22 +571,32 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             mainAudioBound = bindSurfaceAudio(pk->shader.get(), pk->iAudioSpectrumSizeLoc, pk->uAudioSpectrumLoc);
             // User-declared image textures (metadata `textures`), units
             // kSurfaceUserTextureBaseUnit.. — loaded once at compile time onto
-            // the pack state. Push the sampler unit + the texture's pixel size
-            // (iTextureResolution[N]) only for slots the shader references AND
-            // a texture loaded; an unbound declared sampler reads transparent.
+            // the pack state. Every slot the shader REFERENCES gets a bind: a
+            // loaded texture, or the shared 1x1 transparent fallback when the
+            // metadata file failed to load (or the pack referenced a sampler
+            // it never declared). Without the fallback a referenced classic
+            // default-block sampler reads unit 0 — the running composite —
+            // instead of the contract's transparent black. iTextureResolution
+            // is pushed only for real textures (stays 0 for the fallback).
             for (int t = 0; t < PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots; ++t) {
-                if (!pk->userTextures[t] || pk->userTextureLoc[t] < 0) {
+                if (pk->userTextureLoc[t] < 0) {
                     continue;
+                }
+                KWin::GLTexture* userTex = pk->userTextures[t].get();
+                if (!userTex) {
+                    userTex = transparentFallbackTexture();
+                    if (!userTex) {
+                        continue; // allocation failed — keep the old omit behaviour
+                    }
+                } else if (pk->iTextureResolutionLoc[t] >= 0) {
+                    pk->shader->setUniform(pk->iTextureResolutionLoc[t],
+                                           QVector4D(static_cast<float>(userTex->width()),
+                                                     static_cast<float>(userTex->height()), 0.0f, 0.0f));
                 }
                 const int unit = ShaderInternal::kSurfaceUserTextureBaseUnit + t;
                 pk->shader->setUniform(pk->userTextureLoc[t], unit);
-                if (pk->iTextureResolutionLoc[t] >= 0) {
-                    pk->shader->setUniform(pk->iTextureResolutionLoc[t],
-                                           QVector4D(static_cast<float>(pk->userTextures[t]->width()),
-                                                     static_cast<float>(pk->userTextures[t]->height()), 0.0f, 0.0f));
-                }
                 glActiveTexture(GL_TEXTURE0 + unit);
-                pk->userTextures[t]->bind();
+                userTex->bind();
                 glActiveTexture(GL_TEXTURE0);
                 mainUserTexturesBound = true;
             }

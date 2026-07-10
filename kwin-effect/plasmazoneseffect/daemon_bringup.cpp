@@ -913,6 +913,14 @@ void PlasmaZonesEffect::loadCachedSettings()
         // Per-pack param values are baked at first compile, so a tree change that
         // alters parameters[packId] requires a recompile of that pack — clear the
         // whole compiled-pack cache (it lazily recompiles on the next paint).
+        // This D-Bus reply lands between frames where the compositor GL context
+        // is not guaranteed current, and the cached packs own GLShaders plus
+        // user GLTextures whose destruction issues glDelete* — make the context
+        // current first, same discipline as the effectsChanged clear in
+        // lifecycle.cpp.
+        if (KWin::effects) {
+            KWin::effects->makeOpenGLContextCurrent();
+        }
         m_compiledPacks.clear();
         updateAllDecorations();
         if (KWin::effects) {
