@@ -364,6 +364,9 @@ qt_add_qml_module(plasmazones-settings
         qml/ShaderBrowserPage.qml
         qml/ShaderBrowserCard.qml
         qml/FilterMenuButton.qml
+        # Stay-open checkable menu item shared by every filter menu
+        # (Layouts via LayoutFilterBar, Rules + shader browser via
+        # FilterMenuButton).
         qml/StayOpenMenuItem.qml
         qml/ShaderBrowserDetailDialog.qml
         qml/CurveEditorDialog.qml

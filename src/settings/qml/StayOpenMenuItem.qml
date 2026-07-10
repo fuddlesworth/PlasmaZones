@@ -27,9 +27,10 @@ MenuItem {
         return key === Qt.Key_Space || key === Qt.Key_Return || key === Qt.Key_Enter || key === Qt.Key_Select;
     }
     // Programmatic setChecked() does not emit toggled(), so emit it manually —
-    // exactly once — after flipping.
+    // exactly once — after flipping. The checkable guard keeps a consumer
+    // that overrides `checkable: false` from getting phantom toggles.
     function _toggleWithoutDismiss() {
-        if (!enabled)
+        if (!enabled || !checkable)
             return;
         checked = !checked;
         toggled();
