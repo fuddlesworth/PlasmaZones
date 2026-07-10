@@ -39,9 +39,8 @@ return pluau.algorithm {
             local masterWidth = math.floor(contentWidth * splitRatio)
             local stackWidth = contentWidth - masterWidth
             if #minSizes > 0 then
-                local minMW = (minSizes[1] and minSizes[1].w and minSizes[1].w > 0) and minSizes[1].w or 0
-                local minSW = (#minSizes > 1 and minSizes[2] and minSizes[2].w and minSizes[2].w > 0)
-                    and minSizes[2].w or 0
+                local minMW = pluau.minSizeAt(minSizes, 0)
+                local minSW = pluau.minSizeAt(minSizes, 1)
                 local solved = pluau.solveTwoPart(contentWidth, masterWidth, stackWidth, minMW, minSW)
                 masterWidth = solved.first
                 stackWidth = solved.second

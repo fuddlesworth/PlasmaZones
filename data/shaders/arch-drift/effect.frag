@@ -112,9 +112,6 @@ vec3 paletteSweep(float t, vec3 primary, vec3 secondary, vec3 accent, vec3 glow,
 }
 
 
-// sdSegment() comes from common.glsl.
-
-
 // =================================================================
 //  ARCH LINUX LOGO -- 95-vertex polygon from official Crystal SVG
 // =================================================================

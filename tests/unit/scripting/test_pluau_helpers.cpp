@@ -241,7 +241,8 @@ void TestPluauHelpers::cumulativeOffsets()
     const QByteArray body = R"LUA(
         return { run = function()
             local o = pluau.cumulativeOffsets(100, { 50, 60, 70 }, 10)
-            return { len = #o, o1 = o[1], o2 = o[2], o3 = o[3] }
+            local e = pluau.cumulativeOffsets(100, {}, 10)
+            return { len = #o, o1 = o[1], o2 = o[2], o3 = o[3], elen = #e, e1 = e[1] }
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
@@ -250,6 +251,9 @@ void TestPluauHelpers::cumulativeOffsets()
     QCOMPARE(r.value(QStringLiteral("o1")).toInt(), 100);
     QCOMPARE(r.value(QStringLiteral("o2")).toInt(), 160); // 100 + 50 + 10
     QCOMPARE(r.value(QStringLiteral("o3")).toInt(), 230); // 160 + 60 + 10
+    // Documented empty-input contract: an empty sizes list still yields { start }.
+    QCOMPARE(r.value(QStringLiteral("elen")).toInt(), 1);
+    QCOMPARE(r.value(QStringLiteral("e1")).toInt(), 100);
 }
 
 void TestPluauHelpers::center()

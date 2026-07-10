@@ -64,8 +64,8 @@ vec3 colSecondary() { return colorWithFallback(p_secondaryColor.rgb, vec3(0.769,
 vec3 colAccent()    { return colorWithFallback(p_accentColor.rgb, vec3(0.208, 0.725, 0.671)); }
 vec3 colGlow()      { return colorWithFallback(p_glowColor.rgb, vec3(0.451, 0.729, 0.145)); }
 
-// The rotation matrix (rot), fbm(), and the tri-stop palette (triStopPalette,
-// "desert" here) all come from common.glsl.
+// fbm() and the tri-stop palette (triStopPalette, "desert" here) come from
+// common.glsl.
 
 // ─── Wind field (curl-noise based) ─────────────────────────────────
 

@@ -6,9 +6,11 @@
 //   #include <common.glsl>
 //   #include <flow-noise.glsl>
 //
-// Kept out of common.glsl because opensuse-drift defines its own same-signature
-// curlNoise(vec2, float) variant, and common.glsl is auto-prepended to every
-// zone effect shader — sharing this signature there would collide.
+// Kept opt-in rather than in the auto-prepended common.glsl: curl noise is a
+// flow-field-specific helper only the flow packs use, and keeping the
+// signature out of every effect shader's translation unit leaves packs free
+// to carry their own variants (opensuse-drift's forward-difference version is
+// named curlNoiseFwd to stay collision-proof either way).
 
 #ifndef PLASMAZONES_FLOW_NOISE_GLSL
 #define PLASMAZONES_FLOW_NOISE_GLSL

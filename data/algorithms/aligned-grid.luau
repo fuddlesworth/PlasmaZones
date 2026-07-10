@@ -80,7 +80,7 @@ return pluau.algorithm {
     metadata = {
         name = "Aligned Grid",
         id = "aligned-grid",
-        description = "Resize-aware grid: drag a cell edge to move the whole aligned column/row",
+        description = "Resize-aware grid where dragging a cell edge moves the whole aligned column or row",
         producesOverlappingZones = false,
         supportsMasterCount = false,
         supportsSplitRatio = false,
