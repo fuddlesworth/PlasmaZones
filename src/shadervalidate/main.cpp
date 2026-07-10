@@ -966,9 +966,10 @@ int main(int argc, char** argv)
 
     QStringList args;
     bool quiet = false; // --quiet/-q: print only failing packs (clean pre-commit output)
-    // System selection: --overlay (default) vs --animation. Two distinct
-    // authoring models (different metadata schema + entry convention), so the
-    // mode is explicit and symmetric; later flag wins if both are given.
+    // System selection: --overlay (default) vs --animation vs --surface.
+    // Three distinct authoring models (different metadata schema + entry
+    // convention), so the mode is explicit and symmetric; later flag wins if
+    // more than one is given.
     bool animationMode = false;
     // --surface: surface-layer packs (data/surface/*) — the window border /
     // rounded-corner category. Mutually exclusive with --overlay / --animation.

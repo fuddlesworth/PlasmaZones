@@ -22,7 +22,8 @@
 #include <audio.glsl>
 
 
-// fbm() and the tri-stop palette (triStopPalette) come from common.glsl.
+// fbm(), sdSegment(), and the tri-stop palette (triStopPalette) come from
+// common.glsl.
 
 // ── SDF primitives ──────────────────────────────────────────────
 

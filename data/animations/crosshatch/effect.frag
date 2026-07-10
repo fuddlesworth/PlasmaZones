@@ -35,7 +35,7 @@ vec4 pTransition(vec2 uv, float t) {
     vec4 win = surfaceColor(uv);
 
     vec2 center = vec2(0.5);
-    float dist = distance(center, uv) / p_radialFalloff;
+    float dist = distance(center, uv) / max(p_radialFalloff, 1e-3);
     float r = p - min(classicHash(vec2(uv.y, 0.0)), classicHash(vec2(0.0, uv.x)));
     float reveal = mix(0.0, mix(step(dist, r), 1.0, smoothstep(1.0 - p_edgeFade, 1.0, p)), smoothstep(0.0, p_edgeFade, p));
 

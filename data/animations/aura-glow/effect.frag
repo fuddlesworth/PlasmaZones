@@ -87,7 +87,7 @@ vec4 alphaOver(vec4 under, vec4 over)
     return vec4(mix(under.rgb * under.a, over.rgb, over.a) / max(a, 1e-4), a);
 }
 
-// 16-tap radial blur of the window content. `radius` in pixels;
+// 45-tap radial blur of the window content. `radius` in pixels;
 // `samples` is the inner-loop count (3 keeps the cost reasonable).
 // Pre-multiplied texture read is summed in pre-multiplied space and
 // divided by sample count — the result stays pre-multiplied.
