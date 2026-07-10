@@ -43,7 +43,6 @@ float pErosionStrength() { return p_erosionStrength >= 0.0 ? p_erosionStrength :
 float pLabelGlowSpread() { return p_labelGlowSpread >= 0.0 ? p_labelGlowSpread : 3.0;  }
 float pLabelBrightness() { return p_labelBrightness >= 0.0 ? p_labelBrightness : 2.5;  }
 float pLabelAudioReact() { return p_labelAudioReact >= 0.0 ? p_labelAudioReact : 1.0;  }
-float pLabelChroma()     { return customParams[4].w >= 0.0 ? customParams[4].w : 0.5;  }
 float pLogoScale()       { return p_logoScale >= 0.0 ? p_logoScale : 0.35; }
 float pLogoIntensity()   { return p_logoIntensity >= 0.0 ? p_logoIntensity : 0.8;  }
 float pLogoPulse()       { return p_logoPulse >= 0.0 ? p_logoPulse : 0.8;  }
@@ -52,9 +51,7 @@ float pLogoSizeMin()     { return p_logoSizeMin >= 0.0 ? p_logoSizeMin : 0.4;  }
 float pLogoSizeMax()     { return p_logoSizeMax >= 0.0 ? p_logoSizeMax : 1.0;  }
 float pLogoSpin()        { return p_logoSpin >= 0.0 ? p_logoSpin : 0.3;  }
 float pIdleStrength()    { return p_idleStrength >= 0.0 ? p_idleStrength : 0.6;  }
-float pFlowCenterX()     { return customParams[7].x >= -1.5 ? customParams[7].x : 0.4; }
 float pShowLabels()      { return p_showLabels >= 0.0 ? p_showLabels : 1.0;  }
-float pFlowCenterY()     { return customParams[7].z >= -1.5 ? customParams[7].z : 0.5; }
 float pSparkleIntensity(){ return p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;  }
 
 // ─── Palette ───────────────────────────────────────────────────────
@@ -371,7 +368,7 @@ float sdTumbleweed(vec2 p) {
 const vec2 TW_LOGO_CENTER = vec2(0.0);
 
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse, float spinRate,
+                       float logoScale, float bassEnv, float spinRate,
                        float sizeMin, float sizeMax, out float instScale) {
     vec2 uv = globalUV;
     uv.x = (uv.x - 0.5) * aspect + 0.5;
@@ -432,7 +429,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 // continuous across zone boundaries instead of resetting per zone.
 // Mirrors the chrome-protocol / opensuse-drift / fedora-drift pattern.
 
-vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebleEnv, bool hasAudio) {
+vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebleEnv) {
     float time = iTime;
     vec2 uv = fragCoord / max(iResolution, vec2(1.0));
     float gAspect = iResolution.x / max(iResolution.y, 1.0);
@@ -536,7 +533,7 @@ vec3 renderGlobalScene(vec2 fragCoord, float bassEnv, float midsEnv, float trebl
     for (int li = 0; li < logoCount && li < 8; li++) {
         float instScale;
         vec2 iLogoUV = computeInstanceUV(li, logoCount, uv, gAspect, time,
-                                          logoScale, bassEnv, logoPulse, spinRate,
+                                          logoScale, bassEnv, spinRate,
                                           sizeMin, sizeMax, instScale);
 
         if (iLogoUV.x < -0.7 || iLogoUV.x > 0.7 ||
@@ -918,7 +915,7 @@ vec4 pImage(vec2 fragCoord) {
     // Render the desert scene + drifting Tumbleweed logos once in
     // overlay-space. Each zone below renders a window onto this shared
     // scene plus its own border/glow/vitality treatment.
-    vec3 sceneCol = renderGlobalScene(fragCoord, bassEnv, midsEnv, trebleEnv, hasAudio);
+    vec3 sceneCol = renderGlobalScene(fragCoord, bassEnv, midsEnv, trebleEnv);
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];

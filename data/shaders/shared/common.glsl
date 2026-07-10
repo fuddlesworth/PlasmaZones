@@ -193,24 +193,11 @@ vec2 hash22(vec2 p) {
     return vec2(float(h1 >> 16u), float(h2 >> 16u)) / 65535.0;
 }
 
-// Composite pre-rendered zone labels over the current color (premult alpha over).
-// labelsTex: sampler at binding 1; uv: fragCoord / max(iResolution, vec2(0.0001)); no Y flip
-vec4 compositeLabels(vec4 color, vec2 uv, sampler2D labelsTex) {
-    vec4 labels = texture(labelsTex, uv);
-    color.rgb = color.rgb * (1.0 - labels.a) + labels.rgb;
-    color.a = labels.a + color.a * (1.0 - labels.a);
-    return color;
-}
-
-// UV for labels texture sampling. Use with compositeLabels(color, labelsUv(fragCoord), labelsTex).
+// UV for sampling the zone-labels texture (uZoneLabels, binding 1). Packs sample
+// it themselves and blend the premultiplied result over their color.
 vec2 labelsUv(vec2 fragCoord) {
     vec2 res = max(iResolution, vec2(0.0001));
     return fragCoord / res;
-}
-
-// Composite labels at fragCoord using uZoneLabels (binding 1)
-vec4 compositeLabelsWithUv(vec4 color, vec2 fragCoord) {
-    return compositeLabels(color, labelsUv(fragCoord), uZoneLabels);
 }
 
 // Premultiplied alpha over blend: result = src over dst

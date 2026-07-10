@@ -13,7 +13,6 @@
 // the pack renders a still shadow-to-highlight gradient slab with the
 // same corner rounding.
 
-#include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 #include <surface_color.glsl>
 

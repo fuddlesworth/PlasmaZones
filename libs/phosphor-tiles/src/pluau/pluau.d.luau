@@ -150,6 +150,7 @@ export type Pluau = {
     minSizeAt: (minSizes: { MinSize }, i: number) -> (number, number),
     resizeRatioGrow: (newSize: number, oldSize: number, oldRatio: number) -> number,
     resizeRatioShrink: (newSize: number, oldSize: number, oldRatio: number) -> number,
+    masterStackResize: (state: any, resize: ResizeEvent, horizontal: boolean) -> { [string]: any }?,
     stripLayout: (zones: { Zone }, startX: number, startY: number, panelW: number, panelH: number,
         count: number, gap: number, horizontal: boolean) -> (),
 }

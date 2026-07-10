@@ -13,7 +13,6 @@
 // degrades to a faint premultiplied tint slab at the same corner rounding,
 // so previews still communicate the pack's shape.
 
-#include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 
 vec4 pSurface(vec2 uv) {

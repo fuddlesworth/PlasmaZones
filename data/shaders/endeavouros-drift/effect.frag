@@ -217,7 +217,7 @@ SailHit evalEosSails(vec2 p, vec3 colBlue, vec3 colCoral, vec3 colPurple) {
 
 // -- Per-instance UV computation ------------------------------------------
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse,
+                       float logoScale, float logoPulse,
                        float sizeMin, float sizeMax, out float instScale) {
     vec2 uv = globalUV;
     float wobbleAmp = p_logoWobble >= 0.0 ? p_logoWobble : 0.12;
@@ -274,14 +274,13 @@ float sailSilhouette(vec2 uv, vec2 pos, float size, float lean) {
 // =========================================================================
 
 vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
-                   bool isHighlighted, float bass, float mids, float treble, float overall,
+                   bool isHighlighted, float bass, float mids, float treble,
                    bool hasAudio) {
     float borderRadius = max(params.x, 8.0), borderWidth = max(params.y, 2.0);
     float speed      = p_speed >= 0.0 ? p_speed : 0.10;
     float flowSpeed  = p_flowSpeed >= 0.0 ? p_flowSpeed : 0.20;
     float noiseScale = p_interiorScale >= 0.0 ? p_interiorScale : 3.5;
     int octaves      = int(p_octaves >= 0.0 ? p_octaves : 6.0);
-    float gridScale    = p_orbitRadius >= 0.0 ? p_orbitRadius : 5.0;
     float gridStrength = p_lineStrength >= 0.0 ? p_lineStrength : 0.20;
     float brightness   = p_brightness >= 0.0 ? p_brightness : 0.7;
     float contrast     = p_contrast >= 0.0 ? p_contrast : 0.9;
@@ -293,7 +292,6 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
     float particleStr  = p_particleStrength >= 0.0 ? p_particleStrength : 0.4;
     float innerGlowStr = p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.35;
     float sparkleStr   = p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;
-    float connThreshold = p_packetDirection >= 0.0 ? p_packetDirection : 0.25;
     float logoScale     = p_logoScale >= 0.0 ? p_logoScale : 0.5;
     float logoIntensity = p_logoIntensity >= 0.0 ? p_logoIntensity : 0.75;
     float logoPulse     = p_logoPulse >= 0.0 ? p_logoPulse : 0.8;
@@ -433,7 +431,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
             vec2 iLogoUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, bassEnv, logoPulse,
+                                              logoScale, logoPulse,
                                               logoSizeMin, logoSizeMax, instScale);
 
             if (iLogoUV.x < -0.3 || iLogoUV.x > 1.3 ||
@@ -844,14 +842,13 @@ vec4 pImage(vec2 fragCoord) {
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
     float treble  = getTrebleSoft();
-    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
         vec4 zoneColor = renderEosZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio);
+            bass, mids, treble, hasAudio);
         color = blendOver(color, zoneColor);
     }
 

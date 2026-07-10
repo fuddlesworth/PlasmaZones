@@ -77,24 +77,15 @@ return pluau.algorithm {
 
         zones[#zones + 1] = { x = centerX, y = centerY, width = centerW, height = centerH }
 
+        -- rightW/leftW/topH are floored at 1 by math.max(1, ...), so their old
+        -- `>= 1` guards were always true; the overlapping-fallback else arms were
+        -- dead. bottomH keeps its guard: the ANDed bounds check can be false.
         if rightCount > 0 then
-            if rightW >= 1 then
-                pluau.stripLayout(zones, rightX, sideTop, rightW, sideH, rightCount, gap, false)
-            else
-                for _ = 1, rightCount do
-                    zones[#zones + 1] = { x = centerX, y = centerY, width = centerW, height = centerH }
-                end
-            end
+            pluau.stripLayout(zones, rightX, sideTop, rightW, sideH, rightCount, gap, false)
         end
 
         if leftCount > 0 then
-            if leftW >= 1 then
-                pluau.stripLayout(zones, area.x, sideTop, leftW, sideH, leftCount, gap, false)
-            else
-                for _ = 1, leftCount do
-                    zones[#zones + 1] = { x = centerX, y = centerY, width = centerW, height = centerH }
-                end
-            end
+            pluau.stripLayout(zones, area.x, sideTop, leftW, sideH, leftCount, gap, false)
         end
 
         if bottomCount > 0 then
@@ -108,13 +99,7 @@ return pluau.algorithm {
         end
 
         if topCount > 0 then
-            if topH >= 1 then
-                pluau.stripLayout(zones, area.x, area.y, area.width, topH, topCount, gap, true)
-            else
-                for _ = 1, topCount do
-                    zones[#zones + 1] = { x = centerX, y = centerY, width = centerW, height = centerH }
-                end
-            end
+            pluau.stripLayout(zones, area.x, area.y, area.width, topH, topCount, gap, true)
         end
 
         return zones

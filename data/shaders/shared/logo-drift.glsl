@@ -9,8 +9,10 @@
 // Holds the byte-identical building blocks shared across the drift packs: the
 // simplex-noise stack (arch, endeavouros), Catmull-Rom interpolation plus the
 // logoPaletteCR/paletteSweep palette sweep built on it (arch, endeavouros),
-// and the neon flicker envelope (fedora, neon). The per-pack instance
-// placement (computeInstanceUV) and the per-zone composite loops stay in each
+// the neon flicker envelope (fedora, neon), the drifting per-instance logo
+// placement (driftInstanceUV — fedora, neon; parameterized by the recentre
+// point and tilt magnitude), and the 5x5 chromatic label-halo gather
+// (gatherLabelHalo — fedora, neon). The per-zone composite loops stay in each
 // pack because they diverge algorithmically.
 
 #ifndef PLASMAZONES_LOGO_DRIFT_GLSL
@@ -103,6 +105,110 @@ vec3 paletteSweep(float t, vec3 primary, vec3 secondary, vec3 accent, vec3 glow,
     // Subtle hue shift from audio stays within the pack's color family
     float shifted = t + audioShift * 0.08;
     return logoPaletteCR(shifted, primary, secondary, accent, glow);
+}
+
+// ─── Drifting per-instance logo placement (fedora, neon) ─────────────────────
+// Per-instance UV for the multi-logo packs: gentle drift, per-instance rotation
+// oscillation, breathing, and a bass-driven spring on the scale. `center` is
+// the recentre point (LOGO_CENTER / GEAR_CENTER, both vec2(0.5)) and `tiltAmt`
+// scales the rotation oscillation (fedora keeps the "f" upright at 0.01, neon
+// spins gears harder at 0.05).
+vec2 driftInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
+                     float logoScale, float bassEnv, float sizeMin, float sizeMax,
+                     vec2 center, float tiltAmt, out float instScale) {
+    vec2 uv = globalUV;
+    uv.x = (uv.x - 0.5) * aspect + 0.5;
+
+    if (totalCount <= 1) {
+        vec2 drift = vec2(
+            timeSin(0.13) * 0.015 + timeSin(0.29) * 0.008,
+            timeCos(0.19) * 0.012 + timeCos(0.11) * 0.006
+        );
+        uv -= drift;
+        // Gentle rotation
+        float rotAng = timeSin(0.12) * 0.04;
+        vec2 lp = uv - vec2(0.5);
+        uv = lp * rot(rotAng) + vec2(0.5);
+        float breathe = 1.0 + timeSin(0.6) * 0.02;
+        float springT = fract(time * 1.2);
+        float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
+        instScale = logoScale * breathe * spring;
+        uv = (uv - 0.5) / instScale + center;
+        return uv;
+    }
+
+    float h1 = hash21(vec2(float(idx) * 7.31, 3.17));
+    float h2 = hash21(vec2(float(idx) * 13.71, 7.23));
+    float h3 = hash21(vec2(float(idx) * 5.13, 11.37));
+    float h4 = hash21(vec2(float(idx) * 9.77, 17.53));
+
+    float roam = 0.35;
+    float f1 = 0.06 + float(idx) * 0.021;
+    float f2 = 0.04 + float(idx) * 0.017;
+    vec2 drift = vec2(
+        timeSin(f1, h1 * TAU) * roam + timeSin(f1 * 2.1, h3 * TAU) * roam * 0.3,
+        timeCos(f2, h2 * TAU) * roam * 0.9 + timeCos(f2 * 1.6, h4 * TAU) * roam * 0.25
+    );
+    uv -= drift;
+
+    // Per-instance rotation oscillation (tiltAmt sets the magnitude per pack)
+    float rotAng = timeSin(0.08 + float(idx) * 0.025, h4 * TAU) * tiltAmt;
+    vec2 lp = uv - vec2(0.5);
+    uv = lp * rot(rotAng) + vec2(0.5);
+
+    instScale = mix(sizeMin, sizeMax, h3) * logoScale;
+    float breathe = 1.0 + timeSin(0.5 + float(idx) * 0.11, h1 * TAU) * 0.02;
+    float springT = fract(time * 1.2 + h2);
+    float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
+    instScale *= breathe * spring;
+    uv = (uv - 0.5) / instScale + center;
+    return uv;
+}
+
+// ─── Chromatic label-halo gather (fedora, neon) ──────────────────────────────
+// 5x5 weighted gather over the zone-labels texture (uZoneLabels, from
+// common.glsl): a tight core, wide and very-wide haze, plus three chromatically
+// offset channels for the retro aberration. `chromOff` is the per-pack channel
+// separation; everything else (weights, normalizations) is shared.
+struct LabelHalo {
+    float tight;
+    float wide;
+    float vWide;
+    vec3 chroma;  // R, G, B channels of the aberrated halo
+};
+
+LabelHalo gatherLabelHalo(vec2 uv, vec2 px, float labelGlowSpread, vec2 chromOff) {
+    float haloTight = 0.0;
+    float haloWide = 0.0;
+    float haloVWide = 0.0;
+    float haloR = 0.0, haloG = 0.0, haloB = 0.0;
+
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            float r2 = float(dx * dx + dy * dy);
+            vec2 off = vec2(float(dx), float(dy)) * px;
+
+            float wTight = exp(-r2 * 0.6);
+            float wWide = exp(-r2 * 0.2);
+            float wVWide = exp(-r2 * 0.1);
+
+            float s = texture(uZoneLabels, uv + off * labelGlowSpread).a;
+            haloTight += s * wTight;
+            haloWide += s * wWide;
+            haloVWide += s * wVWide;
+
+            haloR += texture(uZoneLabels, uv + off * labelGlowSpread + chromOff).a * wWide;
+            haloG += texture(uZoneLabels, uv + off * labelGlowSpread).a * wWide;
+            haloB += texture(uZoneLabels, uv + off * labelGlowSpread - chromOff).a * wWide;
+        }
+    }
+
+    LabelHalo h;
+    h.tight = haloTight / 10.0;
+    h.wide = haloWide / 16.5;
+    h.vWide = haloVWide / 20.0;
+    h.chroma = vec3(haloR, haloG, haloB) / 16.5;
+    return h;
 }
 
 #endif // PLASMAZONES_LOGO_DRIFT_GLSL

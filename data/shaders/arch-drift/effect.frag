@@ -147,29 +147,6 @@ const vec2 ARCH_AABB_LO = vec2(0.000, 0.000);
 const vec2 ARCH_AABB_HI = vec2(1.000, 1.000);
 
 
-// ── Signed distance to the 95-vertex Arch polygon ───────────────
-
-float sdArchPolygon(vec2 p) {
-    vec2 dLo = ARCH_AABB_LO - p;
-    vec2 dHi = p - ARCH_AABB_HI;
-    vec2 outside = max(max(dLo, dHi), vec2(0.0));
-    float boxDist2 = dot(outside, outside);
-    if (boxDist2 > 0.04) return sqrt(boxDist2);
-
-    float d = dot(p - ARCH[0], p - ARCH[0]);
-    float s = 1.0;
-    for (int i = 0, j = ARCH_N - 1; i < ARCH_N; j = i, i++) {
-        vec2 e = ARCH[j] - ARCH[i];
-        vec2 w = p - ARCH[i];
-        vec2 b = w - e * clamp(dot(w, e) / dot(e, e), 0.0, 1.0);
-        d = min(d, dot(b, b));
-        bvec3 cond = bvec3(p.y >= ARCH[i].y, p.y < ARCH[j].y, e.x * w.y > e.y * w.x);
-        if (all(cond) || all(not(cond))) s *= -1.0;
-    }
-    return s * sqrt(d);
-}
-
-
 // ── Logo hit result ─────────────────────────────────────────────
 
 struct LogoHit {
@@ -217,7 +194,7 @@ LogoHit evalArchLogo(vec2 p) {
 // ── Per-instance UV computation ─────────────────────────────────
 
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float bassEnv, float logoPulse,
+                       float logoScale, float logoPulse,
                        float sizeMin, float sizeMax, out float instScale) {
     vec2 uv = globalUV;
     float wobbleAmp = p_logoWobble >= 0.0 ? p_logoWobble : 0.12;
@@ -262,7 +239,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 // =================================================================
 
 vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
-                    bool isHighlighted, float bass, float mids, float treble, float overall,
+                    bool isHighlighted, float bass, float mids, float treble,
                     bool hasAudio) {
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
@@ -449,7 +426,7 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
             vec2 iLogoUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, bassEnv, logoPulse,
+                                              logoScale, logoPulse,
                                               logoSizeMin, logoSizeMax, instScale);
 
             if (iLogoUV.x < -0.3 || iLogoUV.x > 1.3 ||
@@ -919,7 +896,6 @@ vec4 compositeArchLabels(vec4 color, vec2 fragCoord,
     // ── Text body ────────────────────────────────────────────────
     if (labels.a > 0.01) {
         // Sharp CRT scan lines
-        float scanFreq = iResolution.y * 0.5;
         float scanlines = 0.8 + 0.2 * step(0.5, fract(fragCoord.y / 2.0));
 
         // Edge detection for glow outline
@@ -982,14 +958,13 @@ vec4 pImage(vec2 fragCoord) {
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
     float treble  = getTrebleSoft();
-    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
         vec4 zoneColor = renderArchZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio);
+            bass, mids, treble, hasAudio);
         color = blendOver(color, zoneColor);
     }
 

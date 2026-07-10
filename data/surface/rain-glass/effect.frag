@@ -20,7 +20,6 @@
 // daemon host ticks the item; the compositor detects the linked iTime
 // uniform itself and repaints the window continuously while decorated.
 
-#include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
 

@@ -16,7 +16,6 @@
 // handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
 // the pane stays solid and translucency reveals the frosted backdrop.
 
-#include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
 

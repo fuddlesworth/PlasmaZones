@@ -26,12 +26,11 @@ return pluau.algorithm {
 
         local minHeights = pluau.extractMinHeights(ctx.minSizes, count)
         local rowHeights = pluau.distributeWithOptionalMins(area.height, count, gap, minHeights)
+        local rowYs = pluau.cumulativeOffsets(area.y, rowHeights, gap)
 
         local zones = {}
-        local currentY = area.y
         for i = 1, count do
-            zones[i] = { x = area.x, y = currentY, width = area.width, height = rowHeights[i] }
-            currentY = currentY + rowHeights[i] + gap
+            zones[i] = { x = area.x, y = rowYs[i], width = area.width, height = rowHeights[i] }
         end
         return zones
     end,

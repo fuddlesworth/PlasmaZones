@@ -77,6 +77,7 @@ private Q_SLOTS:
     void guardArea();
     void stripLayoutEvenAndDegenerate();
     void resizeRatio();
+    void masterStackResize();
     void clampBoundsAndNaN();
     void minSizeAt();
     void gridShape();
@@ -165,6 +166,87 @@ void TestPluauHelpers::resizeRatio()
     QVERIFY(!r.isEmpty());
     QCOMPARE(r.value(QStringLiteral("grow")).toDouble(), 0.6); // 120 * 0.5 / 100
     QCOMPARE(r.value(QStringLiteral("shrink")).toDouble(), 0.4); // 1 - 120 * 0.5 / 100
+}
+
+void TestPluauHelpers::masterStackResize()
+{
+    // Shared master/stack resize glue. horizontal=false is the width axis (right
+    // grows the master, left shrinks the stack); horizontal=true is the height
+    // axis (bottom grows, top shrinks). Guards: count<=masterCount, zero old
+    // dimension, or out-of-range oldRatio all return nil.
+    const QByteArray body = R"LUA(
+        return { run = function()
+            local function ev(idx, oldRect, newRect, edges)
+                return { index = idx, oldRect = oldRect, newRect = newRect, edges = edges }
+            end
+            local noEdge = { left = false, right = false, top = false, bottom = false }
+            local function edge(k)
+                local e = { left = false, right = false, top = false, bottom = false }
+                e[k] = true
+                return e
+            end
+            -- Vertical seam (width axis): master (idx 0) right edge grows.
+            local vGrow = pluau.masterStackResize(
+                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
+                ev(0, { width = 100, height = 100 }, { width = 120, height = 100 }, edge("right")),
+                false)
+            -- Vertical seam: stack (idx 1) left edge shrinks.
+            local vShrink = pluau.masterStackResize(
+                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
+                ev(1, { width = 100, height = 100 }, { width = 120, height = 100 }, edge("left")),
+                false)
+            -- Horizontal seam (height axis): master bottom edge grows.
+            local hGrow = pluau.masterStackResize(
+                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
+                ev(0, { width = 100, height = 100 }, { width = 100, height = 120 }, edge("bottom")),
+                true)
+            -- Horizontal seam: stack top edge shrinks.
+            local hShrink = pluau.masterStackResize(
+                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
+                ev(1, { width = 100, height = 100 }, { width = 100, height = 120 }, edge("top")),
+                true)
+            -- count <= masterCount → no seam → nil.
+            local single = pluau.masterStackResize(
+                { windowCount = 1, masterCount = 1, splitRatio = 0.5 },
+                ev(0, { width = 100, height = 100 }, { width = 120, height = 100 }, edge("right")),
+                false)
+            -- Out-of-range oldRatio (>= 1) → nil.
+            local badRatio = pluau.masterStackResize(
+                { windowCount = 3, masterCount = 1, splitRatio = 1.0 },
+                ev(0, { width = 100, height = 100 }, { width = 120, height = 100 }, edge("right")),
+                false)
+            -- Zero old dimension → nil.
+            local zeroDim = pluau.masterStackResize(
+                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
+                ev(0, { width = 0, height = 100 }, { width = 120, height = 100 }, edge("right")),
+                false)
+            -- Correct index but wrong edge → nil.
+            local wrongEdge = pluau.masterStackResize(
+                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
+                ev(0, { width = 100, height = 100 }, { width = 120, height = 100 }, noEdge),
+                false)
+            return {
+                vGrow = vGrow and vGrow.splitRatio or -1,
+                vShrink = vShrink and vShrink.splitRatio or -1,
+                hGrow = hGrow and hGrow.splitRatio or -1,
+                hShrink = hShrink and hShrink.splitRatio or -1,
+                singleIsNil = single == nil,
+                badRatioIsNil = badRatio == nil,
+                zeroDimIsNil = zeroDim == nil,
+                wrongEdgeIsNil = wrongEdge == nil,
+            }
+        end }
+    )LUA";
+    const QVariantMap r = run(body).toMap();
+    QVERIFY(!r.isEmpty());
+    QCOMPARE(r.value(QStringLiteral("vGrow")).toDouble(), 0.6); // 120 * 0.5 / 100
+    QCOMPARE(r.value(QStringLiteral("vShrink")).toDouble(), 0.4); // 1 - 120 * 0.5 / 100
+    QCOMPARE(r.value(QStringLiteral("hGrow")).toDouble(), 0.6); // height axis, same closed form
+    QCOMPARE(r.value(QStringLiteral("hShrink")).toDouble(), 0.4);
+    QCOMPARE(r.value(QStringLiteral("singleIsNil")).toBool(), true);
+    QCOMPARE(r.value(QStringLiteral("badRatioIsNil")).toBool(), true);
+    QCOMPARE(r.value(QStringLiteral("zeroDimIsNil")).toBool(), true);
+    QCOMPARE(r.value(QStringLiteral("wrongEdgeIsNil")).toBool(), true);
 }
 
 void TestPluauHelpers::clampBoundsAndNaN()

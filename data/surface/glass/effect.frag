@@ -30,7 +30,6 @@
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the pane degrades to a faint tint slab with the same corner rounding.
 
-#include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
 #include <surface_color.glsl>

@@ -1063,6 +1063,42 @@ local function resizeRatioShrink(newSize, oldSize, oldRatio)
     return 1 - newSize * (1 - oldRatio) / oldSize
 end
 
+-- Shared onWindowResized glue for master/stack layouts. The master/stack seam
+-- maps to the split ratio: dragging a master window's trailing edge grows the
+-- ratio, a stack window's leading edge shrinks it. `horizontal` selects the axis
+-- and the seam edges — false is the vertical seam (width axis; right grows, left
+-- shrinks, as in master-stack), true is the horizontal seam (height axis; bottom
+-- grows, top shrinks, as in wide). Returns a { splitRatio = ... } control table
+-- for the engine to apply locally, or nil when there is no seam or the drag is
+-- not on the boundary edge. The gap cancels in the fraction, so the new ratio is
+-- reconstructed self-referentially from the old size.
+local function masterStackResize(state, resize, horizontal)
+    local count = state.windowCount
+    local masterCount = state.masterCount or 1
+    if count <= masterCount then return nil end -- no stack → no seam
+    local oldRatio = state.splitRatio
+    local old, new, edges, idx = resize.oldRect, resize.newRect, resize.edges, resize.index
+    local oldDim, newDim, growEdge, shrinkEdge
+    if horizontal then
+        oldDim, newDim = old.height, new.height
+        growEdge, shrinkEdge = edges.bottom, edges.top
+    else
+        oldDim, newDim = old.width, new.width
+        growEdge, shrinkEdge = edges.right, edges.left
+    end
+    if oldDim <= 0 or oldRatio <= 0 or oldRatio >= 1 then return nil end
+    if idx < masterCount then
+        if growEdge then
+            return { splitRatio = resizeRatioGrow(newDim, oldDim, oldRatio) }
+        end
+    else
+        if shrinkEdge then
+            return { splitRatio = resizeRatioShrink(newDim, oldDim, oldRatio) }
+        end
+    end
+    return nil
+end
+
 -- General horizontal/vertical strip of `count` cells filling a panel, appended to
 -- `zones`. When the gaps alone exceed the strip length it degrades to equal,
 -- overlapping fills; otherwise cells are distributed evenly (gap-aware).
@@ -1148,5 +1184,6 @@ pluau = {
     minSizeAt = minSizeAt,
     resizeRatioGrow = resizeRatioGrow,
     resizeRatioShrink = resizeRatioShrink,
+    masterStackResize = masterStackResize,
     stripLayout = stripLayout,
 }
