@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-FileCopyrightText: 2021-2024 Simon Schneegans (Burn-My-Windows)
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Shared easing curves for animation shaders. The bodies are byte-equivalent
-// ports of Burn-My-Windows' common.glsl easings, hosted here so the per-shader
+// Shared easing curves for animation shaders, hosted here so the per-shader
 // copies (bmw_compat.glsl, tv, pixel-wipe, aura-glow) collapse to one
-// definition. These four curves are plain polynomial maps carrying no
-// BMW-specific derivation, so this file is LGPL-2.1-or-later and may be
-// included from LGPL shaders; bmw_compat.glsl (GPL) also includes it, which
-// is fine — a GPL work may include an LGPL header.
+// definition. These four curves are the canonical Robert Penner polynomial
+// maps (the same forms Burn-My-Windows uses) and carry no BMW-specific
+// derivation — the same rationale as noise.glsl's hash12 — so this file is
+// LGPL-2.1-or-later and may be included from LGPL shaders; bmw_compat.glsl
+// (GPL) also includes it, which is fine — a GPL work may include an LGPL
+// header.
 //
 // Include AFTER the animation uniform block (the harness prepends
 // <animation_uniforms.glsl>); these functions reference no uniforms, so the
