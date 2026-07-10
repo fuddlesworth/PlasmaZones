@@ -26,6 +26,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Gaps use one shared model**: snapping zone padding and tiling inner gap are now the same setting. Set per-monitor gaps on the Appearance Windows page where a monitor should differ ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **The action and condition pickers are reorganized**: both are alphabetized, and the action picker groups the context conditions above the window conditions with a divider ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699)).
 - **Old per-mode appearance and gap settings are unified on upgrade**: the snapping and tiling border, title bar, and gap values you had customized collapse into shared Window and Gap settings, and per-monitor gaps move into per-monitor settings. A default configuration is unchanged ([#699](https://github.com/fuddlesworth/PlasmaZones/pull/699), [#730](https://github.com/fuddlesworth/PlasmaZones/pull/730)).
+- **Dragging a window is its own animation page**: drag animations are physics driven and follow the pointer while you hold the window, so they use their own shader type instead of the crossfade shaders. The new Window Dragging page under Animations → Motion holds the event, its picker offers only drag shaders such as Wobbly Move, and it no longer takes the "All Windows" shader from the Window Motion page. If you had Wobbly Move set on "All Windows", pick it again on the new page ([#756](https://github.com/fuddlesworth/PlasmaZones/pull/756)).
+
+### Removed
+
+- **The Resized animation event**: an interactive resize repaints the window live while you drag its edge, so there is no before and after moment for an animation to play. The event showed a default that never ran and did nothing useful when configured. Size changes from snapping, layout switches, and maximizing keep their animations through those events ([#756](https://github.com/fuddlesworth/PlasmaZones/pull/756)).
 
 ### Fixed
 
