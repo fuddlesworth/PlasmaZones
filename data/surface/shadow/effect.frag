@@ -27,7 +27,8 @@ vec4 pSurface(vec2 uv) {
     // evaluating the fragment against the shifted frame moves the whole
     // shadow body down/right, the classic dropped look.
     vec2 offset = vec2(p_offsetX, p_offsetY) * uSurfaceScale;
-    vec2 p = surfacePixel(uv) - offset;
+    vec2 realPx = surfacePixel(uv);
+    vec2 p = realPx - offset;
     FrameSDF fs = frameSdf(p, p_cornerRadius * uSurfaceScale);
 
     // Same exp(-4t²) reach falloff as the glow pack, but the edge feather is
@@ -36,7 +37,7 @@ vec4 pSurface(vec2 uv) {
     // a hard rectangle. Confined to the transparent margin and only mildly
     // focus-softened (a real shadow persists unfocused) — the shared halo.
     float reach = max(p_shadowSize * uSurfaceScale, 1.0);
-    float body = haloFalloff(fs.d, reach, surfacePixel(uv), base.a, p_shadowStrength, 0.65);
+    float body = haloFalloff(fs.d, reach, realPx, base.a, p_shadowStrength, 0.65);
 
     // Premultiplied over: the dark veil fills the margin under its own
     // alpha; with the default black colour the rgb term contributes nothing

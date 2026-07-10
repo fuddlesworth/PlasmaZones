@@ -461,8 +461,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
         // Gentle rotation
         float rotAng = timeSin(0.12) * 0.04;
         vec2 lp = uv - vec2(0.5);
-        uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-                   lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
+        uv = lp * rot(rotAng) + vec2(0.5);
         float breathe = 1.0 + timeSin(0.6) * 0.02;
         float springT = fract(time * 1.2);
         float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
@@ -488,8 +487,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     // Per-instance rotation -- snowflake can rotate freely (6-fold symmetric)
     float rotAng = timeSin(0.1 + float(idx) * 0.025, h4 * TAU) * 0.08;
     vec2 lp = uv - vec2(0.5);
-    uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-               lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
+    uv = lp * rot(rotAng) + vec2(0.5);
 
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
     float breathe = 1.0 + timeSin(0.5 + float(idx) * 0.11, h1 * TAU) * 0.02;

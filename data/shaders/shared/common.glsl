@@ -271,7 +271,7 @@ float angularNoise(float angle, float freq, float seed) {
 }
 
 // Rotated fractal Brownian motion over value noise. gain is the per-octave
-// amplitude decay; the 2-arg-less overload uses the 0.55 shared by the drift
+// amplitude decay; the gain-less overload uses the 0.55 shared by the drift
 // packs. Loop caps at 8 octaves so a bad `octaves` can't run unbounded.
 float fbm(vec2 uv, int octaves, float rotAngle, float gain) {
     float value = 0.0;

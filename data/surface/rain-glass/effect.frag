@@ -24,6 +24,11 @@
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
 
+// Droplet cell shape: cells ~2.5x taller than wide so each drop has a real
+// run and trails read vertically. Shared by dropLayer and the per-cell
+// culling in pSurface.
+const vec2 kRainCellDim = vec2(1.0, 2.5);
+
 // One layer of falling droplets on a tall cell grid. `st` is glass-space
 // (device px / cell size, y down). Returns (offset.xy, wetness): offset
 // points from the fragment toward the droplet centre (in st units),
@@ -36,9 +41,7 @@
 // the position from the cell coordinate alone, which only scrolled the
 // whole field a few px/s and read as a still image.
 vec3 dropLayer(vec2 st, float t) {
-    // Cells ~2.5x taller than wide so each drop has a real run and trails
-    // read vertically.
-    vec2 cellDim = vec2(1.0, 2.5);
+    vec2 cellDim = kRainCellDim;
     vec2 grid = st / cellDim;
     vec2 id = floor(grid);
     vec2 f = fract(grid); // 0..1 in-cell, y = 0 at the top
@@ -81,12 +84,11 @@ vec4 pSurface(vec2 uv) {
 
     // Two falling layers at offset scales/speeds plus one static bead layer;
     // rainAmount thins the field by culling whole cells on a hash.
-    const vec2 kCellDim = vec2(1.0, 2.5); // keep in sync with dropLayer
     float amount = clamp(p_rainAmount, 0.0, 1.0);
     vec3 layer1 = dropLayer(st, t);
     vec3 layer2 = dropLayer(st * 1.6 + 4.3, t * 1.35);
-    layer1 *= step(1.0 - amount, hash13(floor(st / kCellDim) + 2.7));
-    layer2 *= step(1.0 - amount, hash13(floor((st * 1.6 + 4.3) / kCellDim) + 8.1));
+    layer1 *= step(1.0 - amount, hash13(floor(st / kRainCellDim) + 2.7));
+    layer2 *= step(1.0 - amount, hash13(floor((st * 1.6 + 4.3) / kRainCellDim) + 8.1));
 
     // Static micro-beads: tiny fixed droplets that never move, filling the
     // pane so dry stretches still read as wet glass.

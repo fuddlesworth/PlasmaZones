@@ -7,10 +7,11 @@
 //   #include <logo-drift.glsl>
 //
 // Holds the byte-identical building blocks shared across the drift packs: the
-// simplex-noise stack (arch, endeavouros), Catmull-Rom interpolation (arch,
-// endeavouros), and the neon flicker envelope (fedora, neon). The per-pack
-// instance placement (computeInstanceUV) and the per-zone composite loops stay
-// in each pack because they diverge algorithmically.
+// simplex-noise stack (arch, endeavouros), Catmull-Rom interpolation plus the
+// logoPaletteCR/paletteSweep palette sweep built on it (arch, endeavouros),
+// and the neon flicker envelope (fedora, neon). The per-pack instance
+// placement (computeInstanceUV) and the per-zone composite loops stay in each
+// pack because they diverge algorithmically.
 
 #ifndef PLASMAZONES_LOGO_DRIFT_GLSL
 #define PLASMAZONES_LOGO_DRIFT_GLSL
@@ -79,6 +80,29 @@ float neonFlicker(float time, float seed, float trebleEnv) {
     float buzz = step(0.97, noise2D(vec2(time * 4.0, seed * 7.0))) * 0.2;
     float trebleBuzz = trebleEnv * step(0.93, noise2D(vec2(time * 5.0, seed * 13.0))) * 0.25;
     return clamp(base - buzz - trebleBuzz, 0.6, 1.0);
+}
+
+// ─── Catmull-Rom palette sweep (arch, endeavouros) ───────────────────────────
+// Smooth wrap-around sweep through primary -> secondary -> accent -> glow ->
+// primary via catmullRom, plus the audio-shifted convenience wrapper.
+vec3 logoPaletteCR(float t, vec3 primary, vec3 secondary, vec3 accent, vec3 glow) {
+    t = fract(t);
+    float seg = t * 4.0;
+    int idx = int(seg);
+    float f = fract(seg);
+    vec3 colors[5] = vec3[5](primary, secondary, accent, glow, primary);
+    int i0 = max(idx - 1, 0);
+    int i1 = idx;
+    int i2 = min(idx + 1, 4);
+    int i3 = min(idx + 2, 4);
+    return clamp(catmullRom(colors[i0], colors[i1], colors[i2], colors[i3], f), 0.0, 1.0);
+}
+
+vec3 paletteSweep(float t, vec3 primary, vec3 secondary, vec3 accent, vec3 glow,
+                  float audioShift) {
+    // Subtle hue shift from audio stays within the pack's color family
+    float shifted = t + audioShift * 0.08;
+    return logoPaletteCR(shifted, primary, secondary, accent, glow);
 }
 
 #endif // PLASMAZONES_LOGO_DRIFT_GLSL

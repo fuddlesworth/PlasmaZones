@@ -252,8 +252,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
         uv -= drift;
         float rotAng = timeSin(0.15) * logoSpin;
         vec2 lp = uv - vec2(0.5);
-        uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-                   lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
+        uv = lp * rot(rotAng) + vec2(0.5);
         float breathe = 1.0 + timeSin(0.8) * 0.015;
         float springT = fract(time * 1.5);
         float spring = 1.0 + bassEnv * 0.1 * exp(-springT * 6.0) * cos(springT * 20.0);
@@ -279,8 +278,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 
     float rotAng = timeSin(0.1 + float(idx) * 0.027, h4 * TAU) * logoSpin;
     vec2 lp = uv - vec2(0.5);
-    uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
-               lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
+    uv = lp * rot(rotAng) + vec2(0.5);
 
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
     float breathe = 1.0 + timeSin(0.6 + float(idx) * 0.13, h1 * TAU) * 0.015;

@@ -37,27 +37,8 @@ const vec3 EOS_GLOW   = vec3(0.565, 0.506, 0.733); // Lavender glow
 const vec2 LOGO_CENTER = vec2(0.583, 0.52);
 
 
-// simplex2D / simplexFBM (and simplexMod289/Permute) and catmullRom()
-// come from logo-drift.glsl.
-
-vec3 eosPaletteCR(float t, vec3 primary, vec3 secondary, vec3 accent, vec3 glow) {
-    t = fract(t);
-    float seg = t * 4.0;
-    int idx = int(seg);
-    float f = fract(seg);
-    vec3 colors[5] = vec3[5](primary, secondary, accent, glow, primary);
-    int i0 = max(idx - 1, 0);
-    int i1 = idx;
-    int i2 = min(idx + 1, 4);
-    int i3 = min(idx + 2, 4);
-    return clamp(catmullRom(colors[i0], colors[i1], colors[i2], colors[i3], f), 0.0, 1.0);
-}
-
-vec3 paletteSweep(float t, vec3 primary, vec3 secondary, vec3 accent, vec3 glow,
-                  float audioShift) {
-    float shifted = t + audioShift * 0.08;
-    return eosPaletteCR(shifted, primary, secondary, accent, glow);
-}
+// simplex2D / simplexFBM (and simplexMod289/Permute), catmullRom(),
+// logoPaletteCR(), and paletteSweep() come from logo-drift.glsl.
 
 // =========================================================================
 //  ENDEAVOUROS LOGO -- 3 overlapping sail polygons
