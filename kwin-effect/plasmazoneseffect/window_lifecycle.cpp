@@ -36,6 +36,18 @@ namespace {
 // round-trip, while a mis-suppressed floating window only ever waits this
 // long — within the envelope of KWin's own window-open fade.
 constexpr qint64 kRestoreSuppressDeadlineMs = 250;
+
+// Maximize-morph landing discriminator: has the frame SIZE actually moved
+// away from the departure rect? A maximize/restore always changes the frame
+// size, while a position-only change can apply early server-side, so the
+// size delta (with a 1px tolerance for fractional-scale residue) is what
+// distinguishes "the jump landed" from "still waiting on the client's
+// commit". Shared by the state-changed arming site and the deferred
+// windowFrameGeometryChanged completion so the threshold has one home.
+bool maximizeSizeLanded(const QRectF& frame, const QRectF& departureFrame)
+{
+    return qAbs(frame.width() - departureFrame.width()) > 1.0 || qAbs(frame.height() - departureFrame.height()) > 1.0;
+}
 } // namespace
 
 // Withhold a freshly-opened window from compositing until its snap-restore
@@ -872,13 +884,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // guarantees windowMaximizedStateAboutToChange fires before the
     // maximize/restore geometry change (effectwindow.h documents the
     // ordering, and the stock maximize script relies on it the same way),
-    // so frameGeometry() here is the rect the window is leaving. By the
-    // time windowMaximizedStateChanged fires the frame has already jumped
-    // to the destination, so this is the only point the old rect can be
-    // read. Latest-wins per window: an axis-only intermediate flip
-    // overwrites the entry, which is correct — the morph should depart
-    // from wherever the window actually was just before the edge we act
-    // on. Erased on windowDeleted alongside m_lastFullyMaximized.
+    // so frameGeometry() here is the rect the window is leaving — the only
+    // point the old rect can be read. The state-changed edge below may fire
+    // with the destination geometry already applied OR still pending the
+    // client's commit (see PendingMaximizeMorph); either way this capture
+    // is what anchors the morph's departure. Latest-wins per window: an
+    // axis-only intermediate flip overwrites the entry, which is correct —
+    // the morph should depart from wherever the window actually was just
+    // before the edge we act on. Erased on windowDeleted alongside
+    // m_lastFullyMaximized.
     connect(w, &KWin::EffectWindow::windowMaximizedStateAboutToChange, this,
             [this](KWin::EffectWindow* window, bool, bool) {
                 if (window) {
@@ -934,15 +948,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // KWin does NOT guarantee the maximize/restore geometry has
                 // been applied when this state signal fires — see the
                 // PendingMaximizeMorph docstring for the observed decoupling.
-                // Only install here when the size has actually changed;
-                // otherwise arm the pending entry and let the size-delivering
-                // windowFrameGeometryChanged below complete the install at the
-                // visible jump. A maximize/restore always changes the frame
-                // SIZE (position alone can apply early server-side), so the
-                // size delta is the landing discriminator.
-                const bool sizeLanded = qAbs(newFrame.width() - preFrame.width()) > 1.0
-                    || qAbs(newFrame.height() - preFrame.height()) > 1.0;
-                if (sizeLanded) {
+                // Only install here when the size has actually changed
+                // (maximizeSizeLanded above); otherwise arm the pending entry
+                // and let the size-delivering windowFrameGeometryChanged below
+                // complete the install at the visible jump.
+                if (maximizeSizeLanded(newFrame, preFrame)) {
                     m_shaderManager.m_pendingMaximizeMorph.remove(window);
                     beginMaximizeShaderMorph(window, preFrame);
                 } else {
@@ -1001,10 +1011,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 if (const auto pendingIt = m_shaderManager.m_pendingMaximizeMorph.constFind(safeW.data());
                     pendingIt != m_shaderManager.m_pendingMaximizeMorph.constEnd()) {
                     const auto pending = pendingIt.value();
-                    const QRectF liveFrame = safeW->frameGeometry();
-                    const bool sizeLanded = qAbs(liveFrame.width() - pending.departureFrame.width()) > 1.0
-                        || qAbs(liveFrame.height() - pending.departureFrame.height()) > 1.0;
-                    if (sizeLanded) {
+                    if (maximizeSizeLanded(safeW->frameGeometry(), pending.departureFrame)) {
                         m_shaderManager.m_pendingMaximizeMorph.remove(safeW.data());
                         constexpr qint64 kPendingMaximizeMorphDeadlineMs = 1000;
                         const bool stale =
