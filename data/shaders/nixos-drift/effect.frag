@@ -45,23 +45,7 @@ const vec3 NIX_SKY      = vec3(0.412, 0.604, 0.843);   // #699AD7 -- light gradi
 const vec3 NIX_GLOW     = vec3(0.494, 0.729, 0.894);   // #7EBAE4 -- light gradient mid
 
 
-// -- SDF primitives -----------------------------------------------
-
-float sdSegment(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a, ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return length(pa - ba * h);
-}
-
-
-// -- Palette function ---------------------------------------------
-
-vec3 nixPalette(float t, vec3 primary, vec3 secondary, vec3 accent) {
-    t = fract(t);
-    if (t < 0.33)      return mix(primary, secondary, t * 3.0);
-    else if (t < 0.66) return mix(secondary, accent, (t - 0.33) * 3.0);
-    else               return mix(accent, primary, (t - 0.66) * 3.0);
-}
+// sdSegment() and the tri-stop palette (triStopPalette) come from common.glsl.
 
 
 // =================================================================
@@ -119,11 +103,7 @@ float sdPolygonArm(vec2 p) {
 }
 
 
-// -- Rotate a 2D point by angle ----------------------------------
-vec2 rot2D(vec2 p, float a) {
-    float c = cos(a), s = sin(a);
-    return vec2(p.x * c - p.y * s, p.x * s + p.y * c);
-}
+// Rotation matrix rot(a) comes from common.glsl; rot2D(p, a) was p * rot(a).
 
 
 // -- Full snowflake SDF with facet tracking -----------------------
@@ -138,7 +118,7 @@ vec2 snowflakeSDF(vec2 p) {
 
     for (int i = 0; i < 6; i++) {
         float angle = float(i) * TAU / 6.0;
-        vec2 rp = rot2D(p, -angle);
+        vec2 rp = p * rot(-angle);
         float d = sdPolygonArm(rp);
         if (d < bestDist) {
             bestDist = d;
@@ -222,7 +202,7 @@ vec3 hexCircuitTraces(vec2 uv, float time, float bassEnv, float midsEnv, float t
 
         // Color: mids shift through palette
         float colorT = edgeHash + midsEnv * 0.3 + time * 0.05;
-        vec3 pColor = nixPalette(colorT, palPrimary, palSecondary, palAccent);
+        vec3 pColor = triStopPalette(colorT, palPrimary, palSecondary, palAccent);
 
         // Combine: trace is visible where we are near an edge AND pulse is passing
         float traceMask = onEdge * pulse;
@@ -237,7 +217,7 @@ vec3 hexCircuitTraces(vec2 uv, float time, float bassEnv, float midsEnv, float t
     float centerDist = length(gv);
     float cellGlow = smoothstep(0.3, 0.0, centerDist) * 0.03;
     float cellHash = hash21(id);
-    col += nixPalette(cellHash + time * 0.02, palPrimary, palSecondary, palAccent) * cellGlow;
+    col += triStopPalette(cellHash + time * 0.02, palPrimary, palSecondary, palAccent) * cellGlow;
 
     return col;
 }
@@ -396,8 +376,8 @@ float armEdgeTrace(vec2 p, float time, int armIdx, float trebleEnv, float bassEn
         int nextIdx = (segIdx + 1) % ARM_N;
         float segFract = fract(pathT);
 
-        vec2 v0 = rot2D(ARM[segIdx], armAngle);
-        vec2 v1 = rot2D(ARM[nextIdx], armAngle);
+        vec2 v0 = ARM[segIdx] * rot(armAngle);
+        vec2 v1 = ARM[nextIdx] * rot(armAngle);
         vec2 packetPos = mix(v0, v1, segFract);
 
         float dist = length(p - packetPos);
@@ -644,7 +624,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             // Cell interior color: each cell has a unique hue-phase
             float cellHash = hash21(closestId);
             float cellPhase = cellHash + time * 0.04 + midsEnv * 0.4;
-            vec3 cellCol = nixPalette(cellPhase, palPrimary, palSecondary, palAccent);
+            vec3 cellCol = triStopPalette(cellPhase, palPrimary, palSecondary, palAccent);
 
             // Cell brightness — subtle base, ALL cells react to bass
             float cellBright = 0.08 + 0.06 * sin(cellHash * TAU * 5.0 + time * 0.7);
@@ -694,7 +674,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
             // Snowflake can spin freely (it is 6-fold symmetric)
             float wobble = time * logoSpin * 0.5 + float(li) * 1.047;
-            vec2 rotP = rot2D(logoP, wobble);
+            vec2 rotP = logoP * rot(wobble);
 
             float ringBreath = 1.0 + midsEnv * 0.3;
 
@@ -746,7 +726,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                 float shockAngle = atan(logoP.y, logoP.x);
                 float hexMod = 0.8 + 0.2 * cos(shockAngle * 3.0);
                 shockMask *= hexMod;
-                vec3 shockCol = nixPalette(iShockRadius * 3.0 + time * 0.2 + float(li),
+                vec3 shockCol = triStopPalette(iShockRadius * 3.0 + time * 0.2 + float(li),
                                             palGlow, palAccent, palSecondary);
                 outerCol += shockCol * shockMask * 0.45 * depthFactor;
             }
@@ -799,7 +779,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                 float auroraWave = sin(armT * 8.0 - time * 2.5 + armPhase);
                 auroraWave = auroraWave * 0.5 + 0.5;
                 float auroraStr = auroraWave * 0.35 * (0.5 + midsEnv * 0.8);
-                vec3 auroraCol = nixPalette(armT + time * 0.1 + armPhase * 0.3,
+                vec3 auroraCol = triStopPalette(armT + time * 0.1 + armPhase * 0.3,
                                              palPrimary, palAccent, palGlow);
                 innerCol += auroraCol * auroraStr;
 
@@ -835,7 +815,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                     float traceGlow = armEdgeTrace(rotP, time + float(li) * 5.0,
                                                     ai, trebleEnv, bassEnv);
                     float traceMask = smoothstep(0.04, -0.005, fDist);
-                    vec3 traceCol = nixPalette(float(ai) / 6.0 + time * 0.1,
+                    vec3 traceCol = triStopPalette(float(ai) / 6.0 + time * 0.1,
                                                 palAccent, palGlow, palSecondary);
                     logoCol += traceCol * traceGlow * traceMask * 0.5 * depthFactor;
                 }
@@ -872,7 +852,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
                 // Each segment colored by hash — barcode pattern
                 float segHash = hash21(vec2(ringIdx, segIdx + float(li) * 7.0));
-                vec3 segCol = nixPalette(segHash + time * 0.03,
+                vec3 segCol = triStopPalette(segHash + time * 0.03,
                                           palPrimary, palAccent, palGlow);
 
                 // Bass verification sweep: ring lights up green-white in sequence
@@ -968,7 +948,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                     float flashStr = building * bassEnv * 0.8;
 
                     // Color varies by generation depth
-                    vec3 bCol = nixPalette(rh + fg * 0.33 + time * 0.04,
+                    vec3 bCol = triStopPalette(rh + fg * 0.33 + time * 0.04,
                                             palPrimary, palSecondary, palAccent);
                     vec3 nodeCol = mix(palAccent, palGlow, rh);
 
@@ -987,7 +967,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                     float node2Dist = length(centeredUV - endPos2);
                     float node2Glow = smoothstep(0.035, 0.01, node2Dist) * built;
 
-                    vec3 b2Col = nixPalette(rh2 + fg * 0.33, palSecondary, palAccent, palGlow);
+                    vec3 b2Col = triStopPalette(rh2 + fg * 0.33, palSecondary, palAccent, palGlow);
                     treeColor += b2Col * branch2Glow * 0.2
                                + nodeCol * node2Glow * 0.4;
 
@@ -1059,7 +1039,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             hexE = max(hexE, abs(-hgv.x * 0.5 + hgv.y * 0.866025));
             float cellMask = smoothstep(0.5, 0.35, hexE);
 
-            vec3 cellColor = nixPalette(cellPhase + time * 0.05, palPrimary, palAccent, palGlow);
+            vec3 cellColor = triStopPalette(cellPhase + time * 0.05, palPrimary, palAccent, palGlow);
             col += cellColor * cellBright * borderMask * cellMask;
         }
 
@@ -1198,7 +1178,7 @@ vec4 compositeNixosLabels(vec4 color, vec2 fragCoord,
 
         // NixOS palette cycling
         float t = uv.x * 1.5 + time * 0.06;
-        vec3 haloCol = nixPalette(t, palPrimary, palAccent, palGlow);
+        vec3 haloCol = triStopPalette(t, palPrimary, palAccent, palGlow);
 
         // Bass brightens halo
         float pulse = 0.85 + 0.15 * sin(time * 2.5);
@@ -1236,7 +1216,7 @@ vec4 compositeNixosLabels(vec4 color, vec2 fragCoord,
                 float ray = (primaryRay + secRay) * growEnv;
 
                 // Color shifts per ray
-                vec3 rCol = nixPalette(float(fi) / 6.0 + time * 0.04,
+                vec3 rCol = triStopPalette(float(fi) / 6.0 + time * 0.04,
                                         palAccent, palGlow, palSecondary);
                 frostCol += rCol * ray;
                 frostStr += ray;

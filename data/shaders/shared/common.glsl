@@ -135,6 +135,21 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
 
+// 2D rotation matrix. mat2 is column-major, so rot(a) * p rotates a column
+// vector by a; p * rot(a) applies the transpose (rotation by -a), which is the
+// form the *drift fbm and the pass-shader flow warps rely on.
+mat2 rot(float a) {
+    float c = cos(a), s = sin(a);
+    return mat2(c, -s, s, c);
+}
+
+// Signed distance from point p to the segment a→b.
+float sdSegment(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h);
+}
+
 // Pseudo-random: integer-based hashes that produce identical results on
 // SPIR-V (Vulkan) and GLSL (OpenGL). The sin()-based hashes produce different
 // values on different shader compilers due to transcendental function precision
@@ -252,6 +267,39 @@ float noise2D(vec2 p) {
 float angularNoise(float angle, float freq, float seed) {
     vec2 circlePos = vec2(cos(angle), sin(angle)) * freq;
     return noise2D(circlePos + seed);
+}
+
+// Rotated fractal Brownian motion over value noise. gain is the per-octave
+// amplitude decay; the 2-arg-less overload uses the 0.55 shared by the drift
+// packs. Loop caps at 8 octaves so a bad `octaves` can't run unbounded.
+float fbm(vec2 uv, int octaves, float rotAngle, float gain) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    mat2 m = rot(rotAngle);
+    for (int i = 0; i < octaves && i < 8; i++) {
+        value += amplitude * noise2D(uv);
+        uv = m * uv * 2.0 + vec2(180.0);
+        amplitude *= gain;
+    }
+    return value;
+}
+float fbm(vec2 uv, int octaves, float rotAngle) {
+    return fbm(uv, octaves, rotAngle, 0.55);
+}
+
+// ─── Palettes ────────────────────────────────────────────────────────────────
+
+// Tri-stop hue cycle: three colors around a loop; fract(t) picks the position.
+vec3 triStopPalette(float t, vec3 primary, vec3 secondary, vec3 accent) {
+    t = fract(t);
+    if (t < 0.33)      return mix(primary, secondary, t * 3.0);
+    else if (t < 0.66) return mix(secondary, accent, (t - 0.33) * 3.0);
+    else               return mix(accent, primary, (t - 0.66) * 3.0);
+}
+
+// Inigo Quilez cosine palette: a + b * cos(TAU * (c * t + d)).
+vec3 iqPalette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
+    return a + b * cos(TAU * (c * t + d));
 }
 
 // ─── Highlight / vitality helpers ────────────────────────────────────────

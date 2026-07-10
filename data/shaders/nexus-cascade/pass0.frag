@@ -15,12 +15,6 @@ layout(location = 0) out vec4 fragColor;
 #include <audio.glsl>
 
 
-// Rotate uv around center by angle (radians)
-vec2 rotate2d(vec2 p, float a) {
-    float c = cos(a), s = sin(a);
-    return vec2(p.x * c - p.y * s, p.x * s + p.y * c);
-}
-
 float plasma(vec2 uv, float t) {
     float v = 0.0;
     float px = uv.x + sin(t * 0.7) * 0.3;
@@ -80,8 +74,8 @@ void main() {
         : 0.0;
     float swirlA = baseSwirlA + branchWave;
     float swirlB = baseSwirlB - branchWave * 0.6;
-    vec2 uvPlasma = rotate2d(centered, swirlA) + 0.5;
-    vec2 uvFlow = rotate2d(centered, swirlB) + 0.5;
+    vec2 uvPlasma = centered * rot(swirlA) + 0.5;
+    vec2 uvFlow = centered * rot(swirlB) + 0.5;
 
     float p = plasma(uvPlasma * scale, t);
     float f = flowNoise(uvFlow * scale * 2.0, t);

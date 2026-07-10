@@ -30,14 +30,7 @@ const vec3 SUSE_GREEN = vec3(0.451, 0.729, 0.145);   // #73ba25
 const vec3 SUSE_TURQ  = vec3(0.208, 0.725, 0.671);   // #35b9ab
 const vec3 SUSE_GLOW  = vec3(0.588, 0.796, 0.361);   // #96cb5c
 
-// ── Palette interpolation ────────────────────────────────────
-
-vec3 susePalette(float t, vec3 primary, vec3 secondary, vec3 accent) {
-    t = fract(t);
-    if (t < 0.33)      return mix(primary, secondary, t * 3.0);
-    else if (t < 0.66) return mix(secondary, accent, (t - 0.33) * 3.0);
-    else               return mix(accent, primary, (t - 0.66) * 3.0);
-}
+// The tri-stop palette (triStopPalette) comes from common.glsl.
 
 // ── Thin-film iridescence ────────────────────────────────────
 // Simulates constructive/destructive interference at three wavelengths.
@@ -110,28 +103,7 @@ vec2 curlNoise(vec2 p, float time) {
     return vec2((ny - n) / eps, -(nx - n) / eps);
 }
 
-// ── FBM for domain-warped energy textures ─────────────────────
-
-float fbm(vec2 uv, int octaves, float rotAngle) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    float c = cos(rotAngle), s = sin(rotAngle);
-    mat2 rot = mat2(c, -s, s, c);
-    for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * noise2D(uv);
-        uv = rot * uv * 2.0 + vec2(180.0);
-        amplitude *= 0.55;
-    }
-    return value;
-}
-
-// ── Signed distance to line segment ─────────────────────────
-
-float sdSegmentSuse(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a, ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return length(pa - ba * h);
-}
+// fbm() (domain-warped energy textures) comes from common.glsl.
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -417,7 +389,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float veinPulse = 1.0 + bassEnv * 0.4 * sin(veinNoise * 12.0 - time * 4.0);
 
         // Vein base color (deep green energy flowing under skin)
-        vec3 veinCol = susePalette(veinNoise + midsEnv * 0.15 + time * 0.03,
+        vec3 veinCol = triStopPalette(veinNoise + midsEnv * 0.15 + time * 0.03,
                                     palAccent, palGlow, palSecondary);
 
         // ═══════════════════════════════════════════════════════
@@ -443,7 +415,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
         // Blend iridescence with brand palette
         float colorT = cell.cellHash + time * speed * 0.5;
-        vec3 baseScaleCol = susePalette(colorT, palPrimary, palSecondary, palAccent);
+        vec3 baseScaleCol = triStopPalette(colorT, palPrimary, palSecondary, palAccent);
         vec3 scaleCol = mix(baseScaleCol, iriCol * palSecondary * 2.0, iridescence);
 
         // Scale gap color — veins visible through gaps between scales
@@ -464,7 +436,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             rings *= smoothstep(0.5, 0.15, cellDist / 4.0); // fade toward edges
 
             // Blend energy + rings, colored by palette position
-            vec3 cellInner = susePalette(cellR + cell.cellHash + time * 0.03,
+            vec3 cellInner = triStopPalette(cellR + cell.cellHash + time * 0.03,
                                           palSecondary, palAccent, palGlow);
             col = mix(col, cellInner * brightness * 1.2, rings * 0.2 * scaleRim);
 
@@ -475,7 +447,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
             // Mids shift cell color temperature
             float midsWave = sin(cell.id.x * 0.7 + cell.id.y * 1.3 + time * 0.5);
-            vec3 warmShift = susePalette(cell.cellHash + 0.33 + midsWave * 0.15,
+            vec3 warmShift = triStopPalette(cell.cellHash + 0.33 + midsWave * 0.15,
                                           palGlow, palSecondary, palAccent);
             col = mix(col, warmShift * brightness, midsEnv * 0.15);
         }
@@ -501,7 +473,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             float rippleFade = 1.0 - ripplePhase;
             float rippleAudio = bassEnv * 0.35 * rippleFade;
             // Color shifts through complementary hues as wave passes
-            vec3 rippleShift = susePalette(cell.cellHash + ripplePhase * 2.0,
+            vec3 rippleShift = triStopPalette(cell.cellHash + ripplePhase * 2.0,
                                             palAccent, palGlow, palSecondary);
             col = mix(col, rippleShift * brightness * 1.5,
                       rippleRing * rippleAudio * scaleRim);
@@ -647,10 +619,10 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                     float shiftWave = bodyAxis * 3.0 + time * speed * 4.0;
                     float shiftPhase = sin(shiftWave) * 0.5 + 0.5;
 
-                    vec3 shiftTarget = susePalette(shiftPhase + midsEnv * 0.15,
+                    vec3 shiftTarget = triStopPalette(shiftPhase + midsEnv * 0.15,
                                                     palSecondary, palAccent, palGlow);
                     float angularShift = sin(fillAngle * 2.0 + time * 0.3) * 0.06;
-                    shiftTarget = mix(shiftTarget, susePalette(shiftPhase + angularShift + 0.33,
+                    shiftTarget = mix(shiftTarget, triStopPalette(shiftPhase + angularShift + 0.33,
                                                                palAccent, palGlow, palSecondary), 0.2);
                     // Start from a saturated, boosted green (not raw palette)
                     vec3 vivid = palSecondary * 1.6 + palGlow * 0.4;
@@ -669,7 +641,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                         float chromaFade = 1.0 - chromaPhase;
                         float chromaAudio = bassEnv * chromatophoreStr * chromaFade;
                         // Target hue: complementary shift (green→turquoise→teal cycle)
-                        vec3 chromaTarget = susePalette(
+                        vec3 chromaTarget = triStopPalette(
                             chromaDist * 4.0 + chromaPhase * 2.0,
                             palAccent, palGlow, palSecondary);
                         logoCol = mix(logoCol, chromaTarget * brightness * 2.2,
@@ -687,7 +659,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                     vec2 energyUV = iLogoUV * 4.0 + flowDir * time * flowSpeed * 1.5;
                     float eq = fbm(energyUV + time * speed * 1.2, 5, 0.7);
                     float er = fbm(energyUV + eq * 1.5 + time * speed, 5, 0.7);
-                    vec3 energyCol = susePalette(er * 1.2 + time * 0.05 + float(li) * 0.3,
+                    vec3 energyCol = triStopPalette(er * 1.2 + time * 0.05 + float(li) * 0.3,
                                                   palSecondary, palGlow, palAccent);
                     // Blend energy under the color shift (visible as flowing depth)
                     logoCol = mix(logoCol, energyCol * brightness * 2.4, 0.35);
@@ -799,7 +771,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 float glow1 = exp(-max(fDist, 0.0) * 80.0) * 0.45;
                 float glow2 = exp(-max(fDist, 0.0) * 25.0) * 0.2;
                 float glow3 = exp(-max(fDist, 0.0) * 8.0) * 0.1;
-                vec3 edgeCol = susePalette(time * 0.06 + iLogoUV.y + float(li) * 0.2,
+                vec3 edgeCol = triStopPalette(time * 0.06 + iLogoUV.y + float(li) * 0.2,
                                             palGlow, palSecondary, palAccent);
                 float flare = 1.0 + bassEnv * 0.4;
                 outerCol += edgeCol * glow1 * flare * depthFactor;
@@ -924,7 +896,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float innerGlow = exp(-innerDist / 12.0);
         float edgeAngle = atan(p.y, p.x);
         float iriT = edgeAngle / TAU + time * 0.05 + midsEnv * 0.2;
-        vec3 edgeIriCol = susePalette(iriT, palSecondary, palAccent, palGlow);
+        vec3 edgeIriCol = triStopPalette(iriT, palSecondary, palAccent, palGlow);
         col += edgeIriCol * innerGlow * innerGlowStr;
 
         col = mix(col, fillColor.rgb * luminance(col), 0.07);
@@ -941,7 +913,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float borderPattern = smoothstep(0.0, 0.04, borderCell.edgeDist);
         vec3 borderFilm = thinFilm(borderCell.cellHash, 0.4 + time * 0.08 + midsEnv * 0.15);
 
-        vec3 borderCol = susePalette(borderCell.cellHash + time * 0.05,
+        vec3 borderCol = triStopPalette(borderCell.cellHash + time * 0.05,
                                        palSecondary, palAccent, palGlow);
         borderCol = mix(borderCol, borderFilm * palSecondary * 2.0, 0.3 * iridescence);
         borderCol *= borderPattern * borderBrightness;
@@ -970,7 +942,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float glow = expGlow(d, 7.0, borderGlow);
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.08) + midsEnv * 0.15;
-        vec3 glowCol = susePalette(glowT, palSecondary, palAccent, palGlow);
+        vec3 glowCol = triStopPalette(glowT, palSecondary, palAccent, palGlow);
         glowCol *= mix(0.3, 1.0, vitality);
         result.rgb += glowCol * glow * 0.5;
         result.a = max(result.a, glow * 0.4);
@@ -1027,7 +999,7 @@ vec4 compositeSuseLabels(vec4 color, vec2 fragCoord,
         float chromaWave = sin(haloAngle * 2.0 + iTime * 1.2 + midsR * 1.5)
                          * 0.5 + 0.5;
 
-        vec3 haloCol1 = susePalette(chromaWave + iTime * 0.08,
+        vec3 haloCol1 = triStopPalette(chromaWave + iTime * 0.08,
                                      palGlow, palAccent, palSecondary);
         vec3 haloFilm = thinFilm(0.5 + 0.3 * sin(haloAngle * 3.0 + iTime * 0.5),
                                   0.6 + midsR * 0.3);
@@ -1078,7 +1050,7 @@ vec4 compositeSuseLabels(vec4 color, vec2 fragCoord,
         // Color-shift wave sweeping diagonally across text
         float textWave = sin(uv.x * 8.0 - iTime * 1.8 + uv.y * 4.0) * 0.5 + 0.5;
         // Per-cell color cycles through palette over time
-        vec3 textPalette = susePalette(cell.cellHash + textWave * 0.5
+        vec3 textPalette = triStopPalette(cell.cellHash + textWave * 0.5
                                         + iTime * 0.1,
                                         palGlow, palSecondary, palAccent);
 

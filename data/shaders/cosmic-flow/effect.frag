@@ -23,28 +23,8 @@
 #include <audio.glsl>
 
 
-// Fractal Brownian Motion with rotation
-float fbm(in vec2 uv, int octaves, float rotAngle) {
-    float value = 0.0;
-    float amplitude = 0.5;
-
-    float c = cos(rotAngle);
-    float s = sin(rotAngle);
-    mat2 rot = mat2(c, -s, s, c);
-
-    for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * noise2D(uv);
-        uv = rot * uv * 2.0 + vec2(180.0);
-        amplitude *= 0.6;
-    }
-
-    return value;
-}
-
-// Inigo Quilez palette function
-vec3 palette(in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d) {
-    return a + b * cos(TAU * (c * t + d));
-}
+// fbm() (call with gain 0.6 for this pack's softer falloff) and the IQ cosine
+// palette (iqPalette) come from common.glsl.
 
 vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted,
                       float bass, float mids, float treble, float overall, bool hasAudio) {
@@ -142,13 +122,13 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     if (d < 0.0) {
 
         // First fbm layer - slow drift
-        float q = fbm(centeredUV + time * vSpeed, octaves, fbmRot);
+        float q = fbm(centeredUV + time * vSpeed, octaves, fbmRot, 0.6);
 
         // Second fbm layer - combines with first for complexity
-        float r = fbm(centeredUV + q + time * vFlowSpeed, octaves, fbmRot);
+        float r = fbm(centeredUV + q + time * vFlowSpeed, octaves, fbmRot, 0.6);
 
         // Generate color from palette — bass deepens contrast
-        vec3 col = palette(r * contrast * audioContrast, palA, palB, palC, palD);
+        vec3 col = iqPalette(r * contrast * audioContrast, palA, palB, palC, palD);
 
         // ── Secondary detail layer: noise veins ─────────────
         // Thin vein lines at the 0.5 contour of a higher-frequency noise
@@ -157,7 +137,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float veinWidth = 0.06 + bassEnv * 0.025;
         float veins = 1.0 - smoothstep(0.0, veinWidth, abs(veinNoise - 0.5));
         // Color veins slightly offset from base palette
-        vec3 veinColor = palette(r * contrast * audioContrast + 0.25, palA, palB, palC, palD);
+        vec3 veinColor = iqPalette(r * contrast * audioContrast + 0.25, palA, palB, palC, palD);
         col = mix(col, veinColor, veins * veinDetail);
 
         // ** Stellar Spark Points (treble) **
@@ -171,7 +151,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
             sparkle = smoothstep(0.6, 0.9, sparkle);
             float starBright = starIntensity * sparkle * treble * sparkleStr * audioReact;
             // Stars glow white-hot with a slight palette tint
-            vec3 starColor = mix(vec3(1.0), palette(r * contrast + 0.5, palA, palB, palC, palD), 0.2);
+            vec3 starColor = mix(vec3(1.0), iqPalette(r * contrast + 0.5, palA, palB, palC, palD), 0.2);
             col += starColor * starBright;
         }
 
@@ -195,7 +175,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
         // Bright inner glow near the border (exponential falloff from edge)
         float innerGlow = exp(-innerDist / 14.0);
-        vec3 glowColor = palette(r * contrast + 0.1, palA, palB, palC, palD);
+        vec3 glowColor = iqPalette(r * contrast + 0.1, palA, palB, palC, palD);
         float glowStrength = innerGlowStr;
         col += glowColor * innerGlow * glowStrength;
 
@@ -212,8 +192,8 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
         // Animated border using the same palette (sin/cos avoids atan seam at ±PI)
         float angle = atan(p.y, p.x) * 2.0;
-        float borderFlow = fbm(vec2(sin(angle), cos(angle)) * 2.0 + time * 0.5, 3, 0.5);
-        vec3 borderCol = palette(borderFlow * contrast, palA, palB, palC, palD);
+        float borderFlow = fbm(vec2(sin(angle), cos(angle)) * 2.0 + time * 0.5, 3, 0.5, 0.6);
+        vec3 borderCol = iqPalette(borderFlow * contrast, palA, palB, palC, palD);
         // Zone border color tint — let per-zone color influence the palette
         vec3 zoneBorderTint = colorWithFallback(borderColor.rgb, borderCol);
         borderCol = mix(borderCol, zoneBorderTint * dot(borderCol, vec3(0.299, 0.587, 0.114)), 0.3);
@@ -244,7 +224,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // Glow color from palette
         float angle = atan(p.y, p.x);
         float glowT = angularNoise(angle, 1.5, time * 0.1);
-        vec3 glowCol = palette(glowT, palA, palB, palC, palD);
+        vec3 glowCol = iqPalette(glowT, palA, palB, palC, palD);
 
         // Highlighted: stronger, vivid glow; dormant: dim
         glowCol *= mix(0.3, 1.0, vitality);
@@ -293,7 +273,7 @@ vec4 compositeCosmicLabels(vec4 color, vec2 fragCoord,
 
         // Palette-colored halo that drifts with time
         float t = length(uv - 0.5) + iTime * 0.08;
-        vec3 haloCol = palette(t, palA, palB, palC, palD);
+        vec3 haloCol = iqPalette(t, palA, palB, palC, palD);
         float haloBright = haloEdge * (0.5 + (hasAudio ? bass * 0.5 * labelAudioReact : 0.0));
         color.rgb += haloCol * haloBright;
 
@@ -301,7 +281,7 @@ vec4 compositeCosmicLabels(vec4 color, vec2 fragCoord,
         if (hasAudio && treble > 0.1) {
             float sparkNoise = noise2D(uv * 50.0 + iTime * 3.0);
             float spark = smoothstep(0.7, 0.95, sparkNoise) * treble * 2.0 * labelAudioReact;
-            vec3 sparkCol = mix(vec3(1.0), palette(t + 0.3, palA, palB, palC, palD), 0.3);
+            vec3 sparkCol = mix(vec3(1.0), iqPalette(t + 0.3, palA, palB, palC, palD), 0.3);
             color.rgb += sparkCol * haloEdge * spark;
         }
 
@@ -312,7 +292,7 @@ vec4 compositeCosmicLabels(vec4 color, vec2 fragCoord,
     if (labels.a > 0.01) {
         vec3 nebLens = color.rgb * labelBrightness;
         float t = length(uv - 0.5) + iTime * 0.1;
-        nebLens += palette(t, palA, palB, palC, palD) * 0.2;
+        nebLens += iqPalette(t, palA, palB, palC, palD) * 0.2;
         float bassPulse = hasAudio ? 1.0 + bass * 0.5 * labelAudioReact : 1.0;
         nebLens *= bassPulse;
         color.rgb = mix(color.rgb, nebLens, labels.a);
