@@ -65,6 +65,14 @@ Rectangle {
             "action": i18n("Next page")
         },
         {
+            "key": "Alt+Left",
+            "action": i18n("Back")
+        },
+        {
+            "key": "Alt+Right",
+            "action": i18n("Forward")
+        },
+        {
             "key": "?",
             "action": i18n("Toggle this overlay")
         }
