@@ -108,8 +108,9 @@ float niriHash(vec2 p) {
 // value hash — the OTHER canonical sin-dot magic-constant pair (niriHash
 // above uses (127.1, 311.7)). Lifted from the byte-identical per-shader
 // copies that lived in crosshatch (crosshatch_rand), randomsquares
-// (rs_rand), and the desktop packs dissolve / crosszoom / aretha (pz_hash,
-// pz_rand). Deliberate variants that must NOT use this stay local: perlin
+// (rs_rand), heat-melt (hm_rand), and the desktop packs dissolve /
+// crosszoom / aretha (pz_hash, pz_rand). Deliberate variants that must
+// NOT use this stay local: perlin
 // pre-mods the dot product, static-fade uses unique constants,
 // voronoi-shatter returns a vec2.
 float classicHash(vec2 p) {

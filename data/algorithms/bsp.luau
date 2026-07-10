@@ -41,11 +41,8 @@ local function computeSubtreeMinDims(node, minSizes, leafStartIdx, innerGap, dep
     depth = depth or 0
     if not node or depth > pluau.MAX_TREE_DEPTH then return { w = 0, h = 0, leafCount = 0 } end
     if isLeaf(node) then
-        if leafStartIdx < #minSizes then
-            local ms = minSizes[leafStartIdx + 1]
-            return { w = math.max(ms.w or 0, 0), h = math.max(ms.h or 0, 0), leafCount = 1 }
-        end
-        return { w = 0, h = 0, leafCount = 1 }
+        local mw, mh = pluau.minSizeAt(minSizes, leafStartIdx)
+        return { w = mw, h = mh, leafCount = 1 }
     end
     local firstResult = computeSubtreeMinDims(node.first, minSizes, leafStartIdx, innerGap, depth + 1)
     local secondResult =

@@ -767,6 +767,13 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             if (!QFile::exists(buf)) {
                 continue; // missing buffers already linted above
             }
+            // A `builtin:` buffer resolved via the QStandardPaths fallback (user
+            // pack with no sibling shared/ dir) lives OUTSIDE surfacePacksRoot,
+            // where its angle-includes (surface_blur.glsl) would miss the
+            // pack-derived include paths. Append the buffer's own dir so the
+            // installed shared dir resolves; for bundled packs this duplicates
+            // an entry already in the list, which the resolver tolerates.
+            const QStringList bufferIncludePaths = QStringList(includePaths) << QFileInfo(buf).absolutePath();
             const QString label = QFileInfo(buf).fileName();
             QFile bufFile(buf);
             if (!bufFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -777,7 +784,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             const QString rawBuf = QString::fromUtf8(bufFile.readAll());
             QString err;
             const QString expanded =
-                ShaderCompiler::expandSource(rawBuf, QFileInfo(buf).absolutePath(), includePaths, &err);
+                ShaderCompiler::expandSource(rawBuf, QFileInfo(buf).absolutePath(), bufferIncludePaths, &err);
             if (expanded.isEmpty()) {
                 out << "  " << label.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;

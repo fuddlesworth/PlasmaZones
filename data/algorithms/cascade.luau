@@ -31,6 +31,8 @@ return pluau.algorithm {
         local early = pluau.guardArea(area, count)
         if early then return early end
 
+        -- The max-bound fallback mirrors what the old inline max/min clamp
+        -- produced for a non-real ratio, keeping the NaN path byte-identical.
         local offsetRatio = pluau.clamp(ctx.splitRatio, CascadeMinOffsetRatio, CascadeMaxOffsetRatio)
             or CascadeMaxOffsetRatio
 
