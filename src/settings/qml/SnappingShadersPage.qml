@@ -18,15 +18,16 @@ import QtQuick
  */
 ShaderBrowserPage {
     bridge: settingsController.snappingShadersPage
+    settingsCategory: "SnappingShadersFilterBar"
     infoBannerText: i18n("Browse installed snapping overlay shaders. Assign a shader to a layout from the layout editor's appearance section.")
     // Closures (not pre-evaluated strings) so `i18ncp` runs with the
     // LIVE usage count — required for locales with more than two plural
     // forms and so `%n` displays the actual count rather than a baked-in
     // 1 / 2 sentinel.
-    usageHeaderTextFn: function(count) {
+    usageHeaderTextFn: function (count) {
         return i18ncp("@info shader usage section header (snapping overlay)", "Used by %n layout", "Used by %n layouts", count);
     }
-    usageChipTextFn: function(count) {
+    usageChipTextFn: function (count) {
         return i18ncp("@info shader usage chip (snapping overlay)", "%n layout", "%n layouts", count);
     }
 }
