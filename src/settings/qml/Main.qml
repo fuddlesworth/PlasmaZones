@@ -110,6 +110,13 @@ PhosphorUi.SettingsAppWindow {
     // — same UX as the legacy hand-rolled unsavedChangesDialog, but
     // the framework owns the dialog and the close orchestration.
     closePromptShowsApply: true
+    // Gate the chrome's back/forward history inputs (Alt+Left /
+    // Alt+Right, mouse back/forward buttons) behind the same guard as
+    // the Ctrl+PgUp/PgDown page-step shortcuts, so history navigation
+    // can't drag the user off the page while a confirm dialog, the
+    // shortcut overlay, a page-owned modal, or the search dropdown is
+    // open.
+    navigationShortcutsEnabled: window._navShortcutsEnabled
 
     // Global search in the header toolbar (headerExtras slot). It supersedes the
     // in-sidebar page-tree filter, which is disabled in Component.onCompleted.
