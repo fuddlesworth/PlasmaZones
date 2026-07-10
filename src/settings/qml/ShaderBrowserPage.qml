@@ -13,9 +13,10 @@ import org.kde.kirigami as Kirigami
  * @brief Pack-agnostic shader browser page.
  *
  * Read-only listing with drop-zone install card, filter bar, grouped
- * card grid, and a detail dialog. Drives both the Animations → Shaders
- * page (for `data/animations/` packs) and the Snapping → Shaders page
- * (for `data/shaders/` overlay packs).
+ * card grid, and a detail dialog. Drives the Animations → Shaders page
+ * (for `data/animations/` packs), the Snapping → Shaders page (for
+ * `data/shaders/` overlay packs), and the Decoration → Shaders page (for
+ * `data/surface/` packs).
  *
  * The host supplies a `bridge` QObject implementing the contract:
  *
@@ -36,9 +37,12 @@ import org.kde.kirigami as Kirigami
  *   • User shaders card — drop zone for installing user shader packs +
  *     "Open Folder" button.
  *   • Search row — text search + a multi-select filter button (source
- *     toggles + one checkbox per category), modeled on the Layouts page.
- *   • Per-category sections — each category renders as a collapsible card of
- *     shader thumbnails (count shown in the header). Card click opens
+ *     toggles, one checkbox per capability type when the catalogue spans
+ *     more than one, and one per category), modeled on the Layouts page.
+ *   • Group / sort row — a GroupSortBar to group (Category / Type / Source
+ *     / None) and sort (Name / Category / Type) the catalogue.
+ *   • Grouped sections — each group renders as a collapsible card of shader
+ *     thumbnails (count shown in the header). Card click opens
  *     ShaderBrowserDetailDialog.
  */
 SettingsFlickable {
@@ -283,7 +287,7 @@ SettingsFlickable {
     }
     /// Non-empty capability label for a card badge; "" for universal (the
     /// default majority — no badge, to keep the grid uncluttered).
-    function typeBadgeLabel(e) {
+    function _typeBadgeLabel(e) {
         var key = root._effectTypeKey(e);
         return key === root._universalKey ? "" : root._typeLabel(key);
     }
@@ -645,9 +649,10 @@ SettingsFlickable {
         }
 
         // ── Grouped shader catalogue ────────────────────────────────────
-        // Each category renders as its own collapsible SettingsCard — the same
-        // grouped-section treatment as the Rules page — with the
-        // category as the header and the shader count as the trailing hint.
+        // Each group (per the group-by selection: category, type, source, or a
+        // single "None" bucket) renders as its own collapsible SettingsCard —
+        // the same grouped-section treatment as the Rules page — with the group
+        // label as the header and the shader count as the trailing hint.
         Repeater {
             model: root._displayGroups
 
@@ -700,7 +705,7 @@ SettingsFlickable {
                                 usagesRev: root._usagesRev
                                 usageChipTextFn: root.usageChipTextFn
                                 typeBadgeFn: function (e) {
-                                    return root._hasTypeAxis ? root.typeBadgeLabel(e) : "";
+                                    return root._hasTypeAxis ? root._typeBadgeLabel(e) : "";
                                 }
                                 onShowDetails: function (e) {
                                     detailDialog.effect = e;
