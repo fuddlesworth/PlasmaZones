@@ -152,13 +152,17 @@ public:
     // ── Snap minimize-float (mirrors AutotileHandler's minimize→float machine) ──
     /// Drive the snap-mode minimize→float state machine: on a snapping-mode
     /// screen, float a window when it minimizes and unfloat it when it
-    /// unminimizes (autotile screens run AutotileHandler's own machine). On
-    /// unminimize it also retries snap restore when the daemon does not track
-    /// @p window — every restore pass (daemon-ready, pendingRestoresAvailable)
+    /// unminimizes (autotile screens run AutotileHandler's own machine). When
+    /// unminimizing a window this session minimize-floated, it also retries
+    /// snap restore if the daemon tracks the window as neither snapped nor
+    /// floating — every restore pass (daemon-ready, pendingRestoresAvailable)
     /// skips minimized windows, so a window minimized across a daemon restart
     /// would otherwise stay stranded at whatever geometry KWin unminimizes it
-    /// to. Called from PlasmaZonesEffect::slotWindowMinimizedChanged after the
-    /// shared minimize shader event.
+    /// to. In a normal minimize cycle the daemon still holds the window in its
+    /// floating set (minimize-float unsnaps), so the neither-set check keeps
+    /// the net inert and the plain unfloat re-snaps as before. Called from
+    /// PlasmaZonesEffect::slotWindowMinimizedChanged after the shared minimize
+    /// shader event.
     void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                bool minimized);
     /// Drop @p windowId from the minimize-float set (window closed). Returns
