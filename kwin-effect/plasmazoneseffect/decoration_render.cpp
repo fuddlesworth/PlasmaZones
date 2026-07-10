@@ -157,10 +157,12 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
                                            const QString& windowId)
 {
     // The caller (renderSurfaceChainComposite's per-pack fold) has already
-    // resolved @p pack and @p wb, confirmed the border is applied, ruled out a
-    // transition owning the slot, and bound pack.shader, so this just computes
-    // and writes the uniforms onto the bound program. The border APPEARANCE is
-    // not a
+    // resolved @p pack and @p wb, confirmed the border is applied, and bound
+    // pack.shader, so this just computes and writes the uniforms onto the
+    // bound program. The fold also runs while a TRANSITION owns the window's
+    // draw slot (it produces the layered surface the animation composites
+    // over); that is fine — this function only writes the fold's own bound
+    // pack program, never the redirect slot. The border APPEARANCE is not a
     // parameter here — it rides the pack's baked customParams/customColors,
     // pushed below (with @p wb's per-window rule override when set).
     KWin::GLShader* shader = pack.shader.get();

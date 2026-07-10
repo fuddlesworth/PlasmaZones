@@ -120,11 +120,12 @@ struct CompiledSurfacePack
     int uFocusedLoc = -1; ///< uSurfaceFocused — 1.0 focused / 0.0 unfocused
     int uOpacityLoc = -1; ///< uSurfaceOpacity — rule-resolved window opacity (handlesOpacity packs)
     int uTimeLoc = -1; ///< iTime — continuous seconds; -1 ⟺ static pack (drives the repaint gate)
-    /// uTexture0 — the input-surface sampler (unit 0). On the single-pack path
-    /// OffscreenData::paint binds the redirected surface to unit 0 automatically,
-    /// so this is unused there; the multi-pack composite (renderSurfaceChainComposite)
-    /// runs the main pass as a fullscreen FBO pass and binds the running composite
-    /// to unit 0 itself, setting this explicitly.
+    /// uTexture0 — the input-surface sampler (unit 0). Every decorated window
+    /// (one-pack chains included) folds through renderSurfaceChainComposite,
+    /// which runs the main pass as a fullscreen FBO pass, binds the running
+    /// composite to unit 0 itself, and sets this explicitly. (The only
+    /// remaining OffscreenData::paint auto-bind of unit 0 belongs to the
+    /// animation-transition path's CachedShader, a different struct.)
     int uTexture0Loc = -1;
     /// Backdrop sampling (needsBackdrop packs, main pass): sampler +
     /// valid-rect + gate locations; -1 for packs that never reference the
