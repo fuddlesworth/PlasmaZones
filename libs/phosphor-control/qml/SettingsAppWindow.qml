@@ -64,14 +64,16 @@ Kirigami.ApplicationWindow {
      *  can override this binding (e.g. for tests or to force a
      *  collapsed rail) by reassigning the property. */
     property bool sidebarCompact: width < Kirigami.Units.gridUnit * 50
-    /** Gate for the built-in back/forward navigation inputs (Alt+Left /
-     *  Alt+Right shortcuts and the mouse back/forward buttons — the
-     *  breadcrumb-row buttons are ordinary click targets and stay
-     *  active). Modal popups don't block window-context Shortcuts, so
-     *  apps with their own confirm dialogs bind this to their
-     *  shortcut-guard expression (the same one gating any page-step
-     *  shortcuts) to keep history navigation from firing under a modal.
-     *  Defaults true. */
+    /** Gate for the built-in back/forward navigation inputs (the
+     *  Alt+Left / Alt+Right key handling on the chrome page and the
+     *  mouse back/forward buttons — the breadcrumb-row buttons are
+     *  ordinary click targets and stay active). Modal popups block
+     *  both inputs on their own (focus moves into the popup and mouse
+     *  input outside it is grabbed), but non-modal surfaces — a search
+     *  dropdown, a help overlay, a native child window — do not, so
+     *  apps bind this to their shortcut-guard expression (the same one
+     *  gating any page-step shortcuts) to keep history navigation from
+     *  firing under those. Defaults true. */
     property bool navigationShortcutsEnabled: true
 
     /** Emitted when the user picked Apply in the close-confirmation
@@ -287,18 +289,26 @@ Kirigami.ApplicationWindow {
         // keys in the ShortcutOverride pass (which preempts the whole
         // shortcut map) and handle them as ordinary key presses bubbling
         // up from the focused item.
+        // Claim a key only when the matching history direction has
+        // somewhere to go — an unusable Back/Forward key falls through
+        // to the shortcut map (Kirigami's no-op) instead of being
+        // silently consumed here, mirroring the enabled-gating the
+        // replaced Shortcut items had.
         Keys.onShortcutOverride: event => {
-            if (root.navigationShortcutsEnabled && (event.matches(StandardKey.Back) || event.matches(StandardKey.Forward)))
+            if (!root.navigationShortcutsEnabled)
+                return;
+
+            if ((event.matches(StandardKey.Back) && root.controller.canGoBack) || (event.matches(StandardKey.Forward) && root.controller.canGoForward))
                 event.accepted = true;
         }
         Keys.onPressed: event => {
             if (!root.navigationShortcutsEnabled)
                 return;
 
-            if (event.matches(StandardKey.Back)) {
+            if (event.matches(StandardKey.Back) && root.controller.canGoBack) {
                 root.controller.goBack();
                 event.accepted = true;
-            } else if (event.matches(StandardKey.Forward)) {
+            } else if (event.matches(StandardKey.Forward) && root.controller.canGoForward) {
                 root.controller.goForward();
                 event.accepted = true;
             }
