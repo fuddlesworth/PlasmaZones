@@ -217,7 +217,7 @@ SailHit evalEosSails(vec2 p, vec3 colBlue, vec3 colCoral, vec3 colPurple) {
 
 // -- Per-instance UV computation ------------------------------------------
 vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, float time,
-                       float logoScale, float logoPulse,
+                       float logoScale,
                        float sizeMin, float sizeMax, out float instScale) {
     vec2 uv = globalUV;
     float wobbleAmp = p_logoWobble >= 0.0 ? p_logoWobble : 0.12;
@@ -431,7 +431,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
         for (int li = 0; li < logoCount && li < 8; li++) {
             float instScale;
             vec2 iLogoUV = computeInstanceUV(li, logoCount, globalUV, aspect, time,
-                                              logoScale, logoPulse,
+                                              logoScale,
                                               logoSizeMin, logoSizeMax, instScale);
 
             if (iLogoUV.x < -0.3 || iLogoUV.x > 1.3 ||

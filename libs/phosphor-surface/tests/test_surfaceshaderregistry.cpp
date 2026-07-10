@@ -492,6 +492,22 @@ private Q_SLOTS:
         QVERIFY(QFileInfo(resolved).isAbsolute());
     }
 
+    void builtinBuffer_helpers_reject_non_builtin_tokens()
+    {
+        // Pin the header contract directly: a plain pack-local buffer name is
+        // NOT a builtin token, and the resolver returns empty for it (and for an
+        // unknown builtin token) rather than fabricating a path. This keeps
+        // parseEffect's "resolve, else treat as pack-local" branch correct.
+        QVERIFY(!SurfaceShaderRegistry::isBuiltinBufferShader(QStringLiteral("buffer0.frag")));
+        QVERIFY(!SurfaceShaderRegistry::isBuiltinBufferShader(QString()));
+        QVERIFY(SurfaceShaderRegistry::isBuiltinBufferShader(QStringLiteral("builtin:gaussian-h")));
+
+        const QString packDir = QStringLiteral("/tmp/some-pack");
+        QVERIFY(SurfaceShaderRegistry::resolveBuiltinBufferShader(QStringLiteral("buffer0.frag"), packDir).isEmpty());
+        QVERIFY(SurfaceShaderRegistry::resolveBuiltinBufferShader(QStringLiteral("builtin:does-not-exist"), packDir)
+                    .isEmpty());
+    }
+
     void fromJson_leaves_multipass_flag_raw_without_normalizing()
     {
         // fromJson itself does NOT fail closed on multipass-with-no-buffers —

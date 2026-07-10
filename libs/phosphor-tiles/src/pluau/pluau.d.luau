@@ -147,7 +147,7 @@ export type Pluau = {
     center: (start: number, total: number, size: number) -> number,
     gridShape: (count: number) -> (number, number),
     cumulativeOffsets: (start: number, sizes: { number }, gap: number) -> { number },
-    minSizeAt: (minSizes: { MinSize }, i: number) -> (number, number),
+    minSizeAt: (minSizes: { MinSize }?, i: number) -> (number, number),
     resizeRatioGrow: (newSize: number, oldSize: number, oldRatio: number) -> number,
     resizeRatioShrink: (newSize: number, oldSize: number, oldRatio: number) -> number,
     masterStackResize: (state: any, resize: ResizeEvent, horizontal: boolean) -> { [string]: any }?,

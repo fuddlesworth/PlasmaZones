@@ -21,7 +21,7 @@ end
 
 local function clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio, firstDim, secondDim)
     if minFirstRatio <= maxFirstRatio then
-        return math.max(minFirstRatio, math.min(maxFirstRatio, ratio))
+        return pluau.clamp(ratio, minFirstRatio, maxFirstRatio) or maxFirstRatio
     end
     local totalMin = firstDim + secondDim
     if totalMin > 0 then
