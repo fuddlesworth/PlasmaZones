@@ -195,23 +195,6 @@ Kirigami.ApplicationWindow {
         property bool forceClosing: false
     }
 
-    // ── Back / Forward history shortcuts ────────────────────────────
-    // StandardKey.Back / Forward resolve to Alt+Left / Alt+Right (plus
-    // the dedicated XF86Back/Forward keys on keyboards that have them).
-    // Gated on navigationShortcutsEnabled so consumers can suppress
-    // history moves while their own modals are open.
-    Shortcut {
-        sequences: [StandardKey.Back]
-        enabled: root.navigationShortcutsEnabled && root.controller.canGoBack
-        onActivated: root.controller.goBack()
-    }
-
-    Shortcut {
-        sequences: [StandardKey.Forward]
-        enabled: root.navigationShortcutsEnabled && root.controller.canGoForward
-        onActivated: root.controller.goForward()
-    }
-
     DiscardChangesDialog {
         id: discardDialog
 
@@ -287,19 +270,60 @@ Kirigami.ApplicationWindow {
     pageStack.initialPage: Kirigami.Page {
         padding: 0
         title: root.title
+        // Rest keyboard focus inside the page so key events (and the
+        // ShortcutOverride pass below) route through it even before any
+        // control has taken focus.
+        focus: true
+
+        // ── Back / Forward history keys (Alt+Left / Alt+Right + the
+        // dedicated XF86Back/Forward keys) ──────────────────────────────
+        // NOT implemented as Shortcut items: Kirigami's PageRow installs
+        // its own always-enabled StandardKey.Back/Forward Shortcuts in
+        // this window (column/layer navigation, a no-op for this
+        // single-column chrome). A second Shortcut on the same sequence
+        // makes the pair AMBIGUOUS — Qt then activates neither, it only
+        // rotates activatedAmbiguously between them — so a competing
+        // Shortcut here would simply never fire. Instead, accept the
+        // keys in the ShortcutOverride pass (which preempts the whole
+        // shortcut map) and handle them as ordinary key presses bubbling
+        // up from the focused item.
+        Keys.onShortcutOverride: event => {
+            if (root.navigationShortcutsEnabled && (event.matches(StandardKey.Back) || event.matches(StandardKey.Forward)))
+                event.accepted = true;
+        }
+        Keys.onPressed: event => {
+            if (!root.navigationShortcutsEnabled)
+                return;
+
+            if (event.matches(StandardKey.Back)) {
+                root.controller.goBack();
+                event.accepted = true;
+            } else if (event.matches(StandardKey.Forward)) {
+                root.controller.goForward();
+                event.accepted = true;
+            }
+        }
 
         // Mouse back/forward buttons drive the page history, matching
-        // the Alt+Left / Alt+Right shortcuts. Declared before (so
-        // stacked underneath) the content column: the area accepts ONLY
-        // the two navigation buttons, and receives them only when no
-        // content item claimed the press first — left-button
-        // interaction everywhere is untouched. Modal popups block
-        // outside mouse input on their own, but the shortcut gate is
-        // honoured anyway for consistency with the keyboard path.
+        // the Alt+Left / Alt+Right keys. Declared before (so stacked
+        // underneath) the content column: the area accepts ONLY the two
+        // navigation buttons, and receives them only when no content
+        // item claimed the press first — left-button interaction
+        // everywhere is untouched. Modal popups block outside mouse
+        // input on their own, but the shortcut gate is honoured anyway
+        // for consistency with the keyboard path.
+        //
+        // Navigation happens on PRESS, not click: Kirigami's ColumnView
+        // (the PageRow's C++ container, which filters every descendant's
+        // mouse events) consumes the ForwardButton RELEASE outright —
+        // and the BackButton release too once its column index moves —
+        // so a clicked handler never fires for forward. The press is
+        // the only edge guaranteed to arrive; it also matches browser
+        // behaviour, where side-button navigation triggers on press.
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.BackButton | Qt.ForwardButton
-            onClicked: function (mouse) {
+            onPressed: function (mouse) {
                 if (!root.navigationShortcutsEnabled)
                     return;
 
