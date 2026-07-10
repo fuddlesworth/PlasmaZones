@@ -20,15 +20,13 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
         local area = ctx.area
         local gap = ctx.innerGap
         local splitRatio = ctx.splitRatio
         local minSizes = ctx.minSizes
 
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
 
         splitRatio = pluau.clampSplitRatio(splitRatio)
 
@@ -60,9 +58,9 @@ return pluau.algorithm {
                     break
                 end
                 local windowWidth = math.floor(contentWidth * splitRatio)
-                local entry = minSizes[i + 1]
-                if #minSizes > 0 and i < #minSizes and entry and entry.w and entry.w > 0 then
-                    windowWidth = math.max(windowWidth, entry.w)
+                local mw = pluau.minSizeAt(minSizes, i)
+                if mw > 0 then
+                    windowWidth = math.max(windowWidth, mw)
                 end
                 if #minSizes > 0 and remainingMinW[i + 1] and remainingMinW[i + 1] > 0 then
                     windowWidth = math.min(windowWidth, contentWidth - remainingMinW[i + 1])
@@ -89,9 +87,9 @@ return pluau.algorithm {
                     break
                 end
                 local windowHeight = math.floor(contentHeight * splitRatio)
-                local entry = minSizes[i + 1]
-                if #minSizes > 0 and i < #minSizes and entry and entry.h and entry.h > 0 then
-                    windowHeight = math.max(windowHeight, entry.h)
+                local _, mh = pluau.minSizeAt(minSizes, i)
+                if mh > 0 then
+                    windowHeight = math.max(windowHeight, mh)
                 end
                 if #minSizes > 0 and remainingMinH[i + 1] and remainingMinH[i + 1] > 0 then
                     windowHeight = math.min(windowHeight, contentHeight - remainingMinH[i + 1])

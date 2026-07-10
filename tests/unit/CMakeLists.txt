@@ -164,6 +164,14 @@ set_target_properties(test_luau_engine PROPERTIES AUTOMOC ON)
 target_link_libraries(test_luau_engine PRIVATE Qt6::Test Qt6::Core PhosphorScripting::PhosphorScripting)
 add_test(NAME test_luau_engine COMMAND test_luau_engine)
 
+# Shared pluau helpers (guardArea/stripLayout/clamp/…): loads the real pluau.luau
+# prelude into a sandboxed VM and exercises each helper directly.
+add_executable(test_pluau_helpers scripting/test_pluau_helpers.cpp)
+set_target_properties(test_pluau_helpers PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_pluau_helpers PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_pluau_helpers PRIVATE Qt6::Test Qt6::Core PhosphorScripting::PhosphorScripting)
+add_test(NAME test_pluau_helpers COMMAND test_pluau_helpers)
+
 add_executable(test_luau_tile_algorithm scripting/test_luau_tile_algorithm.cpp)
 set_target_properties(test_luau_tile_algorithm PROPERTIES AUTOMOC ON)
 target_compile_definitions(test_luau_tile_algorithm PRIVATE "P_LUAU_TEST_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/scripting\"")

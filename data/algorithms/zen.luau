@@ -20,17 +20,15 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
         local area = ctx.area
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
         local gap = ctx.innerGap
 
         local splitRatio = pluau.clampSplitRatio(ctx.splitRatio)
         local columnWidth = math.floor(area.width * splitRatio)
         columnWidth = math.max(1, columnWidth)
-        local offsetX = area.x + math.floor((area.width - columnWidth) / 2)
+        local offsetX = pluau.center(area.x, area.width, columnWidth)
 
         local totalGaps = (count - 1) * gap
         if totalGaps >= area.height then

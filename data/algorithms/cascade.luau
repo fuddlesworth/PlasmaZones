@@ -26,14 +26,12 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
         local area = ctx.area
 
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
 
-        local offsetRatio = math.max(CascadeMinOffsetRatio, math.min(CascadeMaxOffsetRatio, ctx.splitRatio))
+        local offsetRatio = pluau.clamp(ctx.splitRatio, CascadeMinOffsetRatio, CascadeMaxOffsetRatio)
 
         -- Guard the divisor (the host short-circuits single-window layouts, so
         -- this is defensive); identical to `count - 1` for the reachable count>=2

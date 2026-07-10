@@ -24,10 +24,8 @@ return pluau.algorithm {
         local area = ctx.area
         local gap = ctx.innerGap
 
-        if count <= 0 then return {} end
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
 
         local splitRatio = pluau.clampSplitRatio(ctx.splitRatio)
         local mainWidth = math.max(1, math.floor(area.width * splitRatio - gap / 2))
@@ -68,11 +66,11 @@ return pluau.algorithm {
         if old.width <= 0 or oldRatio <= 0 or oldRatio >= 1 then return nil end
         if idx == 0 then
             if edges.right then
-                return { splitRatio = new.width * oldRatio / old.width }
+                return { splitRatio = pluau.resizeRatioGrow(new.width, old.width, oldRatio) }
             end
         else
             if edges.left then
-                return { splitRatio = 1 - new.width * (1 - oldRatio) / old.width }
+                return { splitRatio = pluau.resizeRatioShrink(new.width, old.width, oldRatio) }
             end
         end
         return nil

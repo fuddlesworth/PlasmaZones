@@ -223,16 +223,13 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
-
         local area = ctx.area
         local gap = ctx.innerGap
         local minSizes = ctx.minSizes
         local splitRatio = ctx.splitRatio
 
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
 
         local root = buildTree(count, splitRatio, area)
         bspApplyGeometry(root, area, gap, minSizes, 0, 0)

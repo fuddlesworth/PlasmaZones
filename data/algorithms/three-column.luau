@@ -22,15 +22,13 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then return {} end
         local area = ctx.area
         local gap = ctx.innerGap
         local splitRatio = pluau.clampSplitRatio(ctx.splitRatio)
         local minSizes = ctx.minSizes
 
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
 
         if count == 1 then
             return { { x = area.x, y = area.y, width = area.width, height = area.height } }

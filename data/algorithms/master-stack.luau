@@ -39,11 +39,11 @@ return pluau.algorithm {
         if old.width <= 0 or oldRatio <= 0 or oldRatio >= 1 then return nil end
         if idx < masterCount then
             if edges.right then
-                return { splitRatio = new.width * oldRatio / old.width }
+                return { splitRatio = pluau.resizeRatioGrow(new.width, old.width, oldRatio) }
             end
         else
             if edges.left then
-                return { splitRatio = 1 - new.width * (1 - oldRatio) / old.width }
+                return { splitRatio = pluau.resizeRatioShrink(new.width, old.width, oldRatio) }
             end
         end
         return nil
