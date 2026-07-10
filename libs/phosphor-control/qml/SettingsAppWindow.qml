@@ -64,6 +64,17 @@ Kirigami.ApplicationWindow {
      *  can override this binding (e.g. for tests or to force a
      *  collapsed rail) by reassigning the property. */
     property bool sidebarCompact: width < Kirigami.Units.gridUnit * 50
+    /** Gate for the built-in back/forward navigation inputs (the
+     *  Alt+Left / Alt+Right key handling on the chrome page and the
+     *  mouse back/forward buttons — the breadcrumb-row buttons are
+     *  ordinary click targets and stay active). Modal popups block
+     *  both inputs on their own (focus moves into the popup and mouse
+     *  input outside it is grabbed), but non-modal surfaces — a search
+     *  dropdown, a help overlay, a native child window — do not, so
+     *  apps bind this to their shortcut-guard expression (the same one
+     *  gating any page-step shortcuts) to keep history navigation from
+     *  firing under those. Defaults true. */
+    property bool navigationShortcutsEnabled: true
 
     /** Emitted when the user picked Apply in the close-confirmation
      *  prompt, applyAll() ran, and the controller is STILL dirty —
@@ -261,6 +272,77 @@ Kirigami.ApplicationWindow {
     pageStack.initialPage: Kirigami.Page {
         padding: 0
         title: root.title
+        // Rest keyboard focus inside the page so key events (and the
+        // ShortcutOverride pass below) route through it even before any
+        // control has taken focus.
+        focus: true
+
+        // ── Back / Forward history keys (Alt+Left / Alt+Right + the
+        // dedicated XF86Back/Forward keys) ──────────────────────────────
+        // NOT implemented as Shortcut items: Kirigami's PageRow installs
+        // its own always-enabled StandardKey.Back/Forward Shortcuts in
+        // this window (column/layer navigation, a no-op for this
+        // single-column chrome). A second Shortcut on the same sequence
+        // makes the pair AMBIGUOUS — Qt then activates neither, it only
+        // rotates activatedAmbiguously between them — so a competing
+        // Shortcut here would simply never fire. Instead, accept the
+        // keys in the ShortcutOverride pass (which preempts the whole
+        // shortcut map) and handle them as ordinary key presses bubbling
+        // up from the focused item.
+        // Claim a key only when the matching history direction has
+        // somewhere to go — an unusable Back/Forward key falls through
+        // to the shortcut map (Kirigami's no-op) instead of being
+        // silently consumed here, mirroring the enabled-gating the
+        // replaced Shortcut items had.
+        Keys.onShortcutOverride: event => {
+            if (!root.navigationShortcutsEnabled)
+                return;
+
+            if ((event.matches(StandardKey.Back) && root.controller.canGoBack) || (event.matches(StandardKey.Forward) && root.controller.canGoForward))
+                event.accepted = true;
+        }
+        Keys.onPressed: event => {
+            if (!root.navigationShortcutsEnabled)
+                return;
+
+            if (event.matches(StandardKey.Back) && root.controller.canGoBack) {
+                root.controller.goBack();
+                event.accepted = true;
+            } else if (event.matches(StandardKey.Forward) && root.controller.canGoForward) {
+                root.controller.goForward();
+                event.accepted = true;
+            }
+        }
+
+        // Mouse back/forward buttons drive the page history, matching
+        // the Alt+Left / Alt+Right keys. Declared before (so stacked
+        // underneath) the content column: the area accepts ONLY the two
+        // navigation buttons, and receives them only when no content
+        // item claimed the press first — left-button interaction
+        // everywhere is untouched. Modal popups block outside mouse
+        // input on their own, but the shortcut gate is honoured anyway
+        // for consistency with the keyboard path.
+        //
+        // Navigation happens on PRESS, not click: Kirigami's ColumnView
+        // (the PageRow's C++ container, which filters every descendant's
+        // mouse events) consumes the ForwardButton RELEASE outright —
+        // and the BackButton release too once its column index moves —
+        // so a clicked handler never fires for forward. The press is
+        // the only edge guaranteed to arrive; it also matches browser
+        // behaviour, where side-button navigation triggers on press.
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.BackButton | Qt.ForwardButton
+            onPressed: function (mouse) {
+                if (!root.navigationShortcutsEnabled)
+                    return;
+
+                if (mouse.button === Qt.BackButton)
+                    root.controller.goBack();
+                else if (mouse.button === Qt.ForwardButton)
+                    root.controller.goForward();
+            }
+        }
 
         ColumnLayout {
             anchors.fill: parent
@@ -396,6 +478,38 @@ Kirigami.ApplicationWindow {
                         Layout.topMargin: Kirigami.Units.smallSpacing
                         Layout.bottomMargin: Kirigami.Units.smallSpacing
                         spacing: Kirigami.Units.smallSpacing
+
+                        // Back / Forward history buttons. Always present
+                        // (disabled when there's nowhere to go) so the
+                        // breadcrumb row doesn't reflow as history
+                        // accumulates.
+                        QQC2.ToolButton {
+                            Layout.alignment: Qt.AlignVCenter
+                            icon.name: "go-previous"
+                            display: QQC2.AbstractButton.IconOnly
+                            text: qsTr("Back")
+                            Accessible.name: text
+                            enabled: root.controller.canGoBack
+                            onClicked: root.controller.goBack()
+
+                            QQC2.ToolTip.visible: hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                            QQC2.ToolTip.text: text
+                        }
+
+                        QQC2.ToolButton {
+                            Layout.alignment: Qt.AlignVCenter
+                            icon.name: "go-next"
+                            display: QQC2.AbstractButton.IconOnly
+                            text: qsTr("Forward")
+                            Accessible.name: text
+                            enabled: root.controller.canGoForward
+                            onClicked: root.controller.goForward()
+
+                            QQC2.ToolTip.visible: hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                            QQC2.ToolTip.text: text
+                        }
 
                         Breadcrumbs {
                             Layout.fillWidth: true

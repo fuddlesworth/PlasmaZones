@@ -29,6 +29,7 @@ endfunction()
 
 phosphorcontrol_add_test(test_page_registry)
 phosphorcontrol_add_test(test_application_controller)
+phosphorcontrol_add_test(test_application_controller_history)
 phosphorcontrol_add_test(test_localized_context)
 phosphorcontrol_add_test(test_dbus_bridge)
 phosphorcontrol_add_test(test_search_ranker)
