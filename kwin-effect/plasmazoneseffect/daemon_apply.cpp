@@ -669,7 +669,7 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 
     // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler (mirrors
     // AutotileHandler running its own minimize→float machine for autotile screens).
-    m_snapHandler->handleMinimizeChanged(windowId, screenId, minimized);
+    m_snapHandler->handleMinimizeChanged(w, windowId, screenId, minimized);
 }
 
 void PlasmaZonesEffect::slotRunningWindowsRequested()

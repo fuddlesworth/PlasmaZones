@@ -305,12 +305,54 @@ void SnapHandler::callCancelSnap()
                                                 QStringLiteral("cancelSnap"));
 }
 
-void SnapHandler::handleMinimizeChanged(const QString& windowId, const QString& screenId, bool minimized)
+void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
+                                        bool minimized)
 {
     // Snap-mode-only: the autotile handler runs its own snap-state / float-state
     // machine for autotile screens.
     if (m_effect->autotileHandler()->isAutotileScreen(screenId)) {
         return;
+    }
+
+    // Restore net for windows minimized across a daemon restart: every restore
+    // pass (slotDaemonReady's untracked sweep, slotPendingRestoresAvailable)
+    // deliberately skips minimized windows, and this unfloat path only flips a
+    // floating flag the daemon applies to windows it already tracks. A window
+    // that was minimized while the daemon restarted is therefore tracked by
+    // neither pass — it unminimizes to whatever geometry KWin restores and
+    // never rejoins its zone. Ask the daemon whether it tracks the window and
+    // run the same single-window restore the retry passes use when it does
+    // not. Tracked-ness MUST be checked first (not resolved blindly):
+    // resolveWindowRestore consumes the single-shot FIFO pending-restore entry
+    // for the window's appId, and burning it on an already-tracked window robs
+    // a sibling window's restore.
+    if (!minimized && window && m_effect->isDaemonReady("unminimize restore check")) {
+        QPointer<KWin::EffectWindow> safeWindow = window;
+        QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
+            PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
+        auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, safeWindow, windowId](QDBusPendingCallWatcher* w) {
+                    w->deleteLater();
+                    QDBusPendingReply<QStringList> reply = *w;
+                    // On a failed query do nothing — a blind restore could consume
+                    // another window's pending-restore entry (see above).
+                    if (!reply.isValid() || reply.value().contains(windowId)) {
+                        return;
+                    }
+                    // Same eligibility guards as slotPendingRestoresAvailable's
+                    // sweep, re-checked post-await: the window may have closed,
+                    // re-minimized, or left the current desktop/activity while
+                    // the query was in flight (restoring an off-desktop window
+                    // would snap it through the wrong desktop's snap state).
+                    if (!safeWindow || safeWindow->isDeleted() || safeWindow->isMinimized()
+                        || !safeWindow->isOnCurrentDesktop() || !safeWindow->isOnCurrentActivity()) {
+                        return;
+                    }
+                    qCInfo(lcEffect) << "Snap: unminimized window is untracked by daemon — retrying restore:"
+                                     << windowId;
+                    callResolveWindowRestore(safeWindow.data());
+                });
     }
 
     if (minimized) {
