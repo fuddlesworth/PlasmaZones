@@ -34,6 +34,7 @@
 #include <QVector2D>
 
 #include <array>
+#include <cmath>
 
 namespace PlasmaZones {
 
@@ -169,6 +170,33 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         }
     }
 
+    // Actual switch direction for direction-aware packs (uploaded as
+    // iSwitchDelta): the pager-grid delta from -> to, wrap-corrected to the
+    // shortest path so a "next desktop" wrap off the last column reads as one
+    // step forward, not a full-row jump backwards. Grid coords are (col, row)
+    // with row increasing downward, matching the +y-down uv space the packs
+    // sample in. Stays zero when either desktop has no grid position.
+    QVector4D switchDelta;
+    {
+        const QPoint fromCoords = KWin::effects->desktopGridCoords(from);
+        const QPoint toCoords = KWin::effects->desktopGridCoords(to);
+        const QSize grid = KWin::effects->desktopGridSize();
+        if (fromCoords.x() >= 0 && fromCoords.y() >= 0 && toCoords.x() >= 0 && toCoords.y() >= 0) {
+            float dx = float(toCoords.x() - fromCoords.x());
+            float dy = float(toCoords.y() - fromCoords.y());
+            if (grid.width() > 1 && std::abs(dx) > float(grid.width()) / 2.0f) {
+                dx -= std::copysign(float(grid.width()), dx);
+            }
+            if (grid.height() > 1 && std::abs(dy) > float(grid.height()) / 2.0f) {
+                dy -= std::copysign(float(grid.height()), dy);
+            }
+            const float len = std::hypot(dx, dy);
+            if (len > 0.0f) {
+                switchDelta = QVector4D(dx, dy, dx / len, dy / len);
+            }
+        }
+    }
+
     // Resolve the affected outputs: a specific output for a per-output switch
     // (Plasma 6.7 per-output desktops, #648), otherwise every output for a
     // global all-output switch.
@@ -195,6 +223,7 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         tr.effectId = effectId;
         tr.customParams = customParams;
         tr.customColors = customColors;
+        tr.switchDelta = switchDelta;
         tr.startTimeMs = nowMs;
         tr.durationMs = effectiveDurationMs;
         tr.captured = false; // capture is deferred to the first paintOutput (live GL context)
@@ -381,6 +410,7 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
         compiled.iTimeLoc = shader->uniformLocation("iTime");
         compiled.iResolutionLoc = shader->uniformLocation("iResolution");
         compiled.iFrameLoc = shader->uniformLocation("iFrame");
+        compiled.iSwitchDeltaLoc = shader->uniformLocation("iSwitchDelta");
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
             compiled.customParamsLoc[slot] = shader->uniformLocation(ShaderInternal::kCustomParamsElementNames[slot]);
         }
@@ -465,6 +495,11 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
         cs->shader->setUniform(cs->iFrameLoc, tr.frameCount);
     }
     ++tr.frameCount;
+    // Actual switch direction (grid delta + unit vector) for packs that follow
+    // the navigation instead of a fixed configured direction.
+    if (cs->iSwitchDeltaLoc >= 0) {
+        cs->shader->setUniform(cs->iSwitchDeltaLoc, tr.switchDelta);
+    }
     // The p_<name> pack parameters (slide direction, dissolve scale, etc.).
     for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
         if (cs->customParamsLoc[slot] >= 0) {
