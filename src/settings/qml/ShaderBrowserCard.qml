@@ -48,6 +48,14 @@ ItemDelegate {
     property var usageChipTextFn: function (count) {
         return i18ncp("@info shader usage count", "%n use", "%n uses", count);
     }
+    /// Returns a short capability label for the card badge (e.g. "Geometry"),
+    /// or "" to render no badge (universal shaders, the default majority). The
+    /// host supplies the mapping so the badge stays consistent with the
+    /// browser's Type filter and Type grouping.
+    property var typeBadgeFn: function (e) {
+        return "";
+    }
+    readonly property string _typeBadge: (root.effect && root.typeBadgeFn) ? String(root.typeBadgeFn(root.effect)) : ""
 
     signal showDetails(var effect)
 
@@ -144,6 +152,27 @@ ItemDelegate {
                     text: root.effect ? (root.effect.name || root.effect.id || "") : ""
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
+                }
+
+                // Capability badge — a small rounded chip showing which event
+                // class this shader targets (Geometry / Appearance / Desktop).
+                // Hidden for universal shaders so the grid only calls out the
+                // ones that behave differently.
+                Rectangle {
+                    visible: root._typeBadge.length > 0
+                    implicitWidth: typeBadgeLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+                    implicitHeight: typeBadgeLabel.implicitHeight + Kirigami.Units.smallSpacing
+                    radius: height / 2
+                    color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+
+                    Label {
+                        id: typeBadgeLabel
+
+                        anchors.centerIn: parent
+                        text: root._typeBadge
+                        font: Kirigami.Theme.smallFont
+                        color: Kirigami.Theme.highlightColor
+                    }
                 }
 
                 Label {
