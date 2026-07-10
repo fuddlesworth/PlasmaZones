@@ -26,6 +26,8 @@
 #include <QSet>
 #include <QStringList>
 
+#include <memory>
+
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
@@ -305,7 +307,8 @@ void SnapHandler::callCancelSnap()
                                                 QStringLiteral("cancelSnap"));
 }
 
-void SnapHandler::handleMinimizeChanged(const QString& windowId, const QString& screenId, bool minimized)
+void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
+                                        bool minimized)
 {
     // Snap-mode-only: the autotile handler runs its own snap-state / float-state
     // machine for autotile screens.
@@ -323,6 +326,86 @@ void SnapHandler::handleMinimizeChanged(const QString& windowId, const QString& 
         if (!m_minimizeFloatedWindows.remove(windowId)) {
             qCDebug(lcEffect) << "Snap: unminimized window was not minimize-floated, skipping unfloat:" << windowId;
             return;
+        }
+        // Restore net for a snap-tracked window minimized across a daemon
+        // restart: every restore pass (slotDaemonReady's untracked sweep,
+        // slotPendingRestoresAvailable) deliberately skips minimized windows,
+        // and the unfloat sent below only flips a floating flag the daemon
+        // applies to windows it already tracks — the new daemon session tracks
+        // this window as neither snapped nor floating, so the unfloat no-ops
+        // and the window never rejoins its zone.
+        //
+        // Discriminating "orphaned by a restart" from a NORMAL minimize cycle
+        // needs both daemon states: minimize-float UNSNAPS the window
+        // (SnapEngine::setWindowFloat(true) → unsnapForFloat), so in a normal
+        // cycle it is absent from getSnappedWindows too — but it IS in the
+        // daemon's floating set, and the unfloat below re-snaps it. Only a
+        // window in NEITHER set is orphaned. Both queries are dispatched HERE,
+        // before the unfloat fireAndForget below enters the same D-Bus send
+        // queue, so the daemon answers them against the pre-unfloat state.
+        //
+        // The restore-on-orphan is deliberately scoped to windows this effect
+        // session minimize-floated (the remove() above succeeded): an
+        // unconditional net would fire resolveWindowRestore on every
+        // unminimize of any never-tracked window, re-running its open-time
+        // placement routing (RouteToDesktop) and churning the placement
+        // store's per-app FIFO on a path that is not an open.
+        //
+        // Tracked-ness MUST be checked, not resolved blindly:
+        // resolveWindowRestore consumes the single-shot FIFO pending-restore
+        // entry for the window's appId, and burning it on a window the daemon
+        // still owns robs a sibling window's restore. A failed query counts
+        // as tracked for the same reason.
+        if (window && m_effect->isDaemonReady("unminimize restore check")) {
+            struct QueryJoin
+            {
+                int pending = 2;
+                bool trackedOrFailed = false;
+            };
+            auto join = std::make_shared<QueryJoin>();
+            QPointer<KWin::EffectWindow> safeWindow = window;
+            const auto onReplyDone = [this, join, safeWindow, windowId]() {
+                if (--join->pending > 0 || join->trackedOrFailed) {
+                    return;
+                }
+                // Same eligibility guards as slotPendingRestoresAvailable's
+                // sweep, re-checked post-await: the window may have closed,
+                // re-minimized, or left the current desktop/activity while
+                // the queries were in flight (restoring an off-desktop window
+                // would snap it through the wrong desktop's snap state).
+                if (!safeWindow || safeWindow->isDeleted() || safeWindow->isMinimized()
+                    || !safeWindow->isOnCurrentDesktop() || !safeWindow->isOnCurrentActivity()) {
+                    return;
+                }
+                qCInfo(lcEffect) << "Snap: unminimized window is untracked by daemon — retrying restore:" << windowId;
+                callResolveWindowRestore(safeWindow.data());
+            };
+            auto* snappedWatcher = new QDBusPendingCallWatcher(
+                PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                           QStringLiteral("getSnappedWindows")),
+                this);
+            connect(snappedWatcher, &QDBusPendingCallWatcher::finished, this,
+                    [join, windowId, onReplyDone](QDBusPendingCallWatcher* w) {
+                        w->deleteLater();
+                        QDBusPendingReply<QStringList> reply = *w;
+                        if (!reply.isValid() || reply.value().contains(windowId)) {
+                            join->trackedOrFailed = true;
+                        }
+                        onReplyDone();
+                    });
+            auto* floatingWatcher = new QDBusPendingCallWatcher(
+                PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                           QStringLiteral("queryWindowFloating"), {windowId}),
+                this);
+            connect(floatingWatcher, &QDBusPendingCallWatcher::finished, this,
+                    [join, onReplyDone](QDBusPendingCallWatcher* w) {
+                        w->deleteLater();
+                        QDBusPendingReply<bool> reply = *w;
+                        if (!reply.isValid() || reply.value()) {
+                            join->trackedOrFailed = true;
+                        }
+                        onReplyDone();
+                    });
         }
     }
 

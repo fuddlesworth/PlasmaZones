@@ -512,16 +512,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &PlasmaZonesEffect::slotWindowAdded);
     connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &PlasmaZonesEffect::slotWindowClosed);
 
-    // Panel (dock) lifecycle drives KWin's work area: a panel added, removed,
-    // or resized changes the strut-excluded clientArea. Route dock windows to
+    // Panel lifecycle drives KWin's work area: a panel added, removed, or
+    // resized changes the strut-excluded clientArea. Route panel windows to
     // the screen-change handler so it re-pushes the authoritative work area
-    // to the daemon. trackDockWindow / onWindowClosed no-op for non-docks.
+    // to the daemon. Covers docks AND unmovable layer-shell surfaces (a
+    // third-party shell's exclusive-zone panel is not isDock() to KWin);
+    // trackDockWindow / onWindowClosed no-op for every other window.
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded, m_screenChangeHandler.get(),
             &ScreenChangeHandler::trackDockWindow);
     connect(KWin::effects, &KWin::EffectsHandler::windowClosed, m_screenChangeHandler.get(),
             &ScreenChangeHandler::onWindowClosed);
     // Panels mapped before the effect loaded never fire windowAdded — hook the
-    // already-present docks now so a later resize of one still re-reports.
+    // already-present panels now so a later resize of one still re-reports.
     // Skip close-grabbed dying windows: other effects' close animations can
     // hold deleted windows in the stacking order across an effect (re)load.
     for (KWin::EffectWindow* existing : KWin::effects->stackingOrder()) {
