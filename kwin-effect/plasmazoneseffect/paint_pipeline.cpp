@@ -115,12 +115,14 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
         data.mask |= PAINT_SCREEN_TRANSFORMED;
     }
 
-    // Cache cursor pos once per frame for shader-transition iMouse uniform.
-    // paintWindow runs once per active transition (and may run multiple
-    // times across outputs); reading KWin::effects->cursorPos() at every
-    // call multiplies up. Caching here also guarantees every transition
-    // this frame reads an identical iMouse, eliminating sub-frame jitter.
-    if (KWin::effects && !m_shaderManager.empty()) {
+    // Cache cursor pos once per frame for the iMouse uniforms. paintWindow
+    // runs once per active transition (and may run multiple times across
+    // outputs); reading KWin::effects->cursorPos() at every call multiplies
+    // up. Caching here also guarantees every consumer this frame reads an
+    // identical iMouse, eliminating sub-frame jitter. Decorated windows read
+    // it too (hover-reactive surface packs via pushBorderUniforms), so the
+    // refresh also runs while any decoration exists, not only mid-transition.
+    if (KWin::effects && (!m_shaderManager.empty() || !m_windowDecorations.isEmpty())) {
         m_shaderManager.m_cachedCursorGlobal = KWin::effects->cursorPos();
     }
 
@@ -827,6 +829,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             }
             const QVector4D layerRectInTexture = ShaderInternal::computeTextureSubRect(
                 transition.surfaceExtent ? anchorGeo : expandedGeo, layerCanvasGeo);
+            // Whether this draw bound the audio spectrum on kSurfaceAudioUnit —
+            // read by the post-draw hygiene block to unbind it, mirroring the
+            // fold's mainAudioBound/passAudioBound cleanup.
+            bool audioBound = false;
             {
                 KWin::ShaderBinder binder(shader);
                 if (cached->iTimeLoc >= 0) {
@@ -1200,6 +1206,36 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                      ++slot) {
                     CachedTexture* entry = transition.userTextures[slot];
                     if (!entry || !entry->texture) {
+                        // Referenced but unsupplied (declared file failed to
+                        // load, or the pack samples a slot it never declared):
+                        // bind the shared 1x1 transparent fallback so the
+                        // sampler reads the contract's transparent black. A
+                        // classic default-block sampler with no bind defaults
+                        // to unit 0 — the redirected window — which would
+                        // silently composite live content where the pack
+                        // expects nothing.
+                        if (cached->userTextureLoc[slot] >= 0) {
+                            // Park the destination unit BEFORE the call: the
+                            // first-ever call creates the texture, and
+                            // GLTexture::upload binds it on the CURRENTLY
+                            // ACTIVE unit — the previous iteration may have
+                            // left an earlier slot's unit active. Same
+                            // discipline as the audio upload below.
+                            glActiveTexture(GL_TEXTURE1 + slot);
+                            if (KWin::GLTexture* fallback = transparentFallbackTexture()) {
+                                shader->setUniform(cached->userTextureLoc[slot], 1 + slot);
+                                fallback->bind();
+                            }
+                        }
+                        // The fallback is a 1x1 transparent, so this slot's
+                        // declared size is zero. Push it explicitly: this
+                        // cached program persists uniform state across
+                        // transitions, so a slot that carried a real texture
+                        // (and its size) on a prior leg would otherwise leave a
+                        // stale non-zero iTextureResolution here.
+                        if (cached->iTextureResolutionLoc[slot] >= 0) {
+                            shader->setUniform(cached->iTextureResolutionLoc[slot], QVector4D(0.0f, 0.0f, 0.0f, 0.0f));
+                        }
                         continue;
                     }
                     KWin::GLTexture* tex = entry->texture.get();
@@ -1302,6 +1338,33 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (cached->uTexture0Loc >= 0) {
                     shader->setUniform(cached->uTexture0Loc, retargetUTexture0 ? kSurfaceLayerUnit : 0);
                 }
+                // Audio spectrum (opt-in via the audio.glsl module + metadata
+                // `"audio": true`). Reuses the surface-decoration CAVA
+                // provider and texture: bindSurfaceAudio pushes the bar count
+                // (0 while the visualizer is off or cava is absent, so the
+                // pack's helpers render static) and binds the spectrum at
+                // kSurfaceAudioUnit, clear of this draw's units 0..5.
+                if (cached->iAudioSpectrumSizeLoc >= 0 || cached->uAudioSpectrumLoc >= 0) {
+                    // Park the active unit on the audio unit BEFORE the
+                    // (possibly dirty) upload: GLTexture::upload binds the
+                    // fresh texture on the CURRENTLY ACTIVE unit, and the
+                    // surface-layer bind above leaves kSurfaceLayerUnit
+                    // active — an upload there would replace the layered
+                    // surface with the tiny spectrum texture for this draw.
+                    // Same hazard the fold documents (surfacelayers.cpp),
+                    // which defends by uploading up front; here the upload
+                    // lands on the audio unit, its destination anyway.
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
+                    ensureAudioSpectrumTexture();
+                    bindSurfaceAudio(shader, cached->iAudioSpectrumSizeLoc, cached->uAudioSpectrumLoc);
+                    // Unconditional, NOT bindSurfaceAudio's return: a dirty
+                    // upload above can leave the spectrum texture bound on
+                    // the parked unit even when the bind reports not-live
+                    // (size-only shader, audio toggled off mid-frame), and
+                    // unbinding a clear unit in the hygiene block is a
+                    // harmless no-op.
+                    audioBound = true;
+                }
                 // Restore TEXTURE0 as the active unit so KWin's
                 // OffscreenData::paint binds the redirected surface
                 // to the unit it expects (its `m_texture->bind()` runs
@@ -1354,9 +1417,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // effect in the chain assumes TEXTURE0 is the only active
             // unit; leaving stale binds risks the next effect inheriting
             // a sampler that points at our matrix glyph atlas (or
-            // whatever) when it expects a default-empty unit.
+            // whatever) when it expects a default-empty unit. A slot with a
+            // resolved sampler location but no cached texture bound the
+            // transparent fallback above, so it needs the same unbind.
             for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
-                if (!transition.userTextures[slot]) {
+                if (!transition.userTextures[slot] && cached->userTextureLoc[slot] < 0) {
                     continue;
                 }
                 glActiveTexture(GL_TEXTURE1 + slot);
@@ -1380,6 +1445,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (surfaceLayerTex) {
                 constexpr int kSurfaceLayerUnit = ShaderInternal::kSurfaceLayerUnit;
                 glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnit);
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
+            // Same hygiene for the audio-spectrum unit — the fold unbinds its
+            // audio bind after every pass (mainAudioBound / passAudioBound);
+            // mirror that so the next effect in the chain doesn't inherit the
+            // spectrum texture on kSurfaceAudioUnit.
+            if (audioBound) {
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
             glActiveTexture(GL_TEXTURE0);

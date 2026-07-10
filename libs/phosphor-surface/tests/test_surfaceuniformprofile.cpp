@@ -44,6 +44,12 @@ PhosphorShaders::UboFrameState makeFixedState()
         s.channelResolution[i][1] = static_cast<float>(50 + i);
     }
     s.audioSpectrumSize = 12;
+    s.mouseX = 320.0f;
+    s.mouseY = 240.0f;
+    for (int i = 0; i < 4; ++i) {
+        s.textureResolution[i][0] = static_cast<float>(64 + i);
+        s.textureResolution[i][1] = static_cast<float>(32 + i);
+    }
     return s;
 }
 
@@ -85,6 +91,19 @@ SurfaceUniforms makeReference(const PhosphorShaders::UboFrameState& s)
         u.iChannelResolution[i][3] = 0.0f;
     }
     u.iAudioSpectrumSize = s.audioSpectrumSize;
+    // Cursor (device px) with .zw normalized by the surface size — mirrors
+    // fill()'s convention (negative passthrough carries the off-surface
+    // sentinel; the fixed state uses an in-surface position).
+    u.iMouse[0] = s.mouseX;
+    u.iMouse[1] = s.mouseY;
+    u.iMouse[2] = s.surfaceSize[0] > 0.0f ? s.mouseX / s.surfaceSize[0] : 0.0f;
+    u.iMouse[3] = s.surfaceSize[1] > 0.0f ? s.mouseY / s.surfaceSize[1] : 0.0f;
+    for (int i = 0; i < 4; ++i) {
+        u.iTextureResolution[i][0] = s.textureResolution[i][0];
+        u.iTextureResolution[i][1] = s.textureResolution[i][1];
+        u.iTextureResolution[i][2] = 0.0f;
+        u.iTextureResolution[i][3] = 0.0f;
+    }
     return u;
 }
 
@@ -95,11 +114,11 @@ class TestSurfaceUniformProfile : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    void baseSize_is_576()
+    void baseSize_is_656()
     {
         SurfaceUniformProfile profile;
         QCOMPARE(profile.baseSize(), static_cast<int>(sizeof(SurfaceUniforms)));
-        QCOMPARE(profile.baseSize(), 576);
+        QCOMPARE(profile.baseSize(), 656);
     }
 
     void golden_bytes_match_reference()
@@ -150,7 +169,7 @@ private Q_SLOTS:
         // No flags → no regions.
         QVERIFY(profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{}).empty());
 
-        // Any flag → matrix {0,64} + scene {64, 576-64}.
+        // Any flag → matrix {0,64} + scene {64, 656-64}.
         auto r = profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{false, false, true, false});
         QCOMPARE(static_cast<int>(r.size()), 2);
         QCOMPARE(r[0].offset, 0);

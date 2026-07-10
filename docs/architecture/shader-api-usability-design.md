@@ -5,9 +5,14 @@
 
 ## Status
 
-**Tier 1 implemented** (T1.1–T1.5 + T1.2; all 53 animation + 26 zone packs migrated,
+**Tier 1 implemented** (T1.1–T1.5 + T1.2; all bundled animation + zone packs migrated,
 offline validator + CI gate landed). Tiers 2–3 remain proposed. This document covers
 the full scope across all tiers; the Tier-2/3 sections are the forward design.
+
+Pack counts throughout this document reflect the v3.1 tree at design time (53
+animation + 26 zone packs); the animation tree has since grown (69 packs as of
+v3.2) and every pack added after the T1.5 migration follows the migrated
+conventions from day one.
 
 ## Motivation
 
@@ -628,10 +633,13 @@ Consequences for Tier 1:
   both; there is already `tests/unit/ui/test_animation_shader_bake.cpp` baking every
   built-in animation shader through `qsb` — extend that harness rather than
   duplicating it, and have the CLI share its code.
-- **Multipass / audio / wallpaper are daemon-only** on this path (the kwin
+- **Multipass / wallpaper are daemon-only** on this path (the kwin
   `OffscreenEffect` is single-pass). The validator should *warn*, not error, when an
   animation shader uses daemon-only features — they degrade to single-pass on the
-  compositor by design.
+  compositor by design. Audio is NOT in that set: animation packs opt in via
+  `data/animations/shared/audio.glsl` plus the `audio` metadata flag, and the
+  kwin-effect feeds the spectrum from its own CAVA provider, so audio-reactive
+  transitions run on both runtimes.
 
 ### A3 — Direction (the in/out toggle) — `T1.5`
 

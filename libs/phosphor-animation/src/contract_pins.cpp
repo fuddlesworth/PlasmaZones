@@ -5,7 +5,7 @@
 #include <PhosphorRendering/ShaderNodeRhi.h>
 
 // Compile-time pin: the contract's user-declarable texture budget plus the
-// reserved surface slot (iChannel0) must equal the daemon's RHI texture-array
+// reserved surface slot (uTexture0) must equal the daemon's RHI texture-array
 // capacity. If anyone resizes one without the other, the kwin/daemon contract
 // silently drifts (declared textures past slot kMaxUserTextureSlots would land
 // outside the SRB binding range on the daemon, or the daemon would reserve

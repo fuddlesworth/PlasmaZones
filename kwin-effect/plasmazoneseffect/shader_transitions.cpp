@@ -850,6 +850,11 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasSurfaceLayer);
         cached.iHasOldWindowLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIHasOldWindow);
+        // Audio spectrum (opt-in audio.glsl module; -1 for non-audio packs).
+        cached.iAudioSpectrumSizeLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAudioSpectrumSize);
+        cached.uAudioSpectrumLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUAudioSpectrum);
         cached.iMoveVelocityLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIMoveVelocity);
         cached.iMoveOffsetLoc =
@@ -1769,6 +1774,10 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
                                 qCDebug(lcEffect)
                                     << "loadShaderProfileFromDbus: tree loaded with" << tree.overriddenPaths().size()
                                     << "overrides — paths=" << tree.overriddenPaths();
+                                // A tree edit can assign or unassign an audio-reactive
+                                // animation pack; re-evaluate the cava run gate so the
+                                // provider is warm before the first transition needs it.
+                                scheduleEffectAudioSync();
                             },
                             /*arraySink=*/{});
     });
@@ -1862,6 +1871,9 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
             }
         }
         m_shaderManager.setRuleAnimationRules(std::move(animationRules));
+        // A rule edit can route transitions to (or away from) an audio-reactive
+        // animation pack via an EffectId payload — re-evaluate the cava run gate.
+        scheduleEffectAudioSync();
         // The new-state SetOpacity predicate is computed by rebuildAnimationRuleSet
         // (see ShaderTransitionManager::hasOpacityRules) — read it back rather than
         // re-scanning the rule list a second time here.

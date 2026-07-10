@@ -137,6 +137,8 @@ QJsonObject AnimationShaderEffect::toJson() const
     }
     if (useDepthBuffer)
         obj.insert(QLatin1String("depthBuffer"), true);
+    if (useAudio)
+        obj.insert(QLatin1String("audio"), true);
 
     if (!parameters.isEmpty()) {
         QJsonArray params;
@@ -254,6 +256,7 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
             e.bufferFilters.append(f);
     }
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
+    e.useAudio = obj.value(QLatin1String("audio")).toBool(false);
 
     // `fboExtent` (string). Accepted forms:
     //   "anchor"        Anchor extent — FBO == captured anchor (default)
@@ -295,7 +298,7 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     }
 
     // Cap the texture list at the contract budget. Surplus entries are
-    // silently dropped — the canonical UBO only declares iChannel1..3
+    // silently dropped — the canonical UBO only declares uTexture1..3
     // and exposing more would require both runtimes to grow more
     // sampler bindings. A future contract bump (kMaxUserTextureSlots > 3)
     // would loosen this cap automatically.
@@ -332,8 +335,8 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
         // slot-index field; an empty entry preceding a populated one
         // SHIFTS the populated entry's runtime slot. e.g. authoring
         // [{path:""}, {path:"foo.png"}, {path:"bar.png"}] yields
-        // textures bound at iChannel1+iChannel2 instead of iChannel2+
-        // iChannel3 as the metadata reads. Loud so authors notice the
+        // textures bound at uTexture1+uTexture2 instead of uTexture2+
+        // uTexture3 as the metadata reads. Loud so authors notice the
         // implicit re-mapping.
         if (t.path.isEmpty()) {
             ++droppedEmpty;
@@ -381,7 +384,7 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
     if (geometryGridSubdivisions != other.geometryGridSubdivisions)
         return false;
     if (isMultipass != other.isMultipass || useWallpaper != other.useWallpaper || bufferFeedback != other.bufferFeedback
-        || useDepthBuffer != other.useDepthBuffer)
+        || useDepthBuffer != other.useDepthBuffer || useAudio != other.useAudio)
         return false;
     if (!qFuzzyCompare(bufferScale + 1.0, other.bufferScale + 1.0))
         return false;

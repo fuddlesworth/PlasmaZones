@@ -29,9 +29,9 @@ class Item;
 
 namespace PlasmaZones {
 
-/// One compiled buffer pass of a multipass SURFACE pack (the idle drawWindow
-/// path). Each buffer.frag is a fullscreen-quad fragment that samples the
-/// captured window surface (uTexture0) plus any prior buffer outputs
+/// One compiled buffer pass of a multipass SURFACE pack (run in the
+/// composite fold). Each buffer.frag is a fullscreen-quad fragment that
+/// samples the captured window surface (uTexture0) plus any prior buffer outputs
 /// (iChannel0..N-1) and writes into its own FBO; the main effect.frag then
 /// samples the final buffer output(s) as iChannel0..3. Compiled in
 /// compiledPack() right after the main pack shader, cleared (fail-closed) if any
@@ -120,11 +120,12 @@ struct CompiledSurfacePack
     int uFocusedLoc = -1; ///< uSurfaceFocused — 1.0 focused / 0.0 unfocused
     int uOpacityLoc = -1; ///< uSurfaceOpacity — rule-resolved window opacity (handlesOpacity packs)
     int uTimeLoc = -1; ///< iTime — continuous seconds; -1 ⟺ static pack (drives the repaint gate)
-    /// uTexture0 — the input-surface sampler (unit 0). On the single-pack path
-    /// OffscreenData::paint binds the redirected surface to unit 0 automatically,
-    /// so this is unused there; the multi-pack composite (renderSurfaceChainComposite)
-    /// runs the main pass as a fullscreen FBO pass and binds the running composite
-    /// to unit 0 itself, setting this explicitly.
+    /// uTexture0 — the input-surface sampler (unit 0). Every decorated window
+    /// (one-pack chains included) folds through renderSurfaceChainComposite,
+    /// which runs the main pass as a fullscreen FBO pass, binds the running
+    /// composite to unit 0 itself, and sets this explicitly. (The only
+    /// remaining OffscreenData::paint auto-bind of unit 0 belongs to the
+    /// animation-transition path's CachedShader, a different struct.)
     int uTexture0Loc = -1;
     /// Backdrop sampling (needsBackdrop packs, main pass): sampler +
     /// valid-rect + gate locations; -1 for packs that never reference the
@@ -139,11 +140,35 @@ struct CompiledSurfacePack
     /// (syncEffectAudioState) and the per-frame repaint gate (windowSurfaceAnimates).
     int iAudioSpectrumSizeLoc = -1;
     int uAudioSpectrumLoc = -1;
+    /// iMouse — cursor in the surface texture's top-down device-px space,
+    /// (-1, -1) off-canvas. -1 for packs that never read the cursor (the
+    /// common case); pushBorderUniforms then skips the push entirely.
+    int iMouseLoc = -1;
 
     /// MAIN-pass iChannel0..3 sampler + iChannelResolution[0..3] element
     /// locations. -1 when the linker dropped the uniform (single-pass pack).
     std::array<int, 4> iChannelLoc{{-1, -1, -1, -1}};
     std::array<int, 4> iChannelResolutionLoc{{-1, -1, -1, -1}};
+
+    /// User-declared image textures (metadata `textures`): sampler +
+    /// iTextureResolution[N] element locations, plus the textures themselves,
+    /// loaded once at compile time (decorations are persistent, so the
+    /// pack-lifetime cache is the natural owner — freed with the shader on
+    /// cache clear, where the GL context discipline already applies). Slot N
+    /// feeds uTexture<N+1>. A slot with no loadable file stays null and the
+    /// fold skips its bind (the sampler then reads transparent black).
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> userTextureLoc = []() {
+        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> a;
+        a.fill(-1);
+        return a;
+    }();
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> iTextureResolutionLoc = []() {
+        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> a;
+        a.fill(-1);
+        return a;
+    }();
+    std::array<std::unique_ptr<KWin::GLTexture>, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots>
+        userTextures;
 
     /// Pack-declared parameter uniform locations + resolved-default values.
     /// float/int/bool params pack into customParams[N], colours into
@@ -165,10 +190,10 @@ struct CompiledSurfacePack
     std::array<QVector4D, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsValues{};
     std::array<QVector4D, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomColors> customColorsValues{};
 
-    /// Compiled multipass buffer passes (idle drawWindow path). Empty for a
-    /// single-pass pack (the border). Cleared fail-closed if any pass fails to
-    /// compile (the pack then renders single-pass). The per-window FBO targets
-    /// live in m_surfaceMultipass.
+    /// Compiled multipass buffer passes (run in the composite fold). Empty for
+    /// a single-pass pack (the border). Cleared fail-closed if any pass fails
+    /// to compile (the pack then renders single-pass). The per-window FBO
+    /// targets live in m_surfaceMultipass.
     std::vector<CompiledSurfaceBufferPass> bufferPasses;
 };
 
@@ -451,6 +476,12 @@ struct CachedShader
     /// surfaceColor() for its "old" side instead of sampling the raw window
     /// through the unit-0 alias).
     int iHasOldWindowLoc = -1;
+    /// Audio-spectrum uniforms (opt-in module
+    /// `data/animations/shared/audio.glsl` + metadata `"audio": true`).
+    /// -1 when the pack doesn't include the module — paintWindow then skips
+    /// the spectrum push and bind entirely.
+    int iAudioSpectrumSizeLoc = -1;
+    int uAudioSpectrumLoc = -1;
     /// Interactive-move motion uniforms (held move/resize transitions).
     int iMoveVelocityLoc = -1;
     int iMoveOffsetLoc = -1;

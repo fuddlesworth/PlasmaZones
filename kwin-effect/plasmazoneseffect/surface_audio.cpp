@@ -11,6 +11,8 @@
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleAction.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
 #include <QImage>
@@ -19,10 +21,12 @@
 #include <memory>
 #include <epoxy/gl.h>
 
-// Audio-reactive surface decorations (CAVA). The compositor has no daemon-style
-// audio path, so the effect runs its own CavaSpectrumProvider and feeds the
-// spectrum to audio-reactive decoration packs through surface_audio.glsl. Split
-// out of surfacelayers.cpp to keep that TU under the 800-line limit; the fold
+// Audio-reactive surface decorations and animation packs (CAVA). The
+// compositor has no daemon-style audio path, so the effect runs its own
+// CavaSpectrumProvider and feeds the spectrum to audio-reactive decoration
+// packs (surface_audio.glsl) and animation packs (the animation family's
+// audio.glsl module, bound from paint_pipeline's transition draw). Split out
+// of surfacelayers.cpp to keep that TU under the 800-line limit; the fold
 // itself (which binds the uploaded texture) still lives there. See the member
 // docs in plasmazoneseffect.h.
 
@@ -67,6 +71,55 @@ bool PlasmaZonesEffect::hasAudioReactiveDecoration() const
     for (auto it = m_windowDecorations.cbegin(); it != m_windowDecorations.cend(); ++it) {
         for (const QString& packId : it->chain) {
             if (m_surfaceShaderRegistry.effect(packId).audio) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool PlasmaZonesEffect::hasAudioReactiveAnimation() const
+{
+    // Metadata-only scan, mirroring hasAudioReactiveDecoration: collect every
+    // effect id a transition could resolve (tree baseline + direct overrides +
+    // animation-rule effectId payloads) and test the pack's audio flag. The
+    // scan is small (a handful of overrides and rules) and only runs from
+    // syncEffectAudioState, so no caching is needed.
+    const auto& registry = m_shaderManager.shaderRegistry();
+    const auto isAudioPack = [&registry](const QString& id) {
+        return !id.isEmpty() && registry.effect(id).useAudio;
+    };
+    const auto& tree = m_shaderManager.profileTree();
+    // Built-in per-event DEFAULT packs (resolveShaderWithDefault injects
+    // window-morph / fade for a truly-unset path) are deliberately NOT
+    // scanned: no built-in default pack declares `audio: true`, so an unset
+    // path can never resolve to an audio pack. If a future built-in default
+    // ever declares audio, this scan must route through
+    // resolveShaderWithDefault instead of raw overrides or cava never warms
+    // for it.
+    if (isAudioPack(tree.baseline().effectiveEffectId())) {
+        return true;
+    }
+    const QStringList paths = tree.overriddenPaths();
+    for (const QString& path : paths) {
+        if (isAudioPack(tree.directOverride(path).effectiveEffectId())) {
+            return true;
+        }
+    }
+    // Rules: any enabled rule action carrying an EffectId param can route a
+    // transition to that pack (the anim-shader slot). Reading the param off
+    // every action over-approximates slightly (a non-shader action never
+    // carries EffectId, so the extra reads are cheap misses), which errs on
+    // the safe side for a run gate.
+    for (const PhosphorRules::Rule& rule : m_shaderManager.m_ruleAnimationRules) {
+        // Defensive only: loadRuleAnimationsFromDbus already prunes disabled
+        // rules before populating this list; the check stays so this scan
+        // remains correct if that upstream filter ever changes.
+        if (!rule.enabled) {
+            continue;
+        }
+        for (const PhosphorRules::RuleAction& action : rule.actions) {
+            if (isAudioPack(action.params.value(PhosphorRules::ActionParam::EffectId).toString())) {
                 return true;
             }
         }
@@ -125,7 +178,7 @@ void PlasmaZonesEffect::scheduleEffectAudioSync()
 
 void PlasmaZonesEffect::syncEffectAudioState()
 {
-    const bool wantRun = m_enableAudioVisualizer && hasAudioReactiveDecoration();
+    const bool wantRun = m_enableAudioVisualizer && (hasAudioReactiveDecoration() || hasAudioReactiveAnimation());
     if (wantRun) {
         if (!m_audioProvider) {
             // Lazily created on first need so a session that never uses an audio
@@ -139,10 +192,10 @@ void PlasmaZonesEffect::syncEffectAudioState()
             // Graceful fallback: the pack already renders as a plain static
             // border when iAudioSpectrumSize stays 0 (no spectrum ever arrives).
             // Warn ONCE — this path is re-entered on every sync while the audio
-            // decoration is present, so an unconditional warn would spam the log.
+            // pack is present, so an unconditional warn would spam the log.
             if (!m_audioUnavailableWarned) {
-                qCWarning(lcEffect) << "Audio-reactive decoration active but cava is not installed; "
-                                       "border renders static";
+                qCWarning(lcEffect) << "Audio-reactive pack active (decoration or animation) but cava is not "
+                                       "installed; audio-reactive visuals render static";
                 m_audioUnavailableWarned = true;
             }
             return;
@@ -158,7 +211,8 @@ void PlasmaZonesEffect::syncEffectAudioState()
         }
         return;
     }
-    // Not wanted (toggle off or no audio decoration left): stop capture and clear
+    // Not wanted (toggle off, or no audio decoration or animation pack left):
+    // stop capture and clear
     // the spectrum so audioActive() goes false and any lingering audio border
     // falls back to static on its next paint.
     const bool wasLive = (m_audioProvider && m_audioProvider->isRunning()) || m_audioSpectrumSize > 0;
@@ -215,10 +269,34 @@ bool PlasmaZonesEffect::ensureAudioSpectrumTexture()
     return m_audioSpectrumTex != nullptr;
 }
 
+KWin::GLTexture* PlasmaZonesEffect::transparentFallbackTexture()
+{
+    // Shared 1x1 transparent texture bound in place of a REFERENCED but
+    // unsupplied user-texture sampler (surface fold units 7-9, animation
+    // units 1-3). A classic default-block sampler with no bind reads unit 0
+    // — live window content — instead of the contract's documented
+    // transparent black; this fallback makes the documented behaviour real.
+    // Lazily created on a paint path (GL context current); freed with the
+    // effect. Mirrors the daemon's dummy-channel fallback in ShaderNodeRhi.
+    if (!m_transparentFallbackTex) {
+        QImage img(1, 1, QImage::Format_RGBA8888);
+        img.fill(Qt::transparent);
+        m_transparentFallbackTex = KWin::GLTexture::upload(img);
+        if (m_transparentFallbackTex) {
+            m_transparentFallbackTex->setFilter(GL_LINEAR);
+            m_transparentFallbackTex->setWrapMode(GL_CLAMP_TO_EDGE);
+        }
+    }
+    return m_transparentFallbackTex.get();
+}
+
 bool PlasmaZonesEffect::bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc)
 {
-    // The texture was uploaded up front by renderSurfaceChainComposite (see the
-    // note there); here we only bind the ready texture — no upload mid-pass.
+    // This helper only binds the ready texture — it never uploads. The fold
+    // uploads up front (renderSurfaceChainComposite, see the note there); the
+    // animation path uploads inline just before calling, with the active unit
+    // parked on kSurfaceAudioUnit so the upload lands on its destination
+    // (paint_pipeline.cpp's audio block).
     const bool live = audioActive() && m_audioSpectrumTex != nullptr;
     // Push the bar count (0 when not live) so surface_audio.glsl's helpers gate
     // themselves off and the pack renders static without a bound sampler. Derive

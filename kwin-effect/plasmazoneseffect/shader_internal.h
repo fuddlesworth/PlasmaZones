@@ -246,6 +246,15 @@ inline constexpr int kSurfaceAudioUnit = 6;
 static_assert(kSurfaceAudioUnit > 5,
               "kSurfaceAudioUnit must clear the fold's units 0..5 (uTexture0/iChannel/backdrop)");
 
+/// First texture unit for SURFACE pack user textures (uTexture1..3) in the
+/// composite fold's main pass: units 7..9, clear of the fold's units 0..5 and
+/// the audio unit 6. The animation paintWindow path also binds audio at unit 6
+/// (bindSurfaceAudio) in its own phase; its user textures live at units 1..3,
+/// so the two paths' maps never meet on the same draw.
+inline constexpr int kSurfaceUserTextureBaseUnit = 7;
+static_assert(kSurfaceUserTextureBaseUnit > kSurfaceAudioUnit,
+              "surface user textures must sit above the audio unit — the fold binds both in the same pass");
+
 /// Surface decoration texture units shared by the animation-layer paths in
 /// paint_pipeline.cpp and the present rebind in decoration_render.cpp. All are
 /// offset from kMaxUserTextureSlots (N, = 3 today) so the animation
