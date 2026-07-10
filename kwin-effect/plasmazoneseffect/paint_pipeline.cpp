@@ -1066,8 +1066,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 // releases the published velocity rings down through zero and
                 // a velocity-driven deformation settles like a real object.
                 // toGeometry mirrors the live frame each frame so a vertex
-                // stage can anchor to the current rect via iToRect
-                // (fromGeometry stays invalid — this is not a morph).
+                // stage can anchor to the current rect via iToRect.
+                // fromGeometry is anchored once at the grab (drag-start
+                // hookup in window_lifecycle.cpp) so rect-driven packs read
+                // a valid iFromRect instead of the zero vec4; it is not
+                // re-mirrored here — the held leg is not a morph.
                 if (transition.holdUntilRelease) {
                     const QPointF pos = w->frameGeometry().topLeft();
                     if (transition.lastMoveSampleMs >= 0) {

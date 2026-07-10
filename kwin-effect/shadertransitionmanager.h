@@ -19,6 +19,7 @@
 #include <QLoggingCategory>
 #include <QPointF>
 #include <QPointer>
+#include <QRectF>
 #include <QSet>
 #include <QSize>
 #include <QString>
@@ -384,6 +385,31 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
     quint64 m_shaderTransitionGenerationCounter = 0;
     QHash<KWin::EffectWindow*, bool> m_lastFullyMaximized;
+    // Frame rect captured at windowMaximizedStateAboutToChange — the rect the
+    // window is LEAVING. KWin emits the about-to-change signal before any
+    // geometry change, so this is the only place the maximize morph's
+    // departure rect can be read. Latest-wins per window; erased with
+    // m_lastFullyMaximized on windowDeleted.
+    QHash<KWin::EffectWindow*, QRectF> m_preMaximizeFrame;
+    // Maximize/restore morph whose state edge fired BEFORE the client
+    // committed the new size. KWin does not guarantee the geometry has been
+    // applied when windowMaximizedStateChanged is emitted: an occluded or
+    // slow client leaves the frame at (or near) the departure rect — a
+    // live trace on KWin 6.7.2 showed maximizedChanged arriving with only
+    // the position applied and the size still pending the client's ack.
+    // Installing the morph then would tween between two same-size rects
+    // while the real resize lands as a raw snap mid-animation. Instead the
+    // state edge arms this entry and the size-delivering
+    // windowFrameGeometryChanged completes the install (window_lifecycle.cpp),
+    // so the animation starts exactly when the window visibly changes size.
+    // Erased on completion, on windowDeleted, and on a stale-deadline check
+    // at consumption time.
+    struct PendingMaximizeMorph
+    {
+        QRectF departureFrame;
+        qint64 armedAtMs = 0;
+    };
+    QHash<KWin::EffectWindow*, PendingMaximizeMorph> m_pendingMaximizeMorph;
     QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
 };
 
