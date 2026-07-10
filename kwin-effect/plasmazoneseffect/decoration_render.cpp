@@ -246,6 +246,33 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     if (pack.uTimeLoc >= 0) {
         shader->setUniform(pack.uTimeLoc, surfaceShaderTimeSeconds());
     }
+    // Cursor position for hover-reactive packs, in the same top-down device-px
+    // space as the geometry uniforms above (origin at the padded canvas's
+    // top-left); (-1, -1) when the cursor is outside the canvas. .zw is .xy
+    // normalized by the canvas size (negative alongside the sentinel),
+    // matching the daemon branch's convention. Uses the per-frame cached
+    // cursor from prePaintScreen — same rationale as the animation path.
+    // Hover packs declare `animated: true` so the vsync repaint loop keeps
+    // this fresh; there is no per-cursor-move damage path.
+    if (pack.iMouseLoc >= 0) {
+        const QPointF cursorGlobal = m_shaderManager.m_cachedCursorGlobal;
+        float localX = -1.0f;
+        float localY = -1.0f;
+        const bool inside = cursorGlobal.x() >= expanded.left() && cursorGlobal.x() < expanded.right()
+            && cursorGlobal.y() >= expanded.top() && cursorGlobal.y() < expanded.bottom();
+        if (inside) {
+            localX = static_cast<float>((cursorGlobal.x() - expanded.left()) * scale);
+            localY = static_cast<float>((cursorGlobal.y() - expanded.top()) * scale);
+        }
+        QVector4D iMouseValue(localX, localY, 0.0f, 0.0f);
+        if (windowExpandedSize.x() > 0.0f) {
+            iMouseValue.setZ(localX / windowExpandedSize.x());
+        }
+        if (windowExpandedSize.y() > 0.0f) {
+            iMouseValue.setW(localY / windowExpandedSize.y());
+        }
+        shader->setUniform(pack.iMouseLoc, iMouseValue);
+    }
     // Pack-declared parameters (customParams / customColors). Seed from THIS
     // window's resolved values (updateWindowDecoration fills packParamValues from
     // the window's own DecorationProfile), falling back to the compiled pack's

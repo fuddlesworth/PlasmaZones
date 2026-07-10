@@ -63,6 +63,13 @@ SurfaceShaderItem::SurfaceShaderItem(QQuickItem* parent)
     // ShaderEffect's setAudioSpectrum / setAudioSpectrumVariant already call
     // update() on a value change, and update() schedules this item's
     // updatePaintNode whether or not the override is present.
+
+    // Seed the inherited iMouse to the off-surface sentinel. The surface UBO
+    // publishes iMouse (hover-reactive packs), and a host that wires no hover
+    // source must read as "cursor off the surface", not as a phantom hover at
+    // the base's (0, 0) default. A host that does wire a HoverHandler simply
+    // overwrites this.
+    setIMouse(QPointF(-1.0, -1.0));
 }
 
 SurfaceShaderItem::~SurfaceShaderItem()

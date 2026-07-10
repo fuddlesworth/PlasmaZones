@@ -102,6 +102,26 @@ uniform float uHasBackdrop;
 // the frost slab stays solid).
 uniform float uSurfaceOpacity;
 
+// Cursor position for hover-reactive packs. .xy is the cursor in the SAME
+// top-down device-px space as the geometry uniforms above (origin at the
+// padded canvas's top-left), (-1, -1) when the cursor is outside the canvas.
+// .zw is .xy normalized by uSurfaceSize (negative while .xy carries the
+// sentinel), so `iMouse.x < 0.0` is the canonical off-surface test on both
+// runtimes. A pack that reads iMouse should also declare `"animated": true`
+// in its metadata — the host repaints on its vsync loop while a pack
+// animates, and there is no per-cursor-move damage path for static packs.
+uniform vec4 iMouse;
+
+// User-declared image textures (metadata `textures` — logo, mask, pattern).
+// Bound to dedicated units at draw time; iTextureResolution[N].xy carries
+// each bound texture's pixel size (slot N feeds uTexture<N+1>, mirroring the
+// animation contract's slot layout). A slot with no loadable file reads
+// transparent black.
+uniform sampler2D uTexture1;
+uniform sampler2D uTexture2;
+uniform sampler2D uTexture3;
+uniform vec4 iTextureResolution[4];
+
 #else
 
 // ── Daemon branch — std140 UBO at binding 0 ─────────────────────────────────
@@ -124,9 +144,22 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
     vec4 customColors[16];       // offset 240 (256)
     vec4 iChannelResolution[4];  // offset 496 (64) — multipass buffer sizes (.xy)
     int iAudioSpectrumSize;      // offset 560 (4) — CAVA bar count (0 = audio off)
-};                               // total 576 bytes (std140 rounds the block up from 564)
+    // implicit 12-byte std140 pad here — vec4 iMouse below is 16-aligned.
+    vec4 iMouse;                 // offset 576 (16) — cursor in the surface texture's
+                                 //   top-down device-px space (.xy; negative when
+                                 //   off-surface / no hover source), .zw = .xy
+                                 //   normalized by uSurfaceSize
+    vec4 iTextureResolution[4];  // offset 592 (64) — user texture sizes (.xy;
+                                 //   slot N feeds uTexture<N+1>)
+};                               // total 656 bytes, no trailing pad
 
 layout(binding = 7) uniform sampler2D uTexture0;
+// User-declared image textures (metadata `textures`), bindings 8-10 — the
+// same sampler-name and binding-point dialect the animation and overlay
+// categories use, provided by the base ShaderEffect's user-texture plumbing.
+layout(binding = 8) uniform sampler2D uTexture1;
+layout(binding = 9) uniform sampler2D uTexture2;
+layout(binding = 10) uniform sampler2D uTexture3;
 
 // The multipass iChannel sampler bindings (2-5) live in surface_multipass.glsl,
 // which a multipass pack includes; the border and other single-pass packs bind

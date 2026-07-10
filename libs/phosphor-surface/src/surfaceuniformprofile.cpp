@@ -86,8 +86,27 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
 
     // Audio spectrum bar count (0 when CAVA is off). The node uploads the
     // spectrum texture (binding 6) via setAudioSpectrum; only the size crosses
-    // into the UBO. The trailing pad stays zero from the m_u{} value-init.
+    // into the UBO. The pad stays zero from the m_u{} value-init.
     m_u.iAudioSpectrumSize = state.audioSpectrumSize;
+
+    // Cursor position, already in device px (ShaderEffect scales its iMouse
+    // property by the dpr before pushing it to the node). SurfaceShaderItem
+    // seeds the inherited iMouse to (-1, -1), so a host that wires no hover
+    // source publishes the off-surface sentinel; .zw stays negative alongside
+    // it, matching the kwin branch's convention.
+    m_u.iMouse[0] = state.mouseX;
+    m_u.iMouse[1] = state.mouseY;
+    m_u.iMouse[2] = state.surfaceSize[0] > 0.0f ? state.mouseX / state.surfaceSize[0] : 0.0f;
+    m_u.iMouse[3] = state.surfaceSize[1] > 0.0f ? state.mouseY / state.surfaceSize[1] : 0.0f;
+
+    // User texture sizes (bindings 8-10) — the node resolves these live, same
+    // as the overlay profile.
+    for (std::size_t i = 0; i < std::size(m_u.iTextureResolution); ++i) {
+        m_u.iTextureResolution[i][0] = state.textureResolution[i][0];
+        m_u.iTextureResolution[i][1] = state.textureResolution[i][1];
+        m_u.iTextureResolution[i][2] = 0.0f;
+        m_u.iTextureResolution[i][3] = 0.0f;
+    }
 }
 
 PhosphorShaders::UboUploadRegionList

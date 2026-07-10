@@ -20,12 +20,14 @@
 #include <effect/effecthandler.h>
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
+#include <opengl/gltexture.h>
 
 #include <QByteArray>
 #include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QIODevice>
 #include <QLoggingCategory>
 #include <QStandardPaths>
@@ -325,6 +327,53 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // keeps them and iAudioSpectrumSizeLoc >= 0 flags the pack as audio-reactive.
     packState.iAudioSpectrumSizeLoc = shader->uniformLocation(SC::kIAudioSpectrumSize);
     packState.uAudioSpectrumLoc = shader->uniformLocation(SC::kUAudioSpectrum);
+    // iMouse (hover-reactive packs) — -1 for the common pack that never reads
+    // the cursor; pushBorderUniforms skips the push entirely then.
+    packState.iMouseLoc = shader->uniformLocation(SC::kIMouse);
+
+    // User-declared image textures (metadata `textures`): resolve the sampler +
+    // iTextureResolution[N] element locations and upload each declared file
+    // once — decorations are persistent, so the pack-lifetime cache owns the
+    // GLTextures (freed with the shader under the same GL-context discipline).
+    // Paths were made absolute + traversal-checked at registry scan time; an
+    // unloadable file warns and leaves the slot null (transparent black).
+    static const std::array<const char*, 3> kSurfaceUserTextureNames = {
+        {SC::kUTexture1, SC::kUTexture2, SC::kUTexture3}};
+    static const std::array<const char*, 3> kSurfaceTextureResNames = {
+        {"iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]"}};
+    static_assert(SC::kMaxUserTextureSlots == 3, "surface user-texture name arrays must grow with the slot budget");
+    for (int slot = 0; slot < SC::kMaxUserTextureSlots; ++slot) {
+        packState.userTextureLoc[slot] = shader->uniformLocation(kSurfaceUserTextureNames[slot]);
+        packState.iTextureResolutionLoc[slot] = shader->uniformLocation(kSurfaceTextureResNames[slot]);
+    }
+    for (int slot = 0; slot < eff.textures.size() && slot < SC::kMaxUserTextureSlots; ++slot) {
+        const auto& texSlot = eff.textures.at(slot);
+        if (texSlot.path.isEmpty()) {
+            continue;
+        }
+        QImage img(texSlot.path);
+        if (img.isNull()) {
+            qCWarning(lcEffect) << "Surface pack" << packId << "texture slot" << slot << "failed to load"
+                                << texSlot.path << "— sampler reads transparent";
+            continue;
+        }
+        std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::upload(img);
+        if (!tex) {
+            qCWarning(lcEffect) << "Surface pack" << packId << "texture slot" << slot << "GL upload failed for"
+                                << texSlot.path;
+            continue;
+        }
+        tex->setFilter(GL_LINEAR);
+        // Wrap vocabulary matches the shared contract (clamp default).
+        GLenum wrap = GL_CLAMP_TO_EDGE;
+        if (texSlot.wrap == QLatin1String("repeat")) {
+            wrap = GL_REPEAT;
+        } else if (texSlot.wrap == QLatin1String("mirror")) {
+            wrap = GL_MIRRORED_REPEAT;
+        }
+        tex->setWrapMode(wrap);
+        packState.userTextures[slot] = std::move(tex);
+    }
 
     // MAIN-pass multipass channel locations: the buffer-pass outputs are bound
     // here (idle drawWindow path) as iChannel0..3 so the main effect.frag can

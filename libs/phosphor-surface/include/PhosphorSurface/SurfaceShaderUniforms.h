@@ -72,10 +72,22 @@ struct alignas(16) SurfaceUniforms
     // UBO; only the size is a UBO member. A pack reads it via surface_audio.glsl
     // (audioBar / getBass).
     int iAudioSpectrumSize; // int: 4 bytes at offset 560
-    int _pad_after_audioSpectrum[3]; // pad the std140 block to a 16-byte multiple
-}; // total 576 bytes
+    int _pad_after_audioSpectrum[3]; // std140 pads to the 16-byte-aligned vec4 below
 
-static_assert(sizeof(SurfaceUniforms) == 576, "SurfaceUniforms must be exactly 576 bytes (surface UBO contract)");
+    // Cursor position for hover-reactive packs. .xy in the surface texture's
+    // top-down device-px space (negative when off-surface / no hover source),
+    // .zw = .xy normalized by uSurfaceSize. The daemon consumer defaults its
+    // inherited iMouse to (-1, -1) so an un-hovered surface carries the
+    // off-surface sentinel rather than a phantom top-left hover.
+    float iMouse[4]; // vec4: 16 bytes at offset 576
+
+    // User texture sizes: iTextureResolution[i].xy = the pixel size of the
+    // texture bound at slot i (slot N feeds uTexture<N+1>, bindings 8-10 on
+    // the daemon). The node resolves these live, same as the overlay UBO.
+    float iTextureResolution[4][4]; // vec4[4]: 64 bytes at offset 592
+}; // total 656 bytes
+
+static_assert(sizeof(SurfaceUniforms) == 656, "SurfaceUniforms must be exactly 656 bytes (surface UBO contract)");
 
 static_assert(offsetof(SurfaceUniforms, qt_Matrix) == 0, "SurfaceUniforms::qt_Matrix must remain at std140 offset 0");
 static_assert(offsetof(SurfaceUniforms, qt_Opacity) == 64,
@@ -103,5 +115,8 @@ static_assert(offsetof(SurfaceUniforms, iChannelResolution) == 496,
               "SurfaceUniforms::iChannelResolution must remain at std140 offset 496");
 static_assert(offsetof(SurfaceUniforms, iAudioSpectrumSize) == 560,
               "SurfaceUniforms::iAudioSpectrumSize must remain at std140 offset 560");
+static_assert(offsetof(SurfaceUniforms, iMouse) == 576, "SurfaceUniforms::iMouse must remain at std140 offset 576");
+static_assert(offsetof(SurfaceUniforms, iTextureResolution) == 592,
+              "SurfaceUniforms::iTextureResolution must remain at std140 offset 592");
 
 } // namespace PhosphorSurfaceShaders
