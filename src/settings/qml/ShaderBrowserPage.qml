@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import "GroupSortLogic.js" as Core
+import QtCore
 import QtQuick
 import QtQuick.Window
 import QtQuick.Controls
@@ -43,6 +45,10 @@ SettingsFlickable {
     id: root
 
     required property var bridge
+    /// Distinct QtCore.Settings category so each host page (Animations /
+    /// Snapping / Decoration shaders) remembers its own group/sort choice
+    /// independently. Hosts should set this to a unique, stable string.
+    property string settingsCategory: "ShaderBrowserPage"
     // ── Domain-tuned copy ────────────────────────────────────────────────
     property string infoBannerText: ""
     property string userShadersDescription: i18n("User-installed shader packs live under your data directory. Drop a shader pack folder here to make it available to PlasmaZones.")
@@ -77,6 +83,107 @@ SettingsFlickable {
     //   "src:builtin" / "src:user" gate source; "cat:<name>" gate a category.
     readonly property bool showBuiltIn: !shaderFilterButton.isExcluded("src:builtin")
     readonly property bool showUser: !shaderFilterButton.isExcluded("src:user")
+    // ── Type axis (`appliesTo` event-class capability) ──────────────────
+    // Ordered catalog of the known event-class capabilities. Universal (an
+    // empty `appliesTo`) is the synthetic order-0 bucket resolved in the
+    // helpers below. The whole axis — a Type filter group, a Type group-by /
+    // sort option, and the card badge — only surfaces when the installed
+    // packs actually span more than one type (`_hasTypeAxis`). Snapping and
+    // decoration packs are all universal, so those pages look unchanged.
+    readonly property var _typeCatalog: [
+        {
+            "key": "geometry",
+            "label": i18nc("@item shader capability", "Geometry"),
+            "order": 1
+        },
+        {
+            "key": "appearance",
+            "label": i18nc("@item shader capability", "Appearance"),
+            "order": 2
+        },
+        {
+            "key": "desktop",
+            "label": i18nc("@item shader capability", "Desktop"),
+            "order": 3
+        }
+    ]
+    readonly property string _universalKey: "universal"
+    // Distinct type keys present across the catalogue, ordered by catalog
+    // order, each with a count. Drives the Type filter group.
+    readonly property var _allTypes: {
+        var counts = {};
+        for (var i = 0; i < effectList.length; i++) {
+            if (!effectList[i])
+                continue;
+
+            var key = root._effectTypeKey(effectList[i]);
+            counts[key] = (counts[key] || 0) + 1;
+        }
+        var keys = Object.keys(counts);
+        keys.sort(function (a, b) {
+            return root._typeOrder(a) - root._typeOrder(b);
+        });
+        var result = [];
+        for (var k = 0; k < keys.length; k++)
+            result.push({
+                "key": keys[k],
+                "label": root._typeLabel(keys[k]),
+                "count": counts[keys[k]]
+            });
+        return result;
+    }
+    readonly property bool _hasTypeAxis: _allTypes.length > 1
+    // ── Group / sort options (data-driven; dispatched by option id) ─────
+    // The Type option only appears when the type axis is live. Grouping and
+    // sorting dispatch on the option `id`, never a raw index, so a model that
+    // grows or drops the Type option can never mis-dispatch.
+    readonly property var _groupOptions: {
+        var opts = [
+            {
+                "id": "category",
+                "label": i18nc("@item:inlistbox group shaders by", "Category")
+            }
+        ];
+        if (root._hasTypeAxis)
+            opts.push({
+                "id": "type",
+                "label": i18nc("@item:inlistbox group shaders by", "Type")
+            });
+
+        opts.push({
+            "id": "source",
+            "label": i18nc("@item:inlistbox group shaders by", "Source")
+        });
+        opts.push({
+            "id": "none",
+            "label": i18nc("@item:inlistbox group shaders by", "None")
+        });
+        return opts;
+    }
+    readonly property var _sortOptions: {
+        var opts = [
+            {
+                "id": "name",
+                "label": i18nc("@item:inlistbox sort shaders by", "Name")
+            },
+            {
+                "id": "category",
+                "label": i18nc("@item:inlistbox sort shaders by", "Category")
+            }
+        ];
+        if (root._hasTypeAxis)
+            opts.push({
+                "id": "type",
+                "label": i18nc("@item:inlistbox sort shaders by", "Type")
+            });
+
+        return opts;
+    }
+    property int groupByIndex: 0
+    property int sortByIndex: 0
+    property bool sortAscending: true
+    readonly property string _groupId: (_groupOptions[groupByIndex] || _groupOptions[0]).id
+    readonly property string _sortId: (_sortOptions[sortByIndex] || _sortOptions[0]).id
     // ── Derived: category index (sorted, with counts) ───────────────────
     readonly property var _allCategories: {
         var counts = {};
@@ -119,6 +226,9 @@ SettingsFlickable {
             if (cat.length > 0 && shaderFilterButton.isExcluded("cat:" + cat))
                 continue;
 
+            if (root._hasTypeAxis && shaderFilterButton.isExcluded("type:" + root._effectTypeKey(e)))
+                continue;
+
             if (needle.length > 0) {
                 var hay = (String(e.name || "") + " " + String(e.id || "") + " " + String(e.description || "") + " " + String(e.category || "") + " " + String(e.author || "")).toLowerCase();
                 if (hay.indexOf(needle) === -1)
@@ -128,37 +238,118 @@ SettingsFlickable {
         }
         return out;
     }
-    /// `[{category, effects}]` sorted alphabetically by category. Effects
-    /// inside each group keep their bridge-emitted order.
-    readonly property var _groupedEffects: {
-        var groups = {};
-        var order = [];
-        var uncategorisedKey = i18nc("@title:group fallback for shaders without a category", "Uncategorised");
-        for (var i = 0; i < _filteredEffects.length; i++) {
-            var e = _filteredEffects[i];
-            var cat = (e.category && e.category.length > 0) ? e.category : uncategorisedKey;
-            if (!groups[cat]) {
-                groups[cat] = [];
-                order.push(cat);
-            }
-            groups[cat].push(e);
-        }
-        order.sort(function (a, b) {
-            if (a === uncategorisedKey)
-                return 1;
+    /// Filtered effects grouped and sorted per the toolbar selection, as an
+    /// ordered `[{label, items}]` array ready for the section Repeater. Reuses
+    /// the neutral GroupSortLogic primitives (Core); the groupers stay here
+    /// because their bucket labels need the QML i18n context.
+    readonly property var _displayGroups: {
+        var groups = root._buildGroups(root._filteredEffects, root._groupId);
+        Core.applySort(groups, root._comparatorFor(root._sortId), root.sortAscending);
+        // Keep the header for real groupings (even when they collapse to one
+        // section, matching the prior always-headed category cards); the
+        // "None" grouping carries an empty label so it renders header-less.
+        return Core.finalizeGroups(groups, root._groupId !== "none");
+    }
 
-            if (b === uncategorisedKey)
-                return -1;
+    // ── Type-axis helpers ────────────────────────────────────────────────
+    // Real packs declare at most one capability token, so the first token is
+    // the effect's primary bucket; an empty `appliesTo` is universal.
+    function _effectTypeKey(e) {
+        if (!e || !e.appliesTo || e.appliesTo.length === 0)
+            return root._universalKey;
 
-            return a.localeCompare(b);
-        });
-        var result = [];
-        for (var k = 0; k < order.length; k++)
-            result.push({
-                "category": order[k],
-                "effects": groups[order[k]]
+        return String(e.appliesTo[0]);
+    }
+    function _typeLabel(key) {
+        if (key === root._universalKey)
+            return i18nc("@item shader capability (applies to every event)", "Universal");
+
+        for (var i = 0; i < root._typeCatalog.length; i++)
+            if (root._typeCatalog[i].key === key)
+                return root._typeCatalog[i].label;
+
+        // Unknown future token — show it capitalized rather than dropping it.
+        return key.length > 0 ? key.charAt(0).toUpperCase() + key.slice(1) : key;
+    }
+    function _typeOrder(key) {
+        if (key === root._universalKey)
+            return 0;
+
+        for (var i = 0; i < root._typeCatalog.length; i++)
+            if (root._typeCatalog[i].key === key)
+                return root._typeCatalog[i].order;
+
+        return 99;
+    }
+    /// Non-empty capability label for a card badge; "" for universal (the
+    /// default majority — no badge, to keep the grid uncluttered).
+    function typeBadgeLabel(e) {
+        var key = root._effectTypeKey(e);
+        return key === root._universalKey ? "" : root._typeLabel(key);
+    }
+
+    // ── Grouping / sorting ───────────────────────────────────────────────
+    function _buildGroups(effects, groupId) {
+        if (groupId === "none")
+            return Core.ungrouped(effects, "");
+
+        if (groupId === "source")
+            return Core.groupByBoolKey(effects, function (e) {
+                return !e.isUserEffect;
+            }, "builtin", i18nc("@title:group built-in shaders", "Built-in"), "user", i18nc("@title:group user-installed shaders", "User"));
+
+        if (groupId === "type")
+            return Core.groupByKeyed(effects, function (e) {
+                var key = root._effectTypeKey(e);
+                return {
+                    "key": key,
+                    "order": root._typeOrder(key),
+                    "label": root._typeLabel(key)
+                };
             });
-        return result;
+
+        // Default: category. Order groups alphabetically via the pre-sorted
+        // category index, with "Uncategorised" pinned last.
+        var uncategorised = i18nc("@title:group fallback for shaders without a category", "Uncategorised");
+        var orderOf = {};
+        for (var i = 0; i < root._allCategories.length; i++)
+            orderOf[root._allCategories[i].name] = i;
+
+        return Core.groupByKeyed(effects, function (e) {
+            var cat = (e.category && e.category.length > 0) ? e.category : "";
+            if (cat.length === 0)
+                return {
+                    "key": uncategorised,
+                    "order": 1000000,
+                    "label": uncategorised
+                };
+
+            return {
+                "key": cat,
+                "order": orderOf[cat] !== undefined ? orderOf[cat] : 999999,
+                "label": cat
+            };
+        });
+    }
+    function _nameOf(e) {
+        return String((e && (e.name || e.id)) || "");
+    }
+    function _comparatorFor(sortId) {
+        if (sortId === "category")
+            return function (a, b) {
+                var c = String(a.category || "").localeCompare(String(b.category || ""));
+                return c !== 0 ? c : root._nameOf(a).localeCompare(root._nameOf(b));
+            };
+
+        if (sortId === "type")
+            return function (a, b) {
+                var d = root._typeOrder(root._effectTypeKey(a)) - root._typeOrder(root._effectTypeKey(b));
+                return d !== 0 ? d : root._nameOf(a).localeCompare(root._nameOf(b));
+            };
+
+        return function (a, b) {
+            return root._nameOf(a).localeCompare(root._nameOf(b));
+        };
     }
     // Per-row "Used in:" labels resolve via Q_INVOKABLE. QML can't
     // observe the result of an invokable across mutations, so each row
@@ -364,8 +555,9 @@ SettingsFlickable {
                 id: shaderFilterButton
 
                 menuTitle: i18nc("@title:menu", "Filter Shaders")
-                // Two groups (source, categories) -> a divider between them,
+                // Groups (source, [type,] categories) — a divider between each,
                 // plus the trailing divider + Reset, mirroring the Layouts menu.
+                // The Type group is present only when the type axis is live.
                 groups: {
                     var source = [
                         {
@@ -377,6 +569,16 @@ SettingsFlickable {
                             "label": i18nc("@option:check", "User-installed")
                         }
                     ];
+                    var types = [];
+                    if (root._hasTypeAxis) {
+                        var allTypes = root._allTypes;
+                        for (var t = 0; t < allTypes.length; t++)
+                            types.push({
+                                "key": "type:" + allTypes[t].key,
+                                "label": allTypes[t].label,
+                                "count": allTypes[t].count
+                            });
+                    }
                     var cats = [];
                     var all = root._allCategories;
                     for (var i = 0; i < all.length; i++)
@@ -385,8 +587,42 @@ SettingsFlickable {
                             "label": all[i].name,
                             "count": all[i].count
                         });
-                    return [source, cats];
+                    return root._hasTypeAxis ? [source, types, cats] : [source, cats];
                 }
+            }
+        }
+
+        // ── Group / sort row ────────────────────────────────────────────
+        // On its own row beneath the search field, matching the Layouts page.
+        // The host owns the selection and its persistence (see the Settings
+        // block below); after loading persisted state we call syncFromState()
+        // to re-point the combos.
+        GroupSortBar {
+            id: groupSortBar
+
+            Layout.fillWidth: true
+            groupModel: {
+                var m = [];
+                for (var i = 0; i < root._groupOptions.length; i++)
+                    m.push(root._groupOptions[i].label);
+                return m;
+            }
+            sortModel: {
+                var m = [];
+                for (var i = 0; i < root._sortOptions.length; i++)
+                    m.push(root._sortOptions[i].label);
+                return m;
+            }
+            // Initial-only bindings — syncFromState() re-syncs after the
+            // host imperatively writes these (persisted-state load).
+            groupByIndex: root.groupByIndex
+            sortByIndex: root.sortByIndex
+            sortAscending: root.sortAscending
+            onChanged: {
+                root.groupByIndex = groupByIndex;
+                root.sortByIndex = sortByIndex;
+                root.sortAscending = sortAscending;
+                root._savePrefs();
             }
         }
 
@@ -413,15 +649,17 @@ SettingsFlickable {
         // grouped-section treatment as the Rules page — with the
         // category as the header and the shader count as the trailing hint.
         Repeater {
-            model: root._groupedEffects
+            model: root._displayGroups
 
             delegate: SettingsCard {
                 required property var modelData
 
                 Layout.fillWidth: true
-                headerText: modelData.category
-                collapsible: true
-                headerTrailingText: i18np("%n shader", "%n shaders", modelData.effects.length)
+                headerText: modelData.label
+                // "None" grouping yields an empty label — render it as a plain
+                // header-less card rather than a collapsible section.
+                collapsible: modelData.label.length > 0
+                headerTrailingText: i18np("%n shader", "%n shaders", modelData.items.length)
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
@@ -451,7 +689,7 @@ SettingsFlickable {
                         readonly property real _cardWidth: (width - spacing * (_columns - 1)) / _columns
 
                         Repeater {
-                            model: modelData.effects
+                            model: modelData.items
 
                             delegate: ShaderBrowserCard {
                                 required property var modelData
@@ -461,6 +699,9 @@ SettingsFlickable {
                                 bridge: root.bridge
                                 usagesRev: root._usagesRev
                                 usageChipTextFn: root.usageChipTextFn
+                                typeBadgeFn: function (e) {
+                                    return root._hasTypeAxis ? root.typeBadgeLabel(e) : "";
+                                }
                                 onShowDetails: function (e) {
                                     detailDialog.effect = e;
                                     detailDialog.open();
@@ -471,6 +712,38 @@ SettingsFlickable {
                 }
             }
         }
+    }
+
+    // ── Persisted group / sort selection (per host page) ────────────────
+    // Stored by option id, not index, so the choice survives a model whose
+    // Type option appears or disappears between sessions.
+    Settings {
+        id: prefs
+
+        category: root.settingsCategory
+        property string groupId: "category"
+        property string sortId: "name"
+        property bool sortAscending: true
+    }
+
+    function _savePrefs() {
+        prefs.groupId = root._groupId;
+        prefs.sortId = root._sortId;
+        prefs.sortAscending = root.sortAscending;
+    }
+    function _indexOfOption(options, id) {
+        for (var i = 0; i < options.length; i++)
+            if (options[i].id === id)
+                return i;
+
+        return 0;
+    }
+
+    Component.onCompleted: {
+        root.groupByIndex = root._indexOfOption(root._groupOptions, prefs.groupId);
+        root.sortByIndex = root._indexOfOption(root._sortOptions, prefs.sortId);
+        root.sortAscending = prefs.sortAscending;
+        groupSortBar.syncFromState();
     }
 
     ShaderBrowserDetailDialog {
