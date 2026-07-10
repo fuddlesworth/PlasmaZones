@@ -676,6 +676,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // m_shaderManager.m_lastFullyMaximized is a raw-pointer-keyed QHash so we explicitly
         // erase here to keep it bounded across long sessions.
         m_shaderManager.m_lastFullyMaximized.remove(w);
+        // Sibling raw-pointer-keyed hashes — the maximize morph's departure
+        // rect and the deferred-install entry. Same bounded-across-long-
+        // sessions rationale as above, plus address-reuse safety for the
+        // pending entry (a stale entry at a reused address would fire a
+        // bogus morph on the new window's first resize).
+        m_shaderManager.m_preMaximizeFrame.remove(w);
+        m_shaderManager.m_pendingMaximizeMorph.remove(w);
         // Drop the queued-expiry guard for this raw pointer. KWin reuses
         // EffectWindow heap addresses freely, so a stale entry surviving
         // past windowDeleted would cause the next window allocated at the
