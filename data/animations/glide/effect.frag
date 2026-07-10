@@ -55,5 +55,5 @@ vec4 pTransition(vec2 uv, float t) {
   // Dissolve window.
   oColor.a = oColor.a * (uForOpening ? uProgress : pow(1.0 - uProgress, 2.0));
 
-  return vec4(oColor.rgb * oColor.a, oColor.a);
+  return premultiply(oColor);
 }

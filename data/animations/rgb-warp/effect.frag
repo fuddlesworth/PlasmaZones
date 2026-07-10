@@ -136,7 +136,7 @@ vec4 pTransition(vec2 uv, float t)
     // frame zero-sized surface doesn't collapse `edgePx`/`edgeFar` to
     // zero — the smoothstep would then return 0 everywhere and the
     // entire window would render fully transparent for one paint.
-    vec2 res = max(iResolution, vec2(1.0));
+    vec2 res = resolutionSafe();
     vec2 edgePx = uv * res;
     vec2 edgeFar = (vec2(1.0) - uv) * res;
     float edgeFade = smoothstep(0.0, 30.0, edgePx.x) *

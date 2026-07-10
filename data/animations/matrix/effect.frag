@@ -60,7 +60,7 @@ const float ASSUMED_FPS           = 60.0;
 // produce NaN pixel coords — matches the defensive pattern used by
 // doom/hexagon/pixel-wheel/pixel-wipe/aura-glow.
 float edgeMask(float fadePixels) {
-    vec2 res = max(iResolution, vec2(1.0));
+    vec2 res = resolutionSafe();
     vec2 px = vTexCoord * res;
     vec2 fromEdge = min(px, res - px);
     return clamp(min(fromEdge.x, fromEdge.y) / fadePixels, 0.0, 1.0);
@@ -110,7 +110,7 @@ vec2 getRain(vec2 fragCoord, float legProgress, bool windowFadingIn) {
     // synchronize every visible drop to one column for that paint.
     // The sibling helpers (`getText`, `edgeMask`) already use this
     // pattern; do the same here for consistency.
-    vec2 res = max(iResolution, vec2(1.0));
+    vec2 res = resolutionSafe();
     float column = fragCoord.x * res.x;
     column -= mod(column, ls);
 

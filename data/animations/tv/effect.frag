@@ -41,7 +41,8 @@ const float LR_DELAY   = 0.6;
 const float FF_TIME    = 0.1;
 const float SCALING    = 0.5;
 
-float easeOutQuad(float x) { return -1.0 * x * (x - 2.0); }
+// easeOutQuad hosted in shared/easing.glsl; the local copy collapsed to it.
+#include <easing.glsl>
 
 vec4 pTransition(vec2 uv, float t)
 {

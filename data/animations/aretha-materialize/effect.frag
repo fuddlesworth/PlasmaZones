@@ -18,19 +18,9 @@
 #include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-// ── Hex helpers (ported from data/shaders/aretha-shell) ────────────────────
-float hexDist(vec2 p) {
-    p = abs(p);
-    return max(p.x * 0.866025 + p.y * 0.5, p.y);  // 0 at center .. ~0.5 at edge
-}
-
-vec2 hexLocal(vec2 uv) {
-    vec2 r = vec2(1.0, 1.732);
-    vec2 h = r * 0.5;
-    vec2 a = mod(uv, r) - h;
-    vec2 b = mod(uv - h, r) - h;
-    return dot(a, a) < dot(b, b) ? a : b;
-}
+// ── Hex helpers ────────────────────────────────────────────────────────────
+// hexDist + hexLocal (ported from data/shaders/aretha-shell) now live in
+// shared/noise.glsl (included above); desktop-aretha shares the same pair.
 
 vec4 pTransition(vec2 uv, float t)
 {

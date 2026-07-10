@@ -14,44 +14,22 @@
 // customColors pool, which the desktop-transition pass now binds at parity with
 // the per-window and surface shader contracts (see DesktopTransitionManager).
 #include <desktop_transition.glsl>
-
-#ifdef PLASMAZONES_KWIN
-float pz_hash(vec2 p) {
-    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
-// Hex helpers ported from data/shaders/aretha-shell (same grid as
-// aretha-materialize): distance to cell centre and the nearest cell's local
-// offset for a point in hex-grid space.
-float pz_hexDist(vec2 p) {
-    p = abs(p);
-    return max(p.x * 0.866025 + p.y * 0.5, p.y); // 0 at centre .. ~0.5 at edge
-}
-
-vec2 pz_hexLocal(vec2 uv) {
-    vec2 r = vec2(1.0, 1.732);
-    vec2 h = r * 0.5;
-    vec2 a = mod(uv, r) - h;
-    vec2 b = mod(uv - h, r) - h;
-    return dot(a, a) < dot(b, b) ? a : b;
-}
-
-// Crossfade the two captured desktops at one uv.
-vec4 pz_cross(vec2 uv, float m) {
-    return mix(getFromColor(uv), getToColor(uv), m);
-}
-#endif // PLASMAZONES_KWIN
+// classicHash + hexDist + hexLocal (from noise.glsl) and crossFade (from
+// desktop_transition.glsl) replace this pack's pz_hash, pz_hexDist,
+// pz_hexLocal, and pz_cross copies. The hex helpers are the same grid as
+// aretha-materialize.
+#include <noise.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
     // Hex cell identity in constant screen pixels (independent of resolution).
     float hexSize  = max(p_hexSize, 6.0);
-    vec2  px       = uv * max(iResolution, vec2(1.0));
+    vec2  px       = uv * resolutionSafe();
     vec2  scaled   = px / hexSize;
-    vec2  hex      = pz_hexLocal(scaled);
-    float d        = pz_hexDist(hex);
+    vec2  hex      = hexLocal(scaled);
+    float d        = hexDist(hex);
     vec2  cellId   = floor((scaled - hex) / vec2(1.0, 1.732));
-    float cellRand = pz_hash(cellId);
+    float cellRand = classicHash(cellId);
 
     // Per-cell flip threshold: a diagonal data sweep blended with per-cell
     // random ordering. scatter=0 → clean diagonal wipe; 1 → fully scattered
@@ -75,21 +53,21 @@ vec4 pTransition(vec2 uv, float t) {
     // Per-cell stutter on the front: cells flicker between the two desktops as
     // they flip. Driven by iFrame (bound on the desktop pass at contract
     // parity) so the stutter is independent of the eased switch progress.
-    float flick = pz_hash(cellId + floor(float(iFrame) * 0.25));
+    float flick = classicHash(cellId + floor(float(iFrame) * 0.25));
     reveal = clamp(reveal + (flick - 0.5) * edge * glitchAmt * 0.6, 0.0, 1.0);
 
     // Chromatic-aberration split on the front, with per-cell horizontal jitter
     // so the tear is uneven across the sweep. Off the front the shift collapses
     // to zero, so the vast majority of fragments take a single crossfade tap.
     float split  = 0.012 * glitchAmt * edge;
-    float jitter = (pz_hash(cellId * 2.0 + floor(float(iFrame) * 0.1)) - 0.5) * glitchAmt * edge * 0.04;
+    float jitter = (classicHash(cellId * 2.0 + floor(float(iFrame) * 0.1)) - 0.5) * glitchAmt * edge * 0.04;
     vec3  col;
     if (abs(split) + abs(jitter) < 1.0e-5) {
-        col = pz_cross(uv, reveal).rgb;
+        col = crossFade(uv, reveal).rgb;
     } else {
-        col.r = pz_cross(uv + vec2(split + jitter, 0.0), reveal).r;
-        col.g = pz_cross(uv + vec2(jitter, 0.0), reveal).g;
-        col.b = pz_cross(uv + vec2(-split + jitter, 0.0), reveal).b;
+        col.r = crossFade(uv + vec2(split + jitter, 0.0), reveal).r;
+        col.g = crossFade(uv + vec2(jitter, 0.0), reveal).g;
+        col.b = crossFade(uv + vec2(-split + jitter, 0.0), reveal).b;
     }
 
     // Scanline modulation on the front (CRT feel, constant pixel pitch).

@@ -46,6 +46,18 @@ vec2 hash22(vec2 p) {
     return fract((p3.xx + p3.yz) * p3.zy);
 }
 
+// 1D hash from a vec2 using the Inigo Quilez `fract(p3 * 0.1031)` chain
+// (the scalar-output sibling of hash22 above; distinct from niriHash's
+// `sin(dot(...))` pattern below). Byte-equivalent to Burn-My-Windows'
+// common.glsl hash12, so bmw_compat.glsl pulls this in rather than
+// carrying its own copy — the single LGPL definition every consumer
+// shares (aura-glow directly, tv-glitch / wisps via bmw_compat).
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
 float simplex2D(vec2 p) {
     const float K1 = 0.366025404;
     const float K2 = 0.211324865;
@@ -84,12 +96,24 @@ float surfaceSeed() {
 // — all bit-equivalent except for sub-ULP variance in the
 // constant's last decimals (43758.5453 vs 43758.5453123, identical
 // in float32). Other niri ports keep their own hashes when the
-// constants are deliberately different (crosshatch, randomsquares
-// use (12.9898, 78.233); static-fade uses unique magic constants;
-// perlin pre-mods the dot product). Voronoi-shatter's vs_hash2
-// returns vec2 and stays local.
+// constants are deliberately different: static-fade uses unique magic
+// constants; perlin pre-mods the dot product. The (12.9898, 78.233)
+// sin-dot variant is shared just below as `classicHash`. Voronoi-shatter's
+// vs_hash2 returns vec2 and stays local.
 float niriHash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+// Classic Inigo Quilez `fract(sin(dot(p, (12.9898, 78.233))) * 43758.5453)`
+// value hash — the OTHER canonical sin-dot magic-constant pair (niriHash
+// above uses (127.1, 311.7)). Lifted from the byte-identical per-shader
+// copies that lived in crosshatch (crosshatch_rand), randomsquares
+// (rs_rand), and the desktop packs dissolve / crosszoom / aretha (pz_hash,
+// pz_rand). Deliberate variants that must NOT use this stay local: perlin
+// pre-mods the dot product, static-fade uses unique constants,
+// voronoi-shatter returns a vec2.
+float classicHash(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 // niri-style bilinear value noise on niriHash (smooth-step interp
@@ -105,6 +129,23 @@ float niriNoise(vec2 p) {
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(niriHash(i),                    niriHash(i + vec2(1.0, 0.0)), f.x),
                mix(niriHash(i + vec2(0.0, 1.0)),   niriHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+// Parameterised fBm over niriNoise: `octaves` layers with amplitude
+// halving (gain 0.5) and frequency scaled by `lacunarity` per octave.
+// Reproduces the two niri ports' hand-rolled loops exactly — ink-splash
+// uses fbm(p, 5, 2.1) (its is_fbm) and smoke uses fbm(p, 6, 2.0) (its
+// sm_fbm), which share this skeleton and differ only in octave count and
+// lacunarity. Starting amplitude 0.5 and gain 0.5 are the shared constants.
+float fbm(vec2 p, int octaves, float lacunarity) {
+    float v = 0.0;
+    float amp = 0.5;
+    for (int i = 0; i < octaves; i++) {
+        v += amp * niriNoise(p);
+        p *= lacunarity;
+        amp *= 0.5;
+    }
+    return v;
 }
 
 // Boundary mask for shaders that displace sample UVs. Returns 1.0
@@ -151,6 +192,25 @@ float boundaryMaskAA(vec2 uv) {
     vec2 lo = smoothstep(-0.5 * fw, 0.5 * fw, uv);
     vec2 hi = smoothstep(-0.5 * fw, 0.5 * fw, vec2(1.0) - uv);
     return lo.x * lo.y * hi.x * hi.y;
+}
+
+// Pointy-top hex-grid helpers shared by the Aretha packs (aretha-materialize
+// and desktop-aretha), ported from data/shaders/aretha-shell. `hexDist`
+// returns 0 at a cell centre rising to ~0.5 at the edge; `hexLocal` returns
+// the offset from the nearest hex-cell centre for a point in hex-grid space.
+// Distinct from the hexagon / honeycomb packs, which use different hex
+// formulations and keep their own math.
+float hexDist(vec2 p) {
+    p = abs(p);
+    return max(p.x * 0.866025 + p.y * 0.5, p.y);  // 0 at center .. ~0.5 at edge
+}
+
+vec2 hexLocal(vec2 uv) {
+    vec2 r = vec2(1.0, 1.732);
+    vec2 h = r * 0.5;
+    vec2 a = mod(uv, r) - h;
+    vec2 b = mod(uv - h, r) - h;
+    return dot(a, a) < dot(b, b) ? a : b;
 }
 
 #endif

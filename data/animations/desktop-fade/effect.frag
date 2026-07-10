@@ -11,7 +11,7 @@
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
     float a = smoothstep(0.0, 1.0, clamp(t, 0.0, 1.0));
-    return mix(getFromColor(uv), getToColor(uv), a);
+    return crossFade(uv, a);
 #else
     // Desktop transitions are compositor-only; the daemon never runs them.
     // Return transparent so the pack still bakes for the daemon target.

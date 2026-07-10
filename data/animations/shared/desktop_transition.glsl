@@ -35,6 +35,14 @@ vec4 getFromColor(vec2 uv) {
 vec4 getToColor(vec2 uv) {
     return texture(uToDesktop, vec2(uv.x, 1.0 - uv.y));
 }
+
+// Crossfade the two captured desktops at one uv: the outgoing desktop at t=0,
+// the incoming one at t=1. The plain building block for GL-Transitions-style
+// desktop packs; each pack applied its own inline mix / per-pack helper before
+// this was lifted here.
+vec4 crossFade(vec2 uv, float t) {
+    return mix(getFromColor(uv), getToColor(uv), t);
+}
 #endif // PLASMAZONES_KWIN
 
 #endif // PLASMAZONES_DESKTOP_TRANSITION_GLSL
