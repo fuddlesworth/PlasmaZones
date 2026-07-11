@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../config/configdefaults.h"
+#include "../core/cavaoptions.h"
 #include "../core/settings_interfaces.h"
 #include "../shaderpreview/ishaderpreviewbackend.h"
 
@@ -78,9 +79,11 @@ public:
         return m_settings && m_settings->enableAudioVisualizer();
     }
 
-    int audioBarCount() const override
+    PhosphorAudio::SpectrumOptions audioOptions() const override
     {
-        return m_settings ? m_settings->audioSpectrumBarCount() : ConfigDefaults::audioSpectrumBarCount();
+        // Default-constructed options mirror the config defaults, so a null
+        // settings pointer degrades to the same values a fresh install runs.
+        return m_settings ? cavaOptionsFromSettings(m_settings) : PhosphorAudio::SpectrumOptions{};
     }
 
 private:
