@@ -244,8 +244,8 @@ int main(int argc, char* argv[])
     // basename would seed top-level fields from one file and parameters
     // from another. Reject at the boundary with a clear message instead.
     if (QFileInfo(metadataPath).fileName() != QLatin1String("metadata.json")) {
-        std::cerr << "error: --shader path must point at a file named metadata.json, got "
-                  << QFileInfo(metadataPath).fileName().toStdString() << "\n";
+        std::cerr << "error: --shader path must point at a file named metadata.json, got " << metadataPath.toStdString()
+                  << "\n";
         return 2;
     }
 
