@@ -347,7 +347,7 @@ public:
     }
     int audioSpectrumBarCount() const override
     {
-        return 32;
+        return 64;
     }
     void setAudioSpectrumBarCount(int) override
     {

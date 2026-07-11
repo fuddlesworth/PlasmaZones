@@ -26,8 +26,15 @@ public:
     /// Clamp/sanitize an option set to the values the provider would actually
     /// run with: integer ranges bounded to AudioDefaults, bar count rounded up
     /// to even, control characters stripped from the input strings, and
-    /// unknown input methods coerced back to auto-detect (empty).
+    /// unknown input methods coerced back to auto-detect (empty). Public so
+    /// callers can preview the applied values before committing a set.
     static SpectrumOptions normalizedOptions(SpectrumOptions options);
+
+    /// The cava config-file text the provider would run @p options with
+    /// (normalized first, so hostile or out-of-range values are emitted in
+    /// their sanitized form). This is what start() writes to cava's stdin;
+    /// exposed so the generated config is testable without spawning cava.
+    static QString generateConfig(const SpectrumOptions& options);
 
     bool isAvailable() const override;
     void start() override;
@@ -40,7 +47,6 @@ public:
     QVector<float> spectrum() const override;
 
 private:
-    void buildConfig();
     void onReadyReadStandardOutput();
     void onProcessStateChanged(QProcess::ProcessState state);
     void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);

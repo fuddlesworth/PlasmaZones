@@ -476,6 +476,31 @@ private Q_SLOTS:
         QCOMPARE(audio.value(ConfigKeys::barsKey()).toInt(), 32);
     }
 
+    // The audio move must not depend on the Enabled strip running first: a
+    // v4 config whose Shaders group carries only the audio keys (the toggle
+    // was never persisted) still lands them in Shaders.Audio, and the flat
+    // group survives solely through its new Audio child.
+    void testAudioKeysMoved_withoutEnabledKey()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {ConfigKeys::shadersGroup()},
+                  {{QStringLiteral("AudioVisualizer"), true}, {QStringLiteral("AudioSpectrumBarCount"), 48}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject shaders =
+            readJson(ConfigDefaults::configFilePath()).value(ConfigKeys::shadersGroup()).toObject();
+        QVERIFY(!shaders.contains(QStringLiteral("AudioVisualizer")));
+        QVERIFY(!shaders.contains(QStringLiteral("AudioSpectrumBarCount")));
+        const QJsonObject audio = shaders.value(QStringLiteral("Audio")).toObject();
+        QCOMPARE(audio.value(ConfigKeys::enabledKey()).toBool(), true);
+        QCOMPARE(audio.value(ConfigKeys::barsKey()).toInt(), 48);
+    }
+
     // A v4 config that never touched the audio settings must not grow a
     // Shaders.Audio group: absent keys write nothing (differ-from-default
     // contract), so defaults stay unwritten.

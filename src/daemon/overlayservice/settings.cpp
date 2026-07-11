@@ -342,8 +342,10 @@ static constexpr int kIdleQuiesceGraceMs = 5000;
 
 // Assemble the provider's full parameter set from ISettings. The provider
 // normalizes (clamps/sanitizes) on apply, so values pass through verbatim;
-// only the representation differences are mapped here (channel-mode string →
-// enum, "auto" input method → empty detect sentinel, smoothing % → fraction).
+// the representation differences (channel-mode string → enum, "auto" input
+// method → empty detect sentinel, smoothing % → fraction) go through the
+// shared phosphor-audio conversion helpers so both runtimes map them
+// identically.
 static PhosphorAudio::SpectrumOptions cavaOptionsFromSettings(const ISettings* settings)
 {
     PhosphorAudio::SpectrumOptions opts;
@@ -358,9 +360,8 @@ static PhosphorAudio::SpectrumOptions cavaOptionsFromSettings(const ISettings* s
     opts.waves = settings->audioWaves();
     opts.channelMode = PhosphorAudio::channelModeFromString(settings->audioChannelMode());
     opts.reverse = settings->audioReverse();
-    opts.extraSmoothing = settings->audioExtraSmoothing() / 100.0;
-    const QString method = settings->audioInputMethod();
-    opts.inputMethod = (method == QLatin1String("auto")) ? QString() : method;
+    opts.extraSmoothing = PhosphorAudio::extraSmoothingFromPercent(settings->audioExtraSmoothing());
+    opts.inputMethod = PhosphorAudio::inputMethodFromSetting(settings->audioInputMethod());
     opts.inputSource = settings->audioInputSource();
     return opts;
 }

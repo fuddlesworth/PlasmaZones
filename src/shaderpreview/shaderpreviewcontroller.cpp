@@ -254,6 +254,12 @@ void ShaderPreviewController::startAudioCapture()
                     Q_EMIT audioSpectrumChanged();
                 });
     }
+    // The preview deliberately runs the default analysis parameters: the
+    // editor is a separate process and IShaderPreviewBackend only carries the
+    // bar count and the enable toggle. Bar count is the one knob shader packs
+    // read structurally (iAudioSpectrumSize / texture width), so matching it
+    // keeps the preview faithful; the remaining DSP knobs only shape bar
+    // motion and stay at PhosphorAudio::Defaults here.
     PhosphorAudio::SpectrumOptions audioOpts = m_audioProvider->options();
     audioOpts.barCount = m_backend->audioBarCount();
     m_audioProvider->setOptions(audioOpts);

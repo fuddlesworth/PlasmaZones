@@ -24,9 +24,24 @@ enum class ChannelMode {
 
 /// Canonical config-string forms ("stereo", "mono-average", "mono-left",
 /// "mono-right") for persisting a ChannelMode. fromString falls back to
-/// Stereo for unknown input.
+/// Stereo for unknown input. PlasmaZones itself persists the canonical
+/// strings directly (its settings UI writes them), so it only consumes
+/// fromString; toString is the symmetric serialization half kept for
+/// library consumers that hold a ChannelMode and need the persisted form.
 PHOSPHORAUDIO_EXPORT QString channelModeToString(ChannelMode mode);
 PHOSPHORAUDIO_EXPORT ChannelMode channelModeFromString(const QString& mode);
+
+/// Conversions between the persisted settings representation and the
+/// SpectrumOptions field values, shared by every settings consumer so the
+/// percent scale and the "auto" sentinel are spelled exactly once.
+inline double extraSmoothingFromPercent(int percent)
+{
+    return percent / 100.0;
+}
+inline QString inputMethodFromSetting(const QString& configured)
+{
+    return configured == QLatin1String("auto") ? QString() : configured;
+}
 
 /// Full analysis parameter set for a spectrum provider. A plain value type:
 /// build one (or copy the provider's current set via options()), adjust the

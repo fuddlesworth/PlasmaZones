@@ -3687,7 +3687,7 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
     // survive; the source spellings are frozen above (kV4KeyAudio*), the
     // destinations are written through the live accessors (v5 is current).
     {
-        const QJsonObject shaders = root.value(ConfigKeys::shadersGroup()).toObject();
+        const QJsonObject shaders = groupObjectAtPath(root, ConfigKeys::shadersGroup());
         QJsonObject audio;
         const QJsonValue viz = shaders.value(kV4KeyAudioVisualizer);
         if (viz.isBool()) {

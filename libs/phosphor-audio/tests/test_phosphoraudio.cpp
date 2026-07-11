@@ -132,6 +132,59 @@ private Q_SLOTS:
         QCOMPARE(PhosphorAudio::CavaSpectrumProvider::normalizedOptions(known).inputMethod, QStringLiteral("pipewire"));
     }
 
+    void testGeneratedConfigDefaults()
+    {
+        SpectrumOptions opts;
+        // Pin the method so the config is environment-independent (empty
+        // would run the pipewire/pulse autodetect probe).
+        opts.inputMethod = QStringLiteral("pulse");
+        const QString config = PhosphorAudio::CavaSpectrumProvider::generateConfig(opts);
+        QVERIFY(config.contains(QStringLiteral("framerate=60\n")));
+        QVERIFY(config.contains(QStringLiteral("bars=64\n")));
+        QVERIFY(config.contains(QStringLiteral("autosens=1\n")));
+        QVERIFY(config.contains(QStringLiteral("sensitivity=100\n")));
+        QVERIFY(config.contains(QStringLiteral("lower_cutoff_freq=50\n")));
+        QVERIFY(config.contains(QStringLiteral("higher_cutoff_freq=10000\n")));
+        QVERIFY(config.contains(QStringLiteral("method=pulse\n")));
+        QVERIFY(config.contains(QStringLiteral("source=auto\n")));
+        QVERIFY(config.contains(QStringLiteral("channels=stereo\n")));
+        QVERIFY(config.contains(QStringLiteral("reverse=0\n")));
+        QVERIFY(config.contains(QStringLiteral("noise_reduction=77\n")));
+        QVERIFY(config.contains(QStringLiteral("monstercat=0\n")));
+        QVERIFY(config.contains(QStringLiteral("waves=0\n")));
+    }
+
+    void testGeneratedConfigVariantMapping()
+    {
+        SpectrumOptions opts;
+        opts.inputMethod = QStringLiteral("pipewire");
+        opts.channelMode = ChannelMode::MonoLeft;
+        opts.reverse = true;
+        opts.monstercat = true;
+        opts.autosens = false;
+        const QString config = PhosphorAudio::CavaSpectrumProvider::generateConfig(opts);
+        QVERIFY(config.contains(QStringLiteral("method=pipewire\n")));
+        QVERIFY(config.contains(QStringLiteral("channels=mono\n")));
+        QVERIFY(config.contains(QStringLiteral("mono_option=left\n")));
+        QVERIFY(config.contains(QStringLiteral("reverse=1\n")));
+        QVERIFY(config.contains(QStringLiteral("monstercat=1\n")));
+        QVERIFY(config.contains(QStringLiteral("autosens=0\n")));
+    }
+
+    void testGeneratedConfigBlocksInjection()
+    {
+        // A hostile source must not be able to open a new config line: the
+        // sanitizer strips the newlines, so the whole payload stays inline on
+        // the single source= line and no second raw_target can appear.
+        SpectrumOptions opts;
+        opts.inputMethod = QStringLiteral("pulse");
+        opts.inputSource = QStringLiteral("evil\n[output]\nraw_target=/tmp/evil");
+        const QString config = PhosphorAudio::CavaSpectrumProvider::generateConfig(opts);
+        QVERIFY(config.contains(QStringLiteral("source=evil[output]raw_target=/tmp/evil\n")));
+        QVERIFY(!config.contains(QStringLiteral("\nraw_target=/tmp/evil")));
+        QVERIFY(config.contains(QStringLiteral("raw_target=/dev/stdout\n")));
+    }
+
     void testChannelModeStrings()
     {
         using PhosphorAudio::channelModeFromString;

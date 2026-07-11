@@ -367,7 +367,7 @@ SettingsFlickable {
                     SettingsRow {
                         title: i18n("Reverse bar order")
                         searchAnchor: "audioReverse"
-                        description: i18n("Show high frequencies first instead of last")
+                        description: i18n("Flip the frequency order of the bars")
 
                         SettingsSwitch {
                             checked: appSettings.audioReverse

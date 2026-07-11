@@ -8,12 +8,17 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QStandardPaths>
+#include <QTimer>
 
 namespace PhosphorAudio {
 
 Q_LOGGING_CATEGORY(lcPhosphorAudio, "phosphor.audio")
 
 static constexpr int kAsciiMaxRange = 1000;
+// How long a pending restart waits for SIGTERM to land before escalating to
+// SIGKILL. A child that ignores terminate() would otherwise latch the
+// pending-restart flag forever and keep running on the old config.
+static constexpr int kRestartKillGraceMs = 1000;
 static_assert(Defaults::MinBars % 2 == 0, "MinBars must be even for CAVA stereo");
 static_assert(Defaults::MaxBars % 2 == 0, "MaxBars must be even for CAVA stereo");
 static_assert(Defaults::MaxLowerCutoffHz < Defaults::MinHigherCutoffHz,
@@ -115,8 +120,14 @@ QString CavaSpectrumProvider::detectAudioMethod()
 
 SpectrumOptions CavaSpectrumProvider::normalizedOptions(SpectrumOptions options)
 {
-    const int evenBars = (options.barCount % 2 != 0) ? options.barCount + 1 : options.barCount;
-    options.barCount = qBound(Defaults::MinBars, evenBars, Defaults::MaxBars);
+    // Clamp BEFORE rounding up to even: the +1 on an already-clamped value
+    // cannot overflow (MaxBars is even per the static_assert, so an odd
+    // in-range value is strictly below it), whereas +1 on a caller-supplied
+    // INT_MAX would be signed-overflow UB.
+    options.barCount = qBound(Defaults::MinBars, options.barCount, Defaults::MaxBars);
+    if (options.barCount % 2 != 0) {
+        ++options.barCount;
+    }
     options.framerate = qBound(Defaults::MinFramerate, options.framerate, Defaults::MaxFramerate);
     options.sensitivity = qBound(Defaults::MinSensitivity, options.sensitivity, Defaults::MaxSensitivity);
     options.noiseReduction = qBound(Defaults::MinNoiseReduction, options.noiseReduction, Defaults::MaxNoiseReduction);
@@ -148,7 +159,7 @@ void CavaSpectrumProvider::start()
         return;
     }
 
-    buildConfig();
+    m_config = generateConfig(m_options);
 
     if (!m_process) {
         m_process = new QProcess(this);
@@ -173,6 +184,11 @@ void CavaSpectrumProvider::start()
 
 void CavaSpectrumProvider::stop()
 {
+    // Cancel any queued restart FIRST: waitForFinished below pumps the
+    // finished signal synchronously, and a still-armed pending-restart
+    // handler would otherwise respawn cava in the middle of stop() (or of
+    // the destructor). With the flag down the handler no-ops.
+    m_pendingRestart = false;
     if (m_process && m_process->state() != QProcess::NotRunning) {
         m_stopping = true;
         m_process->terminate();
@@ -213,58 +229,63 @@ QVector<float> CavaSpectrumProvider::spectrum() const
     return m_spectrum;
 }
 
-void CavaSpectrumProvider::buildConfig()
+QString CavaSpectrumProvider::generateConfig(const SpectrumOptions& options)
 {
-    const QString audioMethod = m_options.inputMethod.isEmpty() ? detectAudioMethod() : m_options.inputMethod;
-    const bool mono = m_options.channelMode != ChannelMode::Stereo;
+    // Normalize defensively so a caller-supplied set is emitted exactly as
+    // the provider would run it (idempotent for the already-normalized
+    // m_options the running provider passes in).
+    const SpectrumOptions o = normalizedOptions(options);
+    const QString audioMethod = o.inputMethod.isEmpty() ? detectAudioMethod() : o.inputMethod;
+    const bool mono = o.channelMode != ChannelMode::Stereo;
     QString monoOption = QStringLiteral("average");
-    if (m_options.channelMode == ChannelMode::MonoLeft) {
+    if (o.channelMode == ChannelMode::MonoLeft) {
         monoOption = QStringLiteral("left");
-    } else if (m_options.channelMode == ChannelMode::MonoRight) {
+    } else if (o.channelMode == ChannelMode::MonoRight) {
         monoOption = QStringLiteral("right");
     }
 
-    m_config = QStringLiteral(
-                   "[general]\n"
-                   "framerate=%1\n"
-                   "bars=%2\n"
-                   "autosens=%3\n"
-                   "sensitivity=%4\n"
-                   "lower_cutoff_freq=%5\n"
-                   "higher_cutoff_freq=%6\n")
-                   .arg(m_options.framerate)
-                   .arg(m_options.barCount)
-                   .arg(m_options.autosens ? 1 : 0)
-                   .arg(m_options.sensitivity)
-                   .arg(m_options.lowerCutoffHz)
-                   .arg(m_options.higherCutoffHz);
-    m_config += QStringLiteral(
-                    "[input]\n"
-                    "method=%1\n"
-                    "source=%2\n")
-                    .arg(audioMethod, m_options.inputSource);
-    m_config += QStringLiteral(
-                    "[output]\n"
-                    "method=raw\n"
-                    "raw_target=/dev/stdout\n"
-                    "data_format=ascii\n"
-                    "ascii_max_range=%1\n"
-                    "bar_delimiter=59\n"
-                    "frame_delimiter=10\n"
-                    "channels=%2\n"
-                    "mono_option=%3\n"
-                    "reverse=%4\n")
-                    .arg(kAsciiMaxRange)
-                    .arg(mono ? QStringLiteral("mono") : QStringLiteral("stereo"), monoOption)
-                    .arg(m_options.reverse ? 1 : 0);
-    m_config += QStringLiteral(
-                    "[smoothing]\n"
-                    "noise_reduction=%1\n"
-                    "monstercat=%2\n"
-                    "waves=%3\n")
-                    .arg(m_options.noiseReduction)
-                    .arg(m_options.monstercat ? 1 : 0)
-                    .arg(m_options.waves ? 1 : 0);
+    QString config = QStringLiteral(
+                         "[general]\n"
+                         "framerate=%1\n"
+                         "bars=%2\n"
+                         "autosens=%3\n"
+                         "sensitivity=%4\n"
+                         "lower_cutoff_freq=%5\n"
+                         "higher_cutoff_freq=%6\n")
+                         .arg(o.framerate)
+                         .arg(o.barCount)
+                         .arg(o.autosens ? 1 : 0)
+                         .arg(o.sensitivity)
+                         .arg(o.lowerCutoffHz)
+                         .arg(o.higherCutoffHz);
+    config += QStringLiteral(
+                  "[input]\n"
+                  "method=%1\n"
+                  "source=%2\n")
+                  .arg(audioMethod, o.inputSource);
+    config += QStringLiteral(
+                  "[output]\n"
+                  "method=raw\n"
+                  "raw_target=/dev/stdout\n"
+                  "data_format=ascii\n"
+                  "ascii_max_range=%1\n"
+                  "bar_delimiter=59\n"
+                  "frame_delimiter=10\n"
+                  "channels=%2\n"
+                  "mono_option=%3\n"
+                  "reverse=%4\n")
+                  .arg(kAsciiMaxRange)
+                  .arg(mono ? QStringLiteral("mono") : QStringLiteral("stereo"), monoOption)
+                  .arg(o.reverse ? 1 : 0);
+    config += QStringLiteral(
+                  "[smoothing]\n"
+                  "noise_reduction=%1\n"
+                  "monstercat=%2\n"
+                  "waves=%3\n")
+                  .arg(o.noiseReduction)
+                  .arg(o.monstercat ? 1 : 0)
+                  .arg(o.waves ? 1 : 0);
+    return config;
 }
 
 void CavaSpectrumProvider::onReadyReadStandardOutput()
@@ -371,11 +392,26 @@ void CavaSpectrumProvider::restartAsync()
     connect(
         m_process, &QProcess::finished, this,
         [this]() {
+            if (!m_pendingRestart || m_stopping) {
+                // Canceled by stop() before the process wound down; do not
+                // resurrect it.
+                return;
+            }
             m_pendingRestart = false;
             start();
         },
         Qt::SingleShotConnection);
     m_process->terminate();
+    // terminate() is SIGTERM and the child is free to ignore it. Escalate to
+    // kill() after a grace window (mirroring stop()'s fallback) so the
+    // pending flag cannot latch forever with a stale process still running
+    // on the old config; kill produces finished, which drives the restart
+    // handler above.
+    QTimer::singleShot(kRestartKillGraceMs, this, [this]() {
+        if (m_pendingRestart && m_process && m_process->state() != QProcess::NotRunning) {
+            m_process->kill();
+        }
+    });
 }
 
 } // namespace PhosphorAudio
