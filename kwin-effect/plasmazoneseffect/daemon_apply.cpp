@@ -650,8 +650,9 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
         KWin::effects->addRepaintFull();
     }
     // Window-layer rules need the same placement-scoped re-resolve, but they
-    // are EVENT-driven (only reconcileRuleWindowLayer writes
-    // keepAbove/keepBelow), so the cache clear above does nothing for them on
+    // are EVENT-driven (during normal operation only reconcileRuleWindowLayer
+    // writes keepAbove/keepBelow; restoreAllRuleWindowLayers is
+    // destructor-only), so the cache clear above does nothing for them on
     // its own — opacity revives per-frame in paintWindow, layer does not.
     // Re-reconcile every window right here at the bulk-placement chokepoint so
     // BOTH edges are covered: on daemon loss a `WHEN IsFloating` layer rule
@@ -664,8 +665,10 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
     // restoreAllRuleWindowLayers(): that unconditionally drops all snapshots,
     // which would strand windows held by an unconditional (placement-free)
     // layer rule — the rule sets deliberately survive daemon loss, so those
-    // must keep their applied layer.
-    if (KWin::effects) {
+    // must keep their applied layer. Gated on hasWindowLayerRules so a
+    // session whose rules never touch the layer skips the cache-cold
+    // per-window resolution (a lingering snapshot still sweeps to drain).
+    if (KWin::effects && (m_shaderManager.hasWindowLayerRules() || !m_ruleWindowLayerSnapshots.isEmpty())) {
         const auto layerWindows = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* lw : layerWindows) {
             if (lw && !lw->isDeleted()) {

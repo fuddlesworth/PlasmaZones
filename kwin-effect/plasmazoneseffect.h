@@ -1295,7 +1295,8 @@ private:
     /// rule-written values substituted from the pre-rule snapshot while a
     /// SetWindowLayer rule owns the window's layer. Consulted by the
     /// keep-above overlay-tool gates (shouldHandleWindow / shouldDecorateWindow
-    /// / isTileableWindow); applyOwnLayerFlags is the query-side counterpart.
+    /// / isTileableWindow) and the engine-facing KWinCompositorBridge::windowInfo
+    /// export; applyOwnLayerFlags is the query-side counterpart.
     bool windowOwnKeepAbove(KWin::EffectWindow* w) const;
 
     /// Substitute the pre-rule snapshot's keepAbove/keepBelow pair into

@@ -22,11 +22,13 @@ void ShaderTransitionManager::rebuildAnimationRuleSet()
     // entries on next access.
     m_animationRuleSet.setRules(m_ruleAnimationRules);
 
-    // Recompute the SetOpacity-presence gate for the per-frame opacity resolve
-    // (see hasOpacityRules()). Only enabled rules count — a disabled opacity
-    // rule resolves to no override, so it must not force the per-window query
-    // build every frame.
+    // Recompute the action-presence gates: SetOpacity for the per-frame
+    // opacity resolve (see hasOpacityRules()) and SetWindowLayer for the
+    // layer reconcile / bulk sweep (see hasWindowLayerRules()). Only enabled
+    // rules count — a disabled rule resolves to no override, so it must not
+    // force the per-window query build.
     m_hasOpacityRules = false;
+    m_hasWindowLayerRules = false;
     for (const PhosphorRules::Rule& rule : m_ruleAnimationRules) {
         if (!rule.enabled) {
             continue;
@@ -34,10 +36,11 @@ void ShaderTransitionManager::rebuildAnimationRuleSet()
         for (const PhosphorRules::RuleAction& action : rule.actions) {
             if (action.type == PhosphorRules::ActionType::SetOpacity) {
                 m_hasOpacityRules = true;
-                break;
+            } else if (action.type == PhosphorRules::ActionType::SetWindowLayer) {
+                m_hasWindowLayerRules = true;
             }
         }
-        if (m_hasOpacityRules) {
+        if (m_hasOpacityRules && m_hasWindowLayerRules) {
             break;
         }
     }

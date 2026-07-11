@@ -133,6 +133,18 @@ public:
         return m_hasOpacityRules;
     }
 
+    /// True when at least one enabled rule carries a `SetWindowLayer` action.
+    /// Gates the per-window layer reconcile (`reconcileRuleWindowLayer`'s fast
+    /// path) and the bulk-placement sweep in `invalidateAllRuleCaches` —
+    /// without it, a session whose rules never touch the layer (opacity or
+    /// border only) would still pay a cache-cold per-window rule resolution
+    /// across the whole stacking order on every daemon loss / bringup re-seed.
+    /// Recomputed by `rebuildAnimationRuleSet()` on every rule-set change.
+    bool hasWindowLayerRules() const
+    {
+        return m_hasWindowLayerRules;
+    }
+
     /// Per-event motion-profile tree mirrored from the daemon's
     /// PhosphorProfileRegistry over D-Bus (`motionProfileTree`). Holds
     /// the per-event base durations (window.open, window.close, …) that
@@ -340,6 +352,8 @@ private:
     // rebuildAnimationRuleSet() so the per-frame opacity resolve can skip the
     // WindowQuery build entirely when no opacity rule exists. See hasOpacityRules().
     bool m_hasOpacityRules = false;
+    // Same shape for SetWindowLayer. See hasWindowLayerRules().
+    bool m_hasWindowLayerRules = false;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Texture Cache

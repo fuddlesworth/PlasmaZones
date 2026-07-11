@@ -663,14 +663,27 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     if (!w || w->isDeleted() || windowId.isEmpty()) {
         return;
     }
-    // No-rules fast path: with an empty rule set and no snapshot to drain,
-    // there is nothing to resolve or restore. Keeps the "no-rules case pays
-    // nothing" invariant (see shouldAnimateWindow) on the focus-driven
-    // updateAllDecorations path — without this, the layer reconcile would be
-    // the one consumer building the ~30-accessor rule query for rule-less
-    // sessions. A lingering snapshot with an empty rule set still falls
-    // through so the restore below drains it.
-    if (m_shaderManager.animationRuleSet().isEmpty() && !m_ruleWindowLayerSnapshots.contains(windowId)) {
+    // No-layer-rules fast path: with no enabled SetWindowLayer rule and no
+    // snapshot to drain, the resolve below can neither apply nor restore
+    // anything. Keeps the "no-rules case pays nothing" invariant (see
+    // shouldAnimateWindow) on the focus-driven updateAllDecorations path —
+    // without this, the layer reconcile would be the one consumer building
+    // the ~30-accessor rule query for sessions whose rules never touch the
+    // layer (opacity/border-only rule sets included). A lingering snapshot
+    // still falls through so the restore below drains it.
+    if (!m_shaderManager.hasWindowLayerRules() && !m_ruleWindowLayerSnapshots.contains(windowId)) {
+        return;
+    }
+    // Structural / own-surface shield, mirroring the SetOpacity paint gate
+    // (paint_pipeline.cpp): a layer write is a raw KWin window-state
+    // mutation, so a broad match expression must never demote a dock, pin a
+    // notification, or strip the daemon overlay's own keep-above. Sits
+    // before the snapshot capture below, so a shielded window never enters
+    // the map and no restore path needs the same list.
+    const QString winClass = w->windowClass();
+    if (isOwnOverlayClass(winClass) || isPlasmaShellSurface(winClass) || isXdgDesktopPortalSurface(winClass)
+        || w->isDesktop() || w->isDock() || w->isNotification() || w->isCriticalNotification()
+        || w->isOnScreenDisplay()) {
         return;
     }
     KWin::Window* kw = w->window();
