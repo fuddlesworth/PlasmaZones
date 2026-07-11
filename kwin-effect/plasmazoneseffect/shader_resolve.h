@@ -209,4 +209,18 @@ struct ResolvedDecorationChain
 
 std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRules::ResolvedActions& resolved);
 
+/**
+ * @brief Per-window stacking-layer override — the runtime consumer for the
+ *        SetWindowLayer rule.
+ *
+ * Returns the validated layer token (`WindowLayerToken::Above` / `Normal` /
+ * `Below`) when an enabled rule fills the `window-layer` slot of @p resolved,
+ * or `std::nullopt` when no rule fills it or the value is outside the closed
+ * vocabulary (defence in depth against a hand-edited payload that bypassed the
+ * load-time validator, mirroring the other consumers). The caller
+ * (reconcileRuleWindowLayer) maps the token onto KWin's keepAbove/keepBelow
+ * pair, always writing both flags.
+ */
+std::optional<QString> resolveWindowLayer(const PhosphorRules::ResolvedActions& resolved);
+
 } // namespace PlasmaZones

@@ -633,21 +633,6 @@ void Settings::resetKeys(const ConfigKeyList& keys)
 
 // ── Shaders (PhosphorConfig::Store-backed) ──────────────────────────────────
 
-bool Settings::enableShaderEffects() const
-{
-    return m_store->read<bool>(ConfigDefaults::shadersGroup(), ConfigDefaults::enabledKey());
-}
-
-void Settings::setEnableShaderEffects(bool enable)
-{
-    if (enableShaderEffects() == enable) {
-        return;
-    }
-    m_store->write(ConfigDefaults::shadersGroup(), ConfigDefaults::enabledKey(), enable);
-    Q_EMIT enableShaderEffectsChanged();
-    Q_EMIT settingsChanged();
-}
-
 int Settings::shaderFrameRate() const
 {
     return m_store->read<int>(ConfigDefaults::shadersGroup(), ConfigDefaults::frameRateKey());

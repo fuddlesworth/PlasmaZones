@@ -466,7 +466,6 @@ Q_SIGNALS:
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
     // Shader effects
-    void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
     void enableAudioVisualizerChanged();
     void audioSpectrumBarCountChanged();

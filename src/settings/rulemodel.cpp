@@ -412,8 +412,9 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         return algo.isEmpty() ? PhosphorI18n::tr("Algorithm parameter")
                               : PhosphorI18n::tr("Algorithm: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
     }
-    // ── single-value actions keyed on ActionParam::Value (restore-position,
-    //    border / title-bar overrides, per-context gap overrides) ──
+    // ── single-value actions keyed on ActionParam::Value: bool actions
+    //    resolve through boolActionStateLabel first, everything else through
+    //    the per-type value formatting below ──
     {
         const QJsonValue raw = action.params.value(PhosphorRules::ActionParam::Value);
         // Boolean actions render their polarity-aware phrase ("Show border" /
@@ -463,6 +464,23 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         if (action.type == ActionType::SetDragBehavior) {
             return PhosphorI18n::tr("Drag: %1")
                 .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
+        // ── window-management overrides ──
+        if (action.type == ActionType::SetWindowLayer) {
+            const QString v = raw.toString();
+            if (v.isEmpty()) {
+                return PhosphorI18n::tr("Window layer");
+            }
+            // Mirror the resolver's closed vocabulary (shader_resolve.cpp's
+            // resolveWindowLayer): an unknown token produces no runtime
+            // override, so the label must not claim one — same contract as
+            // the SetOpacity "(invalid)" guard above.
+            namespace LayerToken = PhosphorRules::WindowLayerToken;
+            if (v != LayerToken::Above && v != LayerToken::Normal && v != LayerToken::Below) {
+                return PhosphorI18n::tr("Window layer (invalid)");
+            }
+            return PhosphorI18n::tr("Layer: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, v));
         }
         // ── overlay-appearance overrides (colours upper-cased hex; opacities
         //    are [0,1] on the wire, shown as a percent to match the editor) ──

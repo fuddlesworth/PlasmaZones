@@ -228,8 +228,6 @@ public:
     virtual void setLabelFontStrikeout(bool strikeout) = 0;
 
     // Shader effects
-    virtual bool enableShaderEffects() const = 0;
-    virtual void setEnableShaderEffects(bool enable) = 0;
     virtual int shaderFrameRate() const = 0;
     virtual void setShaderFrameRate(int fps) = 0;
     virtual bool enableAudioVisualizer() const = 0;

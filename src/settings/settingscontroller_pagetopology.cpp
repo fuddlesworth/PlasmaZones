@@ -236,7 +236,6 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // Shader Effects moved here from snapping-overlay-appearance: frame
              // rate + audio spectrum drive EVERY shader category (overlay,
              // animation, surface decoration), not just snapping overlays.
-             {CD::shadersGroup(), CD::enabledKey()},
              {CD::shadersGroup(), CD::frameRateKey()},
              {CD::shadersGroup(), CD::audioVisualizerKey()},
              {CD::shadersGroup(), CD::audioSpectrumBarCountKey()},

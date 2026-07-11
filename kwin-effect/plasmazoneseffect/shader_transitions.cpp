@@ -1659,8 +1659,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     // Window-filtering gate. `shouldAnimateWindow` honours the user's
     // Animations.WindowFiltering exclusions (transient / min-size /
-    // app / class) AND lets a Rule carrying any OverrideAnimation*
-    // or SetOpacity action override the filter when the rule's match
+    // app / class) AND lets a Rule carrying any effect-consumed
+    // (Tag::Effect) action override the filter when the rule's match
     // expression resolves for the window's full WindowQuery (AppId /
     // WindowClass / Title / WindowRole / DesktopFile / WindowType / Pid /
     // state flags). Skipping this for shader transitions only would leave
@@ -1845,8 +1845,8 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
 {
     // Fetch the unified Rule store via getAllRules (returns a JSON
     // string of a v4 RuleSet), deserialise, filter to rules whose
-    // action list contains any OverrideAnimation* action, and hand them to
-    // the shader manager. The shader manager mirrors them into
+    // action list contains any effect-consumed (Tag::Effect) action, and
+    // hand them to the shader manager. The shader manager mirrors them into
     // m_animationRuleSet so the per-event slot lookup in shader_resolve.cpp
     // resolves the cascade against the unified rule store directly.
     const QDBusMessage msg = QDBusMessage::createMethodCall(
@@ -1904,9 +1904,12 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
                 // rule-set size minimal and the priority-order index smaller.)
                 continue;
             }
-            // Admit the rule to the evaluator if ANY action is effect-consumed
-            // (the OverrideAnimation* triple, SetOpacity, or a SetBorder* /
-            // SetHideTitleBar appearance action — Tag::Effect via hasTag below).
+            // Admit the rule to the evaluator if ANY action is effect-consumed,
+            // i.e. carries Tag::Effect (hasTag below). The authoritative
+            // membership list is the descriptor tag assignments in
+            // ruleaction.cpp — animation overrides, SetOpacity, the appearance
+            // family (SetBorder*, SetHideTitleBar, OverrideDecorationChain),
+            // and SetWindowLayer.
             bool admitted = false;
             for (const PhosphorRules::RuleAction& action : rule.actions) {
                 if (PhosphorRules::ActionRegistry::instance().hasTag(action.type, PhosphorRules::Tag::Effect)) {

@@ -123,8 +123,67 @@ void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
 PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);
-    return ruleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
-                        m_autotileHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    PhosphorRules::WindowQuery query =
+        ruleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
+                     m_autotileHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    applyOwnLayerFlags(query, windowId);
+    return query;
+}
+
+void PlasmaZonesEffect::applyOwnLayerFlags(PhosphorRules::WindowQuery& query, const QString& windowId) const
+{
+    // KeepAbove / KeepBelow must report the window's OWN flags, not
+    // rule-written state. SetWindowLayer is the one action that mutates a
+    // matchable field: while a layer rule owns the pair, the live KWin flags
+    // are the rule's output, and feeding them back into the query would make
+    // a `WHEN KeepAbove` predicate read its own effect — a self-feeding match
+    // that flips on every cache flush and thrashes the snapshot restore. The
+    // pre-rule snapshot holds the app/user-set values, so substitute those
+    // while the rule owns the layer. Applied to BOTH rule-input boundaries:
+    // ruleQuery (effect-side evaluation) and pushWindowMetadata (the daemon's
+    // KeepAbove/KeepBelow match inputs).
+    if (m_ruleWindowLayerSnapshots.isEmpty()) {
+        return;
+    }
+    if (const auto it = m_ruleWindowLayerSnapshots.constFind(windowId); it != m_ruleWindowLayerSnapshots.cend()) {
+        query.keepAbove = it->keepAbove;
+        query.keepBelow = it->keepBelow;
+    }
+}
+
+bool PlasmaZonesEffect::windowOwnKeepAbove(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return false;
+    }
+    // The window's OWN keep-above flag — the app/user-set state, excluding
+    // rule-written values. The keep-above overlay gates (shouldHandleWindow /
+    // shouldDecorateWindow / isTileableWindow) exist to reject external
+    // overlay tools (Spectacle, colour pickers) that set keep-above on
+    // themselves; a window raised by a SetWindowLayer rule must NOT be
+    // misclassified as one of those, or the headline "floating windows above
+    // tiled windows" rule would silently strip the matched window's
+    // decoration and drop it from snap/tile management. While a layer rule
+    // owns the pair, the pre-rule snapshot holds the window's own flag.
+    //
+    // Empty-map fast path: with no window rule-raised, the own flag IS the
+    // live flag. Keeps the gates getWindowId-free for the common no-layer-rule
+    // session (the "no-rules case pays nothing" invariant).
+    if (m_ruleWindowLayerSnapshots.isEmpty()) {
+        return w->keepAbove();
+    }
+    // Close-grabbed corpse: its flags are frozen and slotWindowClosed already
+    // dropped any snapshot it had, so answer from the live flag WITHOUT
+    // getWindowId — several gate callers don't pre-check isDeleted(), and
+    // getWindowId on a dying window would re-insert the reverse-map entry
+    // buildWindowMap deliberately skips. Unconditional (not folded into the
+    // fast path above) so the no-repollution guarantee holds even while a
+    // layer rule owns some other window.
+    if (w->isDeleted()) {
+        return w->keepAbove();
+    }
+    const auto it = m_ruleWindowLayerSnapshots.constFind(getWindowId(w));
+    return it != m_ruleWindowLayerSnapshots.cend() ? it->keepAbove : w->keepAbove();
 }
 
 PhosphorRules::ResolvedActions PlasmaZonesEffect::resolveRuleActions(KWin::EffectWindow* w,
@@ -257,8 +316,10 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
 
     // Keep-above overlays (Spectacle, color pickers, screen rulers, screenshot
     // tools that linger after capture) shouldn't be snapped to a zone — same
-    // rationale as isTileableWindow's keep-above gate.
-    if (w->keepAbove()) {
+    // rationale as isTileableWindow's keep-above gate. Consults the window's
+    // OWN flag (see windowOwnKeepAbove) so a SetWindowLayer-raised window
+    // stays manageable.
+    if (windowOwnKeepAbove(w)) {
         return rejectedBecause(rejectReason, "keep-above window");
     }
 
@@ -352,9 +413,13 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // it — the user's act of authoring a matching rule is the opt-in signal.
     // (Type exclusions are handled above and are NOT bypassable here.)
     //
-    // `m_shaderManager.animationRuleSet()` is filtered to OverrideAnimation* /
-    // SetOpacity rules at admission (shader_transitions.cpp's
-    // `hasTag(type, Tag::Effect)` loop), so `hasAnyMatch` never surfaces a rule whose
+    // `m_shaderManager.animationRuleSet()` admits every rule carrying a
+    // Tag::Effect action (shader_transitions.cpp's `hasTag(type, Tag::Effect)`
+    // loop; the tag assignments in ruleaction.cpp are the authoritative
+    // membership list). So a rule
+    // whose only action is an appearance or layer override also force-animates
+    // its matches here — deliberate, consistent opt-in semantics across every
+    // effect-consumed action. `hasAnyMatch` never surfaces a rule whose
     // actions are EXCLUSIVELY `ExcludeAnimations` — those route through the
     // exclusion gate below.
     if (haveAnimationRules && animationEvaluator.hasAnyMatch(query())) {
@@ -436,8 +501,10 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
 
     // Keep-above overlays (Spectacle, colour pickers, screen rulers) — same
     // rejection shouldHandleWindow applies, preserved so upgrading doesn't
-    // start bordering these lingering utility windows.
-    if (w->keepAbove()) {
+    // start bordering these lingering utility windows. Consults the window's
+    // OWN flag (see windowOwnKeepAbove) so a SetWindowLayer-raised window
+    // keeps its decoration.
+    if (windowOwnKeepAbove(w)) {
         return false;
     }
 
@@ -490,7 +557,9 @@ bool PlasmaZonesEffect::isTileableWindow(KWin::EffectWindow* w, QString* rejectR
     // pickers, screen rulers, etc.) set keep-above and should not enter the
     // autotile tree or receive auto-focus. Without this guard, opening
     // Spectacle while focusNewWindows is enabled disrupts the tiled layout.
-    if (w->keepAbove()) {
+    // Consults the window's OWN flag (see windowOwnKeepAbove) so a
+    // SetWindowLayer-raised window stays tileable.
+    if (windowOwnKeepAbove(w)) {
         return rejectedBecause(rejectReason, "keep-above window");
     }
     return true;
@@ -530,8 +599,8 @@ void PlasmaZonesEffect::logWindowDiagnostics(KWin::EffectWindow* w, const char* 
     qCDebug(lcEffectDiag) << "[window-diag]   state — managed:" << w->isManaged() << "x11:" << w->isX11Client()
                           << "wayland:" << w->isWaylandClient() << "fullScreen:" << w->isFullScreen()
                           << "minimized:" << w->isMinimized() << "skipSwitcher:" << w->isSkipSwitcher()
-                          << "keepAbove:" << w->keepAbove() << "hasDecoration:" << w->hasDecoration()
-                          << "onCurrentDesktop:" << w->isOnCurrentDesktop()
+                          << "keepAbove:" << w->keepAbove() << "ownKeepAbove:" << windowOwnKeepAbove(w)
+                          << "hasDecoration:" << w->hasDecoration() << "onCurrentDesktop:" << w->isOnCurrentDesktop()
                           << "onCurrentActivity:" << w->isOnCurrentActivity()
                           << "onAllDesktops:" << w->isOnAllDesktops();
     qCDebug(lcEffectDiag) << "[window-diag]   geometry — frame:" << w->frameGeometry()
