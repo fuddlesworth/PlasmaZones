@@ -5,6 +5,8 @@
 
 #include "colorutil.h"
 
+#include <PhosphorShaders/ShaderParamPreamble.h>
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -13,6 +15,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLoggingCategory>
+#include <QSet>
 
 namespace PlasmaZones::ShaderRender {
 
@@ -181,41 +184,92 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
     }
 
     // ── Per-parameter defaults ──────────────────────────────────
+    // Slot resolution mirrors the registry's T1.1 automatic assignment
+    // (libs/phosphor-shaders/src/shaderregistry.cpp, parseShaderMetadata):
+    // explicit `slot` fields are reserved first, then every parameter that
+    // omits `slot` is packed into the next free lane of its pool in
+    // declaration order — float/int/bool → 0..31, color → 0..15, image →
+    // 0..3. A param whose id is not a valid GLSL identifier body claims no
+    // lane on either side (no p_<id> define, no upload), so it seeds nothing
+    // here either. Keeping this numbering byte-identical to the registry's
+    // matters: the generated p_<id> preamble the renderer installs (see
+    // renderer.cpp) reads exactly the lane the default is seeded into.
+    struct RawParam
+    {
+        QString id;
+        QString type;
+        QJsonValue def;
+        QString wrap;
+        int slot = -1;
+    };
+    QList<RawParam> raw;
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
+    raw.reserve(params.size());
     for (const auto& v : params) {
         if (!v.isObject())
             continue;
         const QJsonObject p = v.toObject();
-        const QString type = p.value(QLatin1String("type")).toString(QStringLiteral("float"));
-        const QString id = p.value(QLatin1String("id")).toString();
-        // A missing slot field is intentional — UI-only metadata that
-        // doesn't get pushed to the shader. An explicit negative slot is
-        // a metadata error and gets logged so authoring mistakes don't
-        // silently disappear.
-        if (!p.contains(QLatin1String("slot")))
+        RawParam r;
+        r.id = p.value(QLatin1String("id")).toString();
+        r.type = p.value(QLatin1String("type")).toString(QStringLiteral("float"));
+        r.def = p.value(QLatin1String("default"));
+        r.wrap = p.value(QLatin1String("wrap")).toString(QStringLiteral("clamp"));
+        r.slot = p.value(QLatin1String("slot")).toInt(-1);
+        if (!PhosphorShaders::isValidParamId(r.id)) {
+            // No define, no lane — even with an explicit slot (registry parity).
+            r.slot = -1;
+        }
+        raw.append(r);
+    }
+
+    const auto poolOf = [](const QString& type) -> int { // 0 = scalar, 1 = color, 2 = image
+        if (type == QLatin1String("color"))
+            return 1;
+        if (type == QLatin1String("image"))
+            return 2;
+        return 0;
+    };
+    QSet<int> usedScalar, usedColor, usedImage;
+    for (const RawParam& r : std::as_const(raw)) {
+        if (r.slot < 0 || !PhosphorShaders::isValidParamId(r.id))
             continue;
-        const int slot = p.value(QLatin1String("slot")).toInt(-1);
-        if (slot < 0) {
-            qCWarning(lcMetadataLoader) << "parameter" << id << "has negative slot" << slot << "— dropping";
+        (poolOf(r.type) == 1 ? usedColor : poolOf(r.type) == 2 ? usedImage : usedScalar).insert(r.slot);
+    }
+    int nextScalar = 0, nextColor = 0, nextImage = 0;
+    for (RawParam& r : raw) {
+        if (r.slot >= 0 || !PhosphorShaders::isValidParamId(r.id))
+            continue;
+        const int pool = poolOf(r.type);
+        QSet<int>& used = (pool == 1 ? usedColor : pool == 2 ? usedImage : usedScalar);
+        int& next = (pool == 1 ? nextColor : pool == 2 ? nextImage : nextScalar);
+        while (used.contains(next))
+            ++next;
+        r.slot = next;
+        used.insert(next);
+        ++next;
+    }
+
+    for (const RawParam& r : std::as_const(raw)) {
+        if (r.slot < 0) {
+            qCWarning(lcMetadataLoader) << "parameter" << r.id << "has no usable id — dropping";
             continue;
         }
 
-        if (type == QLatin1String("float") || type == QLatin1String("int")) {
-            seedParam(out.customParams, slot, p.value(QLatin1String("default")).toDouble(0.0));
-        } else if (type == QLatin1String("bool")) {
-            seedParam(out.customParams, slot, p.value(QLatin1String("default")).toBool(false) ? 1.0 : 0.0);
-        } else if (type == QLatin1String("color")) {
-            seedColor(out.customColors, slot,
-                      parseHexColor(p.value(QLatin1String("default")).toString(QStringLiteral("#000000"))));
-        } else if (type == QLatin1String("image")) {
-            if (slot >= 4) {
-                qCWarning(lcMetadataLoader) << "image slot" << slot << "out of range [0, 4) — dropping" << id;
+        if (r.type == QLatin1String("float") || r.type == QLatin1String("int")) {
+            seedParam(out.customParams, r.slot, r.def.toDouble(0.0));
+        } else if (r.type == QLatin1String("bool")) {
+            seedParam(out.customParams, r.slot, r.def.toBool(false) ? 1.0 : 0.0);
+        } else if (r.type == QLatin1String("color")) {
+            seedColor(out.customColors, r.slot, parseHexColor(r.def.toString(QStringLiteral("#000000"))));
+        } else if (r.type == QLatin1String("image")) {
+            if (r.slot >= 4) {
+                qCWarning(lcMetadataLoader) << "image slot" << r.slot << "out of range [0, 4) — dropping" << r.id;
                 continue;
             }
-            out.userTextures[slot] = resolveRelative(metadataDir, p.value(QLatin1String("default")).toString());
-            out.userTextureWraps[slot] = p.value(QLatin1String("wrap")).toString(QStringLiteral("clamp"));
+            out.userTextures[r.slot] = resolveRelative(metadataDir, r.def.toString());
+            out.userTextureWraps[r.slot] = r.wrap;
         } else {
-            qCWarning(lcMetadataLoader) << "parameter" << id << "has unsupported type" << type << "— dropping";
+            qCWarning(lcMetadataLoader) << "parameter" << r.id << "has unsupported type" << r.type << "— dropping";
         }
     }
 

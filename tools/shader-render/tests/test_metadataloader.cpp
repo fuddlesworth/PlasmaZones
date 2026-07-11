@@ -235,11 +235,12 @@ private Q_SLOTS:
         QVERIFY(md.fragmentShader.endsWith(QStringLiteral("effect.frag")));
     }
 
-    void negativeSlotIsDropped()
+    void negativeSlotAutoAssigns()
     {
-        // An explicit negative slot is a metadata error and is dropped
-        // (with a warning, not asserted on here). Adjacent valid slots
-        // must remain untouched.
+        // An explicit negative slot is treated exactly like a missing one
+        // (registry T1.1 parity): the param auto-assigns the next free lane
+        // of its pool after explicit slots are reserved. Here slot 0 is
+        // taken, so "bad" packs into lane 1.
         QTemporaryDir dir;
         writeFile(dir, QStringLiteral("effect.frag"));
         writeFile(dir, QStringLiteral("zone.vert"));
@@ -256,8 +257,7 @@ private Q_SLOTS:
         PlasmaZones::ShaderRender::ShaderMetadata md;
         QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
         QCOMPARE(md.customParams[0].x(), 4.0f);
-        // The negative slot wrote nothing — sentinel preserved on neighbours.
-        QCOMPARE(md.customParams[0].y(), -1.0f);
+        QCOMPARE(md.customParams[0].y(), 9.0f); // auto-assigned lane 1
         QCOMPARE(md.customParams[7].w(), -1.0f);
     }
 
@@ -343,11 +343,13 @@ private Q_SLOTS:
         }
     }
 
-    void missingSlotFieldIsSilentlySkipped()
+    void missingSlotFieldAutoAssigns()
     {
-        // A parameter without a slot field is treated as UI-only metadata
-        // (no shader push), distinct from an explicit negative which is a
-        // metadata error. Verifies no slot is touched.
+        // A parameter without a slot field auto-assigns the next free lane
+        // of its pool in declaration order (registry T1.1 parity), mixing
+        // freely with explicit slots — explicit lanes are reserved first,
+        // then the auto params fill the gaps. Pools number independently
+        // (the color claims color lane 0 regardless of the scalar traffic).
         QTemporaryDir dir;
         writeFile(dir, QStringLiteral("effect.frag"));
         writeFile(dir, QStringLiteral("zone.vert"));
@@ -356,18 +358,20 @@ private Q_SLOTS:
             "fragmentShader": "effect.frag",
             "vertexShader": "zone.vert",
             "parameters": [
-                {"id": "uiOnly", "type": "float", "default": 5.0}
+                {"id": "auto0",    "type": "float", "default": 5.0},
+                {"id": "pinned1",  "type": "float", "slot": 1, "default": 6.0},
+                {"id": "auto2",    "type": "float", "default": 7.0},
+                {"id": "tint",     "type": "color", "default": "#22d3ee"}
             ]
         })"));
 
         PlasmaZones::ShaderRender::ShaderMetadata md;
         QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
-        for (const auto& v : md.customParams) {
-            QCOMPARE(v.x(), -1.0f);
-            QCOMPARE(v.y(), -1.0f);
-            QCOMPARE(v.z(), -1.0f);
-            QCOMPARE(v.w(), -1.0f);
-        }
+        QCOMPARE(md.customParams[0].x(), 5.0f); // auto0 → lane 0
+        QCOMPARE(md.customParams[0].y(), 6.0f); // pinned1 → lane 1 (explicit)
+        QCOMPARE(md.customParams[0].z(), 7.0f); // auto2 → lane 2 (skips reserved 1)
+        QCOMPARE(md.customParams[0].w(), -1.0f);
+        QCOMPARE(md.customColors[0], QColor(QStringLiteral("#22d3ee")));
     }
 };
 

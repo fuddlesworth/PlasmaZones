@@ -3,11 +3,14 @@
 
 #include "renderer.h"
 
+#include "zoneentryscaffold.h"
+
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorRendering/ShaderNodeRhi.h>
 #include <PhosphorRendering/ZoneShaderCommon.h>
 #include <PhosphorRendering/ZoneShaderNodeRhi.h>
 #include <PhosphorRendering/ZoneUniformExtension.h>
+#include <PhosphorShaders/ShaderRegistry.h>
 
 #include <rhi/qrhi.h>
 
@@ -15,6 +18,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QPainter>
@@ -580,6 +584,25 @@ int Renderer::render(const RenderOptions& opts)
     effect->setSize(QSizeF(size));
     effect->setVisible(true);
     effect->setShaderIncludePaths(includePaths);
+
+    // T1.1 / T1.4 parity with ZoneShaderItem (zoneshaderitem.cpp): install the
+    // zone entry-point scaffold so a pack authored as just `vec4 pZone(ZoneCtx)`
+    // / `pImage(vec2)` (no main()) is assembled — prologue prepended, generated
+    // main() appended — and push the generated `#define p_<id> ...` preamble so
+    // parameter reads resolve to the customParams/customColors lanes the
+    // metadata defaults were seeded into. Without both, every migrated pack
+    // (the whole bundled catalog) fails to compile — no #version, no p_
+    // defines — and previews come out as empty frames.
+    effect->setEntryScaffold(PlasmaZones::zoneEntryPrologue(), PlasmaZones::zoneEntryCandidates());
+    {
+        QString metaError;
+        const auto info = PhosphorShaders::ShaderRegistry::parsePackMetadata(
+            QFileInfo(opts.metadata.fragmentShader).absolutePath(), &metaError);
+        if (!metaError.isEmpty()) {
+            qCWarning(lcRenderer) << "param preamble unavailable for" << opts.metadata.id << ":" << metaError;
+        }
+        effect->setParamPreamble(PhosphorShaders::ShaderRegistry::paramPreamble(info));
+    }
 
     // The QML wrapper enables layer.enabled on ZoneShaderItem so the shader
     // renders to a private FBO. Without this, the scene graph's batch

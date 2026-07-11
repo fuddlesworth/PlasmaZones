@@ -106,9 +106,12 @@ struct ShaderMetadata
  *   * color — slot S → customColors[S] (16 slots)
  *   * image — slot S → userTextures[S] / userTextureWraps[S] (4 slots)
  *
- * Parameters without a `slot` field are skipped silently (treated as
- * UI-only metadata). Parameters with an explicitly invalid slot
- * (negative or out-of-range for the type) are dropped with a warning.
+ * Parameters without a `slot` field are auto-assigned the next free lane of
+ * their pool in declaration order, byte-identical to the registry's T1.1
+ * assignment (explicit slots reserved first) — so the seeded defaults line up
+ * with the `p_<id>` preamble the renderer installs. Parameters whose id is
+ * not a valid GLSL identifier body claim no lane and are dropped with a
+ * warning; out-of-range slots are dropped with a warning.
  */
 bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out);
 

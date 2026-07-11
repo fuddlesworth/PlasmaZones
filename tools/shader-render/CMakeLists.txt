@@ -57,8 +57,13 @@ target_link_libraries(plasmazones-shader-render PRIVATE
     Qt6::Quick
     Qt6::QuickPrivate
     PhosphorRendering::PhosphorRendering
+    PhosphorShaders::PhosphorShaders
     PhosphorWayland::PhosphorWayland
     PhosphorAudio::PhosphorAudio
+    # The daemon's zone entry scaffold (zoneEntryPrologue / zoneEntryCandidates)
+    # and ZoneShaderItem live here; the tool installs the same scaffold so its
+    # shader assembly matches the runtime byte-for-byte (see renderer.cpp).
+    plasmazones_rendering
 )
 
 # The tool reuses the daemon's ZoneUniformExtension header so the
@@ -112,8 +117,10 @@ if(BUILD_TESTING)
         metadataloader.cpp
         metadataloader.h)
     set_target_properties(test_shader_render_metadataloader PROPERTIES AUTOMOC ON)
+    # PhosphorShaders: metadataloader.cpp shares the registry's
+    # isValidParamId so its auto-slot numbering can't drift (T1.1).
     target_link_libraries(test_shader_render_metadataloader PRIVATE
-        Qt6::Test Qt6::Core Qt6::Gui)
+        Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
     target_compile_features(test_shader_render_metadataloader PRIVATE cxx_std_20)
     add_test(
         NAME test_shader_render_metadataloader
