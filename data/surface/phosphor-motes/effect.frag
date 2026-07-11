@@ -191,13 +191,19 @@ vec4 pSurface(vec2 uv) {
         float tailStep = tailLen / max(travelPerT, 1.0) / float(kTailTaps - 1);
 
         // Cheap cull: the whole streak lives between spawn and head, so a
-        // fragment far from that segment's bounding circle can skip it.
+        // fragment far from that segment's bounding circle can skip it. The
+        // slack must cover the LARGEST tail stamp, not the head: tail taps
+        // blur out to sizeI * (1 + 0.45 * (kTailTaps - 1)), and three sigmas
+        // of that keeps the cut below visibility even for a zero-sway bright
+        // ember (a head-sized slack clipped the outermost tail stamp at
+        // ~0.24 of its peak).
         float altHead;
         vec2 headPos = motePath(h1, h2, h3, tMote, detachDist, riseDist, swayAmp, altHead);
         vec2 spawn, normalUnused;
         frameBirth(h1, spawn, normalUnused);
         vec2 mid = (spawn + headPos) * 0.5;
-        float bound = length(headPos - spawn) * 0.5 + sizeI * 4.0 + swayAmp;
+        float maxTapR = sizeI * (1.0 + 0.45 * float(kTailTaps - 1));
+        float bound = length(headPos - spawn) * 0.5 + maxTapR * 3.0 + swayAmp;
         if (length(px - mid) > bound) {
             continue;
         }

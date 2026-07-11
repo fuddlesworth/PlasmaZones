@@ -110,19 +110,10 @@ class RenderEffect : public PhosphorRendering::ShaderEffect
 {
     Q_OBJECT
 public:
-    explicit RenderEffect(QQuickItem* parent = nullptr)
-        : PhosphorRendering::ShaderEffect(parent)
-    {
-    }
     explicit RenderEffect(QQuickItem* parent, const QString& vertPath)
         : PhosphorRendering::ShaderEffect(parent)
         , m_vertexShaderPath(vertPath)
     {
-    }
-
-    void setVertexShaderPath(const QString& p)
-    {
-        m_vertexShaderPath = p;
     }
 
     /// Total zone count + currently-highlighted count. Zone-aware shaders
@@ -318,7 +309,7 @@ QStringList shaderIncludePaths()
 
 // Resolve which vertex shader to pass to RenderEffect. metadata.json declares
 // vertexShader explicitly only for packs that ship a non-standard one
-// (currently magnetic-field). The other 25 zone shaders rely on the runtime's
+// (currently magnetic-field). Every other zone shader relies on the runtime's
 // fallback to the shared zone.vert that lives at
 // data/shaders/shared/zone.vert. Without this the base ShaderEffect's default
 // vertex shader (kDefaultVertexShaderSource — emits only vTexCoord) is used,
