@@ -370,4 +370,30 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
     return out;
 }
 
+std::optional<QString> resolveWindowLayer(const PhosphorRules::ResolvedActions& resolved)
+{
+    // Constant slot id — same static-hoist rationale as resolveWindowOpacity.
+    static const QString kLayerSlot = QString(PhosphorRules::ActionSlot::WindowLayer);
+    const auto action = resolved.slot(kLayerSlot);
+    if (!action) {
+        return std::nullopt;
+    }
+    // Re-validate against the closed vocabulary even though the load-time
+    // descriptor validator already did — defence in depth against a
+    // programmatically-built / hand-edited payload that bypassed the parser
+    // (see the equivalent rationale in resolveWindowOpacity). An unknown token
+    // must resolve to "no override", never to an implicit Normal (which would
+    // clear a user's own keepAbove).
+    const QJsonValue v = action->params.value(PhosphorRules::ActionParam::Value);
+    if (!v.isString()) {
+        return std::nullopt;
+    }
+    const QString token = v.toString();
+    if (token != PhosphorRules::WindowLayerToken::Above && token != PhosphorRules::WindowLayerToken::Normal
+        && token != PhosphorRules::WindowLayerToken::Below) {
+        return std::nullopt;
+    }
+    return token;
+}
+
 } // namespace PlasmaZones

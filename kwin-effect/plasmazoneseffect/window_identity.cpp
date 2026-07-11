@@ -145,7 +145,12 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
     // avoiding a per-frame query build + a{sv} marshal for chatty-title windows.
     QVariantMap extended;
     if (includeExtended) {
-        const PhosphorRules::WindowQuery props = ruleQueryFor(w, QString(), false, false, false, QString());
+        PhosphorRules::WindowQuery props = ruleQueryFor(w, QString(), false, false, false, QString());
+        // Report the window's OWN (pre-rule) keepAbove/keepBelow — the daemon
+        // matches its KeepAbove/KeepBelow predicates against this metadata,
+        // and rule output must not feed rule input on that side of the
+        // boundary either. Shared invariant; see applyOwnLayerFlags.
+        applyOwnLayerFlags(props, getWindowId(w));
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
         if (props.isMinimized) {
             extended.insert(Key::IsMinimized, *props.isMinimized);

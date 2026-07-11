@@ -355,7 +355,7 @@ private:
      * `Animations.WindowFiltering` cache so the two filter sets can
      * diverge.
      *
-     * A Rule carrying any OverrideAnimation* or SetOpacity
+     * A Rule carrying any effect-consumed (Tag::Effect)
      * action whose match expression resolves for the window OVERRIDES
      * the filter — the existence of even one targeted rule signals
      * deliberate user intent to animate this app, regardless of
@@ -1270,8 +1270,11 @@ private:
     /// stay cached (e.g. a `WHEN isSnapped` SetOpacity window staying dimmed after
     /// the cache that made it "snapped" was cleared). Drops the whole match cache
     /// and forces a full repaint so opacity rules re-resolve against the current
-    /// IsSnapped / IsFloating / Zone state. Borders recover via their own
-    /// restore / rebuild path. No-op when there are no animation rules.
+    /// IsSnapped / IsFloating / Zone state, then re-reconciles every window's
+    /// rule layer — keepAbove/keepBelow is event-driven, so the cache clear
+    /// alone would leave it stale on both the loss and re-seed edges. Borders
+    /// recover via their own restore / rebuild path. No-op when there are no
+    /// animation rules and no rule-held layer snapshots.
     void invalidateAllRuleCaches();
 
     /// Flush coalesced per-rule-cache invalidations queued by
@@ -1286,6 +1289,57 @@ private:
     /// and forward it to the DecorationManager as a tri-state rule override
     /// (unset = mode decides, true = rule hides, false = force-show veto).
     void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
+
+    /// Resolve the per-window-rule SetWindowLayer override for @p windowId and
+    /// apply it to KWin's keepAbove/keepBelow pair. First application snapshots
+    /// the window's pre-rule flags into m_ruleWindowLayerSnapshots; a resolve
+    /// with no owning rule restores that snapshot once and forgets the window.
+    /// Rides a superset of reconcileRuleHiddenTitleBar's triggers
+    /// (placement-state flush, rule edits / focus via updateAllDecorations)
+    /// plus an eager window-added apply — so a layer rule takes effect before
+    /// the window's first reconcile-triggering event — the class-swap
+    /// re-drive in the identity-change handler, and the bulk-placement
+    /// sweep in invalidateAllRuleCaches (daemon loss and the daemon-ready
+    /// re-seeds). Deliberately NOT triggered by keepAboveChanged /
+    /// keepBelowChanged: an instant re-assert would fight the user's own
+    /// toggle (the Krohnkite failure mode this feature exists to avoid), so
+    /// a manual toggle under an active rule stands until the next natural
+    /// reconcile.
+    void reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w);
+
+    /// The window's OWN keep-above flag — the app/user-set state, with
+    /// rule-written values substituted from the pre-rule snapshot while a
+    /// SetWindowLayer rule owns the window's layer. Consulted by the
+    /// keep-above overlay-tool gates (shouldHandleWindow / shouldDecorateWindow
+    /// / isTileableWindow) and the engine-facing KWinCompositorBridge::windowInfo
+    /// export; applyOwnLayerFlags is the query-side counterpart.
+    bool windowOwnKeepAbove(KWin::EffectWindow* w) const;
+
+    /// Substitute the pre-rule snapshot's keepAbove/keepBelow pair into
+    /// @p query while a SetWindowLayer rule owns @p windowId's layer, so rule
+    /// output never feeds back into rule input. Shared by ruleQuery (the
+    /// effect's live evaluation path) and pushWindowMetadata (the daemon's
+    /// KeepAbove/KeepBelow match inputs) — the one invariant lives in one
+    /// place. No-op with no snapshots (the no-rules case pays one isEmpty).
+    void applyOwnLayerFlags(PhosphorRules::WindowQuery& query, const QString& windowId) const;
+
+    /// Restore every rule-applied window layer to its snapshotted pre-rule
+    /// flags and clear the snapshot map. Teardown counterpart of
+    /// reconcileRuleWindowLayer, called from the destructor next to
+    /// DecorationManager::restoreAll so an effect unload doesn't strand
+    /// rule-set keepAbove/keepBelow state on live windows.
+    void restoreAllRuleWindowLayers();
+
+    /// Pre-rule keepAbove/keepBelow pair captured the first time a
+    /// SetWindowLayer rule is applied to a window. Deliberately NOT re-captured
+    /// while a rule owns the layer, so the restore returns the window to the
+    /// user's own state, not to an intermediate rule state.
+    struct WindowLayerSnapshot
+    {
+        bool keepAbove = false;
+        bool keepBelow = false;
+    };
+    QHash<QString, WindowLayerSnapshot> m_ruleWindowLayerSnapshots;
 
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
@@ -1746,9 +1800,9 @@ private Q_SLOTS:
     void slotMotionProfileTreeChanged();
 
     /// Fetch the unified Rule store via `org.plasmazones.Rules.
-    /// getAllRules`, filter to rules carrying an OverrideAnimation* action,
-    /// and forward them to the shader manager — the sole source of per-window
-    /// animation overrides. Called once at bringup; the bringup also
+    /// getAllRules`, filter to rules carrying any effect-consumed
+    /// (Tag::Effect) action, and forward them to the shader manager — the
+    /// sole source of per-window effect overrides. Called once at bringup; the bringup also
     /// subscribes to the interface's `rulesChanged` signal (via a debounce
     /// timer — see m_animationRulesRefreshDebounce) so a settings-UI edit
     /// takes effect without restarting the effect.

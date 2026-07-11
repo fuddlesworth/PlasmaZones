@@ -91,15 +91,16 @@ public:
 
     /// Rebuild the effect-rule `RuleSet` from `m_ruleAnimationRules`
     /// — the rules from `rules.json` that carry any effect-consumed
-    /// action (the `OverrideAnimation*` triple plus `SetOpacity`; admitted
-    /// via `ActionRegistry::hasTag(type, Tag::Effect)`). Call after
-    /// every mutation of that list. The bound `RuleEvaluator` picks up
-    /// the new revision transparently and its match cache is invalidated.
+    /// action (admitted via `ActionRegistry::hasTag(type, Tag::Effect)`;
+    /// the authoritative membership list is the descriptor tag
+    /// assignments in ruleaction.cpp). Call after every mutation of that
+    /// list. The bound `RuleEvaluator` picks up the new revision
+    /// transparently and its match cache is invalidated.
     void rebuildAnimationRuleSet();
 
     /// Replace the set of `rules.json` rules that carry any
-    /// effect-consumed action (`OverrideAnimation*` or `SetOpacity` —
-    /// admitted via `ActionRegistry::hasTag(type, Tag::Effect)`). The effect refreshes this on the
+    /// effect-consumed action (admitted via
+    /// `ActionRegistry::hasTag(type, Tag::Effect)`). The effect refreshes this on the
     /// `org.plasmazones.Rules.rulesChanged` D-Bus signal so a new
     /// effect rule authored in the settings UI fires without a restart.
     /// Triggers `rebuildAnimationRuleSet()` only when the list actually
@@ -107,9 +108,8 @@ public:
     void setRuleAnimationRules(QList<PhosphorRules::Rule> rules);
 
     /// The evaluator bound to the effect-rule set. Resolution of the
-    /// per-window cascade for every effect-consumed action (the
-    /// `OverrideAnimation*` triple plus `SetOpacity`) routes through
-    /// this evaluator.
+    /// per-window cascade for every effect-consumed (`Tag::Effect`)
+    /// action routes through this evaluator.
     const PhosphorRules::RuleEvaluator& animationRuleEvaluator() const
     {
         return m_animationRuleEvaluator;
@@ -131,6 +131,18 @@ public:
     bool hasOpacityRules() const
     {
         return m_hasOpacityRules;
+    }
+
+    /// True when at least one enabled rule carries a `SetWindowLayer` action.
+    /// Gates the per-window layer reconcile (`reconcileRuleWindowLayer`'s fast
+    /// path) and the bulk-placement sweep in `invalidateAllRuleCaches` —
+    /// without it, a session whose rules never touch the layer (opacity or
+    /// border only) would still pay a cache-cold per-window rule resolution
+    /// across the whole stacking order on every daemon loss / bringup re-seed.
+    /// Recomputed by `rebuildAnimationRuleSet()` on every rule-set change.
+    bool hasWindowLayerRules() const
+    {
+        return m_hasWindowLayerRules;
     }
 
     /// Per-event motion-profile tree mirrored from the daemon's
@@ -318,8 +330,8 @@ private:
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorAnimation::ProfileTree m_motionProfileTree;
     // Rules from rules.json that carry any effect-consumed action
-    // (`OverrideAnimation*` triple OR `SetOpacity` — admitted via
-    // `ActionRegistry::hasTag(type, Tag::Effect)`). Refreshed
+    // (admitted via `ActionRegistry::hasTag(type, Tag::Effect)`;
+    // authoritative list in ruleaction.cpp). Refreshed
     // from the daemon's org.plasmazones.Rules interface on every
     // `rulesChanged` signal; mirrored into `m_animationRuleSet` so the
     // bound RuleEvaluator picks up the new revision.
@@ -340,6 +352,8 @@ private:
     // rebuildAnimationRuleSet() so the per-frame opacity resolve can skip the
     // WindowQuery build entirely when no opacity rule exists. See hasOpacityRules().
     bool m_hasOpacityRules = false;
+    // Same shape for SetWindowLayer. See hasWindowLayerRules().
+    bool m_hasWindowLayerRules = false;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Texture Cache
