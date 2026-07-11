@@ -26,6 +26,16 @@ class SnappingEffectsController : public PhosphorControl::PageController
     Q_PROPERTY(int shaderFrameRateMax READ shaderFrameRateMax CONSTANT)
     Q_PROPERTY(int audioSpectrumBarCountMin READ audioSpectrumBarCountMin CONSTANT)
     Q_PROPERTY(int audioSpectrumBarCountMax READ audioSpectrumBarCountMax CONSTANT)
+    Q_PROPERTY(int audioSensitivityMin READ audioSensitivityMin CONSTANT)
+    Q_PROPERTY(int audioSensitivityMax READ audioSensitivityMax CONSTANT)
+    Q_PROPERTY(int audioNoiseReductionMin READ audioNoiseReductionMin CONSTANT)
+    Q_PROPERTY(int audioNoiseReductionMax READ audioNoiseReductionMax CONSTANT)
+    Q_PROPERTY(int audioLowerCutoffHzMin READ audioLowerCutoffHzMin CONSTANT)
+    Q_PROPERTY(int audioLowerCutoffHzMax READ audioLowerCutoffHzMax CONSTANT)
+    Q_PROPERTY(int audioHigherCutoffHzMin READ audioHigherCutoffHzMin CONSTANT)
+    Q_PROPERTY(int audioHigherCutoffHzMax READ audioHigherCutoffHzMax CONSTANT)
+    Q_PROPERTY(int audioExtraSmoothingMin READ audioExtraSmoothingMin CONSTANT)
+    Q_PROPERTY(int audioExtraSmoothingMax READ audioExtraSmoothingMax CONSTANT)
     Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
 
 public:
@@ -61,6 +71,46 @@ public:
     int audioSpectrumBarCountMax() const
     {
         return ConfigDefaults::audioSpectrumBarCountMax();
+    }
+    int audioSensitivityMin() const
+    {
+        return ConfigDefaults::audioSensitivityMin();
+    }
+    int audioSensitivityMax() const
+    {
+        return ConfigDefaults::audioSensitivityMax();
+    }
+    int audioNoiseReductionMin() const
+    {
+        return ConfigDefaults::audioNoiseReductionMin();
+    }
+    int audioNoiseReductionMax() const
+    {
+        return ConfigDefaults::audioNoiseReductionMax();
+    }
+    int audioLowerCutoffHzMin() const
+    {
+        return ConfigDefaults::audioLowerCutoffHzMin();
+    }
+    int audioLowerCutoffHzMax() const
+    {
+        return ConfigDefaults::audioLowerCutoffHzMax();
+    }
+    int audioHigherCutoffHzMin() const
+    {
+        return ConfigDefaults::audioHigherCutoffHzMin();
+    }
+    int audioHigherCutoffHzMax() const
+    {
+        return ConfigDefaults::audioHigherCutoffHzMax();
+    }
+    int audioExtraSmoothingMin() const
+    {
+        return ConfigDefaults::audioExtraSmoothingMin();
+    }
+    int audioExtraSmoothingMax() const
+    {
+        return ConfigDefaults::audioExtraSmoothingMax();
     }
     bool cavaAvailable() const
     {

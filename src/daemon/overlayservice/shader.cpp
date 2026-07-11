@@ -183,7 +183,9 @@ void OverlayService::startShaderAnimation()
     // CAVA runs independently (started in setSettings / enableAudioVisualizerChanged).
     // Just sync config in case frame rate changed since CAVA was started.
     if (m_audioProvider && m_audioProvider->isRunning() && m_settings) {
-        m_audioProvider->setFramerate(frameRate);
+        PhosphorAudio::SpectrumOptions opts = m_audioProvider->options();
+        opts.framerate = frameRate;
+        m_audioProvider->setOptions(opts);
     }
 
     qCDebug(lcOverlay) << "Shader animation started at" << (1000 / interval) << "fps";

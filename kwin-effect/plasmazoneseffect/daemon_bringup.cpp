@@ -725,11 +725,97 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_enableAudioVisualizer = v.toBool();
         scheduleEffectAudioSync();
     });
+    // The full CAVA parameter set (Shaders.Audio), mirrored into
+    // m_audioOptions field by field. Each reply routes through
+    // scheduleEffectAudioSync, so the burst of async replies collapses to ONE
+    // syncEffectAudioState and the provider sees the assembled set once. The
+    // isValid guards keep a malformed reply from clobbering a field with a
+    // zero/empty coercion; range clamping is the provider's job (setOptions
+    // normalizes against the same PhosphorAudio::Defaults bounds the daemon
+    // schema uses).
     loadSettingAsync(QStringLiteral("audioSpectrumBarCount"), [this](const QVariant& v) {
-        // Clamp to the provider's accepted range as defence-in-depth; the daemon
-        // schema already bounds it, but a malformed reply would otherwise reach
-        // setBarCount and be re-clamped there anyway.
-        m_audioSpectrumBarCount = qBound(PhosphorAudio::Defaults::MinBars, v.toInt(), PhosphorAudio::Defaults::MaxBars);
+        if (v.isValid()) {
+            m_audioOptions.barCount = v.toInt();
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("shaderFrameRate"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.framerate = v.toInt();
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioAutosens"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.autosens = v.toBool();
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioSensitivity"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.sensitivity = v.toInt();
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioNoiseReduction"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.noiseReduction = v.toInt();
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioLowerCutoffHz"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.lowerCutoffHz = v.toInt();
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioHigherCutoffHz"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.higherCutoffHz = v.toInt();
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioMonstercat"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.monstercat = v.toBool();
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioWaves"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.waves = v.toBool();
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioChannelMode"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.channelMode = PhosphorAudio::channelModeFromString(v.toString());
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioReverse"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.reverse = v.toBool();
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioExtraSmoothing"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.extraSmoothing = v.toInt() / 100.0;
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioInputMethod"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            const QString method = v.toString();
+            m_audioOptions.inputMethod = (method == QLatin1String("auto")) ? QString() : method;
+        }
+        scheduleEffectAudioSync();
+    });
+    loadSettingAsync(QStringLiteral("audioInputSource"), [this](const QVariant& v) {
+        if (v.isValid()) {
+            m_audioOptions.inputSource = v.toString();
+        }
         scheduleEffectAudioSync();
     });
     loadSettingAsync(QStringLiteral("animationsEnabled"), [this](const QVariant& v) {

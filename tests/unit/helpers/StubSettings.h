@@ -352,6 +352,90 @@ public:
     void setAudioSpectrumBarCount(int) override
     {
     }
+    bool audioAutosens() const override
+    {
+        return true;
+    }
+    void setAudioAutosens(bool) override
+    {
+    }
+    int audioSensitivity() const override
+    {
+        return 100;
+    }
+    void setAudioSensitivity(int) override
+    {
+    }
+    int audioNoiseReduction() const override
+    {
+        return 77;
+    }
+    void setAudioNoiseReduction(int) override
+    {
+    }
+    int audioLowerCutoffHz() const override
+    {
+        return 50;
+    }
+    void setAudioLowerCutoffHz(int) override
+    {
+    }
+    int audioHigherCutoffHz() const override
+    {
+        return 10000;
+    }
+    void setAudioHigherCutoffHz(int) override
+    {
+    }
+    bool audioMonstercat() const override
+    {
+        return false;
+    }
+    void setAudioMonstercat(bool) override
+    {
+    }
+    bool audioWaves() const override
+    {
+        return false;
+    }
+    void setAudioWaves(bool) override
+    {
+    }
+    QString audioChannelMode() const override
+    {
+        return QStringLiteral("stereo");
+    }
+    void setAudioChannelMode(const QString&) override
+    {
+    }
+    bool audioReverse() const override
+    {
+        return false;
+    }
+    void setAudioReverse(bool) override
+    {
+    }
+    int audioExtraSmoothing() const override
+    {
+        return 50;
+    }
+    void setAudioExtraSmoothing(int) override
+    {
+    }
+    QString audioInputMethod() const override
+    {
+        return QStringLiteral("auto");
+    }
+    void setAudioInputMethod(const QString&) override
+    {
+    }
+    QString audioInputSource() const override
+    {
+        return QStringLiteral("auto");
+    }
+    void setAudioInputSource(const QString&) override
+    {
+    }
 
     // IZoneGeometrySettings — gaps are config-backed again, so the interface
     // carries setters. Member-backed here so tests can round-trip.

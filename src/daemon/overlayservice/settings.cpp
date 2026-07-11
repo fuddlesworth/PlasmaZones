@@ -69,6 +69,21 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
+            // The full CAVA analysis parameter set (Shaders.Audio). Every knob
+            // routes through the same reconcile: setOptions no-ops on an
+            // unchanged set and restarts capture at most once per change.
+            connect(m_settings, &ISettings::audioAutosensChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioSensitivityChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioNoiseReductionChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioLowerCutoffHzChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioHigherCutoffHzChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioMonstercatChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioWavesChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioChannelModeChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioReverseChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioExtraSmoothingChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioInputMethodChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioInputSourceChanged, this, &OverlayService::syncCavaState);
 
             // Shader profile tree drives the per-overlay shader effect (osd.show,
             // popup.zoneSelector, etc.). Push it into the SurfaceAnimator
@@ -325,6 +340,31 @@ void OverlayService::refreshVisibleWindows()
 // re-trigger) keeps everything warm and avoids per-show spin-up.
 static constexpr int kIdleQuiesceGraceMs = 5000;
 
+// Assemble the provider's full parameter set from ISettings. The provider
+// normalizes (clamps/sanitizes) on apply, so values pass through verbatim;
+// only the representation differences are mapped here (channel-mode string →
+// enum, "auto" input method → empty detect sentinel, smoothing % → fraction).
+static PhosphorAudio::SpectrumOptions cavaOptionsFromSettings(const ISettings* settings)
+{
+    PhosphorAudio::SpectrumOptions opts;
+    opts.barCount = settings->audioSpectrumBarCount();
+    opts.framerate = settings->shaderFrameRate();
+    opts.autosens = settings->audioAutosens();
+    opts.sensitivity = settings->audioSensitivity();
+    opts.noiseReduction = settings->audioNoiseReduction();
+    opts.lowerCutoffHz = settings->audioLowerCutoffHz();
+    opts.higherCutoffHz = settings->audioHigherCutoffHz();
+    opts.monstercat = settings->audioMonstercat();
+    opts.waves = settings->audioWaves();
+    opts.channelMode = PhosphorAudio::channelModeFromString(settings->audioChannelMode());
+    opts.reverse = settings->audioReverse();
+    opts.extraSmoothing = settings->audioExtraSmoothing() / 100.0;
+    const QString method = settings->audioInputMethod();
+    opts.inputMethod = (method == QLatin1String("auto")) ? QString() : method;
+    opts.inputSource = settings->audioInputSource();
+    return opts;
+}
+
 bool OverlayService::isOverlayDisplaying() const
 {
     const bool previewVisible = m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible();
@@ -351,8 +391,7 @@ void OverlayService::syncCavaState()
         if (m_idleQuiesceTimer) {
             m_idleQuiesceTimer->stop(); // cancel any pending grace-period quiesce
         }
-        m_audioProvider->setBarCount(m_settings->audioSpectrumBarCount());
-        m_audioProvider->setFramerate(m_settings->shaderFrameRate());
+        m_audioProvider->setOptions(cavaOptionsFromSettings(m_settings));
         if (!m_audioProvider->isRunning()) {
             m_audioProvider->start();
         }

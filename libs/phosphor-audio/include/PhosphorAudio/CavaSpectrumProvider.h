@@ -23,16 +23,19 @@ public:
     static bool isCavaInstalled();
     static QString detectAudioMethod();
 
+    /// Clamp/sanitize an option set to the values the provider would actually
+    /// run with: integer ranges bounded to AudioDefaults, bar count rounded up
+    /// to even, control characters stripped from the input strings, and
+    /// unknown input methods coerced back to auto-detect (empty).
+    static SpectrumOptions normalizedOptions(SpectrumOptions options);
+
     bool isAvailable() const override;
     void start() override;
     void stop() override;
     bool isRunning() const override;
 
-    int barCount() const override;
-    void setBarCount(int count) override;
-
-    int framerate() const override;
-    void setFramerate(int fps) override;
+    SpectrumOptions options() const override;
+    void setOptions(const SpectrumOptions& options) override;
 
     QVector<float> spectrum() const override;
 
@@ -48,8 +51,7 @@ private:
 
     QProcess* m_process = nullptr;
     QByteArray m_stdoutBuffer;
-    int m_barCount = 64;
-    int m_framerate = 60;
+    SpectrumOptions m_options;
     QString m_config;
     QVector<float> m_spectrum;
     QVector<float> m_smoothedSpectrum;

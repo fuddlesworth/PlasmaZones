@@ -16,6 +16,70 @@ Q_LOGGING_CATEGORY(lcPhosphorAudio, "phosphor.audio")
 static constexpr int kAsciiMaxRange = 1000;
 static_assert(Defaults::MinBars % 2 == 0, "MinBars must be even for CAVA stereo");
 static_assert(Defaults::MaxBars % 2 == 0, "MaxBars must be even for CAVA stereo");
+static_assert(Defaults::MaxLowerCutoffHz < Defaults::MinHigherCutoffHz,
+              "cutoff ranges must not overlap: cava rejects lower_cutoff_freq >= higher_cutoff_freq");
+
+QString channelModeToString(ChannelMode mode)
+{
+    switch (mode) {
+    case ChannelMode::MonoAverage:
+        return QStringLiteral("mono-average");
+    case ChannelMode::MonoLeft:
+        return QStringLiteral("mono-left");
+    case ChannelMode::MonoRight:
+        return QStringLiteral("mono-right");
+    case ChannelMode::Stereo:
+        break;
+    }
+    return QStringLiteral("stereo");
+}
+
+ChannelMode channelModeFromString(const QString& mode)
+{
+    if (mode == QLatin1String("mono-average")) {
+        return ChannelMode::MonoAverage;
+    }
+    if (mode == QLatin1String("mono-left")) {
+        return ChannelMode::MonoLeft;
+    }
+    if (mode == QLatin1String("mono-right")) {
+        return ChannelMode::MonoRight;
+    }
+    return ChannelMode::Stereo;
+}
+
+namespace {
+
+// The option strings land on their own `key=value` lines in the generated
+// config, so strip anything that could break out of the line (or confuse
+// cava's INI parser) and trim to the meaningful text.
+QString sanitizedConfigValue(const QString& raw)
+{
+    QString out;
+    out.reserve(raw.size());
+    for (const QChar c : raw) {
+        if (!c.isPrint()) {
+            continue;
+        }
+        out.append(c);
+    }
+    return out.trimmed();
+}
+
+bool isKnownInputMethod(const QString& method)
+{
+    // The capture backends upstream cava can be built with. The settings UI
+    // only offers auto/pipewire/pulse; the rest stay reachable for power
+    // users editing config.json directly.
+    static const QStringList kMethods = {
+        QStringLiteral("pipewire"),  QStringLiteral("pulse"), QStringLiteral("alsa"),
+        QStringLiteral("jack"),      QStringLiteral("sndio"), QStringLiteral("oss"),
+        QStringLiteral("portaudio"), QStringLiteral("fifo"),  QStringLiteral("shmem"),
+    };
+    return kMethods.contains(method);
+}
+
+} // namespace
 
 CavaSpectrumProvider::CavaSpectrumProvider(QObject* parent)
     : IAudioSpectrumProvider(parent)
@@ -49,6 +113,29 @@ QString CavaSpectrumProvider::detectAudioMethod()
     return QStringLiteral("pulse");
 }
 
+SpectrumOptions CavaSpectrumProvider::normalizedOptions(SpectrumOptions options)
+{
+    const int evenBars = (options.barCount % 2 != 0) ? options.barCount + 1 : options.barCount;
+    options.barCount = qBound(Defaults::MinBars, evenBars, Defaults::MaxBars);
+    options.framerate = qBound(Defaults::MinFramerate, options.framerate, Defaults::MaxFramerate);
+    options.sensitivity = qBound(Defaults::MinSensitivity, options.sensitivity, Defaults::MaxSensitivity);
+    options.noiseReduction = qBound(Defaults::MinNoiseReduction, options.noiseReduction, Defaults::MaxNoiseReduction);
+    options.lowerCutoffHz = qBound(Defaults::MinLowerCutoffHz, options.lowerCutoffHz, Defaults::MaxLowerCutoffHz);
+    options.higherCutoffHz = qBound(Defaults::MinHigherCutoffHz, options.higherCutoffHz, Defaults::MaxHigherCutoffHz);
+    options.extraSmoothing = qBound(Defaults::MinExtraSmoothing, options.extraSmoothing, Defaults::MaxExtraSmoothing);
+
+    options.inputMethod = sanitizedConfigValue(options.inputMethod).toLower();
+    if (!options.inputMethod.isEmpty() && !isKnownInputMethod(options.inputMethod)) {
+        qCWarning(lcPhosphorAudio) << "Unknown CAVA input method" << options.inputMethod << "- using auto-detection";
+        options.inputMethod.clear();
+    }
+    options.inputSource = sanitizedConfigValue(options.inputSource);
+    if (options.inputSource.isEmpty()) {
+        options.inputSource = QStringLiteral("auto");
+    }
+    return options;
+}
+
 void CavaSpectrumProvider::start()
 {
     if (m_process && m_process->state() != QProcess::NotRunning) {
@@ -76,10 +163,12 @@ void CavaSpectrumProvider::start()
     m_smoothedSpectrum.clear();
 
     m_process->setProcessChannelMode(QProcess::SeparateChannels);
-    m_process->start(
-        QStringLiteral("sh"),
-        QStringList{QStringLiteral("-c"),
-                    QStringLiteral("exec %1 -p /dev/stdin <<'CAVAEOF'\n%2\nCAVAEOF").arg(cavaPath, m_config)});
+    // Feed the generated config through stdin (cava reads it as the file
+    // /dev/stdin). A direct spawn — no shell in between — so option strings
+    // can never be interpreted by anything but cava's own INI parser.
+    m_process->start(cavaPath, QStringList{QStringLiteral("-p"), QStringLiteral("/dev/stdin")});
+    m_process->write(m_config.toUtf8());
+    m_process->closeWriteChannel();
 }
 
 void CavaSpectrumProvider::stop()
@@ -102,36 +191,20 @@ bool CavaSpectrumProvider::isRunning() const
     return m_process && m_process->state() == QProcess::Running;
 }
 
-int CavaSpectrumProvider::barCount() const
+SpectrumOptions CavaSpectrumProvider::options() const
 {
-    return m_barCount;
+    return m_options;
 }
 
-void CavaSpectrumProvider::setBarCount(int count)
+void CavaSpectrumProvider::setOptions(const SpectrumOptions& options)
 {
-    int even = (count % 2 != 0) ? count + 1 : count;
-    const int clamped = qBound(Defaults::MinBars, even, Defaults::MaxBars);
-    if (m_barCount != clamped) {
-        m_barCount = clamped;
-        if (isRunning()) {
-            restartAsync();
-        }
+    const SpectrumOptions normalized = normalizedOptions(options);
+    if (m_options == normalized) {
+        return;
     }
-}
-
-int CavaSpectrumProvider::framerate() const
-{
-    return m_framerate;
-}
-
-void CavaSpectrumProvider::setFramerate(int fps)
-{
-    const int clamped = qBound(Defaults::MinFramerate, fps, Defaults::MaxFramerate);
-    if (m_framerate != clamped) {
-        m_framerate = clamped;
-        if (isRunning()) {
-            restartAsync();
-        }
+    m_options = normalized;
+    if (isRunning()) {
+        restartAsync();
     }
 }
 
@@ -142,32 +215,56 @@ QVector<float> CavaSpectrumProvider::spectrum() const
 
 void CavaSpectrumProvider::buildConfig()
 {
-    const QString audioMethod = detectAudioMethod();
+    const QString audioMethod = m_options.inputMethod.isEmpty() ? detectAudioMethod() : m_options.inputMethod;
+    const bool mono = m_options.channelMode != ChannelMode::Stereo;
+    QString monoOption = QStringLiteral("average");
+    if (m_options.channelMode == ChannelMode::MonoLeft) {
+        monoOption = QStringLiteral("left");
+    } else if (m_options.channelMode == ChannelMode::MonoRight) {
+        monoOption = QStringLiteral("right");
+    }
+
     m_config = QStringLiteral(
                    "[general]\n"
                    "framerate=%1\n"
                    "bars=%2\n"
-                   "autosens=1\n"
-                   "lower_cutoff_freq=50\n"
-                   "higher_cutoff_freq=10000\n"
-                   "[input]\n"
-                   "method=%4\n"
-                   "source=auto\n"
-                   "[output]\n"
-                   "method=raw\n"
-                   "raw_target=/dev/stdout\n"
-                   "data_format=ascii\n"
-                   "ascii_max_range=%3\n"
-                   "bar_delimiter=59\n"
-                   "frame_delimiter=10\n"
-                   "[smoothing]\n"
-                   "noise_reduction=77\n"
-                   "monstercat=0\n"
-                   "waves=0\n")
-                   .arg(m_framerate)
-                   .arg(m_barCount)
-                   .arg(kAsciiMaxRange)
-                   .arg(audioMethod);
+                   "autosens=%3\n"
+                   "sensitivity=%4\n"
+                   "lower_cutoff_freq=%5\n"
+                   "higher_cutoff_freq=%6\n")
+                   .arg(m_options.framerate)
+                   .arg(m_options.barCount)
+                   .arg(m_options.autosens ? 1 : 0)
+                   .arg(m_options.sensitivity)
+                   .arg(m_options.lowerCutoffHz)
+                   .arg(m_options.higherCutoffHz);
+    m_config += QStringLiteral(
+                    "[input]\n"
+                    "method=%1\n"
+                    "source=%2\n")
+                    .arg(audioMethod, m_options.inputSource);
+    m_config += QStringLiteral(
+                    "[output]\n"
+                    "method=raw\n"
+                    "raw_target=/dev/stdout\n"
+                    "data_format=ascii\n"
+                    "ascii_max_range=%1\n"
+                    "bar_delimiter=59\n"
+                    "frame_delimiter=10\n"
+                    "channels=%2\n"
+                    "mono_option=%3\n"
+                    "reverse=%4\n")
+                    .arg(kAsciiMaxRange)
+                    .arg(mono ? QStringLiteral("mono") : QStringLiteral("stereo"), monoOption)
+                    .arg(m_options.reverse ? 1 : 0);
+    m_config += QStringLiteral(
+                    "[smoothing]\n"
+                    "noise_reduction=%1\n"
+                    "monstercat=%2\n"
+                    "waves=%3\n")
+                    .arg(m_options.noiseReduction)
+                    .arg(m_options.monstercat ? 1 : 0)
+                    .arg(m_options.waves ? 1 : 0);
 }
 
 void CavaSpectrumProvider::onReadyReadStandardOutput()
@@ -204,11 +301,10 @@ void CavaSpectrumProvider::onReadyReadStandardOutput()
             }
         }
         if (!spectrum.isEmpty()) {
-            static constexpr float kSmoothingAlpha = 0.5f;
-            if (m_smoothedSpectrum.size() == spectrum.size()) {
+            const float retain = static_cast<float>(m_options.extraSmoothing);
+            if (retain > 0.0f && m_smoothedSpectrum.size() == spectrum.size()) {
                 for (int i = 0; i < spectrum.size(); ++i) {
-                    m_smoothedSpectrum[i] =
-                        kSmoothingAlpha * spectrum[i] + (1.0f - kSmoothingAlpha) * m_smoothedSpectrum[i];
+                    m_smoothedSpectrum[i] = (1.0f - retain) * spectrum[i] + retain * m_smoothedSpectrum[i];
                 }
             } else {
                 m_smoothedSpectrum = spectrum;
@@ -262,6 +358,11 @@ void CavaSpectrumProvider::onProcessError(QProcess::ProcessError error)
 
 void CavaSpectrumProvider::restartAsync()
 {
+    if (m_pendingRestart) {
+        // A restart is already queued; the queued start() runs buildConfig()
+        // and picks up whatever m_options holds by then.
+        return;
+    }
     if (!m_process || m_process->state() == QProcess::NotRunning) {
         start();
         return;

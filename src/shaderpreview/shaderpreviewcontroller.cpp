@@ -254,7 +254,9 @@ void ShaderPreviewController::startAudioCapture()
                     Q_EMIT audioSpectrumChanged();
                 });
     }
-    m_audioProvider->setBarCount(m_backend->audioBarCount());
+    PhosphorAudio::SpectrumOptions audioOpts = m_audioProvider->options();
+    audioOpts.barCount = m_backend->audioBarCount();
+    m_audioProvider->setOptions(audioOpts);
     m_audioProvider->start();
 }
 
