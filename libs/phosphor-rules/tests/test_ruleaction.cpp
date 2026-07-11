@@ -773,6 +773,8 @@ private Q_SLOTS:
         rejectsStray(ActionType::DefaultLayoutAssignment, QJsonValue(true));
         // OverrideOverlayStyle also declares allowedKeys = {Value}.
         rejectsStray(ActionType::OverrideOverlayStyle, QJsonValue(QString(OverlayStyleToken::Preview)));
+        // SetWindowLayer is the same Value-keyed closed-enum shape.
+        rejectsStray(ActionType::SetWindowLayer, QJsonValue(QString(WindowLayerToken::Above)));
     }
 
     void testOverrideOverlay_fromJson()

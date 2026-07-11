@@ -569,8 +569,8 @@ void PlasmaZonesEffect::logWindowDiagnostics(KWin::EffectWindow* w, const char* 
     qCDebug(lcEffectDiag) << "[window-diag]   state — managed:" << w->isManaged() << "x11:" << w->isX11Client()
                           << "wayland:" << w->isWaylandClient() << "fullScreen:" << w->isFullScreen()
                           << "minimized:" << w->isMinimized() << "skipSwitcher:" << w->isSkipSwitcher()
-                          << "keepAbove:" << w->keepAbove() << "hasDecoration:" << w->hasDecoration()
-                          << "onCurrentDesktop:" << w->isOnCurrentDesktop()
+                          << "keepAbove:" << w->keepAbove() << "ownKeepAbove:" << windowOwnKeepAbove(w)
+                          << "hasDecoration:" << w->hasDecoration() << "onCurrentDesktop:" << w->isOnCurrentDesktop()
                           << "onCurrentActivity:" << w->isOnCurrentActivity()
                           << "onAllDesktops:" << w->isOnAllDesktops();
     qCDebug(lcEffectDiag) << "[window-diag]   geometry — frame:" << w->frameGeometry()
