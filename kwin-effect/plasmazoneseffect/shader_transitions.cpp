@@ -1904,9 +1904,12 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
                 // rule-set size minimal and the priority-order index smaller.)
                 continue;
             }
-            // Admit the rule to the evaluator if ANY action is effect-consumed
-            // (the OverrideAnimation* triple, SetOpacity, or a SetBorder* /
-            // SetHideTitleBar appearance action — Tag::Effect via hasTag below).
+            // Admit the rule to the evaluator if ANY action is effect-consumed,
+            // i.e. carries Tag::Effect (hasTag below). The authoritative
+            // membership list is the descriptor tag assignments in
+            // ruleaction.cpp — animation overrides, SetOpacity, the appearance
+            // family (SetBorder*, SetHideTitleBar, OverrideDecorationChain),
+            // and SetWindowLayer.
             bool admitted = false;
             for (const PhosphorRules::RuleAction& action : rule.actions) {
                 if (PhosphorRules::ActionRegistry::instance().hasTag(action.type, PhosphorRules::Tag::Effect)) {

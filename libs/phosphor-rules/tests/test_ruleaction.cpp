@@ -598,6 +598,13 @@ private Q_SLOTS:
             QCOMPARE(*roundTripped, *loaded);
         }
 
+        // Tag::Effect is the SOLE admission gate into the KWin effect's rule
+        // set (the `hasTag(type, Tag::Effect)` loop in shader_transitions.cpp):
+        // a descriptor regression that drops the tag compiles and passes every
+        // vocabulary test above while silently never delivering the action.
+        // Pin the delivery contract.
+        QVERIFY(ActionRegistry::instance().hasTag(QString(ActionType::SetWindowLayer), Tag::Effect));
+
         // Outside the closed vocabulary — rejected at load. The effect-side
         // consumer maps an unknown token to "no override", so the load
         // boundary must be the strict one: missing value, an unknown token,

@@ -941,27 +941,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // the window keeps its stale opacity (borders revert via restoreAll /
         // clearAllDecorations below, but opacity would not). Re-resolve every opacity
         // window against the now-cleared placement, matching the border teardown.
+        // Also carries the window-layer sweep (see invalidateAllRuleCaches): a
+        // `WHEN IsFloating` layer rule releases its keep-above here (snapshot
+        // restore) instead of stranding it for the daemon-down interval.
         invalidateAllRuleCaches();
-        // Window-layer rules need the same placement-scoped re-resolve, but
-        // they are EVENT-driven (only reconcileRuleWindowLayer writes
-        // keepAbove/keepBelow), so the cache clear above does nothing for
-        // them on its own — opacity revives per-frame in paintWindow, layer
-        // does not. Re-reconcile every window against the now-cleared
-        // placement: a `WHEN IsFloating` layer rule releases its keep-above
-        // here (snapshot restore) instead of stranding it for the whole
-        // daemon-down interval. NOT restoreAllRuleWindowLayers(): that
-        // unconditionally drops all snapshots, which would strand windows
-        // held by an unconditional (placement-free) layer rule — the rule
-        // sets deliberately survive daemon loss (see below), so those must
-        // keep their applied layer.
-        if (KWin::effects) {
-            const auto layerWindows = KWin::effects->stackingOrder();
-            for (KWin::EffectWindow* lw : layerWindows) {
-                if (lw && !lw->isDeleted()) {
-                    reconcileRuleWindowLayer(getWindowId(lw), lw);
-                }
-            }
-        }
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllDecorations();

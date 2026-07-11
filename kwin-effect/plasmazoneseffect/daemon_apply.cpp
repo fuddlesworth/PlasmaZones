@@ -584,13 +584,21 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
         if (!w) {
             continue;
         }
+        // findWindowById's unambiguous-appId fallback can resolve a window whose
+        // live id differs from the daemon-supplied one (stale uuid after a
+        // cross-session restore). Key ALL downstream tracking by the LIVE id —
+        // matching slotApplyGeometryRequested — or the layer reconcile below
+        // would insert its pre-rule snapshot under a key no teardown path ever
+        // removes and no live-id lookup (windowOwnKeepAbove / applyOwnLayerFlags
+        // / the next reconcile) ever finds.
+        const QString liveId = getWindowId(w);
         // Recreate this window's border so a state-scoped border colour
         // re-applies. Border overlays are visual-only, so build them only for a
         // window on the current desktop — matching updateAllDecorations, which gates
         // the same call this way to avoid building an invisible off-desktop item
         // that the next desktop switch tears down.
         if (w->isOnCurrentDesktop()) {
-            updateWindowDecoration(windowId, w);
+            updateWindowDecoration(liveId, w);
         }
         // Re-resolve the hide-title-bar override too: a SetHideTitleBar rule
         // scoped on a placement field (IsSnapped / IsFloating / Zone / Mode) must
@@ -598,12 +606,12 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
         // stays hidden after unsnap until the next updateAllDecorations. The
         // decoration state survives desktop switches, so reconcile it for the
         // window regardless of which desktop it sits on (as updateAllDecorations does).
-        reconcileRuleHiddenTitleBar(windowId, w);
+        reconcileRuleHiddenTitleBar(liveId, w);
         // Same for the stacking layer: a SetWindowLayer rule scoped on a
         // placement field (IsFloating / IsTiled / IsSnapped / Zone / Mode) must
         // re-apply on a float/snap flip — this is the trigger that makes
         // "floating windows above tiled windows" follow the float toggle.
-        reconcileRuleWindowLayer(windowId, w);
+        reconcileRuleWindowLayer(liveId, w);
         // An opacity-only (borderless) window needs an explicit repaint for its
         // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
         if (hasOpacity) {
@@ -628,11 +636,11 @@ void PlasmaZonesEffect::scheduleBorderSweep()
 
 void PlasmaZonesEffect::invalidateAllRuleCaches()
 {
-    if (m_shaderManager.animationRuleSet().isEmpty()) {
+    if (m_shaderManager.animationRuleSet().isEmpty() && m_ruleWindowLayerSnapshots.isEmpty()) {
         return;
     }
     // A bulk placement change (daemon loss clears the zone/floating caches; the
-    // daemon-ready re-seed repopulates them) moves neither the windowId nor the
+    // daemon-ready re-seeds repopulate them) moves neither the windowId nor the
     // ruleSet revision the match cache is keyed on, so every placement-scoped
     // verdict would survive stale. Drop the whole cache; the full repaint makes
     // every opacity-only window re-resolve against the current placement on the
@@ -640,6 +648,30 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
     m_shaderManager.animationRuleEvaluator().clearCache();
     if (KWin::effects && m_shaderManager.hasOpacityRules()) {
         KWin::effects->addRepaintFull();
+    }
+    // Window-layer rules need the same placement-scoped re-resolve, but they
+    // are EVENT-driven (only reconcileRuleWindowLayer writes
+    // keepAbove/keepBelow), so the cache clear above does nothing for them on
+    // its own — opacity revives per-frame in paintWindow, layer does not.
+    // Re-reconcile every window right here at the bulk-placement chokepoint so
+    // BOTH edges are covered: on daemon loss a `WHEN IsFloating` layer rule
+    // releases its keep-above against the cleared placement (snapshot restore)
+    // instead of stranding it for the daemon-down interval, and on the
+    // daemon-ready re-seeds (getFloatingWindows / syncZonesFromDaemon replies)
+    // it re-applies against the fresh placement even when the getAllRules
+    // refresh fails (loadRuleAnimationsFromDbus early-returns on a D-Bus or
+    // parse error without reconciling anything). NOT
+    // restoreAllRuleWindowLayers(): that unconditionally drops all snapshots,
+    // which would strand windows held by an unconditional (placement-free)
+    // layer rule — the rule sets deliberately survive daemon loss, so those
+    // must keep their applied layer.
+    if (KWin::effects) {
+        const auto layerWindows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* lw : layerWindows) {
+            if (lw && !lw->isDeleted()) {
+                reconcileRuleWindowLayer(getWindowId(lw), lw);
+            }
+        }
     }
 }
 

@@ -168,12 +168,18 @@ bool PlasmaZonesEffect::windowOwnKeepAbove(KWin::EffectWindow* w) const
     //
     // Empty-map fast path: with no window rule-raised, the own flag IS the
     // live flag. Keeps the gates getWindowId-free for the common no-layer-rule
-    // session (the "no-rules case pays nothing" invariant) and avoids
-    // re-polluting the id caches for close-grabbed deleted windows — several
-    // gate callers don't pre-check isDeleted(), and getWindowId on a dying
-    // window would re-insert the reverse-map entry buildWindowMap deliberately
-    // skips.
+    // session (the "no-rules case pays nothing" invariant).
     if (m_ruleWindowLayerSnapshots.isEmpty()) {
+        return w->keepAbove();
+    }
+    // Close-grabbed corpse: its flags are frozen and slotWindowClosed already
+    // dropped any snapshot it had, so answer from the live flag WITHOUT
+    // getWindowId — several gate callers don't pre-check isDeleted(), and
+    // getWindowId on a dying window would re-insert the reverse-map entry
+    // buildWindowMap deliberately skips. Unconditional (not folded into the
+    // fast path above) so the no-repollution guarantee holds even while a
+    // layer rule owns some other window.
+    if (w->isDeleted()) {
         return w->keepAbove();
     }
     const auto it = m_ruleWindowLayerSnapshots.constFind(getWindowId(w));
@@ -410,7 +416,8 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // `m_shaderManager.animationRuleSet()` admits every rule carrying a
     // Tag::Effect action (shader_transitions.cpp's `hasTag(type, Tag::Effect)`
     // loop) — the OverrideAnimation* triple, SetOpacity, and the appearance /
-    // stacking family (SetBorder*, SetHideTitleBar, SetWindowLayer). So a rule
+    // stacking family (SetBorder*, SetHideTitleBar, OverrideDecorationChain,
+    // SetWindowLayer). So a rule
     // whose only action is an appearance or layer override also force-animates
     // its matches here — deliberate, consistent opt-in semantics across every
     // effect-consumed action. `hasAnyMatch` never surfaces a rule whose

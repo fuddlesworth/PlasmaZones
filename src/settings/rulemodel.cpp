@@ -464,9 +464,14 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return PhosphorI18n::tr("Drag: %1")
                 .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
         }
+        // ── window-management overrides ──
         if (action.type == ActionType::SetWindowLayer) {
+            const QString v = raw.toString();
+            if (v.isEmpty()) {
+                return PhosphorI18n::tr("Window layer");
+            }
             return PhosphorI18n::tr("Layer: %1")
-                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, v));
         }
         // ── overlay-appearance overrides (colours upper-cased hex; opacities
         //    are [0,1] on the wire, shown as a percent to match the editor) ──

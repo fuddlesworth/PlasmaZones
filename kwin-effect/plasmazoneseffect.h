@@ -1259,8 +1259,11 @@ private:
     /// stay cached (e.g. a `WHEN isSnapped` SetOpacity window staying dimmed after
     /// the cache that made it "snapped" was cleared). Drops the whole match cache
     /// and forces a full repaint so opacity rules re-resolve against the current
-    /// IsSnapped / IsFloating / Zone state. Borders recover via their own
-    /// restore / rebuild path. No-op when there are no animation rules.
+    /// IsSnapped / IsFloating / Zone state, then re-reconciles every window's
+    /// rule layer — keepAbove/keepBelow is event-driven, so the cache clear
+    /// alone would leave it stale on both the loss and re-seed edges. Borders
+    /// recover via their own restore / rebuild path. No-op when there are no
+    /// animation rules and no rule-held layer snapshots.
     void invalidateAllRuleCaches();
 
     /// Flush coalesced per-rule-cache invalidations queued by
@@ -1282,8 +1285,10 @@ private:
     /// with no owning rule restores that snapshot once and forgets the window.
     /// Rides a superset of reconcileRuleHiddenTitleBar's triggers
     /// (placement-state flush, rule edits / focus via updateAllDecorations)
-    /// plus an eager window-added apply, so a layer rule takes effect before
-    /// the window's first reconcile-triggering event.
+    /// plus an eager window-added apply — so a layer rule takes effect before
+    /// the window's first reconcile-triggering event — and the bulk-placement
+    /// sweep in invalidateAllRuleCaches (daemon loss and the daemon-ready
+    /// re-seeds).
     void reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w);
 
     /// The window's OWN keep-above flag — the app/user-set state, with

@@ -176,7 +176,11 @@ WindowInfo KWinCompositorBridge::windowInfo(WindowHandle w) const
     info.isOnCurrentDesktop = ew->isOnCurrentDesktop();
     info.isOnCurrentActivity = ew->isOnCurrentActivity();
     info.isNormalWindow = ew->isNormalWindow();
-    info.keepAbove = ew->keepAbove();
+    // The window's OWN keep-above — pre-rule snapshot while a SetWindowLayer
+    // rule holds the pair. Every keep-above export shares the own-flag
+    // invariant (see applyOwnLayerFlags): an engine consumer gating on this
+    // must never read a rule's own output back as user state.
+    info.keepAbove = m_effect.windowOwnKeepAbove(ew);
     info.pid = ew->pid();
 
     info.hasDecoration = ew->hasDecoration();
