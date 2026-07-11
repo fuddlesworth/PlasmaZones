@@ -5,7 +5,7 @@
 
 #include "colorutil.h"
 
-#include <PhosphorShaders/ShaderParamPreamble.h>
+#include <PhosphorShaders/ShaderRegistry.h>
 
 #include <QDir>
 #include <QFile>
@@ -15,7 +15,6 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLoggingCategory>
-#include <QSet>
 
 namespace PlasmaZones::ShaderRender {
 
@@ -185,97 +184,52 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
     }
 
     // ── Per-parameter defaults ──────────────────────────────────
-    // Slot resolution mirrors the registry's T1.1 automatic assignment
-    // (libs/phosphor-shaders/src/shaderregistry.cpp, parseShaderMetadata):
-    // explicit `slot` fields are reserved first, then every parameter that
-    // omits `slot` is packed into the next free lane of its pool in
-    // declaration order — float/int/bool → 0..31, color → 0..15, image →
-    // 0..3. A param whose id is not a valid GLSL identifier body claims no
-    // lane on either side (no p_<id> define, no upload), so it seeds nothing
-    // here either. Keeping this numbering byte-identical to the registry's
-    // matters: the generated p_<id> preamble the renderer installs (see
-    // renderer.cpp) reads exactly the lane the default is seeded into.
-    struct RawParam
-    {
-        QString id;
-        QString type;
-        QJsonValue def;
-        QString wrap;
-        int slot = -1;
-    };
-    QList<RawParam> raw;
-    const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
-    raw.reserve(params.size());
-    for (const auto& v : params) {
-        if (!v.isObject())
-            continue;
-        const QJsonObject p = v.toObject();
-        RawParam r;
-        r.id = p.value(QLatin1String("id")).toString();
-        r.type = p.value(QLatin1String("type")).toString(QStringLiteral("float"));
-        r.def = p.value(QLatin1String("default"));
-        r.wrap = p.value(QLatin1String("wrap")).toString(QStringLiteral("clamp"));
-        r.slot = p.value(QLatin1String("slot")).toInt(-1);
-        if (!PhosphorShaders::isValidParamId(r.id)) {
-            // No define, no lane — even with an explicit slot (registry parity).
-            r.slot = -1;
-        }
-        raw.append(r);
+    // Slot resolution is delegated to the daemon's own parser:
+    // ShaderRegistry::parsePackMetadata applies the registry's T1.1 automatic
+    // assignment (explicit slots reserved first, slotless params packed into
+    // the next free lane of their pool in declaration order, ids that aren't
+    // valid GLSL identifier bodies claiming no lane), so the lane a default
+    // is seeded into here matches the lane the generated p_<id> preamble the
+    // renderer installs reads — by construction, not by a hand-maintained
+    // copy of the registry's algorithm. parsePackMetadata re-reads
+    // <dir>/metadata.json itself; that exact filename is the pack layout
+    // contract the renderer's preamble path (renderer.cpp) already relies on.
+    QString parseError;
+    const PhosphorShaders::ShaderRegistry::ShaderInfo packInfo =
+        PhosphorShaders::ShaderRegistry::parsePackMetadata(metadataDir, &parseError);
+    if (!parseError.isEmpty()) {
+        qCWarning(lcMetadataLoader) << "parameter parse failed for" << metadataPath << ":" << parseError;
+        return false;
     }
 
-    const auto poolOf = [](const QString& type) -> int { // 0 = scalar, 1 = color, 2 = image
-        if (type == QLatin1String("color"))
-            return 1;
-        if (type == QLatin1String("image"))
-            return 2;
-        return 0;
-    };
-    QSet<int> usedScalar, usedColor, usedImage;
-    for (const RawParam& r : std::as_const(raw)) {
-        if (r.slot < 0 || !PhosphorShaders::isValidParamId(r.id))
-            continue;
-        (poolOf(r.type) == 1 ? usedColor : poolOf(r.type) == 2 ? usedImage : usedScalar).insert(r.slot);
-    }
-    int nextScalar = 0, nextColor = 0, nextImage = 0;
-    for (RawParam& r : raw) {
-        if (r.slot >= 0 || !PhosphorShaders::isValidParamId(r.id))
-            continue;
-        const int pool = poolOf(r.type);
-        QSet<int>& used = (pool == 1 ? usedColor : pool == 2 ? usedImage : usedScalar);
-        int& next = (pool == 1 ? nextColor : pool == 2 ? nextImage : nextScalar);
-        while (used.contains(next))
-            ++next;
-        r.slot = next;
-        used.insert(next);
-        ++next;
-    }
-
-    for (const RawParam& r : std::as_const(raw)) {
-        if (r.slot < 0) {
-            qCWarning(lcMetadataLoader) << "parameter" << r.id << "has no usable id — dropping";
+    for (const auto& p : packInfo.parameters) {
+        if (p.slot < 0) {
+            qCWarning(lcMetadataLoader) << "parameter" << p.id << "has no usable id — dropping";
             continue;
         }
 
-        if (r.type == QLatin1String("float") || r.type == QLatin1String("int")) {
-            seedParam(out.customParams, r.slot, r.def.toDouble(0.0));
-        } else if (r.type == QLatin1String("bool")) {
-            seedParam(out.customParams, r.slot, r.def.toBool(false) ? 1.0 : 0.0);
-        } else if (r.type == QLatin1String("color")) {
-            seedColor(out.customColors, r.slot, parseHexColor(r.def.toString(QStringLiteral("#000000"))));
-        } else if (r.type == QLatin1String("image")) {
-            if (r.slot >= 4) {
-                qCWarning(lcMetadataLoader) << "image slot" << r.slot << "out of range [0, 4) — dropping" << r.id;
+        if (p.type == QLatin1String("float") || p.type == QLatin1String("int")) {
+            seedParam(out.customParams, p.slot, p.defaultValue.toDouble());
+        } else if (p.type == QLatin1String("bool")) {
+            seedParam(out.customParams, p.slot, p.defaultValue.toBool() ? 1.0 : 0.0);
+        } else if (p.type == QLatin1String("color")) {
+            seedColor(out.customColors, p.slot, parseHexColor(p.defaultValue.toString()));
+        } else if (p.type == QLatin1String("image")) {
+            if (p.slot >= 4) {
+                qCWarning(lcMetadataLoader) << "image slot" << p.slot << "out of range [0, 4) — dropping" << p.id;
                 continue;
             }
-            out.userTextures[r.slot] = resolveRelative(metadataDir, r.def.toString());
-            out.userTextureWraps[r.slot] = r.wrap;
+            out.userTextures[p.slot] = resolveRelative(metadataDir, p.defaultValue.toString());
+            // ParameterInfo.wrap is empty when metadata omits the field; the
+            // renderer's texture setup expects a concrete mode, so normalise
+            // to the daemon's "clamp" default at the seam.
+            out.userTextureWraps[p.slot] = p.wrap.isEmpty() ? QStringLiteral("clamp") : p.wrap;
         } else {
-            // Deliberate: an unsupported type has already CLAIMED a scalar
-            // lane above (the registry's poolOf treats unknown types as
-            // scalar too), so the lane numbering of the following params
-            // stays byte-identical to the p_<id> preamble — only the
+            // Deliberate: the registry's poolOf treats an unknown type as
+            // scalar, so the param has already claimed a scalar lane (keeping
+            // the numbering aligned with the p_<id> preamble) — only the
             // seeding is skipped, leaving that lane at the -1 sentinel.
-            qCWarning(lcMetadataLoader) << "parameter" << r.id << "has unsupported type" << r.type << "— dropping";
+            qCWarning(lcMetadataLoader) << "parameter" << p.id << "has unsupported type" << p.type << "— dropping";
         }
     }
 

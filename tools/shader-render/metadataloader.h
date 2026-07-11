@@ -100,18 +100,19 @@ struct ShaderMetadata
  * disk. All path fields are resolved absolute against the metadata.json's
  * directory.
  *
- * Parameter slot resolution mirrors the daemon's flat 0–31 slot index:
+ * Parameter slot resolution uses the daemon's flat 0–31 slot index:
  *   * float / int / bool — slot S → customParams[S/4].(x|y|z|w)[S%4]
  *     (8 vec4s × 4 channels = 32 distinct float slots)
  *   * color — slot S → customColors[S] (16 slots)
  *   * image — slot S → userTextures[S] / userTextureWraps[S] (4 slots)
  *
- * Parameters without a `slot` field are auto-assigned the next free lane of
- * their pool in declaration order, byte-identical to the registry's T1.1
- * assignment (explicit slots reserved first) — so the seeded defaults line up
- * with the `p_<id>` preamble the renderer installs. Parameters whose id is
- * not a valid GLSL identifier body claim no lane and are dropped with a
- * warning; out-of-range slots are dropped with a warning.
+ * Slots are resolved by `ShaderRegistry::parsePackMetadata` — the registry's
+ * own T1.1 assignment (explicit slots reserved first, slotless params packed
+ * into the next free lane of their pool in declaration order) — so the seeded
+ * defaults line up with the `p_<id>` preamble the renderer installs by
+ * construction. Parameters whose id is not a valid GLSL identifier body claim
+ * no lane and are dropped with a warning; out-of-range slots are dropped with
+ * a warning.
  */
 bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out);
 

@@ -589,6 +589,10 @@ int Renderer::render(const RenderOptions& opts)
         // Pack dir from the metadata path — NOT from the frag path, which a
         // pack may point into a subdirectory ("fragmentShader": "sub/x.frag"
         // would make the frag-derived dir miss metadata.json entirely).
+        // One deliberate divergence from the daemon: no schema validation
+        // runs here (the registry scan gates packs on
+        // shaderMetadataValidator().validate()), so the tool still previews
+        // a pack the daemon would skip for a schema error.
         QString metaError;
         const auto info =
             PhosphorShaders::ShaderRegistry::parsePackMetadata(QFileInfo(opts.metadataPath).absolutePath(), &metaError);

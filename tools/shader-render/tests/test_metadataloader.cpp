@@ -196,6 +196,74 @@ private Q_SLOTS:
         QCOMPARE(md.customParams[0].x(), -1.0f);
     }
 
+    void malformedJsonFails()
+    {
+        // A file that isn't parseable JSON must be rejected at the boundary
+        // (QJsonParseError path), not surface later as an empty metadata
+        // struct with a missing fragment shader.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        const QString path = writeMetadataJson(dir, QStringLiteral("{ this is not json"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(!PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+    }
+
+    void nonObjectRootFails()
+    {
+        // Valid JSON whose root is not an object (array here) must be
+        // rejected the same way — the loader reads keys off the root object.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        const QString path = writeMetadataJson(dir, QStringLiteral("[1, 2, 3]"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(!PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+    }
+
+    void multipassBufferChainIsParsed()
+    {
+        // The multipass fields ride through the loader: bufferShaders resolve
+        // absolute against the pack dir (traversal-guarded like every other
+        // path), bufferWraps ride along verbatim, and the single-bufferShader
+        // form populates the scalar field.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        writeFile(dir, QStringLiteral("bufA.frag"));
+        writeFile(dir, QStringLiteral("bufB.frag"));
+        const QString path = writeMetadataJson(dir, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "effect.frag",
+            "multipass": true,
+            "bufferShaders": ["bufA.frag", "bufB.frag"],
+            "bufferWraps": ["repeat", "clamp"]
+        })"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+        QVERIFY(md.multipass);
+        QCOMPARE(md.bufferShaders.size(), 2);
+        QVERIFY(md.bufferShaders[0].endsWith(QStringLiteral("bufA.frag")));
+        QVERIFY(md.bufferShaders[1].endsWith(QStringLiteral("bufB.frag")));
+        const QStringList expectedWraps{QStringLiteral("repeat"), QStringLiteral("clamp")};
+        QCOMPARE(md.bufferWraps, expectedWraps);
+
+        QTemporaryDir dir2;
+        writeFile(dir2, QStringLiteral("effect.frag"));
+        writeFile(dir2, QStringLiteral("buffer.frag"));
+        const QString singlePath = writeMetadataJson(dir2, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "effect.frag",
+            "multipass": true,
+            "bufferShader": "buffer.frag"
+        })"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata mdSingle;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(singlePath, mdSingle));
+        QVERIFY(mdSingle.bufferShader.endsWith(QStringLiteral("buffer.frag")));
+        QVERIFY(mdSingle.bufferShaders.isEmpty());
+    }
+
     void missingFragmentShaderFails()
     {
         QTemporaryDir dir;

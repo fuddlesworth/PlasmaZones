@@ -38,11 +38,15 @@ vec4 pTransition(vec2 uv, float t) {
     float grad = (uv.x + uv.y) * 0.5;   // 0 top-left .. 1 bottom-right
     float perp = uv.x - uv.y;
     float ripple = sin(perp * 6.0) * 0.5 + sin(perp * 15.0 + 1.9) * 0.3;
-    float threshold = grad + ripple * clamp(p_ripple, 0.0, 1.0) * 0.05;
+    float rippleAmp = clamp(p_ripple, 0.0, 1.0) * 0.05;
+    float threshold = grad + ripple * rippleAmp;
 
-    // Expand progress past [0,1] by the band so the first / last pixels fully
-    // clear their threshold band at t=0 and t=1 (clean endpoints).
-    float p = t * (1.0 + 2.0 * band) - band;
+    // Expand progress past [0,1] by the band plus the worst-case ripple
+    // offset (|ripple| <= 0.8) so the first / last pixels fully clear their
+    // threshold band at t=0 and t=1 (clean endpoints) even when the ripple
+    // pushes a threshold outside [0,1].
+    float slack = band + 0.8 * rippleAmp;
+    float p = t * (1.0 + 2.0 * slack) - slack;
 
     // reveal: 0 = still outgoing desktop .. 1 = incoming desktop.
     float reveal = smoothstep(threshold - band, threshold + band, p);

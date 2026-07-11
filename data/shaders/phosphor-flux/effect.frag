@@ -165,8 +165,16 @@ vec3 emberRise(vec2 screenUV, float t, float treble, bool hasAudio) {
     // to a sparse ambient drift.
     float band = hasAudio ? audioBarSmooth(cx) * audioSens : 0.0;
 
-    // Sparse ambient occupancy; energy wakes more columns up.
-    if (hash11(col * 3.71 + floor(t * 0.15)) > 0.35 + band * 0.6) return vec3(0.0);
+    // Sparse ambient occupancy; energy wakes more columns up. Occupancy is
+    // sampled on a slow (~6.7s) epoch clock; cross-fade into the next epoch
+    // over its final stretch so a column that goes vacant dims its ember out
+    // instead of cutting it off mid-flight when the epoch ticks.
+    float epoch = t * 0.15;
+    float occGate = 0.35 + band * 0.6;
+    float occNow  = step(hash11(col * 3.71 + floor(epoch)), occGate);
+    float occNext = step(hash11(col * 3.71 + floor(epoch) + 1.0), occGate);
+    float occupancy = mix(occNow, occNext, smoothstep(0.8, 1.0, fract(epoch)));
+    if (occupancy <= 0.001) return vec3(0.0);
 
     float yUp = 1.0 - screenUV.y;
     float rate = 0.05 + 0.10 * seed + band * 0.35;
@@ -194,7 +202,7 @@ vec3 emberRise(vec2 screenUV, float t, float treble, bool hasAudio) {
     // Hue climbs the gradient with altitude — cyan low, rose at burnout.
     vec3 c = fluxGradient(altitude * 0.85 + seed * 0.15);
     float bright = (0.25 + band * 1.6) * intensity;
-    return c * (head * shimmer + tail * 0.5) * life * bright;
+    return c * (head * shimmer + tail * 0.5) * life * bright * occupancy;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

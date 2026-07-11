@@ -900,7 +900,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     // restarting the ramp and double-scheduling teardown.
                     st->releaseStartMs = ShaderInternal::shaderClockNowMs();
                     const quint64 myGeneration = st->generation;
-                    const int rampMs = st->durationMs > 0 ? st->durationMs : animationDurationMs();
+                    const int rampMs = st->durationMs;
                     QTimer::singleShot(rampMs, this, [this, safeWindow, myGeneration]() {
                         if (!safeWindow) {
                             return;
