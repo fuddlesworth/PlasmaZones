@@ -208,7 +208,7 @@ add_executable(plasmazones-settings ${plasmazones_settings_SRCS})
 # DecorationProfile holds std::optional members. A disengaged optional's payload
 # bytes are legitimately uninitialized and only ever read behind the engaged
 # flag, but GCC's link-time IPA maybe-uninitialized pass loses that guard across
-# the QList::emplaceBack inline chain and warns against the Qt headers
+# the QList append/reallocation inline chain and warns against the Qt headers
 # (qswap.h / qshareddata_impl.h / bits/move.h). The warnings surface at the
 # ltrans stage, so in-source diagnostic pragmas cannot reach them (the reported
 # location is outside the pragma region) and whether they fire varies with LTO

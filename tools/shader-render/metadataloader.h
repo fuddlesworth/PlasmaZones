@@ -96,9 +96,12 @@ struct ShaderMetadata
  * @brief Parse data/shaders/<id>/metadata.json into ShaderMetadata.
  *
  * Returns false if the file is missing, malformed, doesn't declare a
- * fragment shader, or the declared fragment shader does not exist on
- * disk. All path fields are resolved absolute against the metadata.json's
- * directory.
+ * fragment shader, the declared fragment shader does not exist on disk,
+ * or the pack's parameter metadata fails to parse. Parameter parsing
+ * re-reads `metadata.json` from the file's directory (see below), so the
+ * metadata file must carry that exact name — the same pack layout
+ * contract the renderer's preamble path relies on. All path fields are
+ * resolved absolute against the metadata.json's directory.
  *
  * Parameter slot resolution uses the daemon's flat 0–31 slot index:
  *   * float / int / bool — slot S → customParams[S/4].(x|y|z|w)[S%4]

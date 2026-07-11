@@ -204,7 +204,7 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
 
     for (const auto& p : packInfo.parameters) {
         if (p.slot < 0) {
-            qCWarning(lcMetadataLoader) << "parameter" << p.id << "has no usable id — dropping";
+            qCWarning(lcMetadataLoader) << "parameter" << p.id << "id is not a valid GLSL identifier — dropping";
             continue;
         }
 
