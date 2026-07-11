@@ -428,9 +428,12 @@ void CavaSpectrumProvider::restartAsync()
     // kill() after a grace window (mirroring stop()'s fallback) so the
     // pending flag cannot latch forever with a stale process still running
     // on the old config; kill produces finished, which drives the restart
-    // handler above.
-    QTimer::singleShot(kRestartKillGraceMs, this, [this]() {
-        if (m_pendingRestart && m_process && m_process->state() != QProcess::NotRunning) {
+    // handler above. The epoch guard scopes the timer to THIS restart: a
+    // timer armed by an earlier restart that already completed must not fire
+    // into a later restart's grace window and kill early.
+    const int epoch = ++m_restartEpoch;
+    QTimer::singleShot(kRestartKillGraceMs, this, [this, epoch]() {
+        if (m_pendingRestart && epoch == m_restartEpoch && m_process && m_process->state() != QProcess::NotRunning) {
             m_process->kill();
         }
     });

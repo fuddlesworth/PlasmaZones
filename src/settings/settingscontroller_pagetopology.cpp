@@ -233,9 +233,11 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         {QStringLiteral("general"),
          {
              {CD::renderingGroup(), CD::backendKey()},
-             // Shader Effects moved here from snapping-overlay-appearance: frame
-             // rate + audio spectrum drive EVERY shader category (overlay,
-             // animation, surface decoration), not just snapping overlays.
+             // Shader Effects moved here from snapping-overlay-appearance, and
+             // the Shaders.Audio group (the full CAVA parameter set) lives with
+             // it: frame rate + audio spectrum drive EVERY shader category
+             // (overlay, animation, surface decoration), not just snapping
+             // overlays.
              {CD::shadersGroup(), CD::frameRateKey()},
              {CD::shadersAudioGroup(), CD::enabledKey()},
              {CD::shadersAudioGroup(), CD::barsKey()},

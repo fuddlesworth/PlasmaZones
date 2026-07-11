@@ -62,6 +62,11 @@ private:
     QVector<float> m_smoothedSpectrum;
     bool m_stopping = false;
     bool m_pendingRestart = false;
+    // Incremented each time restartAsync() arms a kill-escalation timer, so a
+    // timer left over from an earlier restart cannot cut a later restart's
+    // grace window short (m_process is one reused object across restarts, so
+    // the timer cannot tell generations apart by pointer).
+    int m_restartEpoch = 0;
 };
 
 } // namespace PhosphorAudio

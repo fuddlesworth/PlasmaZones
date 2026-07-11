@@ -7,6 +7,7 @@
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorRendering/ShaderCompiler.h>
+#include "../../core/cavaoptions.h"
 #include "../../core/logging.h"
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -339,32 +340,6 @@ void OverlayService::refreshVisibleWindows()
 // actually stopped, so rapid drag thrash (modifier release/re-press, quick
 // re-trigger) keeps everything warm and avoids per-show spin-up.
 static constexpr int kIdleQuiesceGraceMs = 5000;
-
-// Assemble the provider's full parameter set from ISettings. The provider
-// normalizes (clamps/sanitizes) on apply, so values pass through verbatim;
-// the representation differences (channel-mode string → enum, "auto" input
-// method → empty detect sentinel, smoothing % → fraction) go through the
-// shared phosphor-audio conversion helpers so both runtimes map them
-// identically.
-static PhosphorAudio::SpectrumOptions cavaOptionsFromSettings(const ISettings* settings)
-{
-    PhosphorAudio::SpectrumOptions opts;
-    opts.barCount = settings->audioSpectrumBarCount();
-    opts.framerate = settings->shaderFrameRate();
-    opts.autosens = settings->audioAutosens();
-    opts.sensitivity = settings->audioSensitivity();
-    opts.noiseReduction = settings->audioNoiseReduction();
-    opts.lowerCutoffHz = settings->audioLowerCutoffHz();
-    opts.higherCutoffHz = settings->audioHigherCutoffHz();
-    opts.monstercat = settings->audioMonstercat();
-    opts.waves = settings->audioWaves();
-    opts.channelMode = PhosphorAudio::channelModeFromString(settings->audioChannelMode());
-    opts.reverse = settings->audioReverse();
-    opts.extraSmoothing = PhosphorAudio::extraSmoothingFromPercent(settings->audioExtraSmoothing());
-    opts.inputMethod = PhosphorAudio::inputMethodFromSetting(settings->audioInputMethod());
-    opts.inputSource = settings->audioInputSource();
-    return opts;
-}
 
 bool OverlayService::isOverlayDisplaying() const
 {

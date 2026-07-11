@@ -16,10 +16,10 @@ SettingsFlickable {
     // Capture the context property so child components can access it
     readonly property var settingsBridge: appSettings
     // Frame rate + audio spectrum drive EVERY shader category (overlay,
-    // animation, surface decoration), so the Shader Effects card lives here on
-    // General rather than on the snapping overlay page. The backing state is
-    // still the snappingEffectsPage controller (its bounds + CAVA probe are
-    // global, only its name is historical).
+    // animation, surface decoration), so the Shader Effects and Audio
+    // Spectrum cards live here on General rather than on the snapping overlay
+    // page. The backing state is still the snappingEffectsPage controller
+    // (its bounds + CAVA probe are global, only its name is historical).
     readonly property var effectsBridge: settingsController.snappingEffectsPage
 
     contentHeight: content.implicitHeight
@@ -148,8 +148,6 @@ SettingsFlickable {
         // values feed both runtimes (daemon overlays and the KWin effect) plus
         // the editor's shader preview.
         SettingsCard {
-            id: audioCard
-
             headerText: i18n("Audio Spectrum")
             searchAnchor: "audioSpectrum"
             collapsible: true
