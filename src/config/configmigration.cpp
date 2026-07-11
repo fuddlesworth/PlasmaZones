@@ -3666,6 +3666,14 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
                         {kV4KeyInner, kV4KeyOuter, kV4KeyUsePerSide, kV4KeyTop, kV4KeyBottom, kV4KeyLeft, kV4KeyRight});
     }
 
+    // ── Drop the retired overlay-shader master toggle ───────────────────────
+    // v5 removes Shaders.Enabled entirely: shader use is decided per layout
+    // (shaderId "none" draws the rectangle overlay), so the global switch
+    // gated nothing the layouts don't already control. The v1→v2 step still
+    // writes this key when migrating v1 configs, so strip it here to keep the
+    // chain's output aligned with the v5 schema.
+    stripKeysAtPath(root, {ConfigKeys::shadersGroup()}, {QLatin1String("Enabled")});
+
     // Stamp literal 5 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
     root[ConfigKeys::versionKey()] = 5;
 }

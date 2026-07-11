@@ -427,8 +427,7 @@ public:
     /// shader↔non-shader slot whose type the new style override changed, then
     /// re-pushes each window's shader id/params. A no-op when the overlay is
     /// hidden — the next `show()` re-resolves via `initializeOverlay`. Mirrors
-    /// the `overlayDisplayModeChanged` / `enableShaderEffectsChanged` wiring for
-    /// the equivalent global settings.
+    /// the `overlayDisplayModeChanged` wiring for the equivalent global setting.
     void refreshOverlayPropertiesIfShown();
 
 public Q_SLOTS:

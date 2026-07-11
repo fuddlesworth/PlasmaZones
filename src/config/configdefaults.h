@@ -974,10 +974,6 @@ public:
     // Shader Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static bool enableShaderEffects()
-    {
-        return true;
-    }
     static int shaderFrameRate()
     {
         return 60;
