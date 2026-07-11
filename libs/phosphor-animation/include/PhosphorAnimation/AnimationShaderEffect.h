@@ -189,7 +189,7 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     FboExtentKind fboExtentKind = FboExtentKind::Anchor;
 
     /// Per-axis subdivision count for geometry shaders that deform the
-    /// drawn quad in the vertex stage (e.g. the `flow` window-move
+    /// drawn quad in the vertex stage (e.g. the `flow` geometry
     /// effect, whose grid rows lag behind the leading edge so the
     /// window streams into its destination zone). 0 (the default) keeps
     /// the single output-spanning quad every other surface-extent

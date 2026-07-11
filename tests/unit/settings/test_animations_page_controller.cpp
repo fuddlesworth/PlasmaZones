@@ -471,8 +471,8 @@ private Q_SLOTS:
         // Window family — consumed leaves driven by the KWin effect's
         // tryBeginShaderForEvent at kwin-effect/plasmazoneseffect.cpp.
         // Each maps to a window-lifecycle hook (windowAdded, windowClosed,
-        // windowFinishUserMovedResized, maximized, minimized,
-        // focusChanged) and runs the resolved shader on the
+        // windowStartUserMovedResized for the held move, maximized,
+        // minimized, focusChanged) and runs the resolved shader on the
         // OffscreenEffect's redirected texture quad.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.open")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.close")));
@@ -515,6 +515,8 @@ private Q_SLOTS:
         // The intermediate cascade parents the parent-card UX relies on.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance")));
+        // The desktop family root, ancestor of the consumed switch leaf.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop")));
 
         // Paths the resolver never walks through — any assignment would
         // be runtime-dead and silently shadow what the user thought

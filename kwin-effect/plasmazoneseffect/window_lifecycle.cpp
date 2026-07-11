@@ -778,6 +778,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // grab origin anchors iMoveOffset, and the velocity spring
                 // integrates from here (see the paint pipeline).
                 st->holdUntilRelease = true;
+                // Fresh epoch for the (re-)hold: a re-grab inside the prior
+                // drag's settle window rides the same-effect short-circuit
+                // (beginShaderTransition installs nothing new), so the prior
+                // release's tail / safety-cap timer still carries this
+                // transition's generation and would fire mid-drag, killing
+                // the shader for the rest of the new drag. Bumping here
+                // invalidates it. For a fresh install the bump is harmless:
+                // the just-scheduled duration timer stands down on the hold
+                // flag anyway, and every later consumer captures the live
+                // generation at its own schedule time.
+                st->generation = ++m_shaderManager.m_shaderTransitionGenerationCounter;
                 st->grabOrigin = window->frameGeometry().topLeft();
                 st->lastMovePos = st->grabOrigin;
                 st->lastMoveSampleMs = -1;

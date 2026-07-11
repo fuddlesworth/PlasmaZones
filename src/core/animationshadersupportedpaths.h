@@ -37,9 +37,10 @@ inline QStringList shaderConsumedLeafEventPaths()
         //
         // Window family — driven by the KWin OffscreenEffect at
         // kwin-effect/plasmazoneseffect.cpp via tryBeginShaderForEvent
-        // on each window-lifecycle hook (windowAdded/windowClosed/
-        // windowStartUserMovedResized for the held move/maximized/
-        // minimized/focusChanged).
+        // on each window-lifecycle hook: windowAdded/windowClosed for
+        // open/close, windowStartUserMovedResized for the held move,
+        // and windowMaximizedStateChanged/minimizedChanged/
+        // windowActivated for maximize/minimize/focus.
         // The effect resolves m_shaderProfileTree.resolve(path) per
         // event, drives a per-window iTime AnimatedValue, and runs the
         // shader on the OffscreenEffect's redirected texture quad.

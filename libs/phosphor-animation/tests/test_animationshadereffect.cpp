@@ -380,6 +380,10 @@ private Q_SLOTS:
         for (const QString& geo : {PP::WindowSnapIn, PP::WindowSnapOut, PP::WindowLayoutSwitch, PP::WindowMaximize}) {
             QVERIFY2(shaderEffectAppliesToEventPath(morph, geo), qPrintable(geo));
         }
+        // The geometry-classed cascade parent accepts a geometry effect too
+        // (it is a category row, not a leg — the move-only refusal on the
+        // same row is pinned in the move-effect block below).
+        QVERIFY(shaderEffectAppliesToEventPath(morph, PP::WindowMovement));
         // Every appearance leg must be incompatible with a geometry-only effect.
         for (const QString& app : {PP::WindowOpen, PP::WindowClose, PP::WindowMinimize, PP::WindowFocus, PP::OsdShow,
                                    PP::OsdHide, PP::PopupLayoutPickerShow, PP::PopupZoneSelectorHide}) {
