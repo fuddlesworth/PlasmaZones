@@ -668,6 +668,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             // the slotWindowClosed removal alone is not enough; drop it here too
             // (keyed by the frozen cachedId) or the entry leaks for the session.
             m_focusFade.remove(cachedId);
+            // Same delete-without-close defence for the layer snapshot: the
+            // normal removal lives in slotWindowClosed, which a window deleted
+            // without a preceding close never reaches. No restore is possible
+            // (the window is gone); this only keeps the map bounded.
+            m_ruleWindowLayerSnapshots.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);
@@ -937,6 +942,26 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // clearAllDecorations below, but opacity would not). Re-resolve every opacity
         // window against the now-cleared placement, matching the border teardown.
         invalidateAllRuleCaches();
+        // Window-layer rules need the same placement-scoped re-resolve, but
+        // they are EVENT-driven (only reconcileRuleWindowLayer writes
+        // keepAbove/keepBelow), so the cache clear above does nothing for
+        // them on its own — opacity revives per-frame in paintWindow, layer
+        // does not. Re-reconcile every window against the now-cleared
+        // placement: a `WHEN IsFloating` layer rule releases its keep-above
+        // here (snapshot restore) instead of stranding it for the whole
+        // daemon-down interval. NOT restoreAllRuleWindowLayers(): that
+        // unconditionally drops all snapshots, which would strand windows
+        // held by an unconditional (placement-free) layer rule — the rule
+        // sets deliberately survive daemon loss (see below), so those must
+        // keep their applied layer.
+        if (KWin::effects) {
+            const auto layerWindows = KWin::effects->stackingOrder();
+            for (KWin::EffectWindow* lw : layerWindows) {
+                if (lw && !lw->isDeleted()) {
+                    reconcileRuleWindowLayer(getWindowId(lw), lw);
+                }
+            }
+        }
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllDecorations();

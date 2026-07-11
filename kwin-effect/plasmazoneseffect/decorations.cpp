@@ -36,6 +36,7 @@
 #include <QVector4D>
 
 #include <optional>
+#include <utility>
 
 namespace PlasmaZones {
 
@@ -662,6 +663,16 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     if (!w || w->isDeleted() || windowId.isEmpty()) {
         return;
     }
+    // No-rules fast path: with an empty rule set and no snapshot to drain,
+    // there is nothing to resolve or restore. Keeps the "no-rules case pays
+    // nothing" invariant (see shouldAnimateWindow) on the focus-driven
+    // updateAllDecorations path — without this, the layer reconcile would be
+    // the one consumer building the ~30-accessor rule query for rule-less
+    // sessions. A lingering snapshot with an empty rule set still falls
+    // through so the restore below drains it.
+    if (m_shaderManager.animationRuleSet().isEmpty() && !m_ruleWindowLayerSnapshots.contains(windowId)) {
+        return;
+    }
     KWin::Window* kw = w->window();
     if (!kw) {
         return;
@@ -670,11 +681,15 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     const auto it = m_ruleWindowLayerSnapshots.find(windowId);
     if (!layer) {
         // No rule owns the layer. If one did before, put the user's own flags
-        // back exactly once and forget the window.
+        // back exactly once and forget the window. Erase BEFORE the setters:
+        // they emit KWin signals, and holding a QHash iterator across code
+        // that could re-enter this map would be undefined if a future
+        // connection routes a keep-above change back into a reconcile.
         if (it != m_ruleWindowLayerSnapshots.end()) {
-            kw->setKeepAbove(it->keepAbove);
-            kw->setKeepBelow(it->keepBelow);
+            const WindowLayerSnapshot snapshot = *it;
             m_ruleWindowLayerSnapshots.erase(it);
+            kw->setKeepAbove(snapshot.keepAbove);
+            kw->setKeepBelow(snapshot.keepBelow);
         }
         return;
     }
@@ -702,7 +717,11 @@ void PlasmaZonesEffect::restoreAllRuleWindowLayers()
     const QHash<QString, WindowLayerSnapshot> snapshots = std::exchange(m_ruleWindowLayerSnapshots, {});
     for (auto it = snapshots.cbegin(); it != snapshots.cend(); ++it) {
         KWin::EffectWindow* w = findWindowById(it.key());
-        if (!w || w->isDeleted()) {
+        // Exact-id re-check, matching every other findWindowById consumer in
+        // this file: the fuzzy appId fallback can resolve a same-app SIBLING
+        // for a gone windowId, and restoring one window's snapshot onto
+        // another would clobber the sibling's own flags.
+        if (!w || w->isDeleted() || getWindowId(w) != it.key()) {
             continue;
         }
         if (KWin::Window* kw = w->window()) {

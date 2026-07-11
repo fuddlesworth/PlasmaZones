@@ -1280,9 +1280,19 @@ private:
     /// apply it to KWin's keepAbove/keepBelow pair. First application snapshots
     /// the window's pre-rule flags into m_ruleWindowLayerSnapshots; a resolve
     /// with no owning rule restores that snapshot once and forgets the window.
-    /// Rides the same triggers as reconcileRuleHiddenTitleBar (window added,
-    /// placement-state flush, rule edits / focus via updateAllDecorations).
+    /// Rides a superset of reconcileRuleHiddenTitleBar's triggers
+    /// (placement-state flush, rule edits / focus via updateAllDecorations)
+    /// plus an eager window-added apply, so a layer rule takes effect before
+    /// the window's first reconcile-triggering event.
     void reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w);
+
+    /// The window's OWN keep-above flag — the app/user-set state, with
+    /// rule-written values substituted from the pre-rule snapshot while a
+    /// SetWindowLayer rule owns the window's layer. Consulted by the
+    /// keep-above overlay-tool gates (shouldHandleWindow / shouldDecorateWindow
+    /// / isTileableWindow) and mirrored into ruleQuery's KeepAbove/KeepBelow
+    /// fields so rule output never feeds back into rule input.
+    bool windowOwnKeepAbove(KWin::EffectWindow* w) const;
 
     /// Restore every rule-applied window layer to its snapshotted pre-rule
     /// flags and clear the snapshot map. Teardown counterpart of

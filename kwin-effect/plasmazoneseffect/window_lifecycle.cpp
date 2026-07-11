@@ -151,8 +151,11 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     }
     // Apply any SetWindowLayer rule to the new window right away (persistent
     // window state, so NOT desktop-gated — matching updateAllDecorations'
-    // title-bar/layer handling). Placement-scoped layer rules re-reconcile
-    // when the async float/zone syncs land, via the placement-state flush.
+    // title-bar/layer handling). This eager add-time apply is a layer-only
+    // extra trigger on top of the shared reconcile paths (the title-bar
+    // reconcile has no window-added call). Placement-scoped layer rules
+    // re-reconcile when the async float/zone syncs land, via the
+    // placement-state flush.
     reconcileRuleWindowLayer(windowId, w);
 
     bool onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
