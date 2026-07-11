@@ -355,7 +355,7 @@ private:
      * `Animations.WindowFiltering` cache so the two filter sets can
      * diverge.
      *
-     * A Rule carrying any OverrideAnimation* or SetOpacity
+     * A Rule carrying any effect-consumed (Tag::Effect)
      * action whose match expression resolves for the window OVERRIDES
      * the filter — the existence of even one targeted rule signals
      * deliberate user intent to animate this app, regardless of

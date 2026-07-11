@@ -1659,8 +1659,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     // Window-filtering gate. `shouldAnimateWindow` honours the user's
     // Animations.WindowFiltering exclusions (transient / min-size /
-    // app / class) AND lets a Rule carrying any OverrideAnimation*
-    // or SetOpacity action override the filter when the rule's match
+    // app / class) AND lets a Rule carrying any effect-consumed
+    // (Tag::Effect) action override the filter when the rule's match
     // expression resolves for the window's full WindowQuery (AppId /
     // WindowClass / Title / WindowRole / DesktopFile / WindowType / Pid /
     // state flags). Skipping this for shader transitions only would leave

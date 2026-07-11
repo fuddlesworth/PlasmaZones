@@ -862,7 +862,7 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Above other windows");
         }
         if (wireValue == PhosphorRules::WindowLayerToken::Normal) {
-            return PhosphorI18n::tr("Normal");
+            return PhosphorI18n::tr("Normal stacking");
         }
         if (wireValue == PhosphorRules::WindowLayerToken::Below) {
             return PhosphorI18n::tr("Below other windows");

@@ -471,6 +471,14 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             if (v.isEmpty()) {
                 return PhosphorI18n::tr("Window layer");
             }
+            // Mirror the resolver's closed vocabulary (shader_resolve.cpp's
+            // resolveWindowLayer): an unknown token produces no runtime
+            // override, so the label must not claim one — same contract as
+            // the SetOpacity "(invalid)" guard above.
+            namespace LayerToken = PhosphorRules::WindowLayerToken;
+            if (v != LayerToken::Above && v != LayerToken::Normal && v != LayerToken::Below) {
+                return PhosphorI18n::tr("Window layer (invalid)");
+            }
             return PhosphorI18n::tr("Layer: %1")
                 .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, v));
         }

@@ -111,7 +111,7 @@ private Q_SLOTS:
     void actionSummaryRendersAllEngineModes();
     void disableEngineNamesTheModeBeingDisabled();
     void setOpacityRendersValidValuesAndGuardsRejectPaths();
-    void setWindowLayerRendersTokenAndGuardsEmptyValue();
+    void setWindowLayerRendersTokenAndGuardsBadValues();
     void restorePositionRendersValueAwareLabel();
     void boolMatchConditionRendersOnOff();
     void shaderAndCurveLabelsResolveThroughLookups();
@@ -462,7 +462,7 @@ void TestRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
     QVERIFY2(labelAt(4).contains(QStringLiteral("invalid")), qPrintable(labelAt(4)));
 }
 
-void TestRuleModel::setWindowLayerRendersTokenAndGuardsEmptyValue()
+void TestRuleModel::setWindowLayerRendersTokenAndGuardsBadValues()
 {
     // Pin that the SetWindowLayer actionLabel resolves the wire token through
     // the shared enumOptionLabel (never leaking the raw lowercase token) and
@@ -493,6 +493,9 @@ void TestRuleModel::setWindowLayerRendersTokenAndGuardsEmptyValue()
             a.params.insert(ActionParam::Value, QStringLiteral("below"));
         }),
         buildRule([](RuleAction&) { }),
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, QStringLiteral("topmost"));
+        }),
     });
 
     const auto labelAt = [&](int row) {
@@ -506,6 +509,11 @@ void TestRuleModel::setWindowLayerRendersTokenAndGuardsEmptyValue()
     QVERIFY2(!labelAt(2).contains(QStringLiteral("below")), qPrintable(labelAt(2)));
     // Missing Value: bare placeholder, no dangling "Layer:" prefix.
     QCOMPARE(labelAt(3), QStringLiteral("Window layer"));
+    // Out-of-vocabulary token: "(invalid)" marker, never the raw token —
+    // the resolver ignores unknown tokens, so the label must not claim
+    // a layer override (mirrors the SetOpacity reject-path guard).
+    QVERIFY2(labelAt(4).contains(QStringLiteral("invalid")), qPrintable(labelAt(4)));
+    QVERIFY2(!labelAt(4).contains(QStringLiteral("topmost")), qPrintable(labelAt(4)));
 }
 
 void TestRuleModel::restorePositionRendersValueAwareLabel()
