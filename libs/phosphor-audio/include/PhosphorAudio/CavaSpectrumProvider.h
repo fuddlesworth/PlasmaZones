@@ -58,7 +58,6 @@ private:
     QProcess* m_process = nullptr;
     QByteArray m_stdoutBuffer;
     SpectrumOptions m_options;
-    QString m_config;
     QVector<float> m_spectrum;
     QVector<float> m_smoothedSpectrum;
     bool m_stopping = false;

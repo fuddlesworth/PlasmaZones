@@ -16,15 +16,17 @@ bar vector into a `ShaderEffect` UBO.
 
 | Type | Purpose |
 |------|---------|
-| `PhosphorAudio::IAudioSpectrumProvider` | Provider contract: `start`, `stop`, bar count, framerate, `spectrum()` snapshot. |
+| `PhosphorAudio::IAudioSpectrumProvider` | Provider contract: `start`, `stop`, `options()`/`setOptions()` (full `SpectrumOptions` parameter set), `spectrum()` snapshot. |
 | `PhosphorAudio::CavaSpectrumProvider`   | `cava`-backed provider. Detects install, picks an audio method (PulseAudio / PipeWire / ALSA), builds a throwaway config, emits normalized FFT bars. |
 
 ## Typical use
 
 ```cpp
 auto* provider = new PhosphorAudio::CavaSpectrumProvider(parent);
-provider->setBarCount(64);
-provider->setFramerate(60);
+PhosphorAudio::SpectrumOptions options;
+options.barCount = 64;
+options.framerate = 60;
+provider->setOptions(options);
 QObject::connect(provider, &IAudioSpectrumProvider::spectrumUpdated,
                  shaderEffect, &MyShader::setBars);
 provider->start();

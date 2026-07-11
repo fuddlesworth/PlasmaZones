@@ -159,7 +159,7 @@ void CavaSpectrumProvider::start()
         return;
     }
 
-    m_config = generateConfig(m_options);
+    const QString config = generateConfig(m_options);
 
     if (!m_process) {
         m_process = new QProcess(this);
@@ -178,7 +178,7 @@ void CavaSpectrumProvider::start()
     // /dev/stdin). A direct spawn — no shell in between — so option strings
     // can never be interpreted by anything but cava's own INI parser.
     m_process->start(cavaPath, QStringList{QStringLiteral("-p"), QStringLiteral("/dev/stdin")});
-    m_process->write(m_config.toUtf8());
+    m_process->write(config.toUtf8());
     m_process->closeWriteChannel();
 }
 
@@ -219,7 +219,11 @@ void CavaSpectrumProvider::setOptions(const SpectrumOptions& options)
         return;
     }
     m_options = normalized;
-    if (isRunning()) {
+    // Restart whenever a process exists in ANY live state, not just Running:
+    // a change landing in the brief Starting window must still reach the
+    // child, and restartAsync already handles a not-yet-Running process (the
+    // terminate → finished → start() chain applies the fresh options).
+    if (m_process && m_process->state() != QProcess::NotRunning) {
         restartAsync();
     }
 }
@@ -380,8 +384,9 @@ void CavaSpectrumProvider::onProcessError(QProcess::ProcessError error)
 void CavaSpectrumProvider::restartAsync()
 {
     if (m_pendingRestart) {
-        // A restart is already queued; the queued start() runs buildConfig()
-        // and picks up whatever m_options holds by then.
+        // A restart is already queued; the queued start() runs
+        // generateConfig(m_options) and picks up whatever the options hold
+        // by then.
         return;
     }
     if (!m_process || m_process->state() == QProcess::NotRunning) {
