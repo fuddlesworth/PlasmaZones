@@ -356,9 +356,11 @@ private Q_SLOTS:
         // so a leaf rename can't silently keep these passing, and pin the full
         // disjunction so dropping any leg from the classifier is caught.
         // `WindowMove` is NOT in this set: the interactive-drag leaf is its own
-        // opt-in `move` class (see the move-effect block below). There are no
-        // resize legs at all — the interactive-resize and snapResize events
-        // were dropped from the taxonomy.
+        // opt-in `move` class (see the move-effect block below). Neither is
+        // `WindowMovement` — geometry-classed, but a cascade parent rather
+        // than a leg; it gets its own compatibility check further down. There
+        // are no resize legs at all — the interactive-resize and snapResize
+        // events were dropped from the taxonomy.
         for (const QString& geo : {PP::WindowSnapIn, PP::WindowSnapOut, PP::WindowLayoutSwitch, PP::WindowMaximize}) {
             QVERIFY2(shaderEffectAppliesToEventPath(morph, geo), qPrintable(geo));
         }

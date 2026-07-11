@@ -1600,6 +1600,26 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     }
 }
 
+bool PlasmaZonesEffect::resolvedShaderAppliesToEvent(const QString& effectId, const QString& profilePath) const
+{
+    // See the header doc. Routed through the canonical predicate
+    // (shaderEffectAppliesToEventPath) — the same one the settings pickers
+    // filter with — so runtime refusal and picker filtering can never drift.
+    const auto eff = m_shaderManager.m_animationShaderRegistry.effect(effectId);
+    if (!eff.isValid()) {
+        // Unknown id: pass through. The pack may still be scanning, and
+        // beginShaderTransition's registry-miss warning stays the single
+        // reporter for genuinely unknown ids.
+        return true;
+    }
+    if (!PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff, profilePath)) {
+        qCDebug(lcEffect) << "shader" << effectId << "does not apply to event" << profilePath
+                          << "(appliesTo=" << eff.appliesTo << ") — skipping transition";
+        return false;
+    }
+    return true;
+}
+
 void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                                bool reverse, bool holdCloseGrab, bool holdAddedGrab)
 {
@@ -1715,25 +1735,18 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         }
         return;
     }
-    // Interactive-drag contract guard — the runtime mirror of the picker
-    // filter. window.movement.move installs a HELD transition (no from/to
-    // crossfade plays while the pointer is down), so only a pack declaring
-    // the `move` class (consumes iMoveMesh / iMoveOffset / iMoveVelocity* /
-    // iMoveTrail) does anything there. The tree cannot deliver a non-move
-    // pack here (ShaderProfileTree::resolve takes no ancestor overlay for
-    // the move leaf), but a Rule's OverrideAnimationShader slot or a stale
-    // pre-split config override still can — refuse it instead of installing
-    // a dead transition that pins full-output repaints for the whole drag.
-    // An unknown effect id falls through: beginShaderTransition already
-    // rejects it with its own registry-miss warning.
-    if (profilePath == PhosphorAnimation::ProfilePaths::WindowMove) {
-        const auto eff = m_shaderManager.m_animationShaderRegistry.effect(profile.effectiveEffectId());
-        if (eff.isValid() && !eff.appliesTo.contains(PhosphorAnimation::ProfilePaths::EventClassMove)) {
-            qCDebug(lcEffect) << "tryBeginShader[" << profilePath << "]: refusing non-move pack"
-                              << profile.effectiveEffectId()
-                              << "on the interactive-drag event (declares no `move` capability)";
-            return;
-        }
+    // Runtime applicability gate — see resolvedShaderAppliesToEvent. The
+    // pickers keep class-mismatched packs unselectable, but a Rule's
+    // OverrideAnimationShader slot or a stale / hand-edited config bypasses
+    // them. Most material on the held-drag leg (window.movement.move): a
+    // crossfade pack there would install a dead transition that pins
+    // full-output repaints for the whole drag. The tree itself can no longer
+    // deliver one there (ShaderProfileTree::resolve takes no ancestor overlay
+    // for the move leaf), so this catches the rule-layer and stale-config
+    // routes — and, symmetrically, a move-physics or desktop pack forced onto
+    // any other window leg.
+    if (!resolvedShaderAppliesToEvent(profile.effectiveEffectId(), profilePath)) {
+        return;
     }
     const bool installed =
         beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab, holdAddedGrab);
@@ -1769,7 +1782,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
             return;
         }
         if (const auto* live = m_shaderManager.findTransition(safeWindow); live && live->generation == myGeneration) {
-            // HELD transitions (interactive move/resize) outlive their
+            // HELD transitions (the interactive drag) outlive their
             // nominal duration by design: the user is still dragging.
             // windowFinishUserMovedResized owns their teardown (a settle
             // tail after release), so the duration timer stands down.

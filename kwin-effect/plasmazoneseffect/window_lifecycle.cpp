@@ -765,7 +765,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         }
     });
     connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {
-        // Release a HELD move/resize transition with a settle tail: the
+        // Release a HELD move transition with a settle tail (interactive
+        // resize starts no shader transition, see the start handler): the
         // velocity spring decays through zero over the next fraction of a
         // second, letting wobble/tilt shaders relax to rest before the
         // teardown lands. Generation-guarded exactly like the duration

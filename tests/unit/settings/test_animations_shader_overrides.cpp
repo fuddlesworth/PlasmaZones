@@ -23,6 +23,7 @@
 #include <QTest>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 
 #include "config/settings.h"
 #include "settings/animationspagecontroller.h"
@@ -362,6 +363,36 @@ private Q_SLOTS:
         QSignalSpy spy2(&c, &AnimationsPageController::pendingChangesChanged);
         QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("popup")), 0);
         QCOMPARE(spy2.count(), 0);
+    }
+
+    /// The leaf-isolated interactive-drag path (window.movement.move) is a
+    /// prefix-descendant of window.movement but resolves in ISOLATION —
+    /// ShaderProfileTree::resolve takes no ancestor overlay there — so its
+    /// override can never shadow the "All Windows" parent. The shadowing-
+    /// children count must skip it, and the parent card's "Clear shadowing
+    /// children" action must NOT wipe the drag shader the user configured
+    /// on the separate Window Dragging page.
+    void shaderOverrideDescendants_skipLeafIsolatedMovePath()
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        // Drag-leaf override + one genuine shadowing sibling for contrast.
+        QVERIFY(c.setShaderOverride(PP::WindowMove, QStringLiteral("wobble"), {}));
+        QVERIFY(c.setShaderOverride(PP::WindowSnapIn, QStringLiteral("window-morph"), {}));
+
+        // Only the snapIn override shadows the movement parent.
+        QCOMPARE(c.shaderOverrideDescendantCount(PP::WindowMovement), 1);
+
+        // Clearing shadowing children removes snapIn but PRESERVES the
+        // isolated drag-leaf override.
+        QCOMPARE(c.clearShaderOverrideDescendants(PP::WindowMovement), 1);
+        QVERIFY(c.rawShaderProfile(PP::WindowSnapIn).isEmpty());
+        QCOMPARE(c.rawShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("wobble"));
     }
 
     /// `setShaderOverride` short-circuits when the request matches the

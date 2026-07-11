@@ -399,7 +399,15 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 shaderProfile =
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath);
             }
-            if (!shaderProfile.effectiveEffectId().isEmpty()) {
+            // Runtime applicability gate — same canonical-predicate check
+            // as tryBeginShaderForEvent (resolvedShaderAppliesToEvent): the
+            // rule layer or a stale config can deliver a pack that provably
+            // cannot drive this snap leg (a move-physics or desktop pack).
+            // Refusing here keeps the C++ WindowAnimator geometry animation
+            // as the fallback instead of paying capture + paint cost for an
+            // identity no-op transition.
+            if (!shaderProfile.effectiveEffectId().isEmpty()
+                && resolvedShaderAppliesToEvent(shaderProfile.effectiveEffectId(), profilePath)) {
                 beginShaderTransition(window, shaderProfile);
                 // If the installed shader is a geometry morph (declares
                 // iFromRect), hand it the old/new frames and request the

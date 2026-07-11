@@ -92,6 +92,16 @@ private:
     QStringList m_insertionOrder;
 };
 
+/// True when @p path resolves its shader in ISOLATION: ShaderProfileTree::
+/// resolve reads only the direct override at the path, so no ancestor or
+/// baseline shader ever applies there — and, symmetrically, an override AT
+/// the path can never shadow an ancestor's shader. Today this is exactly
+/// the interactive-drag leaf (ProfilePaths::WindowMove); see the walk-up
+/// inheritance EXCEPTION note above. Exposed so shadowing-aware consumers
+/// (e.g. the settings "shadowing children" banner walk) share the
+/// resolver's definition instead of re-deriving it from a path prefix.
+PHOSPHORANIMATION_EXPORT bool shaderPathResolvesInIsolation(const QString& path);
+
 /// Resolve @p path against @p tree, applying the built-in per-event default
 /// shader (ProfilePaths::defaultShaderEffectIdForPath, e.g. "window-morph" for
 /// window snap events) when the path is TRULY UNSET — i.e. neither it nor any

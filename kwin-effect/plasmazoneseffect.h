@@ -1357,6 +1357,19 @@ private:
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                 bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false);
+    /// Runtime mirror of the settings pickers' shader-class filter, routed
+    /// through the canonical PhosphorAnimationShaders::
+    /// shaderEffectAppliesToEventPath predicate so the two can never drift.
+    /// Returns false only when @p effectId is KNOWN to the registry and
+    /// provably cannot drive @p profilePath (e.g. a crossfade pack on the
+    /// held-drag leg, a move-physics or desktop pack on a crossfade leg).
+    /// An id the registry doesn't know returns true: the pack may still be
+    /// scanning, and beginShaderTransition's registry-miss warning stays the
+    /// single reporter for genuinely unknown ids. Gates every per-window
+    /// resolution route (tryBeginShaderForEvent and the applyWindowGeometry
+    /// snap chokepoint) against rule-layer and stale-config assignments the
+    /// pickers cannot intercept.
+    bool resolvedShaderAppliesToEvent(const QString& effectId, const QString& profilePath) const;
     void evictLruTextureIfOverBound();
     void warmUserTextureAsync(const QString& absolutePath);
 

@@ -95,13 +95,22 @@ inline QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProf
 }
 
 /// Collect every override path strictly DEEPER than @p path
-/// (i.e. starting with `<path>.`). Centralises the prefix-match math
+/// (i.e. starting with `<path>.`) that SHADOWS @p path in the resolver's
+/// deeper-leaf-wins overlay. Centralises the prefix-match math
 /// so shaderOverrideDescendantCount and clearShaderOverrideDescendants
-/// share one definition of "descendant" — the trailing `.` boundary
-/// is what excludes both the path itself ("popup") and unrelated
+/// share one definition of "shadowing descendant" — the trailing `.`
+/// boundary is what excludes both the path itself ("popup") and unrelated
 /// names with shared character-prefix ("popups"). Inline in this
 /// header so sibling helpers in this namespace can call it without
 /// depending on unity-build TU merging.
+///
+/// Leaf-isolated paths (shaderPathResolvesInIsolation, today the
+/// interactive-drag leaf window.movement.move) are EXCLUDED even though
+/// they are prefix-descendants: their resolve() never walks the ancestor,
+/// so an override there cannot shadow @p path. Counting one would show a
+/// false "shadowing children" warning on the ancestor card, and the
+/// paired clear action would silently wipe a setting the user made on the
+/// Window Dragging page.
 inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                                     const QString& path)
 {
@@ -111,7 +120,7 @@ inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShade
     const QString prefix = path + QLatin1Char('.');
     const QStringList paths = tree.overriddenPaths();
     for (const QString& p : paths) {
-        if (p.startsWith(prefix))
+        if (p.startsWith(prefix) && !PhosphorAnimationShaders::shaderPathResolvesInIsolation(p))
             out.append(p);
     }
     return out;
