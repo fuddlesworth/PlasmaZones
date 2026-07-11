@@ -415,9 +415,8 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     //
     // `m_shaderManager.animationRuleSet()` admits every rule carrying a
     // Tag::Effect action (shader_transitions.cpp's `hasTag(type, Tag::Effect)`
-    // loop) — the OverrideAnimation* triple, SetOpacity, and the appearance /
-    // stacking family (SetBorder*, SetHideTitleBar, OverrideDecorationChain,
-    // SetWindowLayer). So a rule
+    // loop; the tag assignments in ruleaction.cpp are the authoritative
+    // membership list). So a rule
     // whose only action is an appearance or layer override also force-animates
     // its matches here — deliberate, consistent opt-in semantics across every
     // effect-consumed action. `hasAnyMatch` never surfaces a rule whose
