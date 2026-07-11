@@ -222,6 +222,9 @@ void CavaSpectrumProvider::setOptions(const SpectrumOptions& options)
     // and never reaches the cava config, so a change to it alone must not
     // bounce the capture process — the smoothing loop reads the live value on
     // the next frame. Only a field cava actually consumes forces a restart.
+    // Any future field that generateConfig does NOT emit must be equalized
+    // into cavaView the same way, or changing it will restart cava for
+    // nothing.
     SpectrumOptions cavaView = normalized;
     cavaView.extraSmoothing = m_options.extraSmoothing;
     const bool cavaAffecting = !(cavaView == m_options);
