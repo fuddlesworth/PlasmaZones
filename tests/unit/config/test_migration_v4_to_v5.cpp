@@ -437,6 +437,55 @@ private Q_SLOTS:
                      .contains(QStringLiteral("Inner")));
     }
 
+    // ─── Retired Shaders.Enabled toggle stripped, siblings survive ─────────
+
+    // v5 retires the Shaders.Enabled overlay-shader master toggle. The strip
+    // must remove exactly that key: the sibling Shaders keys (FrameRate /
+    // AudioVisualizer / AudioSpectrumBarCount) are live v5 settings and must
+    // survive verbatim. Guards against a regression that widens the stripped
+    // key set — stripKeysAtPath prunes a group once it empties, and the
+    // full-chain schema-drift test only catches PRODUCED-but-undeclared keys,
+    // so silently dropped survivors would pass every other test.
+    void testShaderToggleStripped_siblingsSurvive()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {ConfigKeys::shadersGroup()},
+                  {{ConfigKeys::enabledKey(), false},
+                   {ConfigKeys::frameRateKey(), 90},
+                   {ConfigKeys::audioVisualizerKey(), true},
+                   {ConfigKeys::audioSpectrumBarCountKey(), 32}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject shaders =
+            readJson(ConfigDefaults::configFilePath()).value(ConfigKeys::shadersGroup()).toObject();
+        QVERIFY2(!shaders.contains(ConfigKeys::enabledKey()), "the retired Shaders.Enabled key must be stripped");
+        QCOMPARE(shaders.value(ConfigKeys::frameRateKey()).toInt(), 90);
+        QCOMPARE(shaders.value(ConfigKeys::audioVisualizerKey()).toBool(), true);
+        QCOMPARE(shaders.value(ConfigKeys::audioSpectrumBarCountKey()).toInt(), 32);
+    }
+
+    // When Enabled is the ONLY Shaders key, the strip empties the group and
+    // stripKeysAtPath prunes it entirely rather than leaving an empty object.
+    void testShaderToggleStripped_soleKeyPrunesGroup()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {ConfigKeys::shadersGroup()}, {{ConfigKeys::enabledKey(), true}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject after = readJson(ConfigDefaults::configFilePath());
+        QVERIFY2(!after.contains(ConfigKeys::shadersGroup()), "an Enabled-only Shaders group must be pruned");
+    }
+
     // ─── Idempotency ──────────────────────────────────────────────────────
 
     void testIdempotency_runTwiceIsNoOp()

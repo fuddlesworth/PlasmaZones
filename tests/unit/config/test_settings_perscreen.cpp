@@ -665,7 +665,6 @@ private Q_SLOTS:
         QCOMPARE(settings.animationDuration(), ConfigDefaults::animationDuration());
 
         // Shader defaults
-        QCOMPARE(settings.enableShaderEffects(), ConfigDefaults::enableShaderEffects());
         QCOMPARE(settings.shaderFrameRate(), ConfigDefaults::shaderFrameRate());
     }
 

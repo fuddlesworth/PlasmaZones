@@ -104,14 +104,12 @@ SettingsFlickable {
         // =====================================================================
         // SHADER EFFECTS CARD
         // =====================================================================
-        // Frame rate + audio spectrum apply to all shader categories, so this
-        // card is global (moved here from Snapping → Overlay Appearance). The
-        // card deliberately has no master toggle: enableShaderEffects only
-        // governs the zone-overlay window shaders, whereas frame rate and the
-        // audio spectrum feed every shader category (overlay, animation,
-        // surface decoration). Gating those global rows behind the overlay
-        // switch would wrongly disable audio for animations and decorations,
-        // so "Overlay shaders" is just a normal row that gates nothing else.
+        // Frame rate + audio spectrum apply to all shader categories (overlay,
+        // animation, surface decoration), so this card is global (moved here
+        // from Snapping → Overlay Appearance). The card deliberately has no
+        // master toggle: shader use is decided per layout (a layout whose
+        // shader is "none" draws the rectangle overlay), so a global switch
+        // would gate nothing the layouts don't already control.
         SettingsCard {
             id: shaderCard
 
@@ -121,22 +119,6 @@ SettingsFlickable {
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
-
-                SettingsRow {
-                    title: i18n("Overlay shaders")
-                    searchAnchor: "overlayShaders"
-                    description: i18n("Render the zone overlay using GLSL shaders")
-
-                    SettingsSwitch {
-                        checked: appSettings.enableShaderEffects
-                        accessibleName: i18n("Enable overlay shaders")
-                        onToggled: function (newValue) {
-                            appSettings.enableShaderEffects = newValue;
-                        }
-                    }
-                }
-
-                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Frame rate")

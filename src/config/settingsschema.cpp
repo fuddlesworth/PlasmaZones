@@ -182,13 +182,12 @@ QVariant sanitizePerAlgorithmSettings(const QVariant& v)
 } // namespace
 
 // ─── Shaders ────────────────────────────────────────────────────────────────
-// Controls: overall effect toggle, frame rate, audio visualizer, bar count.
+// Controls: frame rate, audio visualizer, bar count.
 
 void appendShadersSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::shadersGroup()] = {
-        {CD::enabledKey(), CD::enableShaderEffects(), QMetaType::Bool},
         {CD::frameRateKey(),
          CD::shaderFrameRate(),
          QMetaType::Int,

@@ -331,13 +331,6 @@ public:
     void setLabelFontStrikeout(bool) override
     {
     }
-    bool enableShaderEffects() const override
-    {
-        return false;
-    }
-    void setEnableShaderEffects(bool) override
-    {
-    }
     int shaderFrameRate() const override
     {
         return 60;

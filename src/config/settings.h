@@ -376,8 +376,6 @@ public:
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
 
     // Shader Effects
-    Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
-                   enableShaderEffectsChanged)
     Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
     Q_PROPERTY(bool enableAudioVisualizer READ enableAudioVisualizer WRITE setEnableAudioVisualizer NOTIFY
                    enableAudioVisualizerChanged)
@@ -1031,8 +1029,6 @@ public:
     // ranges uniformly); setters route the write through the store so the
     // value is coerced + persisted in memory on the same call, with save()
     // flushing to disk.
-    bool enableShaderEffects() const override;
-    void setEnableShaderEffects(bool enable) override;
     int shaderFrameRate() const override;
     void setShaderFrameRate(int fps) override;
     bool enableAudioVisualizer() const override;
