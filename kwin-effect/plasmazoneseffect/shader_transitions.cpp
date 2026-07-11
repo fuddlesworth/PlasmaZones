@@ -545,7 +545,8 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
 
 bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                                               const PhosphorAnimationShaders::ShaderProfile& profile, int durationMs,
-                                              bool reverse, bool holdCloseGrab, bool holdAddedGrab)
+                                              bool reverse, bool holdCloseGrab, bool holdAddedGrab,
+                                              std::shared_ptr<const PhosphorAnimation::Curve> progressCurve)
 {
     const QString effectId = profile.effectiveEffectId();
     if (effectId.isEmpty() || !window)
@@ -1226,6 +1227,13 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (durationMs > 0) {
         transition.durationMs = durationMs;
         transition.startTimeMs = shaderClockNowMs();
+        // Per-event timing curve (global → "All" → node → rule). paintWindow
+        // eases the linear time progress through it. Stored only on the
+        // time-driven path; a durationMs == 0 animator-driven transition reads a
+        // curve-shaped value from the WindowAnimator, so a curve here would
+        // double-ease. Fresh CurveState for a stateful (spring) curve.
+        transition.progressCurve = std::move(progressCurve);
+        transition.progressCurveState = PhosphorAnimation::CurveState{};
     }
 
     // Claim the closing window for our shader animation. Done HERE — after
@@ -1700,6 +1708,16 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // (`OverrideAnimationTiming`) still layers on top (rule wins → per-event base
     // → global), matching the resolver's documented contract.
     const int baseDurationMs = resolveMotionTreeBaseDuration(profilePath, durationMs);
+    // Per-event timing curve for the time-driven shader path: the SAME global →
+    // "All" → node → rule cascade as the duration above, resolved through the
+    // shared SSOT. paintWindow eases the linear time progress through this so a
+    // node's curve (e.g. "Ease Out") shapes its shader `iTime` — matching the
+    // animator-driven snap path, which already animates on a curve-shaped value.
+    // resolveEventMotionProfile reuses the evaluator's cached rule walk
+    // (resolveCached with the same windowId/query), so this is not a second
+    // priority-order pass. Null → linear iTime (no curve set / empty tree).
+    const std::shared_ptr<const PhosphorAnimation::Curve> progressCurve =
+        resolveEventMotionProfile(profilePath, query, windowId).curve;
     // Combined cascade: ONE cached evaluator walk feeds BOTH the shader-slot
     // and timing-slot reads. The pre-refactor pair of `resolveAnimationShader
     // Profile` + `resolveAnimationDuration` ran two priority-order walks per
@@ -1725,6 +1743,19 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     int effectiveDurationMs = resolved.durationMs;
     if (effectiveDurationMs <= 0) {
         effectiveDurationMs = durationMs;
+    }
+    // A stateful (spring) timing curve derives its own timeline from its physics
+    // (omega / zeta), not the nominal duration slider — mirroring the
+    // AnimationProfileEditor's "Spring mode derives its own duration". Run the
+    // transition for the spring's analytical settle time so it rings out under
+    // paintWindow's per-frame step() instead of being cut at the easing
+    // duration. This lifetime drives BOTH the paint active-window and the
+    // teardown timer below, so the two stay in lockstep. Clamped to the same
+    // [Min, Max] envelope as every other duration path.
+    if (progressCurve && progressCurve->isStateful()) {
+        effectiveDurationMs =
+            qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, qRound(progressCurve->settleTime() * 1000.0),
+                   PhosphorAnimation::Limits::MaxAnimationDurationMs);
     }
     if (profile.effectiveEffectId().isEmpty()) {
         // Default-state path: a fresh user with no shader overrides
@@ -1759,8 +1790,8 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (!resolvedShaderAppliesToEvent(profile.effectiveEffectId(), profilePath)) {
         return;
     }
-    const bool installed =
-        beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab, holdAddedGrab);
+    const bool installed = beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab,
+                                                 holdAddedGrab, progressCurve);
     if (!installed) {
         // Either beginShaderTransition no-op'd (compile fail, invalid id,
         // collapsed surface, animations disabled) and there is nothing
@@ -2015,6 +2046,31 @@ int PlasmaZonesEffect::resolveMotionTreeBaseDuration(const QString& profilePath,
         cursor = parent;
     }
     return fallbackMs;
+}
+
+PhosphorAnimation::Profile PlasmaZonesEffect::resolveEventMotionProfile(const QString& profilePath,
+                                                                        const PhosphorRules::WindowQuery& query,
+                                                                        const QString& windowId) const
+{
+    // Cascade base: the WindowAnimator's global profile carries the authoritative
+    // global curve + duration (from animationEasingCurve / animationDuration).
+    const PhosphorAnimation::Profile& base = m_windowAnimator->profile();
+    // Category "All" → per-node: overlay only the motion-tree override chain for
+    // this path onto the global base (overlayChainOnto skips the tree's own
+    // baseline and returns base untouched when nothing in the chain overrides,
+    // so an empty tree keeps the animator's global). Gated on a non-empty
+    // override set to keep the default-state fast-path (no chain walk).
+    const auto& motionTree = m_shaderManager.motionProfileTree();
+    PhosphorAnimation::Profile resolved =
+        motionTree.overriddenPaths().isEmpty() ? base : motionTree.overlayChainOnto(profilePath, base);
+    // Rule override (top of the cascade): a per-window Timing / Curve rule for
+    // this (window, event) replaces the resolved curve / duration. Skipped for
+    // windowless events (desktop switch) and when no rules are configured.
+    if (query.hasWindow() && !m_shaderManager.animationRuleSet().isEmpty()) {
+        resolved = PlasmaZones::resolveAnimationMotionProfile(m_shaderManager.animationRuleEvaluator(), resolved, query,
+                                                              profilePath, windowId, m_curveRegistry);
+    }
+    return resolved;
 }
 
 void PlasmaZonesEffect::slotMotionProfileTreeChanged()

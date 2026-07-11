@@ -35,6 +35,20 @@ public:
     /// Curve may still be null if no chain member supplied one.
     Profile resolve(const QString& path) const;
 
+    /// Overlay ONLY this tree's override chain for @p path onto @p base — the
+    /// tree's own baseline is ignored and no library defaults are filled. Each
+    /// engaged override field (closest-to-root first, leaf wins) replaces the
+    /// matching field in @p base; fields no override in the chain sets keep
+    /// their value from @p base. Returns @p base unchanged when no node in the
+    /// chain has an override.
+    ///
+    /// Use this to layer per-event overrides on top of an externally-owned
+    /// base profile (e.g. a consumer that holds the authoritative "global"
+    /// elsewhere) without importing this tree's baseline — resolve() would
+    /// instead start from m_baseline and collapse an empty chain to the
+    /// library default.
+    Profile overlayChainOnto(const QString& path, Profile base) const;
+
     /// Direct override at @p path without walking parents.
     /// Use hasOverride() to distinguish absent from all-unset.
     Profile directOverride(const QString& path) const;

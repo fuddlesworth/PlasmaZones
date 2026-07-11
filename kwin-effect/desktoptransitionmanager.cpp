@@ -97,7 +97,8 @@ DesktopTransitionManager::~DesktopTransitionManager()
 }
 
 void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
-                                     const QString& effectId, const QVariantMap& params, int durationMs)
+                                     const QString& effectId, const QVariantMap& params, int durationMs,
+                                     std::shared_ptr<const PhosphorAnimation::Curve> progressCurve)
 {
     if (!from || !to || from == to || effectId.isEmpty()) {
         return; // nothing to animate (no shader assigned, or a no-op switch)
@@ -105,7 +106,14 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     // A non-positive resolve (corrupt/absent motion-tree node) falls back to the
     // default so the transition can't settle on its first paint (durationMs <= 0
     // would make elapsed >= durationMs true immediately).
-    const int effectiveDurationMs = durationMs > 0 ? durationMs : DefaultDurationMs;
+    int effectiveDurationMs = durationMs > 0 ? durationMs : DefaultDurationMs;
+    // A stateful (spring) timing curve derives its own timeline from its physics,
+    // not the nominal duration — run the switch for the spring's analytical
+    // settle time so it rings out under paintOutput's per-frame step() instead of
+    // being cut at the easing duration. Mirrors the per-window shader path.
+    if (progressCurve && progressCurve->isStateful()) {
+        effectiveDurationMs = qMax(1, qRound(progressCurve->settleTime() * 1000.0));
+    }
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
 
     // Resolve p_<name> parameter values into customParams[] slots. Same for
@@ -230,6 +238,7 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         tr.switchDelta = switchDelta;
         tr.startTimeMs = nowMs;
         tr.durationMs = effectiveDurationMs;
+        tr.progressCurve = progressCurve; // shapes iTime in paintOutput; null → linear
         tr.captured = false; // capture is deferred to the first paintOutput (live GL context)
         m_active.insert_or_assign(screen, std::move(tr));
     }
@@ -447,7 +456,26 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
         endOutput(screen);
         return false;
     }
-    const float t = tr.durationMs > 0 ? float(qBound<qreal>(0.0, qreal(elapsed) / qreal(tr.durationMs), 1.0)) : 1.0f;
+    // Ease the linear time progress through the per-event timing curve (resolved
+    // global → node → rule at begin time), so a `desktop.switch` node's curve
+    // (e.g. "Ease Out") shapes iTime — matching the per-window shader path. A
+    // stateless curve evaluates the linear point; a stateful spring integrates
+    // its CurveState toward target 1 by the inter-frame dt, mirroring
+    // AnimatedValue. Null curve → linear. Clamped to [0, 1] per the iTime
+    // contract. lastPaintTimeMs is advanced here, once per output paint tick.
+    const qreal linearT = tr.durationMs > 0 ? qBound<qreal>(0.0, qreal(elapsed) / qreal(tr.durationMs), 1.0) : 1.0;
+    qreal easedT = linearT;
+    if (tr.progressCurve) {
+        if (tr.progressCurve->isStateful()) {
+            const qreal dt = tr.lastPaintTimeMs < 0 ? 0.0 : qMax(0.0, qreal(nowMs - tr.lastPaintTimeMs) / 1000.0);
+            tr.progressCurve->step(dt, tr.progressCurveState, 1.0);
+            easedT = qBound<qreal>(0.0, tr.progressCurveState.value, 1.0);
+        } else {
+            easedT = qBound<qreal>(0.0, tr.progressCurve->evaluate(linearT), 1.0);
+        }
+    }
+    tr.lastPaintTimeMs = nowMs;
+    const float t = float(easedT);
 
     // Deferred capture (once). The OUTGOING desktop is no longer current, so its
     // windows are reconstructed via drawWindow. The INCOMING desktop IS the live

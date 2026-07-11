@@ -654,7 +654,30 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         if (transition.durationMs > 0) {
             const qint64 elapsed = frameNowMs - transition.startTimeMs;
             if (elapsed >= 0 && elapsed <= transition.durationMs) {
-                progress = qreal(elapsed) / qreal(transition.durationMs);
+                const qreal linear = qreal(elapsed) / qreal(transition.durationMs);
+                // Ease the linear time progress through the per-event timing
+                // curve (resolved global → "All" → node → rule at begin time),
+                // so a node's curve shapes its shader iTime exactly as it shapes
+                // the animator-driven branch below. A stateless curve evaluates
+                // the linear point directly; a stateful spring integrates its
+                // CurveState toward target 1 by the inter-frame dt (lastPaintTimeMs
+                // still holds the previous tick here — it is advanced further
+                // down alongside iTimeDelta), mirroring AnimatedValue::advance.
+                // Null curve → linear (unchanged). Clamped to [0, 1] per the
+                // iTime contract, matching the animator branch's qBound.
+                if (transition.progressCurve) {
+                    if (transition.progressCurve->isStateful()) {
+                        const qreal dt = transition.lastPaintTimeMs < 0
+                            ? 0.0
+                            : qMax(0.0, qreal(frameNowMs - transition.lastPaintTimeMs) / 1000.0);
+                        transition.progressCurve->step(dt, transition.progressCurveState, 1.0);
+                        progress = qBound(0.0, transition.progressCurveState.value, 1.0);
+                    } else {
+                        progress = qBound(0.0, transition.progressCurve->evaluate(linear), 1.0);
+                    }
+                } else {
+                    progress = linear;
+                }
                 active = true;
             } else if ((transition.holdUntilRelease || (transition.meshSim.initialized && !transition.meshSim.settled))
                        && elapsed > transition.durationMs) {

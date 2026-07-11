@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorAnimation/AnimationShaderContract.h> // kMaxCustomParams
+#include <PhosphorAnimation/Curve.h> // per-event timing curve + CurveState
 
 #include <QHash> // std::hash<QString> specialization (used by the unordered_map key below)
 #include <QString>
@@ -69,7 +70,8 @@ public:
     /// DefaultDurationMs). Capture is deferred to the first paintOutput() for each
     /// output, where a live GL context exists.
     void begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
-               const QString& effectId, const QVariantMap& params, int durationMs);
+               const QString& effectId, const QVariantMap& params, int durationMs,
+               std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
 
     /// True while any output has a live transition. Feeds PlasmaZonesEffect::isActive()
     /// so KWin keeps the effect in the paint chain.
@@ -151,6 +153,18 @@ private:
         QVector4D switchDelta;
         qint64 startTimeMs = 0;
         int durationMs = 0;
+        // Per-event timing curve for `desktop.switch` (global → node → rule; the
+        // desktop family has no "All" between switch and global). paintOutput
+        // eases the linear `elapsed / durationMs` through it before uploading
+        // iTime, so the node's curve (e.g. "Ease Out") shapes the switch exactly
+        // as it shapes the per-window shader path. Null → linear iTime.
+        std::shared_ptr<const PhosphorAnimation::Curve> progressCurve;
+        // Integration state for a STATEFUL (spring) progressCurve; stepped toward
+        // target 1 by the inter-frame dt in paintOutput. Unused for stateless.
+        PhosphorAnimation::CurveState progressCurveState;
+        // Previous paintOutput tick time (shader-clock ms) for the spring dt.
+        // -1 = no prior paint (first step gets dt 0).
+        qint64 lastPaintTimeMs = -1;
         // Monotonic paint counter uploaded as iFrame, so glitch-style desktop
         // packs get a per-frame stutter that is independent of the linear iTime
         // progress — matching the canonical animation contract's iFrame.

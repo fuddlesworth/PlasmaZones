@@ -5,6 +5,7 @@
 
 #include "mesh_sim.h"
 #include <PhosphorAnimation/AnimationShaderContract.h>
+#include <PhosphorAnimation/Curve.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 
 #include <opengl/glshader.h>
@@ -534,6 +535,21 @@ struct ShaderTransition
     ///   the geometry animation's timeline.
     qint64 startTimeMs = 0;
     int durationMs = 0;
+    /// Per-event timing curve resolved at begin time via the motion cascade
+    /// (global → category "All" → per-node, plus rule override). Shapes the
+    /// time-driven `iTime`: paintWindow eases the linear `elapsed / durationMs`
+    /// through this before feeding the shader, so a node's curve (e.g.
+    /// "Ease Out") applies to its shader transition exactly as it does to the
+    /// animator-driven snap path. Null means linear progress (no curve set /
+    /// unresolved). Only consulted on the `durationMs > 0` (time-driven) path;
+    /// the `durationMs == 0` animator-driven path already reads a curve-shaped
+    /// value from the WindowAnimator.
+    std::shared_ptr<const PhosphorAnimation::Curve> progressCurve;
+    /// Integration state for a STATEFUL `progressCurve` (spring/physics). Fresh
+    /// per install; paintWindow steps it toward target 1.0 by the inter-frame
+    /// dt and reads `.value` as progress, mirroring AnimatedValue. Unused for
+    /// stateless curves (they evaluate the linear progress directly).
+    PhosphorAnimation::CurveState progressCurveState;
     /// Monotonic per-window generation. Each `beginShaderTransition` bumps
     /// the counter for that window; the timer-driven `endShaderTransition`
     /// scheduled by `tryBeginShaderForEvent` captures the generation at

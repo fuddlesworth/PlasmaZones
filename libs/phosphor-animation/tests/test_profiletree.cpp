@@ -221,6 +221,87 @@ private Q_SLOTS:
         QCOMPARE(*resolved.sequenceMode, Profile::DefaultSequenceMode);
     }
 
+    // ─── overlayChainOnto ───
+
+    // The KWin effect holds the authoritative "global" motion profile in its
+    // WindowAnimator and needs only the per-event OVERRIDES layered on top —
+    // NOT the tree's own baseline. This is the movement-duration regression:
+    // a `window.movement` "All" override (curve + duration) must reach a
+    // `window.movement.snapIn` geometry animation.
+    void testOverlayChainOntoAppliesMovementAllToLeaf()
+    {
+        ProfileTree tree;
+
+        // Tree baseline is deliberately DIFFERENT from the caller's base to
+        // prove the baseline is ignored (the effect owns global elsewhere).
+        Profile treeBaseline;
+        treeBaseline.duration = 150.0;
+        tree.setBaseline(treeBaseline);
+
+        // The user's "All" window.movement override: 500 ms + a spring curve.
+        Profile movementAll;
+        movementAll.duration = 500.0;
+        movementAll.curve = std::make_shared<Spring>(Spring::snappy());
+        tree.setOverride(PP::WindowMovement, movementAll);
+
+        // Caller base = the animator's global profile (300 ms, easing).
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+        animatorGlobal.curve = std::make_shared<Easing>();
+
+        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        // Both axes come from the movement "All" node, NOT the tree baseline
+        // and NOT the caller's global.
+        QCOMPARE(*composed.duration, 500.0);
+        QVERIFY(composed.curve != nullptr);
+        QVERIFY(std::dynamic_pointer_cast<const Spring>(composed.curve) != nullptr);
+    }
+
+    // Leaf override wins over the "All" parent; a field the leaf leaves unset
+    // still inherits the parent's; a field neither sets keeps the caller base.
+    void testOverlayChainOntoLeafBeatsParentKeepsBaseForUnset()
+    {
+        ProfileTree tree;
+
+        Profile movementAll;
+        movementAll.duration = 500.0;
+        movementAll.staggerInterval = 60;
+        tree.setOverride(PP::WindowMovement, movementAll);
+
+        Profile leaf;
+        leaf.duration = 80.0; // leaf wins on duration
+        tree.setOverride(PP::WindowSnapIn, leaf);
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+        animatorGlobal.minDistance = 25; // set by nobody in the chain
+
+        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        QCOMPARE(*composed.duration, 80.0); // leaf
+        QCOMPARE(*composed.staggerInterval, 60); // parent "All"
+        QCOMPARE(*composed.minDistance, 25); // untouched caller base
+    }
+
+    // No override anywhere in the chain → the caller's base returns unchanged.
+    // This underpins the effect's fast-path gate (skip when the base is
+    // returned identical).
+    void testOverlayChainOntoNoOverrideReturnsBaseUnchanged()
+    {
+        ProfileTree tree;
+
+        // An override on an UNRELATED path must not leak into this chain.
+        Profile appearance;
+        appearance.duration = 900.0;
+        tree.setOverride(PP::WindowOpen, appearance);
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+        animatorGlobal.curve = std::make_shared<Easing>();
+
+        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        QVERIFY(composed == animatorGlobal);
+    }
+
     // ─── Mutation ───
 
     void testSetOverrideInsertsOnce()

@@ -735,6 +735,18 @@ private:
     // fallback stands. Used by tryBeginShaderForEvent (per-event transition
     // timing).
     int resolveMotionTreeBaseDuration(const QString& profilePath, int fallbackMs) const;
+    // Resolve the fully-cascaded motion Profile (curve + duration) for
+    // @p profilePath: global animator profile → category "All" → per-node
+    // motion-tree overrides → per-window Rule override. This is the single SSOT
+    // for the per-event timing cascade, shared by the animator-driven geometry
+    // path (applyWindowGeometry) and the time-driven shader path
+    // (tryBeginShaderForEvent) so both honour the same global → All → node
+    // resolution. Pass a windowless @p query (hasWindow() false) + empty
+    // @p windowId for events with no per-window rule scope (desktop switch);
+    // the Rule layer is then skipped and only the tree cascade applies.
+    PhosphorAnimation::Profile resolveEventMotionProfile(const QString& profilePath,
+                                                         const PhosphorRules::WindowQuery& query,
+                                                         const QString& windowId) const;
     // Cap on the per-frame ramp delta. A window at rest (value pinned at 0 or 1)
     // stops being force-repainted by windowSurfaceAnimates, so its FocusFadeState
     // `lastMs` goes stale; without this cap the first frame after a focus change
@@ -1394,7 +1406,8 @@ private:
     /// case (a).
     bool beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
-                               bool holdAddedGrab = false);
+                               bool holdAddedGrab = false,
+                               std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
     void endShaderTransition(KWin::EffectWindow* window);
 
     // First-frame open suppression — implementations in window_lifecycle.cpp.

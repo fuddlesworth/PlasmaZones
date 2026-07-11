@@ -614,8 +614,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // desktop switch too, not only a per-event override.
                 const int durationMs = resolveMotionTreeBaseDuration(PhosphorAnimation::ProfilePaths::DesktopSwitch,
                                                                      animationDurationMs());
+                // Per-event timing curve for the desktop switch: global → node →
+                // rule, resolved through the shared SSOT. desktop.switch is a
+                // windowless event (no per-window rule scope), so pass an empty
+                // WindowQuery — resolveEventMotionProfile then applies only the
+                // tree cascade (global → desktop.switch). paintOutput eases iTime
+                // through this so the node's curve shapes the switch.
+                const std::shared_ptr<const PhosphorAnimation::Curve> progressCurve =
+                    resolveEventMotionProfile(PhosphorAnimation::ProfilePaths::DesktopSwitch,
+                                              PhosphorRules::WindowQuery{}, QString())
+                        .curve;
                 m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, profile.effectiveParameters(),
-                                          durationMs);
+                                          durationMs, progressCurve);
             });
 
     // Reap any live desktop transition whose OUTGOING desktop is removed from the

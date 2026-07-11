@@ -51,6 +51,31 @@ Profile ProfileTree::resolve(const QString& path) const
     return effective.withDefaults();
 }
 
+Profile ProfileTree::overlayChainOnto(const QString& path, Profile base) const
+{
+    // Same closest-to-root-down chain as resolve(), but seeded with the
+    // caller's @p base instead of m_baseline and with NO withDefaults() fill:
+    // fields no override engages keep their @p base value. When the chain
+    // carries no override, @p base returns byte-for-byte unchanged, so a
+    // consumer holding the authoritative baseline elsewhere can gate the whole
+    // overlay on hasOverride/overriddenPaths and keep its fast path.
+    QString cursor = path;
+    QStringList chain;
+    while (!cursor.isEmpty()) {
+        chain.prepend(cursor);
+        cursor = ProfilePaths::parentPath(cursor);
+    }
+
+    for (const QString& step : chain) {
+        auto it = m_overrides.constFind(step);
+        if (it == m_overrides.constEnd()) {
+            continue;
+        }
+        overlay(base, it.value());
+    }
+    return base;
+}
+
 Profile ProfileTree::directOverride(const QString& path) const
 {
     return m_overrides.value(path);
