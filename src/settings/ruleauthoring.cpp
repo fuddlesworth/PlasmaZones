@@ -322,6 +322,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetRestoreSizeOnUnsnap && key == ActionParam::Value) {
         return PhosphorI18n::tr("Restore size on unsnap (off = keep zone size)");
     }
+    if (type == ActionType::SetWindowLayer && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Layer");
+    }
     // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
     // SetHideTitleBar is tri-state at the effect: rule absent = mode decides,
     // ON = hide, OFF = force the title bar visible even where the mode hides
@@ -579,6 +582,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetRestoreSizeOnUnsnap) {
         return PhosphorI18n::tr("Restore size on unsnap");
+    }
+    if (type == ActionType::SetWindowLayer) {
+        return PhosphorI18n::tr("Set window layer");
     }
     if (type == ActionType::OverrideAnimationShader) {
         return PhosphorI18n::tr("Override animation shader");
@@ -849,6 +855,17 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
         }
         if (wireValue == PhosphorRules::DragBehaviorToken::Reorder) {
             return PhosphorI18n::tr("Reorder in stack");
+        }
+    }
+    if (type == ActionType::SetWindowLayer && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::WindowLayerToken::Above) {
+            return PhosphorI18n::tr("Above other windows");
+        }
+        if (wireValue == PhosphorRules::WindowLayerToken::Normal) {
+            return PhosphorI18n::tr("Normal");
+        }
+        if (wireValue == PhosphorRules::WindowLayerToken::Below) {
+            return PhosphorI18n::tr("Below other windows");
         }
     }
     return wireValue;

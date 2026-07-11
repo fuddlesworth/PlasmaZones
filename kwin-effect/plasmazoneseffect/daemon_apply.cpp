@@ -599,6 +599,11 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
         // decoration state survives desktop switches, so reconcile it for the
         // window regardless of which desktop it sits on (as updateAllDecorations does).
         reconcileRuleHiddenTitleBar(windowId, w);
+        // Same for the stacking layer: a SetWindowLayer rule scoped on a
+        // placement field (IsFloating / IsTiled / IsSnapped / Zone / Mode) must
+        // re-apply on a float/snap flip — this is the trigger that makes
+        // "floating windows above tiled windows" follow the float toggle.
+        reconcileRuleWindowLayer(windowId, w);
         // An opacity-only (borderless) window needs an explicit repaint for its
         // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
         if (hasOpacity) {

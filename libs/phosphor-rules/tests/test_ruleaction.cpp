@@ -99,6 +99,9 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     // (managed-restore predicate / drag-out unsnap paths), like RestorePosition.
     ActionType::SetRestoreToZoneOnLogin,
     ActionType::SetRestoreSizeOnUnsnap,
+    // Stacking-layer override — window-domain, effect-consumed
+    // (reconcileRuleWindowLayer maps the token onto keepAbove/keepBelow).
+    ActionType::SetWindowLayer,
 };
 } // namespace
 
@@ -574,6 +577,40 @@ private Q_SLOTS:
             o.insert(QStringLiteral("value"), false);
             QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
         }
+    }
+
+    void testSetWindowLayer_tokenVocabularyAndSlot()
+    {
+        // Pin the complete recognised layer vocabulary (the DisableEngine
+        // token-pinning precedent — a future token addition must update this
+        // test). All three tokens validate, round-trip stably, and resolve
+        // the window-layer slot.
+        for (const QLatin1StringView token :
+             {WindowLayerToken::Above, WindowLayerToken::Normal, WindowLayerToken::Below}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString(ActionType::SetWindowLayer));
+            o.insert(QStringLiteral("value"), QString::fromLatin1(token.data(), token.size()));
+            const auto loaded = RuleAction::fromJson(o);
+            QVERIFY2(loaded.has_value(), token.data());
+            QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::WindowLayer));
+            const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+            QVERIFY2(roundTripped.has_value(), token.data());
+            QCOMPARE(*roundTripped, *loaded);
+        }
+
+        // Outside the closed vocabulary — rejected at load. The effect-side
+        // consumer maps an unknown token to "no override", so the load
+        // boundary must be the strict one: missing value, an unknown token,
+        // and non-string payloads all fail the descriptor validator.
+        QJsonObject bad;
+        bad.insert(QStringLiteral("type"), QString(ActionType::SetWindowLayer));
+        QVERIFY(!RuleAction::fromJson(bad).has_value()); // missing value
+        bad.insert(QStringLiteral("value"), QStringLiteral("topmost"));
+        QVERIFY(!RuleAction::fromJson(bad).has_value());
+        bad.insert(QStringLiteral("value"), true);
+        QVERIFY(!RuleAction::fromJson(bad).has_value());
+        bad.insert(QStringLiteral("value"), 2);
+        QVERIFY(!RuleAction::fromJson(bad).has_value());
     }
 
     // ── autotile parameter actions (context-domain) ──

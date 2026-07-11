@@ -464,6 +464,10 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return PhosphorI18n::tr("Drag: %1")
                 .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
         }
+        if (action.type == ActionType::SetWindowLayer) {
+            return PhosphorI18n::tr("Layer: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
         // ── overlay-appearance overrides (colours upper-cased hex; opacities
         //    are [0,1] on the wire, shown as a percent to match the editor) ──
         if (action.type == ActionType::SetOverlayHighlightColor) {

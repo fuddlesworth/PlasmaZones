@@ -968,6 +968,32 @@ void ActionRegistry::registerBuiltins()
         });
     }
 
+    // Per-window stacking-layer override. Effect-consumed (Tag::Effect admits it
+    // into the effect's rule set): reconcileRuleWindowLayer maps the token onto
+    // KWin's keepAbove/keepBelow pair, snapshotting the pre-rule flags so a rule
+    // that stops matching restores the user's own layer state. `above` is listed
+    // first so a fresh rule seeds the headline use case (floating windows above
+    // tiled windows, paired with an IsFloating match).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetWindowLayer),
+        .slotFor = constantSlot(ActionSlot::WindowLayer),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == WindowLayerToken::Above || v == WindowLayerToken::Normal || v == WindowLayerToken::Below;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(WindowLayerToken::Above), QString(WindowLayerToken::Normal),
+                                        QString(WindowLayerToken::Below)}}},
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 8,
+        .tags = {QString(Tag::Effect)},
+    });
+
     // ── per-window border / title-bar appearance slots (domain Window) ──
     // One slot per property so independent rules cascade per-property. The
     // effect (resolveWindowAppearance) reads these slots and merges them over

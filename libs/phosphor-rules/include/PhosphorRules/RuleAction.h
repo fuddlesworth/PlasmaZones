@@ -409,6 +409,18 @@ inline constexpr QLatin1StringView SetRestoreToZoneOnLogin{"setRestoreToZoneOnLo
 /// the drag-out / drop / cursor-left-zones unsnap paths. Domain Window.
 inline constexpr QLatin1StringView SetRestoreSizeOnUnsnap{"setRestoreSizeOnUnsnap"};
 
+/// Per-window stacking-layer override. Carries a closed enum token
+/// (`ActionParam::Value`, WindowLayerToken): `above` keeps the matched window
+/// above normal windows, `below` keeps it below, `normal` pins both flags off.
+/// Effect-consumed (reconcileRuleWindowLayer): the token maps onto KWin's
+/// keepAbove/keepBelow pair, BOTH flags are always written from the token (so
+/// a layer flip can never leave a stale opposite flag), the window's pre-rule
+/// flags are snapshotted on first application, and they are restored when no
+/// rule owns the layer any more. Combined with the IsFloating / IsTiled match
+/// fields this yields Krohnkite-style window layers ("floating windows above
+/// tiled windows"). Domain Window.
+inline constexpr QLatin1StringView SetWindowLayer{"setWindowLayer"};
+
 // ── Per-window border / title-bar appearance overrides (domain Window) ──
 // Effect-side per-window overrides of the global snap appearance. Each is its
 // own slot so independent rules cascade per-property (a width rule and a
@@ -575,6 +587,17 @@ inline constexpr QLatin1StringView Float{"float"}; ///< AutotileDragBehavior::Fl
 inline constexpr QLatin1StringView Reorder{"reorder"}; ///< Reorder (1)
 } // namespace DragBehaviorToken
 
+/// Wire tokens for SetWindowLayer's `value` param — the closed vocabulary the
+/// descriptor validator, the KWin-effect consumer (resolveWindowLayer), and the
+/// settings label layers all read from this single source. The tokens map onto
+/// KWin's keepAbove/keepBelow pair: above = keepAbove, below = keepBelow,
+/// normal = both off.
+namespace WindowLayerToken {
+inline constexpr QLatin1StringView Above{"above"};
+inline constexpr QLatin1StringView Normal{"normal"};
+inline constexpr QLatin1StringView Below{"below"};
+} // namespace WindowLayerToken
+
 /// Sentinel value a `SetBorderColorActive` / `SetBorderColorInactive` `value`
 /// param may carry instead of a hex string, meaning "track the live system
 /// accent colour". The
@@ -619,6 +642,9 @@ inline constexpr QLatin1StringView RestorePosition{"restore-position"};
 // SetRestoreToZoneOnLogin / SetRestoreSizeOnUnsnap, read daemon-side.
 inline constexpr QLatin1StringView RestoreToZoneOnLogin{"restore-to-zone-on-login"};
 inline constexpr QLatin1StringView RestoreSizeOnUnsnap{"restore-size-on-unsnap"};
+/// Window-scoped stacking-layer slot — filled by `ActionType::SetWindowLayer`,
+/// read by the KWin effect's reconcileRuleWindowLayer.
+inline constexpr QLatin1StringView WindowLayer{"window-layer"};
 // Per-window border / title-bar appearance slots (one per property so
 // independent rules cascade per-property).
 inline constexpr QLatin1StringView HideTitleBar{"hide-title-bar"};

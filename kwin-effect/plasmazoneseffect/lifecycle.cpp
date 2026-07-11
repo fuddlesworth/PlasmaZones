@@ -1087,6 +1087,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         m_snapHandler->clearSnapTracking();
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
+        restoreAllRuleWindowLayers();
         clearAllDecorations();
     }
 

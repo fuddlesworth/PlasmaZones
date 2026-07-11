@@ -149,6 +149,11 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     if (w->isOnCurrentDesktop()) {
         updateWindowDecoration(windowId, w);
     }
+    // Apply any SetWindowLayer rule to the new window right away (persistent
+    // window state, so NOT desktop-gated — matching updateAllDecorations'
+    // title-bar/layer handling). Placement-scoped layer rules re-reconcile
+    // when the async float/zone syncs land, via the placement-state flush.
+    reconcileRuleWindowLayer(windowId, w);
 
     bool onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
 
@@ -357,6 +362,10 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // force-show veto). forgetWindow makes zero compositor calls — the
     // decoration dies with the window.
     m_decorationManager->forgetWindow(closedWindowId);
+    // Drop the window's pre-rule layer snapshot the same way — no restore, the
+    // keepAbove/keepBelow flags die with the window, and a reused windowId
+    // must not inherit a stale snapshot.
+    m_ruleWindowLayerSnapshots.remove(closedWindowId);
 
     // Drop the window's border entry and release its border-shader redirect —
     // UNLESS a close transition was just installed above: renderSurfaceChain

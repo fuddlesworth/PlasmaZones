@@ -9,6 +9,7 @@
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
+#include <window.h>
 
 #include <epoxy/gl.h>
 
@@ -630,6 +631,11 @@ void PlasmaZonesEffect::updateAllDecorations()
             updateWindowDecoration(wid, w, previouslyDecorated.contains(wid));
         }
         reconcileRuleHiddenTitleBar(wid, w);
+        // Stacking layer is persistent window state like the title bar, so it
+        // reconciles for ALL windows regardless of desktop too — and the
+        // reconcile-to-unset restores a window whose SetWindowLayer rule was
+        // just removed, mirroring the title-bar note above.
+        reconcileRuleWindowLayer(wid, w);
     }
 }
 
@@ -649,6 +655,61 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     // veto-driven decoration flips.
     const ResolvedWindowAppearance ovr = resolveEffectiveWindowAppearance(w, windowId);
     m_decorationManager->setRuleOverride(windowId, ovr.hideTitleBar);
+}
+
+void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w)
+{
+    if (!w || w->isDeleted() || windowId.isEmpty()) {
+        return;
+    }
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        return;
+    }
+    const std::optional<QString> layer = resolveWindowLayer(resolveRuleActions(w, windowId));
+    const auto it = m_ruleWindowLayerSnapshots.find(windowId);
+    if (!layer) {
+        // No rule owns the layer. If one did before, put the user's own flags
+        // back exactly once and forget the window.
+        if (it != m_ruleWindowLayerSnapshots.end()) {
+            kw->setKeepAbove(it->keepAbove);
+            kw->setKeepBelow(it->keepBelow);
+            m_ruleWindowLayerSnapshots.erase(it);
+        }
+        return;
+    }
+    // First application snapshots the pre-rule flags so the restore above
+    // returns the window to the USER's state. Deliberately not re-captured
+    // while a rule owns the layer: a manual keepAbove toggle under an active
+    // rule is re-asserted away on the next reconcile (the rule owns the
+    // property while it matches, same as the DecorationManager rule override),
+    // and capturing it would corrupt the restore target.
+    if (it == m_ruleWindowLayerSnapshots.end()) {
+        m_ruleWindowLayerSnapshots.insert(windowId, {kw->keepAbove(), kw->keepBelow()});
+    }
+    // Always write the fully-specified pair. Writing only the token's "own"
+    // flag leaves the opposite one stale on an above→below rule flip (the
+    // Krohnkite asymmetry bug); KWin's setters are change-gated, so the
+    // re-asserts are free in the steady state.
+    const bool above = (*layer == PhosphorRules::WindowLayerToken::Above);
+    const bool below = (*layer == PhosphorRules::WindowLayerToken::Below);
+    kw->setKeepAbove(above);
+    kw->setKeepBelow(below);
+}
+
+void PlasmaZonesEffect::restoreAllRuleWindowLayers()
+{
+    const QHash<QString, WindowLayerSnapshot> snapshots = std::exchange(m_ruleWindowLayerSnapshots, {});
+    for (auto it = snapshots.cbegin(); it != snapshots.cend(); ++it) {
+        KWin::EffectWindow* w = findWindowById(it.key());
+        if (!w || w->isDeleted()) {
+            continue;
+        }
+        if (KWin::Window* kw = w->window()) {
+            kw->setKeepAbove(it->keepAbove);
+            kw->setKeepBelow(it->keepBelow);
+        }
+    }
 }
 
 bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const

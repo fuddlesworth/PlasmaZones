@@ -1276,6 +1276,32 @@ private:
     /// (unset = mode decides, true = rule hides, false = force-show veto).
     void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
 
+    /// Resolve the per-window-rule SetWindowLayer override for @p windowId and
+    /// apply it to KWin's keepAbove/keepBelow pair. First application snapshots
+    /// the window's pre-rule flags into m_ruleWindowLayerSnapshots; a resolve
+    /// with no owning rule restores that snapshot once and forgets the window.
+    /// Rides the same triggers as reconcileRuleHiddenTitleBar (window added,
+    /// placement-state flush, rule edits / focus via updateAllDecorations).
+    void reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w);
+
+    /// Restore every rule-applied window layer to its snapshotted pre-rule
+    /// flags and clear the snapshot map. Teardown counterpart of
+    /// reconcileRuleWindowLayer, called from the destructor next to
+    /// DecorationManager::restoreAll so an effect unload doesn't strand
+    /// rule-set keepAbove/keepBelow state on live windows.
+    void restoreAllRuleWindowLayers();
+
+    /// Pre-rule keepAbove/keepBelow pair captured the first time a
+    /// SetWindowLayer rule is applied to a window. Deliberately NOT re-captured
+    /// while a rule owns the layer, so the restore returns the window to the
+    /// user's own state, not to an intermediate rule state.
+    struct WindowLayerSnapshot
+    {
+        bool keepAbove = false;
+        bool keepBelow = false;
+    };
+    QHash<QString, WindowLayerSnapshot> m_ruleWindowLayerSnapshots;
+
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
     std::unique_ptr<SnapAssistHandler> m_snapAssistHandler;
