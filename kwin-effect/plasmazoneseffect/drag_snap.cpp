@@ -259,11 +259,11 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // the non-animated path just runs the moveResize without the snap
     // motion / shader.
     //
-    // BUT never let the snap/move geometry morph supersede an in-flight
+    // BUT never let the geometry morph supersede an in-flight
     // window.open animation. A window that is snapped / placed AS IT OPENS
     // (snap-restore, autotile, daemon placement) should show its OPEN animation
-    // at the snapped position, not a move morph — otherwise the geometry morph
-    // (the default for snap/move) installs over the just-started open transition
+    // at the snapped position, not a snap morph — otherwise the geometry morph
+    // (the snap default) installs over the just-started open transition
     // and the open animation never plays. The open transition holds the
     // WindowAddedGrabRole (addedGrabHeld), so detect it and fall through to the
     // instant-moveResize path below: the window jumps to its snapped geometry and
@@ -410,15 +410,17 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             const bool snapShaderApplies =
                 !snapShaderId.isEmpty() && resolvedShaderAppliesToEvent(snapShaderId, profilePath);
             if (!snapShaderApplies && !snapShaderId.isEmpty() && m_shaderManager.findTransition(window)) {
-                // A RETARGET resolved a refused pack while a morph from an
-                // earlier leg of this drag is still in flight (only reachable
-                // when the rule set or tree is edited mid-drag — every
-                // applyWindowGeometry path shares the geometry class, so the
-                // gate cannot flip between retargets otherwise). Tear the live
-                // transition down: skipping the block would leave mt->
-                // toGeometry stale, and the orphaned morph would keep painting
-                // toward the OLD target while the WindowAnimator (retargeted
-                // above) heads to the new one.
+                // A refused pack resolved while ANY transition is still live
+                // on this window — typically a morph from an earlier leg of
+                // this drag, but a settling wobble or an in-flight open/focus
+                // leg present at snap time is cleared the same way (only
+                // reachable when the rule set or tree is edited mid-drag —
+                // every applyWindowGeometry path shares the geometry class,
+                // so the gate cannot flip between retargets otherwise). Tear
+                // the live transition down for a clean slate: skipping the
+                // block would leave a stale morph painting toward the OLD
+                // target (mt->toGeometry never updated) while the
+                // WindowAnimator (retargeted above) heads to the new one.
                 endShaderTransition(window);
             }
             if (snapShaderApplies) {
