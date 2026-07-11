@@ -227,6 +227,13 @@ int main(int argc, char* argv[])
         return 2;
     }
 
+    bool stillHighlightOk = false;
+    const int stillHighlightZone = parser.value(stillHighlightOpt).toInt(&stillHighlightOk);
+    if (!stillHighlightOk || stillHighlightZone < 0) {
+        std::cerr << "error: --still-highlight must be a non-negative integer (0 = disabled)\n";
+        return 2;
+    }
+
     // ── Resolve inputs ───────────────────────────────────────────
     const QString shaderArg = parser.value(shaderOpt);
     const QString layoutArg = parser.value(layoutOpt);
@@ -291,13 +298,6 @@ int main(int argc, char* argv[])
     opts.frameCount = frameCount;
     opts.fps = fps;
     opts.audio = audio.get();
-
-    bool stillHighlightOk = false;
-    const int stillHighlightZone = parser.value(stillHighlightOpt).toInt(&stillHighlightOk);
-    if (!stillHighlightOk || stillHighlightZone < 0) {
-        std::cerr << "error: --still-highlight must be a non-negative integer (0 = disabled)\n";
-        return 2;
-    }
     opts.stillHighlightZone = stillHighlightZone;
 
     auto sink = PlasmaZones::ShaderRender::makeFrameSink(outPath, outputSize, fps);

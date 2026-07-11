@@ -169,7 +169,14 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
     if (obj.contains(QLatin1String("bufferShaders"))) {
         const QJsonArray arr = obj.value(QLatin1String("bufferShaders")).toArray();
         for (const auto& v : arr) {
-            out.bufferShaders.append(resolveRelative(metadataDir, v.toString()));
+            // resolveRelative returns an empty string for a rejected path
+            // traversal; skip those so the renderer never receives an empty
+            // buffer-pass path (the single-bufferShader form is guarded
+            // downstream by an isEmpty check, this list is not).
+            const QString resolved = resolveRelative(metadataDir, v.toString());
+            if (!resolved.isEmpty()) {
+                out.bufferShaders.append(resolved);
+            }
         }
     }
     if (obj.contains(QLatin1String("bufferWraps"))) {

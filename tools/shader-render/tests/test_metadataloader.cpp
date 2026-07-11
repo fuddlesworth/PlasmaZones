@@ -292,6 +292,32 @@ private Q_SLOTS:
         QVERIFY(mdSingle.bufferShaders.isEmpty());
     }
 
+    void traversalEscapeOnBufferShadersIsDropped()
+    {
+        // A bufferShaders entry that escapes the metadata directory is
+        // rejected by the traversal guard and must be skipped, not appended
+        // as an empty path the renderer would try to load. Entries that
+        // resolve inside the directory survive.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        writeFile(dir, QStringLiteral("bufA.frag"));
+        const QString path = writeMetadataJson(dir, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "effect.frag",
+            "multipass": true,
+            "bufferShaders": ["bufA.frag", "../../../etc/passwd"]
+        })"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+        QCOMPARE(md.bufferShaders.size(), 1);
+        QVERIFY(md.bufferShaders[0].endsWith(QStringLiteral("bufA.frag")));
+        for (const auto& bufPath : md.bufferShaders) {
+            QVERIFY(!bufPath.isEmpty());
+            QVERIFY(!bufPath.contains(QStringLiteral("/etc/")));
+        }
+    }
+
     void missingFragmentShaderFails()
     {
         QTemporaryDir dir;
