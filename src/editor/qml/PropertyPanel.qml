@@ -61,6 +61,20 @@ Rectangle {
         return ColorUtils.extractZoneColor(selectedZone, propertyName, Qt.transparent);
     }
 
+    // Imperative sync for the geometry controls. Their declarative bindings
+    // die on the first user edit (QQC2) or imperative write, so both the
+    // selection-change and zonesChanged paths re-apply the model state here.
+    function syncGeometryControls() {
+        if (!selectedZone)
+            return;
+
+        fixedGeometryCheck.checked = selectedZone.geometryMode === 1;
+        fixedXSpin.value = selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0;
+        fixedYSpin.value = selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0;
+        fixedWidthSpin.value = selectedZone.fixedWidth !== undefined ? selectedZone.fixedWidth : 50;
+        fixedHeightSpin.value = selectedZone.fixedHeight !== undefined ? selectedZone.fixedHeight : 50;
+    }
+
     // Layout properties
     Layout.preferredWidth: visible ? 280 : 0
     Layout.maximumWidth: visible ? 280 : 0
@@ -501,26 +515,20 @@ Rectangle {
                     }
                 }
 
-                // Sync spinbox values when zone data changes (undo/redo, external updates)
+                // Sync geometry controls when zone data changes (undo/redo, external
+                // updates). Includes the mode checkbox: its `checked` binding dies on
+                // the first manual toggle, so an undone/redone mode toggle must be
+                // reflected imperatively. Not gated on fixedGeometryCheck.checked for
+                // the same reason.
                 Connections {
                     function onZonesChanged() {
-                        if (!selectedZone || !fixedGeometryCheck.checked)
-                            return;
-
-                        // Use Qt.callLater to avoid binding loops
-                        Qt.callLater(function () {
-                            if (!selectedZone)
-                                return;
-
-                            fixedXSpin.value = selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0;
-                            fixedYSpin.value = selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0;
-                            fixedWidthSpin.value = selectedZone.fixedWidth !== undefined ? selectedZone.fixedWidth : 50;
-                            fixedHeightSpin.value = selectedZone.fixedHeight !== undefined ? selectedZone.fixedHeight : 50;
-                        });
+                        // Qt.callLater avoids binding loops, and the stable function
+                        // reference lets it coalesce bursts of zonesChanged into one sync.
+                        Qt.callLater(propertyPanel.syncGeometryControls);
                     }
 
                     target: editorController
-                    enabled: panelMode === "single" && fixedGeometryCheck.checked && editorController !== null
+                    enabled: panelMode === "single" && editorController !== null
                 }
 
                 // ═══════════════════════════════════════════════════════════════
@@ -774,11 +782,19 @@ Rectangle {
                 // Handle validation errors and selection changes
                 Connections {
                     function onSelectedZoneIdChanged() {
+                        // Re-sync every editable control imperatively: their
+                        // declarative bindings die on the first user edit (QQC2)
+                        // or imperative sync, after which a selection change
+                        // would keep showing the previous zone's values and any
+                        // edit would stamp those stale values onto the new zone.
+                        if (selectedZone) {
+                            zoneNameField.text = selectedZone.name || "";
+                            zoneNumberSpinBox.value = selectedZone.zoneNumber || 1;
+                        }
+                        propertyPanel.syncGeometryControls();
                         zoneNameField.updateTimer.stop();
                         zoneNameField.validationError = "";
                         zoneNumberSpinBox.validationError = "";
-                        if (selectedZone)
-                            zoneNumberSpinBox.value = selectedZone.zoneNumber || 1;
                     }
 
                     function onZoneNameValidationError(zoneId, error) {
