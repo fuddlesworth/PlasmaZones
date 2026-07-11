@@ -130,7 +130,8 @@ struct PHOSPHORRULES_EXPORT ParamSchema
 // ExcludeAnimations) are exactly Tag::Animation ∩ Tag::Effect.
 namespace Tag {
 /// Actions consumed by the KWin effect's rule set (shader manager +
-/// border appearance). ExcludeAnimations deliberately omits this tag.
+/// border appearance + window stacking layer). ExcludeAnimations
+/// deliberately omits this tag.
 inline constexpr QLatin1StringView Effect{"effect"};
 inline constexpr QLatin1StringView Border{"border"};
 inline constexpr QLatin1StringView Animation{"animation"};

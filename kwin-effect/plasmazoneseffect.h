@@ -1290,9 +1290,16 @@ private:
     /// rule-written values substituted from the pre-rule snapshot while a
     /// SetWindowLayer rule owns the window's layer. Consulted by the
     /// keep-above overlay-tool gates (shouldHandleWindow / shouldDecorateWindow
-    /// / isTileableWindow) and mirrored into ruleQuery's KeepAbove/KeepBelow
-    /// fields so rule output never feeds back into rule input.
+    /// / isTileableWindow); applyOwnLayerFlags is the query-side counterpart.
     bool windowOwnKeepAbove(KWin::EffectWindow* w) const;
+
+    /// Substitute the pre-rule snapshot's keepAbove/keepBelow pair into
+    /// @p query while a SetWindowLayer rule owns @p windowId's layer, so rule
+    /// output never feeds back into rule input. Shared by ruleQuery (the
+    /// effect's live evaluation path) and pushWindowMetadata (the daemon's
+    /// KeepAbove/KeepBelow match inputs) — the one invariant lives in one
+    /// place. No-op with no snapshots (the no-rules case pays one isEmpty).
+    void applyOwnLayerFlags(PhosphorRules::WindowQuery& query, const QString& windowId) const;
 
     /// Restore every rule-applied window layer to its snapshotted pre-rule
     /// flags and clear the snapshot map. Teardown counterpart of

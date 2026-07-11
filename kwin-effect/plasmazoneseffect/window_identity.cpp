@@ -146,17 +146,11 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
     QVariantMap extended;
     if (includeExtended) {
         PhosphorRules::WindowQuery props = ruleQueryFor(w, QString(), false, false, false, QString());
-        // Same substitution ruleQuery applies (see windowOwnKeepAbove): while
-        // a SetWindowLayer rule owns the window's keepAbove/keepBelow pair,
-        // the live flags are rule output. The daemon matches its own
-        // KeepAbove/KeepBelow predicates against this metadata, so report the
-        // window's own (pre-rule) flags to keep rule output out of rule input
-        // on that side of the boundary too.
-        if (const auto layerIt = m_ruleWindowLayerSnapshots.constFind(getWindowId(w));
-            layerIt != m_ruleWindowLayerSnapshots.cend()) {
-            props.keepAbove = layerIt->keepAbove;
-            props.keepBelow = layerIt->keepBelow;
-        }
+        // Report the window's OWN (pre-rule) keepAbove/keepBelow — the daemon
+        // matches its KeepAbove/KeepBelow predicates against this metadata,
+        // and rule output must not feed rule input on that side of the
+        // boundary either. Shared invariant; see applyOwnLayerFlags.
+        applyOwnLayerFlags(props, getWindowId(w));
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
         if (props.isMinimized) {
             extended.insert(Key::IsMinimized, *props.isMinimized);

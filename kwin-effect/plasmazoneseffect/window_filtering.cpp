@@ -126,6 +126,12 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
     PhosphorRules::WindowQuery query =
         ruleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
                      m_autotileHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    applyOwnLayerFlags(query, windowId);
+    return query;
+}
+
+void PlasmaZonesEffect::applyOwnLayerFlags(PhosphorRules::WindowQuery& query, const QString& windowId) const
+{
     // KeepAbove / KeepBelow must report the window's OWN flags, not
     // rule-written state. SetWindowLayer is the one action that mutates a
     // matchable field: while a layer rule owns the pair, the live KWin flags
@@ -133,12 +139,16 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
     // a `WHEN KeepAbove` predicate read its own effect — a self-feeding match
     // that flips on every cache flush and thrashes the snapshot restore. The
     // pre-rule snapshot holds the app/user-set values, so substitute those
-    // while the rule owns the layer.
+    // while the rule owns the layer. Applied to BOTH rule-input boundaries:
+    // ruleQuery (effect-side evaluation) and pushWindowMetadata (the daemon's
+    // KeepAbove/KeepBelow match inputs).
+    if (m_ruleWindowLayerSnapshots.isEmpty()) {
+        return;
+    }
     if (const auto it = m_ruleWindowLayerSnapshots.constFind(windowId); it != m_ruleWindowLayerSnapshots.cend()) {
         query.keepAbove = it->keepAbove;
         query.keepBelow = it->keepBelow;
     }
-    return query;
 }
 
 bool PlasmaZonesEffect::windowOwnKeepAbove(KWin::EffectWindow* w) const
