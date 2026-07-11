@@ -18,7 +18,7 @@ namespace PlasmaZones {
  * shared bake cache. Safe to call from any thread (e.g. after ShaderRegistry::refresh()).
  *
  * The PlasmaZones-specific bit is the include-path discovery — the daemon installs
- * its bundled shaders under "plasmazones/shaders". The render-node class itself
+ * its bundled shaders under "plasmazones/overlays". The render-node class itself
  * (`PhosphorRendering::ZoneShaderNodeRhi`) is shared with the broader rendering
  * library; callers reference it via its full qualified name.
  *
