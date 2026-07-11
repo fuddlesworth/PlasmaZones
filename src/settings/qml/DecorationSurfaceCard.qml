@@ -148,6 +148,7 @@ Item {
 
         anchors.fill: parent
         headerText: root.cardLabel
+        collapsible: true
         // alwaysEnabled roots have nothing to inherit, so no override toggle —
         // mirrors AnimationEventCard's alwaysEnabled global root.
         showToggle: !root.alwaysEnabled
