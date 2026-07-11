@@ -333,7 +333,8 @@ private Q_SLOTS:
         // A snap event without its own override still gets the default.
         QCOMPARE(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn).effectiveEffectId(),
                  QStringLiteral("window-morph"));
-        // A non-move window event correctly stays None under the category None.
+        // A non-snap window event (no built-in default) correctly stays None
+        // under the category None.
         QVERIFY(
             PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMinimize).effectiveEffectId().isEmpty());
         // A per-event None under the category still wins (no default).

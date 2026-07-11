@@ -832,9 +832,10 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAnchorPosInFbo);
         cached.iAnchorRectInTextureLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAnchorRectInTexture);
-        // Geometry-morph uniforms (window move/resize cross-fade). -1 when
-        // the shader is not a morph shader (doesn't read them) — paintWindow
-        // guards on >= 0 so non-morph transitions pay nothing.
+        // Geometry-morph uniforms (snap / maximize / layout-switch
+        // cross-fade). -1 when the shader is not a morph shader (doesn't
+        // read them) — paintWindow guards on >= 0 so non-morph transitions
+        // pay nothing.
         cached.iFromRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIFromRect);
         cached.iToRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIToRect);
         cached.iOldWindowLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUOldWindow);

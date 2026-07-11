@@ -195,6 +195,46 @@ private Q_SLOTS:
                  QStringLiteral("pixelate"));
     }
 
+    /// Runtime-truth mirror in resolvedShaderProfile: a PERSISTED effect the
+    /// registry knows but that provably cannot drive its event (the same
+    /// canonical-predicate check the compositor's resolvedShaderAppliesToEvent
+    /// gate applies) is blanked from the VIEW, while the persisted override
+    /// itself stays untouched so the state self-heals on the user's next
+    /// pick. An applicable pack is returned unchanged. Unknown ids passing
+    /// through mid-warmup is pinned by the empty-registry tests above, where
+    /// hasEffect is false for every id.
+    void resolvedShaderProfile_blanksInapplicablePersistedEffect()
+    {
+        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        if (!QDir(dataDir).exists())
+            QSKIP("data/animations not found — running outside source tree");
+
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off); // synchronous initial scan
+        AnimationsPageController c(&registry, &settings);
+
+        // window-morph declares appliesTo ["geometry"]; window.appearance.open
+        // is an appearance leg — a provable class mismatch. Only a stale or
+        // hand-edited config can produce this shape (the picker filters it),
+        // and setShaderOverride's gate is unknown-id only, so the write lands.
+        QVERIFY2(registry.hasEffect(QStringLiteral("window-morph")), "precondition: bundled pack scanned");
+        const QString path = QStringLiteral("window.appearance.open");
+        QVERIFY(c.setShaderOverride(path, QStringLiteral("window-morph"), {}));
+
+        // Persisted override untouched...
+        QCOMPARE(c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString(), QStringLiteral("window-morph"));
+        // ...but the resolved VIEW blanks the id.
+        QVERIFY(c.resolvedShaderProfile(path).value(QStringLiteral("effectId")).toString().isEmpty());
+
+        // Symmetric positive: an applicable pack is returned unchanged.
+        QVERIFY(registry.hasEffect(QStringLiteral("dissolve")));
+        QVERIFY(c.setShaderOverride(path, QStringLiteral("dissolve"), {}));
+        QCOMPARE(c.resolvedShaderProfile(path).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("dissolve"));
+    }
+
     /// User-reported scenario: parent ("All Window Events" / "All
     /// Popups" / etc.) has an explicit shader. The user wants to override
     /// a CHILD event with a different shader. Each step's resolution

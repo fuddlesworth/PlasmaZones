@@ -388,8 +388,8 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             auto shaderProfile = resolved.profile;
             if (!resolved.shaderSlotFromRule && shaderProfile.effectiveEffectId().isEmpty()) {
                 // No rule matched and no tree override resolved a shader for
-                // this move event — apply the built-in per-event default
-                // (window-morph for snap/move/resize) via the shared SSOT,
+                // this snap event — apply the built-in per-event default
+                // (window-morph for snap / layoutSwitch) via the shared SSOT,
                 // which respects an explicit tree "None". Keeps the default
                 // consistent with what the settings UI shows
                 // (resolvedShaderProfile uses the same helper) without
@@ -406,8 +406,22 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // Refusing here keeps the C++ WindowAnimator geometry animation
             // as the fallback instead of paying capture + paint cost for an
             // identity no-op transition.
-            if (!shaderProfile.effectiveEffectId().isEmpty()
-                && resolvedShaderAppliesToEvent(shaderProfile.effectiveEffectId(), profilePath)) {
+            const QString snapShaderId = shaderProfile.effectiveEffectId();
+            const bool snapShaderApplies =
+                !snapShaderId.isEmpty() && resolvedShaderAppliesToEvent(snapShaderId, profilePath);
+            if (!snapShaderApplies && !snapShaderId.isEmpty() && m_shaderManager.findTransition(window)) {
+                // A RETARGET resolved a refused pack while a morph from an
+                // earlier leg of this drag is still in flight (only reachable
+                // when the rule set or tree is edited mid-drag — every
+                // applyWindowGeometry path shares the geometry class, so the
+                // gate cannot flip between retargets otherwise). Tear the live
+                // transition down: skipping the block would leave mt->
+                // toGeometry stale, and the orphaned morph would keep painting
+                // toward the OLD target while the WindowAnimator (retargeted
+                // above) heads to the new one.
+                endShaderTransition(window);
+            }
+            if (snapShaderApplies) {
                 beginShaderTransition(window, shaderProfile);
                 // If the installed shader is a geometry morph (declares
                 // iFromRect), hand it the old/new frames and request the
