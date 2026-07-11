@@ -196,6 +196,31 @@ private Q_SLOTS:
         QCOMPARE(md.customParams[0].x(), -1.0f);
     }
 
+    void unknownTypeStillClaimsLane()
+    {
+        // An unknown-type param claims a scalar lane (the registry pools
+        // unknown types as scalar) even though its value is never seeded, so
+        // a float declared after it lands on the NEXT lane — the same
+        // numbering the p_<id> preamble uses.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        writeFile(dir, QStringLiteral("zone.vert"));
+        const QString path = writeMetadataJson(dir, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "effect.frag",
+            "vertexShader": "zone.vert",
+            "parameters": [
+                {"id": "weird", "type": "matrix3", "default": 1.0},
+                {"id": "speed", "type": "float", "default": 5.0}
+            ]
+        })"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+        QCOMPARE(md.customParams[0].x(), -1.0f); // weird claimed lane 0, unseeded
+        QCOMPARE(md.customParams[0].y(), 5.0f); // speed packs into lane 1
+    }
+
     void malformedJsonFails()
     {
         // A file that isn't parseable JSON must be rejected at the boundary
@@ -236,7 +261,8 @@ private Q_SLOTS:
             "fragmentShader": "effect.frag",
             "multipass": true,
             "bufferShaders": ["bufA.frag", "bufB.frag"],
-            "bufferWraps": ["repeat", "clamp"]
+            "bufferWraps": ["repeat", "clamp"],
+            "bufferFilters": ["nearest", "linear"]
         })"));
 
         PlasmaZones::ShaderRender::ShaderMetadata md;
@@ -247,6 +273,8 @@ private Q_SLOTS:
         QVERIFY(md.bufferShaders[1].endsWith(QStringLiteral("bufB.frag")));
         const QStringList expectedWraps{QStringLiteral("repeat"), QStringLiteral("clamp")};
         QCOMPARE(md.bufferWraps, expectedWraps);
+        const QStringList expectedFilters{QStringLiteral("nearest"), QStringLiteral("linear")};
+        QCOMPARE(md.bufferFilters, expectedFilters);
 
         QTemporaryDir dir2;
         writeFile(dir2, QStringLiteral("effect.frag"));

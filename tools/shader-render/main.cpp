@@ -238,6 +238,16 @@ int main(int argc, char* argv[])
         std::cerr << "error: shader metadata not found: " << metadataPath.toStdString() << "\n";
         return 1;
     }
+    // The pack layout contract requires the exact name metadata.json: both
+    // the parameter-defaults loader and the renderer's p_<id> preamble
+    // re-read <dir>/metadata.json by that name, so accepting another
+    // basename would seed top-level fields from one file and parameters
+    // from another. Reject at the boundary with a clear message instead.
+    if (QFileInfo(metadataPath).fileName() != QLatin1String("metadata.json")) {
+        std::cerr << "error: --shader path must point at a file named metadata.json, got "
+                  << QFileInfo(metadataPath).fileName().toStdString() << "\n";
+        return 2;
+    }
 
     const QString layoutPath = resolveLayoutPath(layoutArg, layoutDir);
     if (!QFileInfo::exists(layoutPath)) {

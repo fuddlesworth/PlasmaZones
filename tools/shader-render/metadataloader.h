@@ -95,9 +95,10 @@ struct ShaderMetadata
 /**
  * @brief Parse data/shaders/<id>/metadata.json into ShaderMetadata.
  *
- * Returns false if the file is missing, malformed, doesn't declare a
- * fragment shader, the declared fragment shader does not exist on disk,
- * or the pack's parameter metadata fails to parse. Parameter parsing
+ * Returns false if the file is missing, malformed, the fragment shader
+ * (declared, or the effect.frag default when the field is omitted) does
+ * not exist on disk, or the pack's parameter metadata fails to parse.
+ * Parameter parsing
  * re-reads `metadata.json` from the file's directory (see below), so the
  * metadata file must carry that exact name — the same pack layout
  * contract the renderer's preamble path relies on. All path fields are
