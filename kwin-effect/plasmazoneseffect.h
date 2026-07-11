@@ -1370,6 +1370,17 @@ private:
     /// snap chokepoint) against rule-layer and stale-config assignments the
     /// pickers cannot intercept.
     bool resolvedShaderAppliesToEvent(const QString& effectId, const QString& profilePath) const;
+    // window.maximize / window.unmaximize shader install + geometry-morph
+    // endpoint wiring. `departureFrame` is the frame rect the window is
+    // leaving (the pre-maximize float rect when maximizing, the maximized
+    // rect when restoring); the destination is read live. Both directions
+    // play FORWARD — geometry packs encode direction in the rects, matching
+    // the zone-snap convention (see the implementation comment). Called
+    // either directly from the maximize state edge (geometry already landed)
+    // or deferred to the size-delivering windowFrameGeometryChanged when the
+    // state signal outran the client's commit. Implementation in
+    // window_lifecycle.cpp beside its two call sites.
+    void beginMaximizeShaderMorph(KWin::EffectWindow* window, const QRectF& departureFrame);
     void evictLruTextureIfOverBound();
     void warmUserTextureAsync(const QString& absolutePath);
 

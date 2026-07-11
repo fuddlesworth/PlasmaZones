@@ -35,7 +35,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - **Dragging a window stuttered at the start and end of the drag on disks with slow write flushing**: the daemon bound a temporary global Escape shortcut on every drag and released it on drop, and each bind made KWin rewrite its shortcut config to disk with an fsync. On a drive with slow flush latency that briefly stalled the compositor at pickup and at drop, while a continuous drag stayed smooth. The per-drag binding is gone, because the KWin effect already grabs Escape for the whole drag, so dragging is smooth regardless of disk. Thanks @arinl for the report and the bpftrace diagnosis ([#714](https://github.com/fuddlesworth/PlasmaZones/pull/714), [discussion #167](https://github.com/fuddlesworth/PlasmaZones/discussions/167)).
-
+- **Maximize and restore animations never played**: maximizing a window with an animation assigned made it vanish for the length of the animation and pop in at full size, and restoring played the wrong motion with every pack except Window morph. The maximize event never told the animation which rectangles it was moving between, and the restore leg ran the timeline backwards for the grid-deformation packs. Both directions now morph between the old and new frame with any geometry pack. Restore also waits for the window's real size change before starting, so an app that is slow to shrink no longer snaps first and animates late, and dragging a maximized window free by its title bar no longer fires a stray maximize animation over the drag ([#755](https://github.com/fuddlesworth/PlasmaZones/pull/755)).
 ## [3.1.2] - 2026-06-25
 
 ### Fixed
