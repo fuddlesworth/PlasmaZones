@@ -218,7 +218,7 @@ SettingsFlickable {
                     SettingsRow {
                         title: i18n("Noise reduction")
                         searchAnchor: "audioNoiseReduction"
-                        description: i18n("How smoothly the bars respond. Higher values are slower and calmer, lower values are fast and twitchy.")
+                        description: i18n("How smoothly the bars respond. Higher values are slower and calmer while lower values are fast and twitchy.")
 
                         SettingsSlider {
                             from: root.effectsBridge.audioNoiseReductionMin

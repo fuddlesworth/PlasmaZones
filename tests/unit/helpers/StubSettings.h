@@ -345,93 +345,96 @@ public:
     void setEnableAudioVisualizer(bool) override
     {
     }
+    // Audio spectrum (Shaders.Audio) — routed through ConfigDefaults so a
+    // future default tweak flows into tests automatically (the file's
+    // standing anti-drift convention).
     int audioSpectrumBarCount() const override
     {
-        return 64;
+        return ConfigDefaults::audioSpectrumBarCount();
     }
     void setAudioSpectrumBarCount(int) override
     {
     }
     bool audioAutosens() const override
     {
-        return true;
+        return ConfigDefaults::audioAutosens();
     }
     void setAudioAutosens(bool) override
     {
     }
     int audioSensitivity() const override
     {
-        return 100;
+        return ConfigDefaults::audioSensitivity();
     }
     void setAudioSensitivity(int) override
     {
     }
     int audioNoiseReduction() const override
     {
-        return 77;
+        return ConfigDefaults::audioNoiseReduction();
     }
     void setAudioNoiseReduction(int) override
     {
     }
     int audioLowerCutoffHz() const override
     {
-        return 50;
+        return ConfigDefaults::audioLowerCutoffHz();
     }
     void setAudioLowerCutoffHz(int) override
     {
     }
     int audioHigherCutoffHz() const override
     {
-        return 10000;
+        return ConfigDefaults::audioHigherCutoffHz();
     }
     void setAudioHigherCutoffHz(int) override
     {
     }
     bool audioMonstercat() const override
     {
-        return false;
+        return ConfigDefaults::audioMonstercat();
     }
     void setAudioMonstercat(bool) override
     {
     }
     bool audioWaves() const override
     {
-        return false;
+        return ConfigDefaults::audioWaves();
     }
     void setAudioWaves(bool) override
     {
     }
     QString audioChannelMode() const override
     {
-        return QStringLiteral("stereo");
+        return ConfigDefaults::audioChannelMode();
     }
     void setAudioChannelMode(const QString&) override
     {
     }
     bool audioReverse() const override
     {
-        return false;
+        return ConfigDefaults::audioReverse();
     }
     void setAudioReverse(bool) override
     {
     }
     int audioExtraSmoothing() const override
     {
-        return 50;
+        return ConfigDefaults::audioExtraSmoothing();
     }
     void setAudioExtraSmoothing(int) override
     {
     }
     QString audioInputMethod() const override
     {
-        return QStringLiteral("auto");
+        return ConfigDefaults::audioInputMethod();
     }
     void setAudioInputMethod(const QString&) override
     {
     }
     QString audioInputSource() const override
     {
-        return QStringLiteral("auto");
+        return ConfigDefaults::audioInputSource();
     }
     void setAudioInputSource(const QString&) override
     {

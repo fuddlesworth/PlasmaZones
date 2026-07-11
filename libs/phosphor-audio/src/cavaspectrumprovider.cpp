@@ -370,6 +370,13 @@ void CavaSpectrumProvider::onProcessFinished(int exitCode, QProcess::ExitStatus 
 
 void CavaSpectrumProvider::onProcessError(QProcess::ProcessError error)
 {
+    // A start that never produced a process cannot produce the finished()
+    // a pending restart waits on (and the kill-escalation timer's
+    // state-check won't fire either), so clear the flag here or it would
+    // latch and block every future restart.
+    if (error == QProcess::FailedToStart) {
+        m_pendingRestart = false;
+    }
     if (m_stopping || m_pendingRestart) {
         return;
     }
