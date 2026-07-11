@@ -1,0 +1,73 @@
+{
+    "id": "phosphor-bloom",
+    "name": "Phosphor Bloom",
+    "description": "The window fills with light along a diagonal sweep in the official Phosphor style. Ahead of the front the surface is a dark navy silhouette, and the front itself carries the brand gradient from cyan to rose with a soft shimmering glow.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Reveal",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "bandWidth",
+            "name": "Front Width",
+            "type": "float",
+            "default": 0.24,
+            "min": 0.05,
+            "max": 0.6
+        },
+        {
+            "id": "ripple",
+            "name": "Front Ripple",
+            "type": "float",
+            "default": 0.3,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "unlitDim",
+            "name": "Silhouette Strength",
+            "type": "float",
+            "default": 0.25,
+            "min": 0.0,
+            "max": 0.8
+        },
+        {
+            "id": "glow",
+            "name": "Front Glow",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "colorCyan",
+            "name": "Gradient Cyan",
+            "type": "color",
+            "default": "#22D3EE"
+        },
+        {
+            "id": "colorBlue",
+            "name": "Gradient Blue",
+            "type": "color",
+            "default": "#3B82F6"
+        },
+        {
+            "id": "colorPurple",
+            "name": "Gradient Purple",
+            "type": "color",
+            "default": "#A855F7"
+        },
+        {
+            "id": "colorRose",
+            "name": "Gradient Rose",
+            "type": "color",
+            "default": "#F43F5E"
+        },
+        {
+            "id": "colorTint",
+            "name": "Silhouette Tint",
+            "type": "color",
+            "default": "#0B1730"
+        }
+    ]
+}
