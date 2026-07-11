@@ -143,6 +143,9 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
 
 bool PlasmaZonesEffect::windowOwnKeepAbove(KWin::EffectWindow* w) const
 {
+    if (!w) {
+        return false;
+    }
     // The window's OWN keep-above flag — the app/user-set state, excluding
     // rule-written values. The keep-above overlay gates (shouldHandleWindow /
     // shouldDecorateWindow / isTileableWindow) exist to reject external
