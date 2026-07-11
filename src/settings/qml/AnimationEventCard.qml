@@ -43,6 +43,10 @@ Item {
     property bool isParentNode: false
     property bool alwaysEnabled: false
     property bool collapsible: false
+    /// The card's hosting SettingsCard. The virtualized card list re-registers
+    /// its search anchor against this once the card builds, so a deep-link
+    /// reveal can expand the card when it's collapsed.
+    readonly property Item settingsCard: card
     // ── Internal state — one source of truth per UX axis ────────────
     // The on-disk schema is `Profile::toJson()` — a single `curve`
     // string that's either an easing wire format ("x1,y1,x2,y2",

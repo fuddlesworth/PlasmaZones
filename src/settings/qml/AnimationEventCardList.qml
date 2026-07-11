@@ -178,6 +178,19 @@ SettingsFlickable {
                     if (pg)
                         pg.unregisterSearchAnchor(cardLoader.searchAnchor);
                 }
+                // Once the card is built, re-register the anchor WITH its
+                // SettingsCard so revealAnchor can expand a collapsed card
+                // before scrolling (the initial registration passes a null
+                // card because the card doesn't exist until it scrolls in).
+                onLoaded: {
+                    if (!cardLoader.searchable)
+                        return;
+
+                    var pg = SearchAnchors.pageFor(cardLoader);
+                    var built = cardLoader.item as AnimationEventCard;
+                    if (pg && built)
+                        pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader, built.settingsCard);
+                }
 
                 Connections {
                     target: page
@@ -196,6 +209,7 @@ SettingsFlickable {
                     eventPath: cardLoader.modelData.eventPath
                     eventLabel: cardLoader.modelData.eventLabel
                     isParentNode: cardLoader.modelData.isParentNode === true
+                    collapsible: true
                 }
             }
         }

@@ -419,6 +419,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("User shaders")
+            collapsible: true
             searchAnchor: "userShaders"
 
             contentItem: ColumnLayout {
