@@ -240,11 +240,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("general"), QStringLiteral("minimumWindowHeight"),
                PhosphorI18n::tr("Minimum window height"),
                {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("short"), PhosphorI18n::tr("size")});
-    addSection(search, QStringLiteral("general"), QStringLiteral("configuration"), PhosphorI18n::tr("Configuration"));
-    addSetting(search, QStringLiteral("general"), QStringLiteral("backup"), PhosphorI18n::tr("Backup"),
-               {PhosphorI18n::tr("export"), PhosphorI18n::tr("save"), PhosphorI18n::tr("config")});
-    addSetting(search, QStringLiteral("general"), QStringLiteral("restore"), PhosphorI18n::tr("Restore"),
-               {PhosphorI18n::tr("import"), PhosphorI18n::tr("load"), PhosphorI18n::tr("config")});
     addSetting(search, QStringLiteral("general"), QStringLiteral("resetDefaults"), PhosphorI18n::tr("Reset"),
                {PhosphorI18n::tr("reset to defaults"), PhosphorI18n::tr("defaults"), PhosphorI18n::tr("restore")});
 
