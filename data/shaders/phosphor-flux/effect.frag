@@ -310,10 +310,10 @@ vec3 signalGraph(vec2 screenUV, float t, float diag,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// LAYER 3: CONTAINMENT SHELLS  (nested rounded-rect strokes, PhosphorShell motif)
+// LAYER 4: CONTAINMENT SHELLS  (nested rounded-rect strokes, PhosphorShell motif)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-vec3 shellStrokes(float d, float diag, float t, vec2 rectSize, float vitality,
+vec3 shellStrokes(float d, float diag, float t, vec2 rectSize,
                   float bass, bool hasAudio) {
     float count   = clamp(getShellCount(), 0.0, 4.0);
     float spacing = getShellSpacing() * pxScale();
@@ -348,7 +348,10 @@ vec3 shellStrokes(float d, float diag, float t, vec2 rectSize, float vitality,
         result += col * stroke * alpha * falloff * breath;
         falloff *= 0.62;
     }
-    return result * vitalityScale(0.6, 1.0, vitality);
+    // Dormant dimming is owned by the caller's whole-fx vitality scale —
+    // scaling here too would double-apply and leave dormant shells darker
+    // than the sibling layers.
+    return result;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -395,7 +398,7 @@ vec4 renderFluxZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         fx += signalGraph(screenUV, t, diag, bass, treble, hasAudio);
 
         // Layer 4: nested containment shells, breathing with the low end.
-        fx += shellStrokes(d, diag, t, rectSize, vitality, bass, hasAudio);
+        fx += shellStrokes(d, diag, t, rectSize, bass, hasAudio);
 
         // Vitality: dormant zones carry the light dimly.
         fx *= vitalityScale(0.5, 1.0, vitality);

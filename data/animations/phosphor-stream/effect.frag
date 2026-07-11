@@ -72,13 +72,17 @@ vec4 pTransition(vec2 uv, float t) {
     col.rgb += flux * front * clamp(p_frontGlow, 0.0, 2.0) * 0.55 * col.a;
 
     // Ember sparks shed in the un-settled wake: brief hash twinkles that
-    // die as the region arrives (the phosphor-motes motif).
+    // die as the region arrives (the phosphor-motes motif). Emissive over
+    // the body only — like the front glow above, both terms are weighted by
+    // the surface's own coverage. An unweighted alpha bump would raise
+    // alpha where rgb stays near zero (translucent window interiors) and
+    // composite dark specks instead of light.
     float sparks = clamp(p_sparks, 0.0, 1.0);
     if (sparks > 0.001) {
         float n = niriHash(floor(cuv * vec2(48.0, 27.0)) + floor(t * 40.0) * 0.37);
         float spark = step(0.94, n) * (1.0 - e) * mid * sparks;
         col.rgb += flux * spark * 1.4 * col.a;
-        col.a = min(col.a + spark * 0.2, 1.0);
+        col.a = min(col.a + spark * 0.2 * col.a, 1.0);
     }
 
     col.rgb = clamp(col.rgb, 0.0, 1.0);
