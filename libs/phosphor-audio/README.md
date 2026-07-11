@@ -16,15 +16,17 @@ bar vector into a `ShaderEffect` UBO.
 
 | Type | Purpose |
 |------|---------|
-| `PhosphorAudio::IAudioSpectrumProvider` | Provider contract: `start`, `stop`, bar count, framerate, `spectrum()` snapshot. |
-| `PhosphorAudio::CavaSpectrumProvider`   | `cava`-backed provider. Detects install, picks an audio method (PulseAudio / PipeWire / ALSA), builds a throwaway config, emits normalized FFT bars. |
+| `PhosphorAudio::IAudioSpectrumProvider` | Provider contract: `start`, `stop`, `options()`/`setOptions()` (full `SpectrumOptions` parameter set), `spectrum()` snapshot. |
+| `PhosphorAudio::CavaSpectrumProvider`   | `cava`-backed provider. Detects install, auto-picks PipeWire or PulseAudio (other backends such as ALSA via the `inputMethod` override), builds a throwaway config, emits normalized FFT bars. |
 
 ## Typical use
 
 ```cpp
 auto* provider = new PhosphorAudio::CavaSpectrumProvider(parent);
-provider->setBarCount(64);
-provider->setFramerate(60);
+PhosphorAudio::SpectrumOptions options;
+options.barCount = 64;
+options.framerate = 60;
+provider->setOptions(options);
 QObject::connect(provider, &IAudioSpectrumProvider::spectrumUpdated,
                  shaderEffect, &MyShader::setBars);
 provider->start();
@@ -32,9 +34,10 @@ provider->start();
 
 ## Design notes
 
-- **No direct audio backend.** `CavaSpectrumProvider` shells out to
-  `cava`, which handles PulseAudio / PipeWire / ALSA detection and owns
-  the FFT. The lib parses its framed byte output.
+- **No direct audio backend.** `CavaSpectrumProvider` spawns `cava`,
+  which owns the audio capture and the FFT. The lib picks PipeWire or
+  PulseAudio (or an explicit `inputMethod` override) for the generated
+  config and parses cava's framed byte output.
 - **Graceful degradation.** `isAvailable()` returns false when `cava` is
   not installed. Consumers should hide or disable audio-reactive overlays
   in that case rather than hard-fail.

@@ -200,7 +200,7 @@ void PlasmaZonesEffect::syncEffectAudioState()
             }
             return;
         }
-        m_audioProvider->setBarCount(m_audioSpectrumBarCount);
+        m_audioProvider->setOptions(m_audioOptions);
         if (!m_audioProvider->isRunning()) {
             m_audioProvider->start();
             // Kick one repaint so the first spectrum has a consumer; the

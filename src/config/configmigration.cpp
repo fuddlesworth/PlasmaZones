@@ -3309,6 +3309,11 @@ constexpr QLatin1String kV4SegDecorations{"Decorations"};
 constexpr QLatin1String kV4SegBorders{"Borders"};
 constexpr QLatin1String kV4SegGaps{"Gaps"};
 
+// Flat audio-spectrum keys under "Shaders" — v5 moves them into the
+// "Shaders.Audio" group (Enabled / Bars).
+constexpr QLatin1String kV4KeyAudioVisualizer{"AudioVisualizer"};
+constexpr QLatin1String kV4KeyAudioSpectrumBarCount{"AudioSpectrumBarCount"};
+
 // Appearance leaf keys.
 constexpr QLatin1String kV4KeyActive{"Active"};
 constexpr QLatin1String kV4KeyInactive{"Inactive"};
@@ -3675,6 +3680,28 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
     // renames to Shaders.Enabled. Stripping here keeps the chain's output
     // aligned with the v5 schema for both.
     stripKeysAtPath(root, {ConfigKeys::shadersGroup()}, {ConfigKeys::enabledKey()});
+
+    // ── Move the flat audio keys into the Shaders.Audio group ──────────────
+    // v5 grows a full audio-spectrum parameter group (Shaders.Audio). The two
+    // audio keys that shipped under flat Shaders move there so user values
+    // survive; the source spellings are frozen above (kV4KeyAudio*), the
+    // destinations are written through the live accessors (v5 is current).
+    {
+        const QJsonObject shaders = groupObjectAtPath(root, ConfigKeys::shadersGroup());
+        QJsonObject audio;
+        const QJsonValue viz = shaders.value(kV4KeyAudioVisualizer);
+        if (viz.isBool()) {
+            audio.insert(ConfigKeys::enabledKey(), viz);
+        }
+        const QJsonValue bars = shaders.value(kV4KeyAudioSpectrumBarCount);
+        if (bars.isDouble()) {
+            audio.insert(ConfigKeys::barsKey(), bars);
+        }
+        if (!audio.isEmpty()) {
+            setGroupAtSegments(root, ConfigKeys::shadersAudioGroup().split(QLatin1Char('.')), audio);
+        }
+        stripKeysAtPath(root, {ConfigKeys::shadersGroup()}, {kV4KeyAudioVisualizer, kV4KeyAudioSpectrumBarCount});
+    }
 
     // Stamp literal 5 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
     root[ConfigKeys::versionKey()] = 5;

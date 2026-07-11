@@ -254,7 +254,10 @@ void ShaderPreviewController::startAudioCapture()
                     Q_EMIT audioSpectrumChanged();
                 });
     }
-    m_audioProvider->setBarCount(m_backend->audioBarCount());
+    // Apply the user's full Shaders.Audio parameter set (via the backend, so
+    // the settings app reads ISettings and the editor queries the daemon) —
+    // the preview's bar motion matches the live daemon and effect output.
+    m_audioProvider->setOptions(m_backend->audioOptions());
     m_audioProvider->start();
 }
 

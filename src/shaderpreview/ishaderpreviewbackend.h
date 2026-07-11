@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
+
 #include <QSize>
 #include <QString>
 #include <QVariantList>
@@ -53,9 +55,12 @@ public:
     /// reads this over D-Bus; the settings app from ISettings directly.
     virtual bool audioVisualizerEnabled() const = 0;
 
-    /// Number of spectrum bars to request from CAVA (only consulted when
-    /// audioVisualizerEnabled()).
-    virtual int audioBarCount() const = 0;
+    /// The full CAVA analysis parameter set the preview's capture runs with
+    /// (only consulted when audioVisualizerEnabled()). Backed by the user's
+    /// configured Shaders.Audio settings so the preview's bar motion matches
+    /// the live daemon and effect output; the editor assembles it over D-Bus,
+    /// the settings app from ISettings directly.
+    virtual PhosphorAudio::SpectrumOptions audioOptions() const = 0;
 };
 
 } // namespace PlasmaZones
