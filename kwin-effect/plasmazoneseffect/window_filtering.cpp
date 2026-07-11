@@ -152,6 +152,17 @@ bool PlasmaZonesEffect::windowOwnKeepAbove(KWin::EffectWindow* w) const
     // tiled windows" rule would silently strip the matched window's
     // decoration and drop it from snap/tile management. While a layer rule
     // owns the pair, the pre-rule snapshot holds the window's own flag.
+    //
+    // Empty-map fast path: with no window rule-raised, the own flag IS the
+    // live flag. Keeps the gates getWindowId-free for the common no-layer-rule
+    // session (the "no-rules case pays nothing" invariant) and avoids
+    // re-polluting the id caches for close-grabbed deleted windows — several
+    // gate callers don't pre-check isDeleted(), and getWindowId on a dying
+    // window would re-insert the reverse-map entry buildWindowMap deliberately
+    // skips.
+    if (m_ruleWindowLayerSnapshots.isEmpty()) {
+        return w->keepAbove();
+    }
     const auto it = m_ruleWindowLayerSnapshots.constFind(getWindowId(w));
     return it != m_ruleWindowLayerSnapshots.cend() ? it->keepAbove : w->keepAbove();
 }
