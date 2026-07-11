@@ -489,6 +489,10 @@ private Q_SLOTS:
         // paths must prune, so they stay unsupported.
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.snapResize")));
+        // Desktop family — the two-texture switch is a consumed leaf too
+        // (the KWin effect's DesktopTransitionManager resolves it in the
+        // desktopChanged handler, not a per-window tryBeginShaderForEvent leg).
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.switch")));
 
         // Ancestors of consumed leaves — supported because the
         // daemon's resolver walks them on the way to the leaf, so a
@@ -508,6 +512,9 @@ private Q_SLOTS:
         // `window` itself is now a consumable ancestor — setting a
         // shader at the family root cascades to every leaf above.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window")));
+        // The intermediate cascade parents the parent-card UX relies on.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance")));
 
         // Paths the resolver never walks through — any assignment would
         // be runtime-dead and silently shadow what the user thought

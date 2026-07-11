@@ -428,9 +428,13 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // When the snap leg resolves NO shader at all (empty id), a live
             // settling move transition is deliberately LEFT ALONE: the wobble
             // rings out over the WindowAnimator translate, exactly as it does
-            // on a long drag that snaps mid-settle. A move pack declares no
-            // iFromRect, so shaderOwnsGeometry stays false and the animator
-            // keeps the geometry — the two compose rather than fight.
+            // on a long drag that snaps mid-settle. The bundled move pack
+            // (wobble) declares no iFromRect, so shaderOwnsGeometry stays
+            // false and the animator keeps the geometry — they compose. A
+            // hybrid move+geometry pack that declares iFromRect (see the
+            // move-start hookup in window_lifecycle.cpp) would instead own
+            // geometry here and suppress the animator translate for its
+            // settle tail.
             if (snapShaderApplies) {
                 beginShaderTransition(window, shaderProfile);
                 // If the installed shader is a geometry morph (declares
