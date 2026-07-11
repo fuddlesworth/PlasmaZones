@@ -10,9 +10,6 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
-    // Layout constants (previously from monolith's QtObject)
-    readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
-    readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
     // Capture the context property so child components can access it
     readonly property var settingsBridge: appSettings
     // Frame rate + audio spectrum drive EVERY shader category (overlay,

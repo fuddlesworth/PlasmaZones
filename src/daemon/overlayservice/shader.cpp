@@ -180,8 +180,9 @@ void OverlayService::startShaderAnimation()
     const int interval = qRound(1000.0 / frameRate);
     m_shaderUpdateTimer->start(interval);
 
-    // CAVA runs independently (started in setSettings / enableAudioVisualizerChanged).
-    // Just sync config in case frame rate changed since CAVA was started.
+    // CAVA runs independently (spun up lazily by syncCavaState when audio-viz
+    // is enabled and something audio-reactive is on screen). Just sync config
+    // in case frame rate changed since CAVA was started.
     if (m_audioProvider && m_audioProvider->isRunning() && m_settings) {
         PhosphorAudio::SpectrumOptions opts = m_audioProvider->options();
         opts.framerate = frameRate;
