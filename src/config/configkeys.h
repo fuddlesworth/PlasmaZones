@@ -68,6 +68,7 @@ public:
     P_CONFIG_GROUP(performanceGroup, "Performance")
     P_CONFIG_GROUP(renderingGroup, "Rendering")
     P_CONFIG_GROUP(shadersGroup, "Shaders")
+    P_CONFIG_GROUP(shadersAudioGroup, "Shaders.Audio")
     P_CONFIG_GROUP(animationsGroup, "Animations")
     P_CONFIG_GROUP(shortcutsGlobalGroup, "Shortcuts.Global")
     P_CONFIG_GROUP(shortcutsTilingGroup, "Shortcuts.Tiling")
@@ -427,10 +428,24 @@ public:
     // Config Keys — Shaders
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // (uses enabledKey)
     P_CONFIG_KEY(frameRateKey, "FrameRate")
-    P_CONFIG_KEY(audioVisualizerKey, "AudioVisualizer")
-    P_CONFIG_KEY(audioSpectrumBarCountKey, "AudioSpectrumBarCount")
+
+    // Audio spectrum (Shaders.Audio group; the on/off toggle uses enabledKey).
+    // The flat Shaders.AudioVisualizer / Shaders.AudioSpectrumBarCount keys
+    // moved here in the v5 migration (migrateV4ToV5).
+    P_CONFIG_KEY(barsKey, "Bars")
+    P_CONFIG_KEY(autosensKey, "Autosens")
+    P_CONFIG_KEY(sensitivityKey, "Sensitivity")
+    P_CONFIG_KEY(noiseReductionKey, "NoiseReduction")
+    P_CONFIG_KEY(lowerCutoffHzKey, "LowerCutoffHz")
+    P_CONFIG_KEY(higherCutoffHzKey, "HigherCutoffHz")
+    P_CONFIG_KEY(monstercatKey, "Monstercat")
+    P_CONFIG_KEY(wavesKey, "Waves")
+    P_CONFIG_KEY(channelModeKey, "ChannelMode")
+    P_CONFIG_KEY(reverseKey, "Reverse")
+    P_CONFIG_KEY(extraSmoothingKey, "ExtraSmoothing")
+    P_CONFIG_KEY(inputMethodKey, "InputMethod")
+    P_CONFIG_KEY(inputSourceKey, "InputSource")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Animations

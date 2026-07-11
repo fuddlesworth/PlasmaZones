@@ -234,6 +234,34 @@ public:
     virtual void setEnableAudioVisualizer(bool enable) = 0;
     virtual int audioSpectrumBarCount() const = 0;
     virtual void setAudioSpectrumBarCount(int count) = 0;
+
+    // Audio spectrum analysis (Shaders.Audio) — the CAVA parameter set the
+    // spectrum providers run with. String values use the canonical config
+    // forms (ConfigDefaults::audioChannelModeOptions / audioInputMethodOptions).
+    virtual bool audioAutosens() const = 0;
+    virtual void setAudioAutosens(bool enable) = 0;
+    virtual int audioSensitivity() const = 0;
+    virtual void setAudioSensitivity(int percent) = 0;
+    virtual int audioNoiseReduction() const = 0;
+    virtual void setAudioNoiseReduction(int value) = 0;
+    virtual int audioLowerCutoffHz() const = 0;
+    virtual void setAudioLowerCutoffHz(int hz) = 0;
+    virtual int audioHigherCutoffHz() const = 0;
+    virtual void setAudioHigherCutoffHz(int hz) = 0;
+    virtual bool audioMonstercat() const = 0;
+    virtual void setAudioMonstercat(bool enable) = 0;
+    virtual bool audioWaves() const = 0;
+    virtual void setAudioWaves(bool enable) = 0;
+    virtual QString audioChannelMode() const = 0;
+    virtual void setAudioChannelMode(const QString& mode) = 0;
+    virtual bool audioReverse() const = 0;
+    virtual void setAudioReverse(bool enable) = 0;
+    virtual int audioExtraSmoothing() const = 0;
+    virtual void setAudioExtraSmoothing(int percent) = 0;
+    virtual QString audioInputMethod() const = 0;
+    virtual void setAudioInputMethod(const QString& method) = 0;
+    virtual QString audioInputSource() const = 0;
+    virtual void setAudioInputSource(const QString& source) = 0;
 };
 
 /**
