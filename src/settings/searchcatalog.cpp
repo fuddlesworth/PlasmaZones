@@ -180,6 +180,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Rendering backend"),
                {PhosphorI18n::tr("opengl"), PhosphorI18n::tr("vulkan"), PhosphorI18n::tr("graphics")});
     addSection(search, QStringLiteral("general"), QStringLiteral("shaderEffects"), PhosphorI18n::tr("Shader Effects"));
+    addSetting(search, QStringLiteral("general"), QStringLiteral("overlayShaders"), PhosphorI18n::tr("Overlay shaders"),
+               {PhosphorI18n::tr("glsl"), PhosphorI18n::tr("zone"), PhosphorI18n::tr("overlay")});
     addSetting(search, QStringLiteral("general"), QStringLiteral("frameRate"), PhosphorI18n::tr("Frame rate"),
                {PhosphorI18n::tr("fps"), PhosphorI18n::tr("refresh"), PhosphorI18n::tr("animation")});
     addSetting(search, QStringLiteral("general"), QStringLiteral("audioSpectrum"), PhosphorI18n::tr("Audio spectrum"),
