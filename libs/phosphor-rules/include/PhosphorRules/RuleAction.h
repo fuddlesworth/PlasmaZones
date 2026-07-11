@@ -434,11 +434,11 @@ inline constexpr QLatin1StringView SetBorderColorInactive{"setBorderColorInactiv
 // into the reserved "opacity-tint" surface pack exactly like the SetBorder*
 // family feeds the "border" pack (each its own slot so independent rules
 // cascade per-property). The layer's opacity keeps the existing `SetOpacity`
-// slot and is shader-backed, full stop: when the layer renders, its value
-// folds into the pack's opacity param (rule wins over the config value); in
-// custom mode only a pack declaring handlesOpacity (frost) consumes it, via
-// uSurfaceOpacity. A chain without an opacity-capable pack, or an
-// undecorated window, does not honour it. SetTintColor carries a single colour
+// slot and is layer-backed, full stop: when the layer renders, its value
+// folds into the pack's opacity param (rule wins over the config value).
+// Custom chains do not honour it — packs dim through their own parameters
+// (frost/glass `contentOpacity`) — and neither does an undecorated window.
+// SetTintColor carries a single colour
 // param (`ActionParam::Value`): a hex string OR the `BorderColorToken::Accent`
 // sentinel, resolved to the live system accent like the border colours.
 inline constexpr QLatin1StringView SetOpacityTintVisible{"setOpacityTintVisible"};

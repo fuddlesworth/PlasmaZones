@@ -110,10 +110,13 @@ BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius) {
 }
 
 // Backdrop-slab family shared open (blur / duotone / frosted-glass / glass /
-// rain-glass / rippled-glass / mosaic): the window content sample dimmed by the
-// rule opacity (these packs declare handlesOpacity), the device-px fragment,
-// the frame SDF at the pack's corner radius, and the AA slab mask — the four
-// lines every backdrop-slab pack repeats before its pack-specific pane.
+// rain-glass / rippled-glass / mosaic): the raw window content sample, the
+// device-px fragment, the frame SDF at the pack's corner radius, and the AA
+// slab mask — the four lines every backdrop-slab pack repeats before its
+// pack-specific pane. Content dimming is a per-pack concern now: a pack that
+// wants a fadeable window sample declares its own parameter (frost/glass
+// `contentOpacity`) and multiplies `window` itself, so its knob lives in its
+// param editor instead of riding the retired SetOpacity rule feed.
 // `cornerRadiusPx` is the pack's p_cornerRadius already scaled to device px.
 struct SurfaceSlab {
     vec4 window;
@@ -123,7 +126,7 @@ struct SurfaceSlab {
 };
 SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
     SurfaceSlab s;
-    s.window = surfaceTexel(uv) * uSurfaceOpacity;
+    s.window = surfaceTexel(uv);
     s.px = surfacePixel(uv);
     s.fs = frameSdf(s.px, cornerRadiusPx);
     s.mask = frameMask(s.fs.d);

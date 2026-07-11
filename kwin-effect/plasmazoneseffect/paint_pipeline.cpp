@@ -391,18 +391,20 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
 
     // Resolve + cache the rule-resolved opacity for ANY window with
     // SetOpacity rules, independent of whether a transition is in flight.
-    // SetOpacity is shader-backed: the plain opacity-tint layer folds it into
+    // SetOpacity is layer-backed: the plain opacity-tint layer folds it into
     // its pack param at updateWindowDecoration time, so the cache here feeds
-    // only the two shader consumers that read the rule live per frame — the
-    // uSurfaceOpacity push for handlesOpacity packs (frost dims its content
-    // sample) and the shader-transition draw's bare-uTexture0 fallback (the
-    // one path where an opacity-baking chain's fold didn't run). No KWin
-    // paint-data opacity is set anywhere: a window whose chain has no
-    // opacity-capable pack (custom chains without one, undecorated windows)
-    // simply does not honour SetOpacity — the packs own the look, and a
-    // transparent theme keeps its own alpha untouched. No setTranslucent()
-    // needed either: every shader-applied decorated window is already marked
-    // translucent below, and the rule dims nothing anywhere else.
+    // the ONE consumer that reads the rule live per frame — the
+    // shader-transition draw's bare-uTexture0 fallback (the path where an
+    // opacity-baking chain's fold didn't run). No KWin paint-data opacity is
+    // set anywhere: a window without the layer simply does not honour
+    // SetOpacity — custom chains dim through their own pack params
+    // (frost/glass contentOpacity), and a transparent theme keeps its own
+    // alpha untouched. No setTranslucent() needed either: every
+    // shader-applied decorated window is already marked translucent below,
+    // and the rule dims nothing anywhere else. Skip our own overlay /
+    // plasma-shell surfaces so a broad user rule can't dim our UI or the
+    // panel; short-circuit on an empty rule set to keep the default-state
+    // hot path at two pointer reads.
     if (w && m_shaderManager.hasOpacityRules()) {
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
@@ -537,41 +539,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         m_restoreSuppress.erase(supIt);
     }
 
-    // SetOpacity rule consumer — sets the window's painted opacity before
-    // downstream transforms run. Absolute set (not multiplyOpacity) because
-    // SetOpacity rules describe a target opacity, not a scale factor —
-    // "make Firefox 80% opaque" should land at 0.8 regardless of whatever
-    // opacity another effect previously composed. Uses the shader-manager's
-    // window-rule evaluator because the SetOpacity action lives in the same
-    // effect-side rule bag as OverrideAnimation{Shader,Curve,Timing} —
-    // sharing the evaluator also shares its per-window cache, so the paint
-    // hot path pays at most one cascade walk per window per rule-set
-    // revision.
-    //
-    // Skip our own overlay/editor/snap-assist surfaces and plasma-shell
-    // panels — a user-authored rule like `WindowClass contains "plasmashell"`
-    // would otherwise dim our own UI or the system panel. This is a
-    // narrower exclusion than `shouldHandleWindow` (which also rejects
-    // xdg-desktop-portal surfaces) — deliberately so. SetOpacity is a
-    // user-visible cosmetic effect that the user opts into by authoring
-    // a class-matching rule; we exclude only the surfaces whose dimming
-    // would feel like a daemon bug (our own UI, panels), and let the
-    // user-authored rule reach everything else the rule explicitly
-    // names.
-    //
-    // Short-circuit on an empty rule set — the common case for users without
-    // any effect-side rules. The animation-cascade sister consumers
-    // (window_filtering.cpp, drag_snap.cpp) follow the same `isEmpty()` gate
-    // to keep default-state cost to two pointer reads; without it, every
-    // paintWindow call churns the rule evaluator's per-window cache for
-    // zero benefit.
     // SetOpacity deliberately sets NO KWin paint-data opacity. The rule is
-    // shader-backed: the plain opacity-tint layer folds it into its pack
-    // param, handlesOpacity packs (frost) consume it via uSurfaceOpacity,
-    // and a chain without an opacity-capable pack (or an undecorated window)
-    // does not honour it at all — the user's packs own the look, and a
-    // transparent theme keeps its own alpha. See the prePaintWindow cache
-    // comment for the two shader consumers.
+    // layer-backed: the plain opacity-tint layer folds it into its pack
+    // param, custom chains dim through their own pack params (frost/glass
+    // contentOpacity), and a window without the layer does not honour it at
+    // all — the user's packs own the look, and a transparent theme keeps
+    // its own alpha. See the prePaintWindow cache comment for the one
+    // remaining shader consumer (the transition fallback).
 
     // Re-entrancy guard: captureOldWindowSnapshot below calls
     // effects->drawWindow, which walks the chain back through our
@@ -778,7 +752,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (const auto lbIt = m_windowDecorations.constFind(getWindowId(w));
                 lbIt != m_windowDecorations.constEnd()) {
                 layerPad = lbIt->outerPadding;
-                chainBakesOpacity = lbIt->chainHandlesOpacity;
+                chainBakesOpacity = lbIt->chainBakesOpacity;
             }
             // Surface-layer stack (border / rounded corners, ...): render the
             // window's active layers into an FBO so the animation composites
@@ -977,21 +951,18 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     shader->setUniform(cached->iAnchorPosInFboLoc, anchorUniforms.anchorPosInFbo);
                 }
                 if (cached->iWindowOpacityLoc >= 0) {
-                    // SetOpacity is shader-backed: only a chain that bakes
-                    // opacity into its composite (the plain opacity-tint
-                    // layer's folded param, frost's uSurfaceOpacity) honours
-                    // the rule at all, and when the fold produced the
-                    // composite this shader samples (surfaceLayerTex) the
-                    // rule alpha is already in it — re-applying here would
-                    // dim twice, and for frost it collapses the opaque blur
-                    // slab back to rule alpha (the blur goes visually absent
-                    // for the whole transition). So push 1.0 everywhere
-                    // EXCEPT the bare-uTexture0 fallback of an
+                    // SetOpacity is layer-backed: only a chain carrying the
+                    // plain opacity-tint layer bakes the rule into its
+                    // composite (the folded opacity param), and when the fold
+                    // produced the composite this shader samples
+                    // (surfaceLayerTex) the rule alpha is already in it —
+                    // re-applying here would dim twice. So push 1.0
+                    // everywhere EXCEPT the bare-uTexture0 fallback of an
                     // opacity-baking chain: the fold didn't run there, so
                     // the rule-resolved cache is the only dim the window
-                    // gets for the transition's duration. Chains without an
-                    // opacity-capable pack and undecorated windows never
-                    // honour the rule, so they stay at 1.0 outright.
+                    // gets for the transition's duration. Custom chains and
+                    // undecorated windows never honour the rule, so they
+                    // stay at 1.0 outright.
                     float winOpacity = 1.0f;
                     if (chainBakesOpacity && !surfaceLayerTex && m_shaderManager.frameOpacityCached(w)) {
                         if (const auto cachedOpacity = m_shaderManager.cachedFrameOpacity(w)) {

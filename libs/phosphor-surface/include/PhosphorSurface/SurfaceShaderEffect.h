@@ -137,15 +137,6 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// transparent, so a pack must style a fallback on that gate.
     bool needsBackdrop = false;
 
-    /// Declares that the pack applies the window's rule-resolved opacity
-    /// itself (reading `uSurfaceOpacity`). Frost dims only its window
-    /// content sample this way, keeping the frost slab solid. This is also
-    /// the OPT-IN for the SetOpacity rule on custom chains: SetOpacity is
-    /// shader-backed (the plain opacity-tint layer folds it, handlesOpacity
-    /// packs consume it), and a chain without an opacity-capable pack does
-    /// not honour the rule at all.
-    bool handlesOpacity = false;
-
     /// Declares that the pack draws a window border of its own (the border
     /// family: border, border-sweep, border-rgb, ...). Semantic contract
     /// flag, deliberately NOT keyed off the browsing category: a

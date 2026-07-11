@@ -118,7 +118,7 @@ struct CompiledSurfacePack
     int uFrameSizeLoc = -1; ///< uSurfaceFrameSize — frame size excluding shadows, device px
     int uScaleLoc = -1; ///< uSurfaceScale — logical-to-device pixel scale
     int uFocusedLoc = -1; ///< uSurfaceFocused — 1.0 focused / 0.0 unfocused
-    int uOpacityLoc = -1; ///< uSurfaceOpacity — rule-resolved window opacity (handlesOpacity packs)
+    int uOpacityLoc = -1; ///< uSurfaceOpacity — LEGACY, pushed as a constant 1.0 (retired rule feed)
     int uTimeLoc = -1; ///< iTime — continuous seconds; -1 ⟺ static pack (drives the repaint gate)
     /// uTexture0 — the input-surface sampler (unit 0). Every decorated window
     /// (one-pack chains included) folds through renderSurfaceChainComposite,
@@ -325,24 +325,14 @@ struct WindowDecoration
     /// landing on this window).
     bool needsBackdrop = false;
 
-    /// The window's rule-resolved opacity (SetOpacity), 1.0 when no rule
-    /// applies. SetOpacity is shader-backed: this field's one consumer is the
-    /// uSurfaceOpacity uniform push for handlesOpacity packs (frost dims its
-    /// content sample by it), as the fallback under the per-frame cache. The
-    /// plain opacity-tint layer folds the rule into its pack param instead,
-    /// and no KWin paint-data / present-pass modulation exists anymore, so a
-    /// chain without an opacity-capable pack simply does not honour the rule.
-    /// Kept fresh by updateWindowDecoration, which re-runs on every trigger
-    /// that can change a rule verdict (focus, snap state, rule/config edits).
-    double ruleOpacity = 1.0;
-
-    /// True when any chain pack declares `"handlesOpacity": true`, OR when
-    /// the chain carries the plain opacity-tint layer (its opacity param is
-    /// the resolved config + SetOpacity fold) — the chain BAKES the window's
-    /// opacity into its composite. Sole runtime consumer is the transition
-    /// iWindowOpacity push: 1.0 when the fold's composite is what the
-    /// transition samples, the rule-resolved fallback otherwise.
-    bool chainHandlesOpacity = false;
+    /// True when the chain carries the plain opacity-tint layer, whose
+    /// opacity param is the resolved config + SetOpacity fold — the chain
+    /// BAKES the window's opacity into its composite. Sole runtime consumer
+    /// is the transition iWindowOpacity push: 1.0 when the fold's composite
+    /// is what the transition samples, the rule-resolved fallback otherwise.
+    /// SetOpacity has no other application path: custom chains configure
+    /// their own dimming through pack params (frost/glass contentOpacity).
+    bool chainBakesOpacity = false;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but

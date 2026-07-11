@@ -1084,8 +1084,8 @@ void ActionRegistry::registerBuiltins()
     // the editor); the colour accepts a hex shape or the accent sentinel. The
     // layer's opacity itself stays on the SetOpacity slot above — when the
     // layer renders, that rule's value folds into the pack's opacity param
-    // (rule wins over config); in custom mode only a handlesOpacity pack
-    // consumes it, and a chain without one does not honour it at all.
+    // (rule wins over config); custom chains do not honour it (packs dim
+    // through their own parameters, e.g. frost/glass contentOpacity).
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetOpacityTintVisible),
         .slotFor = constantSlot(ActionSlot::OpacityTintVisible),

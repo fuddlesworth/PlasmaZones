@@ -413,12 +413,13 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // lands back in easy mode — SetBorderVisible / SetOpacityTintVisible stay
     // the layer-off switches. The title-bar slot is NOT part of this split
     // (reconcileRuleHiddenTitleBar resolves it separately). The SetOpacity
-    // rule is shader-backed, full stop: it renders through the opacity-tint
+    // rule is layer-backed, full stop: it renders through the opacity-tint
     // layer when the layer is on (folded into the pack's opacity param,
-    // replacing the config value) and through handlesOpacity packs (frost)
-    // in custom mode. A custom chain without an opacity-capable pack, a
-    // vetoed/off layer, or an undecorated window does not honour it — the
-    // user's packs (or their transparent theme) own the window's alpha.
+    // replacing the config value) and nowhere else. Custom chains dim
+    // through their own pack params (frost/glass contentOpacity); a chain
+    // without one, a vetoed/off layer, or an undecorated window does not
+    // honour the rule — the user's packs (or their transparent theme) own
+    // the window's alpha.
     std::optional<ResolvedWindowAppearance> appearance;
     bool showBorder = false;
     bool showOpacityTint = false;
@@ -511,8 +512,8 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // defaults, hit only when the layer was rule-forced on for an
         // out-of-scope window). Folding SetOpacity here makes the layer the
         // window's SOLE opacity applier: the rule has no other application
-        // path anymore (no KWin paint-data opacity, no present modulation),
-        // and chainHandlesOpacity below keeps the transition fallback from
+        // path (no KWin paint-data opacity, no present modulation), and
+        // chainBakesOpacity below keeps the transition fallback from
         // re-applying it over the folded composite. userPacks is empty in
         // easy mode, so this insert can't clobber a user's own opacity-tint
         // params.
@@ -531,7 +532,6 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
     int outerPadding = 0;
     bool needsBackdrop = false;
-    bool handlesOpacity = false;
     for (const QString& packId : std::as_const(chain)) {
         const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
         if (!eff.isValid()) {
@@ -540,7 +540,6 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // Any needsBackdrop pack in the chain switches the window onto the
         // composite path with a per-frame backdrop capture (see paintWindow).
         needsBackdrop = needsBackdrop || eff.needsBackdrop;
-        handlesOpacity = handlesOpacity || eff.handlesOpacity;
         const QVariantMap packOverrides = allPackParams.value(packId).toMap();
         wb.packParamValues.insert(packId, ShaderInternal::resolveSurfaceParamValues(eff, packOverrides));
 
@@ -566,24 +565,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
     // The plain opacity-tint layer folds the window's resolved opacity
-    // (config default, SetOpacity rule winning) into its pack param, so the
-    // chain BAKES opacity exactly like a declared handlesOpacity pack. The
-    // flag's one remaining runtime job is the transition iWindowOpacity
-    // push: 1.0 when the fold produced the composite the transition samples,
-    // the rule-resolved fallback otherwise (see paintWindow).
-    wb.chainHandlesOpacity = handlesOpacity || showOpacityTint;
-
-    // Rule-resolved opacity for the handlesOpacity packs' uSurfaceOpacity
-    // uniform (frost dims its content sample by it) — the fallback under the
-    // per-frame cache (see pushBorderUniforms). Resolved here rather than per
-    // paint: every trigger that can flip a SetOpacity verdict (focus change,
-    // snap/float state, rule edits) funnels through updateWindowDecoration
-    // already.
-    if (m_shaderManager.hasOpacityRules()) {
-        if (const auto opacity = resolveWindowOpacity(resolveRuleActions(w, windowId))) {
-            wb.ruleOpacity = qBound(0.0, *opacity, 1.0);
-        }
-    }
+    // (config default, SetOpacity rule winning) into its pack param — the
+    // chain BAKES the window's opacity. The flag's one runtime job is the
+    // transition iWindowOpacity push: 1.0 when the fold produced the
+    // composite the transition samples, the rule-resolved fallback otherwise
+    // (see paintWindow).
+    wb.chainBakesOpacity = showOpacityTint;
 
     // Padded chains paint a margin band OUTSIDE the window rect; KWin's own
     // move/resize damage covers only the window's old/new rects, so track the

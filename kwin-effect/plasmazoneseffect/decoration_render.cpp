@@ -227,16 +227,14 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
         const bool focused = KWin::effects && w == KWin::effects->activeWindow();
         shader->setUniform(pack.uFocusedLoc, advanceFocusFade(windowId, focused));
     }
-    // Rule-resolved window opacity, for handlesOpacity packs (frost dims its
-    // content sample; the present pass skips its final modulation for such
-    // chains). Prefer the per-frame cache prePaintWindow refreshed.
+    // uSurfaceOpacity is a LEGACY constant now: the retired handlesOpacity
+    // contract fed it the rule-resolved opacity; content dimming is a plain
+    // pack parameter today (frost/glass contentOpacity) and the plain layer
+    // folds SetOpacity into its own param. Pushed 1.0 whenever a pack still
+    // references the uniform so an old third-party pack keeps its content
+    // visible instead of getting GL's 0.0 default.
     if (pack.uOpacityLoc >= 0) {
-        qreal resolved = wb.ruleOpacity;
-        if (m_shaderManager.frameOpacityCached(w)) {
-            const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
-            resolved = frameOpacity ? qBound(0.0, *frameOpacity, 1.0) : 1.0;
-        }
-        shader->setUniform(pack.uOpacityLoc, static_cast<float>(resolved));
+        shader->setUniform(pack.uOpacityLoc, 1.0f);
     }
     // Continuous time for an animated pack. -1 (static pack, e.g. the border)
     // pushes nothing; postPaintScreen only drives the window to repaint when a
@@ -339,14 +337,13 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 if (m_surfacePresentFinalLoc >= 0) {
                     present->setUniform(m_surfacePresentFinalLoc, unit);
                 }
-                // Present opacity is a constant 1.0 now: SetOpacity is
-                // shader-backed (folded into the plain opacity-tint layer's
-                // param, or consumed by a handlesOpacity pack via
-                // uSurfaceOpacity), and a chain without an opacity-capable
-                // pack does not honour the rule at all — so no final
-                // KWin-style modulation ever applies. Still pushed EVERY
-                // frame: the program is shared across windows and a stale
-                // value from an older build would leak.
+                // Present opacity is a constant 1.0: SetOpacity is
+                // layer-backed (folded into the plain opacity-tint layer's
+                // param) and custom chains dim through their own pack params
+                // (frost/glass contentOpacity), so no final KWin-style
+                // modulation ever applies. Still pushed EVERY frame: the
+                // program is shared across windows and a stale value from an
+                // older build would leak.
                 if (m_surfacePresentOpacityLoc >= 0) {
                     present->setUniform(m_surfacePresentOpacityLoc, 1.0f);
                 }

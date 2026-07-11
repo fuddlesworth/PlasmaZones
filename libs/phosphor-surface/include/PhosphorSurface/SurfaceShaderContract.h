@@ -167,13 +167,13 @@ inline constexpr const char* kUSurfaceFocused = "uSurfaceFocused";
 /// static decoration costs nothing.
 inline constexpr const char* kITime = "iTime";
 
-/// `float uSurfaceOpacity` — the window's rule-resolved opacity (1.0 when
-/// no SetOpacity rule applies; ALWAYS 1.0 on the daemon, whose surfaces
-/// carry qt_Opacity instead). Hosts apply a KWin-style final modulation by
-/// default, so most packs never read this; a pack that declares
-/// `"handlesOpacity": true` suppresses the final modulation and applies
-/// this value itself (frost multiplies only its window content sample so
-/// the frost slab stays solid). Per-frame-dynamic.
+/// `float uSurfaceOpacity` — LEGACY, always 1.0 on both runtimes. It used
+/// to carry the window's rule-resolved SetOpacity for packs declaring the
+/// retired `handlesOpacity` contract; SetOpacity is layer-backed now (the
+/// plain opacity-tint layer folds it into its own pack param) and in-pack
+/// content dimming is an ordinary pack parameter (frost/glass
+/// `contentOpacity`). Kept in the contract so existing third-party packs
+/// referencing it keep compiling and the daemon UBO layout is unchanged.
 inline constexpr const char* kUSurfaceOpacity = "uSurfaceOpacity";
 
 /// `sampler2D uBackdrop` — COMPOSITOR-ONLY. The scene BEHIND the window,

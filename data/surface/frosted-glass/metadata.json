@@ -7,7 +7,6 @@
     "category": "Blur",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
-    "handlesOpacity": true,
     "animated": true,
     "multipass": true,
     "bufferScale": 0.25,
@@ -35,6 +34,16 @@
             "max": 32,
             "group": "Shape",
             "description": "Corner rounding of the pane (px)"
+        },
+        {
+            "id": "contentOpacity",
+            "name": "Content opacity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 1.0,
+            "group": "Shape",
+            "description": "How visible the window content stays over the frosted pane, where 1.0 is fully opaque and 0.0 shows only the blurred backdrop"
         },
         {
             "id": "grainAmount",
