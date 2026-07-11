@@ -66,12 +66,6 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::overlayDisplayModeChanged, this,
                     &OverlayService::recreateOverlayWindowsOnTypeMismatch);
 
-            connect(m_settings, &ISettings::enableShaderEffectsChanged, this, [this]() {
-                if (m_visible) {
-                    recreateOverlayWindowsOnTypeMismatch();
-                }
-            });
-
             connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
@@ -137,9 +131,6 @@ void OverlayService::setSettings(ISettings* settings)
             // won't propagate until the next daemon restart.
             if (m_shaderRegistry) {
                 m_shadersChangedConnection = connect(m_shaderRegistry, &ShaderRegistry::shadersChanged, this, [this]() {
-                    if (!m_settings || !m_settings->enableShaderEffects()) {
-                        return;
-                    }
                     qCInfo(lcOverlay) << "Shader files changed on disk, triggering hot-reload";
                     PhosphorRendering::ShaderCompiler::clearCache();
                     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
@@ -285,7 +276,7 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
             // shader is skipped and the overlay keeps drawing rectangles until
             // a hide/show (or daemon restart) rebuilds the slot. Run the
             // type-mismatch recreate first — a no-op when no flip is needed —
-            // mirroring the enableShaderEffects setting path so live edits take
+            // mirroring the overlayDisplayMode setting path so live edits take
             // effect immediately. Only meaningful while visible; a hidden
             // overlay rebuilds with the correct type on its next show.
             if (m_visible) {
