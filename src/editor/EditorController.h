@@ -1055,7 +1055,7 @@ private:
     QVariantMap translateParams(const QString& shaderId, const QVariantMap& params) const override;
     QVariantList previewZones() const override;
     bool audioVisualizerEnabled() const override;
-    int audioBarCount() const override;
+    PhosphorAudio::SpectrumOptions audioOptions() const override;
 
     // Shared zone-shader preview feed (owns the CAVA capture + texture/preamble
     // helpers). EditorController is its backend; the preview methods delegate.

@@ -7,6 +7,7 @@
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorRendering/ShaderCompiler.h>
+#include "../../core/cavaoptions.h"
 #include "../../core/logging.h"
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -69,6 +70,21 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
+            // The full CAVA analysis parameter set (Shaders.Audio). Every knob
+            // routes through the same reconcile: setOptions no-ops on an
+            // unchanged set and restarts capture at most once per change.
+            connect(m_settings, &ISettings::audioAutosensChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioSensitivityChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioNoiseReductionChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioLowerCutoffHzChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioHigherCutoffHzChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioMonstercatChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioWavesChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioChannelModeChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioReverseChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioExtraSmoothingChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioInputMethodChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioInputSourceChanged, this, &OverlayService::syncCavaState);
 
             // Shader profile tree drives the per-overlay shader effect (osd.show,
             // popup.zoneSelector, etc.). Push it into the SurfaceAnimator
@@ -351,8 +367,7 @@ void OverlayService::syncCavaState()
         if (m_idleQuiesceTimer) {
             m_idleQuiesceTimer->stop(); // cancel any pending grace-period quiesce
         }
-        m_audioProvider->setBarCount(m_settings->audioSpectrumBarCount());
-        m_audioProvider->setFramerate(m_settings->shaderFrameRate());
+        m_audioProvider->setOptions(cavaOptionsFromSettings(m_settings));
         if (!m_audioProvider->isRunning()) {
             m_audioProvider->start();
         }

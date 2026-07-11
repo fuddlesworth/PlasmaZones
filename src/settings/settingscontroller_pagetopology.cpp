@@ -233,13 +233,36 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         {QStringLiteral("general"),
          {
              {CD::renderingGroup(), CD::backendKey()},
-             // Shader Effects moved here from snapping-overlay-appearance: frame
-             // rate + audio spectrum drive EVERY shader category (overlay,
-             // animation, surface decoration), not just snapping overlays.
+             // Shader Effects moved here from snapping-overlay-appearance, and
+             // the Shaders.Audio group (the full CAVA parameter set) lives with
+             // it: frame rate + audio spectrum drive EVERY shader category
+             // (overlay, animation, surface decoration), not just snapping
+             // overlays.
              {CD::shadersGroup(), CD::frameRateKey()},
-             {CD::shadersGroup(), CD::audioVisualizerKey()},
-             {CD::shadersGroup(), CD::audioSpectrumBarCountKey()},
+             {CD::shadersAudioGroup(), CD::enabledKey()},
+             {CD::shadersAudioGroup(), CD::barsKey()},
+             {CD::shadersAudioGroup(), CD::autosensKey()},
+             {CD::shadersAudioGroup(), CD::sensitivityKey()},
+             {CD::shadersAudioGroup(), CD::noiseReductionKey()},
+             {CD::shadersAudioGroup(), CD::lowerCutoffHzKey()},
+             {CD::shadersAudioGroup(), CD::higherCutoffHzKey()},
+             {CD::shadersAudioGroup(), CD::monstercatKey()},
+             {CD::shadersAudioGroup(), CD::wavesKey()},
+             {CD::shadersAudioGroup(), CD::channelModeKey()},
+             {CD::shadersAudioGroup(), CD::reverseKey()},
+             {CD::shadersAudioGroup(), CD::extraSmoothingKey()},
+             {CD::shadersAudioGroup(), CD::inputMethodKey()},
+             {CD::shadersAudioGroup(), CD::inputSourceKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::suppressDefaultLayoutAssignmentKey()},
+             // The OSD card also lives on General; its five settings share the
+             // snappingEffectsGroup with the appearance page's blur/showNumbers/
+             // flashOnSwitch keys but are distinct keys, so the one-owner
+             // invariant holds.
+             {CD::snappingEffectsGroup(), CD::osdOnLayoutSwitchKey()},
+             {CD::snappingEffectsGroup(), CD::osdOnDesktopSwitchKey()},
+             {CD::snappingEffectsGroup(), CD::navigationOsdKey()},
+             {CD::snappingEffectsGroup(), CD::osdStyleKey()},
+             {CD::snappingEffectsGroup(), CD::overlayDisplayModeKey()},
              {CD::exclusionsGroup(), CD::transientWindowsKey()},
              {CD::exclusionsGroup(), CD::minimumWindowWidthKey()},
              {CD::exclusionsGroup(), CD::minimumWindowHeightKey()},

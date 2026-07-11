@@ -1,0 +1,77 @@
+{
+    "id": "phosphor-vortex",
+    "name": "Phosphor Vortex",
+    "description": "Grab a window and a plasma vortex around the cursor inhales it, pulling the surface into glowing streamlines that erode as they feed in. The plasma keeps orbiting for as long as the drag is held, stretches into a comet along the path while you move, and releases the window back when you let go.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Particle",
+    "appliesTo": ["move"],
+    "fboExtent": "surface",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "cloudSize",
+            "name": "Vortex Size",
+            "type": "float",
+            "default": 140.0,
+            "min": 40.0,
+            "max": 400.0
+        },
+        {
+            "id": "suction",
+            "name": "Suction",
+            "type": "float",
+            "default": 0.9,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "spin",
+            "name": "Spin",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 3.0
+        },
+        {
+            "id": "streaks",
+            "name": "Filaments",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "glow",
+            "name": "Plasma Glow",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "colorCyan",
+            "name": "Gradient Cyan",
+            "type": "color",
+            "default": "#22D3EE"
+        },
+        {
+            "id": "colorBlue",
+            "name": "Gradient Blue",
+            "type": "color",
+            "default": "#3B82F6"
+        },
+        {
+            "id": "colorPurple",
+            "name": "Gradient Purple",
+            "type": "color",
+            "default": "#A855F7"
+        },
+        {
+            "id": "colorRose",
+            "name": "Gradient Rose",
+            "type": "color",
+            "default": "#F43F5E"
+        }
+    ]
+}

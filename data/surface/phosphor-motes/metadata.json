@@ -1,0 +1,113 @@
+{
+    "id": "phosphor-motes",
+    "name": "Phosphor Motes",
+    "description": "The window sheds embers of luminous dust from its own frame. Each mote is born on an edge and drifts straight out from it through the clear margin, so the dust radiates evenly in every direction, trailing its own path history back toward the frame. Near motes are larger, brighter and faster than far ones, a few flare into rare bright embers, and a fine halo of twinkling micro dust hugs the frame. Colour burns through the brand gradient over each mote's life, born cyan at the frame and fading out rose at the end of its drift. The dust dims when the surface loses focus.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Ambience",
+    "animated": true,
+    "fragmentShader": "effect.frag",
+    "paddingParam": "moteRange",
+    "parameters": [
+        {
+            "id": "moteRange",
+            "name": "Emanation reach",
+            "type": "int",
+            "default": 56,
+            "min": 16,
+            "max": 128,
+            "description": "How far from the frame the dust travels before burning out (px)"
+        },
+        {
+            "id": "moteCount",
+            "name": "Mote count",
+            "type": "int",
+            "default": 12,
+            "min": 1,
+            "max": 24,
+            "description": "How many motes are in the air at once"
+        },
+        {
+            "id": "moteSize",
+            "name": "Mote size",
+            "type": "float",
+            "default": 2.5,
+            "min": 0.5,
+            "max": 8.0,
+            "description": "Radius of each mote's glowing head (px)"
+        },
+        {
+            "id": "driftSpeed",
+            "name": "Drift speed",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "How fast the dust drifts away from the frame"
+        },
+        {
+            "id": "tailLength",
+            "name": "Tail length",
+            "type": "float",
+            "default": 30.0,
+            "min": 4.0,
+            "max": 120.0,
+            "description": "Length of the fading comet tail (px)"
+        },
+        {
+            "id": "sway",
+            "name": "Sway",
+            "type": "float",
+            "default": 12.0,
+            "min": 0.0,
+            "max": 48.0,
+            "description": "How far each mote wanders along the edge as it drifts out (px)"
+        },
+        {
+            "id": "dustAmount",
+            "name": "Micro dust",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Density of the fine twinkling dust between the motes, 0 to disable"
+        },
+        {
+            "id": "intensity",
+            "name": "Intensity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "Overall brightness of the dust"
+        },
+        {
+            "id": "colorCyan",
+            "name": "Gradient cyan",
+            "type": "color",
+            "default": "#22D3EE",
+            "description": "Colour of newborn motes at the frame"
+        },
+        {
+            "id": "colorBlue",
+            "name": "Gradient blue",
+            "type": "color",
+            "default": "#3B82F6",
+            "description": "Second stop of the drift"
+        },
+        {
+            "id": "colorPurple",
+            "name": "Gradient purple",
+            "type": "color",
+            "default": "#A855F7",
+            "description": "Third stop of the drift"
+        },
+        {
+            "id": "colorRose",
+            "name": "Gradient rose",
+            "type": "color",
+            "default": "#F43F5E",
+            "description": "Burnout colour at the end of the drift"
+        }
+    ]
+}

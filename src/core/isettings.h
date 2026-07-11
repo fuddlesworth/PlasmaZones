@@ -489,6 +489,18 @@ Q_SIGNALS:
     void shaderFrameRateChanged();
     void enableAudioVisualizerChanged();
     void audioSpectrumBarCountChanged();
+    void audioAutosensChanged();
+    void audioSensitivityChanged();
+    void audioNoiseReductionChanged();
+    void audioLowerCutoffHzChanged();
+    void audioHigherCutoffHzChanged();
+    void audioMonstercatChanged();
+    void audioWavesChanged();
+    void audioChannelModeChanged();
+    void audioReverseChanged();
+    void audioExtraSmoothingChanged();
+    void audioInputMethodChanged();
+    void audioInputSourceChanged();
     // Global shortcuts
     void openEditorShortcutChanged();
     void openSettingsShortcutChanged();

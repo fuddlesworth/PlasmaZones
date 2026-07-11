@@ -17,7 +17,7 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAudio/AudioDefaults.h>
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
@@ -63,10 +63,6 @@ class LogicalOutput;
 
 namespace PhosphorAnimation {
 class IMotionClock;
-}
-
-namespace PhosphorAudio {
-class IAudioSpectrumProvider;
 }
 
 namespace PlasmaZones {
@@ -1153,12 +1149,14 @@ private:
     /// folding every audio border forever. -1 until the first spectrum arrives.
     qint64 m_audioSpectrumLastChangeMs = -1;
 
-    /// The daemon's audio-viz master toggle + bar count, pulled via getSetting in
-    /// loadCachedSettings exactly like snapAssistEnabled. The effect's cava run
-    /// gate ANDs the toggle with an audio decoration or an audio animation pack
-    /// being present.
+    /// The daemon's audio-viz master toggle + the full CAVA parameter set,
+    /// pulled via getSetting in loadCachedSettings exactly like
+    /// snapAssistEnabled. The effect's cava run gate ANDs the toggle with an
+    /// audio decoration or an audio animation pack being present; the options
+    /// are applied wholesale in syncEffectAudioState (the provider no-ops on
+    /// an unchanged set and restarts capture at most once per change).
     bool m_enableAudioVisualizer = false;
-    int m_audioSpectrumBarCount = PhosphorAudio::Defaults::DefaultBarCount;
+    PhosphorAudio::SpectrumOptions m_audioOptions;
     /// Coalescing latch for scheduleEffectAudioSync: many decoration/settings
     /// callbacks can fire in one event-loop turn (a focus change removes then
     /// re-adds a decoration); collapsing them to one syncEffectAudioState keeps

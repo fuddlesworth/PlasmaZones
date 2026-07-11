@@ -1031,6 +1031,131 @@ public:
         return 256;
     }
 
+    // Audio spectrum analysis parameters (Shaders.Audio group). Values and
+    // ranges mirror PhosphorAudio::Defaults — the provider re-clamps to the
+    // same bounds, so schema and library agree on the canonical range.
+    static bool audioAutosens()
+    {
+        return true;
+    }
+    static int audioSensitivity()
+    {
+        return 100;
+    }
+    static constexpr int audioSensitivityMin()
+    {
+        return 10;
+    }
+    static constexpr int audioSensitivityMax()
+    {
+        return 500;
+    }
+    static int audioNoiseReduction()
+    {
+        return 77;
+    }
+    static constexpr int audioNoiseReductionMin()
+    {
+        return 0;
+    }
+    static constexpr int audioNoiseReductionMax()
+    {
+        return 100;
+    }
+    static int audioLowerCutoffHz()
+    {
+        return 50;
+    }
+    static constexpr int audioLowerCutoffHzMin()
+    {
+        return 20;
+    }
+    static constexpr int audioLowerCutoffHzMax()
+    {
+        return 500;
+    }
+    static int audioHigherCutoffHz()
+    {
+        return 10000;
+    }
+    static constexpr int audioHigherCutoffHzMin()
+    {
+        return 1000;
+    }
+    static constexpr int audioHigherCutoffHzMax()
+    {
+        return 20000;
+    }
+    static bool audioMonstercat()
+    {
+        return false;
+    }
+    static bool audioWaves()
+    {
+        return false;
+    }
+    static bool audioReverse()
+    {
+        return false;
+    }
+    // Provider-side extra smoothing on top of noise reduction, stored as a
+    // percent (the provider consumes it as a 0-0.95 fraction).
+    static int audioExtraSmoothing()
+    {
+        return 50;
+    }
+    static constexpr int audioExtraSmoothingMin()
+    {
+        return 0;
+    }
+    static constexpr int audioExtraSmoothingMax()
+    {
+        return 95;
+    }
+
+    static QString audioChannelMode()
+    {
+        return QStringLiteral("stereo");
+    }
+    static const QStringList& audioChannelModeOptions()
+    {
+        static const QStringList opts = {QStringLiteral("stereo"), QStringLiteral("mono-average"),
+                                         QStringLiteral("mono-left"), QStringLiteral("mono-right")};
+        return opts;
+    }
+    static QString normalizeAudioChannelMode(const QString& raw)
+    {
+        const QString normalized = raw.toLower().trimmed();
+        return audioChannelModeOptions().contains(normalized) ? normalized : audioChannelMode();
+    }
+
+    static QString audioInputMethod()
+    {
+        return QStringLiteral("auto");
+    }
+    static const QStringList& audioInputMethodOptions()
+    {
+        // "auto" = provider detection (pipewire/pulse probe). The rest mirror
+        // the capture backends upstream cava can be built with; the settings
+        // UI offers auto/pipewire/pulse and the remainder stay valid for
+        // hand-edited configs.
+        static const QStringList opts = {QStringLiteral("auto"), QStringLiteral("pipewire"),  QStringLiteral("pulse"),
+                                         QStringLiteral("alsa"), QStringLiteral("jack"),      QStringLiteral("sndio"),
+                                         QStringLiteral("oss"),  QStringLiteral("portaudio"), QStringLiteral("fifo"),
+                                         QStringLiteral("shmem")};
+        return opts;
+    }
+    static QString normalizeAudioInputMethod(const QString& raw)
+    {
+        const QString normalized = raw.toLower().trimmed();
+        return audioInputMethodOptions().contains(normalized) ? normalized : audioInputMethod();
+    }
+
+    static QString audioInputSource()
+    {
+        return QStringLiteral("auto");
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Decoration shader Settings
     //
