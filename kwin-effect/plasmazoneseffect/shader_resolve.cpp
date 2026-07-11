@@ -289,6 +289,24 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
         return color;
     };
 
+    // [0.0, 1.0] double slot (SetTintStrength). Same defence-in-depth re-read
+    // as the other slots; the range mirrors the load-time validator.
+    const auto unitDoubleSlot = [&resolved](QLatin1StringView slot) -> std::optional<double> {
+        const auto action = resolved.slot(QString(slot));
+        if (!action) {
+            return std::nullopt;
+        }
+        const QJsonValue v = action->params.value(PhosphorRules::ActionParam::Value);
+        if (!v.isDouble()) {
+            return std::nullopt;
+        }
+        const double d = v.toDouble();
+        if (d < 0.0 || d > 1.0) {
+            return std::nullopt;
+        }
+        return d;
+    };
+
     ResolvedWindowAppearance out;
     out.hideTitleBar = boolSlot(PhosphorRules::ActionSlot::HideTitleBar);
     out.showBorder = boolSlot(PhosphorRules::ActionSlot::BorderVisible);
@@ -296,6 +314,13 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
     out.borderRadius = intSlot(PhosphorRules::ActionSlot::BorderRadius, PhosphorRules::MaxBorderRadius);
     out.activeColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorActive, accentColor);
     out.inactiveColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorInactive, inactiveColor);
+    // Plain opacity+tint layer slots. The tint colour's accent sentinel
+    // resolves to the system accent (focus-independent, so the active colour
+    // is the right system fallback). `out.opacity` stays unset here — it is
+    // config-only, filled by resolveEffectiveWindowAppearance.
+    out.showOpacityTint = boolSlot(PhosphorRules::ActionSlot::OpacityTintVisible);
+    out.tintStrength = unitDoubleSlot(PhosphorRules::ActionSlot::TintStrength);
+    out.tintColor = borderColorSlot(PhosphorRules::ActionSlot::TintColor, accentColor);
     // An omitted `inactive` mirrors the active colour, matching the retired
     // global behaviour where a window with no distinct inactive colour kept its
     // active border when unfocused.

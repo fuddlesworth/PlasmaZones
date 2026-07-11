@@ -777,17 +777,27 @@ private:
         QString inactiveColor;
         bool hideTitleBar = false;
         QString titleBarScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
+        // Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*),
+        // rendered by the reserved "opacity-tint" pack in easy mode. The tint
+        // colour carries hex or the accent sentinel like the border colours.
+        bool showOpacityTint = false;
+        QString opacityTintScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
+        double opacity = 1.0;
+        double tintStrength = 0.0;
+        QString tintColor;
     };
     WindowAppearanceDefault m_windowAppearanceDefault;
 
-    /// True when a config-default border or hidden title bar could apply to some
-    /// window. Placement-change reconciliation (invalidateRuleCacheForStateChange /
-    /// flushPendingRuleInvalidations) must run whenever this is true even with an
-    /// empty rule set, because a config default is scope-gated on placement state
-    /// (isSnapped / isTiled / normal), so a snap/unsnap changes whether it applies.
+    /// True when a config-default border, hidden title bar, or opacity+tint
+    /// layer could apply to some window. Placement-change reconciliation
+    /// (invalidateRuleCacheForStateChange / flushPendingRuleInvalidations) must
+    /// run whenever this is true even with an empty rule set, because a config
+    /// default is scope-gated on placement state (isSnapped / isTiled /
+    /// normal), so a snap/unsnap changes whether it applies.
     bool hasWindowAppearanceDefault() const
     {
-        return m_windowAppearanceDefault.showBorder || m_windowAppearanceDefault.hideTitleBar;
+        return m_windowAppearanceDefault.showBorder || m_windowAppearanceDefault.hideTitleBar
+            || m_windowAppearanceDefault.showOpacityTint;
     }
 
     /// True when the decoration profile tree could decorate some window (a
@@ -946,9 +956,10 @@ private:
     /// (uSurfaceFocused), plus @p packId's customParams/customColors — seeded from
     /// THIS window's resolved values (WindowDecoration::packParamValues) with the
     /// compiled pack's baked baseline as fallback. @p wb is the window's border
-    /// entry: when its ruleBorder flag is set AND @p packId is the rule-owned
-    /// border base, THIS window's rule-resolved width / radius / colours override
-    /// the seeded slot-0 params (user packs in the chain keep their own values).
+    /// entry. The reserved "border" base pack needs no special-casing here:
+    /// updateWindowDecoration routes the window's resolved border appearance
+    /// into packParamValues by param id, the same path every pack's overrides
+    /// take.
     /// Writes onto the ALREADY-BOUND pack shader: every caller (drawWindow's idle
     /// blit, renderSurfaceChain's transition capture, renderSurfaceChainComposite's
     /// per-pack fold) owns the KWin::ShaderBinder, has already resolved @p pack

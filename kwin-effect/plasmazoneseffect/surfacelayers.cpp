@@ -150,12 +150,11 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
         "layout(location = 0) in vec2 vTexCoord;\n\n"
         "layout(location = 0) out vec4 fragColor;\n\n"
         "uniform sampler2D uFinal;\n\n"
-        // Final KWin-style opacity modulation (premultiplied multiply): the
-        // WHOLE decorated output ghosts uniformly, exactly like KWin's own
-        // Modulate trait would. Pushed per frame in drawWindow's present
-        // branch; forced to 1.0 when a chain pack declares handlesOpacity
-        // (frost applies the window's opacity to its content sample itself
-        // so its slab stays solid).
+        // Final opacity modulation (premultiplied multiply). Now a constant
+        // 1.0 push: SetOpacity is shader-backed (the plain opacity-tint
+        // layer's folded param, or a handlesOpacity pack's uSurfaceOpacity),
+        // so no KWin-style final ghosting ever applies. The uniform stays in
+        // the contract so the shared program keeps a defined value.
         "uniform float uOpacity;\n\n"
         "void main() {\n"
         "    fragColor = texture(uFinal, vTexCoord) * uOpacity;\n"
@@ -353,11 +352,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             KWin::ItemEffect keepRenderable(w->windowItem());
             KWin::WindowPaintData captureData;
             // Capture RAW (opacity 1.0). Rule opacity is applied downstream
-            // as a shader concern: the present passthrough modulates the
-            // final composite (KWin-style uniform ghosting), unless a chain
-            // pack declares handlesOpacity and applies uSurfaceOpacity to
-            // its own content sample instead (frost). Dimming the capture
-            // here would double-apply against either.
+            // as a shader concern: the plain opacity-tint layer's folded
+            // opacity param, or a handlesOpacity pack applying
+            // uSurfaceOpacity to its own content sample (frost). Dimming the
+            // capture here would double-apply against either.
             captureData.setOpacity(1.0);
             const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
             KWin::effects->drawWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);

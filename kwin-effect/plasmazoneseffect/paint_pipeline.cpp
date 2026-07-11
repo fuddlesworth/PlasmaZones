@@ -391,32 +391,22 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
 
     // Resolve + cache the rule-resolved opacity for ANY window with
     // SetOpacity rules, independent of whether a transition is in flight.
-    // Two consumers in paintWindow read this cache: the `data.setOpacity()`
-    // path (plain dimmed window) and the shader-transition draw, which
-    // pushes the value into the `iWindowOpacity` uniform so surfaceColor()
-    // dims the surface for the whole animation — a MapTexture-only custom
-    // shader can't see `data.opacity()`. This was previously an `else if`
-    // gated off the transform-driven branch above, so a window mid-
-    // transition never cached its opacity and the transition shader
-    // rendered it fully opaque until the animation settled, then snapped to
-    // the rule opacity. Resolve once per frame and cache (the cascade walk
-    // is the hot-path cost the project tracks); the cache drops at
-    // postPaintScreen.
+    // SetOpacity is shader-backed: the plain opacity-tint layer folds it into
+    // its pack param at updateWindowDecoration time, so the cache here feeds
+    // only the two shader consumers that read the rule live per frame — the
+    // uSurfaceOpacity push for handlesOpacity packs (frost dims its content
+    // sample) and the shader-transition draw's bare-uTexture0 fallback (the
+    // one path where an opacity-baking chain's fold didn't run). No KWin
+    // paint-data opacity is set anywhere: a window whose chain has no
+    // opacity-capable pack (custom chains without one, undecorated windows)
+    // simply does not honour SetOpacity — the packs own the look, and a
+    // transparent theme keeps its own alpha untouched. No setTranslucent()
+    // needed either: every shader-applied decorated window is already marked
+    // translucent below, and the rule dims nothing anywhere else.
     if (w && m_shaderManager.hasOpacityRules()) {
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
-            const auto opacity = resolveWindowOpacity(resolveRuleActions(w, getWindowId(w)));
-            m_shaderManager.cacheFrameOpacity(w, opacity);
-            // Clear the deviceOpaque region so KWin recomposites whatever
-            // sits behind a dimmed window — without it, stale background
-            // pixels show through the moment anything behind moves. The
-            // transform-driven branch already did this for windows mid-
-            // transition; only the SetOpacity-only case needs it here.
-            // Geometry is untouched (no setTransformed) — SetOpacity is a
-            // pure alpha change.
-            if (!transformDriven && opacity && *opacity < 1.0) {
-                data.setTranslucent();
-            }
+            m_shaderManager.cacheFrameOpacity(w, resolveWindowOpacity(resolveRuleActions(w, getWindowId(w))));
         }
     }
 
@@ -575,25 +565,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // to keep default-state cost to two pointer reads; without it, every
     // paintWindow call churns the rule evaluator's per-window cache for
     // zero benefit.
-    if (m_shaderManager.hasOpacityRules()) {
-        const QString winClass = w->windowClass();
-        if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
-            // Reuse the per-frame cache populated by prePaintWindow above.
-            // Falls back to a live resolve only when prePaintWindow wasn't
-            // called this frame (defensive bootstrap, test harness — KWin
-            // normally guarantees prePaintWindow→paintWindow ordering).
-            std::optional<qreal> opacity;
-            if (m_shaderManager.frameOpacityCached(w)) {
-                opacity = m_shaderManager.cachedFrameOpacity(w);
-            } else {
-                opacity = resolveWindowOpacity(resolveRuleActions(w, getWindowId(w)));
-                m_shaderManager.cacheFrameOpacity(w, opacity);
-            }
-            if (opacity) {
-                data.setOpacity(*opacity);
-            }
-        }
-    }
+    // SetOpacity deliberately sets NO KWin paint-data opacity. The rule is
+    // shader-backed: the plain opacity-tint layer folds it into its pack
+    // param, handlesOpacity packs (frost) consume it via uSurfaceOpacity,
+    // and a chain without an opacity-capable pack (or an undecorated window)
+    // does not honour it at all — the user's packs own the look, and a
+    // transparent theme keeps its own alpha. See the prePaintWindow cache
+    // comment for the two shader consumers.
 
     // Re-entrancy guard: captureOldWindowSnapshot below calls
     // effects->drawWindow, which walks the chain back through our
@@ -999,39 +977,26 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     shader->setUniform(cached->iAnchorPosInFboLoc, anchorUniforms.anchorPosInFbo);
                 }
                 if (cached->iWindowOpacityLoc >= 0) {
-                    // Feed the rule-resolved opacity so surfaceColor() dims
-                    // the surface for the entire transition. prePaintWindow
-                    // cached it this frame for any window with SetOpacity
-                    // rules; a nullopt entry (or no rules at all) means "no
-                    // rule matched this window" → full opacity. The custom
-                    // shader is compiled MapTexture-only and can't observe
-                    // data.opacity(), so this uniform is the only path that
-                    // applies the dim while the transition runs — without it
-                    // the window flashes fully opaque until the animation
-                    // settles, then snaps to the rule opacity.
+                    // SetOpacity is shader-backed: only a chain that bakes
+                    // opacity into its composite (the plain opacity-tint
+                    // layer's folded param, frost's uSurfaceOpacity) honours
+                    // the rule at all, and when the fold produced the
+                    // composite this shader samples (surfaceLayerTex) the
+                    // rule alpha is already in it — re-applying here would
+                    // dim twice, and for frost it collapses the opaque blur
+                    // slab back to rule alpha (the blur goes visually absent
+                    // for the whole transition). So push 1.0 everywhere
+                    // EXCEPT the bare-uTexture0 fallback of an
+                    // opacity-baking chain: the fold didn't run there, so
+                    // the rule-resolved cache is the only dim the window
+                    // gets for the transition's duration. Chains without an
+                    // opacity-capable pack and undecorated windows never
+                    // honour the rule, so they stay at 1.0 outright.
                     float winOpacity = 1.0f;
-                    if (m_shaderManager.frameOpacityCached(w)) {
+                    if (chainBakesOpacity && !surfaceLayerTex && m_shaderManager.frameOpacityCached(w)) {
                         if (const auto cachedOpacity = m_shaderManager.cachedFrameOpacity(w)) {
                             winOpacity = static_cast<float>(*cachedOpacity);
                         }
-                    }
-                    // handlesOpacity chains (frost / glass) already baked the
-                    // rule opacity into the composite at fold time: the pack
-                    // multiplies its content sample by uSurfaceOpacity and
-                    // fills the created translucency with the blurred pane,
-                    // emitting an OPAQUE slab. Re-applying the rule here
-                    // collapses that slab back to rule alpha — GL blending
-                    // then shows the sharp live scene through the quad and
-                    // the blur is visually absent for the whole transition.
-                    // Mirror the rest path's present exemption
-                    // (surfacePresentOpacity stays 1.0 for such chains):
-                    // push 1.0 whenever the fold produced the composite the
-                    // shader samples. The bare-uTexture0 fallback keeps the
-                    // resolved value — nothing else has applied the rule
-                    // there — and the uTexture0 retarget is covered too (it
-                    // requires surfaceLayerTex).
-                    if (chainBakesOpacity && surfaceLayerTex) {
-                        winOpacity = 1.0f;
                     }
                     shader->setUniform(cached->iWindowOpacityLoc, winOpacity);
                 }

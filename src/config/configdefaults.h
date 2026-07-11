@@ -378,6 +378,34 @@ public:
         return windowBorderScope();
     }
 
+    // ── Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*) ──
+    // The opacity analogue of the plain border: config-backed, rendered by the
+    // reserved "opacity-tint" surface pack in easy mode (no user decoration
+    // packs), suppressed wholesale by any user pack. Defaults mirror the
+    // pack's own parameter defaults (full opacity, no tint) so enabling the
+    // toggle changes nothing until the user moves a slider; the tint colour
+    // defaults to the accent sentinel like the border colours.
+    static bool showWindowOpacityTint()
+    {
+        return false;
+    }
+    static double windowOpacity()
+    {
+        return 1.0;
+    }
+    static double windowTintStrength()
+    {
+        return 0.0;
+    }
+    static QString windowTintColor()
+    {
+        return windowBorderColorActive();
+    }
+    static QString windowOpacityTintScope()
+    {
+        return windowBorderScope();
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Zone Settings
     // ═══════════════════════════════════════════════════════════════════════════

@@ -173,10 +173,23 @@ struct ResolvedWindowAppearance
     // activeColor in its matching state.
     std::optional<QColor> activeColor;
     std::optional<QColor> inactiveColor;
+    // Plain opacity+tint layer slots (SetOpacityTintVisible / SetTintStrength /
+    // SetTintColor), mirroring the border trio above. `tintColor`'s accent
+    // sentinel resolves to the system accent like `activeColor`. `opacity`
+    // carries the CONFIG value only — resolveWindowAppearance never fills it
+    // (the SetOpacity rule has its own resolver, resolveWindowOpacity, and
+    // updateWindowDecoration folds that rule over this config value when the
+    // layer renders); it exists here so resolveEffectiveWindowAppearance can
+    // carry the config value alongside the rule-resolved tint slots.
+    std::optional<bool> showOpacityTint;
+    std::optional<double> opacity;
+    std::optional<double> tintStrength;
+    std::optional<QColor> tintColor;
 
     bool any() const
     {
-        return hideTitleBar || showBorder || borderWidth || borderRadius || activeColor || inactiveColor;
+        return hideTitleBar || showBorder || borderWidth || borderRadius || activeColor || inactiveColor
+            || showOpacityTint || tintStrength || tintColor;
     }
 };
 

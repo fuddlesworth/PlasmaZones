@@ -476,6 +476,46 @@ public:
     {
         m_hideWindowTitleBars = v;
     }
+    bool showWindowOpacityTint() const override
+    {
+        return m_showWindowOpacityTint;
+    }
+    void setShowWindowOpacityTint(bool v) override
+    {
+        m_showWindowOpacityTint = v;
+    }
+    QString windowOpacityTintScope() const override
+    {
+        return m_windowOpacityTintScope;
+    }
+    void setWindowOpacityTintScope(const QString& v) override
+    {
+        m_windowOpacityTintScope = v;
+    }
+    double windowOpacity() const override
+    {
+        return m_windowOpacity;
+    }
+    void setWindowOpacity(double v) override
+    {
+        m_windowOpacity = v;
+    }
+    double windowTintStrength() const override
+    {
+        return m_windowTintStrength;
+    }
+    void setWindowTintStrength(double v) override
+    {
+        m_windowTintStrength = v;
+    }
+    QString windowTintColor() const override
+    {
+        return m_windowTintColor;
+    }
+    void setWindowTintColor(const QString& v) override
+    {
+        m_windowTintColor = v;
+    }
     QString windowTitleBarScope() const override
     {
         return m_windowTitleBarScope;
@@ -1313,6 +1353,11 @@ private:
     bool m_hideWindowTitleBars = ConfigDefaults::hideWindowTitleBars();
     QString m_windowTitleBarScope = ConfigDefaults::windowTitleBarScope();
     int m_focusFadeDuration = ConfigDefaults::focusFadeDuration();
+    bool m_showWindowOpacityTint = ConfigDefaults::showWindowOpacityTint();
+    QString m_windowOpacityTintScope = ConfigDefaults::windowOpacityTintScope();
+    double m_windowOpacity = ConfigDefaults::windowOpacity();
+    double m_windowTintStrength = ConfigDefaults::windowTintStrength();
+    QString m_windowTintColor = ConfigDefaults::windowTintColor();
 };
 
 } // namespace PlasmaZones

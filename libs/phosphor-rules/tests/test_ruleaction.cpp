@@ -94,6 +94,11 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::SetBorderRadius,
     ActionType::SetBorderColorActive,
     ActionType::SetBorderColorInactive,
+    // Plain opacity+tint layer overrides — window-domain like the border
+    // family they mirror.
+    ActionType::SetOpacityTintVisible,
+    ActionType::SetTintStrength,
+    ActionType::SetTintColor,
     ActionType::OverrideDecorationChain,
     // Per-window restore-policy overrides — window-domain, resolved daemon-side
     // (managed-restore predicate / drag-out unsnap paths), like RestorePosition.

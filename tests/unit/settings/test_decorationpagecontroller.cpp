@@ -31,12 +31,17 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <QColor>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
+#include <QTemporaryDir>
+
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
@@ -90,6 +95,84 @@ void seedBaselinePlusLeaf(TreeStubSettings& settings)
     tree.setOverride(QStringLiteral("window.tiled"), leaf);
 
     settings.setDecorationProfileTree(tree);
+}
+
+/// Author a pack directory `<root>/<subdir>/metadata.json` plus an effect.frag
+/// stub so the registry's on-disk existence checks pass (mirrors the
+/// SurfaceShaderRegistry test fixture).
+bool writePack(const QString& root, const QString& subdir, const QJsonObject& metadata)
+{
+    const QString packDir = root + QLatin1Char('/') + subdir;
+    const QFileInfo fi(packDir + QStringLiteral("/metadata.json"));
+    if (!QDir().mkpath(fi.absolutePath()))
+        return false;
+    QFile meta(fi.absoluteFilePath());
+    if (!meta.open(QIODevice::WriteOnly | QIODevice::Truncate) || meta.write(QJsonDocument(metadata).toJson()) < 0)
+        return false;
+    QFile frag(packDir + QStringLiteral("/effect.frag"));
+    return frag.open(QIODevice::WriteOnly | QIODevice::Truncate) && frag.write(QByteArrayLiteral("// stub\n")) > 0;
+}
+
+/// Metadata for a border-providing pack declaring the shared contract param
+/// ids. cornerRadius caps at 8 so the seed-clamp path is observable.
+QJsonObject fancyBorderMetadata()
+{
+    const auto param = [](const char* id, const char* type, const QJsonValue& def, const QJsonValue& min = {},
+                          const QJsonValue& max = {}) {
+        QJsonObject p{{QLatin1String("id"), QLatin1String(id)},
+                      {QLatin1String("type"), QLatin1String(type)},
+                      {QLatin1String("default"), def}};
+        if (!min.isUndefined())
+            p.insert(QLatin1String("min"), min);
+        if (!max.isUndefined())
+            p.insert(QLatin1String("max"), max);
+        return p;
+    };
+    return QJsonObject{{QLatin1String("id"), QLatin1String("fancy-border")},
+                       {QLatin1String("name"), QLatin1String("Fancy Border")},
+                       {QLatin1String("category"), QLatin1String("Borders")},
+                       {QLatin1String("providesBorder"), true},
+                       {QLatin1String("fragmentShader"), QLatin1String("effect.frag")},
+                       {QLatin1String("parameters"),
+                        QJsonArray{param("borderWidth", "int", 2, 0, 10), param("cornerRadius", "int", 8, 0, 8),
+                                   param("activeColor", "color", QLatin1String("#ff3daee9")),
+                                   param("inactiveColor", "color", QLatin1String("#ff888888"))}}};
+}
+
+/// Metadata for an opacity-tint-providing pack declaring the shared contract
+/// param ids (opacity / tintStrength / tintColor).
+QJsonObject fadeTintMetadata()
+{
+    const auto param = [](const char* id, const char* type, const QJsonValue& def) {
+        return QJsonObject{{QLatin1String("id"), QLatin1String(id)},
+                           {QLatin1String("type"), QLatin1String(type)},
+                           {QLatin1String("default"), def},
+                           {QLatin1String("min"), 0.0},
+                           {QLatin1String("max"), 1.0}};
+    };
+    return QJsonObject{{QLatin1String("id"), QLatin1String("fade-tint")},
+                       {QLatin1String("name"), QLatin1String("Fade Tint")},
+                       {QLatin1String("category"), QLatin1String("Ambience")},
+                       {QLatin1String("providesOpacityTint"), true},
+                       {QLatin1String("fragmentShader"), QLatin1String("effect.frag")},
+                       {QLatin1String("parameters"),
+                        QJsonArray{param("opacity", "float", 1.0), param("tintStrength", "float", 0.0),
+                                   QJsonObject{{QLatin1String("id"), QLatin1String("tintColor")},
+                                               {QLatin1String("type"), QLatin1String("color")},
+                                               {QLatin1String("default"), QLatin1String("#ff3daee9")}}}}};
+}
+
+/// A plain non-border pack: providesBorder absent, so setChain must not seed it.
+QJsonObject glowishMetadata()
+{
+    return QJsonObject{{QLatin1String("id"), QLatin1String("glowish")},
+                       {QLatin1String("name"), QLatin1String("Glowish")},
+                       {QLatin1String("category"), QLatin1String("Effects")},
+                       {QLatin1String("fragmentShader"), QLatin1String("effect.frag")},
+                       {QLatin1String("parameters"),
+                        QJsonArray{QJsonObject{{QLatin1String("id"), QLatin1String("intensity")},
+                                               {QLatin1String("type"), QLatin1String("float")},
+                                               {QLatin1String("default"), 1.0}}}}};
 }
 
 } // namespace
@@ -620,6 +703,105 @@ private Q_SLOTS:
                          QVariantMap{{QStringLiteral("width"), 3}});
         QCOMPARE(spy.count(), 0);
         QVERIFY(!c.hasOverride(QStringLiteral("not.a.surface")));
+    }
+
+    /// A providesBorder pack newly added to a chain gets its shared contract
+    /// params seeded from the plain Windows border setting: width copied,
+    /// radius clamped to the pack's declared max, a concrete active colour
+    /// copied, the "accent" sentinel skipped, a non-border pack untouched, and
+    /// an already-present pack never re-seeded.
+    void setChain_seedsBorderPackParamsFromPlainBorderSetting()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writePack(tmp.path(), QStringLiteral("fancy-border"), fancyBorderMetadata()));
+        QVERIFY(writePack(tmp.path(), QStringLiteral("glowish"), glowishMetadata()));
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("fancy-border")));
+
+        TreeStubSettings settings;
+        settings.setShowWindowBorder(true);
+        settings.setWindowBorderWidth(4);
+        settings.setWindowBorderRadius(12); // above the pack's max of 8
+        settings.setWindowBorderColorActive(QStringLiteral("#80ff0000"));
+        settings.setWindowBorderColorInactive(QStringLiteral("accent")); // sentinel, not a colour
+
+        DecorationPageController c(&registry, &settings);
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("fancy-border"), QStringLiteral("glowish")});
+
+        const QVariantMap params = c.rawProfile(path).value(QStringLiteral("parameters")).toMap();
+        const QVariantMap fancy = params.value(QStringLiteral("fancy-border")).toMap();
+        QCOMPARE(fancy.value(QStringLiteral("borderWidth")).toInt(), 4);
+        QCOMPARE(fancy.value(QStringLiteral("cornerRadius")).toInt(), 8);
+        QCOMPARE(QColor(fancy.value(QStringLiteral("activeColor")).toString()), QColor(QStringLiteral("#80ff0000")));
+        QVERIFY2(!fancy.contains(QStringLiteral("inactiveColor")), "accent sentinel must not seed a colour");
+        QVERIFY2(!params.contains(QStringLiteral("glowish")), "non-border pack must not be seeded");
+
+        // Re-writing the chain with the pack already present must not re-seed:
+        // the user's (possibly edited) values are theirs now.
+        settings.setWindowBorderWidth(9);
+        c.setChain(path, QStringList{QStringLiteral("fancy-border")});
+        const QVariantMap after = c.rawProfile(path)
+                                      .value(QStringLiteral("parameters"))
+                                      .toMap()
+                                      .value(QStringLiteral("fancy-border"))
+                                      .toMap();
+        QCOMPARE(after.value(QStringLiteral("borderWidth")).toInt(), 4);
+    }
+
+    /// A providesOpacityTint pack newly added to a chain gets opacity /
+    /// tintStrength / tintColor seeded from the plain opacity+tint setting,
+    /// mirroring the border seeding. The plain border layer being off does not
+    /// block it — each contract seeds under its own toggle.
+    void setChain_seedsOpacityTintPackParamsFromPlainLayerSetting()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writePack(tmp.path(), QStringLiteral("fade-tint"), fadeTintMetadata()));
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("fade-tint")));
+
+        TreeStubSettings settings;
+        settings.setShowWindowBorder(false);
+        settings.setShowWindowOpacityTint(true);
+        settings.setWindowOpacity(0.8);
+        settings.setWindowTintStrength(0.25);
+        settings.setWindowTintColor(QStringLiteral("#80ff0000"));
+
+        DecorationPageController c(&registry, &settings);
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("fade-tint")});
+
+        const QVariantMap params =
+            c.rawProfile(path).value(QStringLiteral("parameters")).toMap().value(QStringLiteral("fade-tint")).toMap();
+        QCOMPARE(params.value(QStringLiteral("opacity")).toDouble(), 0.8);
+        QCOMPARE(params.value(QStringLiteral("tintStrength")).toDouble(), 0.25);
+        QCOMPARE(QColor(params.value(QStringLiteral("tintColor")).toString()), QColor(QStringLiteral("#80ff0000")));
+    }
+
+    /// With the plain border toggled off there is no look to carry over, so
+    /// adding a border pack seeds nothing and the pack's own defaults apply.
+    void setChain_noSeedWhenPlainBorderOff()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writePack(tmp.path(), QStringLiteral("fancy-border"), fancyBorderMetadata()));
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        TreeStubSettings settings;
+        settings.setShowWindowBorder(false);
+        settings.setWindowBorderWidth(4);
+
+        DecorationPageController c(&registry, &settings);
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("fancy-border")});
+
+        const QVariantMap params = c.rawProfile(path).value(QStringLiteral("parameters")).toMap();
+        QVERIFY2(!params.contains(QStringLiteral("fancy-border")), "no seeding while the plain border is off");
     }
 };
 

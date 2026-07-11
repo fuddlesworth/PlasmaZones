@@ -691,6 +691,43 @@ void PlasmaZonesEffect::loadCachedSettings()
             scheduleBorderSweep();
         }
     });
+    // Plain opacity+tint layer (the border's opacity analogue) — same
+    // change-detect + sweep pattern as the border keys above.
+    loadSettingAsync(QStringLiteral("showWindowOpacityTint"), [this](const QVariant& v) {
+        const bool b = v.toBool();
+        if (m_windowAppearanceDefault.showOpacityTint != b) {
+            m_windowAppearanceDefault.showOpacityTint = b;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowOpacityTintScope"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.opacityTintScope != s) {
+            m_windowAppearanceDefault.opacityTintScope = s;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowOpacity"), [this](const QVariant& v) {
+        const double d = v.toDouble();
+        if (!qFuzzyCompare(m_windowAppearanceDefault.opacity + 1.0, d + 1.0)) {
+            m_windowAppearanceDefault.opacity = d;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowTintStrength"), [this](const QVariant& v) {
+        const double d = v.toDouble();
+        if (!qFuzzyCompare(m_windowAppearanceDefault.tintStrength + 1.0, d + 1.0)) {
+            m_windowAppearanceDefault.tintStrength = d;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowTintColor"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.tintColor != s) {
+            m_windowAppearanceDefault.tintColor = s;
+            scheduleBorderSweep();
+        }
+    });
     // Decoration focus cross-fade (uSurfaceFocused ramp). A standalone
     // decoration setting, deliberately independent of animationsEnabled /
     // animationDuration / the window.focus motion node: the fade is a

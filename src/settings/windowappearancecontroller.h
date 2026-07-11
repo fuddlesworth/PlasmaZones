@@ -56,6 +56,17 @@ class WindowAppearanceController : public PhosphorControl::PageController
         QString titleBarScope READ windowTitleBarScope WRITE setWindowTitleBarScope NOTIFY windowTitleBarScopeChanged)
     // Decoration focus cross-fade duration (ms); 0 switches instantly.
     Q_PROPERTY(int focusFadeDuration READ focusFadeDuration WRITE setFocusFadeDuration NOTIFY focusFadeDurationChanged)
+    // ── Plain opacity+tint layer (Windows.*) ──────────────────────────────────
+    // Opacity/strength are [0.0, 1.0]; the tint colour shares the border
+    // colours' "#AARRGGBB" or "accent" sentinel shape.
+    Q_PROPERTY(bool showWindowOpacityTint READ showWindowOpacityTint WRITE setShowWindowOpacityTint NOTIFY
+                   showWindowOpacityTintChanged)
+    Q_PROPERTY(QString opacityTintScope READ windowOpacityTintScope WRITE setWindowOpacityTintScope NOTIFY
+                   windowOpacityTintScopeChanged)
+    Q_PROPERTY(double windowOpacity READ windowOpacity WRITE setWindowOpacity NOTIFY windowOpacityChanged)
+    Q_PROPERTY(
+        double windowTintStrength READ windowTintStrength WRITE setWindowTintStrength NOTIFY windowTintStrengthChanged)
+    Q_PROPERTY(QString windowTintColor READ windowTintColor WRITE setWindowTintColor NOTIFY windowTintColorChanged)
 
     // ── Shared inner/outer gap model (Gaps.*) ─────────────────────────────────
     Q_PROPERTY(int innerGap READ innerGap WRITE setInnerGap NOTIFY innerGapChanged)
@@ -127,6 +138,18 @@ public:
     void setHideWindowTitleBars(bool hide);
     void setWindowTitleBarScope(const QString& scope);
     void setFocusFadeDuration(int ms);
+
+    // Plain opacity+tint layer — forward to ISettings.
+    bool showWindowOpacityTint() const;
+    QString windowOpacityTintScope() const;
+    double windowOpacity() const;
+    double windowTintStrength() const;
+    QString windowTintColor() const;
+    void setShowWindowOpacityTint(bool show);
+    void setWindowOpacityTintScope(const QString& scope);
+    void setWindowOpacity(double opacity);
+    void setWindowTintStrength(double strength);
+    void setWindowTintColor(const QString& color);
 
     // Shared inner/outer gaps — forward to ISettings.
     int innerGap() const;
@@ -230,6 +253,11 @@ Q_SIGNALS:
     void hideWindowTitleBarsChanged();
     void windowTitleBarScopeChanged();
     void focusFadeDurationChanged();
+    void showWindowOpacityTintChanged();
+    void windowOpacityTintScopeChanged();
+    void windowOpacityChanged();
+    void windowTintStrengthChanged();
+    void windowTintColorChanged();
     void innerGapChanged();
     void outerGapChanged();
     void usePerSideOuterGapChanged();

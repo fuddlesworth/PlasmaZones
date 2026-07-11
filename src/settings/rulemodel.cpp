@@ -441,6 +441,17 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             }
             return PhosphorI18n::tr("Unfocused border: %1").arg(shown);
         }
+        if (action.type == ActionType::SetTintStrength) {
+            // Wire value is the [0,1] strength; shown as a percent to match
+            // the editor (same treatment as SetSplitRatio).
+            return PhosphorI18n::tr("Tint strength: %1%").arg(qRound(raw.toDouble() * 100.0));
+        }
+        if (action.type == ActionType::SetTintColor) {
+            const QString value = raw.toString();
+            const QString shown =
+                value == PhosphorRules::BorderColorToken::Accent ? PhosphorI18n::tr("Accent") : value.toUpper();
+            return PhosphorI18n::tr("Tint color: %1").arg(shown);
+        }
         // ── autotile parameter overrides ──
         if (action.type == ActionType::SetMaxWindows) {
             return PhosphorI18n::tr("Max tiled windows: %1").arg(raw.toInt());

@@ -274,37 +274,17 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     }
     // Pack-declared parameters (customParams / customColors). Seed from THIS
     // window's resolved values (updateWindowDecoration fills packParamValues from
-    // the window's own DecorationProfile), falling back to the compiled pack's
-    // baked baseline when the registry couldn't resolve the pack at update
-    // time. Only slots the shader actually references resolve to a valid
-    // location.
-    //
-    // Per-window border override: when the base "border" pack is driven by a
-    // window rule, push THIS window's rule-resolved width / radius / colours
-    // over even the per-window seed. The border pack lays its params out as
-    // customParams[0] = (borderWidth, cornerRadius, useSystemAccent, _) and
-    // colours as customColors[0]=active / customColors[1]=inactive, matching
-    // data/surface/border/metadata.json; the shader selects active vs inactive
-    // by uSurfaceFocused (pushed above). useSystemAccent is forced false
-    // because the rule colour is already accent-resolved
-    // (resolveWindowAppearance maps the accent sentinel to the live accent
-    // before it lands here).
+    // the window's own DecorationProfile — for the reserved "border" base pack
+    // that resolution already carries the window's rule/config border
+    // appearance, routed by param id like any other pack override), falling
+    // back to the compiled pack's baked baseline when the registry couldn't
+    // resolve the pack at update time. Only slots the shader actually
+    // references resolve to a valid location.
     const auto windowVals = wb.packParamValues.constFind(packId);
-    auto paramsValues = (windowVals != wb.packParamValues.constEnd()) ? windowVals->params : pack.customParamsValues;
-    auto colorsValues = (windowVals != wb.packParamValues.constEnd()) ? windowVals->colors : pack.customColorsValues;
-    // Rule override applies ONLY to the rule-owned "border" base pack — the
-    // composite fold routes every chain pack through here, and a user pack
-    // (e.g. glow) must keep its own slot-0 params.
-    if (wb.ruleBorder && packId == wb.basePackId) {
-        paramsValues[0] =
-            QVector4D(static_cast<float>(wb.ruleBorderWidth), static_cast<float>(wb.ruleBorderRadius), 0.0f, 0.0f);
-        const QColor& a = wb.ruleBorderActiveColor;
-        const QColor& i = wb.ruleBorderInactiveColor;
-        colorsValues[0] = QVector4D(static_cast<float>(a.redF()), static_cast<float>(a.greenF()),
-                                    static_cast<float>(a.blueF()), static_cast<float>(a.alphaF()));
-        colorsValues[1] = QVector4D(static_cast<float>(i.redF()), static_cast<float>(i.greenF()),
-                                    static_cast<float>(i.blueF()), static_cast<float>(i.alphaF()));
-    }
+    const auto& paramsValues =
+        (windowVals != wb.packParamValues.constEnd()) ? windowVals->params : pack.customParamsValues;
+    const auto& colorsValues =
+        (windowVals != wb.packParamValues.constEnd()) ? windowVals->colors : pack.customColorsValues;
     for (int slot = 0; slot < PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams; ++slot) {
         if (pack.customParamsLoc[slot] >= 0) {
             shader->setUniform(pack.customParamsLoc[slot], paramsValues[slot]);
@@ -359,21 +339,16 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 if (m_surfacePresentFinalLoc >= 0) {
                     present->setUniform(m_surfacePresentFinalLoc, unit);
                 }
-                // Final KWin-style opacity modulation. Pushed EVERY frame —
-                // the program is shared across windows, so a stale value from
-                // another window would leak. 1.0 when a chain pack handles
-                // opacity itself (frost), else the freshest resolved value.
+                // Present opacity is a constant 1.0 now: SetOpacity is
+                // shader-backed (folded into the plain opacity-tint layer's
+                // param, or consumed by a handlesOpacity pack via
+                // uSurfaceOpacity), and a chain without an opacity-capable
+                // pack does not honour the rule at all — so no final
+                // KWin-style modulation ever applies. Still pushed EVERY
+                // frame: the program is shared across windows and a stale
+                // value from an older build would leak.
                 if (m_surfacePresentOpacityLoc >= 0) {
-                    float presentOpacity = 1.0f;
-                    if (!bit->chainHandlesOpacity) {
-                        qreal resolved = bit->ruleOpacity;
-                        if (m_shaderManager.frameOpacityCached(w)) {
-                            const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
-                            resolved = frameOpacity ? qBound(0.0, *frameOpacity, 1.0) : 1.0;
-                        }
-                        presentOpacity = static_cast<float>(resolved);
-                    }
-                    present->setUniform(m_surfacePresentOpacityLoc, presentOpacity);
+                    present->setUniform(m_surfacePresentOpacityLoc, 1.0f);
                 }
                 glActiveTexture(GL_TEXTURE0);
                 boundChannels = 1; // unit kSurfaceChannelBaseUnit+0, freed in the cleanup below

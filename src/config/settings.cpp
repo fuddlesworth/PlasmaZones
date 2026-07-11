@@ -1442,6 +1442,18 @@ P_STORE_GET(QString, windowTitleBarScope, windowsAppearanceGroup, titleBarScopeK
 P_STORE_SET_STRING(setWindowTitleBarScope, windowsAppearanceGroup, titleBarScopeKey, windowTitleBarScopeChanged)
 P_STORE_GET(int, focusFadeDuration, windowsAppearanceGroup, focusFadeDurationKey, int)
 P_STORE_SET_INT(setFocusFadeDuration, windowsAppearanceGroup, focusFadeDurationKey, focusFadeDurationChanged)
+// Plain opacity+tint layer (same "Windows" group).
+P_STORE_GET(bool, showWindowOpacityTint, windowsAppearanceGroup, showOpacityTintKey, bool)
+P_STORE_SET_BOOL(setShowWindowOpacityTint, windowsAppearanceGroup, showOpacityTintKey, showWindowOpacityTintChanged)
+P_STORE_GET(QString, windowOpacityTintScope, windowsAppearanceGroup, opacityTintScopeKey, QString)
+P_STORE_SET_STRING(setWindowOpacityTintScope, windowsAppearanceGroup, opacityTintScopeKey,
+                   windowOpacityTintScopeChanged)
+P_STORE_GET(double, windowOpacity, windowsAppearanceGroup, opacityKey, double)
+P_STORE_SET_DOUBLE(setWindowOpacity, windowsAppearanceGroup, opacityKey, windowOpacityChanged)
+P_STORE_GET(double, windowTintStrength, windowsAppearanceGroup, tintStrengthKey, double)
+P_STORE_SET_DOUBLE(setWindowTintStrength, windowsAppearanceGroup, tintStrengthKey, windowTintStrengthChanged)
+P_STORE_GET(QString, windowTintColor, windowsAppearanceGroup, tintColorKey, QString)
+P_STORE_SET_STRING(setWindowTintColor, windowsAppearanceGroup, tintColorKey, windowTintColorChanged)
 
 void Settings::connectRuleStoreGapReactivity()
 {

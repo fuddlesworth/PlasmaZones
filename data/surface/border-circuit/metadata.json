@@ -5,6 +5,7 @@
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Borders",
+    "providesBorder": true,
     "animated": true,
     "fragmentShader": "effect.frag",
     "parameters": [

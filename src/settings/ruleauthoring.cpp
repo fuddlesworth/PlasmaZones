@@ -344,6 +344,15 @@ QString paramLabel(const QString& type, const QString& key)
         // colour param just reads "Border color".
         return PhosphorI18n::tr("Border color");
     }
+    if (type == ActionType::SetOpacityTintVisible && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Show opacity and tint (off = hide)");
+    }
+    if (type == ActionType::SetTintStrength && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Tint strength (%)");
+    }
+    if (type == ActionType::SetTintColor && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Tint color");
+    }
     // Per-context gap overrides (all single-value, keyed ActionParam::Value).
     if (type == ActionType::SetInnerGap && key == ActionParam::Value) {
         return PhosphorI18n::tr("Inner gap (px)");
@@ -651,6 +660,15 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetBorderColorInactive) {
         return PhosphorI18n::tr("Set unfocused border color");
     }
+    if (type == ActionType::SetOpacityTintVisible) {
+        return PhosphorI18n::tr("Show opacity and tint");
+    }
+    if (type == ActionType::SetTintStrength) {
+        return PhosphorI18n::tr("Set tint strength");
+    }
+    if (type == ActionType::SetTintColor) {
+        return PhosphorI18n::tr("Set tint color");
+    }
     if (type == ActionType::SetInnerGap) {
         return PhosphorI18n::tr("Set inner gap");
     }
@@ -877,6 +895,9 @@ QString boolActionStateLabel(const QString& type, bool on)
     }
     if (type == ActionType::SetBorderVisible) {
         return on ? PhosphorI18n::tr("Show border") : PhosphorI18n::tr("Hide border");
+    }
+    if (type == ActionType::SetOpacityTintVisible) {
+        return on ? PhosphorI18n::tr("Show opacity and tint") : PhosphorI18n::tr("Hide opacity and tint");
     }
     if (type == ActionType::SetUsePerSideOuterGap) {
         return on ? PhosphorI18n::tr("Per-side outer gaps") : PhosphorI18n::tr("Uniform outer gap");
@@ -1210,10 +1231,11 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // resolves no token — validator is plain hex), so seed a concrete
             // hex (the Plasma default blue, matching the colour picker's own
             // empty-value fallback) that passes `hasHexColor`.
-            const bool isBorderColor = typeWire == QString(PhosphorRules::ActionType::SetBorderColorActive)
-                || typeWire == QString(PhosphorRules::ActionType::SetBorderColorInactive);
+            const bool isAccentColor = typeWire == QString(PhosphorRules::ActionType::SetBorderColorActive)
+                || typeWire == QString(PhosphorRules::ActionType::SetBorderColorInactive)
+                || typeWire == QString(PhosphorRules::ActionType::SetTintColor);
             payload[key] =
-                isBorderColor ? QString(PhosphorRules::BorderColorToken::Accent) : QStringLiteral("#FF3DAEE9");
+                isAccentColor ? QString(PhosphorRules::BorderColorToken::Accent) : QStringLiteral("#FF3DAEE9");
         } else if (kind == QLatin1String("zoneOrdinals")) {
             // Seed a valid single-zone default ([1]) so a fresh SnapToZone rule
             // passes the validator (non-empty array of positive ordinals) before

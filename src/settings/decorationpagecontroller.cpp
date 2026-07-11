@@ -13,6 +13,7 @@
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
+#include <QColor>
 #include <QLatin1String>
 
 #include <algorithm>
@@ -167,6 +168,11 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
         return;
     DecorationProfileTree tree = readTree(m_settings);
     DecorationProfile profile = directProfileAt(tree, path);
+    // Packs newly entering the chain, for the border-seed below. The previous
+    // chain is the DIRECT one when engaged, else the resolved effective chain
+    // (same first-direct-edit seeding rationale as setChainLayerEnabled): a
+    // pack the user was already previewing via inheritance is not "new".
+    const QStringList prevChain = profile.chain ? *profile.chain : tree.resolve(path).effectiveChain();
     profile.chain = chain;
     // Drop per-pack parameter overrides for any pack no longer in the chain, so
     // removing a pack discards its settings — re-adding it later starts from the
@@ -194,6 +200,79 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
                                       }),
                        disabled.end());
         profile.disabledPacks = disabled;
+    }
+    // Plain-look handoff: any user pack suppresses the plain Windows border
+    // and opacity+tint layers wholesale in the kwin effect, so a pack newly
+    // added to the chain that provides one of those looks (providesBorder /
+    // providesOpacityTint metadata) gets its shared contract params seeded
+    // from the matching setting — the user's border keeps its size and colour
+    // (and their fade its strength and tint) when they trade the plain layer
+    // for a pack. Seeds only while the matching plain layer is on (otherwise
+    // there is no look to carry), only ids the pack declares (border-rgb has
+    // no colour slots, border-double no borderWidth), clamped to the pack's
+    // declared bounds, and never over an existing value. The "accent" colour
+    // sentinel is not a valid QColor and is skipped, leaving the pack's own
+    // default colours.
+    if (m_registry && (m_settings->showWindowBorder() || m_settings->showWindowOpacityTint())) {
+        QVariantMap allParams = profile.parameters.value_or(QVariantMap());
+        bool seeded = false;
+        for (const QString& packId : chain) {
+            if (prevChain.contains(packId) || !m_registry->hasEffect(packId))
+                continue;
+            const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_registry->effect(packId);
+            const bool seedBorder = effect.providesBorder && m_settings->showWindowBorder();
+            const bool seedOpacityTint = effect.providesOpacityTint && m_settings->showWindowOpacityTint();
+            if (!seedBorder && !seedOpacityTint)
+                continue;
+            QVariantMap packParams = allParams.value(packId).toMap();
+            const auto seedParam = [&](const QString& id, const QVariant& value) {
+                if (packParams.contains(id))
+                    return;
+                for (const auto& p : effect.parameters) {
+                    if (p.id != id)
+                        continue;
+                    QVariant v = value;
+                    // Clamp NUMERIC params only — a colour string also
+                    // canConvert<double>() (to 0.0), so gate on the declared
+                    // type, not on convertibility.
+                    const bool numeric = p.type == QLatin1String("int") || p.type == QLatin1String("float");
+                    if (numeric && p.minValue.isValid() && p.maxValue.isValid()) {
+                        v = qBound(p.minValue.toDouble(), v.toDouble(), p.maxValue.toDouble());
+                        // Keep integer params integral so the editor's spinbox
+                        // round-trips without a fractional cast.
+                        if (p.type == QLatin1String("int"))
+                            v = v.toInt();
+                    }
+                    packParams.insert(id, v);
+                    seeded = true;
+                    break;
+                }
+            };
+            if (seedBorder) {
+                seedParam(QStringLiteral("borderWidth"), m_settings->windowBorderWidth());
+                seedParam(QStringLiteral("cornerRadius"), m_settings->windowBorderRadius());
+                // Colours ride as their #AARRGGBB strings — the runtime
+                // converts to QColor and JSON persistence round-trips them
+                // untouched.
+                const QString active = m_settings->windowBorderColorActive();
+                if (QColor(active).isValid())
+                    seedParam(QStringLiteral("activeColor"), active);
+                const QString inactive = m_settings->windowBorderColorInactive();
+                if (QColor(inactive).isValid())
+                    seedParam(QStringLiteral("inactiveColor"), inactive);
+            }
+            if (seedOpacityTint) {
+                seedParam(QStringLiteral("opacity"), m_settings->windowOpacity());
+                seedParam(QStringLiteral("tintStrength"), m_settings->windowTintStrength());
+                const QString tint = m_settings->windowTintColor();
+                if (QColor(tint).isValid())
+                    seedParam(QStringLiteral("tintColor"), tint);
+            }
+            if (!packParams.isEmpty())
+                allParams.insert(packId, packParams);
+        }
+        if (seeded)
+            profile.parameters = allParams;
     }
     writeDirectProfile(m_settings, tree, path, profile);
 }

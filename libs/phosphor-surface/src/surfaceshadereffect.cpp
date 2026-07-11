@@ -46,6 +46,10 @@ QJsonObject SurfaceShaderEffect::toJson() const
         obj.insert(QLatin1String("needsBackdrop"), true);
     if (handlesOpacity)
         obj.insert(QLatin1String("handlesOpacity"), true);
+    if (providesBorder)
+        obj.insert(QLatin1String("providesBorder"), true);
+    if (providesOpacityTint)
+        obj.insert(QLatin1String("providesOpacityTint"), true);
     if (audio)
         obj.insert(QLatin1String("audio"), true);
     if (!bufferShaderPaths.isEmpty()) {
@@ -157,6 +161,8 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     e.paddingParam = obj.value(QLatin1String("paddingParam")).toString();
     e.needsBackdrop = obj.value(QLatin1String("needsBackdrop")).toBool(false);
     e.handlesOpacity = obj.value(QLatin1String("handlesOpacity")).toBool(false);
+    e.providesBorder = obj.value(QLatin1String("providesBorder")).toBool(false);
+    e.providesOpacityTint = obj.value(QLatin1String("providesOpacityTint")).toBool(false);
     e.audio = obj.value(QLatin1String("audio")).toBool(false);
     const QJsonArray bufArr = obj.value(QLatin1String("bufferShaders")).toArray();
     for (const QJsonValue& v : bufArr) {
@@ -306,6 +312,7 @@ bool SurfaceShaderEffect::operator==(const SurfaceShaderEffect& other) const
         return false;
     if (isMultipass != other.isMultipass || animated != other.animated || paddingParam != other.paddingParam
         || needsBackdrop != other.needsBackdrop || handlesOpacity != other.handlesOpacity || audio != other.audio
+        || providesBorder != other.providesBorder || providesOpacityTint != other.providesOpacityTint
         || bufferFeedback != other.bufferFeedback || useDepthBuffer != other.useDepthBuffer)
         return false;
     if (!qFuzzyCompare(bufferScale + 1.0, other.bufferScale + 1.0))

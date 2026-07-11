@@ -182,6 +182,14 @@ public:
     Q_PROPERTY(QString windowTitleBarScope READ windowTitleBarScope WRITE setWindowTitleBarScope NOTIFY
                    windowTitleBarScopeChanged)
     Q_PROPERTY(int focusFadeDuration READ focusFadeDuration WRITE setFocusFadeDuration NOTIFY focusFadeDurationChanged)
+    Q_PROPERTY(bool showWindowOpacityTint READ showWindowOpacityTint WRITE setShowWindowOpacityTint NOTIFY
+                   showWindowOpacityTintChanged)
+    Q_PROPERTY(QString windowOpacityTintScope READ windowOpacityTintScope WRITE setWindowOpacityTintScope NOTIFY
+                   windowOpacityTintScopeChanged)
+    Q_PROPERTY(double windowOpacity READ windowOpacity WRITE setWindowOpacity NOTIFY windowOpacityChanged)
+    Q_PROPERTY(
+        double windowTintStrength READ windowTintStrength WRITE setWindowTintStrength NOTIFY windowTintStrengthChanged)
+    Q_PROPERTY(QString windowTintColor READ windowTintColor WRITE setWindowTintColor NOTIFY windowTintColorChanged)
 
     // Performance and behavior (configurable constants)
     Q_PROPERTY(int pollIntervalMs READ pollIntervalMs WRITE setPollIntervalMs NOTIFY pollIntervalMsChanged)
@@ -675,6 +683,17 @@ public:
     void setWindowTitleBarScope(const QString& scope) override;
     int focusFadeDuration() const override;
     void setFocusFadeDuration(int ms) override;
+    // Plain opacity+tint layer (same "Windows" group).
+    bool showWindowOpacityTint() const override;
+    void setShowWindowOpacityTint(bool show) override;
+    QString windowOpacityTintScope() const override;
+    void setWindowOpacityTintScope(const QString& scope) override;
+    double windowOpacity() const override;
+    void setWindowOpacity(double opacity) override;
+    double windowTintStrength() const override;
+    void setWindowTintStrength(double strength) override;
+    QString windowTintColor() const override;
+    void setWindowTintColor(const QString& color) override;
 
     // Performance — PhosphorConfig::Store-backed (see settingsschema.cpp).
     int pollIntervalMs() const override;
