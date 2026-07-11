@@ -218,12 +218,19 @@ void CavaSpectrumProvider::setOptions(const SpectrumOptions& options)
     if (m_options == normalized) {
         return;
     }
+    // extraSmoothing is applied provider-side (the EMA over incoming frames)
+    // and never reaches the cava config, so a change to it alone must not
+    // bounce the capture process — the smoothing loop reads the live value on
+    // the next frame. Only a field cava actually consumes forces a restart.
+    SpectrumOptions cavaView = normalized;
+    cavaView.extraSmoothing = m_options.extraSmoothing;
+    const bool cavaAffecting = !(cavaView == m_options);
     m_options = normalized;
     // Restart whenever a process exists in ANY live state, not just Running:
     // a change landing in the brief Starting window must still reach the
     // child, and restartAsync already handles a not-yet-Running process (the
     // terminate → finished → start() chain applies the fresh options).
-    if (m_process && m_process->state() != QProcess::NotRunning) {
+    if (cavaAffecting && m_process && m_process->state() != QProcess::NotRunning) {
         restartAsync();
     }
 }
