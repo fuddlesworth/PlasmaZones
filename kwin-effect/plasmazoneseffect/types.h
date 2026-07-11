@@ -690,6 +690,18 @@ struct ShaderTransition
     /// real teardown after a settle tail so velocity-driven shaders can
     /// relax. Set at the move-start install site.
     bool holdUntilRelease = false;
+    /// Held-move release leg (velocity/trail move packs, no lattice):
+    /// `shaderClockNowMs()` stamped by windowFinishUserMovedResized. The
+    /// hold flag stays SET through the release tail (it also drives the
+    /// velocity-spring integration and the expanded-repaint injection,
+    /// which the ramp-down still needs), and paintWindow ramps the pinned
+    /// progress back toward 0 over `durationMs` from this stamp, so the
+    /// shader plays iTime 1→0 after the button lets go and a
+    /// dissolve-while-held pack can rematerialise. -1 = not released (or
+    /// a mesh pack, whose ring-out rides the settle gate instead). The
+    /// drag-start handler clears it on a re-grab and rewinds startTimeMs
+    /// so the grab-in ramp resumes from the current value.
+    qint64 releaseStartMs = -1;
     /// Frame origin at grab — iMoveOffset = current origin - this.
     QPointF grabOrigin;
     /// Underdamped spring filter over the instantaneous frame velocity;

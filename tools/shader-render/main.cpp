@@ -60,7 +60,7 @@ QString resolveShaderMetadata(const QString& shaderArg, const QString& shaderDir
 }
 
 // Same logic for layouts — argument is either a layout id (basename
-// of a JSON file under shaderDir) or a direct path.
+// of a JSON file under layoutDir) or a direct path.
 QString resolveLayoutPath(const QString& layoutArg, const QString& layoutDir)
 {
     if (layoutArg.contains(QLatin1Char('/')) || layoutArg.endsWith(QLatin1String(".json"))) {
@@ -227,6 +227,13 @@ int main(int argc, char* argv[])
         return 2;
     }
 
+    bool stillHighlightOk = false;
+    const int stillHighlightZone = parser.value(stillHighlightOpt).toInt(&stillHighlightOk);
+    if (!stillHighlightOk || stillHighlightZone < 0) {
+        std::cerr << "error: --still-highlight must be a non-negative integer (0 = disabled)\n";
+        return 2;
+    }
+
     // ── Resolve inputs ───────────────────────────────────────────
     const QString shaderArg = parser.value(shaderOpt);
     const QString layoutArg = parser.value(layoutOpt);
@@ -237,6 +244,16 @@ int main(int argc, char* argv[])
     if (!QFileInfo::exists(metadataPath)) {
         std::cerr << "error: shader metadata not found: " << metadataPath.toStdString() << "\n";
         return 1;
+    }
+    // The pack layout contract requires the exact name metadata.json: both
+    // the parameter-defaults loader and the renderer's p_<id> preamble
+    // re-read <dir>/metadata.json by that name, so accepting another
+    // basename would seed top-level fields from one file and parameters
+    // from another. Reject at the boundary with a clear message instead.
+    if (QFileInfo(metadataPath).fileName() != QLatin1String("metadata.json")) {
+        std::cerr << "error: --shader path must point at a file named metadata.json, got " << metadataPath.toStdString()
+                  << "\n";
+        return 2;
     }
 
     const QString layoutPath = resolveLayoutPath(layoutArg, layoutDir);
@@ -275,18 +292,12 @@ int main(int argc, char* argv[])
     // ── Render ──────────────────────────────────────────────────
     PlasmaZones::ShaderRender::RenderOptions opts;
     opts.metadata = metadata;
+    opts.metadataPath = QFileInfo(metadataPath).absoluteFilePath();
     opts.zones = zones;
     opts.resolution = resolution;
     opts.frameCount = frameCount;
     opts.fps = fps;
     opts.audio = audio.get();
-
-    bool stillHighlightOk = false;
-    const int stillHighlightZone = parser.value(stillHighlightOpt).toInt(&stillHighlightOk);
-    if (!stillHighlightOk || stillHighlightZone < 0) {
-        std::cerr << "error: --still-highlight must be a non-negative integer (0 = disabled)\n";
-        return 2;
-    }
     opts.stillHighlightZone = stillHighlightZone;
 
     auto sink = PlasmaZones::ShaderRender::makeFrameSink(outPath, outputSize, fps);

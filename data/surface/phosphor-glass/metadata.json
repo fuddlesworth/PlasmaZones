@@ -1,0 +1,115 @@
+{
+    "id": "phosphor-glass",
+    "name": "Phosphor Glass",
+    "description": "Dark navy glass over a real blur that behaves like a phosphor screen. Bright content behind the surface excites a glowing response in the brand gradient, the glow breathes like phosphor persistence, and a slow diagonal sweep recharges the pane as it passes. Where no scene exists behind the surface it falls back to a translucent navy slab with the same shimmer.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Blur",
+    "needsBackdrop": true,
+    "handlesOpacity": true,
+    "animated": true,
+    "multipass": true,
+    "bufferScale": 0.25,
+    "bufferShaders": ["builtin:gaussian-h", "builtin:gaussian-v"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "blurRadius",
+            "name": "Blur radius",
+            "type": "int",
+            "default": 24,
+            "min": 4,
+            "max": 64,
+            "description": "Strength of the backdrop blur (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Roundness of the pane corners (px, 0 for square)"
+        },
+        {
+            "id": "tintStrength",
+            "name": "Navy depth",
+            "type": "float",
+            "default": 0.55,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How far the blurred scene sinks toward the navy surface"
+        },
+        {
+            "id": "glowStrength",
+            "name": "Glow strength",
+            "type": "float",
+            "default": 0.9,
+            "min": 0.0,
+            "max": 2.0,
+            "description": "Brightness of the excited phosphor response"
+        },
+        {
+            "id": "exciteThreshold",
+            "name": "Excitation threshold",
+            "type": "float",
+            "default": 0.45,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How bright the backdrop must be before the glass glows"
+        },
+        {
+            "id": "flowSpeed",
+            "name": "Hue flow speed",
+            "type": "float",
+            "default": 0.02,
+            "min": 0.0,
+            "max": 0.2,
+            "description": "How fast the gradient hue drifts through the pane"
+        },
+        {
+            "id": "sweepSpeed",
+            "name": "Sweep speed",
+            "type": "float",
+            "default": 0.08,
+            "min": 0.0,
+            "max": 0.5,
+            "description": "How fast the recharge sweep travels the pane"
+        },
+        {
+            "id": "colorCyan",
+            "name": "Gradient cyan",
+            "type": "color",
+            "default": "#22D3EE",
+            "description": "First stop of the brand gradient"
+        },
+        {
+            "id": "colorBlue",
+            "name": "Gradient blue",
+            "type": "color",
+            "default": "#3B82F6",
+            "description": "Second stop of the brand gradient"
+        },
+        {
+            "id": "colorPurple",
+            "name": "Gradient purple",
+            "type": "color",
+            "default": "#A855F7",
+            "description": "Third stop of the brand gradient"
+        },
+        {
+            "id": "colorRose",
+            "name": "Gradient rose",
+            "type": "color",
+            "default": "#F43F5E",
+            "description": "Fourth stop of the brand gradient"
+        },
+        {
+            "id": "colorTint",
+            "name": "Glass tint",
+            "type": "color",
+            "default": "#0B1730",
+            "description": "The navy surface the blurred scene sinks toward"
+        }
+    ]
+}
