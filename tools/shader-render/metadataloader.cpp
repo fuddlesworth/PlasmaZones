@@ -147,9 +147,10 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
     // Validate at the boundary: a metadata.json that points at a missing
     // fragment shader fails the loader rather than silently propagating a
     // bad path that would surface later as an opaque shader-compile error.
-    // (The "isEmpty" branch is implicit here — resolveRelative returns the
-    // metadata-dir-prefixed default filename when the JSON omits the field,
-    // so out.fragmentShader is always non-empty by the time we get here.)
+    // (No separate isEmpty branch: resolveRelative returns either the
+    // metadata-dir-prefixed path — the default filename when the JSON omits
+    // the field — or an empty string on a rejected path traversal, and
+    // QFileInfo::exists("") is false, so this one check rejects both cases.)
     if (!QFileInfo::exists(out.fragmentShader)) {
         qCWarning(lcMetadataLoader) << "fragment shader not found:" << out.fragmentShader;
         return false;
