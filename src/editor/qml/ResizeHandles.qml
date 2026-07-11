@@ -60,47 +60,56 @@ Item {
 
     // Handle positions: nw, n, ne, e, se, s, sw, w
     Repeater {
-        model: [{
-            "id": "nw",
-            "ax": 0,
-            "ay": 0,
-            "cursor": Qt.SizeFDiagCursor
-        }, {
-            "id": "n",
-            "ax": 0.5,
-            "ay": 0,
-            "cursor": Qt.SizeVerCursor
-        }, {
-            "id": "ne",
-            "ax": 1,
-            "ay": 0,
-            "cursor": Qt.SizeBDiagCursor
-        }, {
-            "id": "e",
-            "ax": 1,
-            "ay": 0.5,
-            "cursor": Qt.SizeHorCursor
-        }, {
-            "id": "se",
-            "ax": 1,
-            "ay": 1,
-            "cursor": Qt.SizeFDiagCursor
-        }, {
-            "id": "s",
-            "ax": 0.5,
-            "ay": 1,
-            "cursor": Qt.SizeVerCursor
-        }, {
-            "id": "sw",
-            "ax": 0,
-            "ay": 1,
-            "cursor": Qt.SizeBDiagCursor
-        }, {
-            "id": "w",
-            "ax": 0,
-            "ay": 0.5,
-            "cursor": Qt.SizeHorCursor
-        }]
+        model: [
+            {
+                "id": "nw",
+                "ax": 0,
+                "ay": 0,
+                "cursor": Qt.SizeFDiagCursor
+            },
+            {
+                "id": "n",
+                "ax": 0.5,
+                "ay": 0,
+                "cursor": Qt.SizeVerCursor
+            },
+            {
+                "id": "ne",
+                "ax": 1,
+                "ay": 0,
+                "cursor": Qt.SizeBDiagCursor
+            },
+            {
+                "id": "e",
+                "ax": 1,
+                "ay": 0.5,
+                "cursor": Qt.SizeHorCursor
+            },
+            {
+                "id": "se",
+                "ax": 1,
+                "ay": 1,
+                "cursor": Qt.SizeFDiagCursor
+            },
+            {
+                "id": "s",
+                "ax": 0.5,
+                "ay": 1,
+                "cursor": Qt.SizeVerCursor
+            },
+            {
+                "id": "sw",
+                "ax": 0,
+                "ay": 1,
+                "cursor": Qt.SizeBDiagCursor
+            },
+            {
+                "id": "w",
+                "ax": 0,
+                "ay": 0.5,
+                "cursor": Qt.SizeHorCursor
+            }
+        ]
 
         Rectangle {
             id: handle
@@ -258,20 +267,19 @@ Item {
                     // Clear hover state when starting resize to avoid conflicts
                     if (pressed)
                         resizeHandles.root.anyHandleHovered = true;
-
                 }
-                onPressed: function(mouse) {
+                onPressed: function (mouse) {
                     var actualCanvasW = resizeHandles.actualCanvasWidth;
                     var actualCanvasH = resizeHandles.actualCanvasHeight;
                     // Validate dimensions before proceeding
                     if (!resizeHandles.root || !isFinite(actualCanvasW) || !isFinite(actualCanvasH) || actualCanvasW <= 0 || actualCanvasH <= 0) {
                         mouse.accepted = false;
-                        return ;
+                        return;
                     }
                     // Check if handle is visible and positioned correctly
                     if (!handle.visible || handle.x < -1000 || handle.y < -1000) {
                         mouse.accepted = false;
-                        return ;
+                        return;
                     }
                     mouse.accepted = true;
                     // State values: 0=Idle, 1=Dragging, 2=Resizing
@@ -296,7 +304,7 @@ Item {
                         var canvasItem = resizeHandles.root.parent;
                         if (!canvasItem) {
                             resizeHandles.root.operationState = 0;
-                            return ;
+                            return;
                         }
                         var mouseInCanvas = handleMouse.mapToItem(canvasItem, mouse.x, mouse.y);
                         startMouseCanvasX = isFinite(mouseInCanvas.x) ? mouseInCanvas.x : 0;
@@ -305,11 +313,11 @@ Item {
                         resizeHandles.root.operationStarted(resizeHandles.root.zoneId, startZoneX, startZoneY, startZoneW, startZoneH);
                     }
                 }
-                onPositionChanged: function(mouse) {
+                onPositionChanged: function (mouse) {
                     // South handles move bottom edge
                     // State 2 = Resizing
                     if (!pressed || resizeHandles.root.operationState !== 2)
-                        return ;
+                        return;
 
                     handleMouse.lastModifiers = mouse.modifiers;
                     var actualW = resizeHandles.actualCanvasWidth;
@@ -321,13 +329,13 @@ Item {
                     }
                     // Validate dimensions before proceeding
                     if (!isFinite(actualW) || !isFinite(actualH) || actualW <= 0 || actualH <= 0)
-                        return ;
+                        return;
 
                     mouse.accepted = true;
                     // Map current mouse position to canvas coordinates
                     var canvasItem = resizeHandles.root.parent;
                     if (!canvasItem)
-                        return ;
+                        return;
 
                     var currentMouseInCanvas = handleMouse.mapToItem(canvasItem, mouse.x, mouse.y);
                     // Calculate delta from initial mouse position (both in canvas coordinates)
@@ -419,13 +427,11 @@ Item {
                         newW = resizeHandles.minSize;
                         if (isWest && newX + newW > actualW)
                             newX = actualW - resizeHandles.minSize;
-
                     }
                     if (newH < resizeHandles.minSize) {
                         newH = resizeHandles.minSize;
                         if (isNorth && newY + newH > actualH)
                             newY = actualH - resizeHandles.minSize;
-
                     }
                     // Apply snapping after clamping
                     // Only snap the edges being moved by this handle
@@ -554,13 +560,11 @@ Item {
                                 newW = resizeHandles.minSize;
                                 if (newX + newW > actualW)
                                     newX = actualW - resizeHandles.minSize;
-
                             }
                             if (newH < resizeHandles.minSize) {
                                 newH = resizeHandles.minSize;
                                 if (newY + newH > actualH)
                                     newY = actualH - resizeHandles.minSize;
-
                             }
                         }
                     }
@@ -590,7 +594,7 @@ Item {
                     // Store references early to avoid scope issues
                     var rootItem = resizeHandles.root;
                     if (!rootItem || rootItem.operationState !== 2)
-                        return ;
+                        return;
 
                     // Clear snap lines before committing
                     if (resizeHandles.snapIndicator)
@@ -602,13 +606,17 @@ Item {
                     if (actualW <= 0 || actualH <= 0) {
                         rootItem.operationState = 0;
                         rootItem.operationEnded(rootItem.zoneId);
-                        return ;
+                        return;
                     }
-                    // Convert to relative coordinates for C++ update
-                    var relX = (actualW > 0 && isFinite(rootItem.visualX)) ? rootItem.visualX / actualW : 0;
-                    var relY = (actualH > 0 && isFinite(rootItem.visualY)) ? rootItem.visualY / actualH : 0;
-                    var relW = (actualW > 0 && isFinite(rootItem.visualWidth) && rootItem.visualWidth > 0) ? rootItem.visualWidth / actualW : 0.25;
-                    var relH = (actualH > 0 && isFinite(rootItem.visualHeight) && rootItem.visualHeight > 0) ? rootItem.visualHeight / actualH : 0.25;
+                    // Convert to model coordinates for the C++ update via the
+                    // zone's fixed-geometry-aware helpers (same as ZoneDragHandler):
+                    // fixed zones must commit screen pixels or updateZoneGeometry
+                    // rejects the value against MinFixedZoneSize; relative zones
+                    // commit 0-1 normalized values.
+                    var relX = rootItem.toRelativeX(rootItem.visualX);
+                    var relY = rootItem.toRelativeY(rootItem.visualY);
+                    var relW = rootItem.toRelativeW(rootItem.visualWidth);
+                    var relH = rootItem.toRelativeH(rootItem.visualHeight);
                     // Set state to Idle BEFORE committing so onZoneGeometryChanged can process
                     rootItem.operationState = 0;
                     // Check if snap override modifier was held — skip C++ re-snapping if so
@@ -621,10 +629,9 @@ Item {
                     // Signal operation ended (state is already Idle)
                     var rootRef = rootItem;
                     var zoneIdRef = rootItem.zoneId;
-                    Qt.callLater(function() {
+                    Qt.callLater(function () {
                         if (rootRef)
                             rootRef.operationEnded(zoneIdRef);
-
                     });
                 }
                 onCanceled: {
@@ -653,25 +660,19 @@ Item {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                 }
-
             }
 
             Behavior on color {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                 }
-
             }
 
             Behavior on border.color {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                 }
-
             }
-
         }
-
     }
-
 }
