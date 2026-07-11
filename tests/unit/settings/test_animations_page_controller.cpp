@@ -479,6 +479,9 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.minimize")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.maximize")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.move")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.snapIn")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.snapOut")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.layoutSwitch")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.focus")));
         // The resize legs were dropped from the taxonomy: the interactive
         // edge-drag has no discrete before/after for a shader to play, and

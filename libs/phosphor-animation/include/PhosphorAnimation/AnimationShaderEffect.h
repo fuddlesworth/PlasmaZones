@@ -64,8 +64,8 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// Event-class tokens this effect is meaningful on. Each token is one
     /// of `PhosphorAnimation::ProfilePaths::EventClassAppearance`
     /// ("appearance" — open/close/minimize/focus + OSD/popup show/hide),
-    /// `EventClassGeometry` ("geometry" — resize/snap*/layoutSwitch/
-    /// maximize), `EventClassDesktop` ("desktop" — the two-texture
+    /// `EventClassGeometry` ("geometry" — snap*/layoutSwitch/maximize),
+    /// `EventClassDesktop` ("desktop" — the two-texture
     /// full-screen switch) or `EventClassMove` ("move" — the held
     /// interactive drag, driven by the move-physics inputs). EMPTY (the
     /// default) means "universal" — the effect applies to every

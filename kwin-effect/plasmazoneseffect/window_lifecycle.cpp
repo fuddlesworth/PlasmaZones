@@ -802,7 +802,6 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // timer so an interrupting transition owns its own lifetime.
         if (window) {
             if (auto* st = m_shaderManager.findTransition(window); st && st->holdUntilRelease) {
-                const quint64 myGeneration = st->generation;
                 QPointer<KWin::EffectWindow> safeWindow(window);
                 if (st->meshSim.initialized) {
                     // Soft-body lattice: hand teardown to the settle gate.
@@ -812,7 +811,20 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     // long as it physically takes rather than a fixed tail.
                     // The timer is only a generous SAFETY cap in case the
                     // sim never reaches its settle threshold.
+                    //
+                    // Fresh epoch for the handoff: the start-scheduled
+                    // duration timer in tryBeginShaderForEvent captured the
+                    // install generation and only stands down while
+                    // holdUntilRelease is set. On a drag SHORTER than the
+                    // nominal duration that timer fires after this clear,
+                    // sees a matching generation, and would cut the ring-out
+                    // off mid-settle — so bump the generation to invalidate
+                    // it. The paint pipeline's expiry teardown captures the
+                    // live generation at queue time, so the settle gate and
+                    // the safety cap below both own the new epoch.
                     st->holdUntilRelease = false;
+                    st->generation = ++m_shaderManager.m_shaderTransitionGenerationCounter;
+                    const quint64 myGeneration = st->generation;
                     constexpr int kMeshSettleSafetyCapMs = 4000;
                     QTimer::singleShot(kMeshSettleSafetyCapMs, this, [this, safeWindow, myGeneration]() {
                         if (!safeWindow) {
@@ -826,6 +838,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 } else {
                     // Velocity / trail packs: the springLag decays over the
                     // next fraction of a second, so keep the fixed tail.
+                    // holdUntilRelease stays SET here, so the start-scheduled
+                    // duration timer keeps standing down and this tail timer
+                    // (guarded on the install generation) owns the teardown.
+                    const quint64 myGeneration = st->generation;
                     QTimer::singleShot(animationDurationMs(), this, [this, safeWindow, myGeneration]() {
                         if (!safeWindow) {
                             return;
@@ -933,7 +949,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // window.move shader as a HELD transition — and installing
                 // WindowMaximize here would supersede it: the move pack dies
                 // mid-drag and a full-screen→cursor morph replays over the
-                // pointer. Skip the shader; the edge tracking above still ran,
+                // pointer. The isUserResize branch is skipped for a different
+                // reason: an interactive resize starts NO shader (the start
+                // handler gates on !isUserResize), but it is still a held
+                // gesture with continuous geometry feedback, so a discrete
+                // maximize morph replaying under the pointer would be just as
+                // wrong. Skip the shader; the edge tracking above still ran,
                 // so the next non-interactive flip fires normally.
                 if (window->isUserMove() || window->isUserResize()) {
                     m_shaderManager.m_pendingMaximizeMorph.remove(window);

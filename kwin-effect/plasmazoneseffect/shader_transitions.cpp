@@ -601,7 +601,13 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // scope (the settings pickers filter desktop packs out of every window
     // event). Refuse it so the window keeps its normal behavior. Guarding on the
     // desktop class specifically — not full class-matching — keeps geometry /
-    // appearance / universal shaders untouched.
+    // appearance / universal shaders untouched. This split is deliberate: a
+    // desktop pack on a per-window surface paints GARBAGE (unbound samplers),
+    // so it must be refused at this chokepoint; a move/geometry class mismatch
+    // paints safely but dead, and is enforced upstream by
+    // resolvedShaderAppliesToEvent at every resolution route into here
+    // (tryBeginShaderForEvent, applyWindowGeometry). A future direct caller
+    // must route through that gate too.
     if (eff.appliesTo.contains(PhosphorAnimation::ProfilePaths::EventClassDesktop)) {
         qCWarning(lcEffect) << "beginShaderTransition: refusing desktop-contract shader" << effectId
                             << "on a per-window event — desktop packs sample unbound uFromDesktop/uToDesktop";
@@ -1787,6 +1793,10 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
             // nominal duration by design: the user is still dragging.
             // windowFinishUserMovedResized owns their teardown (a settle
             // tail after release), so the duration timer stands down.
+            // A mesh-backed drag released BEFORE this timer fires is
+            // covered by the generation check above instead: the release
+            // handler clears the hold flag but bumps the generation when
+            // it hands the lifetime to the settle gate.
             if (live->holdUntilRelease) {
                 return;
             }

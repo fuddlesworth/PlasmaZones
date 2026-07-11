@@ -275,6 +275,22 @@ private Q_SLOTS:
         universal.fragmentShaderPath = QStringLiteral("effect.frag");
         QVERIFY(!universal.toJson().contains(QLatin1String("appliesTo")));
         QVERIFY(AnimationShaderEffect::fromJson(universal.toJson()).appliesTo.isEmpty());
+
+        // The opt-in classes round-trip too — a serializer regression that
+        // handled only "geometry" would strip a desktop or move pack's
+        // constraint on save, turning it universal (and then refused
+        // everywhere by the opt-in rule).
+        AnimationShaderEffect moveOnly;
+        moveOnly.id = QStringLiteral("wobble");
+        moveOnly.fragmentShaderPath = QStringLiteral("effect.frag");
+        moveOnly.appliesTo = QStringList{QStringLiteral("move")};
+        QCOMPARE(AnimationShaderEffect::fromJson(moveOnly.toJson()).appliesTo, moveOnly.appliesTo);
+
+        AnimationShaderEffect desktopOnly;
+        desktopOnly.id = QStringLiteral("desktop-cube");
+        desktopOnly.fragmentShaderPath = QStringLiteral("effect.frag");
+        desktopOnly.appliesTo = QStringList{QStringLiteral("desktop")};
+        QCOMPARE(AnimationShaderEffect::fromJson(desktopOnly.toJson()).appliesTo, desktopOnly.appliesTo);
     }
 
     /// Unknown / duplicate tokens are dropped at parse time; a list that
@@ -450,6 +466,11 @@ private Q_SLOTS:
         QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::WindowSnapIn));
         QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::Window));
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::WindowOpen));
+        // A hybrid that does NOT declare "desktop" is still refused on the
+        // desktop paths — the geometry/move branches must not leak onto the
+        // two-texture switch, whose samplers a single-surface pack never binds.
+        QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::Desktop));
     }
 };
 

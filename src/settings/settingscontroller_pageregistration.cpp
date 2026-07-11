@@ -241,10 +241,11 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("animations-transitions"), QStringLiteral("animations"), PhosphorI18n::tr("Transitions"),
                QString(), QStringLiteral("preferences-desktop-multimedia"),
                /*collapsible=*/true);
-    // Motion — movement and geometry events. Window motion (move / resize /
-    // maximize / snap) carries the geometry shader contract, so its page still
-    // shows a shader picker; side panels, widgets and the editor are timing/curve
-    // only.
+    // Motion — movement and geometry events. Window motion (maximize / snap /
+    // layout switch) carries the geometry shader contract, so its page still
+    // shows a shader picker; the held drag is its own opt-in `move` class on
+    // the Window Dragging child page; side panels, widgets and the editor are
+    // timing/curve only.
     regVirtual(QStringLiteral("animations-motion"), QStringLiteral("animations"), PhosphorI18n::tr("Motion"), QString(),
                QStringLiteral("chronometer"), /*collapsible=*/true);
     regVirtual(QStringLiteral("animations-library"), QStringLiteral("animations"), PhosphorI18n::tr("Library"),

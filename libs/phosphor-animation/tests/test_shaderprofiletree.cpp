@@ -380,6 +380,10 @@ private Q_SLOTS:
         leaf.effectId = QStringLiteral("wobble");
         tree.setOverride(PP::WindowMove, leaf);
         QCOMPARE(tree.resolve(PP::WindowMove).effectiveEffectId(), QStringLiteral("wobble"));
+        // Isolation cuts both ways in outcome: the leaf override does not
+        // bleed into sibling or ancestor resolution either.
+        QCOMPARE(tree.resolve(PP::WindowSnapIn).effectiveEffectId(), QStringLiteral("ripple-snap"));
+        QCOMPARE(tree.resolve(PP::WindowMovement).effectiveEffectId(), QStringLiteral("ripple-snap"));
         // The baseline is skipped too, exactly like named ancestors.
         tree.clearOverride(PP::WindowMove);
         ShaderProfile base;

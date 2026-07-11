@@ -332,7 +332,8 @@ inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
 
 /// `vec4 iFromRect` / `vec4 iToRect` — geometry-morph endpoints in
 /// logical screen pixels `(x, y, width, height)`. Used by the window
-/// move/resize morph: the window jumps to its destination instantly via
+/// geometry morph (snap / layout switch / maximize): the window jumps to
+/// its destination instantly via
 /// `moveResize`, and the shader animates the visual transition by
 /// interpolating the drawn quad from `iFromRect` (old frame) to `iToRect`
 /// (new frame) by `iTime`, cross-fading the captured old content
@@ -391,8 +392,9 @@ inline constexpr const char* kIHasSurfaceLayer = "iHasSurfaceLayer";
 inline constexpr const char* kIHasOldWindow = "iHasOldWindow";
 
 /// `vec2 iMoveVelocity` — COMPOSITOR PATH ONLY. Spring-smoothed window
-/// velocity in logical px/s during a HELD interactive move/resize
-/// transition (holdUntilRelease). The smoothing filter is underdamped on
+/// velocity in logical px/s during a HELD interactive move transition
+/// (holdUntilRelease; an interactive resize starts no shader transition).
+/// The smoothing filter is underdamped on
 /// purpose: after the pointer stops or releases, the value decays through
 /// zero with a slight overshoot, so a velocity-driven deformation (wobble,
 /// tilt) relaxes with a natural spring settle instead of freezing. Zero
@@ -410,7 +412,7 @@ inline constexpr const char* kIMoveOffset = "iMoveOffset";
 /// without any per-vertex state in the shader.
 inline constexpr const char* kIMoveVelocity2 = "iMoveVelocity2";
 /// `vec2 iMoveTrail[16]` — COMPOSITOR PATH ONLY. Short motion history for
-/// HELD move/resize transitions: slot k holds the window origin as it was
+/// HELD move transitions: slot k holds the window origin as it was
 /// k*15 ms in the past, RELATIVE to the current origin (so a static window
 /// publishes all zeros). 16 slots = 240 ms of path. The host merely records
 /// positions — all deformation logic stays in the shader, which samples the
@@ -419,7 +421,7 @@ inline constexpr const char* kIMoveVelocity2 = "iMoveVelocity2";
 /// the grip point (iMouse).
 inline constexpr const char* kIMoveTrail = "iMoveTrail";
 /// `vec2 iMoveMesh[16]` — COMPOSITOR PATH ONLY. The solved displacements of
-/// a 4x4 neighbour-coupled soft-body control lattice for HELD move/resize
+/// a 4x4 neighbour-coupled soft-body control lattice for HELD move
 /// transitions: slot i+4*j is node (i,j)'s deflection from its ideal grid
 /// position on the current frame, logical px, row 0 at the top. The host
 /// runs the spring simulation (grip-constrained, wave-propagating); a pack
