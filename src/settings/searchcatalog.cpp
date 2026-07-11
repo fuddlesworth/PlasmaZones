@@ -111,8 +111,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("focus")});
     search->setPageKeywords(QStringLiteral("animations-window-motion"),
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("movement"), PhosphorI18n::tr("motion"),
-                             PhosphorI18n::tr("move"), PhosphorI18n::tr("resize"), PhosphorI18n::tr("snap"),
-                             PhosphorI18n::tr("maximize")});
+                             PhosphorI18n::tr("snap"), PhosphorI18n::tr("maximize")});
+    search->setPageKeywords(QStringLiteral("animations-window-dragging"),
+                            {PhosphorI18n::tr("window"), PhosphorI18n::tr("drag"), PhosphorI18n::tr("dragging"),
+                             PhosphorI18n::tr("move"), PhosphorI18n::tr("wobble"), PhosphorI18n::tr("physics")});
     search->setPageKeywords(
         QStringLiteral("animations-osds"),
         {PhosphorI18n::tr("osd"), PhosphorI18n::tr("notification"), PhosphorI18n::tr("on-screen display")});
@@ -531,11 +533,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Minimized"));
     addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.appearance.focus"),
                PhosphorI18n::tr("Focused"));
+    // Window Dragging page under Motion — the held-drag leaf lives on its
+    // own page (see AnimationsWindowDraggingPage.qml).
+    addSetting(search, QStringLiteral("animations-window-dragging"), QStringLiteral("window.movement.move"),
+               PhosphorI18n::tr("Dragged"));
     // Windows (movement) page under Motion.
-    addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.move"),
-               PhosphorI18n::tr("Moved"));
-    addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.resize"),
-               PhosphorI18n::tr("Resized"));
     addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.maximize"),
                PhosphorI18n::tr("Maximized"));
     addSetting(search, QStringLiteral("animations-window-motion"), QStringLiteral("window.movement.snapIn"),

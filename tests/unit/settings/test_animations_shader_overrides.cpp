@@ -16,6 +16,10 @@
  *   - clearShaderOverride on an unset path is a no-op (false, no signal)
  *   - a populated registry rejects an unknown effectId (false, no write,
  *     no signal) while an empty registry stays permissive
+ *   - window.movement.move leaf isolation as the controller surfaces it:
+ *     no inherited ancestor shader, no built-in default, runtime-truth
+ *     blanking of a stale geometry pack, and a picker that offers only
+ *     move-class packs
  */
 
 #include <QDir>
@@ -23,6 +27,7 @@
 #include <QTest>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 
 #include "config/settings.h"
 #include "settings/animationspagecontroller.h"
@@ -194,6 +199,176 @@ private Q_SLOTS:
                  QStringLiteral("pixelate"));
     }
 
+    /// Runtime-truth mirror in resolvedShaderProfile: a PERSISTED effect the
+    /// registry knows but that provably cannot drive its event (the same
+    /// canonical-predicate check the compositor's resolvedShaderAppliesToEvent
+    /// gate applies) is blanked from the VIEW, while the persisted override
+    /// itself stays untouched so the state self-heals on the user's next
+    /// pick. An applicable pack is returned unchanged. Unknown ids passing
+    /// through mid-warmup is pinned by the empty-registry tests above, where
+    /// hasEffect is false for every id.
+    void resolvedShaderProfile_blanksInapplicablePersistedEffect()
+    {
+        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        if (!QDir(dataDir).exists())
+            QSKIP("data/animations not found — running outside source tree");
+
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off); // synchronous initial scan
+        AnimationsPageController c(&registry, &settings);
+
+        // window-morph declares appliesTo ["geometry"]; window.appearance.open
+        // is an appearance leg — a provable class mismatch. Only a stale or
+        // hand-edited config can produce this shape (the picker filters it),
+        // and setShaderOverride's gate is unknown-id only, so the write lands.
+        QVERIFY2(registry.hasEffect(QStringLiteral("window-morph")), "precondition: bundled pack scanned");
+        const QString path = QStringLiteral("window.appearance.open");
+        QVERIFY(c.setShaderOverride(path, QStringLiteral("window-morph"), {}));
+
+        // Persisted override untouched...
+        QCOMPARE(c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString(), QStringLiteral("window-morph"));
+        // ...but the resolved VIEW blanks the id.
+        QVERIFY(c.resolvedShaderProfile(path).value(QStringLiteral("effectId")).toString().isEmpty());
+
+        // Symmetric positive: an applicable pack is returned unchanged.
+        QVERIFY(registry.hasEffect(QStringLiteral("dissolve")));
+        QVERIFY(c.setShaderOverride(path, QStringLiteral("dissolve"), {}));
+        QCOMPARE(c.resolvedShaderProfile(path).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("dissolve"));
+    }
+
+    /// The drag-leaf isolation as the controller surfaces it (what the
+    /// Window Dragging page combo reads back): an ancestor shader on
+    /// `window` or `window.movement` must NOT be inherited by
+    /// window.movement.move, while a sibling geometry leg still inherits
+    /// normally. Empty registry, so the runtime-truth blanking stays out
+    /// of the way and this pins pure tree resolution through
+    /// resolvedShaderProfile → resolveShaderWithDefault → resolve.
+    void resolvedShaderProfile_moveLeafRefusesAncestorInheritance()
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        // Family root carries a shader...
+        QVERIFY(c.setShaderOverride(QStringLiteral("window"), QStringLiteral("matrix"), {}));
+        // ...the sibling geometry leg inherits it...
+        QCOMPARE(c.resolvedShaderProfile(PP::WindowSnapIn).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("matrix"));
+        // ...the drag leaf refuses it.
+        QVERIFY(c.resolvedShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString().isEmpty());
+
+        // Same with the movement sub-parent (the "All Windows" card on the
+        // Window Motion page — the CHANGELOG's "no longer takes the All
+        // Windows shader" promise).
+        QVERIFY(c.setShaderOverride(PP::WindowMovement, QStringLiteral("glitch"), {}));
+        QCOMPARE(c.resolvedShaderProfile(PP::WindowSnapIn).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("glitch"));
+        QVERIFY(c.resolvedShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString().isEmpty());
+
+        // A direct pick on the drag leaf itself still lands.
+        QVERIFY(c.setShaderOverride(PP::WindowMove, QStringLiteral("wobble"), {}));
+        QCOMPARE(c.resolvedShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("wobble"));
+    }
+
+    /// A fresh tree gives the drag leaf NO built-in default: the snap legs
+    /// default to window-morph, but `defaultShaderEffectIdForPath` excludes
+    /// window.movement.move (a crossfade cannot drive the held drag), so the
+    /// Window Dragging combo starts at "None" until the user opts in. A
+    /// regression re-adding the default would make the drag page advertise
+    /// window-morph as current for every fresh config.
+    void resolvedShaderProfile_moveLeafHasNoBuiltInDefault()
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        QVERIFY(c.resolvedShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString().isEmpty());
+        // Contrast: the snap sibling gets the built-in geometry default.
+        QCOMPARE(c.resolvedShaderProfile(PP::WindowSnapIn).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("window-morph"));
+    }
+
+    /// The move-leaf variant of the runtime-truth blank: a stale pre-split
+    /// GEOMETRY pack persisted on the drag leaf (the exact shape the
+    /// compositor gate's comment names) is blanked from the resolved VIEW
+    /// while the persisted override survives, and the bundled move pack
+    /// passes through. This exercises the opt-in EventClassMove branch of
+    /// shaderEffectAppliesToEventPath — a different code path from the
+    /// appearance-leg case above.
+    void resolvedShaderProfile_blanksStaleGeometryPackOnMoveLeaf()
+    {
+        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        if (!QDir(dataDir).exists())
+            QSKIP("data/animations not found — running outside source tree");
+
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off); // synchronous initial scan
+        AnimationsPageController c(&registry, &settings);
+
+        QVERIFY2(registry.hasEffect(QStringLiteral("window-morph")), "precondition: bundled pack scanned");
+        QVERIFY(c.setShaderOverride(PP::WindowMove, QStringLiteral("window-morph"), {}));
+        // Persisted override untouched...
+        QCOMPARE(c.rawShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("window-morph"));
+        // ...but the resolved VIEW blanks the geometry pack on the move leaf.
+        QVERIFY(c.resolvedShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString().isEmpty());
+
+        // Symmetric positive: the bundled move pack passes through unchanged.
+        QVERIFY2(registry.hasEffect(QStringLiteral("wobble")), "precondition: bundled move pack scanned");
+        QVERIFY(c.setShaderOverride(PP::WindowMove, QStringLiteral("wobble"), {}));
+        QCOMPARE(c.resolvedShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("wobble"));
+    }
+
+    /// Picker contract for the Window Dragging page (the CHANGELOG's "its
+    /// picker offers only drag shaders such as Wobbly Move"): the move leaf
+    /// offers the bundled move pack and none of the crossfade packs, and a
+    /// crossfade leg does not offer the move pack.
+    void availableShaderEffectsForPath_moveLeafOffersOnlyDragShaders()
+    {
+        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        if (!QDir(dataDir).exists())
+            QSKIP("data/animations not found — running outside source tree");
+
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off); // synchronous initial scan
+        AnimationsPageController c(&registry, &settings);
+
+        const auto idsFor = [&c](const QString& path) {
+            QStringList ids;
+            const QVariantList list = c.availableShaderEffectsForPath(path);
+            ids.reserve(list.size());
+            for (const QVariant& v : list)
+                ids.append(v.toMap().value(QStringLiteral("id")).toString());
+            return ids;
+        };
+
+        const QStringList moveIds = idsFor(PP::WindowMove);
+        QVERIFY2(moveIds.contains(QStringLiteral("wobble")), "bundled move pack must be offered on the drag leaf");
+        QVERIFY2(!moveIds.contains(QStringLiteral("window-morph")),
+                 "geometry pack must not be offered on the drag leaf");
+        QVERIFY2(!moveIds.contains(QStringLiteral("dissolve")),
+                 "universal crossfade must not be offered on the drag leaf");
+
+        const QStringList snapIds = idsFor(PP::WindowSnapIn);
+        QVERIFY2(snapIds.contains(QStringLiteral("window-morph")), "geometry pack must stay offered on snap legs");
+        QVERIFY2(!snapIds.contains(QStringLiteral("wobble")), "move pack must not be offered on a crossfade leg");
+    }
+
     /// User-reported scenario: parent ("All Window Events" / "All
     /// Popups" / etc.) has an explicit shader. The user wants to override
     /// a CHILD event with a different shader. Each step's resolution
@@ -362,6 +537,36 @@ private Q_SLOTS:
         QSignalSpy spy2(&c, &AnimationsPageController::pendingChangesChanged);
         QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("popup")), 0);
         QCOMPARE(spy2.count(), 0);
+    }
+
+    /// The leaf-isolated interactive-drag path (window.movement.move) is a
+    /// prefix-descendant of window.movement but resolves in ISOLATION —
+    /// ShaderProfileTree::resolve takes no ancestor overlay there — so its
+    /// override can never shadow the "All Windows" parent. The shadowing-
+    /// children count must skip it, and the parent card's "Clear shadowing
+    /// children" action must NOT wipe the drag shader the user configured
+    /// on the separate Window Dragging page.
+    void shaderOverrideDescendants_skipLeafIsolatedMovePath()
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        // Drag-leaf override + one genuine shadowing sibling for contrast.
+        QVERIFY(c.setShaderOverride(PP::WindowMove, QStringLiteral("wobble"), {}));
+        QVERIFY(c.setShaderOverride(PP::WindowSnapIn, QStringLiteral("window-morph"), {}));
+
+        // Only the snapIn override shadows the movement parent.
+        QCOMPARE(c.shaderOverrideDescendantCount(PP::WindowMovement), 1);
+
+        // Clearing shadowing children removes snapIn but PRESERVES the
+        // isolated drag-leaf override.
+        QCOMPARE(c.clearShaderOverrideDescendants(PP::WindowMovement), 1);
+        QVERIFY(c.rawShaderProfile(PP::WindowSnapIn).isEmpty());
+        QCOMPARE(c.rawShaderProfile(PP::WindowMove).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("wobble"));
     }
 
     /// `setShaderOverride` short-circuits when the request matches the

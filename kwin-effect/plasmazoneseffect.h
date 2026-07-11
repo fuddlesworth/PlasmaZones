@@ -1368,6 +1368,30 @@ private:
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                 bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false);
+    /// Runtime mirror of the settings pickers' shader-class filter, routed
+    /// through the canonical PhosphorAnimationShaders::
+    /// shaderEffectAppliesToEventPath predicate so the two can never drift.
+    /// Returns false only when @p effectId is KNOWN to the registry and
+    /// provably cannot drive @p profilePath (e.g. a crossfade pack on the
+    /// held-drag leg, a move-physics or desktop pack on a crossfade leg).
+    /// An id the registry doesn't know returns true: the pack may still be
+    /// scanning, and beginShaderTransition's registry-miss warning stays the
+    /// single reporter for genuinely unknown ids. Gates every per-window
+    /// resolution route (tryBeginShaderForEvent and the applyWindowGeometry
+    /// snap chokepoint) against rule-layer and stale-config assignments the
+    /// pickers cannot intercept.
+    bool resolvedShaderAppliesToEvent(const QString& effectId, const QString& profilePath) const;
+    // window.maximize / window.unmaximize shader install + geometry-morph
+    // endpoint wiring. `departureFrame` is the frame rect the window is
+    // leaving (the pre-maximize float rect when maximizing, the maximized
+    // rect when restoring); the destination is read live. Both directions
+    // play FORWARD — geometry packs encode direction in the rects, matching
+    // the zone-snap convention (see the implementation comment). Called
+    // either directly from the maximize state edge (geometry already landed)
+    // or deferred to the size-delivering windowFrameGeometryChanged when the
+    // state signal outran the client's commit. Implementation in
+    // window_lifecycle.cpp beside its two call sites.
+    void beginMaximizeShaderMorph(KWin::EffectWindow* window, const QRectF& departureFrame);
     void evictLruTextureIfOverBound();
     void warmUserTextureAsync(const QString& absolutePath);
 
