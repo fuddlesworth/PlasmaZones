@@ -1845,8 +1845,8 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
 {
     // Fetch the unified Rule store via getAllRules (returns a JSON
     // string of a v4 RuleSet), deserialise, filter to rules whose
-    // action list contains any OverrideAnimation* action, and hand them to
-    // the shader manager. The shader manager mirrors them into
+    // action list contains any effect-consumed (Tag::Effect) action, and
+    // hand them to the shader manager. The shader manager mirrors them into
     // m_animationRuleSet so the per-event slot lookup in shader_resolve.cpp
     // resolves the cascade against the unified rule store directly.
     const QDBusMessage msg = QDBusMessage::createMethodCall(

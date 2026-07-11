@@ -1286,9 +1286,14 @@ private:
     /// Rides a superset of reconcileRuleHiddenTitleBar's triggers
     /// (placement-state flush, rule edits / focus via updateAllDecorations)
     /// plus an eager window-added apply — so a layer rule takes effect before
-    /// the window's first reconcile-triggering event — and the bulk-placement
+    /// the window's first reconcile-triggering event — the class-swap
+    /// re-drive in the identity-change handler, and the bulk-placement
     /// sweep in invalidateAllRuleCaches (daemon loss and the daemon-ready
-    /// re-seeds).
+    /// re-seeds). Deliberately NOT triggered by keepAboveChanged /
+    /// keepBelowChanged: an instant re-assert would fight the user's own
+    /// toggle (the Krohnkite failure mode this feature exists to avoid), so
+    /// a manual toggle under an active rule stands until the next natural
+    /// reconcile.
     void reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w);
 
     /// The window's OWN keep-above flag — the app/user-set state, with
@@ -1784,9 +1789,9 @@ private Q_SLOTS:
     void slotMotionProfileTreeChanged();
 
     /// Fetch the unified Rule store via `org.plasmazones.Rules.
-    /// getAllRules`, filter to rules carrying an OverrideAnimation* action,
-    /// and forward them to the shader manager — the sole source of per-window
-    /// animation overrides. Called once at bringup; the bringup also
+    /// getAllRules`, filter to rules carrying any effect-consumed
+    /// (Tag::Effect) action, and forward them to the shader manager — the
+    /// sole source of per-window effect overrides. Called once at bringup; the bringup also
     /// subscribes to the interface's `rulesChanged` signal (via a debounce
     /// timer — see m_animationRulesRefreshDebounce) so a settings-UI edit
     /// takes effect without restarting the effect.

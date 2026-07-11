@@ -674,23 +674,33 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     if (!m_shaderManager.hasWindowLayerRules() && !m_ruleWindowLayerSnapshots.contains(windowId)) {
         return;
     }
-    // Structural / own-surface shield, mirroring the SetOpacity paint gate
-    // (paint_pipeline.cpp): a layer write is a raw KWin window-state
-    // mutation, so a broad match expression must never demote a dock, pin a
-    // notification, or strip the daemon overlay's own keep-above. Sits
-    // before the snapshot capture below, so a shielded window never enters
-    // the map and no restore path needs the same list.
-    const QString winClass = w->windowClass();
-    if (isOwnOverlayClass(winClass) || isPlasmaShellSurface(winClass) || isXdgDesktopPortalSurface(winClass)
-        || w->isDesktop() || w->isDock() || w->isNotification() || w->isCriticalNotification()
-        || w->isOnScreenDisplay()) {
-        return;
-    }
     KWin::Window* kw = w->window();
     if (!kw) {
         return;
     }
-    const std::optional<QString> layer = resolveWindowLayer(resolveRuleActions(w, windowId));
+    // Structural / own-surface shield, extending the SetOpacity paint gate
+    // (paint_pipeline.cpp shields only the overlay / plasmashell classes;
+    // the portal and structural entries here are deliberate hardening for a
+    // raw window-state write): a broad match expression must never demote a
+    // dock, pin a notification, or strip the daemon overlay's own
+    // keep-above. Transients / popups are deliberately NOT shielded:
+    // transient utility surfaces are legitimate layer-rule targets, and
+    // transient exclusion is per-feature user opt-in in this project (the
+    // IsTransient match field), never hardcoded policy. A shielded window
+    // resolves as rule-free rather than early-returning — window
+    // classification can mutate mid-session (the Electron/CEF class swap,
+    // an X11 type change), and a window that was rule-held BEFORE mutating
+    // into a shielded class must drain its snapshot through the restore
+    // branch below instead of stranding the rule's flags. Fresh shielded
+    // windows skip the resolve entirely and never enter the map.
+    const QString winClass = w->windowClass();
+    const bool shielded = isOwnOverlayClass(winClass) || isPlasmaShellSurface(winClass)
+        || isXdgDesktopPortalSurface(winClass) || w->isDesktop() || w->isDock() || w->isNotification()
+        || w->isCriticalNotification() || w->isOnScreenDisplay();
+    std::optional<QString> layer;
+    if (!shielded) {
+        layer = resolveWindowLayer(resolveRuleActions(w, windowId));
+    }
     const auto it = m_ruleWindowLayerSnapshots.find(windowId);
     if (!layer) {
         // No rule owns the layer. If one did before, put the user's own flags

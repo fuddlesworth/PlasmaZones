@@ -681,8 +681,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // refresh on the effect's local resolver cache. Caption /
         // desktops / activities / role changes don't feed the
         // WindowClass matcher so they don't need the cache drop.
-        auto invalidateRuleCache = [this]() {
+        auto invalidateRuleCache = [this, safeW]() {
             m_shaderManager.animationRuleEvaluator().clearCache();
+            // The cache drop alone only helps per-frame consumers (opacity
+            // re-resolves in paintWindow). The stacking layer is EVENT-driven
+            // and the eager window-added apply ran against the pre-swap
+            // placeholder class — re-drive it so a layer rule keyed to the
+            // real class applies (and one keyed to the placeholder releases)
+            // without waiting for an incidental sweep. The hasWindowLayerRules
+            // fast path keeps this free for sessions with no layer rules.
+            if (safeW && !safeW->isDeleted()) {
+                reconcileRuleWindowLayer(getWindowId(safeW), safeW);
+            }
         };
         connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
         connect(kw, &KWin::Window::windowClassChanged, this, invalidateRuleCache);

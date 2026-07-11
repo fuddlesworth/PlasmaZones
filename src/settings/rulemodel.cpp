@@ -412,9 +412,9 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         return algo.isEmpty() ? PhosphorI18n::tr("Algorithm parameter")
                               : PhosphorI18n::tr("Algorithm: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
     }
-    // ── single-value actions keyed on ActionParam::Value (restore-position,
-    //    border / title-bar, autotile, window-management, and overlay-appearance
-    //    overrides, per-context gap overrides) ──
+    // ── single-value actions keyed on ActionParam::Value: bool actions
+    //    resolve through boolActionStateLabel first, everything else through
+    //    the per-type value formatting below ──
     {
         const QJsonValue raw = action.params.value(PhosphorRules::ActionParam::Value);
         // Boolean actions render their polarity-aware phrase ("Show border" /
