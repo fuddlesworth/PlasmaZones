@@ -105,21 +105,38 @@ SettingsFlickable {
         // SHADER EFFECTS CARD
         // =====================================================================
         // Frame rate + audio spectrum apply to all shader categories, so this
-        // card is global (moved here from Snapping → Overlay Appearance).
+        // card is global (moved here from Snapping → Overlay Appearance). The
+        // card deliberately has no master toggle: enableShaderEffects only
+        // governs the zone-overlay window shaders, whereas frame rate and the
+        // audio spectrum feed every shader category (overlay, animation,
+        // surface decoration). Gating those global rows behind the overlay
+        // switch would wrongly disable audio for animations and decorations,
+        // so "Overlay shaders" is just a normal row that gates nothing else.
         SettingsCard {
             id: shaderCard
 
             headerText: i18n("Shader Effects")
             searchAnchor: "shaderEffects"
-            showToggle: true
-            toggleChecked: appSettings.enableShaderEffects
             collapsible: true
-            onToggleClicked: checked => {
-                return appSettings.enableShaderEffects = checked;
-            }
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Overlay shaders")
+                    searchAnchor: "overlayShaders"
+                    description: i18n("Render the zone overlay using GLSL shaders")
+
+                    SettingsSwitch {
+                        checked: appSettings.enableShaderEffects
+                        accessibleName: i18n("Enable overlay shaders")
+                        onToggled: function (newValue) {
+                            appSettings.enableShaderEffects = newValue;
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Frame rate")
@@ -163,7 +180,7 @@ SettingsFlickable {
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     type: Kirigami.MessageType.Warning
                     text: i18n("CAVA is not installed. Install the <b>cava</b> package to enable audio-reactive shader effects.")
-                    visible: !root.effectsBridge.cavaAvailable && shaderCard.toggleChecked
+                    visible: !root.effectsBridge.cavaAvailable
                 }
 
                 SettingsSeparator {}
