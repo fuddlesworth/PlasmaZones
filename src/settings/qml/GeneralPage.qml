@@ -112,8 +112,6 @@ SettingsFlickable {
         // nothing the layouts don't already control. The audio spectrum knobs
         // live in their own card below (Shaders.Audio config group).
         SettingsCard {
-            id: shaderCard
-
             headerText: i18n("Shader Effects")
             searchAnchor: "shaderEffects"
             collapsible: true

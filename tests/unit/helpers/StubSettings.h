@@ -333,14 +333,14 @@ public:
     }
     int shaderFrameRate() const override
     {
-        return 60;
+        return ConfigDefaults::shaderFrameRate();
     }
     void setShaderFrameRate(int) override
     {
     }
     bool enableAudioVisualizer() const override
     {
-        return false;
+        return ConfigDefaults::enableAudioVisualizer();
     }
     void setEnableAudioVisualizer(bool) override
     {

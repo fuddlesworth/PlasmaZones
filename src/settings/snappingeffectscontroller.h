@@ -12,12 +12,14 @@
 
 namespace PlasmaZones {
 
-/// Q_PROPERTY surface for the "Snapping → Effects" settings page.
+/// Q_PROPERTY bounds consumed by the General page's Shader Effects and
+/// Audio Spectrum cards (historically the "Snapping → Effects" page; the
+/// class and page-id names are kept for continuity).
 ///
-/// CONSTANT bounds for the shader-framerate and audio-spectrum bar-count
-/// sliders, plus a one-shot `cavaAvailable` check (runs `which cava` at
-/// controller construction). Live effect toggles are on Settings and
-/// bind directly via `appSettings.X`.
+/// CONSTANT bounds for the shader-framerate slider and the full CAVA
+/// audio-spectrum parameter sliders, plus a one-shot `cavaAvailable` check
+/// (executable lookup at controller construction). Live effect toggles are
+/// on Settings and bind directly via `appSettings.X`.
 class SnappingEffectsController : public PhosphorControl::PageController
 {
     Q_OBJECT
