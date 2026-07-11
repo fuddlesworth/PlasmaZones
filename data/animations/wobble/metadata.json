@@ -4,9 +4,9 @@
     "description": "Drag transition that turns the window into a sheet of fabric held at the point you grab, so the rest drapes and trails behind, driven by a neighbour-coupled spring simulation. Every physics knob is exposed so the feel can be dialled from taut cloth to loose jelly.",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Geometry",
+    "category": "Physics",
     "appliesTo": [
-        "geometry"
+        "move"
     ],
     "fragmentShader": "effect.frag",
     "vertexShader": "effect.vert",

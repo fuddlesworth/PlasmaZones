@@ -54,6 +54,18 @@ private Q_SLOTS:
         QCOMPARE(PP::eventClassForPath(PP::Global), QString());
     }
 
+    // The move classifier underpins the drag opt-in policy: only the
+    // interactive-drag LEAF classifies as EventClassMove — its cascade parent
+    // and every sibling crossfade leg stay geometry, so the move-physics
+    // packs surface only on the "Moved" row.
+    void testEventClassForMovePath()
+    {
+        QCOMPARE(PP::eventClassForPath(PP::WindowMove), PP::EventClassMove);
+        QCOMPARE(PP::eventClassForPath(PP::WindowMovement), PP::EventClassGeometry);
+        QCOMPARE(PP::eventClassForPath(PP::WindowSnapIn), PP::EventClassGeometry);
+        QCOMPARE(PP::eventClassForPath(PP::WindowMaximize), PP::EventClassGeometry);
+    }
+
     void testAllBuiltInPathsNonEmpty()
     {
         const QStringList paths = PP::allBuiltInPaths();
@@ -74,11 +86,14 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::EditorSnapIn));
         QVERIFY(paths.contains(PP::EditorSnapOut));
         QVERIFY(paths.contains(PP::EditorSnapResize));
-        // Window snap family (kwin-effect window-quad animations).
+        // Window snap family (kwin-effect window-quad animations). There are
+        // deliberately NO resize paths — window.movement.resize and
+        // window.movement.snapResize were dropped from the taxonomy.
         QVERIFY(paths.contains(PP::WindowSnapIn));
         QVERIFY(paths.contains(PP::WindowSnapOut));
-        QVERIFY(paths.contains(PP::WindowSnapResize));
         QVERIFY(paths.contains(PP::WindowLayoutSwitch));
+        QVERIFY(!paths.contains(QStringLiteral("window.movement.resize")));
+        QVERIFY(!paths.contains(QStringLiteral("window.movement.snapResize")));
         // Widget zone-rect highlight family.
         QVERIFY(paths.contains(PP::WidgetZoneHighlight));
         QVERIFY(paths.contains(PP::WidgetZoneHighlightPop));

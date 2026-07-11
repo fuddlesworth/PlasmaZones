@@ -42,13 +42,16 @@ PHOSPHORANIMATION_EXPORT extern const QString WindowMinimize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowFocus;
 // window.movement.* — a window changing geometry, old-rect → new-rect (the
 // geometry-morph shader contract). WindowMovement is the cascade parent.
+// WindowMove is the exception: the held interactive drag, its own opt-in
+// `move` class (see EventClassMove below). There are NO resize legs — the
+// interactive edge-drag resize and the never-routed snapResize were dropped
+// (see the rationale note in profilepaths.cpp); discrete resizes are
+// covered by snapIn / layoutSwitch / maximize.
 PHOSPHORANIMATION_EXPORT extern const QString WindowMovement;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMaximize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMove;
-PHOSPHORANIMATION_EXPORT extern const QString WindowResize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapOut;
-PHOSPHORANIMATION_EXPORT extern const QString WindowSnapResize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
 
 // desktop.* — full-screen virtual-desktop switch transitions driven by the
@@ -152,8 +155,8 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 // can't drive. These string tokens are the SSOT for that vocabulary —
 // matched verbatim against `appliesTo` entries and `eventClassForPath`.
 
-/// Geometry transitions: move, resize, snapIn/snapOut/snapResize,
-/// layoutSwitch, maximize — every leg that carries an old and new rect.
+/// Geometry transitions: snapIn/snapOut, layoutSwitch, maximize — every leg
+/// that carries an old and new rect.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassGeometry;
 
 /// Appearance transitions: open, close, minimize, focus, and every OSD /
@@ -169,13 +172,25 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassAppearance;
 /// sampler would be unbound in the two-texture pass.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassDesktop;
 
+/// Interactive-drag transitions: the `window.movement.move` leaf only. A drag
+/// installs a HELD transition — no old→new crossfade plays (iFromRect stays
+/// invalid, progress clamps while the pointer is down), so a geometry
+/// crossfade pack is a guaranteed no-op there. Only a position / mesh backed
+/// pack consuming the move-physics inputs (iMoveMesh / iMoveOffset /
+/// iMoveVelocity* / iMoveTrail) can drive it, and it must opt in explicitly
+/// via `appliesTo: ["move"]` (wobble). Like `desktop`, this class is opt-in
+/// rather than universal-permissive, and the move leaf takes NO inherited
+/// shader from its ancestors (see ShaderProfileTree::resolve).
+PHOSPHORANIMATION_EXPORT extern const QString EventClassMove;
+
 /// Classify @p path into an event class, or empty string when the path has
 /// no single class (a mixed ancestor like `window`, or a path outside the
 /// classified families — editor / panel / widget / cursor / shader / global).
 /// Resolution is leaf-aware: the OSD and popup roots and all their descendants
 /// are `appearance`; the window leaves split by motion-vs-lifecycle; the
-/// `desktop` root and every `desktop.*` leaf are `desktop`; the `window` root
-/// itself is mixed → empty.
+/// `window.movement.move` leaf is `move` (held interactive drag) while the
+/// rest of the movement sub-tree is `geometry`; the `desktop` root and every
+/// `desktop.*` leaf are `desktop`; the `window` root itself is mixed → empty.
 PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 
 /// Full list of built-in paths in taxonomy order.
@@ -189,8 +204,11 @@ PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
 ///
 /// SSOT for "what shader does this event animate with out of the box". Two
 /// families default to a shader:
-///   • Window MOVE/RESIZE (snap, tile, layout-switch, move, resize) →
-///     "window-morph" (geometry cross-fade), run by the kwin-effect.
+///   • Window SNAP (snap in/out, layout-switch) → "window-morph" (geometry
+///     cross-fade), run by the kwin-effect. The interactive-drag leaf
+///     (`window.movement.move`) carries NO default — a crossfade pack
+///     cannot drive a held drag, and the move-class packs (wobble) stay
+///     opt-in.
 ///   • Overlay show/hide leaves (osd.{show,hide},
 ///     popup.{zoneSelector,layoutPicker,snapAssist}.{show,hide}) → "fade"
 ///     (fade-and-scale), run by the daemon SurfaceAnimator instead of its C++

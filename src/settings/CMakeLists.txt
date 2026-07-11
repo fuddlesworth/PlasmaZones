@@ -335,6 +335,7 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationProfileEditor.qml
         qml/AnimationsWindowsPage.qml
         qml/AnimationsWindowMotionPage.qml
+        qml/AnimationsWindowDraggingPage.qml
         qml/AnimationsOsdsPage.qml
         qml/AnimationsOverlaysPage.qml
         qml/AnimationsDesktopsPage.qml

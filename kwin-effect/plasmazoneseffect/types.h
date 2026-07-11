@@ -540,6 +540,12 @@ struct ShaderTransition
     /// schedule time and bails on fire if the live transition has been
     /// superseded — without this, a stale timer would tear down a fresh
     /// transition that replaced it before it had a chance to play out.
+    /// Two non-install sites bump it too, both for the held drag: the
+    /// drag-start (re-)hold fences a prior drag's release timers on a
+    /// re-grab, and the mesh-release handler fences the start-scheduled
+    /// duration timer when it hands the lifetime to the settle gate. The
+    /// paint pipeline's deferred expiry teardown is a second
+    /// generation-guarded consumer alongside the event timers.
     quint64 generation = 0;
     /// When true, paintWindow flips progress to 1 - progress before the
     /// uniform write, so the shader runs from `iTime = 1.0` down to

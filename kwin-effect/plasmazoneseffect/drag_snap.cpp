@@ -73,9 +73,9 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                               reply.argumentAt<3>());
                     qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
                     if (storePreSnap)
-                        // `window` is non-null inside this branch (guarded by the
-                        // `reply.argumentAt<4>() && window` check above), so the
-                        // ternary fall-through to QRectF() is unreachable.
+                        // `window` is non-null inside this branch (guarded by
+                        // the `reply.argumentAt<4>() && window` check above),
+                        // so frameGeometry() needs no null-guard here.
                         m_snapHandler->ensurePreSnapGeometryStored(window, windowId, QRectF(window->frameGeometry()));
                     applyWindowGeometry(window, geo, false, skipAnimation);
                     // Async snap (keyboard / empty-zone / last-zone / auto-fill)
@@ -259,11 +259,11 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // the non-animated path just runs the moveResize without the snap
     // motion / shader.
     //
-    // BUT never let the snap/move geometry morph supersede an in-flight
+    // BUT never let the geometry morph supersede an in-flight
     // window.open animation. A window that is snapped / placed AS IT OPENS
     // (snap-restore, autotile, daemon placement) should show its OPEN animation
-    // at the snapped position, not a move morph — otherwise the geometry morph
-    // (the default for snap/move) installs over the just-started open transition
+    // at the snapped position, not a snap morph — otherwise the geometry morph
+    // (the snap default) installs over the just-started open transition
     // and the open animation never plays. The open transition holds the
     // WindowAddedGrabRole (addedGrabHeld), so detect it and fall through to the
     // instant-moveResize path below: the window jumps to its snapped geometry and
@@ -388,8 +388,8 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             auto shaderProfile = resolved.profile;
             if (!resolved.shaderSlotFromRule && shaderProfile.effectiveEffectId().isEmpty()) {
                 // No rule matched and no tree override resolved a shader for
-                // this move event — apply the built-in per-event default
-                // (window-morph for snap/move/resize) via the shared SSOT,
+                // this snap event — apply the built-in per-event default
+                // (window-morph for snap / layoutSwitch) via the shared SSOT,
                 // which respects an explicit tree "None". Keeps the default
                 // consistent with what the settings UI shows
                 // (resolvedShaderProfile uses the same helper) without
@@ -399,7 +399,43 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 shaderProfile =
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath);
             }
-            if (!shaderProfile.effectiveEffectId().isEmpty()) {
+            // Runtime applicability gate — same canonical-predicate check
+            // as tryBeginShaderForEvent (resolvedShaderAppliesToEvent): the
+            // rule layer or a stale config can deliver a pack that provably
+            // cannot drive this snap leg (a move-physics or desktop pack).
+            // Refusing here keeps the C++ WindowAnimator geometry animation
+            // as the fallback instead of paying capture + paint cost for an
+            // identity no-op transition.
+            const QString snapShaderId = shaderProfile.effectiveEffectId();
+            const bool snapShaderApplies =
+                !snapShaderId.isEmpty() && resolvedShaderAppliesToEvent(snapShaderId, profilePath);
+            if (!snapShaderApplies && !snapShaderId.isEmpty() && m_shaderManager.findTransition(window)) {
+                // A refused pack resolved while ANY transition is still live
+                // on this window — typically a morph from an earlier leg of
+                // this drag, but a settling wobble or an in-flight focus
+                // leg present at snap time is cleared the same way (an open
+                // leg can never reach here: it holds addedGrabHeld, so the
+                // enclosing block is skipped via openAnimationInFlight) (only
+                // reachable when the rule set or tree is edited mid-drag —
+                // every applyWindowGeometry path shares the geometry class,
+                // so the gate cannot flip between retargets otherwise). Tear
+                // the live transition down for a clean slate: skipping the
+                // block would leave a stale morph painting toward the OLD
+                // target (mt->toGeometry never updated) while the
+                // WindowAnimator (retargeted above) heads to the new one.
+                endShaderTransition(window);
+            }
+            // When the snap leg resolves NO shader at all (empty id), a live
+            // settling move transition is deliberately LEFT ALONE: the wobble
+            // rings out over the WindowAnimator translate, exactly as it does
+            // on a long drag that snaps mid-settle. The bundled move pack
+            // (wobble) declares no iFromRect, so shaderOwnsGeometry stays
+            // false and the animator keeps the geometry — they compose. A
+            // hybrid move+geometry pack that declares iFromRect (see the
+            // move-start hookup in window_lifecycle.cpp) would instead own
+            // geometry here and suppress the animator translate for its
+            // settle tail.
+            if (snapShaderApplies) {
                 beginShaderTransition(window, shaderProfile);
                 // If the installed shader is a geometry morph (declares
                 // iFromRect), hand it the old/new frames and request the

@@ -725,47 +725,49 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         if (m_resizingWindow) {
             m_resizeStartGeometry = window->frameGeometry().toRect();
         }
-        // window.move / window.resize shader transitions: KWin's interactive
-        // move/resize is its own animation system (Window::moveResize via
-        // pointer drag), but we layer an effect-side shader for visual
-        // feedback. windowStartUserMovedResized doesn't disambiguate the
-        // two; w->isUserResize() does — interactive resize sets it, plain
-        // move leaves it false. Each direction can take its own shader
-        // assignment. tryBeginShaderForEvent silently no-ops if the user
-        // didn't assign a shader to the path.
-        if (window) {
-            tryBeginShaderForEvent(window,
-                                   window->isUserResize() ? PhosphorAnimation::ProfilePaths::WindowResize
-                                                          : PhosphorAnimation::ProfilePaths::WindowMove,
-                                   animationDurationMs());
-            // Genuine old-content capture for cross-fade shaders: a
-            // move/resize begins with the window ALIVE and its pre-drag
-            // content still current, so a shader that declares uOldWindow
-            // (ripple-snap, window-morph, ...) gets a real decorated
-            // snapshot to fade FROM — matching the drag-snap morph path —
-            // instead of leaning on the iHasOldWindow fallback (which
-            // collapses the old side to the live content). Especially
-            // material for resizes, where the old content re-lays. The
-            // !oldSnapshot guard preserves an existing capture on a
-            // retargeted transition, mirroring drag_snap; a failed capture
-            // clears needsSnapshot and the shader-side fallback covers it.
+        // window.movement.move shader transition: KWin's interactive move is
+        // its own animation system (Window::moveResize via pointer drag), but
+        // we layer an effect-side shader for visual feedback.
+        // windowStartUserMovedResized doesn't disambiguate move from resize;
+        // w->isUserResize() does — interactive resize sets it, plain move
+        // leaves it false. Interactive RESIZE deliberately starts NO shader
+        // event: it is a held gesture with no discrete before/after until
+        // release (the compositor repaints the re-laid content live the whole
+        // time), so a crossfade pack has nothing meaningful to play, and the
+        // soft-body sim omits KWin's resize edge-lock logic (mesh_sim.cpp) so
+        // the move-physics packs have no real story there either. Discrete
+        // resizes are covered by the snapIn / layoutSwitch / maximize events.
+        // tryBeginShaderForEvent silently no-ops if the user didn't assign a
+        // shader to the path.
+        if (window && !window->isUserResize()) {
+            tryBeginShaderForEvent(window, PhosphorAnimation::ProfilePaths::WindowMove, animationDurationMs());
+            // Genuine old-content capture for cross-fade legs: the drag
+            // begins with the window ALIVE and its pre-drag content still
+            // current, so a move pack that declares uOldWindow gets a real
+            // decorated snapshot to fade FROM — matching the drag-snap morph
+            // path — instead of leaning on the iHasOldWindow fallback (which
+            // collapses the old side to the live content). The !oldSnapshot
+            // guard preserves an existing capture on a retargeted transition,
+            // mirroring drag_snap; a failed capture clears needsSnapshot and
+            // the shader-side fallback covers it.
             if (auto* st = m_shaderManager.findTransition(window); st && st->cached) {
                 if (st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
                     st->needsSnapshot = true;
                 }
-                // Anchor iFromRect at the grab frame for rect-driven packs
-                // (window-morph, fold, stretch, flow — anything declaring
-                // iFromRect). A held move/resize used to leave fromGeometry
-                // invalid, pushing the zero vec4: those packs derive their
-                // drawn rect from iFromRect unconditionally, so the first
-                // `durationMs` of every drag played mix(0-rect, live, t) —
-                // the window swept in from the screen origin (or, for a
-                // masked morph, materialised from nothing). Seeded at the
-                // grab, the ramp is a short catch-up ease toward the live
-                // frame and the pinned tail (progress held at 1) draws the
-                // live rect exactly as before. Velocity/mesh packs don't
-                // declare iFromRect and are unaffected; the !isValid guard
-                // preserves a retargeted transition's original anchor.
+                // Anchor iFromRect at the grab frame for rect-driven packs.
+                // Under the opt-in `move` class, only a pack declaring BOTH
+                // move and geometry can reach this leg with iFromRect
+                // declared (pure crossfade packs are refused by the
+                // resolvedShaderAppliesToEvent gate, and wobble reads no
+                // rects), but the anchor keeps such a hybrid correct:
+                // unseeded, rect-driven packs derive their drawn rect from
+                // iFromRect unconditionally, so the first `durationMs` of the
+                // drag would play mix(0-rect, live, t) — the window sweeping
+                // in from the screen origin. Seeded at the grab, the ramp is
+                // a short catch-up ease toward the live frame and the pinned
+                // tail (progress held at 1) draws the live rect exactly as
+                // before. The !isValid guard preserves a retargeted
+                // transition's original anchor.
                 if (st->cached->iFromRectLoc >= 0 && !st->fromGeometry.isValid()) {
                     st->fromGeometry = window->frameGeometry();
                 }
@@ -776,6 +778,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // grab origin anchors iMoveOffset, and the velocity spring
                 // integrates from here (see the paint pipeline).
                 st->holdUntilRelease = true;
+                // Fresh epoch for the (re-)hold: a re-grab inside the prior
+                // drag's settle window rides the same-effect short-circuit
+                // (beginShaderTransition installs nothing new), so the prior
+                // release's tail / safety-cap timer still carries this
+                // transition's generation and would fire mid-drag, killing
+                // the shader for the rest of the new drag. Bumping here
+                // invalidates it. For a fresh install the bump is harmless:
+                // the just-scheduled duration timer stands down on the hold
+                // flag anyway, and every later consumer captures the live
+                // generation at its own schedule time.
+                st->generation = ++m_shaderManager.m_shaderTransitionGenerationCounter;
                 st->grabOrigin = window->frameGeometry().topLeft();
                 st->lastMovePos = st->grabOrigin;
                 st->lastMoveSampleMs = -1;
@@ -792,14 +805,14 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         }
     });
     connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {
-        // Release a HELD move/resize transition with a settle tail: the
+        // Release a HELD move transition with a settle tail (interactive
+        // resize starts no shader transition, see the start handler): the
         // velocity spring decays through zero over the next fraction of a
         // second, letting wobble/tilt shaders relax to rest before the
         // teardown lands. Generation-guarded exactly like the duration
         // timer so an interrupting transition owns its own lifetime.
         if (window) {
             if (auto* st = m_shaderManager.findTransition(window); st && st->holdUntilRelease) {
-                const quint64 myGeneration = st->generation;
                 QPointer<KWin::EffectWindow> safeWindow(window);
                 if (st->meshSim.initialized) {
                     // Soft-body lattice: hand teardown to the settle gate.
@@ -809,7 +822,20 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     // long as it physically takes rather than a fixed tail.
                     // The timer is only a generous SAFETY cap in case the
                     // sim never reaches its settle threshold.
+                    //
+                    // Fresh epoch for the handoff: the start-scheduled
+                    // duration timer in tryBeginShaderForEvent captured the
+                    // install generation and only stands down while
+                    // holdUntilRelease is set. On a drag SHORTER than the
+                    // nominal duration that timer fires after this clear,
+                    // sees a matching generation, and would cut the ring-out
+                    // off mid-settle — so bump the generation to invalidate
+                    // it. The paint pipeline's expiry teardown captures the
+                    // live generation at queue time, so the settle gate and
+                    // the safety cap below both own the new epoch.
                     st->holdUntilRelease = false;
+                    st->generation = ++m_shaderManager.m_shaderTransitionGenerationCounter;
+                    const quint64 myGeneration = st->generation;
                     constexpr int kMeshSettleSafetyCapMs = 4000;
                     QTimer::singleShot(kMeshSettleSafetyCapMs, this, [this, safeWindow, myGeneration]() {
                         if (!safeWindow) {
@@ -823,6 +849,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 } else {
                     // Velocity / trail packs: the springLag decays over the
                     // next fraction of a second, so keep the fixed tail.
+                    // holdUntilRelease stays SET here, so the start-scheduled
+                    // duration timer keeps standing down and this tail timer
+                    // (guarded on the install generation) owns the teardown.
+                    const quint64 myGeneration = st->generation;
                     QTimer::singleShot(animationDurationMs(), this, [this, safeWindow, myGeneration]() {
                         if (!safeWindow) {
                             return;
@@ -930,7 +960,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // window.move shader as a HELD transition — and installing
                 // WindowMaximize here would supersede it: the move pack dies
                 // mid-drag and a full-screen→cursor morph replays over the
-                // pointer. Skip the shader; the edge tracking above still ran,
+                // pointer. The isUserResize branch is skipped for a different
+                // reason: an interactive resize starts NO shader (the start
+                // handler gates on !isUserResize), but it is still a held
+                // gesture with continuous geometry feedback, so a discrete
+                // maximize morph replaying under the pointer would be just as
+                // wrong. Skip the shader; the edge tracking above still ran,
                 // so the next non-interactive flip fires normally.
                 if (window->isUserMove() || window->isUserResize()) {
                     m_shaderManager.m_pendingMaximizeMorph.remove(window);

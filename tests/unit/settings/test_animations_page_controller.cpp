@@ -471,16 +471,29 @@ private Q_SLOTS:
         // Window family — consumed leaves driven by the KWin effect's
         // tryBeginShaderForEvent at kwin-effect/plasmazoneseffect.cpp.
         // Each maps to a window-lifecycle hook (windowAdded, windowClosed,
-        // windowFinishUserMovedResized, maximized, minimized,
-        // focusChanged) and runs the resolved shader on the
-        // OffscreenEffect's redirected texture quad.
+        // windowStartUserMovedResized for the held move,
+        // windowMaximizedStateChanged, minimizedChanged, windowActivated)
+        // and runs the resolved shader on the OffscreenEffect's redirected
+        // texture quad.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.open")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.close")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.minimize")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.maximize")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.move")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.snapIn")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.snapOut")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.layoutSwitch")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.focus")));
+        // The resize legs were dropped from the taxonomy: the interactive
+        // edge-drag has no discrete before/after for a shader to play, and
+        // snapResize never had a callsite. Stale config overrides on these
+        // paths must prune, so they stay unsupported.
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.snapResize")));
+        // Desktop family — the two-texture switch is a consumed leaf too
+        // (the KWin effect's DesktopTransitionManager resolves it in the
+        // desktopChanged handler, not a per-window tryBeginShaderForEvent leg).
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.switch")));
 
         // Ancestors of consumed leaves — supported because the
         // daemon's resolver walks them on the way to the leaf, so a
@@ -500,6 +513,11 @@ private Q_SLOTS:
         // `window` itself is now a consumable ancestor — setting a
         // shader at the family root cascades to every leaf above.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window")));
+        // The intermediate cascade parents the parent-card UX relies on.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance")));
+        // The desktop family root, ancestor of the consumed switch leaf.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop")));
 
         // Paths the resolver never walks through — any assignment would
         // be runtime-dead and silently shadow what the user thought

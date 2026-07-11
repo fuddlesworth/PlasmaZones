@@ -117,8 +117,9 @@ QVariantList AnimationsPageController::availableShaderEffectsForPath(const QStri
         // geometry-morph on an appearance leg, or a window shader on a desktop
         // switch, would silently no-op. Filtering (rather than dimming) keeps
         // each picker to one coherent set: appearance shaders on the Appearance
-        // page, the morph shaders on Movement, the two-texture packs on Virtual
-        // Desktops. `dimmed` is retained (always false) for QML compatibility.
+        // page, the morph shaders on Movement, the drag-physics packs on the
+        // "Dragged" leaf, the two-texture packs on Virtual Desktops. `dimmed`
+        // is retained (always false) for QML compatibility.
         if (!PhosphorAnimationShaders::shaderEffectAppliesToEventPath(effect, path)) {
             continue;
         }
@@ -224,10 +225,27 @@ QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path)
         return {};
     const ShaderProfileTree tree = m_settings->shaderProfileTree();
     // resolveShaderWithDefault (not bare resolve) so the built-in per-event
-    // default — window-morph for window-move events — shows as the current
+    // default — window-morph for window snap events — shows as the current
     // value for an unset event. A user override (incl. an explicit "None")
     // still wins; the default is computed, never persisted.
-    return shaderProfileToMap(resolveShaderWithDefault(tree, path));
+    ShaderProfile resolved = resolveShaderWithDefault(tree, path);
+    // Runtime-truth mirror of the compositor's applicability gate
+    // (PlasmaZonesEffect::resolvedShaderAppliesToEvent), routed through the
+    // same canonical predicate. A persisted effect that provably cannot
+    // drive this event (a stale pre-split geometry pack on the drag leaf, a
+    // hand-edited class mismatch) is refused at runtime, so displaying it
+    // as "current" would advertise an animation that never plays — and the
+    // class-filtered picker could not even show it as a selectable entry.
+    // Blank only the VIEW: the persisted override is untouched and the
+    // user's next pick overwrites it. An id the registry doesn't know
+    // passes through, so a user pack that is still scanning doesn't flash
+    // to "None" mid-warmup.
+    const QString effectId = resolved.effectiveEffectId();
+    if (!effectId.isEmpty() && m_shaderRegistry && m_shaderRegistry->hasEffect(effectId)
+        && !shaderEffectAppliesToEventPath(m_shaderRegistry->effect(effectId), path)) {
+        resolved.effectId.reset();
+    }
+    return shaderProfileToMap(resolved);
 }
 
 bool AnimationsPageController::setShaderOverride(const QString& path, const QString& effectId,

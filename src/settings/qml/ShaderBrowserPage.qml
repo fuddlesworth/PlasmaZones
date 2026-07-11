@@ -101,14 +101,19 @@ SettingsFlickable {
             "order": 1
         },
         {
+            "key": "move",
+            "label": i18nc("@item shader capability (held interactive window drag)", "Drag motion"),
+            "order": 2
+        },
+        {
             "key": "appearance",
             "label": i18nc("@item shader capability", "Appearance"),
-            "order": 2
+            "order": 3
         },
         {
             "key": "desktop",
             "label": i18nc("@item shader capability", "Desktop"),
-            "order": 3
+            "order": 4
         }
     ]
     readonly property string _universalKey: "universal"

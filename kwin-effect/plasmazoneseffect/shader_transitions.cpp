@@ -601,7 +601,13 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // scope (the settings pickers filter desktop packs out of every window
     // event). Refuse it so the window keeps its normal behavior. Guarding on the
     // desktop class specifically — not full class-matching — keeps geometry /
-    // appearance / universal shaders untouched.
+    // appearance / universal shaders untouched. This split is deliberate: a
+    // desktop pack on a per-window surface paints GARBAGE (unbound samplers),
+    // so it must be refused at this chokepoint; a move/geometry class mismatch
+    // paints safely but dead, and is enforced upstream by
+    // resolvedShaderAppliesToEvent at every resolution route into here
+    // (tryBeginShaderForEvent, applyWindowGeometry). A future direct caller
+    // must route through that gate too.
     if (eff.appliesTo.contains(PhosphorAnimation::ProfilePaths::EventClassDesktop)) {
         qCWarning(lcEffect) << "beginShaderTransition: refusing desktop-contract shader" << effectId
                             << "on a per-window event — desktop packs sample unbound uFromDesktop/uToDesktop";
@@ -832,9 +838,10 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAnchorPosInFbo);
         cached.iAnchorRectInTextureLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIAnchorRectInTexture);
-        // Geometry-morph uniforms (window move/resize cross-fade). -1 when
-        // the shader is not a morph shader (doesn't read them) — paintWindow
-        // guards on >= 0 so non-morph transitions pay nothing.
+        // Geometry-morph uniforms (snap / maximize / layout-switch
+        // cross-fade). -1 when the shader is not a morph shader (doesn't
+        // read them) — paintWindow guards on >= 0 so non-morph transitions
+        // pay nothing.
         cached.iFromRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIFromRect);
         cached.iToRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIToRect);
         cached.iOldWindowLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUOldWindow);
@@ -1201,7 +1208,11 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // tryBeginShaderForEvent can detect supersession (a fresh transition
     // installed before the prior timer fires) and bail without killing the
     // successor. Counter is monotonic per-process; 64-bit so practically
-    // unbounded.
+    // unbounded. Two non-install writers share the counter: the drag-start
+    // (re-)hold (windowStartUserMovedResized), which fences a prior drag's
+    // release timers on a re-grab, and the mesh-drag release handler
+    // (windowFinishUserMovedResized), which bumps when it hands the
+    // lifetime to the settle gate.
     transition.generation = ++m_shaderManager.m_shaderTransitionGenerationCounter;
     transition.reverse = reverse;
     // Stamp the close-grab flag so endShaderTransition knows to release
@@ -1600,6 +1611,26 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     }
 }
 
+bool PlasmaZonesEffect::resolvedShaderAppliesToEvent(const QString& effectId, const QString& profilePath) const
+{
+    // See the header doc. Routed through the canonical predicate
+    // (shaderEffectAppliesToEventPath) — the same one the settings pickers
+    // filter with — so runtime refusal and picker filtering can never drift.
+    const auto eff = m_shaderManager.m_animationShaderRegistry.effect(effectId);
+    if (!eff.isValid()) {
+        // Unknown id: pass through. The pack may still be scanning, and
+        // beginShaderTransition's registry-miss warning stays the single
+        // reporter for genuinely unknown ids.
+        return true;
+    }
+    if (!PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff, profilePath)) {
+        qCDebug(lcEffect) << "shader" << effectId << "does not apply to event" << profilePath
+                          << "(appliesTo=" << eff.appliesTo << ") — skipping transition";
+        return false;
+    }
+    return true;
+}
+
 void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                                bool reverse, bool holdCloseGrab, bool holdAddedGrab)
 {
@@ -1715,6 +1746,19 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         }
         return;
     }
+    // Runtime applicability gate — see resolvedShaderAppliesToEvent. The
+    // pickers keep class-mismatched packs unselectable, but a Rule's
+    // OverrideAnimationShader slot or a stale / hand-edited config bypasses
+    // them. Most material on the held-drag leg (window.movement.move): a
+    // crossfade pack there would install a dead transition that pins
+    // full-output repaints for the whole drag. The tree itself can no longer
+    // deliver one there (ShaderProfileTree::resolve takes no ancestor overlay
+    // for the move leaf), so this catches the rule-layer and stale-config
+    // routes — and, symmetrically, a move-physics or desktop pack forced onto
+    // any other window leg.
+    if (!resolvedShaderAppliesToEvent(profile.effectiveEffectId(), profilePath)) {
+        return;
+    }
     const bool installed =
         beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab, holdAddedGrab);
     if (!installed) {
@@ -1749,10 +1793,14 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
             return;
         }
         if (const auto* live = m_shaderManager.findTransition(safeWindow); live && live->generation == myGeneration) {
-            // HELD transitions (interactive move/resize) outlive their
+            // HELD transitions (the interactive drag) outlive their
             // nominal duration by design: the user is still dragging.
             // windowFinishUserMovedResized owns their teardown (a settle
             // tail after release), so the duration timer stands down.
+            // A mesh-backed drag released BEFORE this timer fires is
+            // covered by the generation check above instead: the release
+            // handler clears the hold flag but bumps the generation when
+            // it hands the lifetime to the settle gate.
             if (live->holdUntilRelease) {
                 return;
             }

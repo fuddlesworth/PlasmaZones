@@ -37,8 +37,10 @@ inline QStringList shaderConsumedLeafEventPaths()
         //
         // Window family — driven by the KWin OffscreenEffect at
         // kwin-effect/plasmazoneseffect.cpp via tryBeginShaderForEvent
-        // on each window-lifecycle hook (windowAdded/windowClosed/
-        // windowFinishUserMovedResized/maximized/minimized/focusChanged).
+        // on each window-lifecycle hook: windowAdded/windowClosed for
+        // open/close, windowStartUserMovedResized for the held move,
+        // and windowMaximizedStateChanged/minimizedChanged/
+        // windowActivated for maximize/minimize/focus.
         // The effect resolves m_shaderProfileTree.resolve(path) per
         // event, drives a per-window iTime AnimatedValue, and runs the
         // shader on the OffscreenEffect's redirected texture quad.
@@ -47,20 +49,21 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::WindowMinimize,
         PP::WindowMaximize,
         PP::WindowMove,
-        PP::WindowResize,
         PP::WindowFocus,
         // Snap-into-zone window animations driven by the kwin-effect's
         // applyWindowGeometry / daemon_apply chokepoints. Each routes
         // through tryBeginShaderForEvent so the user can pick a
         // distinct shader per snap event.
         //
-        // `window.snapResize` is intentionally NOT listed: no
-        // kwin-effect callsite passes it today (the resize-only
-        // branch of applyWindowGeometry currently inherits the
-        // snap-in shader). Adding a resize-only shader leg is a
-        // feature, not a rename — the path constant exists for
-        // motion tuning but the shader picker stays hidden until
-        // a caller wires it through tryBeginShaderForEvent.
+        // There are NO resize legs: `window.movement.resize` (the
+        // interactive edge-drag) and the never-routed
+        // `window.movement.snapResize` were dropped from the taxonomy
+        // entirely — a held resize has no discrete before/after for a
+        // crossfade and no sim support for physics packs, and discrete
+        // resizes are covered by the snap / layoutSwitch / maximize
+        // events (the resize-only branch of applyWindowGeometry inherits
+        // the snap-in shader). Stale config overrides on those paths are
+        // pruned by pruneShaderProfileTreeToSupportedPaths below.
         PP::WindowSnapIn,
         PP::WindowSnapOut,
         PP::WindowLayoutSwitch,
