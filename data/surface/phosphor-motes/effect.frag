@@ -6,27 +6,27 @@
 // declares `paddingParam: moteRange`, so the host inflates the capture
 // canvas the same way it does for the glow pack).
 //
-// Every mote is born ON the frame perimeter — most from the top edge, some
-// from the sides, a few from the bottom — detaches along the edge's outward
-// normal, then buoyancy takes over and curls it upward through the margin.
-// Side-born motes peel off and rise; bottom-born sparks sink briefly and
-// die before drifting back over the content. What separates this from a
-// particle ring like fireflies:
-//   • Emanation — the dust originates from the window itself, so the effect
-//     reads as the surface shedding light, not ambient rain around it.
+// Every mote is born ON the frame perimeter (uniform density per pixel of
+// edge) and travels OUTWARD along its birth edge's normal for its whole
+// life — dust born on the left spreads left, bottom dust spreads down —
+// so the window sheds light evenly in every direction instead of all of
+// it drifting up. What separates this from a particle ring like fireflies:
+//   • Emanation — the dust originates from the window itself and radiates
+//     away from it, so the effect reads as the surface shedding light, not
+//     ambient rain around it.
 //   • Depth — each mote carries a hashed depth: near motes are larger,
 //     brighter and faster, far ones small, dim and slow.
 //   • Real trails — the tail is the mote's own path history: the position
 //     function is re-evaluated a few steps back in time and stamped with
-//     decaying weight and growing blur, so trails curve through the detach
-//     and the upward turn the way an ember streak actually does.
+//     decaying weight and growing blur, so the streak trails back toward
+//     the frame edge the mote came from.
 // A handful of motes hash into rare bright embers with heavier trails, and
 // a fine halo of twinkling micro-dust hugs the frame, thinning with
 // distance, so the margin never reads as empty space between a few dots.
 //
 // Hue burns through the brand accent gradient over each mote's life — born
 // cyan #22D3EE at the frame, through blue #3B82F6 and purple #A855F7,
-// burning out rose #F43F5E at the end of its climb. Motes fade in at birth
+// burning out rose #F43F5E at the end of its drift. Motes fade in at birth
 // and burn out before their clock wraps, so respawn is never visible.
 // Composites BEHIND the window (over transparency only), so the dust ducks
 // under the frame edge instead of crossing the content. Dims when
@@ -51,50 +51,52 @@ vec3 fluxGradient(float t) {
 }
 
 // Birth point on the frame perimeter and its outward normal, from a single
-// hash. Weighted toward the top edge (rising dust sheds mostly upward):
-// 40% top, 25% each side, 10% bottom.
+// hash. The hash maps to arc length, so spawn density is uniform per pixel
+// of perimeter — a wide window sheds more dust from its long edges, and no
+// edge is favoured (the dust radiates evenly all around).
 void frameBirth(float u, out vec2 spawn, out vec2 normal) {
     vec2 tl = uSurfaceFrameTopLeft;
     vec2 sz = max(uSurfaceFrameSize, vec2(1.0));
-    if (u < 0.40) {
-        spawn = tl + vec2(sz.x * (u / 0.40), 0.0);
+    float s = u * 2.0 * (sz.x + sz.y);
+    if (s < sz.x) {
+        spawn = tl + vec2(s, 0.0);
         normal = vec2(0.0, -1.0);
-    } else if (u < 0.65) {
-        spawn = tl + vec2(0.0, sz.y * ((u - 0.40) / 0.25));
-        normal = vec2(-1.0, 0.0);
-    } else if (u < 0.90) {
-        spawn = tl + vec2(sz.x, sz.y * ((u - 0.65) / 0.25));
+    } else if (s < sz.x + sz.y) {
+        spawn = tl + vec2(sz.x, s - sz.x);
         normal = vec2(1.0, 0.0);
-    } else {
-        spawn = tl + vec2(sz.x * ((u - 0.90) / 0.10), sz.y);
+    } else if (s < 2.0 * sz.x + sz.y) {
+        spawn = tl + vec2(s - sz.x - sz.y, sz.y);
         normal = vec2(0.0, 1.0);
+    } else {
+        spawn = tl + vec2(0.0, s - 2.0 * sz.x - sz.y);
+        normal = vec2(-1.0, 0.0);
     }
 }
 
 // Closed-form emanation path for one mote at (scaled) time t. Stateless on
 // purpose: the tail re-evaluates this at earlier times, so the whole streak
 // stays consistent frame to frame with no particle history buffer. The
-// motion is detach (eases out along the edge normal, fast then settling)
-// plus buoyancy (upward, growing as age squared) plus a layered wander, so
-// the path bends from "leaving the edge" into "climbing".
-vec2 motePath(float h1, float h2, float h3, float t, float detachDist,
-              float riseDist, float swayAmp, out float age) {
+// motion is purely RADIAL: outward along the birth edge's normal for the
+// mote's whole life — a fast detach easing into a glide — while a layered
+// wander slides it along the edge tangent. No shared drift direction.
+vec2 motePath(float h1, float h2, float h3, float t, float reachPx,
+              float swayAmp, out float age) {
     float rate = 0.05 + 0.07 * h3;
     age = fract(h2 + t * rate);
 
     vec2 spawn, normal;
     frameBirth(h1, spawn, normal);
 
-    float detach = detachDist * (1.0 - exp(-age * 4.0)) * (0.6 + 0.4 * h2);
-    float rise = riseDist * age * age;
+    float travel = reachPx * (1.0 - pow(1.0 - age, 1.8)) * (0.75 + 0.25 * h2);
+    vec2 tangent = vec2(-normal.y, normal.x);
     float wander = sin(age * 7.0 + h3 * TAU) * 0.5
                  + sin(age * 17.0 - t * 0.5 + h1 * TAU) * 0.3;
 
-    return spawn + normal * detach + vec2(swayAmp * wander, -rise);
+    return spawn + normal * travel + tangent * (swayAmp * wander);
 }
 
-// Fade in at birth, burn out well before the clock wraps — bottom-born
-// sparks die before buoyancy would carry them back over the content.
+// Fade in at birth, burn out well before the clock wraps, so a respawn at
+// the frame edge is never visible.
 float moteLife(float age) {
     return smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(0.55, 0.95, age));
 }
@@ -115,8 +117,10 @@ vec3 microDust(vec2 px, float t, float amount, float reachPx, out float dustA) {
     float halo = exp(-dOut / max(reachPx * 0.9, 1.0));
 
     float cellPx = 13.0 * max(uSurfaceScale, 0.001);
-    // Shift the sample point downward over time: the speck pattern rises.
-    vec2 dq = (px + vec2(0.0, t * 26.0 * max(uSurfaceScale, 0.001))) / cellPx;
+    // Stationary grid: the specks twinkle in place. A scrolling pattern
+    // imposed one shared drift direction on the whole canvas, which fought
+    // the radial emanation of the motes.
+    vec2 dq = px / cellPx;
     vec2 cellId = floor(dq);
     vec3 h = hash23(cellId);
 
@@ -151,14 +155,13 @@ vec4 pSurface(vec2 uv) {
     float baseSize = max(p_moteSize, 0.5) * max(uSurfaceScale, 0.001);
     float tailLen  = max(p_tailLength, 1.0) * max(uSurfaceScale, 0.001);
     float swayAmp  = max(p_sway, 0.0) * max(uSurfaceScale, 0.001);
-    float t = iTime * max(p_riseSpeed, 0.0);
+    float t = iTime * max(p_driftSpeed, 0.0);
     float count = clamp(p_moteCount, 1.0, float(kMaxMotes));
     float intensity = clamp(p_intensity, 0.0, 2.0);
 
-    // Travel distances: rise most of the captured margin, detach a fraction
-    // of it, so the full arc stays inside the canvas the host padded for us.
-    float riseDist   = reachPx * 0.85;
-    float detachDist = reachPx * 0.28;
+    // Travel distance: drift most of the captured margin, so the streak
+    // (head plus blurred tail) stays inside the canvas the host padded.
+    float driftDist = reachPx * 0.9;
 
     vec3 glow = vec3(0.0);
     float alpha = 0.0;
@@ -186,8 +189,8 @@ vec4 pSurface(vec2 uv) {
         float tMote   = t * mix(0.6, 1.35, depth);
 
         // Tail spacing in scaled-time: how long the mote takes to cover
-        // tailLen along its arc at its own rate, split across the stamps.
-        float travelPerT = (riseDist + detachDist) * (0.05 + 0.07 * h3);
+        // tailLen along its drift at its own rate, split across the stamps.
+        float travelPerT = driftDist * (0.05 + 0.07 * h3);
         float tailStep = tailLen / max(travelPerT, 1.0) / float(kTailTaps - 1);
 
         // Cheap cull: the whole streak lives between spawn and head, so a
@@ -198,7 +201,7 @@ vec4 pSurface(vec2 uv) {
         // ember (a head-sized slack clipped the outermost tail stamp at
         // ~0.24 of its peak).
         float altHead;
-        vec2 headPos = motePath(h1, h2, h3, tMote, detachDist, riseDist, swayAmp, altHead);
+        vec2 headPos = motePath(h1, h2, h3, tMote, driftDist, swayAmp, altHead);
         vec2 spawn, normalUnused;
         frameBirth(h1, spawn, normalUnused);
         vec2 mid = (spawn + headPos) * 0.5;
@@ -217,11 +220,11 @@ vec4 pSurface(vec2 uv) {
         for (int k = 0; k < kTailTaps; ++k) {
             float ageK;
             vec2 posK = motePath(h1, h2, h3, tMote - float(k) * tailStep,
-                                 detachDist, riseDist, swayAmp, ageK);
+                                 driftDist, swayAmp, ageK);
             // A tap evaluated before the clock's fract wrap belongs to the
             // PREVIOUS mote instance (its age jumps HIGHER than the head's)
-            // — skip it rather than stamping a disconnected ember high up
-            // the previous climb.
+            // — skip it rather than stamping a disconnected ember far out
+            // on the previous drift.
             if (ageK > altHead + 1.0e-4) {
                 continue;
             }

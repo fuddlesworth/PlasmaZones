@@ -1,7 +1,7 @@
 {
     "id": "phosphor-motes",
     "name": "Phosphor Motes",
-    "description": "The window sheds embers of luminous dust from its own frame. Each mote is born on an edge, mostly the top one, peels away along it and then curls upward through the clear margin, trailing its own curved path history. Near motes are larger, brighter and faster than far ones, a few flare into rare bright embers, and a fine halo of twinkling micro dust hugs the frame. Colour burns through the brand gradient over each mote's life, born cyan at the frame and fading out rose at the end of its climb. The dust dims when the surface loses focus.",
+    "description": "The window sheds embers of luminous dust from its own frame. Each mote is born on an edge and drifts straight out from it through the clear margin, so the dust radiates evenly in every direction, trailing its own path history back toward the frame. Near motes are larger, brighter and faster than far ones, a few flare into rare bright embers, and a fine halo of twinkling micro dust hugs the frame. Colour burns through the brand gradient over each mote's life, born cyan at the frame and fading out rose at the end of its drift. The dust dims when the surface loses focus.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Ambience",
@@ -37,13 +37,13 @@
             "description": "Radius of each mote's glowing head (px)"
         },
         {
-            "id": "riseSpeed",
-            "name": "Rise speed",
+            "id": "driftSpeed",
+            "name": "Drift speed",
             "type": "float",
             "default": 0.5,
             "min": 0.0,
             "max": 2.0,
-            "description": "How fast the dust climbs"
+            "description": "How fast the dust drifts away from the frame"
         },
         {
             "id": "tailLength",
@@ -61,7 +61,7 @@
             "default": 12.0,
             "min": 0.0,
             "max": 48.0,
-            "description": "How far each mote drifts sideways as it rises (px)"
+            "description": "How far each mote wanders along the edge as it drifts out (px)"
         },
         {
             "id": "dustAmount",
