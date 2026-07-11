@@ -471,9 +471,10 @@ private Q_SLOTS:
         // Window family — consumed leaves driven by the KWin effect's
         // tryBeginShaderForEvent at kwin-effect/plasmazoneseffect.cpp.
         // Each maps to a window-lifecycle hook (windowAdded, windowClosed,
-        // windowStartUserMovedResized for the held move, maximized,
-        // minimized, focusChanged) and runs the resolved shader on the
-        // OffscreenEffect's redirected texture quad.
+        // windowStartUserMovedResized for the held move,
+        // windowMaximizedStateChanged, minimizedChanged, windowActivated)
+        // and runs the resolved shader on the OffscreenEffect's redirected
+        // texture quad.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.open")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.close")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.minimize")));

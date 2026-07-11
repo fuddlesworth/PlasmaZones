@@ -1208,9 +1208,11 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // tryBeginShaderForEvent can detect supersession (a fresh transition
     // installed before the prior timer fires) and bail without killing the
     // successor. Counter is monotonic per-process; 64-bit so practically
-    // unbounded. One non-install writer shares the counter: the mesh-drag
-    // release handler (windowFinishUserMovedResized) bumps an existing
-    // transition's generation when it hands the lifetime to the settle gate.
+    // unbounded. Two non-install writers share the counter: the drag-start
+    // (re-)hold (windowStartUserMovedResized), which fences a prior drag's
+    // release timers on a re-grab, and the mesh-drag release handler
+    // (windowFinishUserMovedResized), which bumps when it hands the
+    // lifetime to the settle gate.
     transition.generation = ++m_shaderManager.m_shaderTransitionGenerationCounter;
     transition.reverse = reverse;
     // Stamp the close-grab flag so endShaderTransition knows to release
