@@ -98,6 +98,9 @@ QVariantList DecorationPageController::availableDecorationSets() const
     return result;
 }
 
+// NOTE: this TU is compiled with -fno-lto -Wno-maybe-uninitialized (see
+// src/settings/CMakeLists.txt) — GCC 16's LTO pass emits false-positive
+// -Wmaybe-uninitialized warnings against the staged.push_back() below.
 bool DecorationPageController::applyDecorationSet(const QString& name)
 {
     using PhosphorSurfaceShaders::DecorationProfile;

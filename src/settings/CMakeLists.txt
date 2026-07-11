@@ -204,6 +204,22 @@ set(plasmazones_settings_SRCS
 
 add_executable(plasmazones-settings ${plasmazones_settings_SRCS})
 
+# GCC 16 LTO false positive: applyDecorationSet stages a QList of entries whose
+# DecorationProfile holds std::optional members. A disengaged optional's payload
+# bytes are legitimately uninitialized and only ever read behind the engaged
+# flag, but GCC's link-time IPA maybe-uninitialized pass loses that guard across
+# the QList::emplaceBack inline chain and warns against the Qt headers
+# (qswap.h / qshareddata_impl.h / bits/move.h). The warnings surface at the
+# ltrans stage, so in-source diagnostic pragmas cannot reach them (the reported
+# location is outside the pragma region) and whether they fire varies with LTO
+# partitioning. Deterministic, file-scoped treatment: keep this one TU out of
+# LTO so its functions are never re-analysed at link, and silence the same
+# false positive class in its own compile.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(decorationpagecontroller_sets.cpp PROPERTIES
+        COMPILE_OPTIONS "-fno-lto;-Wno-maybe-uninitialized")
+endif()
+
 target_include_directories(plasmazones-settings PRIVATE
     ${CMAKE_BINARY_DIR}/generated
     ${CMAKE_SOURCE_DIR}/src
