@@ -182,11 +182,53 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSection(search, QStringLiteral("general"), QStringLiteral("shaderEffects"), PhosphorI18n::tr("Shader Effects"));
     addSetting(search, QStringLiteral("general"), QStringLiteral("frameRate"), PhosphorI18n::tr("Frame rate"),
                {PhosphorI18n::tr("fps"), PhosphorI18n::tr("refresh"), PhosphorI18n::tr("animation")});
-    addSetting(search, QStringLiteral("general"), QStringLiteral("audioSpectrum"), PhosphorI18n::tr("Audio spectrum"),
+    addSection(search, QStringLiteral("general"), QStringLiteral("audioSpectrum"), PhosphorI18n::tr("Audio Spectrum"));
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioSpectrumEnabled"),
+               PhosphorI18n::tr("Audio spectrum"),
                {PhosphorI18n::tr("cava"), PhosphorI18n::tr("music"), PhosphorI18n::tr("visualizer"),
                 PhosphorI18n::tr("sound")});
     addSetting(search, QStringLiteral("general"), QStringLiteral("spectrumBars"), PhosphorI18n::tr("Spectrum bars"),
                {PhosphorI18n::tr("cava"), PhosphorI18n::tr("bands"), PhosphorI18n::tr("frequency")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioNoiseReduction"),
+               PhosphorI18n::tr("Noise reduction"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("smoothing"), PhosphorI18n::tr("smooth")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioExtraSmoothing"),
+               PhosphorI18n::tr("Extra smoothing"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("smoothing"), PhosphorI18n::tr("smooth")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioAutosens"), PhosphorI18n::tr("Automatic gain"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("autosens"), PhosphorI18n::tr("sensitivity"),
+                PhosphorI18n::tr("gain")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioSensitivity"), PhosphorI18n::tr("Sensitivity"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("gain")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioLowerCutoff"),
+               PhosphorI18n::tr("Lowest frequency"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("cutoff"), PhosphorI18n::tr("frequency"),
+                PhosphorI18n::tr("bass")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioHigherCutoff"),
+               PhosphorI18n::tr("Highest frequency"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("cutoff"), PhosphorI18n::tr("frequency"),
+                PhosphorI18n::tr("treble")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioChannelMode"), PhosphorI18n::tr("Channels"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("stereo"), PhosphorI18n::tr("mono")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioReverse"), PhosphorI18n::tr("Reverse bar order"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("flip"), PhosphorI18n::tr("mirror")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioMonstercat"),
+               PhosphorI18n::tr("Monstercat filter"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("filter"), PhosphorI18n::tr("smooth")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioWaves"), PhosphorI18n::tr("Wave filter"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("filter"), PhosphorI18n::tr("wave")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioInputMethod"), PhosphorI18n::tr("Audio backend"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("pipewire"), PhosphorI18n::tr("pulseaudio"),
+                PhosphorI18n::tr("capture")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("audioInputSource"), PhosphorI18n::tr("Audio source"),
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("device"), PhosphorI18n::tr("monitor"),
+                PhosphorI18n::tr("capture")});
+    addSection(search, QStringLiteral("general"), QStringLiteral("layoutAssignment"),
+               PhosphorI18n::tr("Layout assignment"));
+    addSetting(search, QStringLiteral("general"), QStringLiteral("suppressDefaultLayoutAssignment"),
+               PhosphorI18n::tr("Don't assign a layout by default"),
+               {PhosphorI18n::tr("default"), PhosphorI18n::tr("assign"), PhosphorI18n::tr("snapping"),
+                PhosphorI18n::tr("tiling")});
     addSection(search, QStringLiteral("general"), QStringLiteral("windowFiltering"),
                PhosphorI18n::tr("Window filtering"));
     addSetting(search, QStringLiteral("general"), QStringLiteral("excludeTransient"),
@@ -198,6 +240,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("general"), QStringLiteral("minimumWindowHeight"),
                PhosphorI18n::tr("Minimum window height"),
                {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("short"), PhosphorI18n::tr("size")});
+    addSection(search, QStringLiteral("general"), QStringLiteral("configuration"), PhosphorI18n::tr("Configuration"));
+    addSetting(search, QStringLiteral("general"), QStringLiteral("backup"), PhosphorI18n::tr("Backup"),
+               {PhosphorI18n::tr("export"), PhosphorI18n::tr("save"), PhosphorI18n::tr("config")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("restore"), PhosphorI18n::tr("Restore"),
+               {PhosphorI18n::tr("import"), PhosphorI18n::tr("load"), PhosphorI18n::tr("config")});
     addSetting(search, QStringLiteral("general"), QStringLiteral("resetDefaults"), PhosphorI18n::tr("Reset"),
                {PhosphorI18n::tr("reset to defaults"), PhosphorI18n::tr("defaults"), PhosphorI18n::tr("restore")});
 
