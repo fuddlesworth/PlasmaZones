@@ -101,8 +101,13 @@ float moteLife(float age) {
     return smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(0.55, 0.95, age));
 }
 
-// Micro-dust: a scrolling grid of tiny twinkling specks forming a halo that
-// hugs the frame and thins with distance. One cell lookup per fragment.
+// Micro-dust: a grid of tiny twinkling specks forming a halo that hugs the
+// frame, thins with distance, and STREAMS OUTWARD with the motes. The field
+// is built in emanation coordinates — s along the nearest frame edge, v the
+// outward distance — and the pattern scrolls in v, so specks everywhere
+// march away from their own edge (a plain screen-space scroll read as the
+// whole canvas rising from the bottom of the padded FBO). One cell lookup
+// per fragment.
 vec3 microDust(vec2 px, float t, float amount, float reachPx, out float dustA) {
     dustA = 0.0;
     if (amount <= 0.001) {
@@ -114,13 +119,24 @@ vec3 microDust(vec2 px, float t, float amount, float reachPx, out float dustA) {
     vec2 cen = uSurfaceFrameTopLeft + halfSz;
     vec2 q = abs(px - cen) - halfSz;
     float dOut = length(max(q, vec2(0.0)));
+    // Inside the frame there is no outward direction (dOut collapses to 0
+    // and the whole interior would share one scrolling row), so the dust
+    // field lives strictly in the margin.
+    if (dOut < 0.5) {
+        return vec3(0.0);
+    }
     float halo = exp(-dOut / max(reachPx * 0.9, 1.0));
 
     float cellPx = 13.0 * max(uSurfaceScale, 0.001);
-    // Stationary grid: the specks twinkle in place. A scrolling pattern
-    // imposed one shared drift direction on the whole canvas, which fought
-    // the radial emanation of the motes.
-    vec2 dq = px / cellPx;
+    // Emanation coordinates: bp is the nearest point on the frame rect, so
+    // s = bp.x + bp.y runs along the edge (constant at a corner, where the
+    // fan of fragments shares the corner as its source) and v = dOut runs
+    // outward. Scrolling v with the mote clock makes the specks drift away
+    // from the frame at every edge, corners included.
+    vec2 bp = clamp(px, cen - halfSz, cen + halfSz);
+    float s = bp.x + bp.y;
+    float v = dOut - t * 22.0 * max(uSurfaceScale, 0.001);
+    vec2 dq = vec2(s, v) / cellPx;
     vec2 cellId = floor(dq);
     vec3 h = hash23(cellId);
 
