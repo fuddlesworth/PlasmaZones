@@ -829,6 +829,17 @@ add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_ov
 # profilesChanged reload propagation. Compiles the controller sources
 # directly (they live in the plasmazones-settings executable, not
 # plasmazones_core); the split _paths TU carries parentChain().
+#
+# decorationpagecontroller_sets.cpp carries the same GCC-only LTO
+# suppression it gets in src/settings/CMakeLists.txt (see the full
+# rationale there): source-file properties are directory-scoped, so the
+# settings dir's suppression does not reach this second consuming target,
+# and a Release+LTO build would re-emit the GCC 16 std::optional
+# maybe-uninitialized false positive from the test build.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_sets.cpp PROPERTIES
+        COMPILE_OPTIONS "-fno-lto;-Wno-maybe-uninitialized")
+endif()
 add_executable(test_decorationpagecontroller
     settings/test_decorationpagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller.cpp

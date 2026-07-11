@@ -17,6 +17,11 @@ namespace PlasmaZones::ShaderRender {
 struct RenderOptions
 {
     ShaderMetadata metadata; ///< Parsed metadata; fragment/buffer paths absolute.
+    /// Absolute path of the pack's metadata.json. The renderer derives the
+    /// pack directory from THIS (not from metadata.fragmentShader, which a
+    /// pack may point into a subdirectory) when it re-parses the pack via
+    /// ShaderRegistry::parsePackMetadata for the p_<id> param preamble.
+    QString metadataPath;
     QVector<Zone> zones; ///< Normalized 0-1 rects + colors (loadLayoutZones).
     QSize resolution; ///< Render target size (passed to the shader as iResolution).
     int frameCount = 150;

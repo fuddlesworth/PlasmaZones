@@ -269,6 +269,11 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
             out.userTextures[r.slot] = resolveRelative(metadataDir, r.def.toString());
             out.userTextureWraps[r.slot] = r.wrap;
         } else {
+            // Deliberate: an unsupported type has already CLAIMED a scalar
+            // lane above (the registry's poolOf treats unknown types as
+            // scalar too), so the lane numbering of the following params
+            // stays byte-identical to the p_<id> preamble — only the
+            // seeding is skipped, leaving that lane at the -1 sentinel.
             qCWarning(lcMetadataLoader) << "parameter" << r.id << "has unsupported type" << r.type << "— dropping";
         }
     }

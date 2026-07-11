@@ -275,6 +275,7 @@ int main(int argc, char* argv[])
     // ── Render ──────────────────────────────────────────────────
     PlasmaZones::ShaderRender::RenderOptions opts;
     opts.metadata = metadata;
+    opts.metadataPath = QFileInfo(metadataPath).absoluteFilePath();
     opts.zones = zones;
     opts.resolution = resolution;
     opts.frameCount = frameCount;

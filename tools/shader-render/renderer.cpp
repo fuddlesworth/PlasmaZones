@@ -595,9 +595,12 @@ int Renderer::render(const RenderOptions& opts)
     // defines — and previews come out as empty frames.
     effect->setEntryScaffold(PlasmaZones::zoneEntryPrologue(), PlasmaZones::zoneEntryCandidates());
     {
+        // Pack dir from the metadata path — NOT from the frag path, which a
+        // pack may point into a subdirectory ("fragmentShader": "sub/x.frag"
+        // would make the frag-derived dir miss metadata.json entirely).
         QString metaError;
-        const auto info = PhosphorShaders::ShaderRegistry::parsePackMetadata(
-            QFileInfo(opts.metadata.fragmentShader).absolutePath(), &metaError);
+        const auto info =
+            PhosphorShaders::ShaderRegistry::parsePackMetadata(QFileInfo(opts.metadataPath).absolutePath(), &metaError);
         if (!metaError.isEmpty()) {
             qCWarning(lcRenderer) << "param preamble unavailable for" << opts.metadata.id << ":" << metaError;
         }

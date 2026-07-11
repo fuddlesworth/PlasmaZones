@@ -373,6 +373,64 @@ private Q_SLOTS:
         QCOMPARE(md.customParams[0].w(), -1.0f);
         QCOMPARE(md.customColors[0], QColor(QStringLiteral("#22d3ee")));
     }
+
+    void invalidGlslIdClaimsNoLane()
+    {
+        // A param whose id is not a valid GLSL identifier body gets no
+        // p_<id> define from the registry's preamble, so it must claim no
+        // lane here either (registry T1.1 parity) — even mid-list: the
+        // valid params before and after it take consecutive lanes as if
+        // the invalid one were absent, and its default is never seeded.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        writeFile(dir, QStringLiteral("zone.vert"));
+        const QString path = writeMetadataJson(dir, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "effect.frag",
+            "vertexShader": "zone.vert",
+            "parameters": [
+                {"id": "first",  "type": "float", "default": 1.5},
+                {"id": "bad-id", "type": "float", "default": 9.0},
+                {"id": "second", "type": "float", "default": 2.5}
+            ]
+        })"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+        QCOMPARE(md.customParams[0].x(), 1.5f); // first → lane 0
+        QCOMPARE(md.customParams[0].y(), 2.5f); // second → lane 1 (bad-id claimed nothing)
+        QCOMPARE(md.customParams[0].z(), -1.0f);
+    }
+
+    void imagePoolAutoAssigns()
+    {
+        // The image pool auto-numbers independently of scalars and colors:
+        // two slotless image params take image lanes 0 and 1 regardless of
+        // scalar traffic, and their wrap fields ride along.
+        QTemporaryDir dir;
+        writeFile(dir, QStringLiteral("effect.frag"));
+        writeFile(dir, QStringLiteral("zone.vert"));
+        writeFile(dir, QStringLiteral("texA.png"));
+        writeFile(dir, QStringLiteral("texB.png"));
+        const QString path = writeMetadataJson(dir, QStringLiteral(R"({
+            "id": "test",
+            "fragmentShader": "effect.frag",
+            "vertexShader": "zone.vert",
+            "parameters": [
+                {"id": "speed", "type": "float", "default": 3.0},
+                {"id": "texA",  "type": "image", "default": "texA.png"},
+                {"id": "texB",  "type": "image", "default": "texB.png", "wrap": "repeat"}
+            ]
+        })"));
+
+        PlasmaZones::ShaderRender::ShaderMetadata md;
+        QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
+        QCOMPARE(md.customParams[0].x(), 3.0f); // scalar pool unaffected
+        QVERIFY(md.userTextures[0].endsWith(QStringLiteral("texA.png")));
+        QVERIFY(md.userTextures[1].endsWith(QStringLiteral("texB.png")));
+        QCOMPARE(md.userTextureWraps[0], QStringLiteral("clamp"));
+        QCOMPARE(md.userTextureWraps[1], QStringLiteral("repeat"));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestMetadataLoader)

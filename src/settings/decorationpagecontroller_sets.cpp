@@ -98,9 +98,12 @@ QVariantList DecorationPageController::availableDecorationSets() const
     return result;
 }
 
-// NOTE: this TU is compiled with -fno-lto -Wno-maybe-uninitialized (see
-// src/settings/CMakeLists.txt) — GCC 16's LTO pass emits false-positive
-// -Wmaybe-uninitialized warnings against the staged.push_back() below.
+// NOTE: this TU is compiled with -fno-lto -Wno-maybe-uninitialized in BOTH
+// consuming targets (src/settings/CMakeLists.txt for plasmazones-settings,
+// tests/unit/CMakeLists.txt for test_decorationpagecontroller — source-file
+// properties are directory-scoped, so each consumer sets its own) — GCC 16's
+// LTO pass emits false-positive -Wmaybe-uninitialized warnings against the
+// staged.push_back() below.
 bool DecorationPageController::applyDecorationSet(const QString& name)
 {
     using PhosphorSurfaceShaders::DecorationProfile;

@@ -65,10 +65,15 @@ void main() {
     float lh = laneHash(lane);
 
     // Staggered local progress: trailing rows lag by `spread` (flow), and
-    // each lane adds its own hash lag on top. The denominator reserves
-    // room for both so every region still reaches e = 1 by the leg's end.
+    // each lane adds its own hash lag on top. The lane lag is scaled by the
+    // headroom LEFT OVER after `spread`, so spread + laneLag can never reach
+    // 1.0 — the denominator stays real and every fragment reaches e = 1 by
+    // the leg's end. Without the headroom scaling, spread = 0.8 with full
+    // stream stagger pushed startT past 1 for high-hash lanes and those
+    // strips froze at the OLD rect when the animation ended, popping to the
+    // destination at teardown.
     float spread = clamp(p_spread, 0.0, 0.8);
-    float laneLag = clamp(p_streamLag, 0.0, 1.0) * 0.25;
+    float laneLag = clamp(p_streamLag, 0.0, 1.0) * (1.0 - spread) * 0.4;
     float tt = legProgress();
     float startT = (1.0 - phase) * spread + lh * laneLag;
     float localT = clamp((tt - startT) / max(1.0 - spread - laneLag, 1.0e-3), 0.0, 1.0);

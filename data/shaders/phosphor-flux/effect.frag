@@ -215,7 +215,11 @@ vec3 signalGraph(vec2 screenUV, float t, float diag,
     float opacity = getGraphOpacity();
     if (opacity <= 0.001) return vec3(0.0);
 
-    float scale     = getGraphScale();
+    // Floor guards the gaussian denominators below (nodeR/pulseR derive
+    // from scale): the p_x >= 0 sentinel check doesn't range-clamp, so a
+    // hand-edited graphScale of 0 would otherwise divide by zero. Same
+    // defence emberRise applies to its density.
+    float scale     = max(getGraphScale(), 1.0);
     float pulseSpd  = getPulseSpeed();
     float audioSens = getAudioSensitivity();
 

@@ -212,6 +212,13 @@ vec4 pSurface(vec2 uv) {
             float ageK;
             vec2 posK = motePath(h1, h2, h3, tMote - float(k) * tailStep,
                                  detachDist, riseDist, swayAmp, ageK);
+            // A tap evaluated before the clock's fract wrap belongs to the
+            // PREVIOUS mote instance (its age jumps HIGHER than the head's)
+            // — skip it rather than stamping a disconnected ember high up
+            // the previous climb.
+            if (ageK > altHead + 1.0e-4) {
+                continue;
+            }
             float lifeK = moteLife(ageK);
             if (lifeK <= 0.001) {
                 continue;
