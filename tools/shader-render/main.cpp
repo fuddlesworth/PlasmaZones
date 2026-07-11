@@ -60,7 +60,7 @@ QString resolveShaderMetadata(const QString& shaderArg, const QString& shaderDir
 }
 
 // Same logic for layouts — argument is either a layout id (basename
-// of a JSON file under shaderDir) or a direct path.
+// of a JSON file under layoutDir) or a direct path.
 QString resolveLayoutPath(const QString& layoutArg, const QString& layoutDir)
 {
     if (layoutArg.contains(QLatin1Char('/')) || layoutArg.endsWith(QLatin1String(".json"))) {
