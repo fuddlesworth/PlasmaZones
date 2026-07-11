@@ -668,6 +668,19 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 progress = 1.0;
                 active = true;
             }
+            // Held-move release leg (velocity/trail move packs): the release
+            // handler stamps releaseStartMs instead of clearing the hold
+            // flag, and the progress ramps back toward 0 over the same
+            // durationMs — the shader plays iTime 1→0 after release, so a
+            // dissolve-while-held pack (phosphor-vortex) rematerialises
+            // instead of snapping at teardown. Subtracting from the base
+            // progress (not from a hard 1.0) makes a grab shorter than the
+            // nominal duration ramp down from wherever its grab-in reached.
+            // Mesh packs never stamp this and are untouched.
+            if (active && transition.releaseStartMs >= 0) {
+                const qreal down = qreal(frameNowMs - transition.releaseStartMs) / qreal(transition.durationMs);
+                progress = qBound(0.0, progress - qMax(down, 0.0), 1.0);
+            }
         } else {
             const auto* anim = m_windowAnimator->animationFor(w);
             if (anim && anim->isAnimating()) {

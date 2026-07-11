@@ -771,6 +771,20 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 if (st->cached->iFromRectLoc >= 0 && !st->fromGeometry.isValid()) {
                     st->fromGeometry = window->frameGeometry();
                 }
+                // Re-grab during a release leg: resume the grab-in ramp
+                // from the current (descending) progress rather than
+                // snapping back to pinned-1 — rewind startTimeMs so
+                // elapsed/duration lands on the ramped-down value, then
+                // clear the release stamp. A fresh grab (releaseStartMs
+                // still -1) skips this and keeps its normal ramp.
+                if (st->releaseStartMs >= 0 && st->durationMs > 0) {
+                    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+                    const qreal grabP = qBound<qreal>(0.0, qreal(nowMs - st->startTimeMs) / qreal(st->durationMs), 1.0);
+                    const qreal downP = qMax<qreal>(0.0, qreal(nowMs - st->releaseStartMs) / qreal(st->durationMs));
+                    const qreal current = qBound<qreal>(0.0, grabP - downP, 1.0);
+                    st->startTimeMs = nowMs - qint64(current * st->durationMs);
+                    st->releaseStartMs = -1;
+                }
                 // HELD transition: the drag is open-ended, so the shader
                 // stays active (progress clamped at 1) until the release
                 // handler below schedules the settle-tail teardown; the
@@ -852,6 +866,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     // holdUntilRelease stays SET here, so the start-scheduled
                     // duration timer keeps standing down and this tail timer
                     // (guarded on the install generation) owns the teardown.
+                    // Stamp the release leg: paintWindow ramps the pinned
+                    // progress back toward 0 over durationMs from this
+                    // moment, so the shader plays iTime 1→0 across exactly
+                    // the tail this timer grants and a dissolve-while-held
+                    // pack finishes rematerialising as the teardown lands.
+                    st->releaseStartMs = ShaderInternal::shaderClockNowMs();
                     const quint64 myGeneration = st->generation;
                     QTimer::singleShot(animationDurationMs(), this, [this, safeWindow, myGeneration]() {
                         if (!safeWindow) {
