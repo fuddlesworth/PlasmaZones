@@ -668,6 +668,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             // the slotWindowClosed removal alone is not enough; drop it here too
             // (keyed by the frozen cachedId) or the entry leaks for the session.
             m_focusFade.remove(cachedId);
+            // Same delete-without-close defence for the layer snapshot: the
+            // normal removal lives in slotWindowClosed, which a window deleted
+            // without a preceding close never reaches. No restore is possible
+            // (the window is gone); this only keeps the map bounded.
+            m_ruleWindowLayerSnapshots.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);
@@ -936,6 +941,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // the window keeps its stale opacity (borders revert via restoreAll /
         // clearAllDecorations below, but opacity would not). Re-resolve every opacity
         // window against the now-cleared placement, matching the border teardown.
+        // Also carries the window-layer sweep (see invalidateAllRuleCaches): a
+        // `WHEN IsFloating` layer rule releases its keep-above here (snapshot
+        // restore) instead of stranding it for the daemon-down interval.
         invalidateAllRuleCaches();
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
@@ -1087,6 +1095,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         m_snapHandler->clearSnapTracking();
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
+        restoreAllRuleWindowLayers();
         clearAllDecorations();
     }
 

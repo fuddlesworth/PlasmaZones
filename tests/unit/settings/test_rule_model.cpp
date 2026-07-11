@@ -111,6 +111,7 @@ private Q_SLOTS:
     void actionSummaryRendersAllEngineModes();
     void disableEngineNamesTheModeBeingDisabled();
     void setOpacityRendersValidValuesAndGuardsRejectPaths();
+    void setWindowLayerRendersTokenAndGuardsBadValues();
     void restorePositionRendersValueAwareLabel();
     void boolMatchConditionRendersOnOff();
     void shaderAndCurveLabelsResolveThroughLookups();
@@ -459,6 +460,60 @@ void TestRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
     QVERIFY2(labelAt(3).contains(QStringLiteral("invalid")), qPrintable(labelAt(3)));
     // Out-of-range: same marker
     QVERIFY2(labelAt(4).contains(QStringLiteral("invalid")), qPrintable(labelAt(4)));
+}
+
+void TestRuleModel::setWindowLayerRendersTokenAndGuardsBadValues()
+{
+    // Pin that the SetWindowLayer actionLabel resolves the wire token through
+    // the shared enumOptionLabel (never leaking the raw lowercase token) and
+    // degrades to the bare "Window layer" placeholder when Value is absent —
+    // reachable because setRules skips the isValid() gate addRule enforces,
+    // matching the SetOpacity guard test above.
+    const auto buildRule = [](std::function<void(RuleAction&)> tweakAction) {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 200;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+        RuleAction action;
+        action.type = QString(ActionType::SetWindowLayer);
+        tweakAction(action);
+        rule.actions = {action};
+        return rule;
+    };
+
+    RuleModel model;
+    model.setRules({
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, QStringLiteral("above"));
+        }),
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, QStringLiteral("normal"));
+        }),
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, QStringLiteral("below"));
+        }),
+        buildRule([](RuleAction&) { }),
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, QStringLiteral("topmost"));
+        }),
+    });
+
+    const auto labelAt = [&](int row) {
+        return model.data(model.index(row, 0), RuleModel::ActionSummaryRole).toString();
+    };
+    QVERIFY2(labelAt(0).contains(QStringLiteral("Above other windows")), qPrintable(labelAt(0)));
+    QVERIFY2(labelAt(1).contains(QStringLiteral("Normal")), qPrintable(labelAt(1)));
+    QVERIFY2(labelAt(2).contains(QStringLiteral("Below other windows")), qPrintable(labelAt(2)));
+    // Never the raw lowercase wire token.
+    QVERIFY2(!labelAt(0).contains(QStringLiteral("above")), qPrintable(labelAt(0)));
+    QVERIFY2(!labelAt(2).contains(QStringLiteral("below")), qPrintable(labelAt(2)));
+    // Missing Value: bare placeholder, no dangling "Layer:" prefix.
+    QCOMPARE(labelAt(3), QStringLiteral("Window layer"));
+    // Out-of-vocabulary token: "(invalid)" marker, never the raw token —
+    // the resolver ignores unknown tokens, so the label must not claim
+    // a layer override (mirrors the SetOpacity reject-path guard).
+    QVERIFY2(labelAt(4).contains(QStringLiteral("invalid")), qPrintable(labelAt(4)));
+    QVERIFY2(!labelAt(4).contains(QStringLiteral("topmost")), qPrintable(labelAt(4)));
 }
 
 void TestRuleModel::restorePositionRendersValueAwareLabel()

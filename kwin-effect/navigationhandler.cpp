@@ -94,6 +94,13 @@ void NavigationHandler::syncZonesFromDaemon()
         QDBusPendingReply<PhosphorProtocol::WindowStateList> reply = *w;
         if (!reply.isValid()) {
             qCDebug(lcEffect) << "Failed to get window states from daemon";
+            // The unconditional clear above still changed the IsSnapped / Zone
+            // match inputs, so the stale placement-scoped verdicts must drop
+            // (and zone-scoped layer rules release via the sweep inside) on
+            // the failure path too — mirrors the getFloatingWindows reply
+            // handler in daemon_bringup.cpp, which documents the same
+            // invalid-reply reasoning.
+            m_effect->invalidateAllRuleCaches();
             return;
         }
 

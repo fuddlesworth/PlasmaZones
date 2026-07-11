@@ -149,6 +149,14 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     if (w->isOnCurrentDesktop()) {
         updateWindowDecoration(windowId, w);
     }
+    // Apply any SetWindowLayer rule to the new window right away (persistent
+    // window state, so NOT desktop-gated — matching updateAllDecorations'
+    // title-bar/layer handling). This eager add-time apply is a layer-only
+    // extra trigger on top of the shared reconcile paths (the title-bar
+    // reconcile has no window-added call). Placement-scoped layer rules
+    // re-reconcile when the async float/zone syncs land, via the
+    // placement-state flush.
+    reconcileRuleWindowLayer(windowId, w);
 
     bool onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
 
@@ -357,6 +365,10 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // force-show veto). forgetWindow makes zero compositor calls — the
     // decoration dies with the window.
     m_decorationManager->forgetWindow(closedWindowId);
+    // Drop the window's pre-rule layer snapshot the same way — no restore, the
+    // keepAbove/keepBelow flags die with the window, and a reused windowId
+    // must not inherit a stale snapshot.
+    m_ruleWindowLayerSnapshots.remove(closedWindowId);
 
     // Drop the window's border entry and release its border-shader redirect —
     // UNLESS a close transition was just installed above: renderSurfaceChain
@@ -669,8 +681,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // refresh on the effect's local resolver cache. Caption /
         // desktops / activities / role changes don't feed the
         // WindowClass matcher so they don't need the cache drop.
-        auto invalidateRuleCache = [this]() {
+        auto invalidateRuleCache = [this, safeW]() {
             m_shaderManager.animationRuleEvaluator().clearCache();
+            // The cache drop alone only helps per-frame consumers (opacity
+            // re-resolves in paintWindow). The stacking layer is EVENT-driven
+            // and the eager window-added apply ran against the pre-swap
+            // placeholder class — re-drive it so a layer rule keyed to the
+            // real class applies (and one keyed to the placeholder releases)
+            // without waiting for an incidental sweep. The hasWindowLayerRules
+            // fast path keeps this free for sessions with no layer rules.
+            if (safeW && !safeW->isDeleted()) {
+                reconcileRuleWindowLayer(getWindowId(safeW), safeW);
+            }
         };
         connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
         connect(kw, &KWin::Window::windowClassChanged, this, invalidateRuleCache);

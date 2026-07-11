@@ -254,8 +254,8 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     //
     // `shouldAnimateWindow` adds the user's per-animation Window
     // Filtering gate (transient / min-size / app / class) and lets a
-    // Rule carrying any OverrideAnimation* action override the
-    // filter when the rule's class matcher matches. Falling through to
+    // Rule carrying any effect-consumed (Tag::Effect) action override
+    // the filter when the rule's match expression resolves. Falling through to
     // the non-animated path just runs the moveResize without the snap
     // motion / shader.
     //
