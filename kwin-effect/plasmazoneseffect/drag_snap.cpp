@@ -412,8 +412,10 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             if (!snapShaderApplies && !snapShaderId.isEmpty() && m_shaderManager.findTransition(window)) {
                 // A refused pack resolved while ANY transition is still live
                 // on this window — typically a morph from an earlier leg of
-                // this drag, but a settling wobble or an in-flight open/focus
-                // leg present at snap time is cleared the same way (only
+                // this drag, but a settling wobble or an in-flight focus
+                // leg present at snap time is cleared the same way (an open
+                // leg can never reach here: it holds addedGrabHeld, so the
+                // enclosing block is skipped via openAnimationInFlight) (only
                 // reachable when the rule set or tree is edited mid-drag —
                 // every applyWindowGeometry path shares the geometry class,
                 // so the gate cannot flip between retargets otherwise). Tear
