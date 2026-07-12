@@ -89,6 +89,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         // A well-formed entry on a REAL surface, whose profile parses to nothing:
@@ -115,6 +116,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         c.setChain(QString(), QStringList{QStringLiteral("border")});
@@ -143,6 +145,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         c.setChain(QString(), QStringList{QStringLiteral("border")});
@@ -154,12 +157,40 @@ private Q_SLOTS:
         QCOMPARE(rowFor(sets, QStringLiteral("Look")).value(QStringLiteral("coverageCount")).toInt(), 1);
     }
 
+    /// A `profile` that is not an object at all (a string, say) has its own
+    /// refusal branch, distinct from the engages-nothing rule that catches a
+    /// wrong-typed key INSIDE an object.
+    void applySet_rejectsANonObjectProfile()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
+        ShaderSetStore* sets = c.setsBridge();
+
+        QJsonObject entry;
+        entry.insert(QStringLiteral("path"), QStringLiteral("window.tiled"));
+        entry.insert(QStringLiteral("profile"), QStringLiteral("glow"));
+        QJsonObject root;
+        root.insert(QStringLiteral("name"), QStringLiteral("stringy"));
+        root.insert(QStringLiteral("version"), 1);
+        root.insert(QStringLiteral("overrides"), QJsonArray{entry});
+        writeSetFile(decorationSetsDir() + QStringLiteral("/stringy.json"), root);
+
+        // Pin the BRANCH: the engages-nothing rule would refuse this too, with a
+        // different warning, so the unmatched ignoreMessage is what fails this
+        // test if the type check goes away.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("is not an object")));
+        QVERIFY2(!sets->applySet(QStringLiteral("stringy")), "a non-object profile must refuse the whole set");
+        QVERIFY(!c.hasOverride(QStringLiteral("window.tiled")));
+    }
+
     /// A present-but-non-array `overrides` used to read as "no overrides", so a set
     /// could import and apply with everything it claimed silently dropped.
     void applySet_rejectsNonArrayOverrides()
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         QJsonObject root;
@@ -184,6 +215,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         // Hand-placed: the stem is "My Set", but "My Set" slugifies to "my-set".
@@ -209,6 +241,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
@@ -245,6 +278,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         // A DIRECTORY where the set file wants to be: QSaveFile cannot commit over
@@ -276,6 +310,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         QTemporaryDir dir;
@@ -306,6 +341,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         // A future-format set already sitting in the sets dir.
@@ -357,6 +393,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
@@ -370,6 +407,8 @@ private Q_SLOTS:
         QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("Taken"), QStringLiteral("second")),
                  "an unconfirmed overwrite must be refused");
         QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(),
+                 PhosphorI18n::tr("A set named \"%1\" already exists.").arg(QStringLiteral("Taken")));
 
         // The stored set is intact — same description, same payload.
         const QVariantMap row = rowFor(sets, QStringLiteral("Taken"));
@@ -402,6 +441,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         // Missing file.
@@ -446,6 +486,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         QTemporaryDir dir;
@@ -473,6 +514,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         QTemporaryDir dir;
@@ -498,6 +540,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         QSignalSpy setsSpy(sets, &ShaderSetStore::setsChanged);
@@ -516,6 +559,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
         c.setChain(QString(), QStringList{QStringLiteral("border")});
 
@@ -545,6 +589,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         QSignalSpy setsSpy(sets, &ShaderSetStore::setsChanged);
@@ -558,6 +603,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
@@ -599,6 +645,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         QJsonObject entry;
@@ -627,6 +674,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         QTemporaryDir dir;

@@ -29,7 +29,6 @@ namespace {
 constexpr QLatin1String kNameKey{"name"};
 constexpr QLatin1String kDescriptionKey{"description"};
 constexpr QLatin1String kVersionKey{"version"};
-constexpr QLatin1String kBaselineKey{"baseline"};
 constexpr QLatin1String kOverridesKey{"overrides"};
 constexpr QLatin1String kPathKey{"path"};
 constexpr QLatin1String kProfileKey{"profile"};

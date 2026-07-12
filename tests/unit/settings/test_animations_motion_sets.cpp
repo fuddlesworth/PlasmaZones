@@ -406,6 +406,8 @@ private Q_SLOTS:
         QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("Taken"), QStringLiteral("second")),
                  "an unconfirmed overwrite must be refused");
         QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(),
+                 PhosphorI18n::tr("A set named \"%1\" already exists.").arg(QStringLiteral("Taken")));
 
         // The stored set is untouched: applying restores the FIRST payload.
         QVERIFY(sets->applySet(QStringLiteral("Taken")));

@@ -223,6 +223,14 @@ public:
         return m_sets;
     }
 
+    /// Test hook: redirect the sets directory to @p dir instead of the XDG
+    /// default. Pass an empty string to restore the default. Mirrors
+    /// AnimationsPageController::setUserProfilesDirOverride, and exists for the
+    /// same reason: two test binaries resolving the same per-user qttest path
+    /// wipe each other's files under parallel ctest. Not Q_INVOKABLE — QML
+    /// callers must not redirect persistence.
+    void setSetsDirOverride(const QString& dir);
+
 Q_SIGNALS:
     /// Re-emit of `SurfaceShaderRegistry::effectsChanged` so QML can
     /// rebind without poking at the registry directly.
@@ -247,6 +255,8 @@ private:
 
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_registry = nullptr;
     ISettings* m_settings = nullptr;
+
+    QString m_setsDirOverride; ///< Empty = use the XDG default
 
     /// The profile tree, parsed once per change rather than once per read.
     /// ISettings::decorationProfileTree() rebuilds it from the config store every

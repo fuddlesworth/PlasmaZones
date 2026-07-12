@@ -120,14 +120,22 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
 
 QString DecorationPageController::decorationSetsDirectoryPath() const
 {
+    if (!m_setsDirOverride.isEmpty()) {
+        return m_setsDirOverride;
+    }
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return QDir::cleanPath(base + ConfigDefaults::userDecorationSetsSubdir());
 }
 
+void DecorationPageController::setSetsDirOverride(const QString& dir)
+{
+    m_setsDirOverride = dir;
+}
+
 // NOTE: this TU is compiled with -fno-lto -Wno-maybe-uninitialized in every
 // consuming target (src/settings/CMakeLists.txt for plasmazones-settings, and
-// tests/unit/CMakeLists.txt, whose one directory-scoped call covers both
-// test_decorationpagecontroller and test_decoration_sets — source-file
+// tests/unit/CMakeLists.txt, whose one directory-scoped call covers every
+// decoration-controller test target in that directory — source-file
 // properties are directory-scoped, so each directory sets its own). GCC 16's
 // LTO pass emits false-positive -Wmaybe-uninitialized warnings against the
 // staged->push_back() in stageEntries() above.

@@ -93,6 +93,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         // A set covering exactly one surface.
@@ -117,6 +118,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
         QVERIFY(sets);
 
@@ -172,6 +174,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
@@ -194,6 +197,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
@@ -229,6 +233,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
@@ -273,6 +278,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         ShaderSetStore* sets = c.setsBridge();
 
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
@@ -321,6 +327,7 @@ private Q_SLOTS:
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border")});
 
         // Hand-craft a set file mixing a valid and an unknown-path entry.

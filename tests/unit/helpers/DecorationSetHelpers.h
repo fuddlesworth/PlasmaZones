@@ -14,6 +14,7 @@
  * setTestModeEnabled and the user's real saved sets.
  */
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -28,13 +29,17 @@
 
 using namespace PlasmaZones;
 
-/// Absolute path to the decoration-sets directory the store writes to,
-/// recomputed the way DecorationPageController does. Valid only under
-/// QStandardPaths test mode (see initTestCase).
+/// Absolute path to this BINARY's decoration-sets sandbox, under the
+/// QStandardPaths test-mode tree. Suffixed with the application name because
+/// two binaries share the round-trip / validation split, ctest runs them in
+/// parallel (-j in CI), and a directory keyed only on the user would have each
+/// binary's init() wipe the other's in-flight files. Every test must point its
+/// controller here via setSetsDirOverride().
 inline QString decorationSetsDir()
 {
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    return QDir::cleanPath(base + ConfigDefaults::userDecorationSetsSubdir());
+    return QDir::cleanPath(base + ConfigDefaults::userDecorationSetsSubdir() + QLatin1Char('-')
+                           + QCoreApplication::applicationName());
 }
 
 /// Write @p root to @p path as a hand-crafted set file.
