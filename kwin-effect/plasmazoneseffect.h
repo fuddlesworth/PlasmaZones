@@ -1440,6 +1440,13 @@ private:
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                 bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false);
+    /// Arm the duration teardown for a time-driven transition, generation-guarded.
+    ///
+    /// Re-arms itself when the transition's own clock says the leg is not finished.
+    /// The install-time delay is only a first estimate: restore suppression rebases
+    /// `startTimeMs` every withheld frame, so a timer fixed at install fires while
+    /// the animation still has up to 250 ms left to play.
+    void scheduleShaderTransitionTeardown(KWin::EffectWindow* window, quint64 generation, int delayMs);
     /// Runtime mirror of the settings pickers' shader-class filter, routed
     /// through the canonical PhosphorAnimationShaders::
     /// shaderEffectAppliesToEventPath predicate so the two can never drift.

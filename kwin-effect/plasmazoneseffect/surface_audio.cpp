@@ -273,7 +273,9 @@ KWin::GLTexture* PlasmaZonesEffect::transparentFallbackTexture()
 {
     // Shared 1x1 transparent texture bound in place of a REFERENCED but
     // unsupplied user-texture sampler (surface fold units 7-9, animation
-    // units 1-3). A classic default-block sampler with no bind reads unit 0
+    // units 1-3), and in place of an iChannel the surface fold declares but
+    // rendered no buffer for (units 1-4).
+    // A classic default-block sampler with no bind reads unit 0
     // — live window content — instead of the contract's documented
     // transparent black; this fallback makes the documented behaviour real.
     // Lazily created on a paint path (GL context current); freed with the

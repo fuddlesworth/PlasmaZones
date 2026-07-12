@@ -1823,30 +1823,51 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // common case installs nothing at all and `findTransition` would hand them an
     // unrelated leg to pin and reverse. See ShaderTransition::heldMove.
     installedTransition->heldMove = (profilePath == PhosphorAnimation::ProfilePaths::WindowMove);
-    const quint64 myGeneration = installedTransition->generation;
+    scheduleShaderTransitionTeardown(window, installedTransition->generation, effectiveDurationMs);
+}
+
+void PlasmaZonesEffect::scheduleShaderTransitionTeardown(KWin::EffectWindow* window, quint64 generation, int delayMs)
+{
     QPointer<KWin::EffectWindow> safeWindow(window);
-    QTimer::singleShot(effectiveDurationMs, this, [this, safeWindow, myGeneration]() {
+    QTimer::singleShot(qMax(1, delayMs), this, [this, safeWindow, generation]() {
         // Two-tier guard: QPointer catches QObject destruction,
         // endShaderTransition's isDeleted() catches KWin's deletion-animation phase
         if (!safeWindow) {
             return;
         }
-        if (const auto* live = m_shaderManager.findTransition(safeWindow); live && live->generation == myGeneration) {
-            // HELD transitions (the interactive drag) outlive their
-            // nominal duration by design: the user is still dragging.
-            // windowFinishUserMovedResized owns their teardown (a settle
-            // tail after release), so the duration timer stands down.
-            // A mesh-backed drag released BEFORE this timer fires is
-            // covered by the generation check above instead: the release
-            // handler clears the hold flag but bumps the generation when
-            // it hands the lifetime to the settle gate.
-            if (live->holdUntilRelease) {
-                return;
-            }
-            endShaderTransition(safeWindow);
+        const auto* live = m_shaderManager.findTransition(safeWindow);
+        if (!live || live->generation != generation) {
+            // A newer transition replaced us (last-event-wins) and owns its own
+            // timer — leave it alone.
+            return;
         }
-        // else: a newer transition replaced us (last-event-wins) and owns
-        // its own timer — leave it alone.
+        // HELD transitions (the interactive drag) outlive their nominal duration by
+        // design: the user is still dragging. windowFinishUserMovedResized owns
+        // their teardown (a settle tail after release), so the duration timer stands
+        // down. A mesh-backed drag released BEFORE this timer fires is covered by the
+        // generation check above instead: the release handler clears the hold flag
+        // but bumps the generation when it hands the lifetime to the settle gate.
+        if (live->holdUntilRelease) {
+            return;
+        }
+        // Re-check against the transition's OWN clock rather than trusting the delay
+        // we were armed with. `startTimeMs` is REBASED every frame a window spends
+        // under restore suppression (a window repositioned on open is withheld from
+        // compositing until its configure lands, and its animation must not play
+        // invisibly in the meantime — see paint_pipeline). The install-time arming is
+        // therefore up to kRestoreSuppressDeadlineMs (250 ms) too early, and firing
+        // it would tear the leg down while its timeline still had a quarter second
+        // to run — the open animation is cut mid-flight and the window pops. Re-arm
+        // for the remainder instead. Any future rebase gets the same treatment for
+        // free, which is why this is a re-check and not a suppression special case.
+        const qint64 remaining =
+            static_cast<qint64>(live->durationMs) - (ShaderInternal::shaderClockNowMs() - live->startTimeMs);
+        if (remaining > 0) {
+            scheduleShaderTransitionTeardown(safeWindow.data(), generation,
+                                             static_cast<int>(qMin<qint64>(remaining, 60000)));
+            return;
+        }
+        endShaderTransition(safeWindow);
     });
 }
 

@@ -22,7 +22,6 @@
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
-#include <QLoggingCategory>
 #include <QMatrix4x4>
 #include <QPoint>
 #include <QRectF>
@@ -36,8 +35,6 @@
 #include <epoxy/gl.h>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 
@@ -111,136 +108,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
     return renderSurfaceChainComposite(w, scale, transition.cached->shader.get());
 }
 
-// Lazily compile the passthrough present shader. It samples a bound texture
-// (uFinal) at vTexCoord and writes it verbatim, ignoring uTexture0 (the
-// redirected surface KWin binds to unit 0). Used as a multi-pack window's
-// redirect shader so OffscreenData::paint presents the pre-composited final FBO
-// at window geometry — the vertex applies modelViewProjectionMatrix (set by
-// OffscreenData) exactly like the pack default vertex, so the geometry matches.
-KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
-{
-    if (m_surfacePresentShader) {
-        return m_surfacePresentShader.get();
-    }
-    if (m_surfacePresentFailed) {
-        return nullptr;
-    }
-    // Same off-paint-caller guard as compiledPack(): reconcileDecorationShader
-    // reaches here from D-Bus/settings/lifecycle contexts where the GL context
-    // is not guaranteed current. A no-context call must return without
-    // latching so the next use (at latest the paint cycle) retries.
-    if (!KWin::effects || !KWin::effects->makeOpenGLContextCurrent()) {
-        qCWarning(lcEffect) << "Surface present shader compile deferred: no current GL context";
-        return nullptr;
-    }
-    m_surfacePresentFailed = true; // pessimistic until the compile succeeds
-
-    static const QByteArray kPresentVertex = QByteArrayLiteral(
-        "#version 450\n\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 texCoord;\n\n"
-        "layout(location = 0) out vec2 vTexCoord;\n\n"
-        "uniform mat4 modelViewProjectionMatrix;\n\n"
-        "void main() {\n"
-        "    vTexCoord = texCoord;\n"
-        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-        "}\n");
-    static const QByteArray kPresentFragment = QByteArrayLiteral(
-        "#version 450\n\n"
-        "layout(location = 0) in vec2 vTexCoord;\n\n"
-        "layout(location = 0) out vec4 fragColor;\n\n"
-        "uniform sampler2D uFinal;\n\n"
-        // Final KWin-style opacity modulation (premultiplied multiply): the
-        // WHOLE decorated output ghosts uniformly, exactly like KWin's own
-        // Modulate trait would. Pushed per frame in drawWindow's present
-        // branch; forced to 1.0 when a chain pack declares handlesOpacity
-        // (frost applies the window's opacity to its content sample itself
-        // so its slab stays solid).
-        "uniform float uOpacity;\n\n"
-        // Colour management. Installing our own shader via OffscreenEffect::
-        // setShader REPLACES KWin's present shader, which carries
-        // ShaderTrait::TransformColorspace and converts the redirected window's
-        // sRGB content into the output's colour space (offscreeneffect.cpp does
-        // exactly this). Dropping that conversion wrote sRGB values verbatim into
-        // the compositor's blending space, so on an HDR output every decorated
-        // window rendered dim and desaturated — persistently, not just during an
-        // animation.
-        //
-        // KWin's GLShader::preprocess resolves `#include "…"` against its own
-        // `:/opengl/` resource for EVERY source it compiles, custom ones included,
-        // so we can pull in its colour-management GLSL rather than reimplement it.
-        // The uniforms it declares are what GLShader::setColorspaceUniforms fills.
-        //
-        // Stage order mirrors KWin's base.frag exactly: encoding → nits, apply the
-        // colorimetry transform, THEN modulate, then tonemap, then encode for the
-        // destination. Opacity has to land in nits space because that is where
-        // base.frag's TRAIT_MODULATE sits, between the colorimetry transform and
-        // tonemapping.
-        //
-        // Deliberately NOT the sourceEncodingToNitsInDestinationColorspace()
-        // convenience: it folds doTonemapping() in at the end, which would tonemap
-        // BEFORE the modulate and then again at our explicit call — a double
-        // compression. Harmless on SDR (that path only clamps, and clamping twice
-        // is idempotent) but wrong on HDR, i.e. precisely the case this exists for.
-        // base.frag spells the steps out for the same reason.
-        //
-        // On an SDR output source and destination are both sRGB: the colorimetry
-        // transform is identity, the transfer functions round-trip, and
-        // doTonemapping degrades to a clamp that cannot bite (for an sRGB source
-        // KWin sets maxTonemappingLuminance == the destination reference, so the
-        // Reinhard branch is unreachable). So this is a no-op there and can only
-        // change HDR.
-        //
-        // That holds at ANY uOpacity, which is not obvious: modulating in nits
-        // space looks like it should brighten a fade versus the old encoded-domain
-        // multiply. It does not, because `result *= uOpacity` scales ALPHA too and
-        // both encodingToNits and nitsToEncoding un-premultiply before their
-        // transfer function and re-premultiply after (by the NEW alpha). The
-        // opacity therefore rides entirely on the alpha channel and the gamma
-        // cancels: both forms emit E(c)·a·o with alpha a·o. Do not "simplify" the
-        // multiply back out of nits space — that is where KWin's TRAIT_MODULATE
-        // sits, and moving it would break the HDR path for no SDR gain.
-        "#include \"colormanagement.glsl\"\n\n"
-        "void main() {\n"
-        "    vec4 result = texture(uFinal, vTexCoord);\n"
-        "    result = encodingToNits(result, sourceNamedTransferFunction,\n"
-        "                            sourceTransferFunctionParams.x, sourceTransferFunctionParams.y);\n"
-        "    result.rgb = (colorimetryTransform * vec4(result.rgb, 1.0)).rgb;\n"
-        "    result *= uOpacity;\n"
-        "    result.rgb = doTonemapping(result.rgb);\n"
-        "    fragColor = nitsToDestinationEncoding(result);\n"
-        "}\n");
-
-    // Route BOTH stages through injectKwinDefineAfterVersion, exactly like
-    // every pack shader: KWin rewrites our #version 450 down to the GL context
-    // core version (140), where the `layout(location = N)` qualifiers are
-    // illegal without the ARB extensions the inject helper enables. Passing
-    // the raw sources here failed the present compile on NVIDIA (error C7548)
-    // and latched multi-pack / padded decoration off for the whole session —
-    // the same failure mode surface_compile.cpp documents for frag-only packs.
-    // TransformColorspace is DECLARATIVE ONLY here. With a custom fragment source
-    // `generateCustomShader` uses the traits for nothing but `listDefines`, and
-    // colormanagement.glsl does not read TRAIT_TRANSFORM_COLORSPACE at all (only
-    // KWin's own base.frag does, to decide whether to include the file). The
-    // conversion is explicit in kPresentFragment above and would run with or
-    // without this flag. It is declared so the shader's traits describe what it
-    // actually does — do not delete the GLSL believing the trait drives it.
-    auto shader = KWin::ShaderManager::instance()->generateCustomShader(
-        KWin::ShaderTrait::MapTexture | KWin::ShaderTrait::TransformColorspace,
-        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentVertex)),
-        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentFragment)));
-    // KWin 6.7 removed GLShader::isValid(); generateCustomShader returns nullptr
-    // when compilation or linking fails, so a null check is the validity test.
-    if (!shader) {
-        qCWarning(lcEffect) << "Failed to compile surface present shader — multi-pack decoration disabled this session";
-        return nullptr;
-    }
-    m_surfacePresentFinalLoc = shader->uniformLocation("uFinal");
-    m_surfacePresentOpacityLoc = shader->uniformLocation("uOpacity");
-    m_surfacePresentShader = std::move(shader);
-    m_surfacePresentFailed = false;
-    return m_surfacePresentShader.get();
-}
+// surfacePresentShader lives in decoration_render.cpp, alongside the two paths
+// that consume the program it compiles (reconcileDecorationShader installs it as
+// the redirect shader; drawWindow is the sole reader of its uniform locations).
 
 // captureWindowBackdrop lives in surface_backdrop.cpp (split out to keep this
 // TU under the 800-line limit, mirroring the surface_audio.cpp split).
@@ -252,11 +122,21 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         return nullptr;
     }
     const QString windowId = getWindowId(w);
-    const auto bit = m_windowDecorations.constFind(windowId);
-    if (bit == m_windowDecorations.constEnd()) {
+    const auto found = m_windowDecorations.constFind(windowId);
+    if (found == m_windowDecorations.constEnd()) {
         return nullptr;
     }
-    const QStringList chain = bit->chain;
+    // COPY the record — do not hold the iterator. m_windowDecorations is a QHash,
+    // whose iterators are invalidated by any insert, and this function makes a
+    // NESTED effects->drawWindow call (the capture below) that re-enters the effect
+    // chain. Anything reached from inside that draw which touches
+    // updateWindowDecoration would rehash and leave a dangling `bit` for the
+    // dereferences that follow the capture — a use-after-free in the compositor.
+    // The chain was already being copied for exactly this reason; the other fields
+    // needed the same treatment.
+    const WindowDecoration deco = *found;
+    const WindowDecoration* const bit = &deco;
+    const QStringList chain = deco.chain;
     if (chain.isEmpty()) {
         return nullptr;
     }
@@ -620,7 +500,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             }
             // Slots the pack DECLARES but this fold rendered no buffer for — a
             // buffer allocation failed (collapsing passCount to 0), or the pack
-            // forward-references a channel a later pass would fill.
+            // declares more iChannel slots than it has buffer passes.
             //
             // Leaving them alone does NOT make them sample transparent black. The
             // linker kept iChannelLoc, and an UNSET sampler2D reads texture unit
