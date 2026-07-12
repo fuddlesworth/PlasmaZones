@@ -640,7 +640,17 @@ void PlasmaZonesEffect::loadCachedSettings()
     // the per-frame cost is, so these gate WHEN the chain animates. Flipping
     // either one has to wake the paused windows back up, or a window frozen under
     // the old setting would stay frozen until it happened to damage.
+    //
+    // Both check the variant TYPE before reading it. getSetting answers an unknown
+    // key with an empty-string fallback rather than an error, and QVariant("").toBool()
+    // is false — so an unguarded read would silently force these off. That is merely
+    // redundant for a default-false setting, but it would INVERT the default-true
+    // PauseWhenIdle on any failed fetch (daemon not up yet, key not yet registered).
+    // Same guard the audio loaders below use.
     loadSettingAsync(QStringLiteral("decorationAnimateFocusedOnly"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         const bool b = v.toBool();
         if (m_animateFocusedOnly != b) {
             m_animateFocusedOnly = b;
@@ -648,10 +658,16 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     loadSettingAsync(QStringLiteral("decorationPauseWhenIdle"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         const bool b = v.toBool();
         if (m_pauseAnimationWhenIdle != b) {
             m_pauseAnimationWhenIdle = b;
             if (!b) {
+                // Drop a stale idle latch: the daemon only announces a RESUME, so a
+                // session that went idle under the old setting would otherwise keep
+                // m_sessionIdle true and re-pause the moment the toggle came back on.
                 m_sessionIdle = false;
             }
             repaintAllDecorations();

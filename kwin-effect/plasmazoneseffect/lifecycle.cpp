@@ -870,6 +870,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(serviceWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon service unregistered";
         m_daemonServiceRegistered = false;
+        // Release the idle latch. m_sessionIdle is daemon-pushed state whose ONLY
+        // route back to false is a sessionIdleChanged(false) broadcast — and a
+        // restarted daemon arms a fresh ext-idle-notify-v1 notification on a seat
+        // that is already active, which never produces an idle->active edge and so
+        // never sends one. Left set, every decorated window's chain would stay
+        // frozen for the rest of the session. Repaint them so a chain paused under
+        // the latch is put back in the paint loop (a paused chain emits no damage
+        // of its own).
+        if (m_sessionIdle) {
+            m_sessionIdle = false;
+            repaintAllDecorations();
+        }
         // Drop the virtual-screen readiness immediately. The defs from the
         // previous daemon cycle are now stale; without clearing the flag here,
         // the windowFrameGeometryChanged VS-crossing detector would keep

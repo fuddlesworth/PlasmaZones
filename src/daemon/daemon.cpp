@@ -579,7 +579,11 @@ void Daemon::setupAnimationShaderEffects()
 
 void Daemon::setupIdleService()
 {
-    m_idleService = std::make_unique<PhosphorServiceIdle::IdleService>(this);
+    // No QObject parent: the unique_ptr owns it. Passing `this` as well would be
+    // dual ownership (it survives only because member destruction runs before
+    // ~QObject de-parents the children), and every other unique_ptr-held QObject
+    // in this file is constructed with a null parent for the same reason.
+    m_idleService = std::make_unique<PhosphorServiceIdle::IdleService>(nullptr);
     if (!m_idleService->isSupported()) {
         // No ext-idle-notify-v1 on this compositor. The decoration chain simply
         // keeps animating; PauseWhenIdle degrades to a no-op rather than guessing
@@ -591,13 +595,18 @@ void Daemon::setupIdleService()
     }
 
     connect(m_idleService.get(), &PhosphorServiceIdle::IdleService::idled, this, [this](int /*stage*/) {
+        // refreshIdleStages() empties the ladder whenever PauseWhenIdle is off, so
+        // this cannot fire in that state. The re-check is belt and braces against a
+        // future edit that arms the ladder for some other consumer.
         if (m_settings && m_settings->decorationPauseWhenIdle() && m_settingsAdaptor) {
             Q_EMIT m_settingsAdaptor->sessionIdleChanged(true);
         }
     });
     connect(m_idleService.get(), &PhosphorServiceIdle::IdleService::resumed, this, [this]() {
-        // Always announce the resume, even if the toggle went off while we were
-        // idle — the effect would otherwise stay paused on a stale `true`.
+        // Announce the resume unconditionally, including when PauseWhenIdle was
+        // switched off mid-idle — the effect would otherwise stay paused on a stale
+        // `true`. Clearing the ladder emits resumed() through this same handler, so
+        // the toggle-off path is released here rather than needing its own emit.
         if (m_settingsAdaptor) {
             Q_EMIT m_settingsAdaptor->sessionIdleChanged(false);
         }
@@ -605,17 +614,31 @@ void Daemon::setupIdleService()
 
     refreshIdleStages();
 
-    // Re-arm when the ladder moves. A timeout change has to rebuild the stage, and
-    // turning PauseWhenIdle off has to release a session that is already idle, or
-    // the effect would stay paused until the user happened to move the mouse.
+    // Re-arm when the ladder moves: a timeout change has to rebuild the stage, and
+    // turning PauseWhenIdle off has to clear it. Turning it off ALSO releases an
+    // already-idle session, but not from here — setStages({}) drives the state
+    // machine back to stage 0, which emits resumed(), which the handler above turns
+    // into sessionIdleChanged(false).
     if (m_settings) {
         connect(m_settings.get(), &ISettings::decorationIdleTimeoutSecChanged, this, &Daemon::refreshIdleStages);
-        connect(m_settings.get(), &ISettings::decorationPauseWhenIdleChanged, this, [this]() {
-            if (!m_settings->decorationPauseWhenIdle() && m_settingsAdaptor) {
-                Q_EMIT m_settingsAdaptor->sessionIdleChanged(false);
-            }
-            refreshIdleStages();
-        });
+        connect(m_settings.get(), &ISettings::decorationPauseWhenIdleChanged, this, &Daemon::refreshIdleStages);
+    }
+
+    // Push the CURRENT state whenever the KWin effect (re)registers. sessionIdleChanged
+    // is edge-triggered, and a restarted daemon arms a fresh ext-idle-notify-v1
+    // notification on a seat that may already be idle or already active — either way
+    // it produces no edge, so an effect that restarted (or a daemon that did) would
+    // otherwise run on a stale assumption until the next real idle->active flip.
+    if (m_compositorBridge) {
+        connect(m_compositorBridge, &CompositorBridgeAdaptor::bridgeRegistered, this,
+                [this](const QString&, const QString&, const QStringList&) {
+                    if (!m_settingsAdaptor) {
+                        return;
+                    }
+                    const bool idle =
+                        m_idleService && m_settings && m_settings->decorationPauseWhenIdle() && m_idleService->isIdle();
+                    Q_EMIT m_settingsAdaptor->sessionIdleChanged(idle);
+                });
     }
 }
 
@@ -1303,18 +1326,6 @@ bool Daemon::init()
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), m_shaderRegistry.get(), &m_profileRegistry, this);
 
-    // Session-idle detection for Decorations.Performance.PauseWhenIdle. The KWin
-    // effect cannot do this itself: idleness arrives over ext-idle-notify-v1, a
-    // Wayland CLIENT protocol that the compositor the effect lives in SERVES rather
-    // than consumes. The daemon is already a client, so it watches and pushes the
-    // resolved boolean over D-Bus.
-    //
-    // Worth the plumbing because it is the only thing that recovers idle GPU power:
-    // an animated decoration pack repaints every window carrying it on every vsync,
-    // and it is the existence of per-frame work — not how cheap that work is — that
-    // keeps the card pinned in its top performance state.
-    setupIdleService();
-
     // Shader adaptor - shader discovery, compilation lifecycle, file monitoring.
     // Held as a member so stop() can detach() it before the unique_ptr member
     // that owns m_shaderRegistry runs its destructor.
@@ -1329,6 +1340,22 @@ bool Daemon::init()
     // Held as a member so the support report and the registration watchdog
     // can query its state. Ownership stays with `this` via QObject parent.
     m_compositorBridge = new CompositorBridgeAdaptor(this);
+
+    // Session-idle detection for Decorations.Performance.PauseWhenIdle. The KWin
+    // effect cannot do this itself: idleness arrives over ext-idle-notify-v1, a
+    // Wayland CLIENT protocol that the compositor the effect lives in SERVES rather
+    // than consumes. The daemon is already a client, so it watches and pushes the
+    // resolved boolean over D-Bus.
+    //
+    // Worth the plumbing because it is the only thing that recovers idle GPU power:
+    // an animated decoration pack repaints every window carrying it on every vsync,
+    // and it is the existence of per-frame work — not how cheap that work is — that
+    // keeps the card pinned in its top performance state.
+    //
+    // Constructed AFTER m_settingsAdaptor (it emits through it) and AFTER
+    // m_compositorBridge (it subscribes to bridgeRegistered to push the current idle
+    // state to a freshly (re)started effect, since the signal is edge-triggered).
+    setupIdleService();
 
     // Overlay adaptor - overlay visibility and highlighting
     m_overlayAdaptor = new OverlayAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(),
@@ -2522,6 +2549,11 @@ void Daemon::stop()
     m_settingsGateAdapter.reset();
     m_screenModeAdapter.reset();
     m_workspaceStateAdapter.reset();
+    // Severed explicitly, like every other `this`-capturing wiring above. Its
+    // handlers dereference m_settings and m_settingsAdaptor, and it is currently
+    // safe only because reverse-declaration-order destruction happens to kill it
+    // first — an invariant no reader can see and a member reorder would break.
+    m_idleService.reset();
 
     // Destroy the router. Engines below outlive it so any in-flight
     // navigatorForShortcut path completes with the engine pointers it

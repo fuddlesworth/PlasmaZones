@@ -553,6 +553,16 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("decorationMinimumWindowWidth", decorationMinimumWindowWidth, setDecorationMinimumWindowWidth)
     REGISTER_INT_SETTING("decorationMinimumWindowHeight", decorationMinimumWindowHeight,
                          setDecorationMinimumWindowHeight)
+
+    // Decoration performance (Decorations.Performance). The KWin effect fetches
+    // these by name over getSetting, which resolves through THIS registry — not
+    // through Qt property reflection — so an unregistered key silently returns the
+    // empty fallback rather than failing loudly. decorationIdleTimeoutSec is read
+    // by the daemon directly, but registering it keeps the wire surface complete
+    // (getSettingKeys / getAllSettingSchemas enumerate this map).
+    REGISTER_BOOL_SETTING("decorationAnimateFocusedOnly", decorationAnimateFocusedOnly, setDecorationAnimateFocusedOnly)
+    REGISTER_BOOL_SETTING("decorationPauseWhenIdle", decorationPauseWhenIdle, setDecorationPauseWhenIdle)
+    REGISTER_INT_SETTING("decorationIdleTimeoutSec", decorationIdleTimeoutSec, setDecorationIdleTimeoutSec)
     // animationExcludedApplications / animationExcludedWindowClasses
     // retired in v4 — folded into ExcludeAnimations Rules; the
     // effect derives its animation exclusion rule set from the unified

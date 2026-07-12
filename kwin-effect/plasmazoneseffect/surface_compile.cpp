@@ -510,4 +510,77 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     return &packState;
 }
 
+// Lazily compile the passthrough present shader. It samples a bound texture
+// (uFinal) at vTexCoord and writes it verbatim, ignoring uTexture0 (the
+// redirected surface KWin binds to unit 0). Used as a multi-pack window's
+// redirect shader so OffscreenData::paint presents the pre-composited final FBO
+// at window geometry — the vertex applies modelViewProjectionMatrix (set by
+// OffscreenData) exactly like the pack default vertex, so the geometry matches.
+KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
+{
+    if (m_surfacePresentShader) {
+        return m_surfacePresentShader.get();
+    }
+    if (m_surfacePresentFailed) {
+        return nullptr;
+    }
+    // Same off-paint-caller guard as compiledPack(): reconcileDecorationShader
+    // reaches here from D-Bus/settings/lifecycle contexts where the GL context
+    // is not guaranteed current. A no-context call must return without
+    // latching so the next use (at latest the paint cycle) retries.
+    if (!KWin::effects || !KWin::effects->makeOpenGLContextCurrent()) {
+        qCWarning(lcEffect) << "Surface present shader compile deferred: no current GL context";
+        return nullptr;
+    }
+    m_surfacePresentFailed = true; // pessimistic until the compile succeeds
+
+    static const QByteArray kPresentVertex = QByteArrayLiteral(
+        "#version 450\n\n"
+        "layout(location = 0) in vec2 position;\n"
+        "layout(location = 1) in vec2 texCoord;\n\n"
+        "layout(location = 0) out vec2 vTexCoord;\n\n"
+        "uniform mat4 modelViewProjectionMatrix;\n\n"
+        "void main() {\n"
+        "    vTexCoord = texCoord;\n"
+        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
+        "}\n");
+    static const QByteArray kPresentFragment = QByteArrayLiteral(
+        "#version 450\n\n"
+        "layout(location = 0) in vec2 vTexCoord;\n\n"
+        "layout(location = 0) out vec4 fragColor;\n\n"
+        "uniform sampler2D uFinal;\n\n"
+        // Final KWin-style opacity modulation (premultiplied multiply): the
+        // WHOLE decorated output ghosts uniformly, exactly like KWin's own
+        // Modulate trait would. Pushed per frame in drawWindow's present
+        // branch; forced to 1.0 when a chain pack declares handlesOpacity
+        // (frost applies the window's opacity to its content sample itself
+        // so its slab stays solid).
+        "uniform float uOpacity;\n\n"
+        "void main() {\n"
+        "    fragColor = texture(uFinal, vTexCoord) * uOpacity;\n"
+        "}\n");
+
+    // Route BOTH stages through injectKwinDefineAfterVersion, exactly like
+    // every pack shader: KWin rewrites our #version 450 down to the GL context
+    // core version (140), where the `layout(location = N)` qualifiers are
+    // illegal without the ARB extensions the inject helper enables. Passing
+    // the raw sources here failed the present compile on NVIDIA (error C7548)
+    // and latched multi-pack / padded decoration off for the whole session —
+    // the same failure mode surface_compile.cpp documents for frag-only packs.
+    auto shader = KWin::ShaderManager::instance()->generateCustomShader(
+        KWin::ShaderTrait::MapTexture, ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentVertex)),
+        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentFragment)));
+    // KWin 6.7 removed GLShader::isValid(); generateCustomShader returns nullptr
+    // when compilation or linking fails, so a null check is the validity test.
+    if (!shader) {
+        qCWarning(lcEffect) << "Failed to compile surface present shader — multi-pack decoration disabled this session";
+        return nullptr;
+    }
+    m_surfacePresentFinalLoc = shader->uniformLocation("uFinal");
+    m_surfacePresentOpacityLoc = shader->uniformLocation("uOpacity");
+    m_surfacePresentShader = std::move(shader);
+    m_surfacePresentFailed = false;
+    return m_surfacePresentShader.get();
+}
+
 } // namespace PlasmaZones

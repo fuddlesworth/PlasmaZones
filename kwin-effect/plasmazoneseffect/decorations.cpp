@@ -86,7 +86,8 @@ void PlasmaZonesEffect::setupDecorationManager()
             });
 }
 
-void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::EffectWindow* windowHint)
+void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::EffectWindow* windowHint,
+                                               bool keepSurfaceState)
 {
     auto it = m_windowDecorations.find(windowId);
     if (it == m_windowDecorations.end()) {
@@ -195,7 +196,16 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
     if (target && m_shaderManager.findTransition(target)) {
         return;
     }
-    m_surfaceMultipass.erase(windowId);
+    // A decoration REFRESH (updateWindowDecoration's remove-first step) keeps the
+    // GL working set. The targets are keyed on (size, chain) and the fold re-checks
+    // both itself, so freeing them here only to have the very next fold reallocate
+    // them is pure churn — and updateAllDecorations runs on every focus change, so
+    // it would cold-start the capture and static-prefix caches, and free and
+    // reallocate every decorated window's textures and framebuffers, every time the
+    // user clicked a different window. Genuine teardown still frees.
+    if (!keepSurfaceState) {
+        m_surfaceMultipass.erase(windowId);
+    }
 }
 
 void PlasmaZonesEffect::reconcileDecorationOnPlacementFlip(const QString& windowId)
@@ -339,10 +349,19 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // before re-adding, so the local lookup would report false for EVERY window
     // and scrub every in-flight ramp — the fade would snap on each focus change.
     const bool wasDecorated = wasDecoratedHint.value_or(m_windowDecorations.contains(windowId));
-    // Remove existing border for this window first
-    removeWindowDecoration(windowId);
+    // Remove the existing decoration first, but KEEP its GL working set: this is a
+    // refresh of the same window, the capture / prefix / composite targets are keyed
+    // on (size, chain) and the fold re-validates both, so tearing them down here
+    // would just make the next fold reallocate them. updateAllDecorations funnels
+    // through here on every focus change, so erasing would cold-start both caches
+    // and churn every decorated window's textures and framebuffers on every click.
+    removeWindowDecoration(windowId, w, /*keepSurfaceState=*/true);
 
     if (!w || w->isMinimized() || w->isFullScreen()) {
+        // The window is no longer decoratable, so the kept state is now an orphan —
+        // nothing else will reach it until windowDeleted. Free it here rather than
+        // holding its full-canvas textures for the window's remaining lifetime.
+        m_surfaceMultipass.erase(windowId);
         return;
     }
 
@@ -355,6 +374,9 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // m_decorationMinWindow{Width,Height}). Defaults preserve the prior
     // shouldHandleWindow behavior (transients skipped, no size threshold).
     if (!shouldDecorateWindow(w)) {
+        // Same orphan release as the minimized/fullscreen gate above: the window is
+        // no longer decorated, so nothing will reach its kept GL state again.
+        m_surfaceMultipass.erase(windowId);
         return;
     }
 
@@ -408,6 +430,9 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
     chain.append(userPacks);
     if (chain.isEmpty()) {
+        // The DECORATE GATE: no border and no user packs, so this window ends up
+        // undecorated. Release the GL state the remove-first step kept.
+        m_surfaceMultipass.erase(windowId);
         return;
     }
     const QString basePackId = chain.first();
@@ -571,8 +596,29 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // sampling no backdrop and applying no opacity of its own. A user pack can
     // round corners, glow, tint or blur, and nothing in its metadata promises it
     // covers every texel — so any user pack in the chain stays translucent.
+    // Opaque has to be PROVEN, and the border pack makes that a narrow claim.
+    // Reading data/surface/shared/surface_lib.glsl:
+    //
+    //   borderComposite: ba = edge * insideMask * col.a — the band's output alpha
+    //     IS the border colour's alpha, and a translucent border is a supported
+    //     feature (it blends with the desktop, not the content), so the colour must
+    //     be fully opaque.
+    //   standardBorderBand: radius = (cornerRadius + borderWidth) * uSurfaceScale —
+    //     the OUTER corner radius includes the border width, so a zero corner radius
+    //     still arcs the window's outer corners away to transparent whenever the
+    //     border has any width at all. The smoothstep feather softens the outermost
+    //     ring on top of that.
+    //
+    // So the only rule border that genuinely covers every texel of the frame is a
+    // zero-width one (the degenerate "border enabled, nothing drawn" case), with
+    // both colours opaque. Anything else is translucent, and claiming otherwise
+    // would tell KWin to skip compositing the desktop under a band that is about to
+    // blend with it — the band would blend against stale framebuffer pixels.
     const bool ruleBorderOnly = wb.ruleBorder && chain.size() == 1;
-    wb.chainTranslucent = !(ruleBorderOnly && wb.ruleBorderRadius == 0 && !wb.needsBackdrop && !wb.chainHandlesOpacity);
+    const bool opaqueBorderColors =
+        wb.ruleBorderActiveColor.alpha() == 255 && wb.ruleBorderInactiveColor.alpha() == 255;
+    wb.chainTranslucent = !(ruleBorderOnly && wb.ruleBorderWidth == 0 && wb.ruleBorderRadius == 0 && opaqueBorderColors
+                            && !wb.needsBackdrop && !wb.chainHandlesOpacity);
 
     // The cached static-prefix fold (SurfaceMultipassState::prefixTex) bakes the
     // pack parameters resolved above, and they have just been re-resolved — drop
@@ -582,6 +628,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // animation would otherwise leave the prefix folded with the old values.
     if (const auto sit = m_surfaceMultipass.find(windowId); sit != m_surfaceMultipass.end()) {
         sit->second.prefixValid = false;
+        sit->second.compositeValid = false;
         sit->second.prefixPackCount = -1;
     }
 
@@ -688,120 +735,6 @@ void PlasmaZonesEffect::updateAllDecorations()
         // reconcile-to-unset restores a window whose SetWindowLayer rule was
         // just removed, mirroring the title-bar note above.
         reconcileRuleWindowLayer(wid, w);
-    }
-}
-
-void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w)
-{
-    if (!w || windowId.isEmpty()) {
-        return;
-    }
-    // Tri-state override, forwarded to the DecorationManager (Rule is the only
-    // owner kind now — there are no mode owners to defer to):
-    //   unset → no owner, the title bar shows
-    //   true  → hide the title bar (a rule, or the config default in scope)
-    //   false → FORCE-SHOW (a veto pinning the decoration visible — only an
-    //           explicit SetHideTitleBar=false rule; the config default never
-    //           contributes a force-show, see resolveEffectiveWindowAppearance)
-    // The manager owns the capability gate and the geometry re-assert across
-    // veto-driven decoration flips.
-    const ResolvedWindowAppearance ovr = resolveEffectiveWindowAppearance(w, windowId);
-    m_decorationManager->setRuleOverride(windowId, ovr.hideTitleBar);
-}
-
-void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w)
-{
-    if (!w || w->isDeleted() || windowId.isEmpty()) {
-        return;
-    }
-    // No-layer-rules fast path: with no enabled SetWindowLayer rule and no
-    // snapshot to drain, the resolve below can neither apply nor restore
-    // anything. Keeps the "no-rules case pays nothing" invariant (see
-    // shouldAnimateWindow) on the focus-driven updateAllDecorations path —
-    // without this, the layer reconcile would be the one consumer building
-    // the ~30-accessor rule query for sessions whose rules never touch the
-    // layer (opacity/border-only rule sets included). A lingering snapshot
-    // still falls through so the restore below drains it.
-    if (!m_shaderManager.hasWindowLayerRules() && !m_ruleWindowLayerSnapshots.contains(windowId)) {
-        return;
-    }
-    KWin::Window* kw = w->window();
-    if (!kw) {
-        return;
-    }
-    // Structural / own-surface shield, extending the SetOpacity paint gate
-    // (paint_pipeline.cpp shields only the overlay / plasmashell classes;
-    // the portal and structural entries here are deliberate hardening for a
-    // raw window-state write): a broad match expression must never demote a
-    // dock, pin a notification, or strip the daemon overlay's own
-    // keep-above. Transients / popups are deliberately NOT shielded:
-    // transient utility surfaces are legitimate layer-rule targets, and
-    // transient exclusion is per-feature user opt-in in this project (the
-    // IsTransient match field), never hardcoded policy. A shielded window
-    // resolves as rule-free rather than early-returning — window
-    // classification can mutate mid-session (the Electron/CEF class swap,
-    // an X11 type change), and a window that was rule-held BEFORE mutating
-    // into a shielded class must drain its snapshot through the restore
-    // branch below instead of stranding the rule's flags. Fresh shielded
-    // windows skip the resolve entirely and never enter the map.
-    const QString winClass = w->windowClass();
-    const bool shielded = isOwnOverlayClass(winClass) || isPlasmaShellSurface(winClass)
-        || isXdgDesktopPortalSurface(winClass) || w->isDesktop() || w->isDock() || w->isNotification()
-        || w->isCriticalNotification() || w->isOnScreenDisplay();
-    std::optional<QString> layer;
-    if (!shielded) {
-        layer = resolveWindowLayer(resolveRuleActions(w, windowId));
-    }
-    const auto it = m_ruleWindowLayerSnapshots.find(windowId);
-    if (!layer) {
-        // No rule owns the layer. If one did before, put the user's own flags
-        // back exactly once and forget the window. Erase BEFORE the setters:
-        // they emit KWin signals, and holding a QHash iterator across code
-        // that could re-enter this map would be undefined if a future
-        // connection routes a keep-above change back into a reconcile.
-        if (it != m_ruleWindowLayerSnapshots.end()) {
-            const WindowLayerSnapshot snapshot = *it;
-            m_ruleWindowLayerSnapshots.erase(it);
-            kw->setKeepAbove(snapshot.keepAbove);
-            kw->setKeepBelow(snapshot.keepBelow);
-        }
-        return;
-    }
-    // First application snapshots the pre-rule flags so the restore above
-    // returns the window to the USER's state. Deliberately not re-captured
-    // while a rule owns the layer: a manual keepAbove toggle under an active
-    // rule is re-asserted away on the next reconcile (the rule owns the
-    // property while it matches, same as the DecorationManager rule override),
-    // and capturing it would corrupt the restore target.
-    if (it == m_ruleWindowLayerSnapshots.end()) {
-        m_ruleWindowLayerSnapshots.insert(windowId, {kw->keepAbove(), kw->keepBelow()});
-    }
-    // Always write the fully-specified pair. Writing only the token's "own"
-    // flag leaves the opposite one stale on an above→below rule flip (the
-    // Krohnkite asymmetry bug); KWin's setters are change-gated, so the
-    // re-asserts are free in the steady state.
-    const bool above = (*layer == PhosphorRules::WindowLayerToken::Above);
-    const bool below = (*layer == PhosphorRules::WindowLayerToken::Below);
-    kw->setKeepAbove(above);
-    kw->setKeepBelow(below);
-}
-
-void PlasmaZonesEffect::restoreAllRuleWindowLayers()
-{
-    const QHash<QString, WindowLayerSnapshot> snapshots = std::exchange(m_ruleWindowLayerSnapshots, {});
-    for (auto it = snapshots.cbegin(); it != snapshots.cend(); ++it) {
-        KWin::EffectWindow* w = findWindowById(it.key());
-        // Exact-id re-check, matching every other findWindowById consumer in
-        // this file: the fuzzy appId fallback can resolve a same-app SIBLING
-        // for a gone windowId, and restoring one window's snapshot onto
-        // another would clobber the sibling's own flags.
-        if (!w || w->isDeleted() || getWindowId(w) != it.key()) {
-            continue;
-        }
-        if (KWin::Window* kw = w->window()) {
-            kw->setKeepAbove(it->keepAbove);
-            kw->setKeepBelow(it->keepBelow);
-        }
     }
 }
 

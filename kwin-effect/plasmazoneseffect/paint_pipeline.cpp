@@ -290,6 +290,11 @@ void PlasmaZonesEffect::postPaintScreen()
     // decoration (border-only) is not matched, so this is a no-op in the common
     // case. windowSurfaceAnimates is per-pack-cache hash lookups.
     if (KWin::effects && !m_windowDecorations.isEmpty()) {
+        // The clock prePaintScreen pinned for this cycle (it is unpinned at the end
+        // of this function, so it is still live here). Read once: a live per-window
+        // sample would let two windows in the same frame disagree about the time.
+        const qint64 frameClockMs = m_shaderManager.currentFrameClockMs() >= 0 ? m_shaderManager.currentFrameClockMs()
+                                                                               : ShaderInternal::shaderClockNowMs();
         for (auto it = m_windowDecorations.cbegin(); it != m_windowDecorations.cend(); ++it) {
             if (!it->shaderApplied) {
                 continue;
@@ -313,8 +318,11 @@ void PlasmaZonesEffect::postPaintScreen()
             if (it->needsBackdrop) {
                 constexpr qint64 kBackdropRefoldIntervalMs = 33;
                 const auto stateIt = m_surfaceMultipass.find(it.key());
+                // Read the clock PINNED for this frame, not a live sample: every
+                // other consumer in this file reads it, so a live read here would
+                // let two windows in one frame disagree about what time it is.
                 backdropDue = stateIt == m_surfaceMultipass.end() || stateIt->second.lastFoldMs < 0
-                    || (ShaderInternal::shaderClockNowMs() - stateIt->second.lastFoldMs) >= kBackdropRefoldIntervalMs;
+                    || (frameClockMs - stateIt->second.lastFoldMs) >= kBackdropRefoldIntervalMs;
             }
             // Decorations.Performance: is this window's chain allowed to animate
             // right now (session not idle, and either it is focused or we animate
@@ -324,14 +332,26 @@ void PlasmaZonesEffect::postPaintScreen()
             // of its top performance state, which no amount of making the frame
             // cheaper can achieve.
             //
-            // A focus cross-fade is exempt: it must be allowed to finish, or a
-            // window losing focus would freeze mid-ramp between its active and
-            // inactive look. The ramp clamps at both ends, so it self-terminates.
+            // Two exemptions from the FOCUS half of that gate (the idle half gates
+            // everything — nothing is being looked at then):
+            //
+            //   A focus cross-fade must be allowed to finish, or a window losing
+            //   focus would freeze mid-ramp between its active and inactive look.
+            //   The ramp clamps at both ends, so it self-terminates.
+            //
+            //   A needsBackdrop chain must keep its ~30fps backdrop refold. That
+            //   driver exists for backdrop changes landing NO damage on the window
+            //   itself (see above), so without the exemption an unfocused glass
+            //   window would keep presenting a blur baked at the instant it lost
+            //   focus — the scene behind it would move and the frost would not.
+            //   "Animate only the active window" is a promise about MOTION, not a
+            //   licence to show a stale reflection of the desktop.
             const bool focusRamping = [&] {
                 const auto fit = m_focusFade.constFind(it.key());
                 return fit != m_focusFade.constEnd() && fit->value > 0.001f && fit->value < 0.999f;
             }();
-            if (!focusRamping && !decorationMayAnimate(sw)) {
+            const bool idleGated = m_pauseAnimationWhenIdle && m_sessionIdle;
+            if (idleGated || (!focusRamping && !backdropDue && !decorationMayAnimate(sw))) {
                 continue;
             }
             if (backdropDue || windowSurfaceAnimates(it.key())) {
@@ -344,7 +364,15 @@ void PlasmaZonesEffect::postPaintScreen()
                 // invalidate the capture on every single frame, so the cache
                 // would never hit and we'd re-run the most expensive step of the
                 // fold for a window whose content never changed.
+                // Scope-guarded, like the sibling m_capturingSnapshot latch: a
+                // leaked `true` would silently disable capture invalidation for
+                // EVERY decorated window for the rest of the session, freezing
+                // their content under a still-animating decoration with no crash to
+                // point at. Strictly worse than the failure the sibling guards.
                 m_selfRepainting = true;
+                auto clearSelfRepaint = qScopeGuard([this] {
+                    m_selfRepainting = false;
+                });
                 sw->addRepaintFull();
                 // A padded chain's margin band sits OUTSIDE the window item;
                 // per-window repaints clip to it, so damage the band at
@@ -357,7 +385,6 @@ void PlasmaZonesEffect::postPaintScreen()
                     const int pad = it->outerPadding;
                     KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
                 }
-                m_selfRepainting = false;
             }
         }
     }
@@ -378,6 +405,13 @@ void PlasmaZonesEffect::postPaintScreen()
 
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data)
 {
+    // Derived ONCE. This runs per window, per output, per frame, and the three
+    // branches below (padded transform, SetOpacity, chain translucency) each used to
+    // re-derive the id and re-look-up the same decoration entry.
+    const QString windowId = w ? getWindowId(w) : QString();
+    const auto decoIt = w ? m_windowDecorations.constFind(windowId) : m_windowDecorations.constEnd();
+    const bool decorated = decoIt != m_windowDecorations.constEnd() && decoIt->shaderApplied;
+
     const bool transformDriven =
         w && (m_windowAnimator->hasAnimation(w) || m_shaderManager.hasTransition(w) || m_restoreSuppress.contains(w));
     if (transformDriven) {
@@ -412,8 +446,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // window transformed so KWin paints the padded quad unclipped. The
         // opaque region stays — the window's own content still covers it, so
         // occlusion culling underneath remains valid.
-        const auto bit = m_windowDecorations.constFind(getWindowId(w));
-        if (bit != m_windowDecorations.constEnd() && bit->shaderApplied && bit->outerPadding > 0) {
+        if (decorated && decoIt->outerPadding > 0) {
             data.setTransformed();
         }
     }
@@ -434,7 +467,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     if (w && m_shaderManager.hasOpacityRules()) {
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
-            const auto opacity = resolveWindowOpacity(resolveRuleActions(w, getWindowId(w)));
+            const auto opacity = resolveWindowOpacity(resolveRuleActions(w, windowId));
             m_shaderManager.cacheFrameOpacity(w, opacity);
             // Clear the deviceOpaque region so KWin recomposites whatever
             // sits behind a dimmed window — without it, stale background
@@ -472,11 +505,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // schedule their own repaints in postPaintScreen already. Forcing a repaint
     // here instead would be worse than the flag it replaced: it would manufacture
     // damage every frame and stop an idle desktop from ever idling.
-    if (w && !transformDriven && !m_windowDecorations.isEmpty()) {
-        const auto bit = m_windowDecorations.constFind(getWindowId(w));
-        if (bit != m_windowDecorations.constEnd() && bit->shaderApplied && bit->chainTranslucent) {
-            data.setTranslucent();
-        }
+    if (!transformDriven && decorated && decoIt->chainTranslucent) {
+        data.setTranslucent();
     }
 
     OffscreenEffect::prePaintWindow(view, w, data);

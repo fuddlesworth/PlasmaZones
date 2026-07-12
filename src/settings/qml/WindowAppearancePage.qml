@@ -503,7 +503,12 @@ SettingsFlickable {
 
                     SettingsSwitch {
                         checked: appSettings.decorationAnimateFocusedOnly
-                        onToggled: appSettings.decorationAnimateFocusedOnly = checked
+                        accessibleName: i18n("Animate only the active window")
+                        // SettingsSwitch does NOT flip its own `checked` — it emits
+                        // toggled(newValue) and leaves `checked` bound to the source.
+                        // Writing `= checked` here would write back the value we
+                        // already have, so the switch would never change anything.
+                        onToggled: newValue => appSettings.decorationAnimateFocusedOnly = newValue
                     }
                 }
 
@@ -514,7 +519,8 @@ SettingsFlickable {
 
                     SettingsSwitch {
                         checked: appSettings.decorationPauseWhenIdle
-                        onToggled: appSettings.decorationPauseWhenIdle = checked
+                        accessibleName: i18n("Pause while you are away")
+                        onToggled: newValue => appSettings.decorationPauseWhenIdle = newValue
                     }
                 }
 
@@ -525,13 +531,17 @@ SettingsFlickable {
                     enabled: appSettings.decorationPauseWhenIdle
 
                     SettingsSlider {
+                        Accessible.name: i18n("Idle after")
                         from: root.ctl.decorationIdleTimeoutSecMin
                         to: root.ctl.decorationIdleTimeoutSecMax
+                        // The range runs to an hour, so a 1s step would put the
+                        // useful half-minute band inside a few pixels of track.
+                        stepSize: 5
                         value: appSettings.decorationIdleTimeoutSec
-                        valueSuffix: " s"
-                        labelWidth: Kirigami.Units.gridUnit * 4
+                        valueSuffix: i18nc("seconds, as a slider unit suffix", " s")
+                        labelWidth: Kirigami.Units.gridUnit * 5
                         onMoved: value => {
-                            return appSettings.decorationIdleTimeoutSec = Math.round(value);
+                            appSettings.decorationIdleTimeoutSec = Math.round(value);
                         }
                     }
                 }

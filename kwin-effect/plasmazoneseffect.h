@@ -883,7 +883,18 @@ private:
     /// (setShader(nullptr) + unredirect) is skipped, leaving the corpse
     /// redirected with a shader whose samplers reference textures this very
     /// function destroys (unbound sampler = opaque black flash on close).
-    void removeWindowDecoration(const QString& windowId, KWin::EffectWindow* windowHint = nullptr);
+    /// @param keepSurfaceState when true, the window's SurfaceMultipassState (its
+    ///        capture, static-prefix, composite and buffer textures + framebuffers)
+    ///        SURVIVES the removal. Set by updateWindowDecoration's remove-first
+    ///        step: a decoration REFRESH re-resolves the same window's chain, and
+    ///        the GL targets are keyed on (size, chain) — which the fold re-checks
+    ///        itself — so tearing them down and immediately reallocating them is
+    ///        pure churn. updateAllDecorations runs on every focus change, so
+    ///        without this every focus change would free and reallocate every
+    ///        decorated window's whole GL working set and cold-start both caches.
+    ///        Genuine teardown (close, delete, undecorate) leaves it false.
+    void removeWindowDecoration(const QString& windowId, KWin::EffectWindow* windowHint = nullptr,
+                                bool keepSurfaceState = false);
     /// SHARED placement-flip funnel: re-resolve a window's decoration
     /// update-or-remove in the SAME turn after its snapped / tiled /
     /// floating state flipped. Both engines route through this (snap's
@@ -1056,6 +1067,20 @@ private:
     /// postPaintScreen so its animation advances even with no content damage; a
     /// purely static decoration (e.g. border-only) returns false and costs nothing.
     bool windowSurfaceAnimates(const QString& windowId);
+
+    /// Is this window's decoration chain allowed to animate right now? False when
+    /// the session is idle (and PauseWhenIdle is on), or when AnimateFocusedOnly is
+    /// on and this is not the active window. A window it refuses keeps its last
+    /// composite and still LOOKS decorated — it just stops moving. Defined in
+    /// surface_gating.cpp.
+    bool decorationMayAnimate(KWin::EffectWindow* w) const;
+
+    /// Wake every decorated window with one repaint each. Needed whenever a gate
+    /// above OPENS (a settings flip, the session resuming, the daemon dying while we
+    /// were idle): a paused chain emits no damage of its own, so it would otherwise
+    /// stay frozen on its last composite until something unrelated damaged it.
+    /// Defined in surface_gating.cpp.
+    void repaintAllDecorations();
 
     /// Surface-shader pack registry (the "surface" category: window border /
     /// rounded corners / glow / …). Discovers data/surface packs; the effect
@@ -1480,15 +1505,6 @@ private:
     /// and this effect lives inside the compositor, where that protocol is served
     /// rather than consumed. The effect sees only the resolved boolean.
     bool m_sessionIdle = false;
-
-    /// Wake every decorated window: re-fold and repaint it once. Needed whenever a
-    /// gate above OPENS (settings flip, session resumes) — a window paused under
-    /// the old gate emits no damage of its own, so without an explicit repaint it
-    /// would stay frozen until something unrelated happened to damage it.
-    void repaintAllDecorations();
-
-    /// Is this window's decoration allowed to animate right now?
-    bool decorationMayAnimate(KWin::EffectWindow* w) const;
 
     // D-Bus communication uses QDBusMessage::createMethodCall exclusively
     // (no QDBusInterface) to avoid synchronous D-Bus introspection that blocks

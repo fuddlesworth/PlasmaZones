@@ -112,6 +112,47 @@ private Q_SLOTS:
         QCOMPARE(settings.focusFadeDuration(), ConfigDefaults::focusFadeDurationMin());
     }
 
+    /**
+     * Same clampInt contract on the decoration idle timeout
+     * (Decorations.Performance/IdleTimeoutSec). This one is load-bearing rather
+     * than cosmetic: the daemon feeds the value straight into an
+     * ext-idle-notify-v1 timeout as `value * 1000`, so an unclamped on-disk value
+     * would arm a nonsensical timer. A zero or negative timeout is dropped by the
+     * idle service, silently disabling the pause; a value at or above ~2147484
+     * would overflow the int multiply outright.
+     */
+    void testReadValidatedDecorationIdleTimeout_outOfRange_clampsToMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto perf = backend->group(ConfigDefaults::decorationsPerformanceGroup());
+            perf->writeInt(ConfigDefaults::idleTimeoutSecKey(), 999999999);
+            perf.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSecMax());
+    }
+
+    void testReadValidatedDecorationIdleTimeout_belowMin_clampsToMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto perf = backend->group(ConfigDefaults::decorationsPerformanceGroup());
+            perf->writeInt(ConfigDefaults::idleTimeoutSecKey(), -1);
+            perf.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSecMin());
+    }
+
     // =========================================================================
     // Schema validColorOr validator (invalid color string)
     // =========================================================================
