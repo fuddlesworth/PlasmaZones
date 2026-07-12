@@ -113,7 +113,7 @@ set(plasmazones_settings_SRCS
     snappingzoneselectorcontroller.h
     snappingzoneselectorcontroller.cpp
     # Decoration drill-down page — PER-SURFACE chains of decoration shader
-    # packs + border/titlebar globals, resolved through a
+    # packs, resolved through a
     # DecorationProfileTree (baseline + walk-up inheritance). Parallel to
     # AnimationsPageController's tree model but with no per-event staging;
     # mutations write straight to the Settings decorationProfileTree.

@@ -110,6 +110,16 @@ public:
     /// definition the store and every domain validator share.
     static bool carriesBaseline(const QJsonObject& root);
 
+    /// True when @p newName is a name a mutator will actually accept: non-empty,
+    /// slugifiable to a real filename, and not colliding with a set other than
+    /// @p currentName (pass an empty @p currentName when saving a new set).
+    ///
+    /// The refusal set of saveCurrentAsSet / updateSet, in one predicate. QML
+    /// cannot reproduce the slug rule, so a dialog that gated on "non-empty"
+    /// alone would leave Ok enabled for a name the store then refuses, and an
+    /// AcceptRole button dismisses the dialog before the refusal is known.
+    Q_INVOKABLE bool canUseSetName(const QString& newName, const QString& currentName = QString()) const;
+
     /// Saved sets, one row per file:
     /// `{ name, description, slug, coverage: [section…], coverageCount,
     ///    hasBaseline, active, modified }`

@@ -17,7 +17,7 @@ import org.phosphor.animation
  *   - Gentle upward translate on hover (-1px)
  *   - Optional collapsible content (set collapsible: true; use
  *     initiallyCollapsed to start closed without binding `collapsed`)
- *   - Smooth 200ms transitions throughout
+ *   - Motion-profile driven transitions throughout
  *
  * Usage:
  *   SettingsCard {
@@ -210,7 +210,11 @@ Item {
             id: headerArea
 
             width: parent.width
-            height: headerLoader.height
+            // Zero height when there is no header. The loader still holds the
+            // default header component (it is only nulled for a CUSTOM header),
+            // so an invisible headerArea would otherwise keep its band, and both
+            // cardBg.height and contentClip's top anchor count it.
+            height: visible ? headerLoader.height : 0
             visible: root.headerText.length > 0 || root.header !== null
             // Single uniform header fill: the whole header row is one proper
             // header color, distinct from the content rows below. Only the TOP
@@ -375,9 +379,12 @@ Item {
             // Clipping a shut card to nothing still leaves its controls in the
             // tab order, so tabbing through the page walks fields nobody can see.
             // Disabling the body takes them out of the focus chain, and the
-            // header carries the keyboard affordance in their place. The body
-            // stays VISIBLE: an invisible layout stops tracking its children's
-            // visibility for good, and never recovers its implicit height.
+            // header carries the keyboard affordance in their place.
+            //
+            // The body stays VISIBLE rather than hidden. A hidden layout does not
+            // re-measure while it is hidden, and it only catches up a frame or
+            // more after it is shown, which is exactly the window the expand
+            // needs its height in.
             enabled: (root.showToggle ? root.toggleChecked : true) && root._expandProgress > 0
 
             Item {

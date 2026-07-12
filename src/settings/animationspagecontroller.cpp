@@ -151,6 +151,10 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
 
     connect(m_presets, &AnimationPresetLibrary::userPresetsChanged, this,
             &AnimationsPageController::userPresetsChanged);
+    // CLAUDE.md: only emit a signal when the value actually changed. The
+    // sub-services and the mutators raise pendingChangesChanged unconditionally
+    // (a no-op revert, a refused write), so gate the outward dirtyChanged on an
+    // observed state flip rather than forwarding every raise.
     connect(m_presets, &AnimationPresetLibrary::toastRequested, this, &AnimationsPageController::toastRequested);
     connect(m_presets, &AnimationPresetLibrary::pendingChangesChanged, this,
             &AnimationsPageController::pendingChangesChanged);
@@ -289,6 +293,12 @@ bool AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePa
     // and the entry is still Discard's way back.
     QFile f(filePath);
     if (it.value().has_value()) {
+        // Compare sizes first: it settles the common mismatch without a read, and
+        // it keeps this off the unbounded-readAll path that snapshotFileIfFirst
+        // already refuses to take.
+        if (QFileInfo(filePath).size() != it.value()->size())
+            return false;
+
         if (!f.exists() || !f.open(QIODevice::ReadOnly) || f.readAll() != *it.value())
             return false;
     } else if (f.exists()) {

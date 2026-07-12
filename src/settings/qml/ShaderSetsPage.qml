@@ -278,7 +278,9 @@ SettingsFlickable {
                 return;
 
             const path = settingsController.urlToLocalFile(selectedFile);
-            importCard.showResult(root.bridge.importSet(path), path);
+            // Import BY PATH, report BY URL: showResult percent-decodes its
+            // argument, and a dialog path is already decoded.
+            importCard.showResult(root.bridge.importSet(path), selectedFile);
         }
     }
 }

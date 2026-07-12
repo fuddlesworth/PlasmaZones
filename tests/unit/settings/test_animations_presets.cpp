@@ -154,8 +154,7 @@ private Q_SLOTS:
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(!c.addUserPreset(QString(), {{QStringLiteral("duration"), 100}}));
-        // All-symbol slugifies to empty, so there is no usable filename. The
-        // library refuses and toasts rather than failing silently.
+        // All-symbol slugifies to empty, so there is no usable filename.
         QVERIFY(!c.addUserPreset(QStringLiteral("@@@"), {{QStringLiteral("duration"), 100}}));
     }
 

@@ -34,8 +34,12 @@ SettingsCard {
     property string description: ""
     property string idleText: ""
     property string hoverText: ""
-    property string idleIcon: "folder-download"
-    property string hoverIcon: "folder-add"
+    /// Icon + zone geometry, defaulting to the single-FILE case. The shader
+    /// browser takes a folder and overrides all four.
+    property string idleIcon: "document-open"
+    property string hoverIcon: "document-import"
+    property real iconSize: Kirigami.Units.iconSizes.medium
+    property real dropZoneHeight: Kirigami.Units.gridUnit * 4
     /// Given a file's display name, the banner text for each outcome.
     required property var successTextFn
     required property var failureTextFn
@@ -91,6 +95,8 @@ SettingsCard {
             hoverText: card.hoverText
             idleIcon: card.idleIcon
             hoverIcon: card.hoverIcon
+            iconSize: card.iconSize
+            Layout.preferredHeight: card.dropZoneHeight
             onFileDropped: function (url) {
                 card.showResult(card.importFn(url) === true, url);
             }

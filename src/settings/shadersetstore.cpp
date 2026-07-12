@@ -107,6 +107,10 @@ ShaderSetStore::ShaderSetStore(Config config, QObject* parent)
     // std::bad_function_call.
     Q_ASSERT(m_config.setsDir);
     Q_ASSERT(m_config.snapshot);
+    // A domain that stages set files must be able to un-stage them: without the
+    // rollback hook a failed write leaves the page dirty with nothing to
+    // discard. rollbackSnapshot() degrades to a re-notify in release.
+    Q_ASSERT(!m_config.fileSnapshot || m_config.snapshotRollback);
     Q_ASSERT(m_config.validate);
     Q_ASSERT(m_config.apply);
 }
@@ -177,24 +181,24 @@ bool ShaderSetStore::snapshotFile(const QString& filePath)
 
 bool ShaderSetStore::readSetFile(const QString& filePath, QJsonObject* out) const
 {
-    QFile f(filePath);
-    if (!f.exists() || !f.open(QIODevice::ReadOnly)) {
-        qCWarning(lcConfig) << "ShaderSetStore: cannot open set file:" << filePath;
-        return false;
-    }
-    // importSet hands this a user-chosen path, so cap the read before it
-    // happens rather than slurping an arbitrarily large file into memory only
-    // for the JSON parser to reject it.
-    // The size cap only means something for a regular file: a fifo, a device, or
-    // a procfs entry all report size 0 and would slip past it into an unbounded
-    // readAll(). importSet takes a user-chosen path, so this is a real boundary.
-    if (!QFileInfo(filePath).isFile()) {
+    // Both checks come BEFORE the open. importSet hands this a user-chosen path,
+    // and opening a fifo blocks in the kernel until a writer shows up, so an
+    // isFile() check that ran after the open would never get to run at all. A
+    // fifo, a device, and a procfs entry all report size 0 as well, which is why
+    // the size cap alone does not cover this.
+    const QFileInfo info(filePath);
+    if (!info.isFile()) {
         qCWarning(lcConfig) << "ShaderSetStore: refusing to read a non-regular file" << filePath;
         return false;
     }
-    if (f.size() > kMaxSetFileBytes) {
-        qCWarning(lcConfig) << "ShaderSetStore: set file" << filePath << "is" << f.size() << "bytes, over the"
+    if (info.size() > kMaxSetFileBytes) {
+        qCWarning(lcConfig) << "ShaderSetStore: set file" << filePath << "is" << info.size() << "bytes, over the"
                             << kMaxSetFileBytes << "byte cap — refusing";
+        return false;
+    }
+    QFile f(filePath);
+    if (!f.open(QIODevice::ReadOnly)) {
+        qCWarning(lcConfig) << "ShaderSetStore: cannot open set file:" << filePath;
         return false;
     }
     QJsonParseError err{};
@@ -210,8 +214,15 @@ bool ShaderSetStore::readSetFile(const QString& filePath, QJsonObject* out) cons
 void ShaderSetStore::rollbackSnapshot(const QString& filePath)
 {
     if (m_config.snapshotRollback) {
+        // The hook owns the dirty-state signal: it alone knows whether the entry
+        // was really dropped.
         m_config.snapshotRollback(filePath);
+        return;
     }
+    // A domain that stages but cannot roll back has still moved its dirty state,
+    // so it must at least re-notify. The ctor asserts the pairing, and this is
+    // the release-build twin of that assert.
+    notifyPendingChanges();
 }
 
 void ShaderSetStore::notifyPendingChanges()
@@ -360,6 +371,22 @@ bool ShaderSetStore::applySet(const QString& name)
     Q_EMIT setsChanged();
     notifyPendingChanges();
     return true;
+}
+
+bool ShaderSetStore::canUseSetName(const QString& newName, const QString& currentName) const
+{
+    const QString trimmed = newName.trimmed();
+    if (trimmed.isEmpty()) {
+        return false;
+    }
+    // An unslugifiable name has no filename to write to. setFilePath() is the
+    // same call the mutators make, so this cannot drift from what they accept.
+    if (setFilePath(trimmed).isEmpty()) {
+        return false;
+    }
+    const QString taken = existingSetName(trimmed);
+    // Keeping your own name is a description-only edit, not a self-collision.
+    return taken.isEmpty() || taken == currentName;
 }
 
 QString ShaderSetStore::existingSetName(const QString& name) const
@@ -556,8 +583,16 @@ bool ShaderSetStore::exportSet(const QString& name, const QString& destLocalPath
     if (sourcePath.isEmpty()) {
         return false;
     }
+    // Same boundary as readSetFile: the sets dir is user-writable and
+    // openSetsDirectory() actively invites hand-placing files in it.
+    const QFileInfo sourceInfo(sourcePath);
+    if (!sourceInfo.isFile() || sourceInfo.size() > kMaxSetFileBytes) {
+        qCWarning(lcConfig) << "ShaderSetStore::exportSet: refusing to read" << sourcePath;
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set \"%1\".").arg(name));
+        return false;
+    }
     QFile source(sourcePath);
-    if (!source.exists() || !source.open(QIODevice::ReadOnly)) {
+    if (!source.open(QIODevice::ReadOnly)) {
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set \"%1\".").arg(name));
         return false;
     }

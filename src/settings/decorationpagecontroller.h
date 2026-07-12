@@ -35,8 +35,7 @@ class ISettings;
 /// `PhosphorSurfaceShaders::DecorationProfileTree` — a hierarchical store
 /// of `DecorationProfile`s keyed on the dot-path surface namespace
 /// (`window.tiled`, `osd`, `popup.snapAssist`, …). Each profile carries an
-/// ordered CHAIN of surface shader packs plus the border/titlebar
-/// appearance. A baseline (global default) is overlaid by per-surface
+/// ordered CHAIN of surface shader packs. A baseline (global default) is overlaid by per-surface
 /// overrides via the tree's resolve() walk-up.
 ///
 /// ## Baseline as path ""
@@ -66,10 +65,9 @@ class DecorationPageController : public PhosphorControl::PageController
     Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
 
 public:
-    /// @param registry Optional — when null, all `*ShaderEffects()` /
-    ///        `shaderParameters()` Q_INVOKABLEs return empty results so
-    ///        unit tests can construct the controller without a surface
-    ///        bootstrap.
+    /// @param registry Optional — when null, the `*ShaderEffects()`
+    ///        Q_INVOKABLEs return empty results so unit tests can construct
+    ///        the controller without a surface bootstrap.
     /// @param settings Optional — when null, profile getters return empty
     ///        results and mutators are no-ops.
     explicit DecorationPageController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry = nullptr,
@@ -97,10 +95,6 @@ public:
     /// isUserEffect / previewPath / parameters (QVariantList of
     /// ParameterInfo maps).
     Q_INVOKABLE QVariantList availableShaderEffects() const;
-
-    /// Just the parameters list for @p effectId — convenience for the
-    /// per-pack parameter editor.
-    Q_INVOKABLE QVariantList shaderParameters(const QString& effectId) const;
 
     // ── Surface taxonomy ──────────────────────────────────────────────────
 

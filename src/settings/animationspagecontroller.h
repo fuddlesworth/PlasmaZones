@@ -250,9 +250,6 @@ public:
     /// availableShaderEffects consumers.
     Q_INVOKABLE QVariantList availableShaderEffectsForPath(const QString& path) const;
 
-    /// Single-effect lookup. Empty map when @p effectId is unknown.
-    Q_INVOKABLE QVariantMap shaderEffectInfo(const QString& effectId) const;
-
     /// Just the parameters list for @p effectId — convenience for the
     /// per-event shader-param editor.
     Q_INVOKABLE QVariantList shaderParameters(const QString& effectId) const;

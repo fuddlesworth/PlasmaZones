@@ -614,6 +614,93 @@ private Q_SLOTS:
         // The refused save never reached disk.
         QVERIFY(rowFor(sets, QStringLiteral("During")).isEmpty());
     }
+    /// Motion has no baseline, so a baseline-carrying file is a decoration set
+    /// (or a hand edit). Accepting it would half-apply the set: apply drops the
+    /// baseline while the store still counts it, so the Active badge could never
+    /// light up. It has to be refused at the boundary.
+    void motionSets_importRejectsBaselineCarryingSet()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        ShaderSetStore* sets = c.setsBridge();
+
+        QJsonObject entry;
+        entry.insert(QStringLiteral("path"), QStringLiteral("editor.snapIn"));
+        entry.insert(QStringLiteral("profile"), QJsonObject{{QStringLiteral("duration"), 200}});
+        QJsonObject root;
+        root.insert(QStringLiteral("name"), QStringLiteral("Foreign"));
+        root.insert(QStringLiteral("version"), 1);
+        root.insert(QStringLiteral("overrides"), QJsonArray{entry});
+        // A decoration set's global default. Motion cannot apply it.
+        root.insert(QStringLiteral("baseline"), QJsonObject{{QStringLiteral("chain"), QJsonArray{}}});
+
+        const QString payload = tmp.path() + QStringLiteral("/foreign.json");
+        QFile f(payload);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        const QByteArray bytes = QJsonDocument(root).toJson();
+        QCOMPARE(f.write(bytes), static_cast<qint64>(bytes.size()));
+        f.close();
+
+        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
+        QVERIFY2(!sets->importSet(payload), "a motion set carrying a baseline must be refused");
+        QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("That set does not match this page."));
+    }
+
+    /// The snapshot is the ONLY copy of a file's pre-edit content, so the
+    /// phantom-dirty rollback must drop it ONLY while disk still matches it. An
+    /// edit that landed keeps its way back; an edit undone by hand does not.
+    void snapshotRollback_dropsPhantomButKeepsALandedEdit()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        const QString path = QStringLiteral("editor.snapIn");
+
+        // Establish a committed baseline on disk, then start clean.
+        QVERIFY(c.setOverride(path, {{QStringLiteral("duration"), 100}}));
+        c.commitPending();
+        QVERIFY(!c.hasPendingChanges());
+
+        // An edit that LANDS: the snapshot (duration 100) is the only copy of the
+        // pre-edit content and must survive a further edit.
+        QVERIFY(c.setOverride(path, {{QStringLiteral("duration"), 200}}));
+        QVERIFY(c.hasPendingChanges());
+        QVERIFY(c.setOverride(path, {{QStringLiteral("duration"), 300}}));
+        QVERIFY2(c.hasPendingChanges(), "disk no longer matches the snapshot, so it must NOT be dropped");
+
+        // Undo by hand, back to the exact pre-edit content: the snapshot is now a
+        // phantom, and keeping it would leave the page dirty with nothing to
+        // discard.
+        QVERIFY(c.setOverride(path, {{QStringLiteral("duration"), 100}}));
+        QVERIFY2(!c.hasPendingChanges(), "an undo back to the pre-edit content must clear the staged snapshot");
+    }
+
+    /// revertPending() refuses while an async discard owns the snapshot map, and
+    /// it has to SAY so: a caller that goes on to declare the state clean would
+    /// otherwise strand the snapshots the worker is still restoring.
+    void revertPending_refusesAndReportsWhileAsyncDiscardIsInFlight()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 200}}));
+        QVERIFY(c.hasPendingChanges());
+
+        QSignalSpy done(&c, &AnimationsPageController::discardResult);
+        c.asyncRevertPending(); // sets the in-flight flag synchronously
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("revertPending: blocked while an async discard")));
+        QVERIFY2(!c.revertPending(), "a synchronous revert must refuse, and report the refusal, mid-discard");
+
+        QVERIFY(done.wait(5000));
+        QVERIFY(!c.hasPendingChanges());
+    }
 };
 
 QTEST_MAIN(TestAnimationsMotionSets)

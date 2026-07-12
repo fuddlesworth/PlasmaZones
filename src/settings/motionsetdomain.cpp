@@ -36,12 +36,24 @@ constexpr QLatin1String kNameKey{"name"};
 constexpr QLatin1String kOverridesKey{"overrides"};
 constexpr QLatin1String kPathKey{"path"};
 constexpr QLatin1String kProfileKey{"profile"};
+constexpr QLatin1String kBaselineKey{"baseline"};
 
 struct StagedEntry
 {
     QString path;
     QVariantMap profile;
 };
+
+/// The event-path taxonomy is fixed for the process, so build it once. Shared by
+/// the validator and the snapshot walk, both of which run on every set refresh.
+const QSet<QString>& knownEventPaths()
+{
+    static const QSet<QString> paths = [] {
+        const QStringList list = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
+        return QSet<QString>(list.cbegin(), list.cend());
+    }();
+    return paths;
+}
 
 /// Validate + stage every entry in @p root. Whole-set discipline: one
 /// malformed entry rejects the set rather than committing partial state.
@@ -51,19 +63,18 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
 {
     using namespace PhosphorAnimation;
 
-    // The path taxonomy is fixed, so build it once rather than on every call
-    // (applySet runs this twice, via validate and again via apply).
-    static const QSet<QString> knownPathSet = [] {
-        const QStringList paths = ProfilePaths::allBuiltInPaths();
-        return QSet<QString>(paths.cbegin(), paths.cend());
-    }();
-
     staged->clear();
     // Motion has no baseline: there is no global default profile to apply one
     // to. A baseline-carrying file is a decoration set (or hand-edited), and
     // accepting it would half-apply the set — apply drops the baseline, while
     // the store still counts it, so the Active badge could never light up.
     // Refuse it at the boundary instead.
+    // A malformed baseline is refused rather than silently ignored, the same as
+    // a malformed override entry.
+    if (root.contains(kBaselineKey) && !root.value(kBaselineKey).isObject()) {
+        qCWarning(lcConfig) << "motionset: rejecting a set whose baseline is not an object";
+        return false;
+    }
     if (ShaderSetStore::carriesBaseline(root)) {
         qCWarning(lcConfig) << "motionset: rejecting a set that carries a baseline";
         return false;
@@ -80,7 +91,7 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
         // Membership in `allBuiltInPaths()` is the single source of truth —
         // the same rule the controller's setOverride enforces. It also
         // rejects empty and traversal-attempting paths.
-        if (path.isEmpty() || !knownPathSet.contains(path)) {
+        if (path.isEmpty() || !knownEventPaths().contains(path)) {
             qCWarning(lcConfig) << "motionset: rejecting unknown / invalid path" << path;
             return false;
         }
@@ -134,8 +145,6 @@ ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::fun
         if (!dir.exists()) {
             return QJsonObject{};
         }
-        const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
-        const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
         const auto files = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
         for (const QFileInfo& info : files) {
             QFile f(info.absoluteFilePath());
@@ -152,7 +161,7 @@ ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::fun
             }
             const QJsonObject obj = doc.object();
             const QString entryName = obj.value(kNameKey).toString();
-            if (!knownPathSet.contains(entryName)) {
+            if (!knownEventPaths().contains(entryName)) {
                 continue;
             }
             QJsonObject profile = obj;

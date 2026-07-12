@@ -80,10 +80,14 @@ ExpandableRowDelegate {
         id: modifiedStamp
 
         readonly property date modified: row.modelData.modified ?? new Date(NaN)
+        /// The store always carries `modified`, but a file whose mtime the
+        /// filesystem cannot report yields an invalid date. Read the predicate,
+        /// not `visible`, which returns EFFECTIVE (parent-suppressed) visibility.
+        readonly property bool hasStamp: !isNaN(modifiedStamp.modified.getTime())
 
-        visible: !isNaN(modifiedStamp.modified.getTime())
+        visible: modifiedStamp.hasStamp
         Layout.alignment: Qt.AlignVCenter
-        text: modifiedStamp.visible ? i18n("Updated %1", modifiedStamp.modified.toLocaleString(Qt.locale(), Locale.ShortFormat)) : ""
+        text: modifiedStamp.hasStamp ? i18n("Updated %1", modifiedStamp.modified.toLocaleString(Qt.locale(), Locale.ShortFormat)) : ""
         color: Kirigami.Theme.disabledTextColor
         font: Kirigami.Theme.smallFont
     }
@@ -241,19 +245,12 @@ ExpandableRowDelegate {
         /// BOTH the Ok button and the Enter key: Ok is AcceptRole and
         /// Kirigami.Dialog.accept() does not consult the button box, so a name
         /// the store then refuses would close the dialog anyway and swallow the
-        /// user's description edit along with it. The store refuses an empty
-        /// name, a name that slugifies to nothing, and a collision with another
-        /// set, so all three have to be caught here.
-        readonly property bool nameUsable: {
-            const typed = editNameField.text.trim();
-            if (typed.length === 0 || !row.bridge)
-                return false;
-
-            // Keeping the row's own name is a description-only edit, not a
-            // collision with itself.
-            const taken = row.bridge.existingSetName(typed);
-            return taken.length === 0 || taken === row.setName;
-        }
+        /// user's description edit along with it.
+        ///
+        /// canUseSetName is the store's own refusal set (empty, unslugifiable,
+        /// or colliding with another set). QML cannot reproduce the slug rule, so
+        /// asking the store is the only way this cannot drift from it.
+        readonly property bool nameUsable: row.bridge ? row.bridge.canUseSetName(editNameField.text, row.setName) : false
 
         // Installed on open, not at construction: writing into the closed
         // popup's disabled button subtree makes Qt log a binding-loop warning

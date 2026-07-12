@@ -78,7 +78,7 @@ void writeDirectProfile(ISettings* settings, DecorationProfileTree& tree, const 
 
 DecorationPageController::DecorationPageController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry,
                                                    ISettings* settings, QObject* parent)
-    // "decoration-staging", not "decoration": the sidebar nav node owns the
+    // "decoration-staging", not "decorations": the sidebar nav node owns the
     // bare id (regVirtual in settingscontroller_pageregistration.cpp), and the
     // staging controller stays independently addressable — same split as
     // AnimationsPageController's "animations-staging".
@@ -114,18 +114,6 @@ QVariantList DecorationPageController::availableShaderEffects() const
     result.reserve(effects.size());
     for (const auto& effect : effects)
         result.append(effectToMap(effect));
-    return result;
-}
-
-QVariantList DecorationPageController::shaderParameters(const QString& effectId) const
-{
-    if (!m_registry || effectId.isEmpty() || !m_registry->hasEffect(effectId))
-        return {};
-    const auto effect = m_registry->effect(effectId);
-    QVariantList result;
-    result.reserve(effect.parameters.size());
-    for (const auto& p : effect.parameters)
-        result.append(parameterInfoToMap(p));
     return result;
 }
 

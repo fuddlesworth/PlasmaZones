@@ -60,6 +60,12 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* has
     using PhosphorSurfaceShaders::DecorationProfile;
 
     staged->clear();
+    // Whole-set discipline: a malformed baseline refuses the set rather than
+    // being silently ignored, the same way a malformed override entry does.
+    if (root.contains(kBaselineKey) && !root.value(kBaselineKey).isObject()) {
+        qCWarning(lcConfig) << "decorationset: rejecting a set whose baseline is not an object";
+        return false;
+    }
     *hasBaseline = ShaderSetStore::carriesBaseline(root);
     const QJsonArray overrides = root.value(kOverridesKey).toArray();
     staged->reserve(overrides.size());
@@ -77,13 +83,12 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* has
             qCWarning(lcConfig) << "decorationset: rejecting unknown surface path" << path;
             return false;
         }
+        // toObject() yields {} for a missing or non-object value, so this one
+        // check covers both. An empty profile engages no field: staging it would
+        // make the surface READ as overridden while changing nothing the user can
+        // see. The snapshot side skips these for the same reason.
         const QJsonObject profile = entry.value(kProfileKey).toObject();
-        // Same rule as the baseline above, for the same reason: an empty profile
-        // engages no field. The snapshot side never emits one, so an empty
-        // profile from a hand-edited or foreign file would stage an all-inherit
-        // override that makes the surface READ as overridden while changing
-        // nothing the user can see.
-        if (!entry.value(kProfileKey).isObject() || profile.isEmpty()) {
+        if (profile.isEmpty()) {
             qCWarning(lcConfig) << "decorationset: missing or empty profile object for" << path;
             return false;
         }
@@ -139,9 +144,17 @@ void DecorationPageController::initSetsStore()
         QStringList paths = tree.overriddenPaths();
         paths.sort();
         for (const QString& p : paths) {
+            // Skip an override that engages no field, exactly as the baseline
+            // above is skipped. A tree can hold one (config.json is hand-editable
+            // and fromJson stores every entry), and emitting it would write a set
+            // file that stageEntries then refuses forever.
+            const QJsonObject profileJson = tree.directOverride(p).toJson();
+            if (profileJson.isEmpty()) {
+                continue;
+            }
             QJsonObject entry;
             entry.insert(kPathKey, p);
-            entry.insert(kProfileKey, tree.directOverride(p).toJson());
+            entry.insert(kProfileKey, profileJson);
             overrides.append(entry);
         }
         root.insert(kOverridesKey, overrides);

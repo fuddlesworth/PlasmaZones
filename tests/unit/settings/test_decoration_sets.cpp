@@ -384,7 +384,10 @@ private Q_SLOTS:
 
         QJsonObject entry;
         entry.insert(QStringLiteral("path"), QStringLiteral("window.appearance.open")); // a motion path
-        entry.insert(QStringLiteral("profile"), QJsonObject{});
+        // A REAL profile: an empty one would be refused by the empty-profile
+        // rule, and the path-taxonomy guard under test would never run.
+        entry.insert(QStringLiteral("profile"),
+                     QJsonObject{{QStringLiteral("chain"), QJsonArray{QStringLiteral("glow")}}});
         QJsonObject root;
         root.insert(QStringLiteral("name"), QStringLiteral("Foreign"));
         root.insert(QStringLiteral("version"), 1);
@@ -520,7 +523,10 @@ private Q_SLOTS:
         // Foreign payload (an event path, not a decoration surface).
         QJsonObject entry;
         entry.insert(QStringLiteral("path"), QStringLiteral("window.appearance.open"));
-        entry.insert(QStringLiteral("profile"), QJsonObject{});
+        // A REAL profile: an empty one would be refused by the empty-profile
+        // rule, and the path-taxonomy guard under test would never run.
+        entry.insert(QStringLiteral("profile"),
+                     QJsonObject{{QStringLiteral("chain"), QJsonArray{QStringLiteral("glow")}}});
         QJsonObject foreign;
         foreign.insert(QStringLiteral("name"), QStringLiteral("foreign"));
         foreign.insert(QStringLiteral("version"), 1);
@@ -644,7 +650,9 @@ private Q_SLOTS:
         validEntry.insert(QStringLiteral("profile"), validProfile);
         QJsonObject badEntry;
         badEntry.insert(QStringLiteral("path"), QStringLiteral("../etc/passwd"));
-        badEntry.insert(QStringLiteral("profile"), QJsonObject{});
+        // A REAL profile, so only the path check can reject this entry.
+        badEntry.insert(QStringLiteral("profile"),
+                        QJsonObject{{QStringLiteral("chain"), QJsonArray{QStringLiteral("glow")}}});
 
         QJsonObject root;
         root.insert(QStringLiteral("name"), QStringLiteral("bad-set"));

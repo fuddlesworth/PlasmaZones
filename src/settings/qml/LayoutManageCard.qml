@@ -18,6 +18,13 @@ import org.kde.kirigami as Kirigami
  * dialog-backed sources (file pickers) are surfaced as signals the page wires to
  * its FileDialogs.
  */
+// Deliberately a plain SettingsCard rather than an ImportDropCard, which the
+// shader browser and the sets pages share. ImportDropCard drives its result
+// banner from an importFn that RETURNS whether the import worked, and
+// importLayout is fire-and-forget: it reports through the page's
+// layoutOperationFailed toast instead. Its Import affordance is also a menu
+// (layout file, KZones config, KZones file), not a single button. Reshaping
+// either side to fit would cost more than the duplication saves.
 SettingsCard {
     id: root
 
@@ -63,9 +70,12 @@ SettingsCard {
                     // rebuild, failure → layoutOperationFailed toast (both
                     // handled by the page, matching the import-dialog path).
                     settingsController.importLayout(path);
-                } else if (settingsController.importAlgorithm(path)) {
+                } else {
+                    // Report both outcomes. A silent failure here read as a
+                    // dropped file that simply vanished.
+                    const ok = settingsController.importAlgorithm(path);
                     if (typeof window !== "undefined" && window && window.showToast)
-                        window.showToast(i18n("Algorithm imported"));
+                        window.showToast(ok ? i18n("Algorithm imported") : i18n("Could not import that algorithm. It must be a Luau file this build can read."));
                 }
             }
         }

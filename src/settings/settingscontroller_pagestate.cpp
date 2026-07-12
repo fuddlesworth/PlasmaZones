@@ -624,10 +624,12 @@ void SettingsController::discardPage(const QString& page)
             const LoadingScope loadingScope(m_loading);
             m_settings.discardKeys(animationConfigKeys());
         }
-        // revertPending() left hasPendingChanges() false; reconcile every
-        // animation leaf against the value-based truth (all clean post-revert)
-        // so the global needsSave drops the entries the pendingChangesChanged
-        // handler had attributed to the tree. Batched: one emission at most.
+        // Reconcile every animation leaf against the value-based truth so the
+        // global needsSave drops the entries the pendingChangesChanged handler
+        // had attributed to the tree. Value-based on purpose: revertPending()
+        // does not always leave hasPendingChanges() false (it refuses outright
+        // while an async discard is in flight, and it retains a file whose
+        // restore failed so a retry can pick it up). Batched: one emission at most.
         reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
         return;
     }

@@ -211,6 +211,11 @@ SettingsFlickable {
 
     onGroupByIndexChanged: root._syncGroupSortBar()
     onSortByIndexChanged: root._syncGroupSortBar()
+    // The option lists themselves change shape when the type axis appears, and a
+    // ComboBox silently resets currentIndex to 0 on a model change. Re-point it,
+    // or the bar shows Name while the page is still sorting by Category.
+    on_GroupOptionsChanged: root._syncGroupSortBar()
+    on_SortOptionsChanged: root._syncGroupSortBar()
     // ── Derived: category index (sorted, with counts) ───────────────────
     readonly property var _allCategories: {
         var counts = {};
@@ -440,6 +445,11 @@ SettingsFlickable {
             description: root.userShadersDescription
             idleText: root.dropZoneIdleText
             hoverText: root.dropZoneHoverText
+            // A shader pack is a FOLDER, unlike the single-file set import.
+            idleIcon: "folder-download"
+            hoverIcon: "folder-add"
+            iconSize: Kirigami.Units.iconSizes.large
+            dropZoneHeight: Kirigami.Units.gridUnit * 5
             importFn: url => root.bridge ? root.bridge.installShaderPack(url) : false
             openFolderFn: root.bridge ? () => root.bridge.openUserShaderDirectory() : null
             openFolderAccessibleName: i18n("Open user shader directory")
@@ -539,8 +549,16 @@ SettingsFlickable {
             // groupByIndex / sortByIndex / sortAscending properties, and reading
             // those here instead of the bar's would be a silent no-op.
             onChanged: {
-                root._preferredGroupId = (root._groupOptions[groupSortBar.groupByIndex] || root._groupOptions[0]).id;
-                root._preferredSortId = (root._sortOptions[groupSortBar.sortByIndex] || root._sortOptions[0]).id;
+                // Adopt only what the user actually moved. Rewriting both ids
+                // unconditionally would overwrite a remembered Type choice with
+                // whatever fallback the combo is showing while the axis is
+                // hidden, which is the very thing storing ids protects against.
+                if (groupSortBar.groupByIndex !== root.groupByIndex)
+                    root._preferredGroupId = (root._groupOptions[groupSortBar.groupByIndex] || root._groupOptions[0]).id;
+
+                if (groupSortBar.sortByIndex !== root.sortByIndex)
+                    root._preferredSortId = (root._sortOptions[groupSortBar.sortByIndex] || root._sortOptions[0]).id;
+
                 root.sortAscending = groupSortBar.sortAscending;
                 root._savePrefs();
             }

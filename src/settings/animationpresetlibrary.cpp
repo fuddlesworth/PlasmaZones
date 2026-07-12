@@ -161,6 +161,12 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
         return false;
     }
 
+    // Re-saving a preset with byte-identical content puts the file back exactly
+    // as it was, so the snapshot it staged is a phantom. The rollback declines
+    // unless disk really still matches, so this is safe for a real edit.
+    if (m_rollback)
+        m_rollback(filePath);
+
     Q_EMIT userPresetsChanged();
     Q_EMIT pendingChangesChanged();
     return true;

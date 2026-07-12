@@ -196,10 +196,13 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // user undid an edit by hand). The staged snapshot is then a phantom: disk
     // already holds what Discard would write back, so keeping it would leave the
     // page dirty forever with nothing to restore.
-    dropFileSnapshotIfUnchanged(filePath);
+    //
+    // The drop owns the signal for the transition it causes, so the compare below
+    // must not fire again for the same flip.
+    const bool dropped = dropFileSnapshotIfUnchanged(filePath);
     const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
-    if (wasPending != nowPending)
+    if (!dropped && wasPending != nowPending)
         Q_EMIT pendingChangesChanged();
     return true;
 }
@@ -238,11 +241,11 @@ bool AnimationsPageController::clearOverride(const QString& path)
     // Deleting a file that did not exist before this session's edits returns it
     // to its pre-edit state (the snapshot is `nullopt` = "was absent"), so the
     // staged entry is a phantom and has to go, or the page stays dirty with
-    // nothing to discard.
-    dropFileSnapshotIfUnchanged(filePath);
+    // nothing to discard. The drop owns the signal for that flip (see setOverride).
+    const bool dropped = dropFileSnapshotIfUnchanged(filePath);
     const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
-    if (wasPending != nowPending)
+    if (!dropped && wasPending != nowPending)
         Q_EMIT pendingChangesChanged();
     return true;
 }

@@ -3,7 +3,7 @@
 
 // Shader-leg methods for AnimationsPageController:
 //   * Available-shader enumeration (availableShaderEffects,
-//     availableShaderEffectsForPath, shaderEffectInfo, shaderParameters,
+//     availableShaderEffectsForPath, shaderParameters,
 //     supportsShaderLeg).
 //   * User shader directory + shader-pack install
 //     (userShaderDirectoryPath, openUserShaderDirectory, installShaderPack).
@@ -128,13 +128,6 @@ QVariantList AnimationsPageController::availableShaderEffectsForPath(const QStri
         result.append(m);
     }
     return result;
-}
-
-QVariantMap AnimationsPageController::shaderEffectInfo(const QString& effectId) const
-{
-    if (!m_shaderRegistry || effectId.isEmpty() || !m_shaderRegistry->hasEffect(effectId))
-        return {};
-    return effectToMap(m_shaderRegistry->effect(effectId));
 }
 
 QVariantList AnimationsPageController::shaderParameters(const QString& effectId) const
