@@ -377,8 +377,14 @@ ColumnLayout {
                             // the pill kicked in.
                             Layout.minimumWidth: paramRow.index === 0 ? Kirigami.Units.gridUnit * 8 : 0
                             text: paramRow.modelData.label
-                            font.capitalization: Font.AllUppercase
-                            font: Kirigami.Theme.smallFont
+                            // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                            // illegal duplicate binding that fails the whole document.
+                            font: Qt.font({
+                                family: Kirigami.Theme.smallFont.family,
+                                pointSize: Kirigami.Theme.smallFont.pointSize,
+                                pixelSize: Kirigami.Theme.smallFont.pixelSize,
+                                capitalization: Font.AllUppercase
+                            })
                             opacity: 0.55
                         }
 

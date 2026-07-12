@@ -9427,7 +9427,7 @@ Seitenverhältnis: %3</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/animationspagecontroller.cpp" line="573"/>
-        <source>Failed to restore %n profile file(s). They remain pending.</source>
+        <source>Failed to restore %n profile file. It remains pending.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
             <numerusform></numerusform>
@@ -9869,7 +9869,7 @@ Seitenverhältnis: %3</translation>
     </message>
     <message>
         <location filename="../src/settings/animationpresetlibrary.cpp" line="130"/>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="198"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="199"/>
         <source>A preset needs a name.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9886,13 +9886,13 @@ Seitenverhältnis: %3</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="249"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="253"/>
         <source>Could not find the preset &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="257"/>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="267"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="261"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="271"/>
         <source>Could not delete the preset &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>

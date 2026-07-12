@@ -19,6 +19,7 @@
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLatin1Char>
@@ -172,11 +173,24 @@ inline QVariantMap profileToVariantMap(const PhosphorAnimation::Profile& profile
 /// file / parse error / non-object root. The `name` field is stripped so
 /// the returned map matches the QML-facing Profile shape. Parse errors
 /// are logged so silent corruption surfaces in journalctl.
+/// Ceiling on one profile file read. Shared by every reader of the
+/// hand-editable profiles dir; matches the snapshot and preset caps.
+constexpr qint64 kMaxProfileReadBytes = 4 * 1024 * 1024;
+
 inline QJsonObject readProfileJson(const QString& path)
 {
-    QFile file(path);
-    if (!file.exists())
+    const QFileInfo info(path);
+    if (!info.exists())
         return {};
+    // A regular file under the cap, or nothing: this runs per card rebind on the
+    // GUI thread, and the directory is a filesystem boundary a user can
+    // hand-place anything at.
+    if (!info.isFile() || info.size() > kMaxProfileReadBytes) {
+        qCWarning(lcConfig) << "AnimationsPageController: skipping" << path
+                            << "— not a regular file, or over the size cap";
+        return {};
+    }
+    QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         qCWarning(lcConfig) << "AnimationsPageController: cannot open profile" << path;
         return {};

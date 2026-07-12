@@ -519,8 +519,14 @@ ColumnLayout {
                         // since font.capitalization can't selectively
                         // upper-case only the first word.
                         text: delegate.kind === "all" ? i18nc("Match-tree group where every child must match", "ALL of") : delegate.kind === "any" ? i18nc("Match-tree group where at least one child must match", "ANY of") : i18nc("Match-tree group where no child may match", "NONE of")
-                        font.bold: true
-                        font: Kirigami.Theme.smallFont
+                        // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                        // illegal duplicate binding that fails the whole document.
+                        font: Qt.font({
+                            family: Kirigami.Theme.smallFont.family,
+                            pointSize: Kirigami.Theme.smallFont.pointSize,
+                            pixelSize: Kirigami.Theme.smallFont.pixelSize,
+                            bold: true
+                        })
                         // Foreground textColor guarantees high contrast
                         // against the tinted pill fill on every theme.
                         color: Kirigami.Theme.textColor
@@ -578,8 +584,14 @@ ColumnLayout {
                         Layout.alignment: Qt.AlignVCenter
                         Layout.minimumWidth: Kirigami.Units.gridUnit * 8
                         text: root._opLabel(delegate.fieldWire, delegate.opWire)
-                        font.capitalization: Font.AllUppercase
-                        font: Kirigami.Theme.smallFont
+                        // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                        // illegal duplicate binding that fails the whole document.
+                        font: Qt.font({
+                            family: Kirigami.Theme.smallFont.family,
+                            pointSize: Kirigami.Theme.smallFont.pointSize,
+                            pixelSize: Kirigami.Theme.smallFont.pixelSize,
+                            capitalization: Font.AllUppercase
+                        })
                         opacity: 0.55
                     }
 

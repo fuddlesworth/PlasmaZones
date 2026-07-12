@@ -9,7 +9,7 @@
 // Group covers:
 //   * Path derivation (userProfilesDir / profileFilePath / userMotionSetsDir)
 //   * Existence + read (hasOverride / rawProfile / resolvedProfile)
-//   * Write + clear (setOverride / clearOverride)
+//   * Write + clear (setOverride / clearOverride / clearAllOverrides)
 //
 // Sibling _shaders.cpp owns the shader-tree side; the main TU owns
 // pending-changes tracking, async-revert, and the section catalog.

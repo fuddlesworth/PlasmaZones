@@ -313,8 +313,14 @@ Kirigami.Dialog {
                                 return parts.join(" · ");
                             }
                             color: Kirigami.Theme.disabledTextColor
-                            font.italic: true
-                            font: Kirigami.Theme.smallFont
+                            // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                            // illegal duplicate binding that fails the whole document.
+                            font: Qt.font({
+                                family: Kirigami.Theme.smallFont.family,
+                                pointSize: Kirigami.Theme.smallFont.pointSize,
+                                pixelSize: Kirigami.Theme.smallFont.pixelSize,
+                                italic: true
+                            })
                             elide: Text.ElideRight
                         }
                     }

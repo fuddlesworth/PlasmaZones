@@ -209,8 +209,8 @@ public:
     /// The decoration-set store — the `bridge` ShaderSetsPage binds to.
     /// Named snapshots of the decoration profile tree, persisted as JSON
     /// under ~/.local/share/plasmazones/decorationsets/<slug>.json.
-    /// Applying merges: the baseline (when the set captured one) and every
-    /// entry replace the DIRECT profile at their path; surfaces the set
+    /// Applying merges: every entry replaces the DIRECT profile at its
+    /// path; surfaces the set
     /// does not cover keep their current overrides. APPLYING a set writes
     /// through ISettings::setDecorationProfileTree, so that write rides the
     /// normal dirty / apply / discard staging flow. The set FILES themselves

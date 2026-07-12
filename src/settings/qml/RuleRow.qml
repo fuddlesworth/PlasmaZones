@@ -108,9 +108,15 @@ ExpandableRowDelegate {
             id: pillLabel
 
             anchors.centerIn: parent
-            font.bold: true
-            font.capitalization: Font.AllUppercase
-            font: Kirigami.Theme.smallFont
+            // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+            // illegal duplicate binding that fails the whole document.
+            font: Qt.font({
+                family: Kirigami.Theme.smallFont.family,
+                pointSize: Kirigami.Theme.smallFont.pointSize,
+                pixelSize: Kirigami.Theme.smallFont.pixelSize,
+                bold: true,
+                capitalization: Font.AllUppercase
+            })
             color: Kirigami.Theme.textColor
         }
     }

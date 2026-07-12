@@ -6,8 +6,8 @@ import QtQuick
 /**
  * @brief Decoration → Library → Decoration Sets.
  *
- * A decoration set is a snapshot of the decoration profile tree (the
- * baseline plus every per-surface override) persisted as one JSON file under
+ * A decoration set is a snapshot of the decoration profile tree (every
+ * per-surface override) persisted as one JSON file under
  * `~/.local/share/plasmazones/decorationsets/<slug>.json`. Applying a set
  * merges: surfaces it covers are replaced, surfaces it does not cover keep
  * their current chains.
@@ -21,7 +21,7 @@ ShaderSetsPage {
     savedAnchor: "savedDecorationSets"
 
     infoBannerText: i18n("Decoration sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn't cover are left unchanged.")
-    saveDescription: i18n("Capture the baseline and every per-surface override as a named decoration set.")
+    saveDescription: i18n("Capture every per-surface override as a named decoration set.")
     importDescription: i18n("Decoration sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.")
     emptyStateText: i18n("No decoration sets saved yet.")
     nameFieldAccessibleName: i18n("Decoration set name")

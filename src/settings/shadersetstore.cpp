@@ -333,7 +333,7 @@ QVariantList ShaderSetStore::availableSets() const
         row.insert(QLatin1String("description"), root.value(kDescriptionKey).toString());
         row.insert(QLatin1String("slug"), info.completeBaseName());
         row.insert(QLatin1String("coverage"), sections);
-        // The baseline counts as one covered surface in the summary.
+        // One entry per covered path.
         row.insert(QLatin1String("coverageCount"), root.value(kOverridesKey).toArray().size());
         row.insert(QLatin1String("active"), payloadContainedIn(root, live));
         // File mtime, for the row's "Updated …" line.

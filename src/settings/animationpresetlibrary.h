@@ -34,7 +34,10 @@ public:
     /// taken for failed, so the page does not report an unsaved change to a
     /// file nothing touched. Same contract as
     /// ShaderSetStore::FileSnapshotRollbackFn.
-    using SnapshotRollbackFn = std::function<void(const QString& /*filePath*/)>;
+    /// @return true when the staged entry was really dropped (the callable owns
+    /// the pendingChangesChanged for that transition, so the caller must not
+    /// emit again for it).
+    using SnapshotRollbackFn = std::function<bool(const QString& /*filePath*/)>;
 
     explicit AnimationPresetLibrary(ProfilesDirFn profilesDirFn, SnapshotFn snapshot, SnapshotRollbackFn rollback,
                                     QObject* parent = nullptr);

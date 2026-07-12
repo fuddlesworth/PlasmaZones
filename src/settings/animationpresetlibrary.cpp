@@ -181,12 +181,13 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
 
     // Re-saving a preset with byte-identical content puts the file back exactly
     // as it was, so the snapshot it staged is a phantom. The rollback declines
-    // unless disk really still matches, so this is safe for a real edit.
-    if (m_rollback)
-        m_rollback(filePath);
+    // unless disk really still matches, so this is safe for a real edit. It owns
+    // the pendingChangesChanged for a drop, so only emit here when it declined.
+    const bool dropped = m_rollback && m_rollback(filePath);
 
     Q_EMIT userPresetsChanged();
-    Q_EMIT pendingChangesChanged();
+    if (!dropped)
+        Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -231,6 +232,9 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
             // deleted here (the original bug).
             if (knownPathSet.contains(info.completeBaseName()))
                 continue;
+            // Same boundary as userPresets(): hand-editable dir, GUI thread.
+            if (!info.isFile() || info.size() > kMaxPresetFileBytes)
+                continue;
             QFile raw(info.absoluteFilePath());
             if (!raw.open(QIODevice::ReadOnly))
                 continue;
@@ -271,12 +275,13 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
     // Deleting a preset created earlier in this session puts disk back exactly as
     // it started, so the staged snapshot is a phantom. The rollback declines
     // unless disk really still matches the stage, so deleting a PRE-EXISTING
-    // preset keeps its snapshot as Discard's way back.
-    if (m_rollback)
-        m_rollback(filePath);
+    // preset keeps its snapshot as Discard's way back. It owns the signal for a
+    // drop, so only emit here when it declined.
+    const bool dropped = m_rollback && m_rollback(filePath);
 
     Q_EMIT userPresetsChanged();
-    Q_EMIT pendingChangesChanged();
+    if (!dropped)
+        Q_EMIT pendingChangesChanged();
     return true;
 }
 

@@ -108,8 +108,8 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     // report unsaved changes with nothing to discard. This drops that entry
     // again — but only when the file on disk still matches what was staged, so
     // a snapshot covering an EARLIER edit that did land is never thrown away.
-    auto snapshotRollbackFn = [this](const QString& filePath) {
-        dropFileSnapshotIfUnchanged(filePath);
+    auto snapshotRollbackFn = [this](const QString& filePath) -> bool {
+        return dropFileSnapshotIfUnchanged(filePath);
     };
     auto profilesDirFn = [this]() {
         return userProfilesDir();
@@ -570,7 +570,7 @@ void AnimationsPageController::asyncRevertPending()
             // re-opens together with the flag clear.
             const QString errorMsg = result.retained.isEmpty()
                 ? QString()
-                : PhosphorI18n::tr("Failed to restore %n profile file(s). They remain pending.", nullptr,
+                : PhosphorI18n::tr("Failed to restore %n profile file. It remains pending.", nullptr,
                                    static_cast<int>(result.retained.size()));
             Q_EMIT discardResult(result.retained.isEmpty(), errorMsg);
             m_asyncRevertInFlight = false;

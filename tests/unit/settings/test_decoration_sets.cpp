@@ -13,29 +13,19 @@
  * A decoration set is every per-surface override, captured
  * as one JSON file under `<GenericDataLocation>/plasmazones/decorationsets`.
  * Pinned behaviour:
- *   - save / list / apply / remove round-trip, with apply MERGING (surfaces
- *     the set does not cover keep their current chains)
- *   - `active` is a CONTAINMENT check, not equality: a set stays active while
- *     unrelated overrides exist, because apply would have left them alone
- *   - a live edit made anywhere else refreshes the rows, and a burst of edits
- *     collapses into exactly one refresh (the store coalesces the notify)
- *   - updateSet renames and edits the description in one write, refusing a
- *     collision rather than destroying the other set
- *   - saveCurrentAsSet refuses an UNCONFIRMED overwrite (decoration has no
- *     file-snapshot hook, so it would be unrecoverable) but honours a
- *     confirmed one, which is how the user re-points a set at a new look
- *   - saving nothing, and saving under an empty name, are refused
- *   - export / import round-trip, including the file:// URL form the drop
- *     zone hands over, with a colliding import landing under a free name
- *   - the version gate refuses a newer, a non-numeric, and a non-integral
- *     version; import refuses an empty set and one over the read size cap
- *   - import and apply validate against the surface taxonomy, rejecting a
- *     whole set atomically on any unknown path, and apply toasts each failure
- *     reachable here (QML fires and forgets it)
+ *   - Save / list / apply / remove round-trip, with apply MERGING (surfaces the
+ *     set does not cover keep their current chains)
+ *   - `active` is a CONTAINMENT check that survives unrelated live overrides
+ *   - updateSet round-trips a rename plus description, and export/import
+ *     round-trips a set through a file
+ *   - Live edits refresh the rows through ONE coalesced setsChanged
+ *
+ * The refusal paths (validation, version gate, name rules, overwrite consent)
+ * are pinned in test_decoration_sets_validation.cpp.
  *
  * Settings is a TreeStubSettings: a StubSettings that actually stores the tree
- * and emits decorationProfileTreeChanged, so the controller's
- * read-mutate-write loop round-trips without the real PhosphorConfig::Store.
+ * and emits decorationProfileTreeChanged, so the controller's read-mutate-write
+ * loop round-trips without the real PhosphorConfig::Store.
  */
 
 #include <QRegularExpression>

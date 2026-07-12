@@ -179,8 +179,7 @@ ExpandableRowDelegate {
                 text: i18n("Edit…")
                 icon.name: "document-edit"
                 onTriggered: row._openDialog(editDialogLoader, function (dlg) {
-                    dlg.nameText = row.setName;
-                    dlg.descText = row.modelData.description ?? "";
+                    dlg.seed(row.setName, row.modelData.description ?? "");
                 })
             }
 
@@ -264,10 +263,16 @@ ExpandableRowDelegate {
         sourceComponent: Kirigami.PromptDialog {
             id: editDialog
 
-            /// Seeded by _openDialog before open(): the Loader's item does not
-            /// exist until then, so the row cannot reach the fields directly.
-            property string nameText: ""
-            property string descText: ""
+            /// Seed the fields for this open. IMPERATIVE on purpose: the dialog
+            /// item persists across opens (the Loader stays active), and typing
+            /// breaks a TextField's `text:` binding for good, so a
+            /// binding-through-property seed would silently stop reaching the
+            /// fields from the second open on. An imperative write lands
+            /// regardless of the binding's state.
+            function seed(name, description) {
+                editNameField.text = name;
+                editDescField.text = description;
+            }
             /// True when the typed name is one updateSet will actually accept.
             /// Gates BOTH the Ok button and the Enter key: Ok is AcceptRole and
             /// Kirigami.Dialog.accept() does not consult the button box, so a name
@@ -301,7 +306,6 @@ ExpandableRowDelegate {
                     id: editNameField
 
                     Layout.fillWidth: true
-                    text: editDialog.nameText
                     placeholderText: i18n("Set name…")
                     Accessible.name: i18n("Set name")
                     onAccepted: if (editDialog.nameUsable)
@@ -312,7 +316,6 @@ ExpandableRowDelegate {
                     id: editDescField
 
                     Layout.fillWidth: true
-                    text: editDialog.descText
                     placeholderText: i18n("Description (optional)…")
                     Accessible.name: i18n("Set description")
                     onAccepted: if (editDialog.nameUsable)

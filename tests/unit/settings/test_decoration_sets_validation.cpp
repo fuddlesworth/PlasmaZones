@@ -168,6 +168,11 @@ private Q_SLOTS:
         root.insert(QStringLiteral("overrides"), QStringLiteral("not an array"));
         writeSetFile(decorationSetsDir() + QStringLiteral("/bent.json"), root);
 
+        // Pin the BRANCH, not just the outcome: with the guard deleted, a
+        // non-array overrides reads as an empty array and the empty-set
+        // rejection produces an identical false. The unmatched ignoreMessage
+        // is what fails this test if the guard goes away.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("overrides are not an array")));
         QVERIFY2(!sets->applySet(QStringLiteral("bent")),
                  "a malformed overrides field must refuse the whole set, not read as no overrides");
     }

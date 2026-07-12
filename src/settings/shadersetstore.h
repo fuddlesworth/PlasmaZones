@@ -28,8 +28,8 @@ namespace PlasmaZones {
 /// Both domains happen to serialise the SAME envelope:
 /// ```
 /// { "name": …, "description": …, "version": 1,
-///   "baseline": { … },                       // optional (decoration only)
 ///   "overrides": [ { "path": …, "profile": { … } }, … ] }
+/// (a "baseline" key is REFUSED by both domains — see carriesBaseline())
 /// ```
 /// so coverage (which root sections a set touches) and active-detection are
 /// computed generically here rather than per domain.
@@ -46,8 +46,8 @@ public:
     /// Capture the current live state as a set payload (the envelope above,
     /// minus name/description/version — the store stamps those). Must be
     /// deterministic: it is compared against saved payloads to decide which
-    /// set is active. A payload carrying neither a baseline nor any override
-    /// means "nothing to save", and the save is refused.
+    /// set is active. A payload carrying no overrides means "nothing to
+    /// save", and the save is refused.
     using SnapshotFn = std::function<QJsonObject()>;
 
     /// Validate a parsed set payload against the domain's path taxonomy.

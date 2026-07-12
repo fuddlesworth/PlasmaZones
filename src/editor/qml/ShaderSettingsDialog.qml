@@ -478,7 +478,7 @@ Kirigami.Dialog {
                     elide: Text.ElideRight
                     maximumLineCount: 3
                     opacity: (root.currentShaderInfo && root.currentShaderInfo.description) ? 0.8 : 0.5
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font: Kirigami.Theme.smallFont
                     font.italic: !(root.currentShaderInfo && root.currentShaderInfo.description)
                     verticalAlignment: Text.AlignTop
                 }
@@ -505,7 +505,7 @@ Kirigami.Dialog {
                     }
                     elide: Text.ElideRight
                     opacity: 0.5
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font: Kirigami.Theme.smallFont
                     font.italic: true
                 }
             }
