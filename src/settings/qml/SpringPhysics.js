@@ -44,16 +44,22 @@ function evaluate(t, stiffness, dampingRatio, initialVelocity) {
     var zeta = Math.max(0, Math.min(10, dampingRatio));
     var v0 = initialVelocity || 0;
 
-    if (zeta < 1) {
+    // Critical band FIRST, and 1e-3 to match C++ Spring::CriticalDampingEpsilon
+    // (spring.cpp) and this file's own estimateSettleTime critBand. The C++ side
+    // routes zeta within 1e-3 of 1.0 into the critical branch BEFORE the
+    // underdamped test, so the order here must match or zeta = 0.9995 would pick
+    // a different damping regime in the preview than in the compositor (and the
+    // underdamped omegaD division turns ill-conditioned that close to 1).
+    if (Math.abs(zeta - 1) < 1e-3) {
+        // Critically damped: fastest without oscillation
+        var decayCrit = Math.exp(-omega * t);
+        return 1 - decayCrit * (1 + (omega - v0) * t);
+    } else if (zeta < 1) {
         // Underdamped: oscillates
         var omegaD = omega * Math.sqrt(1 - zeta * zeta);
         var decay = Math.exp(-zeta * omega * t);
         var sinTerm = (zeta * omega - v0) / omegaD;
         return 1 - decay * (Math.cos(omegaD * t) + sinTerm * Math.sin(omegaD * t));
-    } else if (Math.abs(zeta - 1) < 1e-9) {
-        // Critically damped: fastest without oscillation
-        var decayCrit = Math.exp(-omega * t);
-        return 1 - decayCrit * (1 + (omega - v0) * t);
     } else {
         // Overdamped: no oscillation, slower
         var disc = Math.sqrt(zeta * zeta - 1);

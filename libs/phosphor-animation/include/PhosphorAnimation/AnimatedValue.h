@@ -329,7 +329,14 @@ public:
             if (m_spec.maxLifetimeMs) {
                 lifetimeMs = qMin(lifetimeMs, static_cast<qreal>(*m_spec.maxLifetimeMs));
             }
-            if (m_state.value >= 1.0 && qAbs(m_state.velocity) <= 1.0e-6) {
+            // AT the target, not merely past it: `value >= 1.0` alone is also true
+            // at an overshoot CREST (displaced past the target with the velocity
+            // instantaneously ~0), and completing there would snap the window back
+            // mid-bounce. The real completion path is step()'s convergence lock,
+            // which snaps value to EXACTLY the target once |error| < 1e-4 — so
+            // requiring the value to be at the target costs nothing on the settle
+            // path and closes the crest hole.
+            if (qAbs(m_state.value - 1.0) <= 1.0e-6 && qAbs(m_state.velocity) <= 1.0e-6) {
                 complete = true;
             } else if (lifetimeMs > 0.0 && std::isfinite(lifetimeMs) && elapsedMs >= lifetimeMs) {
                 complete = true;

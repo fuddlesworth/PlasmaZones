@@ -261,9 +261,11 @@ private Q_SLOTS:
         QCOMPARE(fresh.velocity, 0.0);
     }
 
-    // A frame hitch (suspend/resume, VT switch) must not blow the semi-implicit
-    // Euler integrator up: the dt is capped at MaxShaderTimeDeltaSeconds, so a
-    // minute-long stall advances the spring no further than a 100 ms frame.
+    // A frame hitch (suspend/resume, VT switch) must not teleport the spring:
+    // Spring::step is an exact exponential integrator, unconditionally stable at
+    // any dt, so the cap on MaxShaderTimeDeltaSeconds bounds how far a stall
+    // JUMPS, not whether the integrator survives it — a minute-long stall
+    // advances the spring no further than a 100 ms frame.
     //
     // Compared with a tolerance rather than exactly: the cap is a `float`
     // (0.1f), so the stalled path integrates the float-promoted

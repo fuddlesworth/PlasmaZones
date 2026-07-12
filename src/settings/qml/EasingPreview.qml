@@ -11,7 +11,7 @@ import org.kde.kirigami as Kirigami
  * @brief Easing curve editor with draggable control points and named curve support
  *
  * Supports cubic bezier (interactive drag handles), elastic, and bounce curves.
- * Bezier: "x1,y1,x2,y2", Named: "elastic-out:1.0,0.3" or "bounce-out".
+ * Bezier: "x1,y1,x2,y2", Named: "elastic-out:1.40,0.30" or "bounce-out".
  * Detection: if string contains a letter -> named curve; otherwise -> bezier.
  */
 Item {

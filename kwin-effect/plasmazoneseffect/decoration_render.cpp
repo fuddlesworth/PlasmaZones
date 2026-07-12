@@ -525,10 +525,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                     // fully opaque and silently drop its SetOpacity rule. Falling
                     // back to modulation is exactly the "no pack owns the alpha"
                     // regime. See SurfaceMultipassState::handledOpacity.
-                    bool foldOwnsOpacity = false;
-                    if (const auto foIt = m_surfaceMultipass.find(getWindowId(w)); foIt != m_surfaceMultipass.end()) {
-                        foldOwnsOpacity = foIt->second.handledOpacity;
-                    }
+                    const bool foldOwnsOpacity = stateIt->second.handledOpacity;
                     if (!foldOwnsOpacity) {
                         qreal resolved = bit->ruleOpacity;
                         if (m_shaderManager.frameOpacityCached(w)) {

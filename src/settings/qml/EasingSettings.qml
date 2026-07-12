@@ -327,7 +327,12 @@ ColumnLayout {
             }
             onMoved: value => {
                 var ct = easingRoot.easingPreview.curveType;
-                var amp = easingRoot.easingPreview.curveAmplitude.toFixed(2);
+                // Re-clamp the amplitude against the NEW period before composing
+                // the string: elastic's amplitude floor moves with the period
+                // (minElasticPeak), so shortening the period can strand the old
+                // amplitude below what the curve can produce. C++ fromString
+                // clamps identically on read, but stored must equal used.
+                var amp = Easing.clampAmplitude(true, easingRoot.easingPreview.curveAmplitude, value).toFixed(2);
                 easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + value.toFixed(2);
             }
         }

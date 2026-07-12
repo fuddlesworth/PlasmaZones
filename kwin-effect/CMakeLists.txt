@@ -70,6 +70,8 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/shader_resolve.cpp
     plasmazoneseffect/shader_resolve.h
     plasmazoneseffect/shader_internal.h
+    plasmazoneseffect/surface_types.h
+    plasmazoneseffect/transition_types.h
     plasmazoneseffect/types.h
     shadertransitionmanager.h
     shadertransitionmanager.cpp

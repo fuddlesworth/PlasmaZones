@@ -1405,9 +1405,12 @@ private:
     ///   (b) Pre-commit short-circuit — install short-circuited before
     ///       any state was committed: empty effectId / null window,
     ///       global animations toggle off, collapsed/minimised surface,
-    ///       registry miss, shader file open / read / include-expansion
-    ///       failure, or shader compile failure. Nothing was installed,
-    ///       so there is nothing to schedule a teardown for either.
+    ///       registry miss, a desktop-class pack refused on a window
+    ///       event, the cached null-shader sentinel from a prior compile
+    ///       failure, shader file open / read / include-expansion
+    ///       failure, shader compile failure, or the transition-map
+    ///       insert being rejected. Nothing was installed, so there is
+    ///       nothing to schedule a teardown for either.
     ///
     /// Both cases are correctly handled by `tryBeginShaderForEvent`'s
     /// "skip the timer" branch. A future caller writing a manual install

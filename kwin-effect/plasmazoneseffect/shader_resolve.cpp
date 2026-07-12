@@ -151,10 +151,13 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorRules::Ru
     if (timingAction) {
         const int durationMs = timingAction->params.value(ActionParam::DurationMs).toInt(0);
         if (durationMs > 0) {
-            // The ONE place the Rule timing slot is read and clamped. Both legs of
-            // a user-facing timing rule — the animator's geometry animation and the
+            // The ONE place the Rule timing slot is READ. Both legs of a
+            // user-facing timing rule — the animator's geometry animation and the
             // shader transition — take their duration from this result, so they
-            // cannot drift apart.
+            // cannot drift apart. The clamp here bounds the rule's own value;
+            // resolveEventMotionProfile re-clamps the MERGED profile afterwards
+            // (idempotent for this path — that clamp exists for the motion-tree
+            // path, which reaches it unbounded).
             out.duration = static_cast<qreal>(qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, durationMs,
                                                      PhosphorAnimation::Limits::MaxAnimationDurationMs));
         }

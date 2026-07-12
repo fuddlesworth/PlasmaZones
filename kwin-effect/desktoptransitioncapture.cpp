@@ -160,6 +160,14 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
             // third-party paintWindow hook that keys off that state would be driven
             // with none. Our paintWindow explicitly tolerates the missing
             // prePaintWindow (it falls back to a live opacity resolve).
+            //
+            // Stepping an in-flight transition's spring here is safe. Within a
+            // frame it cannot double-step: paintWindow's dt comes from the frame
+            // clock pinned in prePaintScreen, and the first step of a frame
+            // stamps lastPaintTimeMs to that same pinned value, so a second call
+            // sees dt = 0. Across frames an extra step is a no-op by
+            // construction: Spring::step is an exact exponential integrator, so
+            // step(a) then step(b) lands bit-for-bit where step(a+b) does.
             m_effect->paintWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
         }
 

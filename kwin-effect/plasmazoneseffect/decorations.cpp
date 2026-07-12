@@ -439,7 +439,6 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
     int outerPadding = 0;
     bool needsBackdrop = false;
-    bool handlesOpacity = false;
     for (const QString& packId : std::as_const(chain)) {
         const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
         if (!eff.isValid()) {
@@ -447,8 +446,10 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         }
         // Any needsBackdrop pack in the chain switches the window onto the
         // composite path with a per-frame backdrop capture (see paintWindow).
+        // handlesOpacity is deliberately NOT accumulated here: opacity authority
+        // is decided per-frame by what the fold actually applied
+        // (SurfaceMultipassState::handledOpacity), never by chain metadata.
         needsBackdrop = needsBackdrop || eff.needsBackdrop;
-        handlesOpacity = handlesOpacity || eff.handlesOpacity;
         const QVariantMap packOverrides = allPackParams.value(packId).toMap();
         wb.packParamValues.insert(packId, ShaderInternal::resolveSurfaceParamValues(eff, packOverrides));
 

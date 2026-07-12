@@ -1806,7 +1806,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // We may stamp when `installed` is false, but ONLY for the same-effect
     // short-circuit — where the live leg genuinely IS the pack this event resolved
     // (a pack whose `appliesTo` admits both "move" and another class can already be
-    // running for that other event). `beginShaderTransition` returns false from nine
+    // running for that other event). `beginShaderTransition` returns false from many
     // other places — compile failure, the cached null-shader sentinel, a registry
     // miss, a refused pack, a collapsed surface — and in EVERY one of those the live
     // leg is something else entirely, most reachably the `window.focus` leg the click

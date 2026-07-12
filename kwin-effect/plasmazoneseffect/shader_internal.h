@@ -208,14 +208,15 @@ inline QVector4D computeTextureSubRect(const QRectF& inner, const QRectF& outer)
 /// rings out under the paint pass's per-frame step() instead of being cut at
 /// the easing duration.
 ///
-/// Every result is clamped into the animation envelope. Both callers now feed an
+/// Every result is clamped into the animation envelope. All three callers (the
+/// animator's lifetime, the per-window shader leg, and the desktop switch) feed an
 /// already-clamped nominal (resolveEventMotionProfile bounds the motion cascade's
 /// duration at the source), so for a STATELESS curve this qBound is idempotent.
 /// It stays load-bearing for the SPRING path, whose settleTime() is derived from
 /// the curve's physics and is bounded by nothing upstream — and it keeps the
 /// helper correct for any future caller that hands it a raw tree duration.
 ///
-/// Consequence at parity across both callers: a spring whose settleTime() exceeds
+/// Consequence at parity across all callers: a spring whose settleTime() exceeds
 /// the max is CUT, and for a very soft one that means cut before it visibly
 /// starts, not merely mid-ring. `omega=0.1, zeta=0.1` settles in 530 s, floored to
 /// Spring::MaxSettleSeconds (30 s) and then clamped to 2 s here — at which point

@@ -96,10 +96,10 @@ ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEva
  * Returns @p base with its `curve` / `duration` replaced when a timing rule
  * fills the `anim-timing:<eventPath>` slot. A non-empty curve is parsed via
  * @p curveRegistry's `tryCreate` (a malformed curve keeps the base curve); a
- * `durationMs > 0` overrides the duration, clamped identically to
- * `resolveAnimationShaderProfile`. A windowless @p query
- * (`hasWindow()` false) or empty @p eventPath, or no matching rule, returns
- * @p base unchanged.
+ * `durationMs > 0` overrides the duration, clamped into the animation envelope
+ * `[Limits::MinAnimationDurationMs, Limits::MaxAnimationDurationMs]`. A
+ * windowless @p query (`hasWindow()` false) or empty @p eventPath, or no
+ * matching rule, returns @p base unchanged.
  *
  * @p windowId routes the lookup through the evaluator's per-window match
  * cache so the curve / timing / shader resolvers share their walks. Pass
