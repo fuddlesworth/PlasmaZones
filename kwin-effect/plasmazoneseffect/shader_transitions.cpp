@@ -1746,19 +1746,21 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // `durationMs <= 0` guard at the top of `tryBeginShaderForEvent`
     // rejects non-positive inputs, so `durationMs` here is a safe
     // positive floor.
-    const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
-        m_shaderManager.animationRuleEvaluator(), profileTree, windowId, query, profilePath, baseDurationMs);
+    const auto resolved = PlasmaZones::resolveAnimationShaderProfile(m_shaderManager.animationRuleEvaluator(),
+                                                                     profileTree, windowId, query, profilePath);
     const auto& profile = resolved.profile;
-    int effectiveDurationMs = resolved.durationMs;
+    // The duration comes from the motion cascade ALONE. resolveEventMotionProfile
+    // already applied the Rule timing slot and clamped the result into the
+    // envelope, so there is exactly one read and one clamp of that slot; the shader
+    // resolver deliberately no longer re-reads it.
+    int effectiveDurationMs = baseDurationMs;
     if (effectiveDurationMs <= 0) {
         effectiveDurationMs = durationMs;
     }
-    // Spring lifetime + envelope clamp, shared with the desktop switch. The Rule
-    // layer clamps its OWN candidate, but the motion-tree / global feed reaches
-    // here unclamped (resolveAnimationShaderAndDuration passes defaultDurationMs
-    // straight through) — see resolveTransitionLifetimeMs for why that matters.
-    // The result drives BOTH the paint active-window and the teardown timer
-    // below, so the two stay in lockstep.
+    // Spring lifetime, shared with the desktop switch: a stateful curve derives its
+    // own lifetime from settleTime() and ignores the duration entirely. The result
+    // drives BOTH the paint active-window and the teardown timer below, so the two
+    // stay in lockstep.
     effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(effectiveDurationMs, progressCurve.get());
     if (profile.effectiveEffectId().isEmpty()) {
         // Default-state path: a fresh user with no shader overrides

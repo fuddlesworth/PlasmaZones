@@ -76,10 +76,9 @@ namespace PlasmaZones {
  *    `[Min, Max]AnimationDurationMs`. `durationMs <= 0` ("inherit" sentinel)
  *    or no rule → @p defaultDurationMs.
  */
-struct ResolvedShaderAndDuration
+struct ResolvedShaderProfile
 {
     PhosphorAnimationShaders::ShaderProfile profile;
-    int durationMs;
     /// True when a window RULE filled the shader slot (verbatim, including an
     /// engaged-empty "None" sentinel). False when the profile came from the
     /// tree / baseline. Callers that apply a built-in per-event default must
@@ -87,11 +86,18 @@ struct ResolvedShaderAndDuration
     /// opt-out, so the default only applies when no rule matched.
     bool shaderSlotFromRule = false;
 };
-ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorRules::RuleEvaluator& evaluator,
-                                                            const PhosphorAnimationShaders::ShaderProfileTree& tree,
-                                                            const QString& windowId,
-                                                            const PhosphorRules::WindowQuery& query,
-                                                            const QString& eventPath, int defaultDurationMs);
+/// Resolve ONLY the shader slot (rule → tree → baseline).
+///
+/// It deliberately does NOT read the Rule timing slot. That slot is owned by
+/// `PlasmaZonesEffect::resolveEventMotionProfile`, which reads it, clamps it into
+/// the animation envelope, and hands the result to both the animator leg and the
+/// shader leg. This function used to read and clamp the SAME slot a second time —
+/// idempotent only because both sites happened to spell an identical qBound, and
+/// a silent desync waiting for one of them to change. One read, one clamp.
+ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEvaluator& evaluator,
+                                                    const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                    const QString& windowId, const PhosphorRules::WindowQuery& query,
+                                                    const QString& eventPath);
 
 /**
  * @brief Motion-profile cascade: per-window timing rule → base profile.
@@ -100,7 +106,7 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorRules:
  * fills the `anim-timing:<eventPath>` slot. A non-empty curve is parsed via
  * @p curveRegistry's `tryCreate` (a malformed curve keeps the base curve); a
  * `durationMs > 0` overrides the duration, clamped identically to
- * `resolveAnimationShaderAndDuration`. A windowless @p query
+ * `resolveAnimationShaderProfile`. A windowless @p query
  * (`hasWindow()` false) or empty @p eventPath, or no matching rule, returns
  * @p base unchanged.
  *

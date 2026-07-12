@@ -372,7 +372,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // the tree fallthrough. Reuse the `query` local from the
             // motion-cascade above instead of rebuilding the WindowQuery.
             //
-            // Route through `resolveAnimationShaderAndDuration` (which
+            // Route through `resolveAnimationShaderProfile` (which
             // uses `evaluator.resolveCached(windowId, query)`). When a rule
             // set is configured, the sister `resolveEventMotionProfile`
             // call above already warmed the per-window cache slot for this
@@ -392,9 +392,8 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // via `motionProfile` above (driving the animator's
             // duration), so the shader still terminates with the
             // rule-overridden snap motion.
-            const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
-                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), windowId, query, profilePath,
-                /*defaultDurationMs=*/0);
+            const auto resolved = PlasmaZones::resolveAnimationShaderProfile(
+                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), windowId, query, profilePath);
             auto shaderProfile = resolved.profile;
             if (!resolved.shaderSlotFromRule && shaderProfile.effectiveEffectId().isEmpty()) {
                 // No rule matched and no tree override resolved a shader for

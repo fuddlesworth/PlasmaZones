@@ -65,18 +65,17 @@ QString curveSlotFor(const QString& eventPath)
 
 } // namespace
 
-ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorRules::RuleEvaluator& evaluator,
-                                                            const PhosphorAnimationShaders::ShaderProfileTree& tree,
-                                                            const QString& windowId,
-                                                            const PhosphorRules::WindowQuery& query,
-                                                            const QString& eventPath, int defaultDurationMs)
+ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEvaluator& evaluator,
+                                                    const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                    const QString& windowId, const PhosphorRules::WindowQuery& query,
+                                                    const QString& eventPath)
 {
     // Empty-input short-circuit — preserves the standalone resolvers' header
     // contract for both a windowless query and an empty eventPath, and
     // avoids consuming a cache slot for an evaluator walk that cannot match
     // anything (no window attribute can satisfy any rule predicate).
     if (!query.hasWindow() || eventPath.isEmpty()) {
-        return ResolvedShaderAndDuration{tree.resolve(eventPath), defaultDurationMs};
+        return ResolvedShaderProfile{tree.resolve(eventPath)};
     }
     // ONE cached evaluator walk feeds both slot lookups. The historical
     // pair of standalone shader-profile + duration resolvers did two
@@ -102,19 +101,12 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorRules:
         profile = tree.resolve(eventPath);
     }
 
-    // Timing slot: a filled slot with durationMs > 0 wins (clamped to the
-    // standard envelope). durationMs <= 0 is the "inherit" sentinel — fall
-    // through to the caller-supplied default identically to the
-    // resolveAnimationDuration shim.
-    int durationMs = defaultDurationMs;
-    if (const auto action = resolved.slot(timingSlotFor(eventPath))) {
-        const int candidate = action->params.value(ActionParam::DurationMs).toInt(0);
-        if (candidate > 0) {
-            durationMs = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, candidate,
-                                PhosphorAnimation::Limits::MaxAnimationDurationMs);
-        }
-    }
-    return ResolvedShaderAndDuration{std::move(profile), durationMs, shaderSlotFromRule};
+    // The Rule TIMING slot is deliberately not read here — resolveEventMotionProfile
+    // owns it, reads it once, and clamps it once for both the animator and shader
+    // legs of the same rule. Reading it again here (as this used to) worked only
+    // because both sites spelled an identical qBound; change one envelope and the
+    // two legs of one user-facing rule would silently run different durations.
+    return ResolvedShaderProfile{std::move(profile), shaderSlotFromRule};
 }
 
 PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorRules::RuleEvaluator& evaluator,
@@ -159,8 +151,10 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorRules::Ru
     if (timingAction) {
         const int durationMs = timingAction->params.value(ActionParam::DurationMs).toInt(0);
         if (durationMs > 0) {
-            // Same clamp as resolveAnimationShaderAndDuration so the motion
-            // and shader paths stay in lockstep for the same user-facing rule.
+            // The ONE place the Rule timing slot is read and clamped. Both legs of
+            // a user-facing timing rule — the animator's geometry animation and the
+            // shader transition — take their duration from this result, so they
+            // cannot drift apart.
             out.duration = static_cast<qreal>(qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, durationMs,
                                                      PhosphorAnimation::Limits::MaxAnimationDurationMs));
         }
@@ -337,7 +331,7 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
     // Optional per-pack params override, same nested-object shape the tree
     // profile uses ({packId -> {paramId -> value}}); mirrors how the
     // animation override reads ActionParam::Params in
-    // resolveAnimationShaderAndDuration. Drop any "border" entry for symmetry
+    // resolveAnimationShaderProfile. Drop any "border" entry for symmetry
     // with the chain filter above — the reserved rule-owned border pack's
     // params come from the resolved appearance (SetBorder*), never the chain.
     out.params = action->params.value(PhosphorRules::ActionParam::Params).toObject().toVariantMap();
