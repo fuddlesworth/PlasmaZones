@@ -109,7 +109,13 @@ qreal timeDrivenProgress(ShaderTransition& st, qint64 nowMs, bool stepCurve, boo
     // installs with reverse == false.
     if (active && st.releaseStartMs >= 0) {
         const qreal down = qreal(nowMs - st.releaseStartMs) / qreal(st.durationMs);
-        progress = qBound(0.0, progress - qMax(down, 0.0), 1.0);
+        // Route through the ONE clamp policy, not a bare qBound. A held-move leg
+        // whose grab was SHORTER than the nominal duration takes the eased branch
+        // above, not the pin — so `progress` can legitimately carry an overshooting
+        // curve's overshoot (1.08), and an unconditional qBound would snap it to 1.0
+        // at the exact moment the button lets go. The lower bound matters equally:
+        // an overshooting curve dips below 0, and a 0.0 floor kills that too.
+        progress = ShaderInternal::clampProgressForCurve(progress - qMax(down, 0.0), st.progressCurve.get());
     }
     // Re-grab resume: the accrued down-ramp, decaying back to 0 over the same
     // durationMs. At the re-grab frame the offset equals the ramp the release
@@ -123,10 +129,20 @@ qreal timeDrivenProgress(ShaderTransition& st, qint64 nowMs, bool stepCurve, boo
         const qreal back = qreal(nowMs - st.regrabStartMs) / qreal(st.durationMs);
         const qreal offset = st.regrabDownOffset - qMax(back, 0.0);
         if (offset <= 0.0) {
-            st.regrabStartMs = -1;
-            st.regrabDownOffset = 0.0;
+            // Retire the exhausted offset only on the PAINT pass. `stepCurve` is the
+            // "I own the per-frame mutation" flag, and the backdrop predictor passes
+            // false precisely so it can read this function without side effects — but
+            // this reset was outside that guard, so the predictor was clearing state
+            // paintWindow's own call was about to read. Benign today (both share the
+            // pinned frame clock, so both see the same expiry), and a free bug for
+            // whoever next changes either arm.
+            if (stepCurve) {
+                st.regrabStartMs = -1;
+                st.regrabDownOffset = 0.0;
+            }
         } else {
-            progress = qBound(0.0, progress - offset, 1.0);
+            // Same clamp policy as the release ramp above — see there.
+            progress = ShaderInternal::clampProgressForCurve(progress - offset, st.progressCurve.get());
         }
     }
     return progress;
@@ -275,14 +291,24 @@ void PlasmaZonesEffect::postPaintScreen()
     if (!m_shaderManager.empty()) {
         const qint64 now = shaderClockNowMs();
         for (const auto& [w, transition] : m_shaderManager.shaderTransitions()) {
-            // Skip windows KWin is not painting. An off-desktop window never
-            // reaches paintWindow, and paintWindow is the ONLY teardown for a
-            // durationMs == 0 (animator-driven) leg — it has no timer. Without this
-            // skip, snapping a window and then switching virtual desktop mid-morph
-            // leaves the arm below requesting a FULL-OUTPUT repaint every vsync,
-            // indefinitely, until the user switches back. The sibling decoration
-            // loop already guards on this.
-            if (!w || w->isDeleted() || !w->isOnCurrentDesktop()) {
+            if (!w) {
+                continue;
+            }
+            // Skip windows KWin is not painting. An off-desktop window never reaches
+            // paintWindow, and paintWindow is the ONLY teardown for a durationMs == 0
+            // (animator-driven) leg — it has no timer. Without this, snapping a window
+            // and then switching virtual desktop mid-morph leaves the arm below
+            // requesting a FULL-OUTPUT repaint every vsync, indefinitely.
+            //
+            // EXCEPT a leg we hold the close grab on. A closing window is isDeleted()
+            // for its ENTIRE close animation (we keep the corpse alive with that very
+            // grab), and it emits no damage of its own because the client is gone — so
+            // it is the leg that needs this pump MOST. Skipping it leaves the close
+            // shader running only as long as something else happens to damage the
+            // output. `closeGrabHeld` is precisely "this leg is animating a corpse we
+            // are keeping alive", and paintWindow already calls screen()/frameGeometry()
+            // on that same ref-held Deleted every close frame.
+            if (!transition.closeGrabHeld && (w->isDeleted() || !w->isOnCurrentDesktop())) {
                 continue;
             }
             const bool timeBasedActive =
@@ -447,7 +473,7 @@ void PlasmaZonesEffect::postPaintScreen()
     // the prePaintScreen→postPaintScreen bracket (defensive bootstrap,
     // future test harness, an unexpected mid-cycle paint) then falls
     // back to the live `shaderClockNowMs()` via the -1 sentinel branch
-    // in shader_resolve.cpp's resolveShaderClock(), instead of reading
+    // via the -1 sentinel branch in this file's own clock read, instead of reading
     // a stale pinned timestamp from this cycle.
     m_shaderManager.setCurrentFrameClockMs(-1);
     // Drop the per-frame SetOpacity cache so next frame's prePaintWindow
@@ -631,27 +657,32 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     if (st->reverse) {
                         t = 1.0 - t;
                     }
-                    // Track the draw, OVERSHOOT INCLUDED. The geometry packs
-                    // deliberately extrapolate their rect past iToRect on an
-                    // overshooting curve — that IS the bounce (window-morph lerps the
-                    // position with the raw t; fold carries the overshoot as a linear
-                    // extension) — so clamping t here would make the predictor
-                    // disagree with the draw on exactly the loudest frames, which is
-                    // the failure this predictor exists to prevent.
+                    // Mirror the pack's OWN split: POSITION takes the raw t (the
+                    // overshoot IS the bounce, and it is where the eye reads it),
+                    // SIZE takes the clamped t. That is exactly what window-morph
+                    // does — `mix(iFromRect.xy, iToRect.xy, t)` alongside
+                    // `mix(iFromRect.zw, iToRect.zw, tc)` — because extrapolating an
+                    // EXTENT is nonsense at a large ratio (a maximize computes a
+                    // negative width) while extrapolating a POSITION is the feature.
+                    // Lerping both axes with the raw t, as this briefly did, fixed
+                    // the position and broke the size.
                     //
-                    // Only the EXTENT is floored, and only against degeneracy. An
-                    // overshooting t on a shrinking morph drives the width term
-                    // negative; `QRectF::isValid()` then fails and we silently fall
-                    // back to the animator's rect — a DIFFERENT rect than the draw.
-                    // A degenerate extent is what that isValid() failure was actually
-                    // about. The position was never the problem, and it is where the
-                    // eye reads the bounce.
+                    // CAVEAT, and it is real: one hard-coded lerp shape cannot track
+                    // five packs that each choose their own. `fold` eases its rect
+                    // through a smoothstep, `ripple-snap` squares a time-compressed
+                    // progress, and `flow` / `phosphor-stream` stagger it PER VERTEX —
+                    // there is no single rect to predict for those. The predictor
+                    // approximates for everything except window-morph, and always has.
+                    // Making it exact needs the rect curve to come from the pack (a
+                    // metadata field), not from a guess here. The cost of being wrong
+                    // is bounded: the frost pane samples a slightly-off scene slice.
+                    // It does not corrupt the draw.
+                    const qreal tc = qBound(0.0, t, 1.0);
                     const QRectF& f = st->fromGeometry;
                     const QRectF& g = st->toGeometry;
-                    const qreal lw = f.width() + (g.width() - f.width()) * t;
-                    const qreal lh = f.height() + (g.height() - f.height()) * t;
-                    animatedFrame =
-                        QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t, qMax(1.0, lw), qMax(1.0, lh));
+                    animatedFrame = QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
+                                           qMax(1.0, f.width() + (g.width() - f.width()) * tc),
+                                           qMax(1.0, f.height() + (g.height() - f.height()) * tc));
                 }
             }
             if (!animatedFrame.isValid()) {

@@ -53,28 +53,19 @@ namespace PlasmaZones {
  */
 
 /**
- * @brief Combined shader-profile + duration cascade for the per-window-event
- *        hot path, sharing a single cached evaluator walk.
+ * @brief The resolved SHADER for a per-window event, and where it came from.
  *
- * Returns the resolved `ShaderProfile` (via the rule's `anim-shader:<event>`
- * slot, falling back to `tree.resolve(eventPath)`) AND the resolved duration
- * (via the rule's `anim-timing:<event>` slot, falling back to
- * @p defaultDurationMs) from ONE `evaluator.resolveCached(windowId, …)` call.
+ * The shader slot only. It carries NO duration: the Rule timing slot is owned by
+ * `resolveEventMotionProfile`, which reads it once, clamps it once, and feeds both
+ * the animator leg and the shader leg of the same rule from that one result. This
+ * struct used to carry a duration too, resolved and clamped a second time from the
+ * same slot — idempotent only because both sites happened to spell an identical
+ * qBound, and a silent desync waiting for one of them to change.
  *
- * The standalone resolvers each call `evaluator.resolve(…)`, which costs a
- * full priority-order walk per call and bypasses the per-window cache. The
- * effect's shader hot path needs both values per event; this overload pays
- * one cached walk and reads both slots from the same `ResolvedActions`.
- *
- * Semantics match the standalone resolvers byte-for-byte:
- *  - Windowless @p query (`hasWindow()` false) / empty @p eventPath: returns
- *    `{ tree.resolve(eventPath), defaultDurationMs }` without touching the
- *    evaluator (no window attribute could match any rule predicate).
- *  - Shader slot filled: ShaderProfile taken verbatim (engaged-empty effectId
- *    preserved as the "block tree fallthrough" sentinel).
- *  - Timing slot filled with `durationMs > 0`: that value, clamped to
- *    `[Min, Max]AnimationDurationMs`. `durationMs <= 0` ("inherit" sentinel)
- *    or no rule → @p defaultDurationMs.
+ * Windowless @p query (`hasWindow()` false) or an empty @p eventPath resolves
+ * straight from the tree without touching the evaluator: no window attribute could
+ * match any rule predicate, so the walk would be wasted and would consume a cache
+ * slot for nothing.
  */
 struct ResolvedShaderProfile
 {

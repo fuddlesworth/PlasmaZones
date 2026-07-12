@@ -1798,25 +1798,38 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     const bool installed = beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab,
                                                  holdAddedGrab, progressCurve);
     auto* transition = m_shaderManager.findTransition(window);
-    // Mark the held-move leg by IDENTITY, on BOTH outcomes. The drag handlers must
-    // not infer it from liveness: `window.movement.move` is opt-in with no default
-    // shader, so the common case installs nothing at all and `findTransition` would
-    // hand them an unrelated leg to pin and reverse. See ShaderTransition::heldMove.
+    // Mark the held-move leg by IDENTITY. The drag handlers must not infer it from
+    // liveness: `window.movement.move` is opt-in with no default shader, so the
+    // common case installs nothing at all and `findTransition` would hand them an
+    // unrelated leg to pin and reverse. See ShaderTransition::heldMove.
     //
-    // Set it even when `installed` is false. A pack whose `appliesTo` admits both
-    // "move" and another class can already be live for that other event (a focus leg
-    // installed by the click that begins the drag), in which case the WindowMove
-    // event resolves the SAME cached shader and takes beginShaderTransition's
-    // same-effect short-circuit — no install, no fresh transition. Marking only on
-    // the install path would leave that leg unflagged, the drag-start handler would
-    // skip its entire setup (no pin, no grab origin, no mesh seed), and the focus
-    // leg's own timer would kill the shader mid-drag.
+    // We may stamp when `installed` is false, but ONLY for the same-effect
+    // short-circuit — where the live leg genuinely IS the pack this event resolved
+    // (a pack whose `appliesTo` admits both "move" and another class can already be
+    // running for that other event). `beginShaderTransition` returns false from nine
+    // other places — compile failure, the cached null-shader sentinel, a registry
+    // miss, a refused pack, a collapsed surface — and in EVERY one of those the live
+    // leg is something else entirely, most reachably the `window.focus` leg the click
+    // that began this drag just installed. Stamping that would pin it for the drag,
+    // kill its teardown timer, and play the focus animation BACKWARD on release: the
+    // exact bug this flag exists to prevent, re-introduced from the write side.
     //
-    // Only ever write TRUE here. A non-move event short-circuiting into a live
-    // held-move leg must leave the flag alone — supersession constructs a fresh
-    // ShaderTransition, whose default is already false, so the false case needs no
-    // code and writing it would re-introduce the mislabelling bug.
-    if (transition && profilePath == PhosphorAnimation::ProfilePaths::WindowMove) {
+    // So test what the short-circuit itself tests — does the live leg's cached shader
+    // point at THIS event's pack? The null-shader sentinel is excluded by the
+    // `->shader` check, which matters because that sentinel is sticky: once a pack
+    // fails to compile, every later drag in the session would otherwise mis-stamp.
+    //
+    // Only ever write TRUE. A non-move event short-circuiting into a live held-move
+    // leg must leave the flag alone — supersession builds a fresh ShaderTransition
+    // whose default is already false, so the false case needs no code, and writing it
+    // would re-introduce the mislabelling from the other direction.
+    bool ownsResolvedLeg = installed;
+    if (!ownsResolvedLeg && transition) {
+        const auto cacheIt = m_shaderManager.m_shaderCache.find(profile.effectiveEffectId());
+        ownsResolvedLeg = cacheIt != m_shaderManager.m_shaderCache.end() && cacheIt->second.shader
+            && transition->cached == &cacheIt->second;
+    }
+    if (transition && ownsResolvedLeg && profilePath == PhosphorAnimation::ProfilePaths::WindowMove) {
         transition->heldMove = true;
     }
     if (!installed || !transition) {
