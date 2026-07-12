@@ -57,9 +57,11 @@ class ISettings;
 ///
 /// The controller delegates persistence-heavy concerns to two child
 /// QObjects: `AnimationPresetLibrary` (preset CRUD) and `ShaderSetStore`
-/// (motion-set CRUD). Their signals are forwarded to the controller's
-/// own signals via `connect()` so QML rebinds without poking at the
-/// sub-services directly.
+/// (motion-set CRUD). The preset library's signals are forwarded to the
+/// controller's own signals via `connect()` so QML rebinds without poking
+/// at it directly. The set store is the exception: QML binds it straight
+/// as `setsBridge` (the shared ShaderSetsPage talks to it), so only its
+/// `pendingChangesChanged` is forwarded, for the dirty flag.
 class AnimationsPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
@@ -394,7 +396,8 @@ public:
     /// Restore every file in the snapshot to its pre-edit state and
     /// clear the snapshot. Called from `SettingsController::load()`
     /// (Discard). Emits `overrideChanged`/`userPresetsChanged`/
-    /// `motionSetsChanged`/`shaderProfileChanged` so QML refreshes.
+    /// `shaderProfileChanged` and refreshes the set store through
+    /// `ShaderSetStore::notifyLiveStateChanged()` so QML refreshes.
     /// Failures (e.g. permission errors during file restore) are
     /// retained in the snapshot so a subsequent revert can retry.
     void revertPending();

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -55,7 +54,6 @@ SettingsCard {
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
-            Layout.preferredHeight: Kirigami.Units.gridUnit * 4
             idleText: root._snapping ? i18n("Drop a layout file here") : i18n("Drop an algorithm file here")
             hoverText: root._snapping ? i18n("Release to import layout") : i18n("Release to import algorithm")
             onFileDropped: function (url) {

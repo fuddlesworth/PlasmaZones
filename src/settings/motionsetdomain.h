@@ -24,11 +24,13 @@ namespace PlasmaZones::motionset {
 /// @param setsDir         Absolute path of the motion-sets directory.
 /// @param writeOverride   Commits one entry as a per-path override file.
 /// @param fileSnapshot    Captures a file's pre-edit content for Discard.
+///                        False = the capture failed, and the store then
+///                        refuses the write rather than losing the content.
 /// @param mutationGuard   Empty when writes are allowed, else the refusal
 ///                        reason (the controller blocks writes mid-discard).
 ShaderSetStore::Config
 makeConfig(std::function<QString()> profilesDir, std::function<QString()> setsDir,
            std::function<bool(const QString& /*path*/, const QVariantMap& /*profile*/)> writeOverride,
-           std::function<void(const QString& /*filePath*/)> fileSnapshot, std::function<QString()> mutationGuard);
+           std::function<bool(const QString& /*filePath*/)> fileSnapshot, std::function<QString()> mutationGuard);
 
 } // namespace PlasmaZones::motionset

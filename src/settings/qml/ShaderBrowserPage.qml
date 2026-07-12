@@ -4,7 +4,6 @@
 import "GroupSortLogic.js" as Core
 import QtCore
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami

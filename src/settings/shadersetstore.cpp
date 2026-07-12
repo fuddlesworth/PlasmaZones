@@ -16,9 +16,11 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QLoggingCategory>
+#include <QMetaObject>
 #include <QSaveFile>
-#include <QSet>
 #include <QUrl>
+
+#include <cmath>
 
 namespace PlasmaZones {
 
@@ -93,16 +95,45 @@ ShaderSetStore::ShaderSetStore(Config config, QObject* parent)
     : QObject(parent)
     , m_config(std::move(config))
 {
+    // The three domain closures and the directory accessor are the store's
+    // reason to exist: a domain that forgets one is a programming error, not a
+    // runtime condition. Assert in debug, and note that every call site below
+    // still null-checks so a release build refuses cleanly instead of throwing
+    // std::bad_function_call.
+    Q_ASSERT(m_config.setsDir);
+    Q_ASSERT(m_config.snapshot);
+    Q_ASSERT(m_config.validate);
+    Q_ASSERT(m_config.apply);
+}
+
+QString ShaderSetStore::setsDirectory() const
+{
+    return m_config.setsDir ? m_config.setsDir() : QString();
 }
 
 QString ShaderSetStore::setFilePath(const QString& setName) const
 {
-    return animfileutil::jsonFilePath(m_config.setsDir(), animfileutil::slugify(setName));
+    return animfileutil::jsonFilePath(setsDirectory(), animfileutil::slugify(setName));
 }
 
 void ShaderSetStore::notifyLiveStateChanged()
 {
-    Q_EMIT setsChanged();
+    // Collapse a burst (one call per restored path during a bulk revert) into
+    // a single emission on the next event-loop turn. Each setsChanged costs
+    // QML a full availableSets() — a sets-dir walk plus a live-state snapshot
+    // — so the per-path emission would put that whole walk on the GUI thread
+    // once per path.
+    if (m_liveStateNotifyQueued) {
+        return;
+    }
+    m_liveStateNotifyQueued = true;
+    QMetaObject::invokeMethod(
+        this,
+        [this]() {
+            m_liveStateNotifyQueued = false;
+            Q_EMIT setsChanged();
+        },
+        Qt::QueuedConnection);
 }
 
 bool ShaderSetStore::mutationAllowed()
@@ -119,11 +150,35 @@ bool ShaderSetStore::mutationAllowed()
     return false;
 }
 
+bool ShaderSetStore::snapshotFile(const QString& filePath)
+{
+    if (!m_config.fileSnapshot) {
+        return true; // the domain does not stage set files
+    }
+    if (m_config.fileSnapshot(filePath)) {
+        return true;
+    }
+    // Writing now would destroy content we failed to capture, and Discard
+    // could not restore it. Refuse instead.
+    qCWarning(lcConfig) << "ShaderSetStore: refusing to write" << filePath
+                        << "— could not capture its pre-edit content";
+    Q_EMIT toastRequested(PhosphorI18n::tr("Could not back up the existing set, so it was left untouched."));
+    return false;
+}
+
 bool ShaderSetStore::readSetFile(const QString& filePath, QJsonObject* out) const
 {
     QFile f(filePath);
     if (!f.exists() || !f.open(QIODevice::ReadOnly)) {
         qCWarning(lcConfig) << "ShaderSetStore: cannot open set file:" << filePath;
+        return false;
+    }
+    // importSet hands this a user-chosen path, so cap the read before it
+    // happens rather than slurping an arbitrarily large file into memory only
+    // for the JSON parser to reject it.
+    if (f.size() > kMaxSetFileBytes) {
+        qCWarning(lcConfig) << "ShaderSetStore: set file" << filePath << "is" << f.size() << "bytes, over the"
+                            << kMaxSetFileBytes << "byte cap — refusing";
         return false;
     }
     QJsonParseError err{};
@@ -136,14 +191,34 @@ bool ShaderSetStore::readSetFile(const QString& filePath, QJsonObject* out) cons
     return true;
 }
 
+bool ShaderSetStore::writeSetFile(const QString& filePath, const QJsonObject& root)
+{
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        qCWarning(lcConfig) << "ShaderSetStore: cannot open" << filePath << "for writing";
+        Q_EMIT pendingChangesChanged();
+        return false;
+    }
+    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    if (!file.commit()) {
+        qCWarning(lcConfig) << "ShaderSetStore: could not commit" << filePath;
+        Q_EMIT pendingChangesChanged();
+        return false;
+    }
+    return true;
+}
+
 bool ShaderSetStore::versionAccepted(const QJsonObject& root, const QString& context) const
 {
     const QJsonValue versionVal = root.value(kVersionKey);
     // A present-but-non-numeric version is malformed. Treat it as unknown
     // (newer) and refuse, rather than reading it as the current format and
-    // committing a set this build may not fully understand.
-    if (!versionVal.isUndefined() && !versionVal.isDouble()) {
-        qCWarning(lcConfig) << "ShaderSetStore:" << context << "— non-numeric version, refusing";
+    // committing a set this build may not fully understand. A non-integral
+    // number is refused for the same reason: QJsonValue::toInt() would hand
+    // back the default for it, silently reading "1.5" as the current version.
+    if (!versionVal.isUndefined()
+        && (!versionVal.isDouble() || versionVal.toDouble() != std::floor(versionVal.toDouble()))) {
+        qCWarning(lcConfig) << "ShaderSetStore:" << context << "— version is not a whole number, refusing";
         return false;
     }
     const int version = versionVal.toInt(m_config.formatVersion);
@@ -174,8 +249,9 @@ QString ShaderSetStore::uniqueSetName(const QString& desiredName) const
 QVariantList ShaderSetStore::availableSets() const
 {
     QVariantList result;
-    QDir dir(m_config.setsDir());
-    if (!dir.exists()) {
+    const QString dirPath = setsDirectory();
+    QDir dir(dirPath);
+    if (dirPath.isEmpty() || !dir.exists()) {
         return result;
     }
 
@@ -217,18 +293,25 @@ bool ShaderSetStore::applySet(const QString& name)
     if (filePath.isEmpty()) {
         return false;
     }
+    // Every failure below is silent from the UI's side (QML fires and forgets
+    // the Apply), so each one carries its own reason to the toast. Without
+    // that the user clicks Apply and simply watches nothing happen.
     QJsonObject root;
     if (!readSetFile(filePath, &root)) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set \"%1\".").arg(name));
         return false;
     }
     if (!versionAccepted(root, QStringLiteral("applySet(%1)").arg(name))) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("\"%1\" was written by a newer version of PlasmaZones.").arg(name));
         return false;
     }
     if (m_config.validate && !m_config.validate(root)) {
         qCWarning(lcConfig) << "ShaderSetStore::applySet: validation refused" << filePath;
+        Q_EMIT toastRequested(PhosphorI18n::tr("\"%1\" does not match this page.").arg(name));
         return false;
     }
     if (!m_config.apply || !m_config.apply(root)) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not apply \"%1\".").arg(name));
         return false;
     }
     // Live state moved, so every row's `active` flag is stale.
@@ -246,6 +329,13 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& descri
     if (filePath.isEmpty() || !m_config.snapshot) {
         return false;
     }
+    // Saving onto an existing set would destroy it, and on a domain with no
+    // fileSnapshot hook nothing could restore it. Refuse, exactly as updateSet
+    // does for the same collision.
+    if (QFile::exists(filePath)) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("A set named \"%1\" already exists.").arg(name));
+        return false;
+    }
 
     QJsonObject root = m_config.snapshot();
     // An empty snapshot would save a set that applySet then refuses (nothing
@@ -256,11 +346,12 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& descri
         return false;
     }
 
-    if (!QDir().mkpath(m_config.setsDir())) {
+    const QString dirPath = setsDirectory();
+    if (dirPath.isEmpty() || !QDir().mkpath(dirPath)) {
         return false;
     }
-    if (m_config.fileSnapshot) {
-        m_config.fileSnapshot(filePath);
+    if (!snapshotFile(filePath)) {
+        return false;
     }
 
     root.insert(kNameKey, name);
@@ -269,12 +360,7 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& descri
     }
     root.insert(kVersionKey, m_config.formatVersion);
 
-    QSaveFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return false;
-    }
-    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-    if (!file.commit()) {
+    if (!writeSetFile(filePath, root)) {
         return false;
     }
 
@@ -296,10 +382,13 @@ bool ShaderSetStore::removeSet(const QString& name)
     if (!file.exists()) {
         return false;
     }
-    if (m_config.fileSnapshot) {
-        m_config.fileSnapshot(filePath);
+    if (!snapshotFile(filePath)) {
+        return false;
     }
     if (!file.remove()) {
+        // The snapshot is already staged, so the domain's dirty state moved
+        // even though the delete failed. Re-notify so the page can re-evaluate.
+        Q_EMIT pendingChangesChanged();
         return false;
     }
     Q_EMIT setsChanged();
@@ -339,24 +428,25 @@ bool ShaderSetStore::updateSet(const QString& oldName, const QString& newName, c
         root.insert(kDescriptionKey, description);
     }
 
-    if (m_config.fileSnapshot) {
-        m_config.fileSnapshot(oldPath);
-        if (newPath != oldPath) {
-            m_config.fileSnapshot(newPath);
-        }
+    if (!snapshotFile(oldPath)) {
+        return false;
+    }
+    if (newPath != oldPath && !snapshotFile(newPath)) {
+        return false;
     }
 
-    QSaveFile file(newPath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    if (!writeSetFile(newPath, root)) {
         return false;
     }
-    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-    if (!file.commit()) {
-        return false;
-    }
-    // Only drop the old file once the new one is safely committed.
+    // Only drop the old file once the new one is safely committed. If the
+    // delete fails we are left with two files carrying the same `name`, which
+    // lists as a duplicate row that removeSet can never reach (it resolves the
+    // slug of the NEW name). Tell the user rather than logging into the void.
     if (newPath != oldPath && !QFile::remove(oldPath)) {
         qCWarning(lcConfig) << "ShaderSetStore::updateSet: wrote" << newPath << "but could not remove" << oldPath;
+        Q_EMIT toastRequested(
+            PhosphorI18n::tr("Renamed the set, but the old file could not be removed. Delete it by hand from the "
+                             "sets folder."));
     }
 
     Q_EMIT setsChanged();
@@ -381,12 +471,9 @@ bool ShaderSetStore::exportSet(const QString& name, const QString& destLocalPath
     const QByteArray payload = source.readAll();
 
     QSaveFile dest(destLocalPath);
-    if (!dest.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to %1.").arg(destLocalPath));
-        return false;
-    }
-    dest.write(payload);
-    if (!dest.commit()) {
+    const bool written =
+        dest.open(QIODevice::WriteOnly | QIODevice::Truncate) && dest.write(payload) == payload.size() && dest.commit();
+    if (!written) {
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to %1.").arg(destLocalPath));
         return false;
     }
@@ -415,6 +502,13 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
         Q_EMIT toastRequested(PhosphorI18n::tr("That set was written by a newer version of PlasmaZones."));
         return false;
     }
+    // A set carrying nothing would import as a row that applySet then refuses.
+    // Name it for what it is rather than falling through to the taxonomy
+    // message below, which would misdescribe an empty file as a foreign one.
+    if (root.value(kOverridesKey).toArray().isEmpty() && !root.value(kBaselineKey).isObject()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("That set is empty."));
+        return false;
+    }
     // Validate against THIS domain's taxonomy, so a motion set dropped on the
     // decoration page is refused at the boundary instead of failing later.
     if (m_config.validate && !m_config.validate(root)) {
@@ -433,20 +527,16 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
         return false;
     }
     const QString destPath = setFilePath(name);
-    if (destPath.isEmpty() || !QDir().mkpath(m_config.setsDir())) {
+    const QString dirPath = setsDirectory();
+    if (destPath.isEmpty() || dirPath.isEmpty() || !QDir().mkpath(dirPath)) {
         return false;
     }
     root.insert(kNameKey, name);
 
-    if (m_config.fileSnapshot) {
-        m_config.fileSnapshot(destPath);
-    }
-    QSaveFile file(destPath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    if (!snapshotFile(destPath)) {
         return false;
     }
-    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-    if (!file.commit()) {
+    if (!writeSetFile(destPath, root)) {
         return false;
     }
 
@@ -457,7 +547,7 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
 
 void ShaderSetStore::openSetsDirectory()
 {
-    const QString dir = m_config.setsDir();
+    const QString dir = setsDirectory();
     if (dir.isEmpty() || !QDir().mkpath(dir)) {
         qCWarning(lcConfig) << "ShaderSetStore::openSetsDirectory: cannot create" << dir;
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not create the sets folder."));

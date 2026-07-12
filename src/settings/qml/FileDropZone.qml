@@ -19,9 +19,13 @@ import org.kde.kirigami as Kirigami
  *       Layout.fillWidth: true
  *       idleText: i18n("Drop a layout file here")
  *       hoverText: i18n("Release to import layout")
- *       onFileDropped: url => settingsController.importLayout(
- *           settingsController.urlToLocalFile(url))
+ *       onFileDropped: function (url) {
+ *           settingsController.importLayout(settingsController.urlToLocalFile(url));
+ *       }
  *   }
+ *
+ * The idle/hover icons and the height default to the document-import case
+ * (the Layouts card); the shader browser overrides all of them.
  *
  * The signal hands over the raw URL string — callers that need a local path
  * convert via `settingsController.urlToLocalFile`.
@@ -40,6 +44,8 @@ Rectangle {
     /// First dropped URL, as a string (e.g. "file:///home/…/set.json").
     signal fileDropped(string url)
 
+    Accessible.role: Accessible.Grouping
+    Accessible.name: idleText
     implicitHeight: Kirigami.Units.gridUnit * 4
     radius: Kirigami.Units.smallSpacing
     color: _highlight ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)

@@ -12,10 +12,14 @@ import org.kde.kirigami as Kirigami
  *
  * Built on the shared ExpandableRowDelegate shell (same hover / press
  * highlight as the Rules list and the decoration pack rows), with expansion
- * disabled: everything fits on the row. Name over a metadata line
- * (description · updated date), then the badge cluster — coverage chips, a
- * "Baseline" chip, an "Active" pill when the set matches live state, the
- * coverage-count badge — and the Apply action plus the overflow menu.
+ * disabled: everything fits on the row.
+ *
+ * Layout, left to right: the name over its description, then the trailing
+ * cluster — the last-updated stamp (fixed position, so a long description
+ * cannot push it around), the metadata badges (coverage chips, a "Baseline"
+ * chip, the coverage-count badge), the "Active" pill when the set matches
+ * live state, and the actions (Apply, hidden while active, plus the overflow
+ * menu).
  *
  * Apply is hidden while the set is active: the pill already says there is
  * nothing to apply, and a permanently disabled button reads as broken.
@@ -40,7 +44,9 @@ ExpandableRowDelegate {
 
     // Everything fits on the row itself, so there is nothing to expand.
     expandable: false
-    expansionContent: null
+    // The shell is an ItemDelegate, so the row is focusable even with the
+    // click inert. Name it, or a screen reader announces an unlabelled row.
+    Accessible.name: row.setName
 
     // ── Header ──────────────────────────────────────────────────────────
 
@@ -80,49 +86,55 @@ ExpandableRowDelegate {
     //    reads each kind as a unit.
 
     // Coverage chips — which parts of the taxonomy the set carries, neutral
-    // like the Rules list's count badges.
-    Repeater {
-        model: row.modelData.coverage ?? []
+    // like the Rules list's count badges. Held in a plain Row rather than
+    // dropped straight into the header RowLayout: a bare Repeater is itself a
+    // zero-width layout child, so the layout would allocate spacing around it
+    // and leave a phantom gap in the cluster even when coverage is empty.
+    Row {
+        Layout.alignment: Qt.AlignVCenter
+        spacing: Kirigami.Units.smallSpacing
 
-        delegate: Rectangle {
-            id: chip
+        Repeater {
+            model: row.modelData.coverage ?? []
 
-            required property string modelData
+            delegate: Rectangle {
+                id: chip
 
-            Layout.alignment: Qt.AlignVCenter
-            implicitWidth: chipLabel.implicitWidth + Kirigami.Units.largeSpacing
-            implicitHeight: chipLabel.implicitHeight + Kirigami.Units.smallSpacing
+                required property string modelData
+
+                implicitWidth: chipLabel.implicitWidth + Kirigami.Units.largeSpacing
+                implicitHeight: chipLabel.implicitHeight + Kirigami.Units.smallSpacing
+                radius: Kirigami.Units.smallSpacing
+                color: Kirigami.Theme.alternateBackgroundColor
+
+                Label {
+                    id: chipLabel
+
+                    anchors.centerIn: parent
+                    text: row.coverageLabel(chip.modelData)
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    opacity: 0.7
+                }
+            }
+        }
+
+        // The baseline is the set's global default, not one surface, so it
+        // gets its own chip rather than a taxonomy label.
+        Rectangle {
+            visible: row.modelData.hasBaseline === true
+            implicitWidth: baselineLabel.implicitWidth + Kirigami.Units.largeSpacing
+            implicitHeight: baselineLabel.implicitHeight + Kirigami.Units.smallSpacing
             radius: Kirigami.Units.smallSpacing
             color: Kirigami.Theme.alternateBackgroundColor
 
             Label {
-                id: chipLabel
+                id: baselineLabel
 
                 anchors.centerIn: parent
-                text: row.coverageLabel(chip.modelData)
+                text: i18nc("@label chip for a set's global default profile", "Baseline")
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 opacity: 0.7
             }
-        }
-    }
-
-    // The baseline is the set's global default, not one surface, so it gets
-    // its own chip rather than a taxonomy label.
-    Rectangle {
-        visible: row.modelData.hasBaseline === true
-        Layout.alignment: Qt.AlignVCenter
-        implicitWidth: baselineLabel.implicitWidth + Kirigami.Units.largeSpacing
-        implicitHeight: baselineLabel.implicitHeight + Kirigami.Units.smallSpacing
-        radius: Kirigami.Units.smallSpacing
-        color: Kirigami.Theme.alternateBackgroundColor
-
-        Label {
-            id: baselineLabel
-
-            anchors.centerIn: parent
-            text: i18nc("@label chip for a set's global default profile", "Baseline")
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
-            opacity: 0.7
         }
     }
 

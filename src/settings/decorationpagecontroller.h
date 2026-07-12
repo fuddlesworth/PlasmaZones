@@ -25,7 +25,8 @@ class ISettings;
 
 /// Q_INVOKABLE surface for the "Decoration" drill-down settings pages
 /// (exposed to QML through SettingsController's `decorationPage` Q_PROPERTY;
-/// this class declares invokables + signals, no properties of its own).
+/// this class declares invokables + signals, plus the one `setsBridge`
+/// property that hands QML the decoration-set store).
 ///
 /// ## Scope: PER-SURFACE chains with walk-up inheritance
 ///

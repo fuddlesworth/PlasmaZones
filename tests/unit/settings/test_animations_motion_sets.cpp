@@ -6,9 +6,20 @@
  * @brief AnimationsPageController user-preset, motion-set, and pending-changes tests.
  *
  * Split from test_animations_page_controller.cpp to keep each test file
- * under the project's <800-line guideline. Pinned behaviour:
+ * under the project's <800-line guideline.
+ *
+ * Motion sets go through the shared ShaderSetStore reached from
+ * `AnimationsPageController::setsBridge()`. The domain half (which paths are
+ * valid, how live state is snapshotted) lives in motionsetdomain.cpp; the
+ * envelope, the file lifecycle and the `active` summary are the store's.
+ * Pinned behaviour:
  *   - User preset CRUD (addUserPreset, userPresets, removeUserPreset)
  *   - Motion set save/apply/remove with merge-not-replace semantics
+ *   - `active` is a CONTAINMENT check: a set stays active while unrelated
+ *     overrides exist, because apply would have left them alone
+ *   - updateSet / exportSet / importSet round-trip, and an import is validated
+ *     against the EVENT taxonomy (a decoration set is refused here)
+ *   - The in-flight-discard mutation guard refuses every set write
  *   - Pending changes signal emission for revert/commit
  *   - Atomic motion-set application (rejects whole malformed set)
  *   - Cross-cutting safety: removeUserPreset must not touch override files,
@@ -26,19 +37,45 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
-
-#include <PhosphorAnimation/Profile.h>
+#include <QStandardPaths>
+#include <QUrl>
 
 #include "settings/animationspagecontroller.h"
 #include "settings/shadersetstore.h"
 
 using namespace PlasmaZones;
 
+namespace {
+
+/// The row for @p name, or an empty map when no such set is listed. Callers
+/// QVERIFY the result is non-empty BEFORE asserting on a field, so a missing
+/// row fails loudly instead of skipping the assertion.
+QVariantMap rowFor(ShaderSetStore* sets, const QString& name)
+{
+    const QVariantList rows = sets->availableSets();
+    for (const QVariant& row : rows) {
+        const QVariantMap map = row.toMap();
+        if (map.value(QStringLiteral("name")).toString() == name)
+            return map;
+    }
+    return QVariantMap{};
+}
+
+} // namespace
+
 class TestAnimationsMotionSets : public QObject
 {
     Q_OBJECT
 
 private Q_SLOTS:
+
+    /// Every test overrides the profiles dir to a QTemporaryDir, but the
+    /// motion-sets dir is derived from GenericDataLocation. Redirect it so a
+    /// test can never write into the user's real ~/.local/share.
+    void initTestCase()
+    {
+        QStandardPaths::setTestModeEnabled(true);
+    }
 
     // ─── User preset library ──────────────────────────────────────────────
 
@@ -108,7 +145,8 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("name"), QStringLiteral("panel.popup"));
         obj.insert(QStringLiteral("duration"), 1000);
         obj.insert(QStringLiteral("curve"), QStringLiteral("0.33,1,0.68,1"));
-        f.write(QJsonDocument(obj).toJson());
+        const QByteArray objBytes = QJsonDocument(obj).toJson();
+        QCOMPARE(f.write(objBytes), static_cast<qint64>(objBytes.size()));
         f.close();
 
         // Add a real preset alongside.
@@ -215,7 +253,7 @@ private Q_SLOTS:
 
     // ─── Motion sets ──────────────────────────────────────────────────────
 
-    void saveCurrentAsMotionSet_capturesPathOverridesOnly()
+    void saveCurrentAsSet_capturesPathOverridesOnly()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -241,7 +279,7 @@ private Q_SLOTS:
         QCOMPARE(set.value(QStringLiteral("coverageCount")).toInt(), 2);
     }
 
-    void applyMotionSet_writesPerPathFiles()
+    void applySet_writesPerPathFiles()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -259,7 +297,7 @@ private Q_SLOTS:
         QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 333);
     }
 
-    void applyMotionSet_mergesPreservesOtherPaths()
+    void applySet_mergesPreservesOtherPaths()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -280,7 +318,7 @@ private Q_SLOTS:
         QVERIFY(c.hasOverride(QStringLiteral("editor.snapIn")));
     }
 
-    void removeMotionSet_emitsAndDeletes()
+    void removeSet_emitsAndDeletes()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -298,11 +336,11 @@ private Q_SLOTS:
     }
 
     /// Manually plant a malformed motion-set file (mixing valid and
-    /// invalid entries) and verify applyMotionSet() rejects the whole
+    /// invalid entries) and verify applySet() rejects the whole
     /// thing rather than partially writing. Pre-fix, the loop wrote
     /// each valid entry and skipped invalid ones, leaving inconsistent
     /// state.
-    void applyMotionSet_malformedEntryRejectsWholeSet()
+    void applySet_malformedEntryRejectsWholeSet()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -336,7 +374,8 @@ private Q_SLOTS:
 
         QFile f(setPath);
         QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(QJsonDocument(root).toJson());
+        const QByteArray rootBytes = QJsonDocument(root).toJson();
+        QCOMPARE(f.write(rootBytes), static_cast<qint64>(rootBytes.size()));
         f.close();
 
         // No prior override at editor.snapIn.
@@ -347,7 +386,7 @@ private Q_SLOTS:
         // Critical: the valid entry MUST NOT have been written. Atomic
         // semantics — all-or-nothing. Pre-fix this would be true.
         QVERIFY2(!c.hasOverride(QStringLiteral("editor.snapIn")),
-                 "applyMotionSet wrote partial state from a malformed set — should have rejected atomically");
+                 "applySet wrote partial state from a malformed set — should have rejected atomically");
     }
 
     // ─── Pending changes / commit / revert ────────────────────────────────
@@ -488,6 +527,207 @@ private Q_SLOTS:
         // The good preset still surfaces; the malformed one is skipped.
         QCOMPARE(presets.size(), 1);
         QCOMPARE(presets.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Good"));
+    }
+
+    // ─── Motion sets: active flag, metadata edit, portability, guard ───────
+
+    /// `active` measures the saved payload against the CURRENT override files.
+    /// It must light up right after a save, clear once a covered path is edited
+    /// away, and light again after apply. It must NOT clear because of an
+    /// override the set does not cover — apply merges, so that override would
+    /// have survived the apply anyway (containment, not equality).
+    void motionSets_activeTracksLiveOverrides()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        ShaderSetStore* sets = c.setsBridge();
+        QVERIFY(sets);
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Snappy"), QString()));
+
+        const QVariantMap saved = rowFor(sets, QStringLiteral("Snappy"));
+        QVERIFY(!saved.isEmpty());
+        QCOMPARE(saved.value(QStringLiteral("coverageCount")).toInt(), 1);
+        QCOMPARE(saved.value(QStringLiteral("coverage")).toStringList(), (QStringList{QStringLiteral("editor")}));
+        QVERIFY2(saved.value(QStringLiteral("active")).toBool(), "a just-saved motion set must read as active");
+
+        // An override the set does NOT cover must not clear the badge.
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 111}}));
+        QVERIFY2(rowFor(sets, QStringLiteral("Snappy")).value(QStringLiteral("active")).toBool(),
+                 "an override outside the set's coverage must not clear its active flag");
+
+        // Editing a path the set DOES cover clears it.
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 900}}));
+        QVERIFY2(!rowFor(sets, QStringLiteral("Snappy")).value(QStringLiteral("active")).toBool(),
+                 "editing a covered path must clear the active flag");
+
+        // Applying restores it.
+        QVERIFY(sets->applySet(QStringLiteral("Snappy")));
+        QVERIFY2(rowFor(sets, QStringLiteral("Snappy")).value(QStringLiteral("active")).toBool(),
+                 "the set must read as active again right after applying it");
+    }
+
+    /// updateSet renames and edits the description in one write, keeping the
+    /// payload, and refuses a collision rather than destroying the other set.
+    void motionSets_updateRoundTripsAndRefusesCollision()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        ShaderSetStore* sets = c.setsBridge();
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Old"), QStringLiteral("keep me")));
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 400}}));
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Other"), QString()));
+
+        QVERIFY(sets->updateSet(QStringLiteral("Old"), QStringLiteral("New"), QStringLiteral("new words")));
+        QVERIFY2(rowFor(sets, QStringLiteral("Old")).isEmpty(), "the old name must be freed");
+        const QVariantMap renamed = rowFor(sets, QStringLiteral("New"));
+        QVERIFY(!renamed.isEmpty());
+        QCOMPARE(renamed.value(QStringLiteral("description")).toString(), QStringLiteral("new words"));
+
+        // The payload survived: applying restores the original duration.
+        QVERIFY(sets->applySet(QStringLiteral("New")));
+        QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
+
+        QVERIFY2(!sets->updateSet(QStringLiteral("New"), QStringLiteral("Other"), QString()),
+                 "rename onto an existing set must be refused");
+        QCOMPARE(sets->availableSets().size(), 2);
+    }
+
+    /// Saving onto an existing name must be refused rather than silently
+    /// destroying the set already stored there.
+    void motionSets_saveRefusesToOverwriteExistingName()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        ShaderSetStore* sets = c.setsBridge();
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Taken"), QStringLiteral("first")));
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 999}}));
+        QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("Taken"), QStringLiteral("second")),
+                 "saving onto an existing set name must be refused");
+
+        // The stored set is untouched: applying restores the FIRST payload.
+        QVERIFY(sets->applySet(QStringLiteral("Taken")));
+        QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
+    }
+
+    /// Export writes a file that import reads back, in both the local-path and
+    /// the file:// URL form the drop zone hands over. A colliding import lands
+    /// under a free name instead of overwriting.
+    void motionSets_exportImportRoundTrips()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        ShaderSetStore* sets = c.setsBridge();
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Portable"), QString()));
+
+        QTemporaryDir exportDir;
+        QVERIFY(exportDir.isValid());
+        const QString exported = exportDir.filePath(QStringLiteral("portable.json"));
+        QVERIFY(sets->exportSet(QStringLiteral("Portable"), exported));
+        QVERIFY(QFile::exists(exported));
+
+        // A colliding import must not overwrite the original.
+        QVERIFY(sets->importSet(exported));
+        QVERIFY2(!rowFor(sets, QStringLiteral("Portable (2)")).isEmpty(),
+                 "a colliding import must land under a free name");
+
+        // The drop zone hands over a file:// URL, not a local path.
+        QVERIFY2(sets->importSet(QUrl::fromLocalFile(exported).toString()),
+                 "importSet must accept the file:// URL form the drop zone emits");
+        QCOMPARE(sets->availableSets().size(), 3);
+
+        // The imported payload still applies.
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 900}}));
+        QVERIFY(sets->applySet(QStringLiteral("Portable")));
+        QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
+    }
+
+    /// Import validates against the EVENT taxonomy, so a decoration set (whose
+    /// paths are surfaces, not events) is refused at the boundary — the mirror
+    /// of the decoration side's foreign-payload test.
+    void motionSets_importRejectsForeignPayload()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        ShaderSetStore* sets = c.setsBridge();
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString foreign = dir.filePath(QStringLiteral("foreign.json"));
+
+        QJsonObject profile;
+        profile.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("glow")});
+        QJsonObject entry;
+        entry.insert(QStringLiteral("path"), QStringLiteral("window.tiled")); // a decoration surface
+        entry.insert(QStringLiteral("profile"), profile);
+        QJsonObject root;
+        root.insert(QStringLiteral("name"), QStringLiteral("Foreign"));
+        root.insert(QStringLiteral("version"), 1);
+        root.insert(QStringLiteral("overrides"), QJsonArray{entry});
+
+        QFile f(foreign);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        const QByteArray bytes = QJsonDocument(root).toJson();
+        QCOMPARE(f.write(bytes), static_cast<qint64>(bytes.size()));
+        f.close();
+
+        QVERIFY2(!sets->importSet(foreign), "a set whose paths are not event paths must be refused");
+        QVERIFY(sets->availableSets().isEmpty());
+    }
+
+    /// The in-flight-discard guard is what stops a set write from landing
+    /// mid-revert and being clobbered by the async restore walk. It moved out
+    /// of the controller and into the store as an injected mutationGuard when
+    /// QML started calling the store directly, so pin it: every mutator must
+    /// refuse while a discard is in flight, and each must say why.
+    void motionSets_mutationGuardRefusesWritesDuringDiscard()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        ShaderSetStore* sets = c.setsBridge();
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Before"), QString()));
+
+        // Kick off the async discard and immediately try to write, without
+        // spinning the event loop — the worker is in flight.
+        c.asyncRevertPending();
+
+        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
+        QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("During"), QString()),
+                 "a save must be refused while a discard is in flight");
+        QVERIFY2(!sets->applySet(QStringLiteral("Before")), "an apply must be refused mid-discard");
+        QVERIFY2(!sets->removeSet(QStringLiteral("Before")), "a remove must be refused mid-discard");
+        QVERIFY2(!sets->updateSet(QStringLiteral("Before"), QStringLiteral("Renamed"), QString()),
+                 "an update must be refused mid-discard");
+        QCOMPARE(toastSpy.count(), 4); // each refusal carries its reason
+
+        // The refused save never reached disk.
+        QVERIFY(rowFor(sets, QStringLiteral("During")).isEmpty());
+
+        // Let the worker finish so the fixture tears down cleanly.
+        QSignalSpy done(&c, &PhosphorControl::StagingDomain::discardResult);
+        QVERIFY(done.wait(5000));
     }
 };
 

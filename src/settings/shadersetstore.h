@@ -19,10 +19,11 @@ namespace PlasmaZones {
 /// `bridge` of ShaderSetsPage.
 ///
 /// The store owns everything domain-agnostic: the sets directory, slugs,
-/// atomic writes, listing, apply / save / remove / rename / export / import,
+/// atomic writes, listing, apply / save / remove / update / export / import,
 /// and the coverage + "active" summaries. It treats a set's payload as
-/// opaque JSON and delegates the three domain-specific steps to injected
-/// callables (Config below).
+/// opaque JSON and delegates the domain-specific steps to the injected
+/// callables in Config below (snapshot / validate / apply, plus the optional
+/// file-snapshot and mutation-guard hooks).
 ///
 /// Both domains happen to serialise the SAME envelope:
 /// ```
@@ -61,7 +62,13 @@ public:
     /// controller's `snapshotFileIfFirst` so Discard can restore set files
     /// it overwrote. Decoration leaves this null (its writes ride the
     /// normal settings staging flow).
-    using FileSnapshotFn = std::function<void(const QString& /*filePath*/)>;
+    ///
+    /// Returns false when the pre-edit content could NOT be captured. The
+    /// store then refuses the write rather than proceeding: overwriting a
+    /// file whose prior content was never captured would permanently lose
+    /// it, with Discard unable to restore. A null callable reads as true
+    /// (the domain does not stage set files at all).
+    using FileSnapshotFn = std::function<bool(const QString& /*filePath*/)>;
 
     /// Optional gate consulted before every mutation. Returns an empty
     /// string when the mutation may proceed, or a user-facing refusal
@@ -88,14 +95,21 @@ public:
 
     /// Saved sets, one row per file:
     /// `{ name, description, slug, coverage: [section…], coverageCount,
-    ///    hasBaseline, active }`
+    ///    hasBaseline, active, modified }`
     /// `active` is true when every entry the set carries is already live
     /// with an equal profile (containment, not equality — apply merges, so
-    /// unrelated live overrides must not clear the badge).
+    /// unrelated live overrides must not clear the badge). `modified` is the
+    /// set file's mtime.
     Q_INVOKABLE QVariantList availableSets() const;
 
     Q_INVOKABLE bool applySet(const QString& name);
+
+    /// Capture live state as a new set. Refuses a name that already exists:
+    /// a silent overwrite would destroy the saved set with no confirmation,
+    /// and on a domain with no fileSnapshot hook (decoration) no Discard
+    /// could bring it back. Use updateSet to re-point an existing name.
     Q_INVOKABLE bool saveCurrentAsSet(const QString& name, const QString& description);
+
     Q_INVOKABLE bool removeSet(const QString& name);
 
     /// Update a set's metadata in place, keeping the payload: rename and/or
@@ -117,13 +131,20 @@ public:
     Q_INVOKABLE void openSetsDirectory();
 
     /// Absolute path the named set serialises to. Empty when @p setName
-    /// slugifies to an empty string.
-    Q_INVOKABLE QString setFilePath(const QString& setName) const;
+    /// slugifies to an empty string. Public for tests; QML never needs it.
+    QString setFilePath(const QString& setName) const;
 
     /// Re-emit setsChanged() so QML re-reads the rows. Wired to each
     /// domain's live-state signal: the `active` flag is derived from live
     /// state, so it goes stale when the user edits a chain elsewhere.
-    Q_INVOKABLE void notifyLiveStateChanged();
+    ///
+    /// COALESCED: a bulk revert emits the domain's live-state signal once per
+    /// restored path, and each setsChanged makes QML re-run availableSets(),
+    /// which re-walks the sets dir AND re-snapshots live state. Emitting per
+    /// path would put an O(paths x files) disk walk on the GUI thread. The
+    /// emission is therefore deferred to the next event-loop turn and
+    /// collapsed into one.
+    void notifyLiveStateChanged();
 
 Q_SIGNALS:
     /// Any change to the saved-set list OR to the live state the `active`
@@ -138,8 +159,16 @@ Q_SIGNALS:
     void toastRequested(const QString& text);
 
 private:
-    /// Read + parse a set file. Returns false (and warns) on unreadable or
-    /// malformed JSON. @p filePath is the absolute set-file path.
+    /// The sets directory, or an empty string when no accessor is wired.
+    /// Every filesystem entry point routes through here, so a misconfigured
+    /// store refuses cleanly instead of calling an empty std::function.
+    QString setsDirectory() const;
+
+    /// Read + parse a set file. Returns false (and warns) on an unreadable,
+    /// oversized, or malformed file. @p filePath is the absolute set-file
+    /// path. importSet feeds this a user-chosen path, so the size cap is a
+    /// boundary check: a set is kilobytes, and readAll() on a multi-gigabyte
+    /// file would be slurped into memory before the parser could reject it.
     bool readSetFile(const QString& filePath, QJsonObject* out) const;
 
     /// Version gate shared by applySet and importSet.
@@ -148,10 +177,26 @@ private:
     /// True when the mutation may proceed; emits the refusal toast when not.
     bool mutationAllowed();
 
+    /// Capture pre-edit content of @p filePath before the store overwrites or
+    /// removes it. False = the capture failed and the caller must NOT write.
+    /// True when no fileSnapshot hook is wired (the domain does not stage).
+    bool snapshotFile(const QString& filePath);
+
+    /// Atomically write @p root to @p filePath. On failure emits
+    /// pendingChangesChanged: snapshotFile() already staged the pre-edit
+    /// content, so the domain's dirty state moved even though the write did
+    /// not, and the page must re-evaluate rather than keep a stale flag.
+    bool writeSetFile(const QString& filePath, const QJsonObject& root);
+
     /// A free (non-colliding) set name derived from @p desiredName.
     QString uniqueSetName(const QString& desiredName) const;
 
+    /// Largest set file the store will read. A set is a few kilobytes of JSON.
+    static constexpr qint64 kMaxSetFileBytes = 4 * 1024 * 1024;
+
     Config m_config;
+    /// Guards the coalesced notifyLiveStateChanged() emission (see there).
+    bool m_liveStateNotifyQueued = false;
 };
 
 } // namespace PlasmaZones

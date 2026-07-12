@@ -81,9 +81,9 @@ set(plasmazones_settings_SRCS
     # Centralises the symlink-rejection + metadata.json safety checks.
     shaderpackinstaller.h
     shaderpackinstaller.cpp
-    # Sub-services hosted by AnimationsPageController as child QObjects:
-    # preset library + motion-set store. Split out to keep
-    # animationspagecontroller.cpp under the project's 800-line cap.
+    # Preset library — a sub-service hosted by AnimationsPageController as a
+    # child QObject. Split out to keep animationspagecontroller.cpp under the
+    # project's 800-line cap.
     animationpresetlibrary.h
     animationpresetlibrary.cpp
     # Shared set store (motion sets + decoration sets) and the motion-set
@@ -208,7 +208,7 @@ set(plasmazones_settings_SRCS
 
 add_executable(plasmazones-settings ${plasmazones_settings_SRCS})
 
-# GCC 16 LTO false positive: applyDecorationSet stages a QList of entries whose
+# GCC 16 LTO false positive: stageEntries() builds a QList of entries whose
 # DecorationProfile holds std::optional members. A disengaged optional's payload
 # bytes are legitimately uninitialized and only ever read behind the engaged
 # flag, but GCC's link-time IPA maybe-uninitialized pass loses that guard across

@@ -79,9 +79,16 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
 
 ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::function<QString()> setsDir,
                                   std::function<bool(const QString&, const QVariantMap&)> writeOverride,
-                                  std::function<void(const QString&)> fileSnapshot,
+                                  std::function<bool(const QString&)> fileSnapshot,
                                   std::function<QString()> mutationGuard)
 {
+    // The domain cannot function without these: a missing callable is a wiring
+    // bug, not a runtime condition. Assert in debug; the lambdas below still
+    // check, so a release build degrades to "nothing to snapshot / refuse the
+    // write" instead of throwing std::bad_function_call.
+    Q_ASSERT(profilesDir);
+    Q_ASSERT(writeOverride);
+
     ShaderSetStore::Config config;
     config.setsDir = std::move(setsDir);
     config.fileSnapshot = std::move(fileSnapshot);
@@ -93,9 +100,12 @@ ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::fun
     //    ordering keeps the output deterministic, which the store relies on
     //    when it compares this snapshot against a saved set to decide which
     //    one is active.
-    config.snapshot = [profilesDir]() -> QJsonObject {
+    config.snapshot = [profilesDir = std::move(profilesDir)]() -> QJsonObject {
         using namespace PhosphorAnimation;
 
+        if (!profilesDir) {
+            return QJsonObject{};
+        }
         QJsonArray overrides;
         QDir dir(profilesDir());
         if (!dir.exists()) {
@@ -145,7 +155,10 @@ ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::fun
     //    before each write, so a mid-batch failure still leaves pre-edit
     //    content captured for every peer that already succeeded — Discard
     //    restores them atomically via the controller's revertPending walk.
-    config.apply = [writeOverride](const QJsonObject& root) -> bool {
+    config.apply = [writeOverride = std::move(writeOverride)](const QJsonObject& root) -> bool {
+        if (!writeOverride) {
+            return false;
+        }
         QList<StagedEntry> staged;
         if (!stageEntries(root, &staged)) {
             return false;

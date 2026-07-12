@@ -87,9 +87,13 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     // honest — downstream listeners only re-evaluate on real changes.
     // Forward the snapshot helper as a callable so the sub-services can
     // capture pre-edit content without coupling to the controller's
-    // m_pendingFileSnapshots layout.
-    auto snapshotFn = [this](const QString& filePath) {
-        snapshotFileIfFirst(filePath);
+    // m_pendingFileSnapshots layout. The bool return matters: a false means
+    // the pre-edit content could NOT be captured, and a caller that writes
+    // anyway loses it permanently. ShaderSetStore honours it and refuses the
+    // write; AnimationPresetLibrary's void-typed hook discards it, which is
+    // the pre-existing behaviour there.
+    auto snapshotFn = [this](const QString& filePath) -> bool {
+        return snapshotFileIfFirst(filePath);
     };
     auto profilesDirFn = [this]() {
         return userProfilesDir();
@@ -437,8 +441,10 @@ void AnimationsPageController::asyncRevertPending()
     // handler can MERGE results back into m_pendingFileSnapshots.
     // Today the m_asyncRevertInFlight guard rejects concurrent
     // setOverride / setShaderOverride / clearShaderOverride* /
-    // applyMotionSet / addUserPreset / removeUserPreset /
-    // saveCurrentAsMotionSet / removeMotionSet calls during the worker
+    // addUserPreset / removeUserPreset calls, and — through the
+    // mutationGuard closure handed to ShaderSetStore — every set
+    // mutator (applySet / saveCurrentAsSet / removeSet / updateSet /
+    // importSet) during the worker
     // run, so a fresh post-discard mutator would be the only way new
     // entries could appear — kept the merge as belt-and-braces against
     // a future change that opens the mutator gate (or a post-discard

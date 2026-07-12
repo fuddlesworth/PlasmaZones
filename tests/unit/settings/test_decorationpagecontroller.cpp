@@ -16,9 +16,16 @@
  *     the override; the baseline "" cannot be cleared
  *   - setChainParam / setChainParams merge into the pack's existing
  *     parameters rather than replacing them
+ *   - disabledPacksAt round-trips the per-surface disabled-pack set
  *   - parentChain walks self→ancestors; overrideDescendantCount /
  *     clearOverrideDescendants act on the strict subtree
  *   - profilesChanged re-fires from ISettings::decorationProfileTreeChanged
+ *   - shaderEffectUsages lists the direct overrides using a given effect
+ *
+ * The decoration-SET surface (the controller's `setsBridge()` ShaderSetStore)
+ * lives in its own TU, test_decoration_sets.cpp — same split, and for the same
+ * reason, as the motion side's test_animations_motion_sets.cpp: to keep each
+ * test file under the project's 800-line cap.
  *
  * The controller is constructed with a null SurfaceShaderRegistry — every
  * path exercised here is registry-independent (the registry only feeds the
@@ -31,20 +38,13 @@
 #include <QSignalSpy>
 #include <QTest>
 
-#include <QDir>
-#include <QFile>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QStandardPaths>
-#include <QTemporaryDir>
+#include <QStringList>
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
-#include "config/configdefaults.h"
 #include "settings/decorationpagecontroller.h"
-#include "settings/shadersetstore.h"
 #include "../helpers/StubSettings.h"
 
 using namespace PlasmaZones;
@@ -96,38 +96,19 @@ void seedBaselinePlusLeaf(TreeStubSettings& settings)
 
 } // namespace
 
-/// Absolute path to the decoration-sets directory the controller writes to,
-/// recomputed the same way DecorationPageController::decorationSetsDirectoryPath
-/// does. Valid only under QStandardPaths test mode (see initTestCase), which
-/// redirects GenericDataLocation to an isolated per-user test tree.
-QString decorationSetsDir()
-{
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    return QDir::cleanPath(base + ConfigDefaults::userDecorationSetsSubdir());
-}
-
 class TestDecorationPageController : public QObject
 {
     Q_OBJECT
 
 private Q_SLOTS:
 
-    /// Redirect GenericDataLocation to an isolated test tree so the
-    /// decoration-set CRUD tests never touch the real ~/.local/share.
+    /// Redirect GenericDataLocation to an isolated test tree. Nothing here
+    /// writes to disk (the set CRUD moved to test_decoration_sets.cpp), but
+    /// the controller resolves its sets directory from GenericDataLocation,
+    /// so the redirect stays as a safety net against a future test that does.
     void initTestCase()
     {
         QStandardPaths::setTestModeEnabled(true);
-    }
-
-    /// Each test starts from an empty sets directory.
-    void init()
-    {
-        QDir(decorationSetsDir()).removeRecursively();
-    }
-
-    void cleanupTestCase()
-    {
-        QDir(decorationSetsDir()).removeRecursively();
     }
 
     // ─── Readers ──────────────────────────────────────────────────────────
@@ -456,269 +437,6 @@ private Q_SLOTS:
         other.setBaseline(baseline);
         settings.setDecorationProfileTree(other);
         QVERIFY2(spy.count() > before, "an external tree swap must re-fire profilesChanged");
-    }
-
-    // ─── Decoration sets (save / list / apply / remove) ─────────────────────
-
-    /// A decoration set snapshots the baseline + per-surface overrides to a
-    /// JSON file, and applying it merges those overrides back into the current
-    /// tree. Full round-trip: save a look, mutate the tree, apply, and confirm
-    /// the saved chains are restored; then remove and confirm the listing empties.
-    void decorationSets_saveListApplyRemoveRoundTrips()
-    {
-        TreeStubSettings settings;
-        DecorationPageController c(nullptr, &settings);
-        ShaderSetStore* sets = c.setsBridge();
-        QVERIFY(sets);
-
-        // Author a look: baseline "border", window.tiled → "glow".
-        c.setChain(QString(), QStringList{QStringLiteral("border")});
-        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
-
-        QSignalSpy setsSpy(sets, &ShaderSetStore::setsChanged);
-        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("My Look"), QStringLiteral("a test look")));
-        QCOMPARE(setsSpy.count(), 1);
-
-        // The set appears in the listing with the expected summary (baseline
-        // counts as one covered surface, plus the single window.tiled
-        // override), and it is `active` because it still matches the live tree.
-        const QVariantList saved = sets->availableSets();
-        QCOMPARE(saved.size(), 1);
-        const QVariantMap set = saved.first().toMap();
-        QCOMPARE(set.value(QStringLiteral("name")).toString(), QStringLiteral("My Look"));
-        QCOMPARE(set.value(QStringLiteral("description")).toString(), QStringLiteral("a test look"));
-        QCOMPARE(set.value(QStringLiteral("coverageCount")).toInt(), 2);
-        QCOMPARE(set.value(QStringLiteral("hasBaseline")).toBool(), true);
-        QCOMPARE(set.value(QStringLiteral("coverage")).toStringList(), (QStringList{QStringLiteral("window")}));
-        QVERIFY2(set.value(QStringLiteral("active")).toBool(), "a just-saved set must read as active");
-
-        // Mutate the live tree away from the saved look.
-        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border")});
-        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("border")}));
-        QVERIFY2(!sets->availableSets().first().toMap().value(QStringLiteral("active")).toBool(),
-                 "editing the live tree away from the set must clear its active flag");
-
-        // Apply restores the saved baseline + override.
-        QVERIFY(sets->applySet(QStringLiteral("My Look")));
-        QCOMPARE(c.chainAt(QString()), (QStringList{QStringLiteral("border")}));
-        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("glow")}));
-        QVERIFY2(sets->availableSets().first().toMap().value(QStringLiteral("active")).toBool(),
-                 "the set must read as active again right after applying it");
-
-        // Remove empties the listing and fires the change signal.
-        QSignalSpy removeSpy(sets, &ShaderSetStore::setsChanged);
-        QVERIFY(sets->removeSet(QStringLiteral("My Look")));
-        QCOMPARE(removeSpy.count(), 1);
-        QVERIFY(sets->availableSets().isEmpty());
-    }
-
-    /// Apply MERGES, so an unrelated live override must not clear the badge:
-    /// the set's own entries are all still live. An equality check (rather
-    /// than containment) would wrongly read this as inactive.
-    void decorationSets_activeSurvivesUnrelatedOverride()
-    {
-        TreeStubSettings settings;
-        DecorationPageController c(nullptr, &settings);
-        ShaderSetStore* sets = c.setsBridge();
-
-        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
-        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Tiled Only"), QString()));
-
-        // A surface the set does not cover — apply would have left it alone.
-        c.setChain(QStringLiteral("osd"), QStringList{QStringLiteral("border")});
-
-        QVERIFY2(sets->availableSets().first().toMap().value(QStringLiteral("active")).toBool(),
-                 "an override outside the set's coverage must not clear its active flag");
-    }
-
-    /// updateSet keeps the payload while renaming and editing the
-    /// description, and frees the old name. Renaming onto an existing set is
-    /// refused rather than destroying it.
-    void decorationSets_updateRoundTripsAndRefusesCollision()
-    {
-        TreeStubSettings settings;
-        DecorationPageController c(nullptr, &settings);
-        ShaderSetStore* sets = c.setsBridge();
-
-        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
-        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Old Name"), QStringLiteral("keep me")));
-        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border")});
-        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Other"), QString()));
-
-        QVERIFY(sets->updateSet(QStringLiteral("Old Name"), QStringLiteral("New Name"), QStringLiteral("new words")));
-        const QVariantList after = sets->availableSets();
-        QCOMPARE(after.size(), 2);
-        QStringList names;
-        for (const QVariant& row : after)
-            names << row.toMap().value(QStringLiteral("name")).toString();
-        names.sort();
-        QCOMPARE(names, (QStringList{QStringLiteral("New Name"), QStringLiteral("Other")}));
-        for (const QVariant& row : after) {
-            if (row.toMap().value(QStringLiteral("name")).toString() == QLatin1String("New Name"))
-                QCOMPARE(row.toMap().value(QStringLiteral("description")).toString(), QStringLiteral("new words"));
-        }
-
-        // The payload survived the rename: applying restores the saved chain.
-        QVERIFY(sets->applySet(QStringLiteral("New Name")));
-        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("glow")}));
-
-        // A same-name call is a description-only edit; an empty description
-        // clears the field (stored as an absent key, like save).
-        QVERIFY(sets->updateSet(QStringLiteral("New Name"), QStringLiteral("New Name"), QString()));
-        for (const QVariant& row : sets->availableSets()) {
-            if (row.toMap().value(QStringLiteral("name")).toString() == QLatin1String("New Name"))
-                QVERIFY(row.toMap().value(QStringLiteral("description")).toString().isEmpty());
-        }
-
-        // Renaming onto a name that is taken must not clobber the other set.
-        QVERIFY2(!sets->updateSet(QStringLiteral("New Name"), QStringLiteral("Other"), QString()),
-                 "rename onto an existing set must be refused");
-        QCOMPARE(sets->availableSets().size(), 2);
-    }
-
-    /// Export writes a file that import reads back. Importing while the
-    /// original is still present must not overwrite it — the copy lands under
-    /// a free name.
-    void decorationSets_exportImportRoundTrips()
-    {
-        TreeStubSettings settings;
-        DecorationPageController c(nullptr, &settings);
-        ShaderSetStore* sets = c.setsBridge();
-
-        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
-        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Portable"), QString()));
-
-        QTemporaryDir exportDir;
-        QVERIFY(exportDir.isValid());
-        const QString exported = exportDir.filePath(QStringLiteral("portable.json"));
-        QVERIFY(sets->exportSet(QStringLiteral("Portable"), exported));
-        QVERIFY(QFile::exists(exported));
-
-        // Re-importing alongside the original yields a second, distinct set.
-        QVERIFY(sets->importSet(exported));
-        QCOMPARE(sets->availableSets().size(), 2);
-
-        // Deleting both and importing restores the set from the file alone.
-        for (const QVariant& row : sets->availableSets())
-            QVERIFY(sets->removeSet(row.toMap().value(QStringLiteral("name")).toString()));
-        QVERIFY(sets->availableSets().isEmpty());
-
-        QVERIFY(sets->importSet(exported));
-        const QVariantList imported = sets->availableSets();
-        QCOMPARE(imported.size(), 1);
-        QCOMPARE(imported.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Portable"));
-
-        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border")});
-        QVERIFY(sets->applySet(QStringLiteral("Portable")));
-        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("glow")}));
-    }
-
-    /// Import validates against the surface taxonomy, so a file carrying an
-    /// unknown path is refused at the boundary rather than landing on disk and
-    /// failing later at apply time.
-    void decorationSets_importRejectsForeignPayload()
-    {
-        TreeStubSettings settings;
-        DecorationPageController c(nullptr, &settings);
-        ShaderSetStore* sets = c.setsBridge();
-
-        QTemporaryDir dir;
-        QVERIFY(dir.isValid());
-        const QString foreign = dir.filePath(QStringLiteral("foreign.json"));
-
-        QJsonObject entry;
-        entry.insert(QStringLiteral("path"), QStringLiteral("window.appearance.open")); // a motion path
-        entry.insert(QStringLiteral("profile"), QJsonObject{});
-        QJsonObject root;
-        root.insert(QStringLiteral("name"), QStringLiteral("Foreign"));
-        root.insert(QStringLiteral("version"), 1);
-        root.insert(QStringLiteral("overrides"), QJsonArray{entry});
-
-        QFile f(foreign);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(QJsonDocument(root).toJson());
-        f.close();
-
-        QVERIFY2(!sets->importSet(foreign), "a set whose paths are not decoration surfaces must be refused");
-        QVERIFY(sets->availableSets().isEmpty());
-    }
-
-    /// Saving with an empty tree (no baseline, no overrides) is refused: the
-    /// resulting set would be a no-op that applySet then rejects, so it must
-    /// never reach disk.
-    void saveDecorationSet_emptyTreeRejected()
-    {
-        TreeStubSettings settings;
-        DecorationPageController c(nullptr, &settings);
-        ShaderSetStore* sets = c.setsBridge();
-
-        QSignalSpy setsSpy(sets, &ShaderSetStore::setsChanged);
-        QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("Nothing"), QString()),
-                 "saving an empty decoration tree must be refused");
-        QCOMPARE(setsSpy.count(), 0);
-        QVERIFY(sets->availableSets().isEmpty());
-    }
-
-    /// saveCurrentAsSet rejects an empty name (would slugify to an empty
-    /// filename).
-    void saveDecorationSet_emptyNameRejected()
-    {
-        TreeStubSettings settings;
-        DecorationPageController c(nullptr, &settings);
-        c.setChain(QString(), QStringList{QStringLiteral("border")});
-        QVERIFY(!c.setsBridge()->saveCurrentAsSet(QString(), QString()));
-    }
-
-    /// applySet validates every entry up-front and rejects the whole set on any
-    /// unknown surface path, leaving the current tree untouched (atomic apply —
-    /// no partial write).
-    void applyDecorationSet_unknownPathRejectsWholeSetAtomically()
-    {
-        TreeStubSettings settings;
-        DecorationPageController c(nullptr, &settings);
-        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border")});
-
-        // Hand-craft a set file mixing a valid and an unknown-path entry.
-        QVERIFY(QDir().mkpath(decorationSetsDir()));
-        QJsonObject validProfile;
-        validProfile.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("glow")});
-        QJsonObject validEntry;
-        validEntry.insert(QStringLiteral("path"), QStringLiteral("window.snapped"));
-        validEntry.insert(QStringLiteral("profile"), validProfile);
-        QJsonObject badEntry;
-        badEntry.insert(QStringLiteral("path"), QStringLiteral("../etc/passwd"));
-        badEntry.insert(QStringLiteral("profile"), QJsonObject{});
-
-        QJsonObject root;
-        root.insert(QStringLiteral("name"), QStringLiteral("bad-set"));
-        root.insert(QStringLiteral("version"), 1);
-        root.insert(QStringLiteral("overrides"), QJsonArray{validEntry, badEntry});
-
-        QFile f(decorationSetsDir() + QStringLiteral("/bad-set.json"));
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        const QByteArray bytes = QJsonDocument(root).toJson();
-        QCOMPARE(f.write(bytes), static_cast<qint64>(bytes.size()));
-        f.close();
-
-        QVERIFY2(!c.setsBridge()->applySet(QStringLiteral("bad-set")), "a set with an unknown path must be rejected");
-        // The valid entry must NOT have been applied — atomic all-or-nothing.
-        QVERIFY2(!c.hasOverride(QStringLiteral("window.snapped")), "applySet wrote partial state from a malformed set");
-        // The pre-existing override is untouched.
-        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("border")}));
-    }
-
-    /// applySet / removeSet on a name with no file report failure rather than
-    /// crashing or emitting a spurious change.
-    void decorationSets_unknownNameReturnsFalse()
-    {
-        TreeStubSettings settings;
-        DecorationPageController c(nullptr, &settings);
-        ShaderSetStore* sets = c.setsBridge();
-
-        QSignalSpy setsSpy(sets, &ShaderSetStore::setsChanged);
-        QVERIFY(!sets->applySet(QStringLiteral("nonexistent")));
-        QVERIFY(!sets->removeSet(QStringLiteral("nonexistent")));
-        QCOMPARE(setsSpy.count(), 0);
     }
 
     // ─── Effect-usage query + param guard ───────────────────────────────────

@@ -20,16 +20,17 @@ import org.kde.kirigami as Kirigami
  *
  *   QVariantList availableSets()      // rows: name, description, slug,
  *                                     //   coverage[], coverageCount,
- *                                     //   hasBaseline, active
+ *                                     //   hasBaseline, active, modified
  *   bool         applySet(name)
  *   bool         saveCurrentAsSet(name, description)
  *   bool         removeSet(name)
- *   bool         renameSet(oldName, newName)
+ *   bool         updateSet(oldName, newName, description)
  *   bool         exportSet(name, localPath)
  *   bool         importSet(pathOrUrl)
  *   void         openSetsDirectory()
  *
  *   signal setsChanged()
+ *   signal pendingChangesChanged()
  *   signal toastRequested(text)
  *
  * plus the domain-worded copy below.
@@ -39,16 +40,17 @@ SettingsFlickable {
 
     required property var bridge
 
-    // ── Domain-tuned copy ────────────────────────────────────────────────
+    // ── Domain-tuned copy. Every wrapper sets these, so the defaults are
+    //    only the fallback for a host that forgets one.
     property string infoBannerText: ""
     property string saveDescription: ""
-    property string importDescription: i18n("Sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.")
+    property string importDescription: ""
     property string emptyStateText: i18n("No sets saved yet.")
     property string nameFieldAccessibleName: i18n("Set name")
     property string descriptionFieldAccessibleName: i18n("Set description")
     /// token (e.g. "window") → translated coverage-chip label.
     required property var coverageLabel
-    /// count → translated "%n surfaces" / "%n overrides" label.
+    /// count → translated "%n Surfaces" / "%n Overrides" badge label.
     required property var coverageCountLabel
     /// name → translated apply-confirmation subtitle.
     required property var applySubtitleFor
@@ -60,17 +62,17 @@ SettingsFlickable {
     // Loaded from a Q_INVOKABLE and refreshed manually on setsChanged —
     // Q_INVOKABLE results are not reactive across the QML binding boundary.
     // The store re-fires setsChanged on live-state edits too, so the `active`
-    // badges stay honest while the user edits chains on other pages.
-    property var setsList: bridge.availableSets()
-    property bool _saving: false
+    // badges stay honest while the user edits chains on other pages. The
+    // bridge is null-guarded: `required` guarantees the property is assigned,
+    // not that the assignment is non-null (same guard as ShaderBrowserPage).
+    property var setsList: bridge ? bridge.availableSets() : []
 
     contentHeight: content.implicitHeight
     clip: true
 
     Connections {
         function onSetsChanged() {
-            root.setsList = root.bridge.availableSets();
-            root._saving = false;
+            root.setsList = root.bridge ? root.bridge.availableSets() : [];
         }
 
         // Surface controller-side diagnostics (a refused import, an
@@ -97,14 +99,18 @@ SettingsFlickable {
             text: root.infoBannerText
         }
 
-        // ── Save current state. Collapsed once the user has sets, so the
-        //    list (the thing they came for) is what greets them.
+        // ── Save current state. Starts collapsed when the user already has
+        //    sets, so the list (the thing they came for) is what greets them.
+        //    Assigned once at load, NOT bound: as a binding it would snap the
+        //    card shut under the cursor the moment the user's first save
+        //    landed, and SettingsCard's header click writes `collapsed`
+        //    imperatively anyway, which would break the binding on first use.
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Save current state")
             searchAnchor: root.saveAnchor
             collapsible: true
-            collapsed: root.setsList.length > 0
+            Component.onCompleted: collapsed = root.setsList.length > 0
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -157,23 +163,22 @@ SettingsFlickable {
                         text: i18n("Save")
                         icon.name: "document-save"
                         Accessible.name: i18n("Save set")
-                        enabled: nameField.text.trim().length > 0 && !root._saving
+                        enabled: nameField.text.trim().length > 0
                         onClicked: {
-                            root._saving = true;
                             saveStatus.visible = false;
                             const ok = root.bridge.saveCurrentAsSet(nameField.text.trim(), descField.text.trim());
                             if (ok) {
                                 nameField.text = "";
                                 descField.text = "";
                             } else {
-                                // The C++ side logs the concrete reason via
-                                // qCWarning; surface a banner so the user sees
-                                // that something went wrong instead of staring
-                                // at an inert form.
-                                saveStatus.text = i18n("Could not save the set. Check that the name is unique, that there is something to capture, and that ~/.local/share/plasmazones is writable.");
+                                // A name collision and an unwritable folder both
+                                // toast their own reason from the store. This
+                                // banner covers the remaining case (an empty
+                                // snapshot) so the form is never inert without
+                                // an explanation.
+                                saveStatus.text = i18n("Could not save the set. There must be something to capture, and the name must not already be taken.");
                                 saveStatus.visible = true;
                             }
-                            root._saving = false;
                         }
                     }
                 }
@@ -204,12 +209,13 @@ SettingsFlickable {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    Layout.preferredHeight: Kirigami.Units.gridUnit * 4
                     idleText: i18nc("@info drop-zone idle label", "Drop a set file here to import it")
                     hoverText: i18nc("@info drop-zone hover label", "Release to import the set")
                     // The store validates the payload against this domain's
                     // taxonomy and toasts the concrete refusal reason.
-                    onFileDropped: url => importResult.show(root.bridge.importSet(url), url)
+                    onFileDropped: function (url) {
+                        importResult.show(root.bridge.importSet(url), url);
+                    }
                 }
 
                 Kirigami.InlineMessage {
@@ -240,7 +246,9 @@ SettingsFlickable {
                     Timer {
                         id: autoHideTimer
 
-                        interval: 6000
+                        // Long enough to read the result without leaving a
+                        // stale banner pinned to the card.
+                        interval: Kirigami.Units.humanMoment * 3
                         onTriggered: importResult.visible = false
                     }
                 }
