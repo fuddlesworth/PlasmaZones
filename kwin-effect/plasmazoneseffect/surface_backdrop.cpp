@@ -86,6 +86,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // undefined. The guard restores the ambient scissor on exit.
     glDisable(GL_SCISSOR_TEST);
     if (state.backdropSize != textureSize || !state.backdropTex) {
+        state.backdropFbo.reset();
         state.backdropTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
         if (!state.backdropTex) {
             state.backdropSize = QSize();
@@ -96,16 +97,21 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropSize = textureSize;
         state.backdropRect = QVector4D();
         state.backdropFrameMs = -1;
+        // Wrap the texture once, here — the per-frame capture blit below reuses it.
+        state.backdropFbo = std::make_unique<KWin::GLFramebuffer>(state.backdropTex.get());
+        if (!state.backdropFbo->valid()) {
+            state.backdropFbo.reset();
+            state.backdropTex.reset();
+            state.backdropSize = QSize();
+            return;
+        }
         // The only clear the texture ever gets: uncovered regions read
         // transparent until a capture lands there, and are never sampled
         // (backdropTexel clamps into the valid rect).
-        KWin::GLFramebuffer clearFbo(state.backdropTex.get());
-        if (clearFbo.valid()) {
-            KWin::GLFramebuffer::pushFramebuffer(&clearFbo);
-            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            KWin::GLFramebuffer::popFramebuffer();
-        }
+        KWin::GLFramebuffer::pushFramebuffer(state.backdropFbo.get());
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        KWin::GLFramebuffer::popFramebuffer();
     }
     // Where to READ the scene from. At rest that is the canvas rect itself;
     // while an animation draws the window elsewhere (animatedFrame valid),
@@ -138,12 +144,12 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     }
     const bool sameGeneration =
         state.backdropFrameMs >= 0 && qAbs(frameStamp - state.backdropFrameMs) < kAccumulationWindowMs;
-    KWin::GLFramebuffer fbo(state.backdropTex.get());
-    if (!fbo.valid()) {
+    if (!state.backdropFbo) {
         state.backdropTex.reset();
         state.backdropSize = QSize();
         return;
     }
+    KWin::GLFramebuffer& fbo = *state.backdropFbo;
     // No clear here — see the accumulation note above.
     const KWin::Rect source(qRound(sourceLogicalF.x()), qRound(sourceLogicalF.y()), qRound(sourceLogicalF.width()),
                             qRound(sourceLogicalF.height()));

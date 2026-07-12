@@ -1451,6 +1451,15 @@ private:
     // pass (no morph quad deform / re-capture).
     bool m_capturingSnapshot = false;
 
+    /// True while WE schedule a repaint on a window (postPaintScreen's per-frame
+    /// repaint that keeps an animated decoration chain ticking). KWin's
+    /// `windowDamaged` fires on repaint SCHEDULING, not just on client content
+    /// damage, so without this guard our own addRepaintFull would invalidate the
+    /// very capture cache it exists to let us reuse — every frame, so the cache
+    /// could never hit. The damage handler ignores signals raised inside this
+    /// window; genuine client damage lands outside it and still invalidates.
+    bool m_selfRepainting = false;
+
     // D-Bus communication uses QDBusMessage::createMethodCall exclusively
     // (no QDBusInterface) to avoid synchronous D-Bus introspection that blocks
     // the compositor thread. See ClientHelpers::asyncCall() and ClientHelpers::fireAndForget().

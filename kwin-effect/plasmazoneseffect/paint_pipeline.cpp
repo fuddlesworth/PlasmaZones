@@ -316,7 +316,17 @@ void PlasmaZonesEffect::postPaintScreen()
                 backdropDue = stateIt == m_surfaceMultipass.end() || stateIt->second.lastFoldMs < 0
                     || (ShaderInternal::shaderClockNowMs() - stateIt->second.lastFoldMs) >= kBackdropRefoldIntervalMs;
             }
-            if (windowSurfaceAnimates(it.key()) || backdropDue) {
+            if (backdropDue || windowSurfaceAnimates(it.key())) {
+                // Mark this repaint as OURS. addRepaintFull raises
+                // EffectWindow::windowDamaged (the signal fires on repaint
+                // scheduling, not only on client content damage), and the
+                // decoration capture cache listens to that signal to know when
+                // the window's content went stale. Without this guard the
+                // repaint we issue here to keep the animation ticking would
+                // invalidate the capture on every single frame, so the cache
+                // would never hit and we'd re-run the most expensive step of the
+                // fold for a window whose content never changed.
+                m_selfRepainting = true;
                 sw->addRepaintFull();
                 // A padded chain's margin band sits OUTSIDE the window item;
                 // per-window repaints clip to it, so damage the band at
@@ -329,6 +339,7 @@ void PlasmaZonesEffect::postPaintScreen()
                     const int pad = it->outerPadding;
                     KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
                 }
+                m_selfRepainting = false;
             }
         }
     }

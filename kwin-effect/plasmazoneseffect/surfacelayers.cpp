@@ -274,7 +274,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // (Re)allocate the composite ping-pong pair on a size change.
     if (state.compositeSize != textureSize || !state.compositeTex[0] || !state.compositeTex[1]) {
         bool allocFailed = false;
-        for (auto& t : state.compositeTex) {
+        for (size_t i = 0; i < state.compositeTex.size(); ++i) {
+            auto& t = state.compositeTex[i];
             t = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
             if (!t) {
                 allocFailed = true;
@@ -282,6 +283,32 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             }
             t->setFilter(GL_LINEAR);
             t->setWrapMode(GL_CLAMP_TO_EDGE);
+            // Wrap each composite target once, here, rather than per pass per
+            // frame in the fold below.
+            auto fbo = std::make_unique<KWin::GLFramebuffer>(t.get());
+            if (!fbo->valid()) {
+                allocFailed = true;
+                break;
+            }
+            state.compositeFbo[i] = std::move(fbo);
+        }
+        // The capture target lives alongside the ping-pong pair and is sized
+        // identically; a stale capture at the old size must never be presented,
+        // so the realloc invalidates it.
+        if (!allocFailed) {
+            state.captureValid = false;
+            state.captureFbo.reset();
+            state.captureTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+            if (!state.captureTex) {
+                allocFailed = true;
+            } else {
+                state.captureTex->setFilter(GL_LINEAR);
+                state.captureTex->setWrapMode(GL_CLAMP_TO_EDGE);
+                state.captureFbo = std::make_unique<KWin::GLFramebuffer>(state.captureTex.get());
+                if (!state.captureFbo->valid()) {
+                    allocFailed = true;
+                }
+            }
         }
         if (allocFailed) {
             // Drop the half-allocated state. Erase AFTER the loop has ended so
@@ -301,6 +328,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     if (state.chainKey != chain) {
         state.chainBufferTex.clear();
         state.chainBufferTex.resize(chain.size());
+        state.chainBufferFbo.clear();
+        state.chainBufferFbo.resize(chain.size());
         for (int k = 0; k < chain.size(); ++k) {
             CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
             if (!pk || !pk->shader || pk->bufferPasses.empty()) {
@@ -313,29 +342,66 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             const QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
                                    qMax(1, qRound(textureSize.height() * bufferScale)));
             auto& bufs = state.chainBufferTex[k];
+            auto& fbos = state.chainBufferFbo[k];
             bufs.reserve(pk->bufferPasses.size());
+            fbos.reserve(pk->bufferPasses.size());
             for (size_t i = 0; i < pk->bufferPasses.size(); ++i) {
                 std::unique_ptr<KWin::GLTexture> bt = KWin::GLTexture::allocate(GL_RGBA8, bufferSize);
                 if (!bt) {
                     bufs.clear(); // pack k degrades to no buffers (iChannels sampled as 0)
+                    fbos.clear();
                     break;
                 }
                 bt->setFilter(GL_LINEAR);
                 bt->setWrapMode(GL_CLAMP_TO_EDGE);
+                // Wrap the buffer target once here; the fold reuses it every frame.
+                // Keep bufs/fbos strictly in lockstep — the fold indexes both by i.
+                auto bfbo = std::make_unique<KWin::GLFramebuffer>(bt.get());
+                if (!bfbo->valid()) {
+                    bufs.clear();
+                    fbos.clear();
+                    break;
+                }
                 bufs.push_back(std::move(bt));
+                fbos.push_back(std::move(bfbo));
             }
         }
         state.chainKey = chain;
     }
 
-    // ── Step 1: capture the raw window surface into compositeTex[0] ───────────
+    // ── Step 1: capture the raw window surface into captureTex ────────────────
     // Raw window capture (bypass the redirect shader so the
     // capture is the raw composited window), then restore the present passthrough.
-    {
-        KWin::GLFramebuffer fbo(state.compositeTex[0].get());
-        if (!fbo.valid()) {
-            return nullptr;
+    //
+    // SKIPPED when the window has not damaged since the last capture. This is
+    // the single most expensive step of the fold: KWin::effects->drawWindow()
+    // re-enters the entire draw chain. Its only input is the window's own
+    // content, so on a window that is idle — but whose chain still animates
+    // (motes drifting, a border gleam orbiting) — the previous capture is still
+    // exactly correct and the iTime packs below fold over it unchanged.
+    // windowDamaged clears captureValid, so a window that genuinely repaints
+    // every frame (video, a busy terminal) re-captures every frame as before.
+    // Does ANY pack in the chain actually fold? If none does (every pack failed
+    // to compile), the presented composite is the bare capture — and finalSlot
+    // must index compositeTex, so in that degenerate case capture straight into
+    // compositeTex[0] and don't cache. compiledPackLazy is memoised, so this
+    // pre-pass costs a hash lookup per pack and the fold below re-reads it free.
+    int foldablePacks = 0;
+    for (int k = 0; k < chain.size(); ++k) {
+        const CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
+        if (pk && pk->shader && k < static_cast<int>(state.chainBufferTex.size())) {
+            ++foldablePacks;
         }
+    }
+    // A transition supplies its own restore shader and drives the window's
+    // geometry frame by frame; don't trust a cached capture across it.
+    const bool captureCacheable = foldablePacks > 0 && captureRestoreShader == nullptr;
+    if (!captureCacheable) {
+        state.captureValid = false;
+    }
+
+    if (!state.captureValid) {
+        KWin::GLFramebuffer& fbo = foldablePacks > 0 ? *state.captureFbo : *state.compositeFbo[0];
         setShader(w, nullptr);
         m_capturingSnapshot = true;
         // Guard the re-entrancy flag against a throw from the draw chain — a
@@ -365,10 +431,13 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         }
         resetCapture.dismiss();
         m_capturingSnapshot = false;
-        // Hand the OffscreenEffect slot back: to the passthrough present on
-        // the rest path, or to the caller's animation shader mid-transition.
-        setShader(w, captureRestoreShader ? captureRestoreShader : surfacePresentShader());
+        state.captureValid = captureCacheable;
     }
+    // Hand the OffscreenEffect slot back: to the passthrough present on the rest
+    // path, or to the caller's animation shader mid-transition. Runs on the
+    // capture-skipped path too — the slot is a per-window binding the transition
+    // path relies on being (re)asserted every fold, not a side effect of capturing.
+    setShader(w, captureRestoreShader ? captureRestoreShader : surfacePresentShader());
 
     // ── Step 2: fold each pack over the running composite ────────────────────
     // Invariant: each pk is consumed entirely within its own iteration and
@@ -378,7 +447,15 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // habit rather than a strict requirement here — but it would become
     // load-bearing if m_compiledPacks were ever swapped for a node-relocating
     // container, so keep it.
-    int src = 0;
+    // The running composite is a TEXTURE POINTER, not a slot index: the first
+    // pack folds out of captureTex (which the ping-pong must never overwrite),
+    // and every pack after that folds out of whichever composite slot the
+    // previous one wrote. `dstSlot` alternates 0/1 across the composite pair and
+    // `lastDst` records where the final fold landed — finalSlot must name a
+    // compositeTex slot, which foldablePacks > 0 guarantees.
+    KWin::GLTexture* srcTex = foldablePacks > 0 ? state.captureTex.get() : state.compositeTex[0].get();
+    int dstSlot = 0;
+    int lastDst = 0;
     for (int k = 0; k < chain.size(); ++k) {
         CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
         if (!pk || !pk->shader) {
@@ -392,16 +469,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             continue;
         }
         const std::vector<std::unique_ptr<KWin::GLTexture>>& bufs = state.chainBufferTex[k];
+        const std::vector<std::unique_ptr<KWin::GLFramebuffer>>& bufFbos = state.chainBufferFbo[k];
 
         // 2a: pack k's buffer passes, sampling the running composite as uTexture0.
-        const size_t passCount = qMin(bufs.size(), pk->bufferPasses.size());
+        // bufs/bufFbos are allocated together and cleared together, so they are the
+        // same length; qMin over both keeps the indexing safe regardless.
+        const size_t passCount = qMin(qMin(bufs.size(), bufFbos.size()), pk->bufferPasses.size());
         for (size_t i = 0; i < passCount; ++i) {
             const CompiledSurfaceBufferPass& pass = pk->bufferPasses[i];
             KWin::GLTexture* const target = bufs[i].get();
-            KWin::GLFramebuffer fbo(target);
-            if (!fbo.valid()) {
-                continue;
-            }
+            KWin::GLFramebuffer& fbo = *bufFbos[i];
             KWin::GLFramebuffer::pushFramebuffer(&fbo);
             glViewport(0, 0, target->width(), target->height());
             glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -417,7 +494,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             {
                 KWin::ShaderBinder binder(pass.shader.get());
                 glActiveTexture(GL_TEXTURE0);
-                state.compositeTex[src]->bind();
+                srcTex->bind();
                 if (pass.uTexture0Loc >= 0) {
                     pass.shader->setUniform(pass.uTexture0Loc, 0);
                 }
@@ -506,13 +583,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             KWin::GLFramebuffer::popFramebuffer();
         }
 
-        // 2b: pack k's MAIN as a fullscreen FBO pass → the other composite slot.
-        const int dst = 1 - src;
+        // 2b: pack k's MAIN as a fullscreen FBO pass → the next composite slot.
+        const int dst = dstSlot;
         KWin::GLTexture* const target = state.compositeTex[dst].get();
-        KWin::GLFramebuffer fbo(target);
-        if (!fbo.valid()) {
-            continue;
-        }
+        KWin::GLFramebuffer& fbo = *state.compositeFbo[dst];
         KWin::GLFramebuffer::pushFramebuffer(&fbo);
         glViewport(0, 0, target->width(), target->height());
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -530,7 +604,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // 1:1 through the pack's default (MVP) vertex stage.
             pk->shader->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, QMatrix4x4());
             glActiveTexture(GL_TEXTURE0);
-            state.compositeTex[src]->bind();
+            srcTex->bind();
             if (pk->uTexture0Loc >= 0) {
                 pk->shader->setUniform(pk->uTexture0Loc, 0);
             }
@@ -632,12 +706,14 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         }
         glActiveTexture(GL_TEXTURE0);
         KWin::GLFramebuffer::popFramebuffer();
-        src = dst;
+        srcTex = state.compositeTex[dst].get();
+        lastDst = dst;
+        dstSlot = 1 - dst;
     }
 
-    state.finalSlot = src;
+    state.finalSlot = lastDst;
     state.lastFoldMs = ShaderInternal::shaderClockNowMs();
-    return state.compositeTex[src].get();
+    return state.compositeTex[lastDst].get();
 }
 
 // Continuous seconds for the surface `iTime` uniform, relative to an epoch

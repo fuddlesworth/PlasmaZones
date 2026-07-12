@@ -161,6 +161,9 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
     if (wb.paddedGeoConnection) {
         disconnect(wb.paddedGeoConnection);
     }
+    if (wb.damageConnection) {
+        disconnect(wb.damageConnection);
+    }
     m_windowDecorations.erase(it);
     // The audio-reactive decoration set may have shrunk — re-evaluate whether the
     // effect's cava instance is still needed. DEFERRED + coalesced: this runs as
@@ -483,6 +486,29 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         if (const auto opacity = resolveWindowOpacity(resolveRuleActions(w, windowId))) {
             wb.ruleOpacity = qBound(0.0, *opacity, 1.0);
         }
+    }
+
+    // The chain fold reuses the previous raw capture until the window's own
+    // content changes (see SurfaceMultipassState::captureTex). This is what tells
+    // it the content changed. Connected for EVERY decorated window, padded or
+    // not; disconnected by removeWindowDecoration (updateWindowDecoration always
+    // removes first).
+    {
+        const QString wid = windowId; // capture by value
+        wb.damageConnection =
+            connect(w, &KWin::EffectWindow::windowDamaged, this, [this, wid](KWin::EffectWindow* /*ew*/) {
+                // Ignore the repaint WE just scheduled to keep an animated chain
+                // ticking — that says nothing about the window's content. Only
+                // damage raised outside our own addRepaintFull means the client
+                // actually painted something new.
+                if (m_selfRepainting) {
+                    return;
+                }
+                const auto sit = m_surfaceMultipass.find(wid);
+                if (sit != m_surfaceMultipass.end()) {
+                    sit->second.captureValid = false;
+                }
+            });
     }
 
     // Padded chains paint a margin band OUTSIDE the window rect; KWin's own

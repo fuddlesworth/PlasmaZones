@@ -7,6 +7,7 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 
+#include <opengl/glframebuffer.h>
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
 
@@ -213,6 +214,31 @@ struct SurfaceMultipassState
     // resolved chain changes.
     std::array<std::unique_ptr<KWin::GLTexture>, 2> compositeTex;
     std::vector<std::vector<std::unique_ptr<KWin::GLTexture>>> chainBufferTex;
+    /// Framebuffers wrapping the textures above, cached for the same lifetime.
+    /// KWin's GLFramebuffer ctor is glGenFramebuffers + attach +
+    /// glCheckFramebufferStatus and its dtor is glDeleteFramebuffers; building
+    /// them on the stack per pass meant a 4-pack chain churned one gen/check/
+    /// delete cycle per pass per window per frame. The textures they attach are
+    /// already pooled here, so the FBOs are pooled in lockstep and rebuilt only
+    /// where the textures are (size or chain change). KWin's own OffscreenData
+    /// caches its GLFramebuffer beside its texture for exactly this reason.
+    std::array<std::unique_ptr<KWin::GLFramebuffer>, 2> compositeFbo;
+    std::vector<std::vector<std::unique_ptr<KWin::GLFramebuffer>>> chainBufferFbo;
+
+    /// The raw window capture, held in its OWN texture rather than in
+    /// compositeTex[0], so the pack fold's ping-pong cannot clobber it.
+    ///
+    /// The capture step calls KWin::effects->drawWindow(), which re-enters the
+    /// whole draw chain — by far the most expensive step of the fold. Its only
+    /// input is the window's own content, so it stays valid until the window
+    /// damages. `captureValid` is cleared by the windowDamaged connection (and
+    /// by any realloc here), which lets an ANIMATED chain keep folding its
+    /// iTime packs every frame over a capture taken once. A window that damages
+    /// every frame (video, terminal) re-captures every frame exactly as before.
+    std::unique_ptr<KWin::GLTexture> captureTex;
+    std::unique_ptr<KWin::GLFramebuffer> captureFbo;
+    bool captureValid = false;
+
     QStringList chainKey; ///< the chain `chainBufferTex` was allocated for
     QSize compositeSize; ///< full textureSize the composite targets were allocated for
     int finalSlot = 0; ///< which compositeTex slot holds the final fold
@@ -232,6 +258,10 @@ struct SurfaceMultipassState
     /// fold doesn't run there; the frozen composite carries the last-alive
     /// frost baked in).
     std::unique_ptr<KWin::GLTexture> backdropTex;
+    /// Framebuffer over backdropTex, cached for the texture's lifetime — the
+    /// capture blit runs every frame for a needsBackdrop chain, so building it
+    /// on the stack there churned a gen/check/delete per window per frame.
+    std::unique_ptr<KWin::GLFramebuffer> backdropFbo;
     QSize backdropSize;
     /// Valid sub-rect of backdropTex in TOP-DOWN normalized coords (xy=min,
     /// zw=size) — the part actually blitted (canvas ∩ output). Zero-size
@@ -362,6 +392,10 @@ struct WindowDecoration
     /// screen level; removeWindowDecoration disconnects.
     QRectF lastPaddedGeo;
     QMetaObject::Connection paddedGeoConnection;
+    /// Clears SurfaceMultipassState::captureValid when the window's own content
+    /// changes, so the fold re-captures. Connected for EVERY decorated window
+    /// (not just padded ones); disconnected by removeWindowDecoration.
+    QMetaObject::Connection damageConnection;
 
     /// Texcoord-handedness cache for the padded present quad built in
     /// apply() — same rationale as ShaderTransition::handednessCached: the
