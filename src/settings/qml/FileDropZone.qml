@@ -45,7 +45,7 @@ Rectangle {
     signal fileDropped(string url)
 
     Accessible.role: Accessible.Grouping
-    Accessible.name: idleText
+    Accessible.name: root.idleText
     implicitHeight: Kirigami.Units.gridUnit * 4
     radius: Kirigami.Units.smallSpacing
     color: _highlight ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)

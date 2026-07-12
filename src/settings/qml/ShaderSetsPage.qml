@@ -5,7 +5,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
@@ -16,13 +15,15 @@ import org.kde.kirigami as Kirigami
  * Applying a set MERGES: paths it covers are replaced, paths it does not
  * cover are left alone.
  *
- * The host supplies a `bridge` (a PlasmaZones::ShaderSetStore) implementing:
+ * The host supplies a `bridge` (a PlasmaZones::ShaderSetStore). The parts of
+ * its contract this page and its ShaderSetCards use:
  *
- *   QVariantList availableSets()      // rows: name, description, slug,
+ *   QVariantList availableSets()      // rows: name, description,
  *                                     //   coverage[], coverageCount,
  *                                     //   hasBaseline, active, modified
+ *   bool         setExists(name)
  *   bool         applySet(name)
- *   bool         saveCurrentAsSet(name, description)
+ *   bool         saveCurrentAsSet(name, description, overwrite)
  *   bool         removeSet(name)
  *   bool         updateSet(oldName, newName, description)
  *   bool         exportSet(name, localPath)
@@ -30,8 +31,10 @@ import org.kde.kirigami as Kirigami
  *   void         openSetsDirectory()
  *
  *   signal setsChanged()
- *   signal pendingChangesChanged()
  *   signal toastRequested(text)
+ *
+ * (The store also carries a `slug` row field and a pendingChangesChanged
+ * signal. Both are for the C++ staging path, not for QML.)
  *
  * plus the domain-worded copy below.
  */
@@ -70,6 +73,23 @@ SettingsFlickable {
     contentHeight: content.implicitHeight
     clip: true
 
+    /// Commit the save form. @p overwrite carries the user's consent to
+    /// replace a set that already holds this name (see the Save button).
+    function _save(overwrite) {
+        const ok = root.bridge.saveCurrentAsSet(nameField.text.trim(), descField.text.trim(), overwrite);
+        if (ok) {
+            nameField.text = "";
+            descField.text = "";
+            return;
+        }
+        // A name collision, an unwritable folder and a failed write each toast
+        // their own reason from the store. This banner covers the remaining
+        // case (nothing to capture) so the form is never inert without an
+        // explanation.
+        saveStatus.text = i18n("Could not save the set. There must be something to capture first.");
+        saveStatus.visible = true;
+    }
+
     Connections {
         function onSetsChanged() {
             root.setsList = root.bridge ? root.bridge.availableSets() : [];
@@ -101,16 +121,25 @@ SettingsFlickable {
 
         // ── Save current state. Starts collapsed when the user already has
         //    sets, so the list (the thing they came for) is what greets them.
-        //    Assigned once at load, NOT bound: as a binding it would snap the
-        //    card shut under the cursor the moment the user's first save
-        //    landed, and SettingsCard's header click writes `collapsed`
-        //    imperatively anyway, which would break the binding on first use.
+        //
+        //    The declarative value is load-bearing: SettingsCard reads
+        //    `collapsed` in its OWN Component.onCompleted to zero the content
+        //    clip, and a base type's onCompleted runs BEFORE the instantiating
+        //    scope's. Assigning from our onCompleted would therefore leave the
+        //    card rendered open on the first frame and then animate it shut.
+        //    The self-assignment below drops the binding once the initial value
+        //    has been read, so a later save cannot snap the card closed under
+        //    the cursor (SettingsCard's header click writes `collapsed`
+        //    imperatively, which would break the binding on first use anyway).
         SettingsCard {
+            id: saveCard
+
             Layout.fillWidth: true
             headerText: i18n("Save current state")
             searchAnchor: root.saveAnchor
             collapsible: true
-            Component.onCompleted: collapsed = root.setsList.length > 0
+            collapsed: root.setsList.length > 0
+            Component.onCompleted: saveCard.collapsed = saveCard.collapsed
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -166,19 +195,16 @@ SettingsFlickable {
                         enabled: nameField.text.trim().length > 0
                         onClicked: {
                             saveStatus.visible = false;
-                            const ok = root.bridge.saveCurrentAsSet(nameField.text.trim(), descField.text.trim());
-                            if (ok) {
-                                nameField.text = "";
-                                descField.text = "";
-                            } else {
-                                // A name collision and an unwritable folder both
-                                // toast their own reason from the store. This
-                                // banner covers the remaining case (an empty
-                                // snapshot) so the form is never inert without
-                                // an explanation.
-                                saveStatus.text = i18n("Could not save the set. There must be something to capture, and the name must not already be taken.");
-                                saveStatus.visible = true;
+                            // Re-saving over a set is how the user updates one
+                            // after tweaking their look, but it destroys the
+                            // stored payload. Confirm first, then save with
+                            // consent; the store refuses an unconfirmed
+                            // overwrite outright.
+                            if (root.bridge.setExists(nameField.text.trim())) {
+                                replaceConfirm.open();
+                                return;
                             }
+                            root._save(false);
                         }
                     }
                 }
@@ -222,9 +248,17 @@ SettingsFlickable {
                     id: importResult
 
                     function show(ok, url) {
-                        var basename = String(url).split("/").pop();
+                        // A dropped URL is percent-encoded, so decode before
+                        // showing the name. Fall back to a generic noun rather
+                        // than announcing an empty pair of quotes.
+                        var basename = "";
+                        try {
+                            basename = decodeURIComponent(String(url).split("/").pop());
+                        } catch (e) {
+                            basename = String(url).split("/").pop();
+                        }
                         if (basename.length === 0)
-                            basename = String(url);
+                            basename = i18nc("@item fallback name for a set file with no usable name", "the file");
 
                         if (ok) {
                             type = Kirigami.MessageType.Positive;
@@ -315,6 +349,20 @@ SettingsFlickable {
                     }
                 }
             }
+        }
+    }
+
+    // Saving over an existing set destroys its stored payload, and on the
+    // decoration side no Discard can bring it back. Confirm before the write.
+    Kirigami.PromptDialog {
+        id: replaceConfirm
+
+        title: i18n("Replace set?")
+        subtitle: i18n("\"%1\" already exists. Saving replaces what it currently holds.", nameField.text.trim())
+        standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
+        onApplied: {
+            root._save(true);
+            replaceConfirm.close();
         }
     }
 

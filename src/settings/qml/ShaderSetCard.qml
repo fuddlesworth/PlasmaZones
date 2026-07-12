@@ -72,11 +72,16 @@ ExpandableRowDelegate {
 
     // Last-updated stamp — leads the right-aligned cluster instead of
     // trailing the description, so it sits at a fixed spot on every row
-    // regardless of how long the description is.
+    // regardless of how long the description is. The store always carries
+    // `modified` (the set file's mtime), but a set file whose mtime the
+    // filesystem cannot report would yield an invalid date, so render only a
+    // valid one rather than printing "Invalid Date" at the user.
     Label {
-        visible: row.modelData.modified !== undefined
+        readonly property date modified: row.modelData.modified ?? new Date(NaN)
+
+        visible: !isNaN(modified.getTime())
         Layout.alignment: Qt.AlignVCenter
-        text: row.modelData.modified !== undefined ? i18n("Updated %1", row.modelData.modified.toLocaleString(Qt.locale(), Locale.ShortFormat)) : ""
+        text: visible ? i18n("Updated %1", modified.toLocaleString(Qt.locale(), Locale.ShortFormat)) : ""
         color: Kirigami.Theme.disabledTextColor
         font.pointSize: Kirigami.Theme.smallFont.pointSize
     }
@@ -85,107 +90,52 @@ ExpandableRowDelegate {
     //    (Active), then actions (Apply → overflow) — grouped so the eye
     //    reads each kind as a unit.
 
-    // Coverage chips — which parts of the taxonomy the set carries, neutral
-    // like the Rules list's count badges. Held in a plain Row rather than
-    // dropped straight into the header RowLayout: a bare Repeater is itself a
-    // zero-width layout child, so the layout would allocate spacing around it
-    // and leave a phantom gap in the cluster even when coverage is empty.
+    // Coverage chips — which parts of the taxonomy the set carries. Held in a
+    // plain Row rather than dropped straight into the header RowLayout: a bare
+    // Repeater is itself a zero-width layout child, so the layout would
+    // allocate a slot and spacing for the Repeater on every row. The Row hides
+    // itself when there is nothing to show, and layouts skip invisible
+    // children, so no phantom gap is left.
     Row {
+        visible: (row.modelData.coverage?.length ?? 0) > 0 || row.modelData.hasBaseline === true
         Layout.alignment: Qt.AlignVCenter
         spacing: Kirigami.Units.smallSpacing
 
         Repeater {
             model: row.modelData.coverage ?? []
 
-            delegate: Rectangle {
+            delegate: MetadataChip {
                 id: chip
 
                 required property string modelData
 
-                implicitWidth: chipLabel.implicitWidth + Kirigami.Units.largeSpacing
-                implicitHeight: chipLabel.implicitHeight + Kirigami.Units.smallSpacing
-                radius: Kirigami.Units.smallSpacing
-                color: Kirigami.Theme.alternateBackgroundColor
-
-                Label {
-                    id: chipLabel
-
-                    anchors.centerIn: parent
-                    text: row.coverageLabel(chip.modelData)
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    opacity: 0.7
-                }
+                text: row.coverageLabel(chip.modelData)
             }
         }
 
         // The baseline is the set's global default, not one surface, so it
         // gets its own chip rather than a taxonomy label.
-        Rectangle {
+        MetadataChip {
             visible: row.modelData.hasBaseline === true
-            implicitWidth: baselineLabel.implicitWidth + Kirigami.Units.largeSpacing
-            implicitHeight: baselineLabel.implicitHeight + Kirigami.Units.smallSpacing
-            radius: Kirigami.Units.smallSpacing
-            color: Kirigami.Theme.alternateBackgroundColor
-
-            Label {
-                id: baselineLabel
-
-                anchors.centerIn: parent
-                text: i18nc("@label chip for a set's global default profile", "Baseline")
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                opacity: 0.7
-            }
+            text: i18nc("@label chip for a set's global default profile", "Baseline")
         }
     }
 
-    // Coverage-count badge, neutral like the Rules list's count badges.
-    Rectangle {
+    MetadataChip {
         Layout.alignment: Qt.AlignVCenter
-        implicitWidth: countLabel.implicitWidth + Kirigami.Units.largeSpacing
-        implicitHeight: countLabel.implicitHeight + Kirigami.Units.smallSpacing
-        radius: Kirigami.Units.smallSpacing
-        color: Kirigami.Theme.alternateBackgroundColor
-
-        Label {
-            id: countLabel
-
-            anchors.centerIn: parent
-            text: row.coverageCountLabel(row.modelData.coverageCount ?? 0)
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
-            opacity: 0.7
-        }
+        text: row.coverageCountLabel(row.modelData.coverageCount ?? 0)
     }
 
     // Active pill — highlight-tinted so it reads as state, distinct from the
     // neutral metadata badges before it (same split as the Rules list's
     // category vs count badges). Sits next to the actions: it occupies the
     // slot Apply takes on inactive rows, saying why there is no Apply here.
-    Rectangle {
+    MetadataChip {
         visible: row.isActive
         Layout.alignment: Qt.AlignVCenter
-        implicitWidth: activeRow.implicitWidth + Kirigami.Units.largeSpacing
-        implicitHeight: activeRow.implicitHeight + Kirigami.Units.smallSpacing
-        radius: Kirigami.Units.smallSpacing
-        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
-
-        RowLayout {
-            id: activeRow
-
-            anchors.centerIn: parent
-            spacing: Kirigami.Units.smallSpacing / 2
-
-            Kirigami.Icon {
-                source: "dialog-ok"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-            }
-
-            Label {
-                text: i18nc("@label badge on the saved set matching the current state", "Active")
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                opacity: 0.85
-            }
-        }
+        highlighted: true
+        iconName: "dialog-ok"
+        text: i18nc("@label badge on the saved set matching the current state", "Active")
     }
 
     Button {
@@ -239,13 +189,22 @@ ExpandableRowDelegate {
 
     // Apply replaces the profile on every path the set covers. Confirm
     // before the batch write.
+    //
+    // The explicit close() is load-bearing: Kirigami.Dialog forwards the
+    // button box's applied() straight through, and ApplyRole (unlike
+    // Accept / Reject) does not dismiss the dialog. Without it the prompt
+    // stays on screen after the set is applied. Same reason deleteConfirm
+    // below closes itself, and the same fix CurveEditorDialog uses.
     Kirigami.PromptDialog {
         id: applyConfirm
 
         title: i18n("Apply set?")
         subtitle: row.applySubtitleFor(row.setName)
         standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
-        onApplied: row.bridge.applySet(row.setName)
+        onApplied: {
+            row.bridge.applySet(row.setName);
+            applyConfirm.close();
+        }
     }
 
     // Delete is permanent — the JSON file is removed and only a backup
@@ -269,12 +228,14 @@ ExpandableRowDelegate {
 
         title: i18n("Edit set")
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
+        // A set needs a name, so Ok stays disabled until there is one. Gating
+        // the button rather than no-oping on accept means an empty name cannot
+        // silently swallow the user's description edit too.
+        Component.onCompleted: standardButton(Kirigami.Dialog.Ok).enabled = Qt.binding(function () {
+            return editNameField.text.trim().length > 0;
+        })
         onOpened: editNameField.forceActiveFocus()
-        onAccepted: {
-            const newName = editNameField.text.trim();
-            if (newName.length > 0)
-                row.bridge.updateSet(row.setName, newName, editDescField.text.trim());
-        }
+        onAccepted: row.bridge.updateSet(row.setName, editNameField.text.trim(), editDescField.text.trim())
 
         ColumnLayout {
             spacing: Kirigami.Units.smallSpacing

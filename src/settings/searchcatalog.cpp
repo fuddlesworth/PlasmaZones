@@ -543,10 +543,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSection(search, QStringLiteral("tiling-shortcuts"), QStringLiteral("quickShortcuts"),
                PhosphorI18n::tr("Tiling Quick Shortcuts"));
 
-    // Shaders (shared ShaderBrowserPage) + animation presets / motion sets
+    // Shaders (shared ShaderBrowserPage) + animation presets / motion sets /
+    // decoration sets. Every page that hosts a ShaderBrowserPage carries its
+    // "userShaders" card, so each one registers the anchor.
     addSection(search, QStringLiteral("snapping-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
     addSection(search, QStringLiteral("animations-shaders"), QStringLiteral("userShaders"),
+               PhosphorI18n::tr("User shaders"));
+    addSection(search, QStringLiteral("decorations-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
     addSection(search, QStringLiteral("animations-presets"), QStringLiteral("easingPresets"),
                PhosphorI18n::tr("Easing Presets"));

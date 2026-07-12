@@ -114,10 +114,11 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         return QString();
     };
 
-    // Sub-service construction lands BEFORE the dirty-forwarder wiring
-    // below so any pendingChangesChanged synchronously fired from a
-    // ctor (e.g. AnimationPresetLibrary loading pre-existing
-    // overrides on first construct) isn't missed by the forwarder.
+    // Sub-services are constructed before the dirty-forwarder wiring below.
+    // Nothing is missed by that ordering: the forwarder seeds
+    // m_lastHadPendingChanges from the real post-construction state (just
+    // below), so it does not need to have observed any signal fired during
+    // construction.
     m_presets = new AnimationPresetLibrary(profilesDirFn, snapshotFn, this);
     m_motionSets = new ShaderSetStore(
         motionset::makeConfig(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn, mutationGuardFn), this);
@@ -160,19 +161,14 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // semantics, and the lambda silently clears m_shaderTreeDirty
         // on the user's own write — a silent revert of staged edits.
         //
-        // m_asyncRevertGeneration defends against a different race:
+        // m_asyncRevertInFlight guards a second race:
         // SettingsController::discard() pairs our discard() with a
         // follow-up Settings::load(), which fires shaderProfileTreeChanged
         // while the asyncRevert worker is still running. The lambda must
         // NOT clear m_shaderTreeDirty in that window — the worker's
         // finished handler owns the terminal clear-and-emit sequence as
-        // part of discardResult. Every dispatch bumps
-        // m_asyncRevertGeneration, so any in-flight worker makes the
-        // generation differ from the value seen here and short-circuits
-        // the clear path. The bool m_asyncRevertInFlight check is the
-        // primary in-flight signal; the generation comparison is
-        // belt-and-braces against a future change that reorders the
-        // flag clear.
+        // part of discardResult — so it short-circuits while the flag is
+        // set.
         connect(
             m_settings, &ISettings::shaderProfileTreeChanged, this,
             [this]() {
@@ -452,13 +448,6 @@ void AnimationsPageController::asyncRevertPending()
     const QSet<QString> dispatchedKeys(snapshots.keyBegin(), snapshots.keyEnd());
 
     m_asyncRevertInFlight = true;
-    // Bump the generation BEFORE wiring the watcher so the
-    // shaderProfileTreeChanged DirectConnection lambda (which compares
-    // the live counter against its own captured snapshot at signal-fire
-    // time) sees a fresh value for the duration of this dispatch. The
-    // lambda is the one external-reload short-circuit we rely on for the
-    // discard()+load() pair.
-    ++m_asyncRevertGeneration;
     auto* watcher = new QFutureWatcher<WorkerResult>(this);
     connect(
         watcher, &QFutureWatcher<WorkerResult>::finished, this,

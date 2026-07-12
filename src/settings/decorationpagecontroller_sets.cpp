@@ -93,12 +93,13 @@ QString DecorationPageController::decorationSetsDirectoryPath() const
     return QDir::cleanPath(base + ConfigDefaults::userDecorationSetsSubdir());
 }
 
-// NOTE: this TU is compiled with -fno-lto -Wno-maybe-uninitialized in BOTH
-// consuming targets (src/settings/CMakeLists.txt for plasmazones-settings,
-// tests/unit/CMakeLists.txt for test_decorationpagecontroller — source-file
-// properties are directory-scoped, so each consumer sets its own) — GCC 16's
+// NOTE: this TU is compiled with -fno-lto -Wno-maybe-uninitialized in every
+// consuming target (src/settings/CMakeLists.txt for plasmazones-settings, and
+// tests/unit/CMakeLists.txt, whose one directory-scoped call covers both
+// test_decorationpagecontroller and test_decoration_sets — source-file
+// properties are directory-scoped, so each directory sets its own). GCC 16's
 // LTO pass emits false-positive -Wmaybe-uninitialized warnings against the
-// staged.push_back() above.
+// staged->push_back() in stageEntries() above.
 void DecorationPageController::initSetsStore()
 {
     using PhosphorSurfaceShaders::DecorationProfile;

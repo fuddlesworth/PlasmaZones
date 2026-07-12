@@ -392,6 +392,8 @@ qt_add_qml_module(plasmazones-settings
         # Shared drag-and-drop import band (shader packs, layouts /
         # algorithms, sets).
         qml/FileDropZone.qml
+        # Shared row badge (neutral metadata + highlighted state).
+        qml/MetadataChip.qml
         qml/FilterMenuButton.qml
         # Stay-open checkable menu item shared by every filter menu
         # (Layouts via LayoutFilterBar, Rules + shader browser via

@@ -396,8 +396,10 @@ public:
     /// Restore every file in the snapshot to its pre-edit state and
     /// clear the snapshot. Called from `SettingsController::load()`
     /// (Discard). Emits `overrideChanged`/`userPresetsChanged`/
-    /// `shaderProfileChanged` and refreshes the set store through
+    /// `pendingChangesChanged` and refreshes the set store through
     /// `ShaderSetStore::notifyLiveStateChanged()` so QML refreshes.
+    /// (`shaderProfileChanged` arrives separately, from the caller's
+    /// own `Settings::load()`.)
     /// Failures (e.g. permission errors during file restore) are
     /// retained in the snapshot so a subsequent revert can retry.
     void revertPending();
@@ -463,15 +465,6 @@ private:
     /// overwrite the first's retained map, producing inconsistent
     /// disk state. Mirrors ApplicationController::m_applying.
     bool m_asyncRevertInFlight = false;
-    /// Monotonic generation counter bumped on every asyncRevertPending
-    /// dispatch. The shaderProfileTreeChanged DirectConnection lambda
-    /// captures the value at connect time of each invocation — when an
-    /// external reload (Settings::load() chasing discard()) fires
-    /// shaderProfileTreeChanged mid-worker, the lambda's captured
-    /// generation no longer matches and it MUST skip clearing
-    /// `m_shaderTreeDirty`. The worker's finished handler then clears
-    /// the dirty bit as part of its terminal sequence.
-    quint64 m_asyncRevertGeneration = 0;
     /// Last observed value of hasPendingChanges() seen by the
     /// pendingChangesChanged → dirtyChanged forwarder. CLAUDE.md:
     /// "Only emit signals when value actually changes". Several call

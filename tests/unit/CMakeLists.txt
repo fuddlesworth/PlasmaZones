@@ -783,6 +783,7 @@ target_link_libraries(test_animations_page_controller
     PRIVATE
         Qt6::Test
         Qt6::Core
+        Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
         PhosphorControl::PhosphorControl
         plasmazones_core
@@ -800,6 +801,7 @@ target_link_libraries(test_animations_motion_sets
     PRIVATE
         Qt6::Test
         Qt6::Core
+        Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
         PhosphorControl::PhosphorControl
         plasmazones_core
@@ -817,6 +819,7 @@ target_link_libraries(test_animations_shader_overrides
     PRIVATE
         Qt6::Test
         Qt6::Core
+        Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
         PhosphorControl::PhosphorControl
         plasmazones_core

@@ -19,6 +19,12 @@
  *     overrides exist, because apply would have left them alone
  *   - updateSet / exportSet / importSet round-trip, and an import is validated
  *     against the EVENT taxonomy (a decoration set is refused here)
+ *   - saveCurrentAsSet refuses an unconfirmed overwrite but honours a
+ *     confirmed one
+ *   - Motion is the only domain that STAGES set files, so it is the only one
+ *     that can pin the two staging contracts: a write is refused when the
+ *     pre-edit content cannot be captured (rather than losing it), and Discard
+ *     restores set files written this session
  *   - The in-flight-discard mutation guard refuses every set write
  *   - Pending changes signal emission for revert/commit
  *   - Atomic motion-set application (rejects whole malformed set)
@@ -602,7 +608,7 @@ private Q_SLOTS:
 
     /// Saving onto an existing name must be refused rather than silently
     /// destroying the set already stored there.
-    void motionSets_saveRefusesToOverwriteExistingName()
+    void motionSets_saveRefusesUnconfirmedOverwriteAndHonoursConsent()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
@@ -612,14 +618,26 @@ private Q_SLOTS:
 
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Taken"), QStringLiteral("first")));
+        QVERIFY(sets->setExists(QStringLiteral("Taken")));
 
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 999}}));
+        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
         QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("Taken"), QStringLiteral("second")),
-                 "saving onto an existing set name must be refused");
+                 "an unconfirmed overwrite must be refused");
+        QCOMPARE(toastSpy.count(), 1);
 
         // The stored set is untouched: applying restores the FIRST payload.
         QVERIFY(sets->applySet(QStringLiteral("Taken")));
         QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 250);
+
+        // With the user's consent the set is re-pointed at the new state.
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 999}}));
+        QVERIFY2(sets->saveCurrentAsSet(QStringLiteral("Taken"), QStringLiteral("second"), true),
+                 "a confirmed overwrite must be honoured");
+        QCOMPARE(sets->availableSets().size(), 1);
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 1}}));
+        QVERIFY(sets->applySet(QStringLiteral("Taken")));
+        QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 999);
     }
 
     /// Export writes a file that import reads back, in both the local-path and
@@ -691,6 +709,78 @@ private Q_SLOTS:
 
         QVERIFY2(!sets->importSet(foreign), "a set whose paths are not event paths must be refused");
         QVERIFY(sets->availableSets().isEmpty());
+    }
+
+    /// Motion is the only domain that stages set files, so it is the only one
+    /// that can prove the store's data-loss guard: when the pre-edit content of
+    /// an existing set cannot be captured, the write is REFUSED rather than
+    /// destroying content Discard could not restore.
+    void motionSets_refusesWriteWhenSnapshotFails()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        ShaderSetStore* sets = c.setsBridge();
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Precious"), QStringLiteral("keep me")));
+
+        // Commit so the set file is no longer already snapshotted, then make it
+        // unreadable: snapshotFileIfFirst now fails for it.
+        c.commitPending();
+        const QString setPath = tmp.path() + QStringLiteral("/motionsets/precious.json");
+        QVERIFY(QFileInfo::exists(setPath));
+        const QByteArray before = [&setPath]() {
+            QFile f(setPath);
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray{};
+        }();
+        QVERIFY(!before.isEmpty());
+        QVERIFY(QFile::setPermissions(setPath, QFileDevice::Permissions{}));
+
+        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("snapshotFileIfFirst: cannot read existing file")));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing to write")));
+        QVERIFY2(!sets->removeSet(QStringLiteral("Precious")),
+                 "a delete must be refused when the pre-edit content cannot be captured");
+        QCOMPARE(toastSpy.count(), 1);
+
+        // The file is still there, byte for byte.
+        QVERIFY(QFile::setPermissions(setPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+        QFile after(setPath);
+        QVERIFY(after.open(QIODevice::ReadOnly));
+        QCOMPARE(after.readAll(), before);
+    }
+
+    /// Motion set writes are staged, so Discard must put the world back: a set
+    /// saved this session disappears again, and a set removed this session
+    /// comes back.
+    void motionSets_discardRestoresSetFiles()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        ShaderSetStore* sets = c.setsBridge();
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Keeper"), QString()));
+        c.commitPending(); // "Keeper" is now saved state, not pending
+        QVERIFY(!c.hasPendingChanges());
+
+        // Save a second set and remove the first, both this session.
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Fresh"), QString()));
+        QVERIFY(sets->removeSet(QStringLiteral("Keeper")));
+        QVERIFY2(c.hasPendingChanges(), "set writes must mark the page dirty");
+        QVERIFY(rowFor(sets, QStringLiteral("Keeper")).isEmpty());
+        QVERIFY(!rowFor(sets, QStringLiteral("Fresh")).isEmpty());
+
+        c.revertPending();
+
+        QVERIFY2(!rowFor(sets, QStringLiteral("Keeper")).isEmpty(), "Discard must restore a set removed this session");
+        QVERIFY2(rowFor(sets, QStringLiteral("Fresh")).isEmpty(), "Discard must drop a set saved this session");
+        QVERIFY(!c.hasPendingChanges());
     }
 
     /// The in-flight-discard guard is what stops a set write from landing

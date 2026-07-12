@@ -28,6 +28,10 @@ namespace PlasmaZones::motionset {
 
 namespace {
 
+/// Current on-disk motion-set format. The store stamps it on save and refuses
+/// a NEWER file on apply / import.
+constexpr int kSetFormatVersion = 1;
+
 constexpr QLatin1String kNameKey{"name"};
 constexpr QLatin1String kOverridesKey{"overrides"};
 constexpr QLatin1String kPathKey{"path"};
@@ -90,6 +94,9 @@ ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::fun
     Q_ASSERT(writeOverride);
 
     ShaderSetStore::Config config;
+    // Named rather than left to the default, so a future format bump is a
+    // one-line change here instead of an easy-to-miss omission.
+    config.formatVersion = kSetFormatVersion;
     config.setsDir = std::move(setsDir);
     config.fileSnapshot = std::move(fileSnapshot);
     config.mutationGuard = std::move(mutationGuard);

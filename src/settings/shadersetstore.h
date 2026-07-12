@@ -104,11 +104,21 @@ public:
 
     Q_INVOKABLE bool applySet(const QString& name);
 
-    /// Capture live state as a new set. Refuses a name that already exists:
-    /// a silent overwrite would destroy the saved set with no confirmation,
-    /// and on a domain with no fileSnapshot hook (decoration) no Discard
-    /// could bring it back. Use updateSet to re-point an existing name.
-    Q_INVOKABLE bool saveCurrentAsSet(const QString& name, const QString& description);
+    /// True when a set is already stored under @p name. QML asks before
+    /// saving so it can confirm an overwrite rather than spring one on the
+    /// user (see saveCurrentAsSet).
+    Q_INVOKABLE bool setExists(const QString& name) const;
+
+    /// Capture live state as a set.
+    ///
+    /// Re-saving over an existing name is how the user updates a set after
+    /// tweaking their look, so it must stay possible — but it destroys the
+    /// stored payload, and on a domain with no fileSnapshot hook (decoration)
+    /// no Discard could bring it back. So it requires explicit consent:
+    /// @p overwrite defaults to false and the call is REFUSED (with a toast)
+    /// when the name is taken. QML checks setExists() first and passes
+    /// overwrite=true only after the user confirms.
+    Q_INVOKABLE bool saveCurrentAsSet(const QString& name, const QString& description, bool overwrite = false);
 
     Q_INVOKABLE bool removeSet(const QString& name);
 
@@ -182,11 +192,17 @@ private:
     /// True when no fileSnapshot hook is wired (the domain does not stage).
     bool snapshotFile(const QString& filePath);
 
-    /// Atomically write @p root to @p filePath. On failure emits
-    /// pendingChangesChanged: snapshotFile() already staged the pre-edit
-    /// content, so the domain's dirty state moved even though the write did
-    /// not, and the page must re-evaluate rather than keep a stale flag.
+    /// Atomically write @p root to @p filePath. On failure calls
+    /// notifyPendingChanges(): snapshotFile() may already have staged the
+    /// pre-edit content, so the domain's dirty state moved even though the
+    /// write did not, and the page must re-evaluate rather than keep a stale
+    /// flag.
     bool writeSetFile(const QString& filePath, const QJsonObject& root);
+
+    /// Emit pendingChangesChanged, but only on a domain that actually stages
+    /// set files. Without a fileSnapshot hook (decoration) nothing was staged,
+    /// so the signal would announce a dirty-state move that never happened.
+    void notifyPendingChanges();
 
     /// A free (non-colliding) set name derived from @p desiredName.
     QString uniqueSetName(const QString& desiredName) const;

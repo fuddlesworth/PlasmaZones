@@ -17,15 +17,21 @@
  *     the set does not cover keep their current chains)
  *   - `active` is a CONTAINMENT check, not equality: a set stays active while
  *     unrelated overrides exist, because apply would have left them alone
+ *   - a live edit made anywhere else refreshes the rows, and a burst of edits
+ *     collapses into exactly one refresh (the store coalesces the notify)
  *   - updateSet renames and edits the description in one write, refusing a
  *     collision rather than destroying the other set
- *   - saveCurrentAsSet refuses to overwrite an existing name (decoration has
- *     no file-snapshot hook, so an overwrite would be unrecoverable)
+ *   - saveCurrentAsSet refuses an UNCONFIRMED overwrite (decoration has no
+ *     file-snapshot hook, so it would be unrecoverable) but honours a
+ *     confirmed one, which is how the user re-points a set at a new look
+ *   - saving nothing, and saving under an empty name, are refused
  *   - export / import round-trip, including the file:// URL form the drop
  *     zone hands over, with a colliding import landing under a free name
- *   - the version gate refuses a set from a newer build
+ *   - the version gate refuses a newer, a non-numeric, and a non-integral
+ *     version; import refuses an empty set and one over the read size cap
  *   - import and apply validate against the surface taxonomy, rejecting a
- *     whole set atomically on any unknown path
+ *     whole set atomically on any unknown path, and apply toasts every
+ *     failure (QML fires and forgets it)
  *
  * Settings is a TreeStubSettings: a StubSettings that actually stores the tree
  * and emits decorationProfileTreeChanged, so the controller's
@@ -45,7 +51,6 @@
 #include <QTemporaryDir>
 #include <QUrl>
 
-#include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
 #include "config/configdefaults.h"
@@ -235,9 +240,11 @@ private Q_SLOTS:
 
     /// The `active` flag is derived from live state, so a live edit made
     /// anywhere else must re-fire setsChanged — otherwise the badge goes stale
-    /// on screen. The store coalesces the emission onto the event loop, so the
-    /// test has to spin it.
-    void decorationSets_liveEditRefreshesRows()
+    /// on screen. The store COALESCES that emission onto the event loop (a bulk
+    /// revert would otherwise re-walk the sets dir once per restored path), so
+    /// this pins both halves: an edit does refresh, and a burst of edits
+    /// refreshes exactly once.
+    void decorationSets_liveEditRefreshesRowsCoalesced()
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
@@ -246,9 +253,18 @@ private Q_SLOTS:
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Live"), QString()));
 
+        // Drain the notify the setChain above already queued. Without this the
+        // spy below would catch THAT emission and the test would pass even with
+        // the live-state connection severed.
+        QTest::qWait(0);
+
         QSignalSpy spy(sets, &ShaderSetStore::setsChanged);
+        // Two edits in one turn must collapse into a single refresh.
         c.setChain(QStringLiteral("window.snapped"), QStringList{QStringLiteral("border")});
+        c.setChain(QStringLiteral("osd"), QStringList{QStringLiteral("border")});
+        QCOMPARE(spy.count(), 0); // still queued, not yet delivered
         QVERIFY2(spy.wait(1000), "a live tree edit must refresh the set rows");
+        QCOMPARE(spy.count(), 1);
     }
 
     // ─── updateSet ──────────────────────────────────────────────────────────
@@ -400,6 +416,14 @@ private Q_SLOTS:
         writeSetFile(malformed, root);
         QVERIFY2(!sets->importSet(malformed), "a non-numeric version must be refused");
 
+        // A non-integral version is malformed too. QJsonValue::toInt() would
+        // hand back the default for it, silently reading 1.5 as version 1.
+        const QString fractional = dir.filePath(QStringLiteral("fractional.json"));
+        QJsonObject frac = validSetPayload(QStringLiteral("Fractional"));
+        frac.insert(QStringLiteral("version"), 1.5);
+        writeSetFile(fractional, frac);
+        QVERIFY2(!sets->importSet(fractional), "a non-integral version must be refused");
+
         // A set with no version at all reads as the current format.
         const QString versionless = dir.filePath(QStringLiteral("versionless.json"));
         QJsonObject noVersion = validSetPayload(QStringLiteral("Versionless"));
@@ -410,9 +434,12 @@ private Q_SLOTS:
 
     // ─── Refusals ───────────────────────────────────────────────────────────
 
-    /// Saving onto an existing name would destroy that set, and decoration
-    /// wires no file-snapshot hook, so nothing could restore it. Refuse.
-    void saveDecorationSet_refusesToOverwriteExistingName()
+    /// Saving onto an existing name destroys that set, and decoration wires no
+    /// file-snapshot hook, so nothing could restore it. An UNCONFIRMED save is
+    /// therefore refused (with a toast) and leaves the stored set intact.
+    /// Re-saving with the user's consent (overwrite=true) is how they update a
+    /// set after tweaking their look, so that path must still work.
+    void saveDecorationSet_refusesUnconfirmedOverwriteAndHonoursConsent()
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
@@ -420,20 +447,115 @@ private Q_SLOTS:
 
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Taken"), QStringLiteral("first")));
+        QVERIFY(sets->setExists(QStringLiteral("Taken")));
+        QVERIFY(!sets->setExists(QStringLiteral("Not Taken")));
 
-        // A different look, saved under the same name.
+        // A different look, saved under the same name, WITHOUT consent.
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border")});
         QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
         QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("Taken"), QStringLiteral("second")),
-                 "saving onto an existing set name must be refused");
+                 "an unconfirmed overwrite must be refused");
         QCOMPARE(toastSpy.count(), 1);
 
-        // The original set is intact — same description, same payload.
+        // The stored set is intact — same description, same payload.
         const QVariantMap row = rowFor(sets, QStringLiteral("Taken"));
         QVERIFY(!row.isEmpty());
         QCOMPARE(row.value(QStringLiteral("description")).toString(), QStringLiteral("first"));
         QVERIFY(sets->applySet(QStringLiteral("Taken")));
         QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("glow")}));
+
+        // Now WITH consent: the set is re-pointed at the new look.
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border")});
+        QVERIFY2(sets->saveCurrentAsSet(QStringLiteral("Taken"), QStringLiteral("second"), true),
+                 "a confirmed overwrite must be honoured");
+        QCOMPARE(sets->availableSets().size(), 1);
+        const QVariantMap updated = rowFor(sets, QStringLiteral("Taken"));
+        QVERIFY(!updated.isEmpty());
+        QCOMPARE(updated.value(QStringLiteral("description")).toString(), QStringLiteral("second"));
+
+        // The re-saved payload is the NEW look.
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
+        QVERIFY(sets->applySet(QStringLiteral("Taken")));
+        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("border")}));
+    }
+
+    /// applySet is fire-and-forget from QML, so every failure branch must carry
+    /// its reason to the toast or the user just watches nothing happen.
+    void applySet_toastsEveryFailure()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        // Missing file.
+        QSignalSpy missingSpy(sets, &ShaderSetStore::toastRequested);
+        QVERIFY(!sets->applySet(QStringLiteral("nonexistent")));
+        QCOMPARE(missingSpy.count(), 1);
+
+        // Newer format version.
+        writeSetFile(decorationSetsDir() + QStringLiteral("/newer.json"), validSetPayload(QStringLiteral("newer"), 2));
+        QSignalSpy versionSpy(sets, &ShaderSetStore::toastRequested);
+        QVERIFY(!sets->applySet(QStringLiteral("newer")));
+        QCOMPARE(versionSpy.count(), 1);
+
+        // Foreign payload (an event path, not a decoration surface).
+        QJsonObject entry;
+        entry.insert(QStringLiteral("path"), QStringLiteral("window.appearance.open"));
+        entry.insert(QStringLiteral("profile"), QJsonObject{});
+        QJsonObject foreign;
+        foreign.insert(QStringLiteral("name"), QStringLiteral("foreign"));
+        foreign.insert(QStringLiteral("version"), 1);
+        foreign.insert(QStringLiteral("overrides"), QJsonArray{entry});
+        writeSetFile(decorationSetsDir() + QStringLiteral("/foreign.json"), foreign);
+        QSignalSpy validateSpy(sets, &ShaderSetStore::toastRequested);
+        QVERIFY(!sets->applySet(QStringLiteral("foreign")));
+        QCOMPARE(validateSpy.count(), 1);
+    }
+
+    /// An import carrying no entries would land as a row that applySet then
+    /// refuses. It is named for what it is, rather than falling through to the
+    /// taxonomy message, which would misdescribe an empty file as a foreign one.
+    void decorationSets_importRejectsEmptySet()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString empty = dir.filePath(QStringLiteral("empty.json"));
+        QJsonObject root;
+        root.insert(QStringLiteral("name"), QStringLiteral("Empty"));
+        root.insert(QStringLiteral("version"), 1);
+        root.insert(QStringLiteral("overrides"), QJsonArray{});
+        writeSetFile(empty, root);
+
+        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
+        QVERIFY2(!sets->importSet(empty), "a set carrying nothing must be refused");
+        QCOMPARE(toastSpy.count(), 1);
+        QVERIFY(sets->availableSets().isEmpty());
+    }
+
+    /// A set file larger than the read cap is refused before it is slurped into
+    /// memory. importSet takes a user-chosen path, so this is a boundary check.
+    void decorationSets_importRejectsOversizedFile()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString huge = dir.filePath(QStringLiteral("huge.json"));
+        QFile f(huge);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        // Just over the store's 4 MiB cap.
+        const QByteArray filler(5 * 1024 * 1024, 'x');
+        QCOMPARE(f.write(filler), static_cast<qint64>(filler.size()));
+        f.close();
+
+        QVERIFY2(!sets->importSet(huge), "a set file over the size cap must be refused");
+        QVERIFY(sets->availableSets().isEmpty());
     }
 
     /// Saving with an empty tree (no baseline, no overrides) is refused: the
@@ -465,7 +587,7 @@ private Q_SLOTS:
     /// applySet validates every entry up-front and rejects the whole set on any
     /// unknown surface path, leaving the current tree untouched (atomic apply —
     /// no partial write).
-    void applyDecorationSet_unknownPathRejectsWholeSetAtomically()
+    void applySet_unknownPathRejectsWholeSetAtomically()
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);

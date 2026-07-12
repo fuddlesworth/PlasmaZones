@@ -191,18 +191,23 @@ bool ShaderSetStore::readSetFile(const QString& filePath, QJsonObject* out) cons
     return true;
 }
 
+void ShaderSetStore::notifyPendingChanges()
+{
+    if (m_config.fileSnapshot) {
+        Q_EMIT pendingChangesChanged();
+    }
+}
+
 bool ShaderSetStore::writeSetFile(const QString& filePath, const QJsonObject& root)
 {
     QSaveFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        qCWarning(lcConfig) << "ShaderSetStore: cannot open" << filePath << "for writing";
-        Q_EMIT pendingChangesChanged();
-        return false;
-    }
-    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-    if (!file.commit()) {
-        qCWarning(lcConfig) << "ShaderSetStore: could not commit" << filePath;
-        Q_EMIT pendingChangesChanged();
+    const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    const bool written =
+        file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(payload) == payload.size() && file.commit();
+    if (!written) {
+        qCWarning(lcConfig) << "ShaderSetStore: could not write" << filePath << ":" << file.errorString();
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not write the set to disk."));
+        notifyPendingChanges();
         return false;
     }
     return true;
@@ -320,7 +325,13 @@ bool ShaderSetStore::applySet(const QString& name)
     return true;
 }
 
-bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& description)
+bool ShaderSetStore::setExists(const QString& name) const
+{
+    const QString filePath = setFilePath(name);
+    return !filePath.isEmpty() && QFile::exists(filePath);
+}
+
+bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& description, bool overwrite)
 {
     if (name.isEmpty() || !mutationAllowed()) {
         return false;
@@ -329,10 +340,10 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& descri
     if (filePath.isEmpty() || !m_config.snapshot) {
         return false;
     }
-    // Saving onto an existing set would destroy it, and on a domain with no
-    // fileSnapshot hook nothing could restore it. Refuse, exactly as updateSet
-    // does for the same collision.
-    if (QFile::exists(filePath)) {
+    // Overwriting destroys the stored payload, and on a domain with no
+    // fileSnapshot hook nothing could restore it. Allowed, but only with
+    // explicit consent — QML confirms first and then passes overwrite=true.
+    if (!overwrite && QFile::exists(filePath)) {
         Q_EMIT toastRequested(PhosphorI18n::tr("A set named \"%1\" already exists.").arg(name));
         return false;
     }
@@ -348,6 +359,8 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& descri
 
     const QString dirPath = setsDirectory();
     if (dirPath.isEmpty() || !QDir().mkpath(dirPath)) {
+        qCWarning(lcConfig) << "ShaderSetStore::saveCurrentAsSet: cannot create" << dirPath;
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not create the sets folder."));
         return false;
     }
     if (!snapshotFile(filePath)) {
@@ -386,9 +399,11 @@ bool ShaderSetStore::removeSet(const QString& name)
         return false;
     }
     if (!file.remove()) {
+        qCWarning(lcConfig) << "ShaderSetStore::removeSet: could not remove" << filePath;
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete \"%1\".").arg(name));
         // The snapshot is already staged, so the domain's dirty state moved
         // even though the delete failed. Re-notify so the page can re-evaluate.
-        Q_EMIT pendingChangesChanged();
+        notifyPendingChanges();
         return false;
     }
     Q_EMIT setsChanged();
@@ -407,6 +422,7 @@ bool ShaderSetStore::updateSet(const QString& oldName, const QString& newName, c
         return false;
     }
     if (!QFile::exists(oldPath)) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set \"%1\".").arg(oldName));
         return false;
     }
     // Renaming onto another set would destroy it. Refuse, with the reason.
@@ -417,6 +433,7 @@ bool ShaderSetStore::updateSet(const QString& oldName, const QString& newName, c
 
     QJsonObject root;
     if (!readSetFile(oldPath, &root)) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read the set \"%1\".").arg(oldName));
         return false;
     }
     root.insert(kNameKey, newName);
@@ -529,6 +546,8 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
     const QString destPath = setFilePath(name);
     const QString dirPath = setsDirectory();
     if (destPath.isEmpty() || dirPath.isEmpty() || !QDir().mkpath(dirPath)) {
+        qCWarning(lcConfig) << "ShaderSetStore::importSet: cannot create" << dirPath;
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not create the sets folder."));
         return false;
     }
     root.insert(kNameKey, name);
