@@ -439,7 +439,6 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
     int outerPadding = 0;
     bool needsBackdrop = false;
-    bool handlesOpacity = false;
     for (const QString& packId : std::as_const(chain)) {
         const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
         if (!eff.isValid()) {
@@ -447,8 +446,10 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         }
         // Any needsBackdrop pack in the chain switches the window onto the
         // composite path with a per-frame backdrop capture (see paintWindow).
+        // handlesOpacity is deliberately NOT accumulated here: opacity authority
+        // is decided per-frame by what the fold actually applied
+        // (SurfaceMultipassState::handledOpacity), never by chain metadata.
         needsBackdrop = needsBackdrop || eff.needsBackdrop;
-        handlesOpacity = handlesOpacity || eff.handlesOpacity;
         const QVariantMap packOverrides = allPackParams.value(packId).toMap();
         wb.packParamValues.insert(packId, ShaderInternal::resolveSurfaceParamValues(eff, packOverrides));
 
@@ -473,7 +474,6 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
-    wb.chainHandlesOpacity = handlesOpacity;
 
     // Rule-resolved opacity, routing + capture-dim input (see the field doc).
     // Resolved here rather than per paint: every trigger that can flip a

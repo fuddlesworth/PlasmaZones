@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/IMotionClock.h>
@@ -112,6 +113,17 @@ public:
         }
 
         const T newFrom = m_current;
+        // Check the FROM endpoint too, not just newTo. `m_current` is the live
+        // interpolated value, so a retarget landing while the state is garbage (a
+        // diverged integrator, a poisoned lerp) would LATCH that garbage as the new
+        // animation's origin — and every subsequent bounds() / damage rect is then
+        // computed from it. Finish rather than propagate: the value is already wrong,
+        // and completing puts the target on screen.
+        if (!Interpolate<T>::isFinite(newFrom)) {
+            qCWarning(lcAnimatedValue) << "retarget() rejected: non-finite current value; finishing at target";
+            finish();
+            return false;
+        }
         const qreal oldDistance = Interpolate<T>::distance(m_from, m_to);
         const qreal newDistance = Interpolate<T>::distance(newFrom, newTo);
 
@@ -271,9 +283,62 @@ public:
         bool complete = false;
 
         if (curve->isStateful()) {
-            curve->step(dtSeconds, m_state, 1.0);
+            // Cap the integrator step at Limits::MaxShaderTimeDeltaSeconds.
+            //
+            // NOT for stability: Spring::step is an EXACT exponential integrator
+            // (the closed form of the ODE, not a numerical scheme), so it is
+            // unconditionally stable at any dt, omega and zeta. The cap bounds how
+            // far a stall JUMPS — a suspend/resume or scheduler hitch would
+            // otherwise advance the spring by multiple seconds in one tick, which is
+            // correct physics but reads as a teleport. At the cap a single tick is
+            // 6 frames of motion at 60 Hz; beyond that the animation "skips" rather
+            // than blurring through motion the user never sees.
+            //
+            // Only this branch integrates dt — the parametric branch derives its
+            // value from elapsed/duration, so a stall there merely lands further
+            // along the curve, which is correct. A clamped spring advances less
+            // than wall-clock across a stall (it "skips" less), and kSafetyCap
+            // still bounds its lifetime.
+            curve->step(qMin(dtSeconds, static_cast<qreal>(Limits::MaxShaderTimeDeltaSeconds)), m_state, 1.0);
 
-            if (m_state.value >= 1.0 && qAbs(m_state.velocity) <= 1.0e-6) {
+            // A stateful curve's lifetime is its own analytical settle time. The
+            // convergence test below is necessary but NOT sufficient: it wants
+            // |velocity| <= 1e-6, which an UNDAMPED spring (zeta = 0, inside
+            // Spring's own qBound(0, zeta, 10) and reachable from the wire string
+            // "spring:12,0") never satisfies — it oscillates forever, so without a
+            // bound it would run to kSafetyCap, pinning per-frame repaints for a
+            // full minute. Even a merely soft spring overruns badly: "spring:1,0.2"
+            // converges only after ~46 s.
+            //
+            // settleTime() alone is a PHYSICS bound (itself capped at 30 s inside
+            // Spring), which is right for consumers deliberately outside the
+            // compositor's duration envelope — the daemon's SurfaceAnimator. It is
+            // NOT sufficient for the compositor: its shader leg cuts the same curve
+            // at MaxAnimationDurationMs (2 s), so a slider-reachable soft spring
+            // (zeta*omega < 2.649) would leave the geometry animation requesting
+            // frames for seconds after its shader was torn down. A consumer that
+            // has already resolved a lifetime for this curve passes it as
+            // `maxLifetimeMs`, and the two legs then provably agree.
+            //
+            // settleMs must be positive as well as finite: Curve is polymorphic and
+            // a third-party curve returning 0 or a negative settle time would
+            // otherwise complete on the second tick and snap the animation. Such a
+            // curve falls through to kSafetyCap instead.
+            const qreal elapsedMs = std::chrono::duration<qreal, std::milli>(elapsed).count();
+            qreal lifetimeMs = curve->settleTime() * 1000.0;
+            if (m_spec.maxLifetimeMs) {
+                lifetimeMs = qMin(lifetimeMs, static_cast<qreal>(*m_spec.maxLifetimeMs));
+            }
+            // AT the target, not merely past it: `value >= 1.0` alone is also true
+            // at an overshoot CREST (displaced past the target with the velocity
+            // instantaneously ~0), and completing there would snap the window back
+            // mid-bounce. The real completion path is step()'s convergence lock,
+            // which snaps value to EXACTLY the target once |error| < 1e-4 — so
+            // requiring the value to be at the target costs nothing on the settle
+            // path and closes the crest hole.
+            if (qAbs(m_state.value - 1.0) <= 1.0e-6 && qAbs(m_state.velocity) <= 1.0e-6) {
+                complete = true;
+            } else if (lifetimeMs > 0.0 && std::isfinite(lifetimeMs) && elapsedMs >= lifetimeMs) {
                 complete = true;
             } else if (elapsed > kSafetyCap) {
                 qCWarning(lcAnimatedValue) << "stateful curve exceeded safety cap; forcing completion";
@@ -377,10 +442,20 @@ private:
 
     T lerpStateValue() const
     {
+        // Bound the overshoot envelope HERE, at the one point where a curve's
+        // progress becomes a value, rather than at either producer. Both the
+        // stateless branch (`evaluate()`) and the stateful one (`step()`) reach
+        // the lerp through this, and `m_state.value` must be left alone: for a
+        // stateful curve that field IS the integrator state and is fed back into
+        // the next step(), so clamping it in place would corrupt the physics
+        // instead of bounding the output. Matches the bound the shader applies to
+        // iTime (`ShaderInternal::clampProgressForCurve`), so the pixels and the
+        // window frame overshoot by the same amount. See AnimationLimits.h.
+        const qreal progress = boundCurveProgress(m_state.value);
         if constexpr (std::same_as<T, QColor> && Space == ColorSpace::OkLab) {
-            return detail::lerpColorOkLab(m_from, m_to, m_state.value);
+            return detail::lerpColorOkLab(m_from, m_to, progress);
         } else {
-            return Interpolate<T>::lerp(m_from, m_to, m_state.value);
+            return Interpolate<T>::lerp(m_from, m_to, progress);
         }
     }
 

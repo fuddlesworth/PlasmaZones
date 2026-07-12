@@ -1787,7 +1787,14 @@ public:
                                               if (sit == m_tracks.end() || !sit->second.target) {
                                                   return;
                                               }
-                                              sit->second.target->setOpacity(v);
+                                              // Clamp: an overshooting curve's value is
+                                              // unbounded, so a hide leg (1 -> 0) with a
+                                              // bouncy spring drives this NEGATIVE (the
+                                              // step response peaks at 1.163 for zeta=0.5,
+                                              // so 1 - 1.163 = -0.163; at zeta=0.05 it is
+                                              // -0.85). The sibling shader leg already
+                                              // clamps for the same reason.
+                                              sit->second.target->setOpacity(qBound(qreal(0.0), v, qreal(1.0)));
                                           },
                                           /*onComplete=*/
                                           [this, surface, target]() {
@@ -1880,10 +1887,17 @@ public:
                                                  // (transparent/invisible) before the spring
                                                  // oscillates back to a slightly positive
                                                  // value, producing a visible disappear→re-
-                                                 // render→disappear flicker. Mirror what the
-                                                 // kwin-effect path already does for window
-                                                 // shader transitions (paint_pipeline.cpp's
-                                                 // `qBound(0.0, anim->state().value, 1.0)`).
+                                                 // render→disappear flicker. This is a
+                                                 // DELIBERATE divergence from the compositor,
+                                                 // which now lets an overshooting curve's iTime
+                                                 // leave [0,1] (see
+                                                 // ShaderInternal::clampProgressForCurve). The
+                                                 // daemon keeps the clamp: its surfaces are
+                                                 // QQuickItems whose hide legs would flicker on
+                                                 // an out-of-range value, and it has no
+                                                 // geometry bounce to stay consistent with. So
+                                                 // the same pack with the same curve bounces in
+                                                 // the compositor and is flat here, on purpose.
                                                  // Geometry sync runs off the anchor's
                                                  // widthChanged/heightChanged signals (see
                                                  // syncGeometry); the per-tick callback only

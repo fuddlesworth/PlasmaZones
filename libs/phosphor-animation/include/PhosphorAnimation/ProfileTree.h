@@ -32,8 +32,33 @@ public:
     ProfileTree& operator=(ProfileTree&&) = default;
 
     /// Resolve effective Profile for @p path (walks parents, fills defaults).
-    /// Curve may still be null if no chain member supplied one.
+    /// withDefaults() backfills anything the chain left unset, including `curve`
+    /// (a default Easing) — so every field is concrete on return EXCEPT
+    /// `presetName`, which has no library default and may still be disengaged.
     Profile resolve(const QString& path) const;
+
+    /// Overlay ONLY this tree's override chain for @p path onto @p base — the
+    /// tree's own baseline is ignored and no library defaults are filled. Each
+    /// engaged override field (closest-to-root first, leaf wins) replaces the
+    /// matching field in @p base; any field that no override in the chain sets
+    /// keeps its value from @p base. Returns @p base unchanged when no node in
+    /// the chain has an override.
+    ///
+    /// Use this to layer per-event overrides on top of an externally-owned
+    /// base profile (e.g. a consumer that holds the authoritative "global"
+    /// elsewhere) without importing this tree's baseline — resolve() would
+    /// instead start from m_baseline and collapse an empty chain to the
+    /// library default.
+    ///
+    /// The tree carries TWO representations of the global level, and only one is
+    /// skipped. The BASELINE is ignored, as above. But an OVERRIDE stored at the
+    /// literal path `"global"` is a genuine chain member (ProfilePaths::parentPath
+    /// routes every category root there), so it overlays on top of @p base like
+    /// any other ancestor. The two never collide today because the D-Bus adaptor
+    /// routes a `Global`-keyed profile to setBaseline() and every other path to
+    /// setOverride(); putting a global profile through setOverride() instead would
+    /// double-apply it over the caller's own base.
+    Profile overlayChainOnto(const QString& path, Profile base) const;
 
     /// Direct override at @p path without walking parents.
     /// Use hasOverride() to distinguish absent from all-unset.
@@ -43,6 +68,15 @@ public:
 
     /// Every path with a direct override, in insertion order.
     QStringList overriddenPaths() const;
+
+    /// True when no path in the tree carries an override.
+    ///
+    /// Prefer this over `overriddenPaths().isEmpty()` on a hot path: the latter
+    /// returns a QStringList BY VALUE, so a mere emptiness test costs a
+    /// copy-on-write refcount atomic pair. The compositor's default-state fast
+    /// path runs it per animated snap and per shader install, where the whole
+    /// point is to be free.
+    bool hasAnyOverride() const;
 
     /// Install an explicit override. Empty path is rejected (no-op).
     void setOverride(const QString& path, const Profile& profile);
@@ -75,6 +109,13 @@ public:
 
 private:
     static void overlay(Profile& dst, const Profile& src);
+
+    /// Shared chain overlay for resolve() and overlayChainOnto(): walk @p path's
+    /// ancestor chain (root → leaf) and overlay each engaged override onto
+    /// @p seed, leaf winning. No baseline import, no default fill — the two
+    /// public methods layer those on (resolve seeds m_baseline + withDefaults;
+    /// overlayChainOnto seeds a caller base and returns raw).
+    Profile overlayChain(const QString& path, Profile seed) const;
 
     Profile m_baseline;
     QHash<QString, Profile> m_overrides;

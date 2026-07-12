@@ -18,6 +18,16 @@ namespace PhosphorAnimation {
 class PHOSPHORANIMATION_EXPORT Spring final : public Curve
 {
 public:
+    /// Hard ceiling on settleTime(), in seconds.
+    ///
+    /// A spring's analytical settle time diverges as `zeta*omega` approaches 0
+    /// (an undamped spring never settles at all), so it is capped here to keep
+    /// repaint budgets and timer delays bounded for pathological parameters.
+    /// Public because callers reason about the bound: the compositor's shader
+    /// lifetime, the geometry animator's completion test, and AnimationLimits.h
+    /// all reference it, and test_spring asserts against it.
+    static constexpr qreal MaxSettleSeconds = 30.0;
+
     Spring() = default;
     Spring(qreal omega, qreal zeta);
 

@@ -90,7 +90,10 @@ std::pair<QSizeF, QSizeF> AnimatedValue<T, Space>::sweptSizeImpl() const
     const auto curve = effectiveCurve();
     if (curve && curve->overshoots()) {
         for (int i = 1; i < kOvershootSamples; ++i) {
-            const qreal p = curve->evaluate(qreal(i) / kOvershootSamples);
+            // Same envelope the lerp applies, so the swept bounds describe the
+            // geometry that will actually be drawn rather than an unbounded
+            // excursion the renderer would never produce.
+            const qreal p = boundCurveProgress(curve->evaluate(qreal(i) / kOvershootSamples));
             const QSizeF sampled = Interpolate<QSizeF>::lerp(m_from, m_to, p);
             minW = std::min(minW, sampled.width());
             maxW = std::max(maxW, sampled.width());
@@ -111,7 +114,7 @@ void AnimatedValue<T, Space>::sampleOvershoots(qreal& minX, qreal& minY, qreal& 
         return;
     }
     for (int i = 1; i < kOvershootSamples; ++i) {
-        const qreal p = curve->evaluate(qreal(i) / kOvershootSamples);
+        const qreal p = boundCurveProgress(curve->evaluate(qreal(i) / kOvershootSamples));
         const auto [x1, y1, x2, y2] = sampleAt(p);
         minX = std::min(minX, x1);
         minY = std::min(minY, y1);
@@ -128,7 +131,9 @@ std::pair<T, T> AnimatedValue<T, Space>::sweptRangeImpl() const
     const auto curve = effectiveCurve();
     if (curve && curve->overshoots()) {
         for (int i = 1; i < kOvershootSamples; ++i) {
-            const qreal p = curve->evaluate(qreal(i) / kOvershootSamples);
+            // Same envelope the lerp applies, so the swept range describes the
+            // values that will actually be produced.
+            const qreal p = boundCurveProgress(curve->evaluate(qreal(i) / kOvershootSamples));
             const T sampled = Interpolate<T>::lerp(m_from, m_to, p);
             lo = std::min(lo, sampled);
             hi = std::max(hi, sampled);

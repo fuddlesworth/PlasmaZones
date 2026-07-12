@@ -7,6 +7,7 @@
 #include "shadertransitionmanager.h"
 #include "plasmazoneseffect/shader_internal.h"
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -15,7 +16,6 @@
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <effect/effecthandler.h>
-#include <effect/effectwindow.h>
 #include <core/output.h>
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
@@ -24,13 +24,11 @@
 #include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
 #include <opengl/glvertexbuffer.h>
-#include <scene/windowitem.h>
 
 #include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QScopeGuard>
 #include <QVector2D>
 
 #include <array>
@@ -39,42 +37,34 @@
 namespace PlasmaZones {
 
 namespace {
-// Output device-pixel size for @p screen (logical geometry scaled to the
-// physical framebuffer). The capture textures and the blend viewport both key on
-// this, so it is derived in one place.
-QSize deviceSizeForOutput(KWin::LogicalOutput* screen)
+// A full-screen quad in the RenderViewport's DEVICE coordinate space (logical
+// pixels × scale, y-down), projected by viewport.projectionMatrix() in the
+// caller. Local copy (unique name) so the Unity build cannot ODR-collide with
+// surfacelayers.cpp's drawFullscreenQuad — this TU is also excluded from the
+// Unity blob in CMakeLists as belt-and-braces.
+//
+// Texcoords are pinned to SCREEN corners, so `uv` stays TOP-DOWN (uv.y == 0 at
+// the top of the output) whatever the output transform is. That is the space
+// desktop_transition.glsl's getFromColor/getToColor undo the capture FBO's Y-up
+// origin against (`1.0 - uv.y`), and the space iSwitchDelta's "+y is one row
+// down" is stated in — so the fragment stage and the packs need no change.
+//
+// The pairing matters: emitting clip-space directly happened to give the same
+// top-down uv only because the default target transform is FlipY. Re-deriving it
+// from screen corners is what keeps that true once the projection is applied.
+void drawDesktopBlendQuad(const KWin::RenderViewport& viewport)
 {
-    return (screen->geometryF().size() * screen->scale()).toSize();
-}
+    const KWin::Rect sr = viewport.scaledRenderRect();
+    const float x0 = float(sr.left());
+    const float y0 = float(sr.top());
+    const float x1 = float(sr.right());
+    const float y1 = float(sr.bottom());
 
-// Allocate an output-sized RGBA8 texture for @p screen (LINEAR filter,
-// CLAMP_TO_EDGE) — the shared preamble of both desktop captures. Returns null
-// when the output's device size is empty or GL allocation fails.
-std::unique_ptr<KWin::GLTexture> allocateOutputTexture(KWin::LogicalOutput* screen)
-{
-    const QSize textureSize = deviceSizeForOutput(screen);
-    if (textureSize.isEmpty()) {
-        return nullptr;
-    }
-    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
-    if (!tex) {
-        return nullptr;
-    }
-    tex->setFilter(GL_LINEAR);
-    tex->setWrapMode(GL_CLAMP_TO_EDGE);
-    return tex;
-}
-
-// A full-screen NDC quad with 0..1 texcoords. Local copy (unique name) so the
-// Unity build cannot ODR-collide with surfacelayers.cpp's drawFullscreenQuad —
-// this TU is also excluded from the Unity blob in CMakeLists as belt-and-braces.
-void drawDesktopBlendQuad()
-{
     const std::array<KWin::GLVertex2D, 4> verts = {{
-        {QVector2D(-1.0f, -1.0f), QVector2D(0.0f, 0.0f)}, // bottom-left
-        {QVector2D(1.0f, -1.0f), QVector2D(1.0f, 0.0f)}, // bottom-right
-        {QVector2D(-1.0f, 1.0f), QVector2D(0.0f, 1.0f)}, // top-left
-        {QVector2D(1.0f, 1.0f), QVector2D(1.0f, 1.0f)}, // top-right
+        {QVector2D(x0, y1), QVector2D(0.0f, 1.0f)}, // bottom-left
+        {QVector2D(x1, y1), QVector2D(1.0f, 1.0f)}, // bottom-right
+        {QVector2D(x0, y0), QVector2D(0.0f, 0.0f)}, // top-left
+        {QVector2D(x1, y0), QVector2D(1.0f, 0.0f)}, // top-right
     }};
     KWin::GLVertexBuffer* const vbo = KWin::GLVertexBuffer::streamingBuffer();
     vbo->reset();
@@ -97,15 +87,19 @@ DesktopTransitionManager::~DesktopTransitionManager()
 }
 
 void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
-                                     const QString& effectId, const QVariantMap& params, int durationMs)
+                                     const QString& effectId, const QVariantMap& params, int durationMs,
+                                     std::shared_ptr<const PhosphorAnimation::Curve> progressCurve)
 {
     if (!from || !to || from == to || effectId.isEmpty()) {
         return; // nothing to animate (no shader assigned, or a no-op switch)
     }
-    // A non-positive resolve (corrupt/absent motion-tree node) falls back to the
-    // default so the transition can't settle on its first paint (durationMs <= 0
-    // would make elapsed >= durationMs true immediately).
-    const int effectiveDurationMs = durationMs > 0 ? durationMs : DefaultDurationMs;
+    // Spring lifetime + envelope clamp, shared with the per-window shader path.
+    // No separate non-positive fallback: resolveTransitionLifetimeMs floors every
+    // result at Limits::MinAnimationDurationMs, so even a 0 arrives as a sane
+    // 50 ms rather than settling on its first paint. The live caller cannot pass
+    // one regardless — resolveEventMotionProfile clamps the cascade's duration
+    // into the envelope before lifecycle.cpp rounds it.
+    const int effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(durationMs, progressCurve.get());
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
 
     // Resolve p_<name> parameter values into customParams[] slots. Same for
@@ -230,6 +224,7 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         tr.switchDelta = switchDelta;
         tr.startTimeMs = nowMs;
         tr.durationMs = effectiveDurationMs;
+        tr.progressCurve = progressCurve; // shapes iTime in paintOutput; null → linear
         tr.captured = false; // capture is deferred to the first paintOutput (live GL context)
         m_active.insert_or_assign(screen, std::move(tr));
     }
@@ -243,107 +238,21 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     // is a race against Slide's own handler (its check is signal-time only, not
     // re-validated at paint), so it wins when our handler runs first; disabling
     // KWin's Desktop-Switch animation guarantees a clean single transition.
-    if (!m_fullScreenClaimed) {
+    //
+    // Only take the screen when nobody else holds it. Overwriting a live claim
+    // would evict whoever owns it (Overview open across a desktop switch), and
+    // our release would then go on to clear THEIR claim — see
+    // releaseFullScreenClaimIfIdle. Losing the claim is the benign outcome: we
+    // simply do not suppress Slide this once.
+    if (!m_fullScreenClaimed && !KWin::effects->activeFullScreenEffect()) {
         KWin::effects->setActiveFullScreenEffect(m_effect);
         m_fullScreenClaimed = true;
     }
     KWin::effects->addRepaintFull();
 }
 
-std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::VirtualDesktop* desktop,
-                                                                          KWin::LogicalOutput* screen)
-{
-    const qreal scale = screen->scale();
-    const QRectF logicalGeometry = screen->geometryF();
-
-    // Never leak the capture's GL state (blend/viewport/clear/active texture)
-    // into the on-screen draw that follows in this same frame.
-    const ShaderInternal::ScopedGlState glStateGuard;
-
-    std::unique_ptr<KWin::GLTexture> tex = allocateOutputTexture(screen);
-    if (!tex) {
-        return nullptr;
-    }
-    KWin::GLFramebuffer fbo(tex.get());
-    if (!fbo.valid()) {
-        return nullptr;
-    }
-
-    // Route every window of this desktop through the raw draw path: set the
-    // effect's capturing guard so its own paintWindow/apply short-circuit (no
-    // border/morph shader) and we capture the plain composited content. Guard
-    // the flag against a throw from the draw chain — a leaked m_capturingSnapshot
-    // would corrupt every subsequent paint. Same pattern as the per-window
-    // capture in paint_pipeline.cpp and the surface-layer sites.
-    m_effect->m_capturingSnapshot = true;
-    auto resetCapture = qScopeGuard([this] {
-        m_effect->m_capturingSnapshot = false;
-    });
-
-    {
-        KWin::RenderTarget renderTarget(&fbo);
-        KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
-        KWin::GLFramebuffer::pushFramebuffer(&fbo);
-        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        // Bottom-to-top: stackingOrder() is already bottom→top, so the wallpaper
-        // (an on-all-desktops window) lands first and app windows composite over
-        // it. Windows outside this output are clipped by the viewport.
-        const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
-        for (KWin::EffectWindow* w : stack) {
-            if (!w || w->isMinimized()) {
-                continue;
-            }
-            if (!(w->isOnDesktop(desktop) || w->isOnAllDesktops())) {
-                continue;
-            }
-            if (!w->expandedGeometry().intersects(logicalGeometry)) {
-                continue;
-            }
-            KWin::ItemEffect keepRenderable(w->windowItem());
-            KWin::WindowPaintData captureData;
-            captureData.setOpacity(1.0);
-            const int captureMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
-            KWin::effects->drawWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
-        }
-
-        KWin::GLFramebuffer::popFramebuffer();
-    }
-
-    return tex;
-}
-
-std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int mask, KWin::LogicalOutput* screen)
-{
-    const qreal scale = screen->scale();
-    const QRectF logicalGeometry = screen->geometryF();
-
-    const ShaderInternal::ScopedGlState glStateGuard;
-
-    std::unique_ptr<KWin::GLTexture> tex = allocateOutputTexture(screen);
-    if (!tex) {
-        return nullptr;
-    }
-    KWin::GLFramebuffer fbo(tex.get());
-    if (!fbo.valid()) {
-        return nullptr;
-    }
-
-    {
-        KWin::RenderTarget renderTarget(&fbo);
-        KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
-        KWin::GLFramebuffer::pushFramebuffer(&fbo);
-        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        // Render the live scene (the now-current INCOMING desktop) into the FBO
-        // via KWin's own composite. This is the downstream chain call (effects
-        // below us + the scene), NOT a re-entry into our own paintScreen.
-        KWin::effects->paintScreen(renderTarget, viewport, mask, KWin::Region(screen->geometry()), screen);
-        KWin::GLFramebuffer::popFramebuffer();
-    }
-    return tex;
-}
+// captureDesktop and captureLiveScene live in desktoptransitioncapture.cpp, along
+// with the texture allocation and format helpers they share.
 
 DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compiledShader(const QString& effectId)
 {
@@ -392,16 +301,23 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
         expanded, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
     const QByteArray fragWithKwinDefine = ShaderInternal::injectKwinDefineAfterVersion(expanded);
 
-    // Full-screen quad vertex stage: position is already clip-space, so there is
-    // no modelViewProjectionMatrix — matches the surface buffer-pass primitive.
+    // Full-screen quad vertex stage. Positions arrive in the RenderViewport's
+    // device coordinate space and are projected by KWin's own matrix, which
+    // encodes RenderTarget::transform() (the output rotation/flip, combined with
+    // the buffer's FlipY) and the render offset. Emitting clip-space directly, as
+    // this used to, is only equivalent when the transform is exactly FlipY and the
+    // offset is zero — the default, unrotated configuration. On a rotated output
+    // the target framebuffer is panel-oriented while the captures are logical-
+    // oriented, so the blend painted the desktops unrotated and stretched.
     static constexpr const char* kDesktopQuadVertexSource =
         "#version 450\n"
+        "uniform mat4 modelViewProjectionMatrix;\n"
         "layout(location = 0) in vec2 position;\n"
         "layout(location = 1) in vec2 texCoord;\n"
         "layout(location = 0) out vec2 vTexCoord;\n"
         "void main() {\n"
         "    vTexCoord = texCoord;\n"
-        "    gl_Position = vec4(position, 0.0, 1.0);\n"
+        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
         "}\n";
     const QByteArray vertWithKwinDefine =
         ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kDesktopQuadVertexSource));
@@ -429,6 +345,11 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
 bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                            int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
 {
+    // The damage region genuinely does not participate: prePaintScreen sets
+    // PAINT_SCREEN_TRANSFORMED for a transitioning output and scheduleRepaints()
+    // repaints its full geometry every frame. Kept in the signature to match
+    // KWin's paint-chain shape. (The viewport IS used — it projects the blend
+    // quad, see drawDesktopBlendQuad.)
     Q_UNUSED(deviceRegion)
     if (!screen) {
         return false;
@@ -447,36 +368,68 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
         endOutput(screen);
         return false;
     }
-    const float t = tr.durationMs > 0 ? float(qBound<qreal>(0.0, qreal(elapsed) / qreal(tr.durationMs), 1.0)) : 1.0f;
+    // Ease the linear time progress through the per-event timing curve (resolved
+    // global → node → rule at begin time), so a `desktop.switch` node's curve
+    // (e.g. "Ease Out") shapes iTime — matching the per-window shader path. A
+    // stateless curve evaluates the linear point; a stateful spring integrates
+    // its CurveState toward target 1 by the inter-frame dt, mirroring
+    // AnimatedValue. Null curve → linear. Clamped to [0, 1] per the iTime
+    // contract. lastPaintTimeMs is advanced here, once per output paint tick.
+    // durationMs is guaranteed >= Limits::MinAnimationDurationMs by
+    // resolveTransitionLifetimeMs in begin(), so the divisor is always positive.
+    const qreal linearT = qBound<qreal>(0.0, qreal(elapsed) / qreal(tr.durationMs), 1.0);
+    // Shared with the per-window transition paint; see easeProgress for the dt
+    // cap and the stateful/stateless split. This is the site that OWNS the
+    // stateful curve's single per-frame step for this output.
+    const qreal easedT = ShaderInternal::easeProgress(tr.progressCurve.get(), tr.progressCurveState, tr.lastPaintTimeMs,
+                                                      nowMs, linearT, /*stepCurve=*/true);
+    tr.lastPaintTimeMs = nowMs;
+    const float t = float(easedT);
+
+    // Compile BEFORE capturing. Each capture allocates an output-sized texture and
+    // renders the entire stacking order, so doing it first would burn two
+    // full-screen captures only to throw them away when the shader turns out not
+    // to compile. compiledShader()'s failure sentinel stops a broken pack being
+    // RE-COMPILED, not re-captured, so that waste would repeat on every desktop
+    // switch for the rest of the session.
+    CompiledDesktopShader* cs = compiledShader(tr.effectId);
+    if (!cs || !cs->shader) {
+        // Compile failed — abandon the transition rather than paint a black
+        // screen; the normal scene paints the settled desktop.
+        endOutput(screen);
+        return false;
+    }
 
     // Deferred capture (once). The OUTGOING desktop is no longer current, so its
     // windows are reconstructed via drawWindow. The INCOMING desktop IS the live
     // scene now, so it is captured via effects->paintScreen — drawWindow on the
     // current desktop's already-visible windows renders black.
     if (!tr.captured) {
-        tr.fromTex = captureDesktop(tr.from, screen);
-        tr.toTex = captureLiveScene(mask, screen);
+        tr.fromTex = captureDesktop(tr.from, screen, renderTarget, viewport);
+        tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
         tr.captured = true;
     }
-    CompiledDesktopShader* cs = compiledShader(tr.effectId);
-    if (!cs || !cs->shader || !tr.fromTex || !tr.toTex) {
-        // Compile or capture failed — abandon the transition rather than paint a
-        // black screen; the normal scene paints the settled desktop.
+    if (!tr.fromTex || !tr.toTex) {
+        // Capture failed — same abandon path.
         endOutput(screen);
         return false;
     }
 
-    const QSize deviceSize = deviceSizeForOutput(screen);
+    // The output's device size in LOGICAL orientation (scaledRenderRect().size(),
+    // offset-independent). Same source the capture textures are allocated from, so
+    // iResolution, the packs' aspect/texel maths and the sampled textures cannot
+    // disagree by a rounding pixel.
+    const QSize deviceSize = viewport.deviceSize();
 
     const ShaderInternal::ScopedGlState glStateGuard;
     // Draw into the framebuffer KWin handed us, sized to that target, instead of
     // assuming the default backbuffer at the device origin. Under a non-default
     // render target (HDR / colour-management intermediate) the target FB is
     // authoritative; on the common path it is the output's device-sized backbuffer,
-    // so this matches the previous behaviour there. The fullscreen NDC quad needs no
-    // projection matrix, so the viewport is intentionally unused; iResolution below
-    // stays the OUTPUT device resolution (what the packs do aspect/texel maths
-    // against), independent of the draw target's pixel size.
+    // so this matches the previous behaviour there. iResolution below stays the
+    // OUTPUT device resolution (what the packs do aspect/texel maths against),
+    // independent of the draw target's pixel size — the quad now rotates the
+    // result as a unit, so the packs still reason in logical orientation.
     KWin::GLFramebuffer* const targetFb = renderTarget.framebuffer();
     if (targetFb) {
         KWin::GLFramebuffer::pushFramebuffer(targetFb);
@@ -486,6 +439,14 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     glDisable(GL_BLEND); // the blend of two opaque desktops is itself opaque — replace the screen
 
     KWin::ShaderBinder binder(cs->shader.get());
+    // Project the quad through KWin's own matrix. It folds in
+    // RenderTarget::transform() — the output rotation/flip combined with the
+    // buffer's FlipY — and the render offset. Without it a rotated output blends
+    // logical-oriented capture textures into a panel-oriented framebuffer, so the
+    // desktops paint unrotated and anisotropically stretched for the whole switch.
+    // KWin resolves this uniform by name, so the enum setter works on a
+    // generateCustomShader program (same as the surface layers do).
+    cs->shader->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, viewport.projectionMatrix());
     if (cs->iTimeLoc >= 0) {
         cs->shader->setUniform(cs->iTimeLoc, t);
     }
@@ -530,8 +491,25 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     }
     glActiveTexture(GL_TEXTURE0);
 
-    Q_UNUSED(viewport)
-    drawDesktopBlendQuad();
+    drawDesktopBlendQuad(viewport);
+
+    // Unbind both capture units. ScopedGlState restores the active-unit ENUM, not
+    // the BINDINGS, so without this the two capture textures stay bound for the
+    // rest of KWin's frame — and then endOutput() (or the wall-clock reap) deletes
+    // them. glDeleteTextures only clears the binding on the CURRENTLY ACTIVE unit,
+    // so a name bound to any other unit survives as a dangling reference and
+    // sampling it is undefined (black on most drivers). Every other bind site in
+    // the effect is meticulous about this; this one was the hole.
+    if (cs->iToDesktopLoc >= 0) {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    if (cs->iFromDesktopLoc >= 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glActiveTexture(GL_TEXTURE0);
+
     if (targetFb) {
         KWin::GLFramebuffer::popFramebuffer();
     }
@@ -541,10 +519,23 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
 void DesktopTransitionManager::endOutput(KWin::LogicalOutput* screen)
 {
     m_active.erase(screen);
-    if (m_active.empty() && m_fullScreenClaimed && KWin::effects) {
-        KWin::effects->setActiveFullScreenEffect(nullptr);
-        m_fullScreenClaimed = false;
+    releaseFullScreenClaimIfIdle();
+}
+
+void DesktopTransitionManager::releaseFullScreenClaimIfIdle()
+{
+    if (!m_active.empty() || !m_fullScreenClaimed || !KWin::effects) {
+        return;
     }
+    // Clear the claim only while KWin still reports it as OURS. Overview or Cube
+    // can take the screen while our transition is in flight; writing nullptr
+    // unconditionally would drop THEIR claim and unsuppress every effect that was
+    // bowing out to them. Dropping our own flag either way keeps us from later
+    // clearing a claim we no longer hold.
+    if (KWin::effects->activeFullScreenEffect() == m_effect) {
+        KWin::effects->setActiveFullScreenEffect(nullptr);
+    }
+    m_fullScreenClaimed = false;
 }
 
 void DesktopTransitionManager::ensureGlContextCurrent()
@@ -554,10 +545,42 @@ void DesktopTransitionManager::ensureGlContextCurrent()
     }
 }
 
-void DesktopTransitionManager::scheduleRepaints() const
+void DesktopTransitionManager::scheduleRepaints()
 {
     if (!KWin::effects) {
         return; // only reached from postPaintScreen (effects live), guard for parity
+    }
+    // Reap expired transitions by WALL CLOCK, not by being painted. paintOutput()
+    // is the only other settle path, and it runs only for an output that is
+    // actually painting — so an output that stops being painted mid-transition
+    // (DPMS-asleep but enabled, or one KWin has stopped rendering) would sit in
+    // m_active forever while a sibling kept painting, and the fullscreen claim
+    // would never release. postPaintScreen calls us on every frame regardless of
+    // which output painted, so expiry is handled here even for an unpainted one.
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    bool erasedAny = false;
+    for (auto it = m_active.begin(); it != m_active.end();) {
+        if (nowMs - it->second.startTimeMs >= it->second.durationMs) {
+            if (!erasedAny) {
+                // The captured GLTextures free on erase and want a live context.
+                ensureGlContextCurrent();
+                erasedAny = true;
+            }
+            // Repaint the output we are about to drop. The blend was the last
+            // thing painted on it, and the settled scene still has to be drawn —
+            // KWin only composites on damage, so without this the output keeps
+            // presenting the frozen final blend frame until something unrelated
+            // damages it. paintOutput's settle path does not need this because it
+            // returns false and paintScreen falls through to the real scene in the
+            // SAME frame; a reap has no such frame to fall through to.
+            KWin::effects->addRepaint(it->first->geometry());
+            it = m_active.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (erasedAny) {
+        releaseFullScreenClaimIfIdle();
     }
     // Keys are always non-null: begin() skips null outputs and outputRemoved()
     // reaps a disconnected one, so a null screen can never be stored.
@@ -600,14 +623,19 @@ void DesktopTransitionManager::desktopRemoved(KWin::VirtualDesktop* desktop)
                 ensureGlContextCurrent();
                 erasedAny = true;
             }
+            // Repaint the output for the same reason the wall-clock reap does: the
+            // blend was the last thing drawn on it and the settled scene still
+            // needs a frame, which nothing else will schedule.
+            if (KWin::effects) {
+                KWin::effects->addRepaint(it->first->geometry());
+            }
             it = m_active.erase(it);
         } else {
             ++it;
         }
     }
-    if (erasedAny && m_active.empty() && m_fullScreenClaimed && KWin::effects) {
-        KWin::effects->setActiveFullScreenEffect(nullptr);
-        m_fullScreenClaimed = false;
+    if (erasedAny) {
+        releaseFullScreenClaimIfIdle();
     }
 }
 
@@ -633,10 +661,7 @@ void DesktopTransitionManager::reset()
     ensureGlContextCurrent();
     m_active.clear();
     m_shaderCache.clear();
-    if (m_fullScreenClaimed && KWin::effects) {
-        KWin::effects->setActiveFullScreenEffect(nullptr);
-        m_fullScreenClaimed = false;
-    }
+    releaseFullScreenClaimIfIdle();
 }
 
 } // namespace PlasmaZones

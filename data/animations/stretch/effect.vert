@@ -87,7 +87,10 @@ void main() {
 
     vec2 rel = alongPos - centerPos;
     float alongComp = dot(rel, dir);
-    float perpComp = dot(rel, perp) * (1.0 - SQUASH * sin(PI * tt));
+    // sin(PI * tt) goes negative past the ends, which would invert the squash into
+    // a stretch on the tail of an overshoot. The envelope has no meaning outside the
+    // leg; the intended overshoot rides on the rect, not on this.
+    float perpComp = dot(rel, perp) * (1.0 - SQUASH * sin(PI * clamp(tt, 0.0, 1.0)));
     vec2 finalPos = centerPos + dir * alongComp + perp * perpComp;
 
     // quad-space <-> screen-space is a pure 1:1 translation, so the screen

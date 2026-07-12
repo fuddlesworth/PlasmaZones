@@ -150,7 +150,7 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
         return nullptr;
     }
     // Per-pack-id cache: a hit returns the prior compile (success shader OR a
-    // failure latch — compileFailed true + shader null) without re-attempting the
+    // failure latch — a cached entry whose shader is null) without re-attempting the
     // compile every frame. The whole map is cleared on a registry hot-reload
     // (effectsChanged) so a pack edit recompiles on the next paint.
     auto cacheIt = m_compiledPacks.find(packId);
@@ -163,7 +163,7 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // and window-lifecycle slots, where KWin's GL context is not guaranteed
     // current (the snap-assist thumbnail capture makes this same guard before
     // its off-paint GL work). Make it current BEFORE inserting the cache slot:
-    // a no-context failure must NOT latch compileFailed for the session — the
+    // a no-context failure must NOT cache an entry for the session — the
     // next caller (at latest the paint cycle itself) retries with a live
     // context.
     if (!KWin::effects->makeOpenGLContextCurrent()) {
@@ -173,10 +173,9 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     }
 
     // Insert the cache slot up-front so every fail-closed early-return latches by
-    // leaving compileFailed=true / shader=null on the cached entry. (The single
+    // leaving shader=null on the cached entry. (The single
     // global path used member latch flags; the per-pack path latches on the slot.)
     CompiledSurfacePack& packState = m_compiledPacks[packId];
-    packState.compileFailed = true; // pessimistic until the compile succeeds
 
     ensureSurfaceRegistryPaths();
 
@@ -308,6 +307,17 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     packState.uScaleLoc = shader->uniformLocation(SC::kUSurfaceScale);
     packState.uFocusedLoc = shader->uniformLocation(SC::kUSurfaceFocused);
     packState.uOpacityLoc = shader->uniformLocation(SC::kUSurfaceOpacity);
+    // Pack metadata is the SOLE authority on who owns the rule alpha — the linker
+    // location alone is not, or a pack that samples uSurfaceOpacity without
+    // declaring "handlesOpacity" would get it applied twice (once folded, once by
+    // the present pass, which suppresses itself on the metadata flag). See
+    // CompiledSurfacePack::handlesOpacity.
+    packState.handlesOpacity = eff.handlesOpacity;
+    if (packState.uOpacityLoc >= 0 && !eff.handlesOpacity) {
+        qCWarning(lcEffect) << "Surface shader pack" << packId
+                            << "samples uSurfaceOpacity but does not declare \"handlesOpacity\": true — the rule"
+                               " alpha will be applied by the present pass, not by the pack";
+    }
     // iTime — present (>= 0) only when the pack's main references it; that is the
     // signal the window must be driven to repaint continuously (windowSurfaceAnimates).
     packState.uTimeLoc = shader->uniformLocation(SC::kITime);
@@ -506,7 +516,6 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     }
 
     packState.shader = std::move(shader);
-    packState.compileFailed = false; // success — clear the pessimistic latch
     return &packState;
 }
 

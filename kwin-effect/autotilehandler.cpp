@@ -525,7 +525,9 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                         }
                         const QRectF frame = safeW->frameGeometry();
                         const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
-                        m_effect->applyWindowGeometry(safeW, geo);
+                        // Snap-out: the window is leaving tile-managed sizing.
+                        m_effect->applyWindowGeometry(safeW, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                                      PhosphorAnimation::ProfilePaths::WindowSnapOut);
                         return;
                     }
 
@@ -557,7 +559,10 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                                               }
                                               const QRectF frame = safeW->frameGeometry();
                                               const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
-                                              m_effect->applyWindowGeometry(safeW, geo);
+                                              // Snap-out: leaving tile-managed sizing.
+                                              m_effect->applyWindowGeometry(
+                                                  safeW, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                                  PhosphorAnimation::ProfilePaths::WindowSnapOut);
                                           });
                     m_pendingCrossScreenRestore[wid] = *sharedConn;
                 });
@@ -663,7 +668,9 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
                     newX = qRound(cursor.x() - cursorOffsetRatio * savedW);
                 }
                 QRect sizeRestored(newX, newY, savedW, savedH);
-                m_effect->applyWindowGeometry(w, sizeRestored, /*allowDuringDrag=*/true);
+                // Snap-out: leaving tile-managed sizing.
+                m_effect->applyWindowGeometry(w, sizeRestored, /*allowDuringDrag=*/true, /*skipAnimation=*/false,
+                                              PhosphorAnimation::ProfilePaths::WindowSnapOut);
                 qCInfo(lcEffect) << "Drag-start float: restored pre-autotile size for" << windowId << savedW << "x"
                                  << savedH;
             } else {
@@ -684,7 +691,9 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
                     }
                     QRectF currentFrame = wp->frameGeometry();
                     QRect sizeRestored(qRound(currentFrame.x()), qRound(currentFrame.y()), savedW, savedH);
-                    effect->applyWindowGeometry(wp, sizeRestored);
+                    // Snap-out: leaving tile-managed sizing.
+                    effect->applyWindowGeometry(wp, sizeRestored, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                                PhosphorAnimation::ProfilePaths::WindowSnapOut);
                     qCInfo(lcEffect) << "Drag-to-float: restored pre-autotile size for" << windowId << savedW << "x"
                                      << savedH;
                 });
