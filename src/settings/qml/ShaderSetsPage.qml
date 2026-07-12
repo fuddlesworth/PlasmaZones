@@ -157,6 +157,11 @@ SettingsFlickable {
                         Layout.fillWidth: true
                         placeholderText: i18n("Set name…")
                         Accessible.name: root.nameFieldAccessibleName
+                        // Through the BUTTON, not _save(): the overwrite prompt
+                        // lives in saveButton.onClicked, and Enter must not step
+                        // around it.
+                        onAccepted: if (saveButton.enabled)
+                            saveButton.clicked()
                     }
 
                     TextField {
@@ -165,6 +170,8 @@ SettingsFlickable {
                         Layout.fillWidth: true
                         placeholderText: i18n("Description (optional)…")
                         Accessible.name: root.descriptionFieldAccessibleName
+                        onAccepted: if (saveButton.enabled)
+                            saveButton.clicked()
                     }
 
                     Button {
@@ -224,7 +231,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Saved sets")
-            headerTrailingText: i18np("%1 set", "%1 sets", root.setsList.length)
+            headerTrailingText: i18np("%n set", "%n sets", root.setsList.length)
             searchAnchor: root.savedAnchor
 
             contentItem: ColumnLayout {

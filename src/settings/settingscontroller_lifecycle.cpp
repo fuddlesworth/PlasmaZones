@@ -49,11 +49,20 @@ void SettingsController::load()
     // page controller's pre-edit snapshot rewinds those files. Shader
     // overrides don't need this — they ride Settings::load()'s
     // Q_PROPERTY re-emit like every other page setting.
-    // False means the page is NOT clean afterwards: either an async discard owns
-    // the snapshot map, or a file could not be restored and was retained for a
-    // retry. Either way, forcing needsSave false below would strand those
-    // snapshots, and the next Discard would write them back over the new state.
-    const bool animationsClean = !m_animationsPage || m_animationsPage->revertPending();
+    // A refusal has two causes and they mean opposite things here.
+    //
+    // On the global Discard path this page's async revert is dispatched FIRST, so
+    // by the time the settings domain calls load() the worker already owns the
+    // snapshot map and revertPending() refuses. That is the restore proceeding
+    // normally, not a failure: the worker finishes the job and re-raises
+    // pendingChangesChanged itself if it has to retain a file. Treating it as
+    // "not clean" left every dirty badge lit after a discard that succeeded.
+    //
+    // A refusal with no worker running, or a partial restore failure, IS a page
+    // that is still dirty, and forcing needsSave false there would strand the
+    // snapshots for the next Discard to write back over the new state.
+    const bool animationsClean =
+        !m_animationsPage || m_animationsPage->asyncRevertInFlight() || m_animationsPage->revertPending();
     if (!animationsClean) {
         qCWarning(lcConfig) << "load: animation snapshots are still staged after the revert";
     }

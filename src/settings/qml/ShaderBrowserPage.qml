@@ -400,22 +400,10 @@ SettingsFlickable {
             ++root._usagesRev;
         }
 
-        // Surface bridge-emitted toast requests through the shell
-        // `window.showToast`. Without this, the controller's
-        // toastRequested signal goes to /dev/null and the install
-        // drop zone falls back to the generic InlineMessage above
-        // (which can't carry the concrete failure reason).
-        function onToastRequested(text) {
-            if (typeof window !== "undefined" && window && window.showToast)
-                window.showToast(text);
-        }
-
         target: root.bridge
-        // `ignoreUnknownSignals` is tolerated implicitly by Connections —
-        // bridges that don't expose `shaderProfileChanged` /
-        // `toastRequested` simply never fire them; the functions are
-        // still defined so the signal handler index resolves correctly
-        // when present.
+        // Bridges that do not expose `shaderProfileChanged` simply never fire it.
+        // Toasts are NOT handled here: the shell (Main.qml) owns that for every
+        // bridge, so a refusal raised while another page is loaded still lands.
         ignoreUnknownSignals: true
     }
 

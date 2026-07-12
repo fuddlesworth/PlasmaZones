@@ -475,6 +475,11 @@ bool AnimationsPageController::revertPending()
     return m_pendingFileSnapshots.isEmpty();
 }
 
+bool AnimationsPageController::asyncRevertInFlight() const
+{
+    return m_asyncRevertInFlight;
+}
+
 void AnimationsPageController::asyncRevertPending()
 {
     // POD payload threaded between GUI thread and the worker.
@@ -565,8 +570,8 @@ void AnimationsPageController::asyncRevertPending()
             // re-opens together with the flag clear.
             const QString errorMsg = result.retained.isEmpty()
                 ? QString()
-                : PhosphorI18n::tr("Failed to restore %1 profile file(s). They remain pending.")
-                      .arg(result.retained.size());
+                : PhosphorI18n::tr("Failed to restore %n profile file(s). They remain pending.", nullptr,
+                                   static_cast<int>(result.retained.size()));
             Q_EMIT discardResult(result.retained.isEmpty(), errorMsg);
             m_asyncRevertInFlight = false;
         },

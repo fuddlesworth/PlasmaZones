@@ -154,7 +154,6 @@ Item {
         if (collapsed) {
             root._expandProgress = 0;
             root._bodyLive = false;
-            contentClip.opacity = 0;
         }
         if (root.searchAnchor.length > 0)
             Qt.callLater(root._registerSearchAnchor);
@@ -400,7 +399,11 @@ Item {
             // Live binding, never overwritten by an animation. See _expandProgress.
             height: contentColumn.implicitHeight * root._expandProgress
             clip: true
-            opacity: root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1
+            // The ramp is IN the binding rather than animated on top of it: a
+            // property animation does not drop the binding, so an imperative fade
+            // was re-evaluated out from under itself whenever the master toggle
+            // changed while the card was shut.
+            opacity: (root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1) * root._expandProgress
             // Clipping a shut card to nothing still leaves its controls in the
             // tab order, so tabbing through the page walks fields nobody can see.
             // Disabling the body takes them out of the focus chain, and the header
@@ -420,30 +423,18 @@ Item {
                 implicitHeight: root.contentItem ? root.contentItem.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
             }
 
-            // Fade and slide run TOGETHER, in both directions. Sequencing them the
-            // other way meant the opacity was still 0 for the whole expand ramp, so
-            // a collapse issued during it spent its entire fade-out leg animating 0
-            // to 0 while the height sat frozen mid-open — an empty box hanging in
-            // mid-air for ~100ms.
+            // Only the progress is animated. Height and opacity are both bound to
+            // it, so they move together by construction and a reversal mid-flight
+            // cannot leave one of them stranded.
             SequentialAnimation {
                 id: collapseAnim
 
-                ParallelAnimation {
-                    PhosphorMotionAnimation {
-                        target: contentClip
-                        properties: "opacity"
-                        to: 0
-                        profile: "widget.fadeOut"
-                        durationOverride: Kirigami.Units.veryShortDuration * 2
-                    }
-
-                    PhosphorMotionAnimation {
-                        target: root
-                        properties: "_expandProgress"
-                        to: 0
-                        profile: "widget.accordionCollapse"
-                        durationOverride: Kirigami.Units.shortDuration
-                    }
+                PhosphorMotionAnimation {
+                    target: root
+                    properties: "_expandProgress"
+                    to: 0
+                    profile: "widget.accordionCollapse"
+                    durationOverride: Kirigami.Units.shortDuration
                 }
 
                 ScriptAction {
@@ -456,36 +447,21 @@ Item {
             SequentialAnimation {
                 id: expandAnim
 
-                ParallelAnimation {
-                    PhosphorMotionAnimation {
-                        target: root
-                        properties: "_expandProgress"
-                        to: 1
-                        profile: "widget.accordionExpand"
-                        durationOverride: Kirigami.Units.shortDuration
-                    }
-
-                    PhosphorMotionAnimation {
-                        target: contentClip
-                        properties: "opacity"
-                        to: root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1
-                        profile: "widget.fadeIn"
-                    }
-                }
-
-                ScriptAction {
-                    script: {
-                        // Only opacity is animated imperatively now, so only its
-                        // binding needs restoring. The height binding was never
-                        // broken.
-                        contentClip.opacity = Qt.binding(function () {
-                            return root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1;
-                        });
-                    }
+                PhosphorMotionAnimation {
+                    target: root
+                    properties: "_expandProgress"
+                    to: 1
+                    profile: "widget.accordionExpand"
+                    durationOverride: Kirigami.Units.shortDuration
                 }
             }
 
+            // Smooths the master-toggle dim only. Disabled while the card is
+            // opening or closing: opacity tracks _expandProgress there, so an
+            // easing on every frame's step would drag the fade behind the slide.
             Behavior on opacity {
+                enabled: !collapseAnim.running && !expandAnim.running
+
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                     durationOverride: Kirigami.Units.shortDuration

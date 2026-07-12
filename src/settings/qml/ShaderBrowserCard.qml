@@ -44,9 +44,12 @@ ItemDelegate {
 
     // ItemDelegate defaults to Qt.NoFocus, which left every shader card out of the
     // tab chain: opening a pack's details was mouse-only, and the focus-border
-    // branch below could never fire. StrongFocus also gives AbstractButton the
-    // Space/Enter to clicked() path for free.
+    // branch below could never fire. AbstractButton gives Space to clicked() for
+    // free, but only Space — Return and Enter have to be wired, and they are the
+    // keys a user actually reaches for. Same trio as SettingsCard's header.
     focusPolicy: Qt.StrongFocus
+    Keys.onReturnPressed: root.clicked()
+    Keys.onEnterPressed: root.clicked()
 
     required property var effect
     required property var bridge

@@ -119,6 +119,14 @@ PhosphorUi.SettingsAppWindow {
         }
     }
 
+    Connections {
+        target: settingsController.snappingShadersPage
+
+        function onToastRequested(text) {
+            window.showToast(text);
+        }
+    }
+
     controller: settingsController.app
     title: i18n("PlasmaZones Settings")
     // Sized in Kirigami grid units so the window scales with the

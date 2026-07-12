@@ -420,6 +420,13 @@ public:
     /// for a subsequent retry.
     Q_INVOKABLE void asyncRevertPending();
 
+    /// True while an asyncRevertPending() worker owns the snapshot map. A caller
+    /// that gets false from revertPending() uses this to tell the two causes
+    /// apart: the worker is mid-restore and will finish the job (and re-dirty the
+    /// page itself if it has to retain a file), versus a restore that actually
+    /// failed and left the page dirty.
+    bool asyncRevertInFlight() const;
+
 private:
     QString userProfilesDir() const;
     QString userMotionSetsDir() const;

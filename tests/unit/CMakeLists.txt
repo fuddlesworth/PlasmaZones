@@ -911,6 +911,24 @@ target_link_libraries(test_decoration_sets
 )
 add_test(NAME test_decoration_sets COMMAND test_decoration_sets)
 
+# The refusal half of the decoration-set suite. Split from the round-trip half so
+# each file stays under the 800-line cap; both share the sandbox guard and the
+# payload builders in helpers/DecorationSetHelpers.h.
+add_executable(test_decoration_sets_validation
+    settings/test_decoration_sets_validation.cpp
+    ${_decoration_ctrl_SRCS}
+)
+target_link_libraries(test_decoration_sets_validation
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_validation)
+
 # Rules page (Phase 4 of the window-rule refactor): RuleModel
 # derives SectionRole / summaries from a rule's shape; RuleController
 # stages CRUD by UUID and builds the monitor overview. Compiles the model /

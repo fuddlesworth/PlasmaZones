@@ -688,19 +688,22 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="500"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="505"/>
         <location filename="../src/settings/rulecontroller.cpp" line="151"/>
         <source>Discard already in flight.</source>
         <translation type="unfinished"></translation>
     </message>
-    <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="568"/>
-        <source>Failed to restore %1 profile file(s). They remain pending.</source>
-        <translation type="unfinished"></translation>
+    <message numerus="yes">
+        <location filename="../src/settings/animationspagecontroller.cpp" line="573"/>
+        <source>Failed to restore %n profile file(s). They remain pending.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="703"/>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="713"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="708"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="718"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4883,7 +4886,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_lifecycle.cpp" line="180"/>
+        <location filename="../src/settings/settingscontroller_lifecycle.cpp" line="189"/>
         <source>Failed to apply assignment changes: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5105,8 +5108,8 @@
         <location filename="../src/settings/shadersetstore.cpp" line="365"/>
         <location filename="../src/settings/shadersetstore.cpp" line="541"/>
         <location filename="../src/settings/shadersetstore.cpp" line="552"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="614"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="619"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="618"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="623"/>
         <source>Could not read the set &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5158,54 +5161,54 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="586"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="590"/>
         <source>Renamed the set, but the old file could not be removed. Delete it by hand from the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="602"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="606"/>
         <source>Could not write to that location.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="628"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="632"/>
         <source>Could not write to %1.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="649"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="653"/>
         <source>That file is not a readable set.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="653"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="657"/>
         <source>That set was written by a newer version of PlasmaZones.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="660"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="664"/>
         <source>That set is empty.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="666"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="670"/>
         <source>That set does not match this page.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="677"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="681"/>
         <source>That set has no usable name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/shadersetstore.cpp" line="467"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="684"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="706"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="688"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="710"/>
         <source>Could not create the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="711"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="715"/>
         <source>Could not open the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>

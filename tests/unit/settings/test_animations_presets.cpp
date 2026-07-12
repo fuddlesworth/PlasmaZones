@@ -31,6 +31,8 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QVariantList>
+#include <QVariantMap>
 
 #include "settings/animationspagecontroller.h"
 

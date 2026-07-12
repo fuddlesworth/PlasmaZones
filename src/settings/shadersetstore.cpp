@@ -571,9 +571,13 @@ bool ShaderSetStore::updateSet(const QString& oldName, const QString& rawNewName
     }
 
     if (!writeSetFile(newPath, root)) {
-        // writeSetFile rolled back newPath. oldPath is this function's own
-        // staging and nothing touched it either.
-        rollbackSnapshot(oldPath);
+        // writeSetFile rolled newPath back. On a rename, oldPath is this
+        // function's own second staging and nothing touched it either. When the
+        // paths are the same (a description-only or case-only edit) there is
+        // nothing left to roll back.
+        if (newPath != oldPath) {
+            rollbackSnapshot(oldPath);
+        }
         return false;
     }
     // Only drop the old file once the new one is safely committed. If the
