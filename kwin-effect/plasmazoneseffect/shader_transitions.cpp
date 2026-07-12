@@ -925,7 +925,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
             // GLSL sampler name: uTexture1..3 (slot+1 because uTexture0 is
             // the redirected surface, not user-declared). Matches the
-            // overlay shader convention in data/shaders/shared/textures.glsl.
+            // overlay shader convention in data/overlays/shared/textures.glsl.
             // Pre-baked from the file-scope `kUserTextureSamplerNames` /
             // `kITextureResolutionKeys` arrays — no per-slot QByteArray
             // alloc per shader install.

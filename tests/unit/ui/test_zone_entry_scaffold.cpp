@@ -33,11 +33,11 @@ class TestZoneEntryScaffold : public QObject
     static bool bakeAssembled(const QString& rawBody, QString* errOut)
     {
         const QString assembled = PlasmaZones::assembleZoneEntrySource(rawBody);
-        const QStringList includePaths = {QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders/shared"),
-                                          QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders")};
+        const QStringList includePaths = {QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/overlays/shared"),
+                                          QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/overlays")};
         QString err;
         const QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
-            assembled, QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders/shared"), includePaths, &err);
+            assembled, QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/overlays/shared"), includePaths, &err);
         if (expanded.isEmpty()) {
             if (errOut) {
                 *errOut = QStringLiteral("include expand failed: ") + err;
@@ -110,10 +110,10 @@ private Q_SLOTS:
     void testEveryBundledZoneFragBakes_data()
     {
         QTest::addColumn<QString>("fragPath");
-        const QString root = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders");
+        const QString root = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/overlays");
         QDir dir(root);
         if (!dir.exists()) {
-            QSKIP("data/shaders not found — running outside source tree");
+            QSKIP("data/overlays not found — running outside source tree");
         }
         bool any = false;
         for (const QString& sub : dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
@@ -158,8 +158,8 @@ private Q_SLOTS:
         const QString preamble = PhosphorShaders::ShaderRegistry::paramPreamble(info);
 
         const QString assembled = PlasmaZones::assembleZoneEntrySource(raw);
-        const QStringList includePaths = {QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders/shared"),
-                                          QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders")};
+        const QStringList includePaths = {QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/overlays/shared"),
+                                          QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/overlays")};
         QString err;
         QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
             assembled, QFileInfo(fragPath).absolutePath(), includePaths, &err);

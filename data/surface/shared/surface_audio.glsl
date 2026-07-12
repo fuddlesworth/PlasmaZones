@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Opt-in audio-spectrum helpers for SURFACE shader packs — the decoration
-// cousin of the overlay category's data/shaders/shared/audio.glsl. `#include
+// cousin of the overlay category's data/overlays/shared/audio.glsl. `#include
 // <surface_audio.glsl>` in a pack that reacts to the CAVA spectrum, then guard
 // on the helpers (they return 0 when audio is off).
 //

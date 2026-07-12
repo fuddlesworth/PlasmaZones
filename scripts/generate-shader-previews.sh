@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Generate preview.png for every bundled shader pack under data/shaders/.
+# Generate preview.png for every bundled shader pack under data/overlays/.
 #
 # Drives plasmazones-shader-render once per pack, renders 60 frames at
 # 960x540 with the master-stack layout and sine audio mock, then keeps the
 # last frame (iTime ≈ 2s — past any boot-up transient) as
-# data/shaders/<id>/preview.png. The shader registry auto-detects this file
+# data/overlays/<id>/preview.png. The shader registry auto-detects this file
 # (libs/phosphor-shaders/src/shaderregistry.cpp:251), so no metadata.json
 # changes are needed.
 #
@@ -38,7 +38,7 @@ repo_root() {
 }
 
 REPO_ROOT="$(repo_root)"
-SHADER_DIR="$REPO_ROOT/data/shaders"
+SHADER_DIR="$REPO_ROOT/data/overlays"
 LAYOUT_DIR="$REPO_ROOT/data/layouts"
 RENDERER=""
 ONLY=()

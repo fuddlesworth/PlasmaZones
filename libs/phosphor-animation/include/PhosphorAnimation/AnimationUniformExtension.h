@@ -258,7 +258,7 @@ private:
                   "layout declared in data/animations/shared/animation_uniforms.glsl");
     static_assert(sizeof(PhosphorShaders::BaseUniforms) == 672,
                   "BaseUniforms must remain at 672 bytes — growing it shifts ZoneUniformExtension's "
-                  "zoneRects offset and breaks every zone shader compiled against `data/shaders/shared/"
+                  "zoneRects offset and breaks every zone shader compiled against `data/overlays/shared/"
                   "common.glsl`. AnimationUniformExtension exists precisely to avoid that growth.");
 
     AnimationExtensionData m_data;

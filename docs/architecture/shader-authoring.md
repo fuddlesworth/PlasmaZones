@@ -6,7 +6,7 @@
 PlasmaZones renders the snapping overlay (the glow behind your zones) with GLSL
 fragment shaders. A shader pack is a folder with a `metadata.json` and an
 `effect.frag`; the 26 built-in packs (cosmic-flow, arch-drift, …) use the exact
-same API documented here, so `data/shaders/*` are the best reference once you
+same API documented here, so `data/overlays/*` are the best reference once you
 know the shape.
 
 The harness does the boilerplate for you. It supplies `#version`, the shared
@@ -27,19 +27,19 @@ named-parameter model (`p_<id>`) and a similar entry convention
 
 ## 1. Where shaders live
 
-- **Your shaders:** `~/.local/share/plasmazones/shaders/<id>/` — one folder per
+- **Your shaders:** `~/.local/share/plasmazones/overlays/<id>/` — one folder per
   pack. The settings app's shader browser scans this on startup.
-- **Bundled shaders:** `data/shaders/<id>/` in the repo, installed to
-  `/usr/share/plasmazones/shaders/<id>/`.
-- **Shared headers:** `data/shaders/shared/` (installed to
-  `/usr/share/plasmazones/shaders/shared/`) — `common.glsl`, `audio.glsl`,
+- **Bundled shaders:** `data/overlays/<id>/` in the repo, installed to
+  `/usr/share/plasmazones/overlays/<id>/`.
+- **Shared headers:** `data/overlays/shared/` (installed to
+  `/usr/share/plasmazones/overlays/shared/`) — `common.glsl`, `audio.glsl`,
   `multipass.glsl`, `wallpaper.glsl`, `depth.glsl`, `textures.glsl`. The harness
   resolves `#include <common.glsl>` (and friends) from here automatically.
 
 A pack is two files (plus an optional `preview.png`):
 
 ```
-~/.local/share/plasmazones/shaders/hello-world/
+~/.local/share/plasmazones/overlays/hello-world/
 ├── metadata.json
 └── effect.frag
 ```
@@ -172,7 +172,7 @@ scaffold + generated preamble + includes) and bakes every stage through
 headless glslang, so it catches compile errors offline:
 
 ```console
-$ plasmazones-shader-validate ~/.local/share/plasmazones/shaders/hello-world
+$ plasmazones-shader-validate ~/.local/share/plasmazones/overlays/hello-world
 hello-world  (2 params, single-pass)
   metadata      OK
   effect.frag   OK
@@ -187,7 +187,7 @@ Because the `p_<id>` defines are generated at load, a language server doesn't se
 them by default. Generate a sidecar with the defines:
 
 ```console
-$ plasmazones-shader-validate --emit-preamble ~/.local/share/plasmazones/shaders/hello-world
+$ plasmazones-shader-validate --emit-preamble ~/.local/share/plasmazones/overlays/hello-world
 wrote …/hello-world/p_generated.glsl
 ```
 
@@ -203,14 +203,14 @@ The sidecar pulls in `<common.glsl>` and defines every `p_<id>`, so
 it neither ships nor affects the compiled shader — so you can leave it in and
 re-run `--emit-preamble` whenever you change parameters. (`p_generated.glsl` is
 git-ignored.) Point your language server's include path at
-`/usr/share/plasmazones/shaders/shared` (or `data/shaders/shared` in a checkout)
+`/usr/share/plasmazones/overlays/shared` (or `data/overlays/shared` in a checkout)
 so `<common.glsl>` resolves too.
 
 ---
 
 ## 7. Reference
 
-- **Built-in packs:** `data/shaders/*` — the best worked examples.
+- **Built-in packs:** `data/overlays/*` — the best worked examples.
 - **Exhaustive API:** the **Shaders** page in the project wiki — every uniform,
   multipass buffers, wallpaper/depth sampling, audio reactivity, binding tables.
 - **Design rationale:** [`shader-api-usability-design.md`](shader-api-usability-design.md).

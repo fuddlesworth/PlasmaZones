@@ -587,8 +587,8 @@ install(CODE "
 # block above is intentionally kept for upgrades from older builds.
 
 # Install bundled RenderNode shaders (raw GLSL, no compilation needed)
-install(DIRECTORY data/shaders/
-    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/shaders
+install(DIRECTORY data/overlays/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/overlays
     FILES_MATCHING
     PATTERN "metadata.json"
     PATTERN "*.glsl"

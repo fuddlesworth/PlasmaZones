@@ -12,7 +12,7 @@
 //
 // Three authoring models, selected by --overlay (default) / --animation /
 // --surface:
-//   • zone/overlay packs (--overlay, the default, data/shaders/*):
+//   • zone/overlay packs (--overlay, the default, data/overlays/*):
 //     ShaderRegistry::parsePackMetadata + the zone entry scaffold (pZone/pImage);
 //     validates the frag, multipass buffer passes, and the vertex stage on the
 //     daemon Qt-RHI path.
@@ -201,7 +201,7 @@ int main(int argc, char** argv)
     if (args.isEmpty()) {
         errStream << "usage: plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface] "
                      "[--emit-preamble] <pack-dir-or-root> [...]\n"
-                  << "  --overlay         zone/overlay packs (data/shaders/*)        [default]\n"
+                  << "  --overlay         zone/overlay packs (data/overlays/*)        [default]\n"
                   << "  --animation       transition/animation packs (data/animations/*)\n"
                   << "  --surface         surface-layer packs (data/surface/*)\n"
                   << "  --emit-preamble   write each pack's p_generated.glsl autocomplete sidecar (no validation)\n";
