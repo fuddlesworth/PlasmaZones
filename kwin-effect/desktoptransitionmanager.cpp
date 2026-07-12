@@ -492,6 +492,24 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     glActiveTexture(GL_TEXTURE0);
 
     drawDesktopBlendQuad(viewport);
+
+    // Unbind both capture units. ScopedGlState restores the active-unit ENUM, not
+    // the BINDINGS, so without this the two capture textures stay bound for the
+    // rest of KWin's frame — and then endOutput() (or the wall-clock reap) deletes
+    // them. glDeleteTextures only clears the binding on the CURRENTLY ACTIVE unit,
+    // so a name bound to any other unit survives as a dangling reference and
+    // sampling it is undefined (black on most drivers). Every other bind site in
+    // the effect is meticulous about this; this one was the hole.
+    if (cs->iToDesktopLoc >= 0) {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    if (cs->iFromDesktopLoc >= 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glActiveTexture(GL_TEXTURE0);
+
     if (targetFb) {
         KWin::GLFramebuffer::popFramebuffer();
     }

@@ -18,12 +18,13 @@
  * The duration bounds are ENFORCED clamps, not merely slider policy.
  * They cap how long an animation may hold per-frame repaints — and, for
  * the desktop switch, the fullscreen-effect claim — so a hand-edited
- * per-event profile JSON cannot arm a multi-minute animation. Five call
+ * per-event profile JSON cannot arm a multi-minute animation. Four call
  * sites clamp against them (keep in sync when adding one):
  *  - the settings load (`daemon_bringup.cpp`),
- *  - the Rule timing slot, TWICE — once in
- *    `resolveAnimationShaderAndDuration` and once in
- *    `resolveAnimationMotionProfile` (both `shader_resolve.cpp`),
+ *  - the Rule timing slot, ONCE, in `resolveAnimationMotionProfile`
+ *    (`shader_resolve.cpp`). The shader resolver deliberately does NOT
+ *    read that slot: `resolveEventMotionProfile` owns it and feeds both
+ *    the animator leg and the shader leg from one read and one clamp,
  *  - `PlasmaZonesEffect::resolveEventMotionProfile`
  *    (`shader_transitions.cpp`), which bounds the motion cascade's
  *    resolved DURATION at the source,

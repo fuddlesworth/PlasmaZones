@@ -1797,7 +1797,29 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     const bool installed = beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab,
                                                  holdAddedGrab, progressCurve);
-    if (!installed) {
+    auto* transition = m_shaderManager.findTransition(window);
+    // Mark the held-move leg by IDENTITY, on BOTH outcomes. The drag handlers must
+    // not infer it from liveness: `window.movement.move` is opt-in with no default
+    // shader, so the common case installs nothing at all and `findTransition` would
+    // hand them an unrelated leg to pin and reverse. See ShaderTransition::heldMove.
+    //
+    // Set it even when `installed` is false. A pack whose `appliesTo` admits both
+    // "move" and another class can already be live for that other event (a focus leg
+    // installed by the click that begins the drag), in which case the WindowMove
+    // event resolves the SAME cached shader and takes beginShaderTransition's
+    // same-effect short-circuit — no install, no fresh transition. Marking only on
+    // the install path would leave that leg unflagged, the drag-start handler would
+    // skip its entire setup (no pin, no grab origin, no mesh seed), and the focus
+    // leg's own timer would kill the shader mid-drag.
+    //
+    // Only ever write TRUE here. A non-move event short-circuiting into a live
+    // held-move leg must leave the flag alone — supersession constructs a fresh
+    // ShaderTransition, whose default is already false, so the false case needs no
+    // code and writing it would re-introduce the mislabelling bug.
+    if (transition && profilePath == PhosphorAnimation::ProfilePaths::WindowMove) {
+        transition->heldMove = true;
+    }
+    if (!installed || !transition) {
         // Either beginShaderTransition no-op'd (compile fail, invalid id,
         // collapsed surface, animations disabled) and there is nothing
         // to teardown, OR the same-effect short-circuit kept the prior
@@ -1814,18 +1836,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // (window.move during window.snapIn, window.focus interrupting
     // window.maximize) leave a stale timer that tears down the SUCCESSOR
     // when its own timer hasn't fired yet.
-    auto* installedTransition = m_shaderManager.findTransition(window);
-    if (!installedTransition) {
-        // Defensive: beginShaderTransition reported true but the entry
-        // is gone (synchronous teardown raced us). Nothing to time.
-        return;
-    }
-    // Mark the held-move leg by IDENTITY. The drag handlers must not infer it from
-    // liveness: `window.movement.move` is opt-in with no default shader, so the
-    // common case installs nothing at all and `findTransition` would hand them an
-    // unrelated leg to pin and reverse. See ShaderTransition::heldMove.
-    installedTransition->heldMove = (profilePath == PhosphorAnimation::ProfilePaths::WindowMove);
-    scheduleShaderTransitionTeardown(window, installedTransition->generation, effectiveDurationMs);
+    scheduleShaderTransitionTeardown(window, transition->generation, effectiveDurationMs);
 }
 
 void PlasmaZonesEffect::scheduleShaderTransitionTeardown(KWin::EffectWindow* window, quint64 generation, int delayMs)

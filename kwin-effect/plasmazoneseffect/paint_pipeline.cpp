@@ -275,11 +275,22 @@ void PlasmaZonesEffect::postPaintScreen()
     if (!m_shaderManager.empty()) {
         const qint64 now = shaderClockNowMs();
         for (const auto& [w, transition] : m_shaderManager.shaderTransitions()) {
-            if (!w || w->isDeleted()) {
+            // Skip windows KWin is not painting. An off-desktop window never
+            // reaches paintWindow, and paintWindow is the ONLY teardown for a
+            // durationMs == 0 (animator-driven) leg — it has no timer. Without this
+            // skip, snapping a window and then switching virtual desktop mid-morph
+            // leaves the arm below requesting a FULL-OUTPUT repaint every vsync,
+            // indefinitely, until the user switches back. The sibling decoration
+            // loop already guards on this.
+            if (!w || w->isDeleted() || !w->isOnCurrentDesktop()) {
                 continue;
             }
             const bool timeBasedActive =
                 transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs;
+            // An animator-driven leg is live only while the ANIMATOR is. Gating on
+            // the mode flag alone (durationMs == 0) keeps repainting for a leg whose
+            // animation finished but whose teardown has not run.
+            const bool animatorActive = transition.durationMs == 0 && m_windowAnimator->hasAnimation(w);
             // Held move/resize transitions live past their nominal duration
             // (timeBasedActive goes false), and a soft-body lattice keeps
             // ringing AFTER release when the window emits no damage of its
@@ -312,7 +323,7 @@ void PlasmaZonesEffect::postPaintScreen()
                 // output as dirty every frame the transition is live. The
                 // `heldActive` arm (hoisted above) keeps a held/ringing
                 // lattice repainting after the duration timer stands down.
-                if ((timeBasedActive || transition.durationMs == 0 || heldActive) && KWin::effects) {
+                if ((timeBasedActive || animatorActive || heldActive) && KWin::effects) {
                     if (const auto* output = w->screen()) {
                         KWin::effects->addRepaint(output->geometry());
                     } else {
@@ -620,21 +631,27 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     if (st->reverse) {
                         t = 1.0 - t;
                     }
-                    // Clamp for the GEOMETRY lerp only — the uniform stays
-                    // unclamped (an overshooting curve's bounce is the point). An
-                    // overshooting t on a SHRINKING morph (unmaximize 1920→300 px)
-                    // drives the width term negative, `QRectF::isValid()` then fails
-                    // and we silently fall back to the animator's rect — a DIFFERENT
-                    // rect than the draw, so the frost pane samples the wrong slice
-                    // exactly on the loudest frames. A contract-compliant pack clamps
-                    // iTime before lerping its rect too, so clamping here is what the
-                    // draw actually does.
-                    const qreal gt = qBound(0.0, t, 1.0);
+                    // Track the draw, OVERSHOOT INCLUDED. The geometry packs
+                    // deliberately extrapolate their rect past iToRect on an
+                    // overshooting curve — that IS the bounce (window-morph lerps the
+                    // position with the raw t; fold carries the overshoot as a linear
+                    // extension) — so clamping t here would make the predictor
+                    // disagree with the draw on exactly the loudest frames, which is
+                    // the failure this predictor exists to prevent.
+                    //
+                    // Only the EXTENT is floored, and only against degeneracy. An
+                    // overshooting t on a shrinking morph drives the width term
+                    // negative; `QRectF::isValid()` then fails and we silently fall
+                    // back to the animator's rect — a DIFFERENT rect than the draw.
+                    // A degenerate extent is what that isValid() failure was actually
+                    // about. The position was never the problem, and it is where the
+                    // eye reads the bounce.
                     const QRectF& f = st->fromGeometry;
                     const QRectF& g = st->toGeometry;
+                    const qreal lw = f.width() + (g.width() - f.width()) * t;
+                    const qreal lh = f.height() + (g.height() - f.height()) * t;
                     animatedFrame =
-                        QRectF(f.x() + (g.x() - f.x()) * gt, f.y() + (g.y() - f.y()) * gt,
-                               f.width() + (g.width() - f.width()) * gt, f.height() + (g.height() - f.height()) * gt);
+                        QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t, qMax(1.0, lw), qMax(1.0, lh));
                 }
             }
             if (!animatedFrame.isValid()) {
