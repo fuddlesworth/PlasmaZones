@@ -46,9 +46,25 @@ void main() {
 
     // Forward progress and a smoothstep ease for the translation.
     float tt = legProgress();
-    float ease = tt * tt * (3.0 - 2.0 * tt);
-    // Tent fold amount: flat at both ends, fully folded at mid-flight.
-    float f = sin(PI * tt);
+    // iTime is NOT bounded to [0,1] — an overshooting curve delivers its overshoot,
+    // and legProgress() can hand this BELOW zero on a reverse leg (a t of 1.2 flips
+    // to -0.2). Both terms below break on that, in opposite ways.
+    //
+    // The smoothstep polynomial is NON-MONOTONIC outside [0,1]: it turns around. At
+    // tt = 1.15 it evaluates to 0.926, BELOW its value at tt = 1.0 — so the window
+    // would reach its target and then snap BACKWARD ~7% at the very moment the
+    // curve overshoots, bouncing the wrong way. Ease the clamped value and carry
+    // the overshoot as a LINEAR extension past the ends, which keeps the mix
+    // monotone while still letting the rect overshoot — the bounce is the point on
+    // a geometry morph, so it is preserved rather than refused.
+    float ec = clamp(tt, 0.0, 1.0);
+    float ease = ec * ec * (3.0 - 2.0 * ec) + (tt - ec);
+    // Tent fold amount: flat at both ends, fully folded at mid-flight. sin(PI*tt)
+    // goes NEGATIVE past the ends (-0.588 at tt = 1.2), which would expand the card
+    // instead of compressing it, invert the accordion ridges, and brighten the
+    // shading instead of darkening it. The fold envelope has no meaning outside the
+    // leg, so it is clamped.
+    float f = sin(PI * ec);
 
     // Orthonormal travel/perp basis in (approx) card space. A degenerate
     // move (pure resize) folds along the vertical so it still reads.

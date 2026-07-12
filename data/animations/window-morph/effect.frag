@@ -40,7 +40,19 @@ uniform vec4 iToRect;
 
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
-    t = clamp(t, 0.0, 1.0);
+    // `t` is deliberately NOT clamped here. iTime leaves [0,1] for an overshooting
+    // curve (an underdamped spring, a back / elastic ease), and on THIS pack that
+    // overshoot is the whole point: the rect lerp below extrapolates past iToRect,
+    // so the window flies a little past its target and springs back — the bounce.
+    // Clamping at entry, as this used to, silently ate it.
+    //
+    // Two things downstream must still see a bounded value, so they take `tc`:
+    //   - the old→new COLOUR cross-fade, where extrapolating premultiplied colours
+    //     past their endpoints drives them out of range (over-contrast on a unorm8
+    //     target, unbounded on a float/HDR one). A cross-fade has no meaning past
+    //     its ends.
+    // The rect divide is safe unclamped: `max(rect.zw, vec2(1.0))` guards it.
+    float tc = clamp(t, 0.0, 1.0);
 
     // Fragment's global logical-screen position. Reconstruct from the OUTPUT
     // origin (iSurfaceScreenPos.xy is the window origin; subtracting the
@@ -66,7 +78,7 @@ vec4 pTransition(vec2 uv, float t) {
 
     // Cross-fade old -> new across the morph. Inputs are premultiplied
     // (KWin FBO storage); a straight mix of premultiplied colours is correct.
-    return mix(oldC, newC, t) * mask;
+    return mix(oldC, newC, tc) * mask;
 #else
     // Daemon path: morph is compositor-only. Render the surface unchanged so
     // the shader bakes for the daemon target and is harmless if ever run.

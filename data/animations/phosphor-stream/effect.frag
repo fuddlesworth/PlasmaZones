@@ -68,7 +68,12 @@ vec4 pTransition(vec2 uv, float t) {
     // Gradient light riding the stream: hue per lane (the separated
     // streams show different stops) drifting with the ease.
     vec3 flux = fluxGradient(fract(lane * 0.35 + e * 0.45));
-    float front = exp(-pow((e - 0.5) * 3.2, 2.0)) * mid;
+    // Squaring, written as a multiply. pow(x, 2.0) is UNDEFINED for x < 0 per the
+    // GLSL spec, and (e - 0.5) is negative for half of every leg — strict drivers
+    // return NaN. Pre-existing, not an iTime consequence (e is clamped upstream),
+    // but undefined either way and free to fix.
+    float d = (e - 0.5) * 3.2;
+    float front = exp(-d * d) * mid;
     col.rgb += flux * front * clamp(p_frontGlow, 0.0, 2.0) * 0.55 * col.a;
 
     // Ember sparks shed in the un-settled wake: brief hash twinkles that
