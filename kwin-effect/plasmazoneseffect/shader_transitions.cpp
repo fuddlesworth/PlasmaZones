@@ -1752,31 +1752,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (effectiveDurationMs <= 0) {
         effectiveDurationMs = durationMs;
     }
-    // Clamp the cascade's result into the animation envelope. The Rule layer
-    // clamps its OWN candidate, but the motion-tree / global feed reaches here
-    // unclamped: `resolveAnimationShaderAndDuration` passes `defaultDurationMs`
-    // straight through, and `Profile::fromJson` only rejects a duration above
-    // `Profile::MaxDurationMs` (one hour). The motion tree is rebuilt from
-    // daemon-rescanned `profiles/*.json` (slotMotionProfileTreeChanged), which
-    // is hand-editable, so without this a `"duration": 600000` node would arm a
-    // ten-minute QTimer AND pin a full-output repaint every frame for its whole
-    // life. Applied BEFORE the spring branch, which computes its own clamped
-    // lifetime from settleTime().
-    effectiveDurationMs = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, effectiveDurationMs,
-                                 PhosphorAnimation::Limits::MaxAnimationDurationMs);
-    // A stateful (spring) timing curve derives its own timeline from its physics
-    // (omega / zeta), not the nominal duration slider — mirroring the
-    // AnimationProfileEditor's "Spring mode derives its own duration". Run the
-    // transition for the spring's analytical settle time so it rings out under
-    // paintWindow's per-frame step() instead of being cut at the easing
-    // duration. This lifetime drives BOTH the paint active-window and the
-    // teardown timer below, so the two stay in lockstep. Clamped to the same
-    // [Min, Max] envelope as every other duration path.
-    if (progressCurve && progressCurve->isStateful()) {
-        effectiveDurationMs =
-            qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, qRound(progressCurve->settleTime() * 1000.0),
-                   PhosphorAnimation::Limits::MaxAnimationDurationMs);
-    }
+    // Spring lifetime + envelope clamp, shared with the desktop switch. The Rule
+    // layer clamps its OWN candidate, but the motion-tree / global feed reaches
+    // here unclamped (resolveAnimationShaderAndDuration passes defaultDurationMs
+    // straight through) — see resolveTransitionLifetimeMs for why that matters.
+    // The result drives BOTH the paint active-window and the teardown timer
+    // below, so the two stay in lockstep.
+    effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(effectiveDurationMs, progressCurve.get());
     if (profile.effectiveEffectId().isEmpty()) {
         // Default-state path: a fresh user with no shader overrides
         // anywhere in the tree resolves every event to empty effectId,
@@ -2034,12 +2016,19 @@ void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
                                 // time-driven iTime), so parse with the effect's own
                                 // `m_curveRegistry` — the SAME registry the Rule path
                                 // resolves against (shader_resolve.cpp) — rather than a
-                                // throwaway. Both are functionally identical today (the
-                                // CurveRegistry ctor auto-registers the builtins and
-                                // nothing registers a custom factory), so this is not a
-                                // bug fix: it is one registry for both curve paths, so a
-                                // future third-party registration is honoured on each
-                                // instead of silently resolving on one and not the other.
+                                // throwaway.
+                                //
+                                // Builtins are sufficient here and no CurveLoader is
+                                // needed in the compositor: a Profile persists its curve
+                                // BY SPEC, not by registry key (Profile::toJson writes
+                                // `curve->toString()`, e.g. "0.34,1.20,0.64,1.00" or
+                                // "spring:<omega>,<zeta>"; the friendly name rides in the
+                                // separate `presetName` field). A user curve pack
+                                // (data/curves/*.json) is a named preset over a BUILTIN
+                                // typeId, so it round-trips through its spec and the
+                                // ctor-registered builtin factories resolve it. Sharing
+                                // one registry keeps both curve paths on identical
+                                // resolution rules rather than two that can drift.
                                 auto& tree = m_shaderManager.motionProfileTree();
                                 tree = PhosphorAnimation::ProfileTree::fromJson(obj, m_curveRegistry);
                                 qCDebug(lcEffect) << "loadMotionProfileTreeFromDbus: tree loaded with"

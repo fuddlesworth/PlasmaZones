@@ -104,27 +104,14 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     if (!from || !to || from == to || effectId.isEmpty()) {
         return; // nothing to animate (no shader assigned, or a no-op switch)
     }
-    // A non-positive resolve (a corrupt / hand-edited node with an engaged
-    // `duration <= 0`) falls back to the default so the transition can't settle
-    // on its first paint. An ABSENT node no longer lands here: the motion
-    // cascade falls back to the global animator duration.
-    int effectiveDurationMs = durationMs > 0 ? durationMs : DefaultDurationMs;
-    // A stateful (spring) timing curve derives its own timeline from its physics,
-    // not the nominal duration — run the switch for the spring's analytical
-    // settle time so it rings out under paintOutput's per-frame step() instead of
-    // being cut at the easing duration.
-    if (progressCurve && progressCurve->isStateful()) {
-        effectiveDurationMs = qRound(progressCurve->settleTime() * 1000.0);
-    }
-    // Clamp EVERY path into the animation envelope, matching the per-window
-    // shader path. The hazard is not spring-specific: a stateless `desktop.switch`
-    // motion-tree node arrives unclamped (Profile::fromJson only rejects above
-    // Profile::MaxDurationMs = one hour) and the tree is rebuilt from
-    // hand-editable, daemon-rescanned `profiles/*.json`. Without this a
-    // `"duration": 60000` node would hold setActiveFullScreenEffect (blocking
-    // Overview / Slide / Cube) and force full-output repaints for a solid minute.
-    effectiveDurationMs = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, effectiveDurationMs,
-                                 PhosphorAnimation::Limits::MaxAnimationDurationMs);
+    // A non-positive resolve falls back to the default so the transition can't
+    // settle on its first paint. An ABSENT node no longer lands here — the motion
+    // cascade falls back to the global animator duration — and Profile::fromJson
+    // rejects an engaged `duration <= 0`, so in practice this catches a positive
+    // sub-0.5 ms node that the caller's qRound() floored to zero.
+    const int nominalMs = durationMs > 0 ? durationMs : DefaultDurationMs;
+    // Spring lifetime + envelope clamp, shared with the per-window shader path.
+    const int effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(nominalMs, progressCurve.get());
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
 
     // Resolve p_<name> parameter values into customParams[] slots. Same for
@@ -474,7 +461,9 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     // its CurveState toward target 1 by the inter-frame dt, mirroring
     // AnimatedValue. Null curve → linear. Clamped to [0, 1] per the iTime
     // contract. lastPaintTimeMs is advanced here, once per output paint tick.
-    const qreal linearT = tr.durationMs > 0 ? qBound<qreal>(0.0, qreal(elapsed) / qreal(tr.durationMs), 1.0) : 1.0;
+    // durationMs is guaranteed >= Limits::MinAnimationDurationMs by
+    // resolveTransitionLifetimeMs in begin(), so the divisor is always positive.
+    const qreal linearT = qBound<qreal>(0.0, qreal(elapsed) / qreal(tr.durationMs), 1.0);
     qreal easedT = linearT;
     if (tr.progressCurve) {
         if (tr.progressCurve->isStateful()) {

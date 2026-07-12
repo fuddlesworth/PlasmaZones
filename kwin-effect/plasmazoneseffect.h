@@ -15,7 +15,9 @@
 #include <PhosphorCompositor/TriggerParser.h>
 
 #include <PhosphorAnimation/AnimationLimits.h>
+#include <PhosphorAnimation/Curve.h> // beginShaderTransition's progressCurve param
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Profile.h> // resolveEventMotionProfile's return type
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
@@ -1399,6 +1401,13 @@ private:
     /// `m_shaderManager.findTransition(window)` (and its generation)
     /// pre-call and compare against the post-call snapshot to detect
     /// case (a).
+    ///
+    /// @p progressCurve is the event's resolved timing curve, and is honoured
+    /// ONLY on the time-driven path (@p durationMs > 0), where paintWindow eases
+    /// the linear progress through it. On the animator-driven path
+    /// (@p durationMs == 0) it is dropped with a warning: that leg reads its
+    /// progress from the WindowAnimator, whose own profile already carries the
+    /// curve, so honouring it here would double-ease.
     bool beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
                                bool holdAddedGrab = false,

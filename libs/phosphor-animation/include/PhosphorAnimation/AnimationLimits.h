@@ -8,24 +8,30 @@
  * @brief Animation-wide UI bounds (duration, stagger interval).
  *
  * Source-of-truth min/max values surfaced by the settings UI's
- * duration and stagger-interval sliders. Every animation in the system
- * — global default, per-event override, autotile window-move,
- * overlay/OSD/popup transitions — clamps against these limits, so they
- * MUST live in the animation library and not in any consumer-specific
- * constants header. Previously homed under
+ * duration and stagger-interval sliders. They are animation-wide
+ * policy, so they MUST live in the animation library and not in any
+ * consumer-specific constants header. Previously homed under
  * `PhosphorTiles::AutotileDefaults` for historical reasons; that
  * placement was a layering mistake (the autotile library has no
  * authority over generic animation policy) and has been corrected.
  *
- * These are ENFORCED clamps, not merely slider policy. The duration
- * bounds are applied on every path that arms an animation lifetime:
- * the daemon-bringup settings load (`daemon_bringup.cpp`), the
- * per-window shader transition and the desktop switch
- * (`shader_transitions.cpp`, `desktoptransitionmanager.cpp`). They
- * bound how long a transition may hold per-frame repaints (and, for
- * the desktop switch, the fullscreen-effect claim), so a hand-edited
- * config cannot arm a multi-minute animation. Changing a bound
- * changes runtime behaviour, not just the slider range.
+ * The duration bounds are ENFORCED clamps, not merely slider policy,
+ * on the compositor paths that ARM an animation lifetime: the
+ * settings load (`daemon_bringup.cpp`), the per-window shader
+ * transition (`shader_transitions.cpp`) and the desktop switch
+ * (`desktoptransitionmanager.cpp`). There they bound how long a
+ * transition may hold per-frame repaints — and, for the desktop
+ * switch, the fullscreen-effect claim — so a hand-edited per-event
+ * profile JSON cannot arm a multi-minute animation. The Rule
+ * timing slot clamps its own candidate against them too
+ * (`shader_resolve.cpp`). Changing a bound changes runtime behaviour
+ * on those paths, not just the slider range.
+ *
+ * NOT universal: the daemon's `SurfaceAnimator` (OSD / popup / overlay
+ * surfaces) reads `Profile::effectiveDuration()` raw and is bounded
+ * only by `Profile::MaxDurationMs`, and the autotile library does not
+ * reference these constants at all. Do not assume a duration reaching
+ * you has been clamped — clamp at the site that arms the lifetime.
  */
 namespace PhosphorAnimation {
 namespace Limits {

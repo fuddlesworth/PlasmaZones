@@ -32,8 +32,9 @@ public:
     ProfileTree& operator=(ProfileTree&&) = default;
 
     /// Resolve effective Profile for @p path (walks parents, fills defaults).
-    /// Every field is concrete on return — withDefaults() backfills any the
-    /// chain left unset, including `curve` (a default Easing).
+    /// withDefaults() backfills anything the chain left unset, including `curve`
+    /// (a default Easing) — so every field is concrete on return EXCEPT
+    /// `presetName`, which has no library default and may still be disengaged.
     Profile resolve(const QString& path) const;
 
     /// Overlay ONLY this tree's override chain for @p path onto @p base — the

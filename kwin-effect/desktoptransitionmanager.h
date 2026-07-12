@@ -58,12 +58,13 @@ public:
     DesktopTransitionManager(const DesktopTransitionManager&) = delete;
     DesktopTransitionManager& operator=(const DesktopTransitionManager&) = delete;
 
-    /// Fallback switch duration (ms) for a corrupt resolve — a hand-edited node
-    /// with an engaged, non-positive `duration`. An ABSENT `desktop.switch` node
-    /// no longer reaches this: the motion cascade falls back to the global
-    /// animator duration. Aligned with the shared animation default so a corrupt
-    /// node doesn't run the switch at a different tempo from every other
-    /// animation.
+    /// Fallback switch duration (ms) for a non-positive resolve. An ABSENT
+    /// `desktop.switch` node does NOT reach this (the motion cascade falls back
+    /// to the global animator duration), and Profile::fromJson rejects an engaged
+    /// `duration <= 0` outright — so in practice this catches a positive sub-0.5
+    /// ms node that the caller's qRound() floored to zero. Aligned with the shared
+    /// animation default so it doesn't run the switch at a different tempo from
+    /// every other animation.
     static constexpr int DefaultDurationMs = PhosphorAnimation::Limits::DefaultAnimationDurationMs;
 
     /// Start a transition. @p output is the switched output, or nullptr for a

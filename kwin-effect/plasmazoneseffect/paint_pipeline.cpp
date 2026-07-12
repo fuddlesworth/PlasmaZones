@@ -7,6 +7,8 @@
 #include "shader_resolve.h"
 #include "window_query.h"
 
+#include <PhosphorAnimation/AnimationLimits.h>
+
 #include <core/output.h>
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
@@ -37,38 +39,84 @@ using ShaderInternal::shaderClockNowMs;
 
 namespace {
 
-/// The progress paintWindow will DISPLAY for @p st this frame, replicating its
-/// full chain — curve ease, then the held-move release down-ramp, then the
-/// reverse flip — WITHOUT stepping a stateful curve's integrator (paintWindow
-/// owns that single step; a stateful curve here reads its last stepped value,
-/// so it is at most one frame stale).
+/// Progress for a TIME-DRIVEN transition (`durationMs > 0`) at @p nowMs: linear
+/// ratio → timing-curve ease → held-move pin → release down-ramp. @p active
+/// reports whether paintWindow would paint the leg this frame.
 ///
-/// Used by the backdrop capture, which must sample the scene where the quad is
-/// actually being drawn. Replicating only part of the chain there is a real bug:
-/// during a held-move release the draw ramps progress back toward 0 while an
-/// un-ramped predictor stays pinned at 1, so the frost pane samples the live
-/// frame while the draw lerps toward the grab frame. Keep in lockstep with the
-/// progress block in paintWindow.
+/// Does NOT apply the `reverse` flip — callers do, because paintWindow shares
+/// that final step with its animator-driven branch.
 ///
-/// Time-driven transitions only (`durationMs > 0`); an animator-driven
-/// transition reads its progress straight off the WindowAnimator.
-qreal peekTransitionProgress(const ShaderTransition& st, qint64 nowMs)
+/// @p stepCurve owns the SINGLE per-frame integrator step for a stateful
+/// (spring) curve. paintWindow passes true. The backdrop capture passes false
+/// and reads the last stepped value (at most one frame stale), so it can predict
+/// the drawn rect without double-stepping the integrator paintWindow owns.
+///
+/// Both callers route through this one function on purpose: the capture must
+/// sample the scene where the quad is actually drawn, and a partial replica
+/// drifts. During a held-move release, for instance, the draw ramps progress
+/// back toward 0 while an un-ramped predictor sits pinned at 1 — the frost pane
+/// then samples the live frame while the draw lerps toward the grab frame.
+qreal timeDrivenProgress(ShaderTransition& st, qint64 nowMs, bool stepCurve, bool& active)
 {
+    active = false;
     if (st.durationMs <= 0) {
         return 0.0;
     }
+    qreal progress = 0.0;
     const qint64 elapsed = nowMs - st.startTimeMs;
-    qreal progress = qBound(0.0, qreal(elapsed) / qreal(st.durationMs), 1.0);
-    if (st.progressCurve) {
-        progress = st.progressCurve->isStateful() ? qBound(0.0, st.progressCurveState.value, 1.0)
-                                                  : qBound(0.0, st.progressCurve->evaluate(progress), 1.0);
+    if (elapsed >= 0 && elapsed <= st.durationMs) {
+        // Ease the linear time progress through the per-event timing curve
+        // (resolved global → "All" → node → rule at begin time), so a node's
+        // curve shapes its shader iTime exactly as it shapes the animator-driven
+        // branch. A stateless curve evaluates the linear point directly; a
+        // stateful spring integrates its CurveState toward target 1 by the
+        // inter-frame dt (lastPaintTimeMs still holds the previous tick here — it
+        // is advanced later, alongside iTimeDelta), mirroring
+        // AnimatedValue::advance. Null curve → linear. Clamped to [0, 1] per the
+        // iTime contract, matching the animator branch's qBound.
+        const qreal linear = qreal(elapsed) / qreal(st.durationMs);
+        if (st.progressCurve) {
+            if (st.progressCurve->isStateful()) {
+                if (stepCurve) {
+                    const qreal dt =
+                        st.lastPaintTimeMs < 0 ? 0.0 : qMax(0.0, qreal(nowMs - st.lastPaintTimeMs) / 1000.0);
+                    st.progressCurve->step(dt, st.progressCurveState, 1.0);
+                }
+                progress = qBound(0.0, st.progressCurveState.value, 1.0);
+            } else {
+                progress = qBound(0.0, st.progressCurve->evaluate(linear), 1.0);
+            }
+        } else {
+            progress = linear;
+        }
+        active = true;
+    } else if ((st.holdUntilRelease || (st.meshSim.initialized && !st.meshSim.settled)) && elapsed > st.durationMs) {
+        // HELD move/resize: the drag outlives the nominal duration by design.
+        // Stay active with progress pinned at 1 — the motion uniforms
+        // (iMoveVelocity / iMoveOffset / iMoveMesh), not the clock, drive the
+        // shader from here, and a stateful curve deliberately stops stepping. The
+        // pin is exact: reading the frozen CurveState instead would sit below 1
+        // for an underdamped spring. After release (holdUntilRelease cleared) a
+        // mesh-driven transition stays active until its lattice settles, so the
+        // wobble rings out instead of being cut off at the release frame.
+        progress = 1.0;
+        active = true;
     }
-    if (st.releaseStartMs >= 0) {
+    // Held-move release leg (velocity/trail move packs): the release handler
+    // stamps releaseStartMs instead of clearing the hold flag, and progress ramps
+    // back toward 0 over the same durationMs — the shader plays iTime 1→0 after
+    // release, so a dissolve-while-held pack (phosphor-vortex) rematerialises
+    // instead of snapping at teardown. Subtracting from the base progress (not
+    // from a hard 1.0) bounds a grab shorter than the nominal duration by its
+    // grab-in value. The ramp is deliberately LINEAR even when the base was eased:
+    // this leg is exclusive to window.movement.move, whose packs drive their
+    // visuals from the motion uniforms, not from iTime. Mesh packs never stamp
+    // this and are untouched. Runs BEFORE the caller's reverse flip, which is
+    // correct — the stamp only exists on the held-move path, and window.move
+    // installs with reverse == false.
+    if (active && st.releaseStartMs >= 0) {
         const qreal down = qreal(nowMs - st.releaseStartMs) / qreal(st.durationMs);
         progress = qBound(0.0, progress - qMax(down, 0.0), 1.0);
-    }
-    if (st.reverse) {
-        progress = 1.0 - progress;
     }
     return progress;
 }
@@ -533,11 +581,17 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             //      windows; this degrades strictly less.
             QRectF animatedFrame = m_windowAnimator->currentValue(w, QRectF());
             if (!animatedFrame.isValid()) {
-                if (const ShaderTransition* st = m_shaderManager.findTransition(w);
+                if (ShaderTransition* st = m_shaderManager.findTransition(w);
                     st && st->fromGeometry.isValid() && st->toGeometry.isValid() && st->durationMs > 0) {
-                    // Mirror every transform the draw applies (ease → release
-                    // ramp → reverse), without stepping a spring's integrator.
-                    const qreal t = peekTransitionProgress(*st, frameNowMs);
+                    // Same progress the draw will use, via the shared SSOT.
+                    // stepCurve=false: paintWindow owns the stateful curve's
+                    // single per-frame step, so this read must not advance it.
+                    // The reverse flip is applied here, as paintWindow does.
+                    bool stActive = false;
+                    qreal t = timeDrivenProgress(*st, frameNowMs, /*stepCurve=*/false, stActive);
+                    if (st->reverse) {
+                        t = 1.0 - t;
+                    }
                     const QRectF& f = st->fromGeometry;
                     const QRectF& g = st->toGeometry;
                     animatedFrame =
@@ -694,72 +748,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         qreal progress = 0.0;
         bool active = false;
         if (transition.durationMs > 0) {
-            const qint64 elapsed = frameNowMs - transition.startTimeMs;
-            if (elapsed >= 0 && elapsed <= transition.durationMs) {
-                const qreal linear = qreal(elapsed) / qreal(transition.durationMs);
-                // Ease the linear time progress through the per-event timing
-                // curve (resolved global → "All" → node → rule at begin time),
-                // so a node's curve shapes its shader iTime exactly as it shapes
-                // the animator-driven branch below. A stateless curve evaluates
-                // the linear point directly; a stateful spring integrates its
-                // CurveState toward target 1 by the inter-frame dt (lastPaintTimeMs
-                // still holds the previous tick here — it is advanced further
-                // down alongside iTimeDelta), mirroring AnimatedValue::advance.
-                // Null curve → linear (unchanged). Clamped to [0, 1] per the
-                // iTime contract, matching the animator branch's qBound.
-                if (transition.progressCurve) {
-                    if (transition.progressCurve->isStateful()) {
-                        const qreal dt = transition.lastPaintTimeMs < 0
-                            ? 0.0
-                            : qMax(0.0, qreal(frameNowMs - transition.lastPaintTimeMs) / 1000.0);
-                        transition.progressCurve->step(dt, transition.progressCurveState, 1.0);
-                        progress = qBound(0.0, transition.progressCurveState.value, 1.0);
-                    } else {
-                        progress = qBound(0.0, transition.progressCurve->evaluate(linear), 1.0);
-                    }
-                } else {
-                    progress = linear;
-                }
-                active = true;
-            } else if ((transition.holdUntilRelease || (transition.meshSim.initialized && !transition.meshSim.settled))
-                       && elapsed > transition.durationMs) {
-                // HELD move/resize: the drag outlives the nominal duration
-                // by design. Stay active with progress pinned at 1 — the
-                // motion uniforms (iMoveVelocity / iMoveOffset / iMoveMesh),
-                // not the clock, drive the shader from here. After release
-                // (holdUntilRelease cleared) a mesh-driven transition stays
-                // active until its lattice settles, so the wobble rings out
-                // instead of being cut off at the release frame.
-                progress = 1.0;
-                active = true;
-            }
-            // Held-move release leg (velocity/trail move packs): the release
-            // handler stamps releaseStartMs instead of clearing the hold
-            // flag, and the progress ramps back toward 0 over the same
-            // durationMs — the shader plays iTime 1→0 after release, so a
-            // dissolve-while-held pack (phosphor-vortex) rematerialises
-            // instead of snapping at teardown. Subtracting from the base
-            // progress (not from a hard 1.0) bounds a grab shorter than the
-            // nominal duration by its grab-in value: while both clocks run
-            // (elapsed <= durationMs) the difference holds a plateau at the
-            // release-frame value, then ramps to 0 once the base pins at 1 —
-            // it never overshoots the grab-in and still reaches 0 within the
-            // tail. Mesh packs never stamp this and are untouched. Ordering
-            // note: this runs BEFORE the transition.reverse flip below, which
-            // is correct because the stamp only exists on the held-move path
-            // and window.move installs with reverse == false — a reversed
-            // held transition cannot carry a release stamp.
-            //
-            // The down-ramp is deliberately LINEAR even when the base progress
-            // above was eased through a timing curve: this leg is exclusive to
-            // window.movement.move, whose packs drive their visuals from the
-            // motion uniforms (iMoveMesh / iMoveOffset / iMoveVelocity), not
-            // from iTime. Easing the release would shape a channel those packs
-            // do not read, while the curve still governs the grab-in ramp.
-            if (active && transition.releaseStartMs >= 0) {
-                const qreal down = qreal(frameNowMs - transition.releaseStartMs) / qreal(transition.durationMs);
-                progress = qBound(0.0, progress - qMax(down, 0.0), 1.0);
-            }
+            // Shared with the backdrop capture (see timeDrivenProgress). This is
+            // the site that OWNS the stateful curve's single per-frame step.
+            progress = timeDrivenProgress(transition, frameNowMs, /*stepCurve=*/true, active);
         } else {
             const auto* anim = m_windowAnimator->animationFor(w);
             if (anim && anim->isAnimating()) {
@@ -820,9 +811,18 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // the top of paintWindow) so multiple paint passes within
             // one cycle agree on the timestamp.
             const qint64 nowMs = frameNowMs;
+            // Cap the frame delta at Limits::MaxShaderTimeDeltaSeconds, matching
+            // the daemon's overlay push (overlayservice/shader.cpp) and the
+            // SurfaceAnimator. A transition can live up to MaxAnimationDurationMs,
+            // so a compositor stall or a suspend/resume mid-transition would
+            // otherwise hand the shader a multi-second dt in a single frame and
+            // jump every dt-integrated effect (particle motion, noise advance,
+            // sparkle drift) far past where it should be. The -1 sentinel still
+            // yields 0 on the first paint.
             const float iTimeDelta = (transition.lastPaintTimeMs < 0)
                 ? 0.0f
-                : static_cast<float>(nowMs - transition.lastPaintTimeMs) / 1000.0f;
+                : qMin(static_cast<float>(nowMs - transition.lastPaintTimeMs) / 1000.0f,
+                       PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds);
             transition.lastPaintTimeMs = nowMs;
             // Pin the GLSL contract: `iFrame` is declared `uniform int`
             // in animation_uniforms.glsl; bumping iFrameValue's type to

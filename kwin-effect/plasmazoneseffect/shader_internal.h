@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
+#include <PhosphorAnimation/Curve.h>
 
 #include <QByteArray>
 #include <QRectF>
@@ -195,6 +197,35 @@ inline QVector4D computeTextureSubRect(const QRectF& inner, const QRectF& outer)
     return QVector4D(static_cast<float>(inner.x() - outer.x()) / outerW,
                      static_cast<float>(inner.y() - outer.y()) / outerH, static_cast<float>(inner.width()) / outerW,
                      static_cast<float>(inner.height()) / outerH);
+}
+
+/// The lifetime (ms) a shader transition should run for, given the motion
+/// cascade's resolved @p nominalMs and its timing @p curve.
+///
+/// A STATEFUL (spring) curve derives its own timeline from its physics rather
+/// than the duration slider — mirroring the settings UI's "Spring mode derives
+/// its own duration" — so it runs for the spring's analytical settle time and
+/// rings out under the paint pass's per-frame step() instead of being cut at
+/// the easing duration.
+///
+/// Every result is clamped into the animation envelope. That clamp is
+/// load-bearing, not defensive theatre: the motion tree hands a node's duration
+/// through untouched (ProfileTree::overlayChainOnto does no clamping, and
+/// Profile::fromJson accepts ANY finite positive value up to
+/// Profile::MaxDurationMs — one hour), and the tree is rebuilt from
+/// hand-editable, daemon-rescanned per-event profile JSON. Unclamped, a
+/// `"duration": 600000` node would arm a ten-minute teardown timer AND pin a
+/// full-output repaint every frame for its whole life — and, on the desktop
+/// switch, hold the fullscreen-effect claim (blocking Overview / Slide / Cube)
+/// for the same span.
+///
+/// Consequence at parity across both callers: a very low-stiffness spring whose
+/// settleTime() exceeds the max is cut mid-ring rather than allowed to overrun.
+inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::Curve* curve)
+{
+    const int lifetime = (curve && curve->isStateful()) ? qRound(curve->settleTime() * 1000.0) : nominalMs;
+    return qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, lifetime,
+                  PhosphorAnimation::Limits::MaxAnimationDurationMs);
 }
 
 /// Pre-baked uniform / param key strings for the hot paths.
