@@ -66,6 +66,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("layout"), PhosphorI18n::tr("zone"), PhosphorI18n::tr("grid"),
                              PhosphorI18n::tr("preset"), PhosphorI18n::tr("template"),
                              PhosphorI18n::tr("aspect ratio")});
+    // The LayoutManageCard (import / open folder) carries this anchor on both
+    // the layouts and the algorithms view of the page.
+    addSection(search, QStringLiteral("layouts"), QStringLiteral("manageLayouts"), PhosphorI18n::tr("User layouts"));
 
     // Snapping
     search->setPageKeywords(QStringLiteral("snapping-overlay-behavior"),
@@ -323,6 +326,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Border width"), {PhosphorI18n::tr("thickness"), PhosphorI18n::tr("size")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("cornerRadius"),
                PhosphorI18n::tr("Corner radius"), {PhosphorI18n::tr("rounding"), PhosphorI18n::tr("border")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("borderScope"),
+               PhosphorI18n::tr("Apply borders to"),
+               {PhosphorI18n::tr("scope"), PhosphorI18n::tr("which windows"), PhosphorI18n::tr("border")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("useSystemAccentColor"),
                PhosphorI18n::tr("Use system accent color"),
                {PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("colour")});
@@ -335,6 +341,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("hideTitleBars"),
                PhosphorI18n::tr("Hide title bars"),
                {PhosphorI18n::tr("titlebar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("header")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("hideTitleBarsScope"),
+               PhosphorI18n::tr("Hide title bars on"),
+               {PhosphorI18n::tr("scope"), PhosphorI18n::tr("which windows"), PhosphorI18n::tr("titlebar")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("focusFadeDuration"),
                PhosphorI18n::tr("Focus fade duration"),
                {PhosphorI18n::tr("fade"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("dim"),

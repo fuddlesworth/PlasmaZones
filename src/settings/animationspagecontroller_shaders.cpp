@@ -6,8 +6,7 @@
 //     availableShaderEffectsForPath, shaderEffectInfo, shaderParameters,
 //     supportsShaderLeg).
 //   * User shader directory + shader-pack install
-//     (userShaderDirectoryPath, ensureUserShaderDirectory,
-//     openUserShaderDirectory, installShaderPack).
+//     (userShaderDirectoryPath, openUserShaderDirectory, installShaderPack).
 //   * Per-event shader read + override (rawShaderProfile,
 //     resolvedShaderProfile, setShaderOverride, clearShaderOverride,
 //     shaderOverrideDescendantCount, clearShaderOverrideDescendants,
@@ -159,11 +158,6 @@ QString AnimationsPageController::userShaderDirectoryPath() const
     // confusing "directory not found" downstream.
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return QDir::cleanPath(base + ConfigDefaults::userAnimationsSubdir());
-}
-
-bool AnimationsPageController::ensureUserShaderDirectory()
-{
-    return QDir().mkpath(userShaderDirectoryPath());
 }
 
 void AnimationsPageController::openUserShaderDirectory()

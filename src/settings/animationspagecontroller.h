@@ -258,7 +258,9 @@ public:
     Q_INVOKABLE QVariantList shaderParameters(const QString& effectId) const;
 
     /// XDG-writable user shader directory path (no side effects). Use
-    /// `ensureUserShaderDirectory()` if you also need it created on disk.
+    /// The directory is created on demand by openUserShaderDirectory() and by
+    /// the pack installer, so callers that only need the path get it here
+    /// without a filesystem write.
     /// Internal helper — not exposed to QML; the page surfaces an
     /// "Open Folder" button that calls `openUserShaderDirectory()`
     /// directly rather than displaying the path as a label.
@@ -267,7 +269,6 @@ public:
     /// Ensure the user shader directory exists; create it if missing.
     /// @return true when the directory exists (newly created or already
     /// present).
-    Q_INVOKABLE bool ensureUserShaderDirectory();
 
     /// Open the user shader directory in the system file manager,
     /// creating it first if missing.
@@ -436,6 +437,11 @@ private:
     /// permanently lose pre-edit content — the controller's direct
     /// callers (setOverride / clearOverride) bail in that case.
     bool snapshotFileIfFirst(const QString& filePath);
+    /// Undo a snapshotFileIfFirst() staging when the write it was taken for
+    /// never landed. No-op unless the file on disk still matches the staged
+    /// content exactly, so a snapshot guarding an earlier successful edit is
+    /// left alone. Handed to the sub-services as a callable.
+    void dropFileSnapshotIfUnchanged(const QString& filePath);
 
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;

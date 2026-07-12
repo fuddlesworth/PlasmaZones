@@ -205,6 +205,13 @@ bool ShaderSetStore::readSetFile(const QString& filePath, QJsonObject* out) cons
     return true;
 }
 
+void ShaderSetStore::rollbackSnapshot(const QString& filePath)
+{
+    if (m_config.snapshotRollback) {
+        m_config.snapshotRollback(filePath);
+    }
+}
+
 void ShaderSetStore::notifyPendingChanges()
 {
     if (m_config.fileSnapshot) {
@@ -221,6 +228,10 @@ bool ShaderSetStore::writeSetFile(const QString& filePath, const QJsonObject& ro
     if (!written) {
         qCWarning(lcConfig) << "ShaderSetStore: could not write" << filePath << ":" << file.errorString();
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not write the set to disk."));
+        // snapshotFile() staged this path for Discard, but the write never
+        // landed, so the file is untouched. Un-stage it rather than leave the
+        // page claiming an unsaved change that does not exist.
+        rollbackSnapshot(filePath);
         notifyPendingChanges();
         return false;
     }

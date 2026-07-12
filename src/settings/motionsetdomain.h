@@ -26,11 +26,15 @@ namespace PlasmaZones::motionset {
 /// @param fileSnapshot    Captures a file's pre-edit content for Discard.
 ///                        False = the capture failed, and the store then
 ///                        refuses the write rather than losing the content.
+/// @param snapshotRollback Drops a fileSnapshot capture again when the write it
+///                        was taken for failed, so the page does not report an
+///                        unsaved change to a file nothing touched.
 /// @param mutationGuard   Empty when writes are allowed, else the refusal
 ///                        reason (the controller blocks writes mid-discard).
 ShaderSetStore::Config
 makeConfig(std::function<QString()> profilesDir, std::function<QString()> setsDir,
            std::function<bool(const QString& /*path*/, const QVariantMap& /*profile*/)> writeOverride,
-           std::function<bool(const QString& /*filePath*/)> fileSnapshot, std::function<QString()> mutationGuard);
+           std::function<bool(const QString& /*filePath*/)> fileSnapshot,
+           std::function<void(const QString& /*filePath*/)> snapshotRollback, std::function<QString()> mutationGuard);
 
 } // namespace PlasmaZones::motionset

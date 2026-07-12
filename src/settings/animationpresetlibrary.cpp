@@ -27,10 +27,12 @@ static constexpr QLatin1String JsonNameKey{"name"};
 
 } // namespace presetlib_detail
 
-AnimationPresetLibrary::AnimationPresetLibrary(ProfilesDirFn profilesDirFn, SnapshotFn snapshot, QObject* parent)
+AnimationPresetLibrary::AnimationPresetLibrary(ProfilesDirFn profilesDirFn, SnapshotFn snapshot,
+                                               SnapshotRollbackFn rollback, QObject* parent)
     : QObject(parent)
     , m_profilesDir(std::move(profilesDirFn))
     , m_snapshot(std::move(snapshot))
+    , m_rollback(std::move(rollback))
 {
 }
 
@@ -149,12 +151,15 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
         file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(payload) == payload.size() && file.commit();
     if (!written) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: could not write" << filePath << ":" << file.errorString();
-        // The snapshot above already staged the pre-edit content, so the dirty
-        // state moved even though the write did not. Re-notify, or the page
-        // keeps a stale flag. Only the snapshot moves it, so with no snapshot
-        // callback wired there is nothing to re-notify about.
-        if (m_snapshot)
+        // The snapshot above staged a file the write never touched. Un-stage it,
+        // or the page reports an unsaved change with nothing to discard. Only
+        // the snapshot moves the dirty state, so with no snapshot wired there is
+        // nothing to roll back or re-notify about.
+        if (m_snapshot) {
+            if (m_rollback)
+                m_rollback(filePath);
             Q_EMIT pendingChangesChanged();
+        }
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset \"%1\".").arg(name));
         return false;
     }
@@ -233,12 +238,13 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
     }
     if (!file.remove()) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: could not remove" << filePath;
-        // The snapshot above already staged the pre-edit content, so the dirty
-        // state moved even though the delete did not. Re-notify, or the page
-        // keeps a stale flag. Only the snapshot moves it, so with no snapshot
-        // callback wired there is nothing to re-notify about.
-        if (m_snapshot)
+        // The snapshot above staged a file the delete never touched. Un-stage
+        // it, or the page reports an unsaved change with nothing to discard.
+        if (m_snapshot) {
+            if (m_rollback)
+                m_rollback(filePath);
             Q_EMIT pendingChangesChanged();
+        }
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset \"%1\".").arg(name));
         return false;
     }

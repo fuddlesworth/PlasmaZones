@@ -188,11 +188,29 @@ SettingsFlickable {
 
         return opts;
     }
-    property int groupByIndex: 0
-    property int sortByIndex: 0
+    /// The chosen options, by id. The id is the state and the combo index is
+    /// derived from it, never the other way around: the option lists gain and
+    /// lose the Type entry as the type axis appears, so a stored index would
+    /// silently re-point the selection at whatever option moved into that slot.
+    property string _preferredGroupId: "category"
+    property string _preferredSortId: "name"
     property bool sortAscending: true
+    /// True once the persisted selection has been adopted. The derived indices
+    /// settle several times while the page builds, and pushing those into the
+    /// bar before it exists is both pointless and a null dereference.
+    property bool _completed: false
+    readonly property int groupByIndex: root._indexOfOption(root._groupOptions, root._preferredGroupId)
+    readonly property int sortByIndex: root._indexOfOption(root._sortOptions, root._preferredSortId)
+    /// The option actually in force. Same as the preferred id whenever that
+    /// option is present. It differs only while the preferred one is absent (a
+    /// remembered Type choice on a page whose type axis is currently hidden),
+    /// where _indexOfOption falls back to the first entry, so what the page
+    /// groups by always matches what the combo shows.
     readonly property string _groupId: (_groupOptions[groupByIndex] || _groupOptions[0]).id
     readonly property string _sortId: (_sortOptions[sortByIndex] || _sortOptions[0]).id
+
+    onGroupByIndexChanged: root._syncGroupSortBar()
+    onSortByIndexChanged: root._syncGroupSortBar()
     // ── Derived: category index (sorted, with counts) ───────────────────
     readonly property var _allCategories: {
         var counts = {};
@@ -606,8 +624,8 @@ SettingsFlickable {
             sortByIndex: root.sortByIndex
             sortAscending: root.sortAscending
             onChanged: {
-                root.groupByIndex = groupByIndex;
-                root.sortByIndex = sortByIndex;
+                root._preferredGroupId = (root._groupOptions[groupByIndex] || root._groupOptions[0]).id;
+                root._preferredSortId = (root._sortOptions[sortByIndex] || root._sortOptions[0]).id;
                 root.sortAscending = sortAscending;
                 root._savePrefs();
             }
@@ -715,9 +733,22 @@ SettingsFlickable {
     }
 
     function _savePrefs() {
-        prefs.groupId = root._groupId;
-        prefs.sortId = root._sortId;
+        // The PREFERRED ids, not the effective ones: a Type choice made on a
+        // page whose axis is currently hidden must survive to the session where
+        // it is back.
+        prefs.groupId = root._preferredGroupId;
+        prefs.sortId = root._preferredSortId;
         prefs.sortAscending = root.sortAscending;
+    }
+    // The bar's combo bindings are initial-only (they break on the first user
+    // pick), so a derived index change has to be pushed into it.
+    function _syncGroupSortBar() {
+        if (!root._completed)
+            return;
+
+        groupSortBar.groupByIndex = root.groupByIndex;
+        groupSortBar.sortByIndex = root.sortByIndex;
+        groupSortBar.syncFromState();
     }
     function _indexOfOption(options, id) {
         for (var i = 0; i < options.length; i++)
@@ -728,10 +759,11 @@ SettingsFlickable {
     }
 
     Component.onCompleted: {
-        root.groupByIndex = root._indexOfOption(root._groupOptions, prefs.groupId);
-        root.sortByIndex = root._indexOfOption(root._sortOptions, prefs.sortId);
+        root._preferredGroupId = prefs.groupId;
+        root._preferredSortId = prefs.sortId;
         root.sortAscending = prefs.sortAscending;
-        groupSortBar.syncFromState();
+        root._completed = true;
+        root._syncGroupSortBar();
     }
 
     ShaderBrowserDetailDialog {

@@ -16,6 +16,9 @@
  *   - removeUserPreset must not touch override files, even when an override's
  *     embedded `name` happens to match the preset being removed
  *   - Malformed preset JSON logs and is skipped rather than breaking the list
+ *   - A write that fails AFTER the pre-edit snapshot was taken un-stages that
+ *     snapshot, so the page does not report an unsaved change to a file that
+ *     was never touched
  */
 
 #include <QSignalSpy>
@@ -251,6 +254,39 @@ private Q_SLOTS:
         // The good preset still surfaces; the malformed one is skipped.
         QCOMPARE(presets.size(), 1);
         QCOMPARE(presets.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Good"));
+    }
+    /// A failed write leaves the file untouched, so the snapshot it staged for
+    /// Discard has to go back too. Without the rollback the page sits dirty
+    /// with nothing to restore, and the only way out is a no-op Discard.
+    void failedWriteDoesNotLeaveThePageDirty()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c(nullptr, nullptr);
+        c.setUserProfilesDirOverride(tmp.path());
+        QVERIFY(!c.hasPendingChanges());
+
+        // Read-execute only: the directory still exists (so the snapshot side
+        // stages a "did not exist" entry for the new file and allows the write),
+        // but QSaveFile cannot create anything inside it.
+        QVERIFY(QFile::setPermissions(tmp.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+
+        QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("AnimationPresetLibrary: could not write")));
+        const bool written = c.addUserPreset(QStringLiteral("Doomed"), {{QStringLiteral("duration"), 200}});
+
+        // Restore before any assertion can abort the test and leak the mode
+        // (QTemporaryDir cannot clean up a directory it may not write).
+        QVERIFY(QFile::setPermissions(tmp.path(),
+                                      QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+
+        if (written)
+            QSKIP("The write succeeded, so this environment ignores directory permissions (running as root?).");
+
+        QCOMPARE(toastSpy.count(), 1);
+        // The load-bearing assertion: the failed write staged nothing.
+        QVERIFY(!c.hasPendingChanges());
     }
 };
 

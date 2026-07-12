@@ -85,6 +85,7 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
 ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::function<QString()> setsDir,
                                   std::function<bool(const QString&, const QVariantMap&)> writeOverride,
                                   std::function<bool(const QString&)> fileSnapshot,
+                                  std::function<void(const QString&)> snapshotRollback,
                                   std::function<QString()> mutationGuard)
 {
     // The domain cannot function without these: a missing callable is a wiring
@@ -100,6 +101,7 @@ ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::fun
     config.formatVersion = kSetFormatVersion;
     config.setsDir = std::move(setsDir);
     config.fileSnapshot = std::move(fileSnapshot);
+    config.snapshotRollback = std::move(snapshotRollback);
     config.mutationGuard = std::move(mutationGuard);
 
     // ── Snapshot: walk the profiles dir and keep the files whose `name`

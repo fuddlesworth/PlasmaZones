@@ -71,6 +71,14 @@ public:
     /// (the domain does not stage set files at all).
     using FileSnapshotFn = std::function<bool(const QString& /*filePath*/)>;
 
+    /// Optional companion to FileSnapshotFn: drop the snapshot staged for
+    /// @p filePath again, because the write it was taken for failed and the
+    /// file was never touched. Without it the page reports unsaved changes
+    /// with nothing to discard. The controller only drops a snapshot whose
+    /// content still matches the file on disk, so an earlier edit that DID
+    /// land keeps its way back.
+    using FileSnapshotRollbackFn = std::function<void(const QString& /*filePath*/)>;
+
     /// Optional gate consulted before every mutation. Returns an empty
     /// string when the mutation may proceed, or a user-facing refusal
     /// reason (surfaced via toastRequested) when it may not. Wired to the
@@ -84,6 +92,7 @@ public:
         ValidateFn validate;
         ApplyFn apply;
         FileSnapshotFn fileSnapshot; // optional
+        FileSnapshotRollbackFn snapshotRollback; // optional, pairs with fileSnapshot
         MutationGuardFn mutationGuard; // optional
         /// Current on-disk format. Save stamps it; apply and import refuse a
         /// NEWER file, so a set written by a future build (carrying fields
@@ -195,6 +204,9 @@ private:
     /// removes it. False = the capture failed and the caller must NOT write.
     /// True when no fileSnapshot hook is wired (the domain does not stage).
     bool snapshotFile(const QString& filePath);
+    /// Un-stage a snapshotFile() capture whose write then failed. No-op on a
+    /// domain that wires no rollback hook.
+    void rollbackSnapshot(const QString& filePath);
 
     /// Atomically write @p root to @p filePath. On failure calls
     /// notifyPendingChanges(): snapshotFile() may already have staged the

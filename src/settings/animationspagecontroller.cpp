@@ -94,6 +94,14 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     auto snapshotFn = [this](const QString& filePath) -> bool {
         return snapshotFileIfFirst(filePath);
     };
+    // The companion to snapshotFn. A sub-service that snapshots a file and then
+    // fails to write it has staged a file it never touched, so the page would
+    // report unsaved changes with nothing to discard. This drops that entry
+    // again — but only when the file on disk still matches what was staged, so
+    // a snapshot covering an EARLIER edit that did land is never thrown away.
+    auto snapshotRollbackFn = [this](const QString& filePath) {
+        dropFileSnapshotIfUnchanged(filePath);
+    };
     auto profilesDirFn = [this]() {
         return userProfilesDir();
     };
@@ -118,9 +126,10 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     // m_lastHadPendingChanges from the real post-construction state (just
     // below), so it does not need to have observed any signal fired during
     // construction.
-    m_presets = new AnimationPresetLibrary(profilesDirFn, snapshotFn, this);
-    m_motionSets = new ShaderSetStore(
-        motionset::makeConfig(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn, mutationGuardFn), this);
+    m_presets = new AnimationPresetLibrary(profilesDirFn, snapshotFn, snapshotRollbackFn, this);
+    m_motionSets = new ShaderSetStore(motionset::makeConfig(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn,
+                                                            snapshotRollbackFn, mutationGuardFn),
+                                      this);
 
     m_lastHadPendingChanges = hasPendingChanges();
     connect(this, &AnimationsPageController::pendingChangesChanged, this, [this]() {
@@ -249,6 +258,29 @@ bool AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
     return true;
 }
 
+void AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePath)
+{
+    const auto it = m_pendingFileSnapshots.constFind(filePath);
+    if (it == m_pendingFileSnapshots.cend())
+        return;
+
+    // The snapshot is the ONLY copy of the file's pre-edit content, so it may be
+    // dropped only when the file still holds exactly that content: the write it
+    // was taken for never landed. A mismatch means some earlier write did land,
+    // and the entry is still Discard's way back.
+    QFile f(filePath);
+    if (it.value().has_value()) {
+        if (!f.exists() || !f.open(QIODevice::ReadOnly) || f.readAll() != *it.value())
+            return;
+    } else if (f.exists()) {
+        // Staged as "did not exist", but something created it since.
+        return;
+    }
+
+    m_pendingFileSnapshots.remove(filePath);
+    Q_EMIT pendingChangesChanged();
+}
+
 bool AnimationsPageController::hasPendingChanges() const
 {
     return !m_pendingFileSnapshots.isEmpty() || m_shaderTreeDirty;
@@ -318,6 +350,14 @@ void AnimationsPageController::revertPending()
     // edits.
     using namespace PhosphorAnimation;
 
+    // The async worker is mid-way through rewriting these same files, and it
+    // merges its results back into m_pendingFileSnapshots when it lands. A
+    // synchronous restore running underneath it would race that walk on disk
+    // and then have its map edits overwritten by the worker's reply.
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "revertPending: blocked while an async discard is in flight";
+        return;
+    }
     if (!hasPendingChanges())
         return;
 

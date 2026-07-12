@@ -333,6 +333,13 @@ Item {
             width: parent.width
             height: contentColumn.implicitHeight
             clip: true
+            // A collapsed card is clipped to nothing, but clipping alone leaves
+            // its controls in the tab order, so tabbing through the page walks
+            // invisible fields. Hiding the body at zero height takes them out of
+            // the focus chain. Safe for the animation: Qt does not re-run a
+            // layout while it is invisible, so contentColumn.implicitHeight (and
+            // with it the expand animation's target height) survives the hide.
+            visible: height > 0
             opacity: root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1
             enabled: root.showToggle ? root.toggleChecked : true
 
