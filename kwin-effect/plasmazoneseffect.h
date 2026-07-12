@@ -932,9 +932,9 @@ private:
     /// Compile-on-first-use + cache the surface shader pack @p packId (window
     /// border / rounded corners / glow / …) from data/surface via the
     /// SurfaceShaderRegistry, keyed by pack id in m_compiledPacks. Returns the
-    /// cached CompiledSurfacePack (whose `shader` may be nullptr + `compileFailed`
-    /// set when the pack is missing or its compile failed — decoration then
-    /// no-ops for that pack), or nullptr only when there is no GL context yet.
+    /// cached CompiledSurfacePack (whose `shader` is nullptr when the pack is missing
+    /// or its compile failed — decoration then no-ops for that pack), or nullptr only
+    /// when there is no GL context yet.
     /// The whole cache is cleared on a SurfaceShaderRegistry hot-reload
     /// (effectsChanged) and on teardown.
     ///

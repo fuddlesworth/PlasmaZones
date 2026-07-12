@@ -102,7 +102,7 @@ struct SurfaceParamValues
 /// pack id so per-window decoration chains can each render their own base pack.
 ///
 /// Compiled on first use (compiledPack), cached for the effect's lifetime, and
-/// fail-closed: a pack whose compile fails latches `compileFailed = true` and
+/// fail-closed: a pack whose compile fails caches an entry with a NULL shader, and
 /// `shader == nullptr`, so subsequent lookups return it without re-attempting the
 /// compile every frame. The whole map is cleared on a SurfaceShaderRegistry
 /// hot-reload (effectsChanged) so the next paint recompiles against fresh source.
@@ -116,7 +116,6 @@ struct SurfaceParamValues
 struct CompiledSurfacePack
 {
     std::unique_ptr<KWin::GLShader> shader;
-    bool compileFailed = false; ///< latch a failed compile so we don't retry every frame
 
     // Contract uniform locations (1:1 with PhosphorSurfaceShaders::SurfaceShaderContract).
     int uSurfaceSizeLoc = -1; ///< uSurfaceSize — uTexture0 extent, device px
@@ -128,7 +127,7 @@ struct CompiledSurfacePack
     /// The pack's `"handlesOpacity"` METADATA flag, cached at compile time.
     ///
     /// Gates the uSurfaceOpacity push, so that push and the present pass's
-    /// suppression (`WindowDecoration::chainHandlesOpacity`) share ONE authority. Gate
+    /// suppression (`SurfaceMultipassState::handledOpacity`) share ONE authority. Gate
     /// the push on the linker (`uOpacityLoc >= 0`) instead and a pack that samples
     /// uSurfaceOpacity — directly, or via the shared `surfaceSlabOpen()` helper —
     /// without declaring the flag gets the rule alpha applied twice: once folded,
@@ -236,7 +235,7 @@ struct SurfaceMultipassState
     /// Did the LAST fold actually apply the window's rule alpha?
     ///
     /// Reports what the fold DID, not what the metadata promised.
-    /// `WindowDecoration::chainHandlesOpacity` is folded from registry metadata
+    /// The pack metadata is folded from the registry
     /// alone, with no reference to whether the pack's GLSL compiled — so a
     /// handlesOpacity pack that FAILS to compile is skipped by the fold (nothing
     /// applies uSurfaceOpacity) while both consumers still stand down on the
@@ -245,8 +244,8 @@ struct SurfaceMultipassState
     ///
     /// Reading this instead means a compiled-but-broken chain falls back to
     /// present-pass modulation, which is exactly the "no pack owns the alpha"
-    /// regime. Nothing reads WindowDecoration::chainHandlesOpacity any more — the
-    /// metadata cannot answer this question, which is the whole point.
+    /// regime. The pack METADATA cannot answer this question — it reports what a pack
+    /// promised, not what the fold delivered — which is the whole point of this field.
     bool handledOpacity = false;
     /// The logical rect the composite canvas covers (expanded geometry
     /// inflated by the chain's outer padding, captured when the fold ran).
@@ -380,17 +379,6 @@ struct WindowDecoration
     /// updateWindowDecoration, which re-runs on every trigger that can change
     /// a rule verdict (focus, snap state, rule/config edits).
     double ruleOpacity = 1.0;
-
-    /// UNUSED as of the handledOpacity change — kept only because removing it would
-    /// touch decorations.cpp's fold. Do NOT read it to decide who owns the alpha:
-    /// it reports what the pack METADATA promised, not what the fold actually did, and
-    /// a pack that fails to compile promises but never delivers. Read
-    /// SurfaceMultipassState::handledOpacity instead.
-    ///
-    /// True when any chain pack declares `"handlesOpacity": true`. The
-    /// present pass then pushes uOpacity = 1.0 (no final modulation) and the
-    /// declaring pack applies uSurfaceOpacity itself.
-    bool chainHandlesOpacity = false;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but

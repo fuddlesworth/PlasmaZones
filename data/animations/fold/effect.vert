@@ -93,7 +93,14 @@ void main() {
     // express the result as a delta from this vertex's settled position
     // (the grid sits on iToRect). quad-space <-> screen-space is a pure
     // 1:1 translation, so the screen delta applies straight to `position`.
-    vec4 rect = mix(iFromRect, iToRect, ease);
+    // POSITION takes the unbounded `ease` (the overshoot IS the bounce); SIZE takes a
+    // bounded copy. Lerping the whole vec4 with `ease`, as this did, extrapolates the
+    // EXTENT: at ease = 3.45 (reachable — elastic's own parameter limits, and
+    // legProgress flips iTime = -2.45 to tt = +3.45 on a reverse leg) a shrinking move
+    // computes rect.zw = (-8028, -4257). NEGATIVE width and height. `screenPos` then
+    // mirrors the card and inflates it to ~8000 px: a flipped, garbage-scaled window.
+    // This is verbatim the hazard window-morph guards against, and it belongs here too.
+    vec4 rect = vec4(mix(iFromRect.xy, iToRect.xy, ease), mix(iFromRect.zw, iToRect.zw, clamp(ease, 0.0, 1.0)));
     vec2 screenPos = rect.xy + duv * rect.zw;
     vec2 toPos = iToRect.xy + cuv * iToRect.zw;
     vec2 displaced = position + (screenPos - toPos);

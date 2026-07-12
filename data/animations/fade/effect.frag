@@ -51,7 +51,9 @@ vec4 fadeBody(vec2 uv, float t, bool windowFadingIn) {
         // Floor the divisor. `scale` rides the RAW leg progress, which is no longer
         // bounded to [0,1] (an overshooting curve delivers its overshoot), so this is
         // safe today only because metadata.json caps p_scaleAmount at 0.3 — scale
-        // would not reach 0 until a 3.3x overshoot. Do not rely on that coincidence:
+        // crosses zero INSIDE the reachable range (elastic reaches +3.45 / -2.45), so the
+        // margin this once claimed is gone — what actually holds is the max() below and
+        // the fact that alpha is exactly 0 at both extremes. Do not remove either:
         // raise the cap or widen the envelope and this becomes a divide-by-zero, a
         // NaN, and a black window.
         vec2 scaled_uv = (uv - center) / max(scale, 0.05) + center;

@@ -111,7 +111,12 @@ function estimateSettleTime(stiffness, dampingRatio, epsilon) {
     var omega = Math.sqrt(Math.max(1e-6, stiffness));
     var zeta = Math.max(0, Math.min(10, dampingRatio));
     var eps = (epsilon !== undefined && epsilon > 0) ? epsilon : 0.005;
-    var maxT = 10;
+    // 30, matching C++ Spring::MaxSettleSeconds. It was 10, so at the slider's own
+    // bottom-left corner (omega=1, zeta=0.1) the tuner reported ~10000ms for a spring
+    // the runtime runs for 30000ms — a 3x lie. It also truncated the preview canvas
+    // (drawn over settleTime * 1.3) so the curve appeared to settle when it had not,
+    // and stopped the animated box 20 seconds before the real window would stop ringing.
+    var maxT = 30;
 
     // Critical-damping epsilon — match C++ Spring::CriticalDampingEpsilon. A wider
     // band here would produce a settle time on a different ζ partition than

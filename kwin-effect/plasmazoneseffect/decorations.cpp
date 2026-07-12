@@ -473,7 +473,6 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
-    wb.chainHandlesOpacity = handlesOpacity;
 
     // Rule-resolved opacity, routing + capture-dim input (see the field doc).
     // Resolved here rather than per paint: every trigger that can flip a
