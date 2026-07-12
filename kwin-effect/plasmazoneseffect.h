@@ -729,19 +729,14 @@ private:
     // the window.focus event no longer snaps or retimes it. 0 = instant.
     // Seeded to the shared default until the async settings load lands.
     int m_focusFadeDurationMs = PhosphorCompositor::DecorationDefaults::FocusFadeMs;
-    // Resolve a per-event base duration (ms) from the motion profile tree: a
-    // motion-tree override anywhere up @p profilePath's ancestor chain replaces
-    // @p fallbackMs with the node's resolved effectiveDuration(), else the
-    // fallback stands. Used by tryBeginShaderForEvent (per-event transition
-    // timing).
-    int resolveMotionTreeBaseDuration(const QString& profilePath, int fallbackMs) const;
     // Resolve the fully-cascaded motion Profile (curve + duration) for
     // @p profilePath: global animator profile → category "All" → per-node
     // motion-tree overrides → per-window Rule override. This is the single SSOT
-    // for the per-event timing cascade, shared by the animator-driven geometry
-    // path (applyWindowGeometry) and the time-driven shader path
-    // (tryBeginShaderForEvent) so both honour the same global → All → node
-    // resolution. Pass a windowless @p query (hasWindow() false) + empty
+    // for the per-event timing cascade, shared by all three per-event timing
+    // consumers — the animator-driven geometry path (applyWindowGeometry), the
+    // time-driven shader path (tryBeginShaderForEvent) and the desktop switch
+    // (the desktopChanged handler) — so each honours the same global → All →
+    // node resolution. Pass a windowless @p query (hasWindow() false) + empty
     // @p windowId for events with no per-window rule scope (desktop switch);
     // the Rule layer is then skipped and only the tree cascade applies.
     PhosphorAnimation::Profile resolveEventMotionProfile(const QString& profilePath,

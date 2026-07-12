@@ -35,6 +35,46 @@ namespace PlasmaZones {
 
 using ShaderInternal::shaderClockNowMs;
 
+namespace {
+
+/// The progress paintWindow will DISPLAY for @p st this frame, replicating its
+/// full chain — curve ease, then the held-move release down-ramp, then the
+/// reverse flip — WITHOUT stepping a stateful curve's integrator (paintWindow
+/// owns that single step; a stateful curve here reads its last stepped value,
+/// so it is at most one frame stale).
+///
+/// Used by the backdrop capture, which must sample the scene where the quad is
+/// actually being drawn. Replicating only part of the chain there is a real bug:
+/// during a held-move release the draw ramps progress back toward 0 while an
+/// un-ramped predictor stays pinned at 1, so the frost pane samples the live
+/// frame while the draw lerps toward the grab frame. Keep in lockstep with the
+/// progress block in paintWindow.
+///
+/// Time-driven transitions only (`durationMs > 0`); an animator-driven
+/// transition reads its progress straight off the WindowAnimator.
+qreal peekTransitionProgress(const ShaderTransition& st, qint64 nowMs)
+{
+    if (st.durationMs <= 0) {
+        return 0.0;
+    }
+    const qint64 elapsed = nowMs - st.startTimeMs;
+    qreal progress = qBound(0.0, qreal(elapsed) / qreal(st.durationMs), 1.0);
+    if (st.progressCurve) {
+        progress = st.progressCurve->isStateful() ? qBound(0.0, st.progressCurveState.value, 1.0)
+                                                  : qBound(0.0, st.progressCurve->evaluate(progress), 1.0);
+    }
+    if (st.releaseStartMs >= 0) {
+        const qreal down = qreal(nowMs - st.releaseStartMs) / qreal(st.durationMs);
+        progress = qBound(0.0, progress - qMax(down, 0.0), 1.0);
+    }
+    if (st.reverse) {
+        progress = 1.0 - progress;
+    }
+    return progress;
+}
+
+} // namespace
+
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 {
     // KWin 6.7 no longer passes a presentTime; sample the steady clock
@@ -483,7 +523,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // the three animation classes expose exact geometry:
             //   1. C++ WindowAnimator translate+scale — its current rect.
             //   2. Geometry-morph transitions — lerp(from, to, progress)
-            //      with the same time-based progress the draw uses.
+            //      with the same eased progress the draw uses (below).
             //   3. Non-morph shader transitions: anchor-extent packs warp in
             //      place (rest rect is already right); surface-extent movers
             //      (fly-in / bounce) place pixels only the shader knows, so
@@ -495,7 +535,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (!animatedFrame.isValid()) {
                 if (const ShaderTransition* st = m_shaderManager.findTransition(w);
                     st && st->fromGeometry.isValid() && st->toGeometry.isValid() && st->durationMs > 0) {
-                    const qreal t = qBound(0.0, qreal(frameNowMs - st->startTimeMs) / qreal(st->durationMs), 1.0);
+                    // Mirror every transform the draw applies (ease → release
+                    // ramp → reverse), without stepping a spring's integrator.
+                    const qreal t = peekTransitionProgress(*st, frameNowMs);
                     const QRectF& f = st->fromGeometry;
                     const QRectF& g = st->toGeometry;
                     animatedFrame =
@@ -707,6 +749,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // is correct because the stamp only exists on the held-move path
             // and window.move installs with reverse == false — a reversed
             // held transition cannot carry a release stamp.
+            //
+            // The down-ramp is deliberately LINEAR even when the base progress
+            // above was eased through a timing curve: this leg is exclusive to
+            // window.movement.move, whose packs drive their visuals from the
+            // motion uniforms (iMoveMesh / iMoveOffset / iMoveVelocity), not
+            // from iTime. Easing the release would shape a channel those packs
+            // do not read, while the curve still governs the grab-in ramp.
             if (active && transition.releaseStartMs >= 0) {
                 const qreal down = qreal(frameNowMs - transition.releaseStartMs) / qreal(transition.durationMs);
                 progress = qBound(0.0, progress - qMax(down, 0.0), 1.0);

@@ -16,10 +16,18 @@ namespace PhosphorAnimation {
 // Lookup
 // ═══════════════════════════════════════════════════════════════════════════════
 
-Profile ProfileTree::resolve(const QString& path) const
+Profile ProfileTree::overlayChain(const QString& path, Profile seed) const
 {
-    // Build the path chain from closest-to-root down to the leaf, so we
-    // can overlay in that order — later overlays win.
+    // Build the path chain from closest-to-root down to the leaf and overlay
+    // each matching override onto @p seed in that order — later (deeper)
+    // overlays win. Every overlay copies only the fields explicitly set in the
+    // source, so a child with only `duration` engaged inherits curve / stagger
+    // / mode from its parent, and a child with `duration = DefaultDuration`
+    // still wins over a parent's different duration (the point of optionals).
+    // No library-default fill: fields no override in the chain engages keep
+    // their @p seed value, and a chain with no override returns @p seed
+    // unchanged. resolve() and overlayChainOnto() differ only in the seed
+    // (m_baseline vs a caller-owned base) and whether they apply withDefaults().
     QStringList chain;
     QString cursor = path;
     while (!cursor.isEmpty()) {
@@ -27,53 +35,33 @@ Profile ProfileTree::resolve(const QString& path) const
         cursor = ProfilePaths::parentPath(cursor);
     }
 
-    // Start from the baseline (logical "global" level) and overlay each
-    // matching override in chain order. Every overlay copies only the
-    // fields that are explicitly set in the source, so a child with only
-    // `duration` engaged correctly inherits curve / stagger / mode from
-    // its parent — and a child with `duration = DefaultDuration` still
-    // wins over a parent's different duration (the point of optionals).
-    Profile effective = m_baseline;
-
     for (const QString& step : chain) {
         auto it = m_overrides.constFind(step);
         if (it == m_overrides.constEnd()) {
             continue;
         }
-        overlay(effective, it.value());
+        overlay(seed, it.value());
     }
+    return seed;
+}
 
-    // Final pass: fill any still-unset field with the library default
-    // so consumers get a fully-populated Profile and never have to check
-    // the optionals themselves. `curve` stays null if no chain member
-    // supplied one; runtime callers that need a concrete curve should
-    // substitute a default Easing at that point.
-    return effective.withDefaults();
+Profile ProfileTree::resolve(const QString& path) const
+{
+    // Seed from the baseline (logical "global" level), overlay the chain, then
+    // fill any still-unset field with the library default so consumers get a
+    // fully-populated Profile and never have to check the optionals — including
+    // `curve`, which withDefaults() backfills with a default Easing.
+    return overlayChain(path, m_baseline).withDefaults();
 }
 
 Profile ProfileTree::overlayChainOnto(const QString& path, Profile base) const
 {
-    // Same closest-to-root-down chain as resolve(), but seeded with the
-    // caller's @p base instead of m_baseline and with NO withDefaults() fill:
-    // fields no override engages keep their @p base value. When the chain
-    // carries no override, @p base returns byte-for-byte unchanged, so a
-    // consumer holding the authoritative baseline elsewhere can gate the whole
-    // overlay on hasOverride/overriddenPaths and keep its fast path.
-    QString cursor = path;
-    QStringList chain;
-    while (!cursor.isEmpty()) {
-        chain.prepend(cursor);
-        cursor = ProfilePaths::parentPath(cursor);
-    }
-
-    for (const QString& step : chain) {
-        auto it = m_overrides.constFind(step);
-        if (it == m_overrides.constEnd()) {
-            continue;
-        }
-        overlay(base, it.value());
-    }
-    return base;
+    // Same chain overlay as resolve(), but seeded with the caller's @p base
+    // instead of m_baseline and with NO withDefaults() fill — so a consumer
+    // holding the authoritative baseline elsewhere can gate the whole overlay
+    // on hasOverride/overriddenPaths and keep its fast path (a no-override
+    // chain returns @p base unchanged).
+    return overlayChain(path, std::move(base));
 }
 
 Profile ProfileTree::directOverride(const QString& path) const

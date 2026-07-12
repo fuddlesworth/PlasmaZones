@@ -17,9 +17,15 @@
  * placement was a layering mistake (the autotile library has no
  * authority over generic animation policy) and has been corrected.
  *
- * The values are pure UI policy — no algorithm or runtime path
- * enforces them as clamps. Increasing the upper bound has no effect
- * beyond letting the user pick larger values in the slider.
+ * These are ENFORCED clamps, not merely slider policy. The duration
+ * bounds are applied on every path that arms an animation lifetime:
+ * the daemon-bringup settings load (`daemon_bringup.cpp`), the
+ * per-window shader transition and the desktop switch
+ * (`shader_transitions.cpp`, `desktoptransitionmanager.cpp`). They
+ * bound how long a transition may hold per-frame repaints (and, for
+ * the desktop switch, the fullscreen-effect claim), so a hand-edited
+ * config cannot arm a multi-minute animation. Changing a bound
+ * changes runtime behaviour, not just the slider range.
  */
 namespace PhosphorAnimation {
 namespace Limits {

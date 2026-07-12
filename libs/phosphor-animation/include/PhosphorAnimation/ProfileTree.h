@@ -32,15 +32,16 @@ public:
     ProfileTree& operator=(ProfileTree&&) = default;
 
     /// Resolve effective Profile for @p path (walks parents, fills defaults).
-    /// Curve may still be null if no chain member supplied one.
+    /// Every field is concrete on return — withDefaults() backfills any the
+    /// chain left unset, including `curve` (a default Easing).
     Profile resolve(const QString& path) const;
 
     /// Overlay ONLY this tree's override chain for @p path onto @p base — the
     /// tree's own baseline is ignored and no library defaults are filled. Each
     /// engaged override field (closest-to-root first, leaf wins) replaces the
-    /// matching field in @p base; fields no override in the chain sets keep
-    /// their value from @p base. Returns @p base unchanged when no node in the
-    /// chain has an override.
+    /// matching field in @p base; any field that no override in the chain sets
+    /// keeps its value from @p base. Returns @p base unchanged when no node in
+    /// the chain has an override.
     ///
     /// Use this to layer per-event overrides on top of an externally-owned
     /// base profile (e.g. a consumer that holds the authoritative "global"
@@ -89,6 +90,13 @@ public:
 
 private:
     static void overlay(Profile& dst, const Profile& src);
+
+    /// Shared chain overlay for resolve() and overlayChainOnto(): walk @p path's
+    /// ancestor chain (root → leaf) and overlay each engaged override onto
+    /// @p seed, leaf winning. No baseline import, no default fill — the two
+    /// public methods layer those on (resolve seeds m_baseline + withDefaults;
+    /// overlayChainOnto seeds a caller base and returns raw).
+    Profile overlayChain(const QString& path, Profile seed) const;
 
     Profile m_baseline;
     QHash<QString, Profile> m_overrides;

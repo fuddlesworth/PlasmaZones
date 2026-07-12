@@ -82,8 +82,9 @@ public:
         return staggerInterval.value_or(DefaultStaggerInterval);
     }
 
-    /// Copy with every unset field filled from library defaults.
-    /// Curve is left null if still unset.
+    /// Copy with every unset field filled from library defaults — including
+    /// `curve`, which is backfilled with a default-constructed Easing (OutCubic)
+    /// when null, so the result is fully concrete.
     Profile withDefaults() const;
 
     // JSON field names — shared with consumers that build Profile blobs externally.

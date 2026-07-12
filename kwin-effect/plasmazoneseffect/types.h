@@ -523,32 +523,20 @@ struct ShaderTransition
     /// parameters stay at (0, 0, 0, 0).
     std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsValues = {};
     std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColorsValues = {};
-    /// Two-mode progress source.
-    /// • `durationMs > 0`: time-based — `startTimeMs` is the monotonic
-    ///   `shaderClockNowMs()` (steady_clock) at begin time and paintWindow
-    ///   computes `progress = clamp01((now - startTimeMs) / durationMs)`.
-    ///   Used by lifecycle events (window.open/close/focus/etc.) that have
-    ///   no `m_windowAnimator` animation to ride.
-    /// • `durationMs == 0`: animator-driven — paintWindow reads progress
-    ///   from `m_windowAnimator->animationFor(w)->state().value`. Used by
-    ///   zone.* events that flow through `applyWindowGeometry` and inherit
-    ///   the geometry animation's timeline.
+    /// Progress source + timing curve. Two modes:
+    /// • `durationMs > 0` (time-based): linear `(now - startTimeMs)/durationMs`
+    ///   eased through `progressCurve` (the EASED result is what's clamped to
+    ///   [0,1]). Lifecycle events; the held-move leg varies it — see
+    ///   `holdUntilRelease` / `releaseStartMs` (pin-at-1, un-eased release).
+    /// • `durationMs == 0` (animator-driven, zone.*/snap via applyWindowGeometry):
+    ///   reads the already curve-shaped `animationFor(w)->state().value`;
+    ///   `progressCurve` null (no double-ease).
+    /// `progressCurve`: motion cascade (global → "All" → node → rule), null →
+    /// linear; a stateful spring steps `progressCurveState` toward 1. The desktop
+    /// switch is NOT a ShaderTransition (it owns an OutputTransition instead).
     qint64 startTimeMs = 0;
     int durationMs = 0;
-    /// Per-event timing curve resolved at begin time via the motion cascade
-    /// (global → category "All" → per-node, plus rule override). Shapes the
-    /// time-driven `iTime`: paintWindow eases the linear `elapsed / durationMs`
-    /// through this before feeding the shader, so a node's curve (e.g.
-    /// "Ease Out") applies to its shader transition exactly as it does to the
-    /// animator-driven snap path. Null means linear progress (no curve set /
-    /// unresolved). Only consulted on the `durationMs > 0` (time-driven) path;
-    /// the `durationMs == 0` animator-driven path already reads a curve-shaped
-    /// value from the WindowAnimator.
     std::shared_ptr<const PhosphorAnimation::Curve> progressCurve;
-    /// Integration state for a STATEFUL `progressCurve` (spring/physics). Fresh
-    /// per install; paintWindow steps it toward target 1.0 by the inter-frame
-    /// dt and reads `.value` as progress, mirroring AnimatedValue. Unused for
-    /// stateless curves (they evaluate the linear progress directly).
     PhosphorAnimation::CurveState progressCurveState;
     /// Monotonic per-window generation. Each `beginShaderTransition` bumps
     /// the counter for that window; the timer-driven `endShaderTransition`

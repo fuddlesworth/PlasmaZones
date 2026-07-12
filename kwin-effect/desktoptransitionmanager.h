@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimationLimits.h> // Limits::{Min,Max,Default}AnimationDurationMs
 #include <PhosphorAnimation/AnimationShaderContract.h> // kMaxCustomParams
 #include <PhosphorAnimation/Curve.h> // per-event timing curve + CurveState
 
@@ -57,18 +58,25 @@ public:
     DesktopTransitionManager(const DesktopTransitionManager&) = delete;
     DesktopTransitionManager& operator=(const DesktopTransitionManager&) = delete;
 
-    /// Fallback switch duration (ms) when the motion profile tree carries no
-    /// `desktop.switch` (or ancestor) duration override.
-    static constexpr int DefaultDurationMs = 300;
+    /// Fallback switch duration (ms) for a corrupt resolve — a hand-edited node
+    /// with an engaged, non-positive `duration`. An ABSENT `desktop.switch` node
+    /// no longer reaches this: the motion cascade falls back to the global
+    /// animator duration. Aligned with the shared animation default so a corrupt
+    /// node doesn't run the switch at a different tempo from every other
+    /// animation.
+    static constexpr int DefaultDurationMs = PhosphorAnimation::Limits::DefaultAnimationDurationMs;
 
     /// Start a transition. @p output is the switched output, or nullptr for a
     /// global (all-output) switch — in which case every output transitions from
     /// @p from to @p to. Resolves nothing itself: the caller passes the already
     /// resolved @p effectId (empty → no-op), @p params (the profile's effective
-    /// pack parameters, translated into the customParams/customColors pools) and
-    /// @p durationMs (the motion-tree resolved duration; <= 0 falls back to
-    /// DefaultDurationMs). Capture is deferred to the first paintOutput() for each
-    /// output, where a live GL context exists.
+    /// pack parameters, translated into the customParams/customColors pools),
+    /// @p durationMs (the motion-cascade resolved duration; only a non-positive
+    /// value — a corrupt node — falls back to DefaultDurationMs) and the optional
+    /// @p progressCurve (the node's timing curve; null → linear iTime). Every
+    /// resolved lifetime is clamped into the animation envelope. Capture is
+    /// deferred to the first paintOutput() for each output, where a live GL
+    /// context exists.
     void begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
                const QString& effectId, const QVariantMap& params, int durationMs,
                std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
@@ -153,11 +161,13 @@ private:
         QVector4D switchDelta;
         qint64 startTimeMs = 0;
         int durationMs = 0;
-        // Per-event timing curve for `desktop.switch` (global → node → rule; the
-        // desktop family has no "All" between switch and global). paintOutput
-        // eases the linear `elapsed / durationMs` through it before uploading
-        // iTime, so the node's curve (e.g. "Ease Out") shapes the switch exactly
-        // as it shapes the per-window shader path. Null → linear iTime.
+        // Per-event timing curve for `desktop.switch`, resolved through the
+        // cascade `global → desktop → desktop.switch` (an override on the bare
+        // `desktop` node would apply, though the UI exposes only the leaf, so it
+        // has no separate user-facing "All"). paintOutput eases the linear
+        // `elapsed / durationMs` through it before uploading iTime, so the node's
+        // curve (e.g. "Ease Out") shapes the switch exactly as it shapes the
+        // per-window shader path. Null → linear iTime.
         std::shared_ptr<const PhosphorAnimation::Curve> progressCurve;
         // Integration state for a STATEFUL (spring) progressCurve; stepped toward
         // target 1 by the inter-frame dt in paintOutput. Unused for stateless.

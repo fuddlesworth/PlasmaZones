@@ -309,6 +309,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // uses for its rule-override gate, so a rule that gates the
         // animation also resolves its curve / timing / shader slots.
         const PhosphorRules::WindowQuery query = ruleQuery(window);
+        const QString windowId = getWindowId(window);
         const auto& baseProfile = m_windowAnimator->profile();
         // Resolve the fully-cascaded motion profile for this event (curve +
         // duration): global animator profile → category "All" → per-node
@@ -331,7 +332,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;
         if (hasMotionOverrides || hasAnimationRules) {
-            motionProfile = resolveEventMotionProfile(profilePath, query, getWindowId(window));
+            motionProfile = resolveEventMotionProfile(profilePath, query, windowId);
             if (motionProfile != baseProfile)
                 motionOverridePtr = &motionProfile;
         }
@@ -372,11 +373,13 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // motion-cascade above instead of rebuilding the WindowQuery.
             //
             // Route through `resolveAnimationShaderAndDuration` (which
-            // uses `evaluator.resolveCached(windowId, query)`). The
-            // sister `resolveAnimationMotionProfile` call above already
-            // populated the per-window cache slot for this query, so
-            // this cached read is a hit. The earlier shape called a
-            // standalone uncached shader-profile resolver here, which
+            // uses `evaluator.resolveCached(windowId, query)`). When a rule
+            // set is configured, the sister `resolveEventMotionProfile`
+            // call above already warmed the per-window cache slot for this
+            // query, so this cached read is a hit. (With an empty rule set
+            // that resolver never touches the evaluator, but then there is
+            // no priority-order walk to pay for either.) The earlier shape
+            // called a standalone uncached shader-profile resolver here, which
             // paid an extra priority-order walk per snap on every
             // non-empty rule set — same regression the shim was
             // introduced to fix for `tryBeginShaderForEvent` (see the
@@ -390,8 +393,8 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // duration), so the shader still terminates with the
             // rule-overridden snap motion.
             const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
-                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), getWindowId(window), query,
-                profilePath, /*defaultDurationMs=*/0);
+                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), windowId, query, profilePath,
+                /*defaultDurationMs=*/0);
             auto shaderProfile = resolved.profile;
             if (!resolved.shaderSlotFromRule && shaderProfile.effectiveEffectId().isEmpty()) {
                 // No rule matched and no tree override resolved a shader for

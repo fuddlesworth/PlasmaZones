@@ -7,6 +7,7 @@
 #include "shadertransitionmanager.h"
 #include "plasmazoneseffect/shader_internal.h"
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -103,17 +104,27 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     if (!from || !to || from == to || effectId.isEmpty()) {
         return; // nothing to animate (no shader assigned, or a no-op switch)
     }
-    // A non-positive resolve (corrupt/absent motion-tree node) falls back to the
-    // default so the transition can't settle on its first paint (durationMs <= 0
-    // would make elapsed >= durationMs true immediately).
+    // A non-positive resolve (a corrupt / hand-edited node with an engaged
+    // `duration <= 0`) falls back to the default so the transition can't settle
+    // on its first paint. An ABSENT node no longer lands here: the motion
+    // cascade falls back to the global animator duration.
     int effectiveDurationMs = durationMs > 0 ? durationMs : DefaultDurationMs;
     // A stateful (spring) timing curve derives its own timeline from its physics,
     // not the nominal duration — run the switch for the spring's analytical
     // settle time so it rings out under paintOutput's per-frame step() instead of
-    // being cut at the easing duration. Mirrors the per-window shader path.
+    // being cut at the easing duration.
     if (progressCurve && progressCurve->isStateful()) {
-        effectiveDurationMs = qMax(1, qRound(progressCurve->settleTime() * 1000.0));
+        effectiveDurationMs = qRound(progressCurve->settleTime() * 1000.0);
     }
+    // Clamp EVERY path into the animation envelope, matching the per-window
+    // shader path. The hazard is not spring-specific: a stateless `desktop.switch`
+    // motion-tree node arrives unclamped (Profile::fromJson only rejects above
+    // Profile::MaxDurationMs = one hour) and the tree is rebuilt from
+    // hand-editable, daemon-rescanned `profiles/*.json`. Without this a
+    // `"duration": 60000` node would hold setActiveFullScreenEffect (blocking
+    // Overview / Slide / Cube) and force full-output repaints for a solid minute.
+    effectiveDurationMs = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, effectiveDurationMs,
+                                 PhosphorAnimation::Limits::MaxAnimationDurationMs);
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
 
     // Resolve p_<name> parameter values into customParams[] slots. Same for

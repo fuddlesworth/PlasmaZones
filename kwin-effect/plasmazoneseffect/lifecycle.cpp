@@ -596,7 +596,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // tryBeginShaderForEvent). `animationsEnabled` drives
                 // m_windowAnimator->setEnabled(); a user who turns all animations
                 // off must not still get a full-screen desktop-switch blend.
-                if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
+                if (!m_windowAnimator->isEnabled()) {
                     return;
                 }
                 const PhosphorAnimationShaders::ShaderProfile profile =
@@ -606,26 +606,21 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 if (effectId.isEmpty()) {
                     return;
                 }
-                // Honour the configured duration for the desktop switch. A
-                // `desktop.switch` (or ancestor) override in the motion profile tree
-                // wins; otherwise fall back to the MASTER animation-duration setting,
-                // exactly as the per-window legs do (they pass animationDurationMs()
-                // as their base). So the global animation-duration slider retimes the
-                // desktop switch too, not only a per-event override.
-                const int durationMs = resolveMotionTreeBaseDuration(PhosphorAnimation::ProfilePaths::DesktopSwitch,
-                                                                     animationDurationMs());
-                // Per-event timing curve for the desktop switch: global → node →
-                // rule, resolved through the shared SSOT. desktop.switch is a
-                // windowless event (no per-window rule scope), so pass an empty
-                // WindowQuery — resolveEventMotionProfile then applies only the
-                // tree cascade (global → desktop.switch). paintOutput eases iTime
-                // through this so the node's curve shapes the switch.
-                const std::shared_ptr<const PhosphorAnimation::Curve> progressCurve =
-                    resolveEventMotionProfile(PhosphorAnimation::ProfilePaths::DesktopSwitch,
-                                              PhosphorRules::WindowQuery{}, QString())
-                        .curve;
+                // Per-event motion profile (curve + duration) for the desktop
+                // switch in ONE walk via the shared SSOT: global animator profile
+                // → `desktop` → `desktop.switch` motion-tree overrides. The base
+                // is the global animator profile, so with no override the switch
+                // inherits the master animation duration + curve (the global
+                // slider retimes it), and BOTH duration and curve come from the
+                // same base. desktop.switch is a windowless event (no per-window
+                // rule scope), so pass an empty WindowQuery — the rule layer is
+                // then skipped. paintOutput eases iTime through `.curve` so the
+                // node's curve shapes the switch.
+                const PhosphorAnimation::Profile eventMotion = resolveEventMotionProfile(
+                    PhosphorAnimation::ProfilePaths::DesktopSwitch, PhosphorRules::WindowQuery{}, QString());
+                const int durationMs = qRound(eventMotion.effectiveDuration());
                 m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, profile.effectiveParameters(),
-                                          durationMs, progressCurve);
+                                          durationMs, eventMotion.curve);
             });
 
     // Reap any live desktop transition whose OUTGOING desktop is removed from the

@@ -282,9 +282,81 @@ private Q_SLOTS:
         QCOMPARE(*composed.minDistance, 25); // untouched caller base
     }
 
-    // No override anywhere in the chain → the caller's base returns unchanged.
-    // This underpins the effect's fast-path gate (skip when the base is
-    // returned identical).
+    // A leaf-only override (no ancestor engaged) still overlays onto the base:
+    // the chain walk reaches the leaf directly.
+    void testOverlayChainOntoLeafOnlyOverride()
+    {
+        ProfileTree tree;
+
+        Profile leaf;
+        leaf.duration = 80.0;
+        tree.setOverride(PP::WindowSnapIn, leaf); // only the leaf, no "All"
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+        animatorGlobal.staggerInterval = 40; // untouched by the leaf
+
+        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        QCOMPARE(*composed.duration, 80.0); // leaf
+        QCOMPARE(*composed.staggerInterval, 40); // base
+    }
+
+    // presetName and sequenceMode overlay through the chain like every other
+    // field (the shared overlay() helper copies all six).
+    void testOverlayChainOntoPresetAndSequenceMode()
+    {
+        ProfileTree tree;
+
+        Profile movementAll;
+        movementAll.presetName = QStringLiteral("snappy");
+        movementAll.sequenceMode = SequenceMode::Cascade;
+        tree.setOverride(PP::WindowMovement, movementAll);
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0; // kept — no override touches it
+
+        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        QCOMPARE(*composed.presetName, QStringLiteral("snappy"));
+        QCOMPARE(*composed.sequenceMode, SequenceMode::Cascade);
+        QCOMPARE(*composed.duration, 300.0); // base
+    }
+
+    // The tree's own baseline must NOT leak into overlayChainOnto (the caller
+    // owns the authoritative global), but an override stored AT `global` is a
+    // real chain member and MUST apply. This pins the split that the D-Bus
+    // adaptor relies on: it routes a `global`-keyed profile to setBaseline() and
+    // every other path to setOverride(), so the baseline never double-applies on
+    // top of the caller's base.
+    void testOverlayChainOntoGlobalNodeIsNotTheBaseline()
+    {
+        ProfileTree tree;
+
+        Profile treeBaseline;
+        treeBaseline.duration = 150.0; // must be IGNORED
+        treeBaseline.staggerInterval = 99; // must be IGNORED
+        tree.setBaseline(treeBaseline);
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+        animatorGlobal.staggerInterval = 40;
+
+        // Baseline ignored: the caller's base survives untouched.
+        const Profile noOverride = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        QVERIFY(noOverride == animatorGlobal);
+
+        // An override AT `global` is part of the chain and does apply.
+        Profile globalOverride;
+        globalOverride.duration = 700.0;
+        tree.setOverride(PP::Global, globalOverride);
+
+        const Profile withGlobal = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        QCOMPARE(*withGlobal.duration, 700.0); // from the `global` override
+        QCOMPARE(*withGlobal.staggerInterval, 40); // still the caller's base, not the baseline's 99
+    }
+
+    // With the tree non-empty, a chain carrying no matching override still
+    // returns the caller's base untouched — an override on an unrelated path
+    // must not leak in.
     void testOverlayChainOntoNoOverrideReturnsBaseUnchanged()
     {
         ProfileTree tree;
