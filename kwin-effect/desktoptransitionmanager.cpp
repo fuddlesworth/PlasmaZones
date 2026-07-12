@@ -436,7 +436,12 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
 bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                            int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
 {
+    // The blend is a fullscreen NDC quad needing no projection, and it repaints
+    // the whole output every frame, so neither the viewport nor the damage
+    // region participates. Both are kept in the signature to match KWin's
+    // paint-chain shape.
     Q_UNUSED(deviceRegion)
+    Q_UNUSED(viewport)
     if (!screen) {
         return false;
     }
@@ -467,7 +472,15 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     qreal easedT = linearT;
     if (tr.progressCurve) {
         if (tr.progressCurve->isStateful()) {
-            const qreal dt = tr.lastPaintTimeMs < 0 ? 0.0 : qMax(0.0, qreal(nowMs - tr.lastPaintTimeMs) / 1000.0);
+            // Cap the integrator's dt at MaxShaderTimeDeltaSeconds, matching the
+            // per-window path. Spring::step is semi-implicit Euler and is only
+            // stable for dt < 1/(5·omega); a compositor hitch or suspend/resume
+            // mid-switch would otherwise hand it a multi-second step in one frame
+            // and blow up the velocity.
+            const qreal dt = tr.lastPaintTimeMs < 0
+                ? 0.0
+                : qBound<qreal>(0.0, qreal(nowMs - tr.lastPaintTimeMs) / 1000.0,
+                                static_cast<qreal>(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds));
             tr.progressCurve->step(dt, tr.progressCurveState, 1.0);
             easedT = qBound<qreal>(0.0, tr.progressCurveState.value, 1.0);
         } else {
@@ -558,7 +571,6 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     }
     glActiveTexture(GL_TEXTURE0);
 
-    Q_UNUSED(viewport)
     drawDesktopBlendQuad();
     if (targetFb) {
         KWin::GLFramebuffer::popFramebuffer();

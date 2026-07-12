@@ -528,7 +528,7 @@ struct ShaderTransition
     ///   eased through `progressCurve` (the EASED result is what's clamped to
     ///   [0,1]). Lifecycle events; the held-move leg varies it — see
     ///   `holdUntilRelease` / `releaseStartMs` (pin-at-1, un-eased release).
-    /// • `durationMs == 0` (animator-driven, zone.*/snap via applyWindowGeometry):
+    /// • `durationMs == 0` (animator-driven, window.movement.* via applyWindowGeometry):
     ///   reads the already curve-shaped `animationFor(w)->state().value`;
     ///   `progressCurve` null (no double-ease).
     /// `progressCurve`: motion cascade (global → "All" → node → rule), null →

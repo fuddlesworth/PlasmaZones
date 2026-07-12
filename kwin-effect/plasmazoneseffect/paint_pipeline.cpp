@@ -78,8 +78,16 @@ qreal timeDrivenProgress(ShaderTransition& st, qint64 nowMs, bool stepCurve, boo
         if (st.progressCurve) {
             if (st.progressCurve->isStateful()) {
                 if (stepCurve) {
-                    const qreal dt =
-                        st.lastPaintTimeMs < 0 ? 0.0 : qMax(0.0, qreal(nowMs - st.lastPaintTimeMs) / 1000.0);
+                    // Cap the integrator's dt at MaxShaderTimeDeltaSeconds, the
+                    // same ceiling iTimeDelta uses. Spring::step is semi-implicit
+                    // Euler and is only stable for dt < 1/(5·omega); a compositor
+                    // hitch or suspend/resume mid-transition would otherwise hand
+                    // it a multi-second step in one frame, blow up velocity, and
+                    // pin progress to an edge for the rest of the leg.
+                    const qreal dt = st.lastPaintTimeMs < 0
+                        ? 0.0
+                        : qBound(0.0, qreal(nowMs - st.lastPaintTimeMs) / 1000.0,
+                                 qreal(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds));
                     st.progressCurve->step(dt, st.progressCurveState, 1.0);
                 }
                 progress = qBound(0.0, st.progressCurveState.value, 1.0);
@@ -589,14 +597,22 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // The reverse flip is applied here, as paintWindow does.
                     bool stActive = false;
                     qreal t = timeDrivenProgress(*st, frameNowMs, /*stepCurve=*/false, stActive);
-                    if (st->reverse) {
-                        t = 1.0 - t;
+                    // Honour `active`: an installed-but-expired leg (elapsed past
+                    // durationMs, not held) paints no shader this frame and the
+                    // window sits at its rest rect. Lerping its 0-progress would
+                    // snap the pane back to fromGeometry — the PRE-maximize rect —
+                    // on the expiry frame. Leaving animatedFrame invalid falls back
+                    // to the rest-rect capture, which is where the draw actually is.
+                    if (stActive) {
+                        if (st->reverse) {
+                            t = 1.0 - t;
+                        }
+                        const QRectF& f = st->fromGeometry;
+                        const QRectF& g = st->toGeometry;
+                        animatedFrame =
+                            QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
+                                   f.width() + (g.width() - f.width()) * t, f.height() + (g.height() - f.height()) * t);
                     }
-                    const QRectF& f = st->fromGeometry;
-                    const QRectF& g = st->toGeometry;
-                    animatedFrame =
-                        QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
-                               f.width() + (g.width() - f.width()) * t, f.height() + (g.height() - f.height()) * t);
                 }
             }
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, animatedFrame);
@@ -739,10 +755,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             return;
         }
         // Two progress sources, picked by the transition's mode (see
-        // ShaderTransition's docstring). Lifecycle events (window.*)
-        // started via tryBeginShaderForEvent set durationMs > 0 and drive
-        // progress from monotonic steady-clock elapsed; zone.* events flowed
-        // through applyWindowGeometry leave durationMs = 0 and ride the
+        // ShaderTransition's docstring). Lifecycle events started via
+        // tryBeginShaderForEvent set durationMs > 0 and drive progress from
+        // monotonic steady-clock elapsed; the window.movement.* geometry events
+        // that flow through applyWindowGeometry leave durationMs = 0 and ride the
         // m_windowAnimator timeline so the shader matches the geometry
         // animation.
         qreal progress = 0.0;

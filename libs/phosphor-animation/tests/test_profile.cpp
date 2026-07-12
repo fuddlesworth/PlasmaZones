@@ -59,6 +59,15 @@ private Q_SLOTS:
         // downstream code still had to null-check.
         QVERIFY(filled.curve != nullptr);
         QCOMPARE(filled.curve->typeId(), QStringLiteral("bezier"));
+        // presetName is the ONE field withDefaults() does NOT backfill: it has
+        // no library default, so it stays disengaged and callers must keep
+        // treating it as optional (value_or), never dereference it blind. Both
+        // Profile::withDefaults() and ProfileTree::resolve() document that
+        // exception, so pin it — a future backfill with QString() would satisfy
+        // every other assertion here while silently collapsing the
+        // engaged-empty ("explicit clear") vs unset ("inherit") distinction the
+        // overlay cascade depends on.
+        QVERIFY(!filled.presetName.has_value());
     }
 
     void testWithDefaultsPreservesExistingCurve()

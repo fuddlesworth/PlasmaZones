@@ -73,7 +73,8 @@ public:
     /// resolved @p effectId (empty → no-op), @p params (the profile's effective
     /// pack parameters, translated into the customParams/customColors pools),
     /// @p durationMs (the motion-cascade resolved duration; only a non-positive
-    /// value — a corrupt node — falls back to DefaultDurationMs) and the optional
+    /// value falls back to DefaultDurationMs — see that constant for the one
+    /// case that actually produces it) and the optional
     /// @p progressCurve (the node's timing curve; null → linear iTime). Every
     /// resolved lifetime is clamped into the animation envelope. Capture is
     /// deferred to the first paintOutput() for each output, where a live GL

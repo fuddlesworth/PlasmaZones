@@ -8,6 +8,7 @@
 
 #include "../windowanimator.h"
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -2071,6 +2072,25 @@ PhosphorAnimation::Profile PlasmaZonesEffect::resolveEventMotionProfile(const QS
     if (query.hasWindow() && !m_shaderManager.animationRuleSet().isEmpty()) {
         resolved = PlasmaZones::resolveAnimationMotionProfile(m_shaderManager.animationRuleEvaluator(), resolved, query,
                                                               profilePath, windowId, m_curveRegistry);
+    }
+    // Clamp the resolved duration into the animation envelope HERE, at the one
+    // place every consumer shares. The motion tree hands a node's duration
+    // through unclamped (ProfileTree does no bounding, and Profile::fromJson
+    // accepts any finite positive value up to one hour), and the tree is rebuilt
+    // from hand-editable profile JSON.
+    //
+    // The two shader consumers re-clamp downstream via resolveTransitionLifetimeMs,
+    // but the ANIMATOR consumer does not: applyWindowGeometry hands this profile
+    // straight to WindowAnimator::startAnimation, whose own clampProfile bounds to
+    // [0, 10000] ms — a different, looser envelope. Without this a `"duration":
+    // 5000` node would run a 2 s shader leg on window.open but a 5 s animator leg
+    // on a snap, with its durationMs == 0 shader riding along and pinning
+    // per-frame repaints for the full 5 s. Clamping at the source keeps all three
+    // consumers on one envelope; the downstream clamps then become idempotent.
+    if (resolved.duration) {
+        resolved.duration =
+            static_cast<qreal>(qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, qRound(*resolved.duration),
+                                      PhosphorAnimation::Limits::MaxAnimationDurationMs));
     }
     return resolved;
 }

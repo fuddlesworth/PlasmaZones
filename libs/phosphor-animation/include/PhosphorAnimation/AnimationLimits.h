@@ -16,16 +16,20 @@
  * authority over generic animation policy) and has been corrected.
  *
  * The duration bounds are ENFORCED clamps, not merely slider policy,
- * on the compositor paths that ARM an animation lifetime: the
- * settings load (`daemon_bringup.cpp`), the per-window shader
- * transition (`shader_transitions.cpp`) and the desktop switch
- * (`desktoptransitionmanager.cpp`). There they bound how long a
- * transition may hold per-frame repaints — and, for the desktop
- * switch, the fullscreen-effect claim — so a hand-edited per-event
- * profile JSON cannot arm a multi-minute animation. The Rule
- * timing slot clamps its own candidate against them too
- * (`shader_resolve.cpp`). Changing a bound changes runtime behaviour
- * on those paths, not just the slider range.
+ * on the compositor paths that ARM an animation lifetime. The single
+ * clamp site for a transition lifetime is
+ * `ShaderInternal::resolveTransitionLifetimeMs`
+ * (`kwin-effect/plasmazoneseffect/shader_internal.h`) — read that one
+ * before changing a bound, since it also folds in the spring
+ * settle-time rule. Both the per-window shader transition
+ * (`shader_transitions.cpp`) and the desktop switch
+ * (`desktoptransitionmanager.cpp`) route through it. There the bounds
+ * cap how long a transition may hold per-frame repaints — and, for the
+ * desktop switch, the fullscreen-effect claim — so a hand-edited
+ * per-event profile JSON cannot arm a multi-minute animation. Two more
+ * sites clamp directly: the settings load (`daemon_bringup.cpp`) and
+ * the Rule timing slot (`shader_resolve.cpp`). Changing a bound changes
+ * runtime behaviour on those paths, not just the slider range.
  *
  * NOT universal: the daemon's `SurfaceAnimator` (OSD / popup / overlay
  * surfaces) reads `Profile::effectiveDuration()` raw and is bounded
@@ -69,17 +73,33 @@ constexpr int MinAnimationStaggerIntervalMs = 10;
 /// without making large lists glacial.
 constexpr int MaxAnimationStaggerIntervalMs = 200;
 
-/// Hard ceiling on the per-frame `iTimeDelta` pushed into shaders, in
-/// seconds. Both runtimes (the daemon's overlay shader update path and
-/// the surface-animator's compositor-side push) clamp the steady-clock
-/// frame delta against this so a sleep/resume hiccup, GC stall, or
-/// scheduler glitch does not blast a multi-second jump into shaders
-/// that integrate `iTimeDelta` (sparkle drift, particle motion, noise
-/// advance). 100 ms is generous: at the worst-cap a single tick
-/// represents 6 frames worth of motion at 60 Hz, beyond which the
-/// effect "skips" rather than blurring through unrealistic motion.
-/// Pinned in this header so a future bump propagates to BOTH runtimes
-/// without one falling out of sync.
+/// Hard ceiling on a per-frame time delta handed to a shader or to a
+/// physics integrator, in seconds. A sleep/resume hiccup, GC stall, or
+/// scheduler glitch must not blast a multi-second jump into a consumer
+/// that integrates the delta — shaders that advance state from
+/// `iTimeDelta` (sparkle drift, particle motion, noise advance), and
+/// spring curves, whose `step()` is semi-implicit Euler and is only
+/// stable for `dt < 1/(5*omega)`. 100 ms is generous: at the cap a
+/// single tick is 6 frames of motion at 60 Hz, beyond which the effect
+/// "skips" rather than blurring through unrealistic motion.
+///
+/// Clamped against this (keep in sync when adding a producer):
+///  - the daemon's overlay shader push (`overlayservice/shader.cpp`),
+///  - the daemon-side `SurfaceAnimator` (`surfaceanimator.cpp`),
+///  - the compositor's per-window transition paint, for BOTH the
+///    `iTimeDelta` uniform and the spring integrator's dt
+///    (`plasmazoneseffect/paint_pipeline.cpp`),
+///  - the compositor's desktop-switch paint, likewise
+///    (`desktoptransitionmanager.cpp`).
+///
+/// NOT clamped, and deliberately out of this library's reach:
+/// `PhosphorRendering::ShaderEffect::onPlayingTick`
+/// (`libs/phosphor-rendering/src/shadereffect.cpp`) pushes a raw
+/// wall-clock delta into a QML-hosted shader. phosphor-rendering does
+/// not link phosphor-animation, so wiring it up means adding that
+/// dependency — a layering call, not a drive-by. It self-mitigates a
+/// re-show (it rebases the clock while hidden) but not a stall while
+/// visible.
 constexpr float MaxShaderTimeDeltaSeconds = 0.1f;
 
 } // namespace Limits
