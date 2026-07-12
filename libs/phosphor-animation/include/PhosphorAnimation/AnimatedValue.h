@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/IMotionClock.h>
@@ -271,7 +272,24 @@ public:
         bool complete = false;
 
         if (curve->isStateful()) {
-            curve->step(dtSeconds, m_state, 1.0);
+            // Cap the integrator step at Limits::MaxShaderTimeDeltaSeconds.
+            // Spring::step is semi-implicit Euler, so an unbounded step diverges:
+            // a suspend/resume, GC pause, or scheduler stall would otherwise hand
+            // it a multi-second dt in a single tick, blow the velocity up, and
+            // leave the value garbage. kSafetyCap below is no defence — it tests
+            // ELAPSED and runs AFTER the step, so it forces completion on an
+            // already-corrupt state rather than preventing it. The cap bounds the
+            // blast radius; it does not make the integrator unconditionally
+            // stable (strict stability wants dt < 1/(5*omega), and Spring admits
+            // omega up to 200). Substepping would be the real fix for a stiff
+            // spring.
+            //
+            // Only this branch integrates dt — the parametric branch derives its
+            // value from elapsed/duration, so a stall there merely lands further
+            // along the curve, which is correct. A clamped spring advances less
+            // than wall-clock across a stall (it "skips" less), and kSafetyCap
+            // still bounds its lifetime.
+            curve->step(qMin(dtSeconds, static_cast<qreal>(Limits::MaxShaderTimeDeltaSeconds)), m_state, 1.0);
 
             if (m_state.value >= 1.0 && qAbs(m_state.velocity) <= 1.0e-6) {
                 complete = true;

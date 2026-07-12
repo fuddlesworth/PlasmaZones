@@ -208,16 +208,12 @@ inline QVector4D computeTextureSubRect(const QRectF& inner, const QRectF& outer)
 /// rings out under the paint pass's per-frame step() instead of being cut at
 /// the easing duration.
 ///
-/// Every result is clamped into the animation envelope. That clamp is
-/// load-bearing, not defensive theatre: the motion tree hands a node's duration
-/// through untouched (ProfileTree::overlayChainOnto does no clamping, and
-/// Profile::fromJson accepts ANY finite positive value up to
-/// Profile::MaxDurationMs — one hour), and the tree is rebuilt from
-/// hand-editable, daemon-rescanned per-event profile JSON. Unclamped, a
-/// `"duration": 600000` node would arm a ten-minute teardown timer AND pin a
-/// full-output repaint every frame for its whole life — and, on the desktop
-/// switch, hold the fullscreen-effect claim (blocking Overview / Slide / Cube)
-/// for the same span.
+/// Every result is clamped into the animation envelope. Both callers now feed an
+/// already-clamped nominal (resolveEventMotionProfile bounds the motion cascade's
+/// duration at the source), so for a STATELESS curve this qBound is idempotent.
+/// It stays load-bearing for the SPRING path, whose settleTime() is derived from
+/// the curve's physics and is bounded by nothing upstream — and it keeps the
+/// helper correct for any future caller that hands it a raw tree duration.
 ///
 /// Consequence at parity across both callers: a very low-stiffness spring whose
 /// settleTime() exceeds the max is cut mid-ring rather than allowed to overrun.
@@ -226,6 +222,45 @@ inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::C
     const int lifetime = (curve && curve->isStateful()) ? qRound(curve->settleTime() * 1000.0) : nominalMs;
     return qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, lifetime,
                   PhosphorAnimation::Limits::MaxAnimationDurationMs);
+}
+
+/// Ease @p linear through @p curve, returning progress clamped to the [0, 1]
+/// iTime contract. Shared by the per-window transition paint and the desktop
+/// switch, which otherwise carried this logic (and its dt cap) twice.
+///
+/// A null curve is linear. A stateless curve evaluates @p linear directly. A
+/// STATEFUL (spring) curve integrates @p state toward 1 by the inter-frame dt
+/// and returns the integrated value, ignoring @p linear.
+///
+/// @p stepCurve owns the SINGLE per-frame integrator step: the paint pass passes
+/// true; a predictor that must not advance the integrator (the backdrop capture)
+/// passes false and reads the last stepped value.
+///
+/// The dt is capped at Limits::MaxShaderTimeDeltaSeconds. Spring::step is
+/// semi-implicit Euler, so an unbounded step diverges: a suspend/resume or a
+/// compositor stall would hand it a multi-second dt in one frame and blow the
+/// velocity up. The cap BOUNDS THE BLAST RADIUS; it does not make the integrator
+/// unconditionally stable (Spring admits omega up to 200, and strict stability
+/// wants dt < 1/(5*omega), far below 100 ms). Substepping would be the real fix
+/// if a pack ever needs a stiff spring here. @p lastPaintTimeMs < 0 is the
+/// "no prior paint" sentinel and yields dt = 0.
+inline qreal easeProgress(const PhosphorAnimation::Curve* curve, PhosphorAnimation::CurveState& state,
+                          qint64 lastPaintTimeMs, qint64 nowMs, qreal linear, bool stepCurve)
+{
+    if (!curve) {
+        return linear;
+    }
+    if (!curve->isStateful()) {
+        return qBound(0.0, curve->evaluate(linear), 1.0);
+    }
+    if (stepCurve) {
+        const qreal dt = lastPaintTimeMs < 0
+            ? 0.0
+            : qBound(0.0, qreal(nowMs - lastPaintTimeMs) / 1000.0,
+                     static_cast<qreal>(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds));
+        curve->step(dt, state, 1.0);
+    }
+    return qBound(0.0, state.value, 1.0);
 }
 
 /// Pre-baked uniform / param key strings for the hot paths.

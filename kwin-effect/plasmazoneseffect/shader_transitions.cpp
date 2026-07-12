@@ -572,9 +572,9 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // `setEnabled(false)`. Gating here (rather than only in
     // `tryBeginShaderForEvent`) covers BOTH callsite categories
     // uniformly: window-lifecycle events that flow through
-    // `tryBeginShaderForEvent`, and zone.* events that flow through
+    // `tryBeginShaderForEvent`, and the window.movement.* geometry events that flow through
     // `applyWindowGeometry → beginShaderTransition` directly. Without
-    // this gate the zone.* path would still install shader transitions
+    // this gate that path would still install shader transitions
     // even with global animations off.
     if (!m_windowAnimator->isEnabled()) {
         return false;
@@ -1674,7 +1674,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     // Fast-path early-out on the global animations toggle. The
     // authoritative gate also lives in `beginShaderTransition` (so
-    // zone.* callers via `applyWindowGeometry` are gated too), but
+    // window.movement.* callers via `applyWindowGeometry` are gated too), but
     // dispatching there would still pay the shader-tree resolve cost
     // — this skips it entirely when the global toggle is off.
     if (!m_windowAnimator->isEnabled()) {

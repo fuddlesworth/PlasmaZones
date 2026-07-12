@@ -104,14 +104,13 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     if (!from || !to || from == to || effectId.isEmpty()) {
         return; // nothing to animate (no shader assigned, or a no-op switch)
     }
-    // A non-positive resolve falls back to the default so the transition can't
-    // settle on its first paint. An ABSENT node no longer lands here — the motion
-    // cascade falls back to the global animator duration — and Profile::fromJson
-    // rejects an engaged `duration <= 0`, so in practice this catches a positive
-    // sub-0.5 ms node that the caller's qRound() floored to zero.
-    const int nominalMs = durationMs > 0 ? durationMs : DefaultDurationMs;
     // Spring lifetime + envelope clamp, shared with the per-window shader path.
-    const int effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(nominalMs, progressCurve.get());
+    // No separate non-positive fallback: resolveTransitionLifetimeMs floors every
+    // result at Limits::MinAnimationDurationMs, so even a 0 arrives as a sane
+    // 50 ms rather than settling on its first paint. The live caller cannot pass
+    // one regardless — resolveEventMotionProfile clamps the cascade's duration
+    // into the envelope before lifecycle.cpp rounds it.
+    const int effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(durationMs, progressCurve.get());
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
 
     // Resolve p_<name> parameter values into customParams[] slots. Same for
@@ -436,9 +435,16 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
 bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                            int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
 {
-    // The blend is a fullscreen NDC quad needing no projection, and it repaints
-    // the whole output every frame, so neither the viewport nor the damage
-    // region participates. Both are kept in the signature to match KWin's
+    // The damage region genuinely does not participate: prePaintScreen sets
+    // PAINT_SCREEN_TRANSFORMED for a transitioning output and scheduleRepaints()
+    // repaints its full geometry every frame.
+    //
+    // The viewport is unused because the blend emits a hardcoded fullscreen NDC
+    // quad rather than going through viewport.projectionMatrix(). That is only
+    // equivalent under an identity RenderTarget::transform() and a zero
+    // renderOffset — on a rotated or flipped output the capture textures (drawn
+    // into identity FBOs in logical orientation) would blend unrotated against a
+    // panel-space target. Both are kept in the signature to match KWin's
     // paint-chain shape.
     Q_UNUSED(deviceRegion)
     Q_UNUSED(viewport)
@@ -469,24 +475,11 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     // durationMs is guaranteed >= Limits::MinAnimationDurationMs by
     // resolveTransitionLifetimeMs in begin(), so the divisor is always positive.
     const qreal linearT = qBound<qreal>(0.0, qreal(elapsed) / qreal(tr.durationMs), 1.0);
-    qreal easedT = linearT;
-    if (tr.progressCurve) {
-        if (tr.progressCurve->isStateful()) {
-            // Cap the integrator's dt at MaxShaderTimeDeltaSeconds, matching the
-            // per-window path. Spring::step is semi-implicit Euler and is only
-            // stable for dt < 1/(5·omega); a compositor hitch or suspend/resume
-            // mid-switch would otherwise hand it a multi-second step in one frame
-            // and blow up the velocity.
-            const qreal dt = tr.lastPaintTimeMs < 0
-                ? 0.0
-                : qBound<qreal>(0.0, qreal(nowMs - tr.lastPaintTimeMs) / 1000.0,
-                                static_cast<qreal>(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds));
-            tr.progressCurve->step(dt, tr.progressCurveState, 1.0);
-            easedT = qBound<qreal>(0.0, tr.progressCurveState.value, 1.0);
-        } else {
-            easedT = qBound<qreal>(0.0, tr.progressCurve->evaluate(linearT), 1.0);
-        }
-    }
+    // Shared with the per-window transition paint; see easeProgress for the dt
+    // cap and the stateful/stateless split. This is the site that OWNS the
+    // stateful curve's single per-frame step for this output.
+    const qreal easedT = ShaderInternal::easeProgress(tr.progressCurve.get(), tr.progressCurveState, tr.lastPaintTimeMs,
+                                                      nowMs, linearT, /*stepCurve=*/true);
     tr.lastPaintTimeMs = nowMs;
     const float t = float(easedT);
 

@@ -68,35 +68,12 @@ qreal timeDrivenProgress(ShaderTransition& st, qint64 nowMs, bool stepCurve, boo
         // Ease the linear time progress through the per-event timing curve
         // (resolved global → "All" → node → rule at begin time), so a node's
         // curve shapes its shader iTime exactly as it shapes the animator-driven
-        // branch. A stateless curve evaluates the linear point directly; a
-        // stateful spring integrates its CurveState toward target 1 by the
-        // inter-frame dt (lastPaintTimeMs still holds the previous tick here — it
-        // is advanced later, alongside iTimeDelta), mirroring
-        // AnimatedValue::advance. Null curve → linear. Clamped to [0, 1] per the
-        // iTime contract, matching the animator branch's qBound.
+        // branch. `lastPaintTimeMs` still holds the previous tick here — it is
+        // advanced later, alongside iTimeDelta. Shared with the desktop switch;
+        // see easeProgress for the dt cap and the stateful/stateless split.
         const qreal linear = qreal(elapsed) / qreal(st.durationMs);
-        if (st.progressCurve) {
-            if (st.progressCurve->isStateful()) {
-                if (stepCurve) {
-                    // Cap the integrator's dt at MaxShaderTimeDeltaSeconds, the
-                    // same ceiling iTimeDelta uses. Spring::step is semi-implicit
-                    // Euler and is only stable for dt < 1/(5·omega); a compositor
-                    // hitch or suspend/resume mid-transition would otherwise hand
-                    // it a multi-second step in one frame, blow up velocity, and
-                    // pin progress to an edge for the rest of the leg.
-                    const qreal dt = st.lastPaintTimeMs < 0
-                        ? 0.0
-                        : qBound(0.0, qreal(nowMs - st.lastPaintTimeMs) / 1000.0,
-                                 qreal(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds));
-                    st.progressCurve->step(dt, st.progressCurveState, 1.0);
-                }
-                progress = qBound(0.0, st.progressCurveState.value, 1.0);
-            } else {
-                progress = qBound(0.0, st.progressCurve->evaluate(linear), 1.0);
-            }
-        } else {
-            progress = linear;
-        }
+        progress = ShaderInternal::easeProgress(st.progressCurve.get(), st.progressCurveState, st.lastPaintTimeMs,
+                                                nowMs, linear, stepCurve);
         active = true;
     } else if ((st.holdUntilRelease || (st.meshSim.initialized && !st.meshSim.settled)) && elapsed > st.durationMs) {
         // HELD move/resize: the drag outlives the nominal duration by design.

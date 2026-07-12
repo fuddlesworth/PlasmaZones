@@ -30,7 +30,8 @@ namespace PhosphorAnimationShaders {
 ///   • **Compositor (window-content) execution** — `kwin-effect` running
 ///     inside the KWin compositor process. Uses classic OpenGL via
 ///     `KWin::GLShader`. Animates window contents during lifecycle
-///     events (`window.open`, `window.move`, `window.snapIn`, …).
+///     events (`window.appearance.open`, `window.movement.move`,
+///     `window.movement.snapIn`, …).
 ///
 ///   • **Daemon (overlay-surface) execution** — `SurfaceAnimator::runLeg`
 ///     in the Phosphor daemon. Uses Qt RHI via
@@ -383,7 +384,7 @@ inline constexpr const char* kIHasSurfaceLayer = "iHasSurfaceLayer";
 
 /// `int iHasOldWindow` — COMPOSITOR PATH ONLY. 1 when `uOldWindow` holds a
 /// genuinely captured old-content snapshot for this transition, 0 when no
-/// capture ran (lifecycle events like window.move / window.resize begin with
+/// capture ran (a held lifecycle event like window.movement.move begins with
 /// no geometry change to snapshot). Old-content samplers MUST gate on this
 /// and fall back to `surfaceColor()` when 0: the compositor's no-snapshot
 /// fallback aliases `uOldWindow` onto unit 0 (the RAW undecorated window),

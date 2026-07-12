@@ -318,7 +318,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_navigationHandler->setWindowFloating(closingWindowId, false);
     m_navigationHandler->clearWindowZone(closingWindowId);
 
-    // Tear down any in-flight zone.* shader transition first — this window
+    // Tear down any in-flight window.movement.* shader transition first — this window
     // is going away and we don't want a half-faded zone shader fighting the
     // fresh window.close shader. Then layer the close shader on top of
     // whatever fade-out KWin applies as part of the close animation.

@@ -15,21 +15,26 @@
  * placement was a layering mistake (the autotile library has no
  * authority over generic animation policy) and has been corrected.
  *
- * The duration bounds are ENFORCED clamps, not merely slider policy,
- * on the compositor paths that ARM an animation lifetime. The single
- * clamp site for a transition lifetime is
- * `ShaderInternal::resolveTransitionLifetimeMs`
- * (`kwin-effect/plasmazoneseffect/shader_internal.h`) — read that one
- * before changing a bound, since it also folds in the spring
- * settle-time rule. Both the per-window shader transition
- * (`shader_transitions.cpp`) and the desktop switch
- * (`desktoptransitionmanager.cpp`) route through it. There the bounds
- * cap how long a transition may hold per-frame repaints — and, for the
- * desktop switch, the fullscreen-effect claim — so a hand-edited
- * per-event profile JSON cannot arm a multi-minute animation. Two more
- * sites clamp directly: the settings load (`daemon_bringup.cpp`) and
- * the Rule timing slot (`shader_resolve.cpp`). Changing a bound changes
- * runtime behaviour on those paths, not just the slider range.
+ * The duration bounds are ENFORCED clamps, not merely slider policy.
+ * They cap how long an animation may hold per-frame repaints — and, for
+ * the desktop switch, the fullscreen-effect claim — so a hand-edited
+ * per-event profile JSON cannot arm a multi-minute animation. Four
+ * sites clamp against them (keep in sync when adding one):
+ *  - the settings load (`daemon_bringup.cpp`),
+ *  - the Rule timing slot (`shader_resolve.cpp`),
+ *  - `PlasmaZonesEffect::resolveEventMotionProfile`
+ *    (`shader_transitions.cpp`), which bounds the motion cascade's
+ *    resolved duration at the source, so every consumer — including the
+ *    WindowAnimator, whose own clamp uses a looser envelope — inherits
+ *    it,
+ *  - `ShaderInternal::resolveTransitionLifetimeMs`
+ *    (`kwin-effect/plasmazoneseffect/shader_internal.h`), which bounds a
+ *    shader transition's LIFETIME and folds in the spring settle-time
+ *    rule. Both the per-window transition (`shader_transitions.cpp`) and
+ *    the desktop switch (`desktoptransitionmanager.cpp`) route through
+ *    it.
+ * Changing a bound changes runtime behaviour on those paths, not just
+ * the slider range.
  *
  * NOT universal: the daemon's `SurfaceAnimator` (OSD / popup / overlay
  * surfaces) reads `Profile::effectiveDuration()` raw and is bounded
@@ -83,14 +88,21 @@ constexpr int MaxAnimationStaggerIntervalMs = 200;
 /// single tick is 6 frames of motion at 60 Hz, beyond which the effect
 /// "skips" rather than blurring through unrealistic motion.
 ///
-/// Clamped against this (keep in sync when adding a producer):
+/// Every WALL-CLOCK delta producer clamps against this (keep in sync
+/// when adding one):
+///  - `AnimatedValue::advance` (`AnimatedValue.h`) — this library's own
+///    integrator, and the one every spring-curve animation runs on,
 ///  - the daemon's overlay shader push (`overlayservice/shader.cpp`),
-///  - the daemon-side `SurfaceAnimator` (`surfaceanimator.cpp`),
+///  - the daemon-side `SurfaceAnimator`'s shader delta
+///    (`surfaceanimator.cpp`),
 ///  - the compositor's per-window transition paint, for BOTH the
 ///    `iTimeDelta` uniform and the spring integrator's dt
 ///    (`plasmazoneseffect/paint_pipeline.cpp`),
-///  - the compositor's desktop-switch paint, likewise
-///    (`desktoptransitionmanager.cpp`).
+///  - the compositor's desktop-switch paint, for its spring integrator
+///    (`desktoptransitionmanager.cpp`). That path uploads no
+///    `iTimeDelta` uniform.
+/// A synthetic fixed step (`tools/shader-render` renders at 1/fps)
+/// cannot spike and needs no clamp.
 ///
 /// NOT clamped, and deliberately out of this library's reach:
 /// `PhosphorRendering::ShaderEffect::onPlayingTick`

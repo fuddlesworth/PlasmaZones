@@ -45,7 +45,7 @@ private Q_SLOTS:
         QCOMPARE(p.effectiveStaggerInterval(), Profile::DefaultStaggerInterval);
     }
 
-    void testWithDefaultsFillsAllOptionals()
+    void testWithDefaultsFillsDefaultableOptionals()
     {
         Profile empty;
         const Profile filled = empty.withDefaults();

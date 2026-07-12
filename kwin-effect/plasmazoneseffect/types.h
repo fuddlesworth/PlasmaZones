@@ -687,7 +687,7 @@ struct ShaderTransition
     /// `oldSnapshot` and clears this. The window content is captured before
     /// the moveResize configure round-trips, so it holds the OLD frame.
     bool needsSnapshot = false;
-    /// ── Held interactive-move state (window.move / window.resize) ──
+    /// ── Held interactive-move state (window.movement.move) ──
     /// True while the user is still dragging: the transition stays active
     /// past durationMs (progress clamps at 1) and the duration-timer
     /// teardown is skipped — windowFinishUserMovedResized schedules the
