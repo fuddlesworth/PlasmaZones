@@ -584,7 +584,7 @@ void Daemon::setupSurfaceShaderEffects()
     // first-registration-wins, yielding `user > sys-highest > ... > sys-lowest`
     // after the user dir is appended last. Surface packs install to
     // `plasmazones/surface` (singular), the third category beside
-    // `plasmazones/shaders` and `plasmazones/animations`.
+    // `plasmazones/overlays` and `plasmazones/animations`.
     QStringList surfaceDirs = QStandardPaths::locateAll(
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/surface"), QStandardPaths::LocateDirectory);
     std::reverse(surfaceDirs.begin(), surfaceDirs.end());

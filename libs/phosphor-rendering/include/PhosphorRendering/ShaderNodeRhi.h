@@ -480,7 +480,7 @@ private:
     /// the resolver visited during the most recent `loadVertexShader` /
     /// `loadFragmentShader`. Folded into the bake-cache key by
     /// `shaderCacheKey` so an edit to a shared header (e.g.
-    /// `data/shaders/shared/common.glsl`) invalidates downstream cache
+    /// `data/overlays/shared/common.glsl`) invalidates downstream cache
     /// entries even when the consuming shader's own mtime is unchanged.
     /// Without this, an in-memory cache hit could keep serving SPIR-V
     /// baked against an older include-content view.

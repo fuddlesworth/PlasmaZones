@@ -18,7 +18,7 @@ namespace PhosphorSurfaceShaders {
 ///      driven by a 0..1 timeline (open, close, snap, drag, etc.).
 ///
 ///   2. **Overlay/zone-background shaders** — `PhosphorShaders::ShaderRegistry`,
-///      sourced from `data/shaders/*/`. Long-lived ambient effects with
+///      sourced from `data/overlays/*/`. Long-lived ambient effects with
 ///      access to the rich `BaseUniforms` UBO (`iMouse`, `iDate`,
 ///      `customColors[16]`, audio-spectrum / wallpaper / multipass
 ///      textures, etc.). Daemon-only (RHI/multipass infrastructure has

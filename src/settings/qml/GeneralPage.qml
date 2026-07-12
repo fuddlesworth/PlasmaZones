@@ -126,7 +126,7 @@ SettingsFlickable {
                         to: root.effectsBridge.shaderFrameRateMax
                         value: appSettings.shaderFrameRate
                         valueSuffix: " fps"
-                        labelWidth: Kirigami.Units.gridUnit * 5
+                        labelWidth: Kirigami.Units.gridUnit * 4
                         onMoved: value => {
                             return appSettings.shaderFrameRate = Math.round(value);
                         }
@@ -199,7 +199,7 @@ SettingsFlickable {
                             stepSize: 2
                             value: appSettings.audioSpectrumBarCount
                             valueSuffix: ""
-                            labelWidth: Kirigami.Units.gridUnit * 5
+                            labelWidth: Kirigami.Units.gridUnit * 4
                             onMoved: value => {
                                 return appSettings.audioSpectrumBarCount = Math.round(value);
                             }
@@ -218,7 +218,7 @@ SettingsFlickable {
                             to: root.effectsBridge.audioNoiseReductionMax
                             value: appSettings.audioNoiseReduction
                             valueSuffix: ""
-                            labelWidth: Kirigami.Units.gridUnit * 5
+                            labelWidth: Kirigami.Units.gridUnit * 4
                             onMoved: value => {
                                 return appSettings.audioNoiseReduction = Math.round(value);
                             }
@@ -235,7 +235,7 @@ SettingsFlickable {
                             to: root.effectsBridge.audioExtraSmoothingMax
                             value: appSettings.audioExtraSmoothing
                             valueSuffix: "%"
-                            labelWidth: Kirigami.Units.gridUnit * 5
+                            labelWidth: Kirigami.Units.gridUnit * 4
                             onMoved: value => {
                                 return appSettings.audioExtraSmoothing = Math.round(value);
                             }
@@ -270,7 +270,7 @@ SettingsFlickable {
                             to: root.effectsBridge.audioSensitivityMax
                             value: appSettings.audioSensitivity
                             valueSuffix: "%"
-                            labelWidth: Kirigami.Units.gridUnit * 5
+                            labelWidth: Kirigami.Units.gridUnit * 4
                             onMoved: value => {
                                 return appSettings.audioSensitivity = Math.round(value);
                             }
@@ -289,7 +289,7 @@ SettingsFlickable {
                             to: root.effectsBridge.audioLowerCutoffHzMax
                             value: appSettings.audioLowerCutoffHz
                             valueSuffix: " Hz"
-                            labelWidth: Kirigami.Units.gridUnit * 5
+                            labelWidth: Kirigami.Units.gridUnit * 4
                             onMoved: value => {
                                 return appSettings.audioLowerCutoffHz = Math.round(value);
                             }
@@ -306,7 +306,7 @@ SettingsFlickable {
                             to: root.effectsBridge.audioHigherCutoffHzMax
                             value: appSettings.audioHigherCutoffHz
                             valueSuffix: " Hz"
-                            labelWidth: Kirigami.Units.gridUnit * 5
+                            labelWidth: Kirigami.Units.gridUnit * 4
                             onMoved: value => {
                                 return appSettings.audioHigherCutoffHz = Math.round(value);
                             }

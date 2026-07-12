@@ -24,7 +24,7 @@
 namespace PlasmaZones {
 
 /// PlasmaZones-specific ShaderRegistry that adds:
-/// - Hardcoded system/user shader paths (plasmazones/shaders)
+/// - Hardcoded system/user shader paths (plasmazones/overlays)
 /// - userShadersEnabled(), userShaderDirectory(), openUserShaderDirectory()
 class PLASMAZONES_EXPORT ShaderRegistry : public PhosphorShaders::ShaderRegistry
 {
@@ -42,7 +42,7 @@ public:
         QDir(userDir).mkpath(QStringLiteral("."));
 
         const QStringList systemDirs =
-            QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"),
+            QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/overlays"),
                                       QStandardPaths::LocateDirectory);
 
         // Build the full registration list once: system dirs first

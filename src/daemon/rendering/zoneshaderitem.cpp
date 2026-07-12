@@ -92,7 +92,7 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     // Use locateAll() because locate() stops at the first match (~/.local/share/
     // which has user shaders but NOT common.glsl). We need the system dir too.
     const QStringList allShaderDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/overlays"), QStandardPaths::LocateDirectory);
     QStringList includePaths;
     for (const QString& dir : allShaderDirs) {
         const QString sharedDir = dir + QStringLiteral("/shared");

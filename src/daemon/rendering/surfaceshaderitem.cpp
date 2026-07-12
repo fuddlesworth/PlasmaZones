@@ -31,7 +31,7 @@ QStringList SurfaceShaderItem::surfaceIncludePaths()
     // the system dir is included alongside ~/.local/share — the user dir holds
     // user packs but not the shared include. Surface packs install to
     // `plasmazones/surface` (singular; see the install() rule in the top-level
-    // CMakeLists), the third pack category beside `plasmazones/shaders` and
+    // CMakeLists), the third pack category beside `plasmazones/overlays` and
     // `plasmazones/animations`. The daemon warm-bake (daemon.cpp) calls this
     // same function — see the header doc for why the two must not diverge.
     const QStringList allSurfaceDirs = QStandardPaths::locateAll(
