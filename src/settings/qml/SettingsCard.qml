@@ -62,6 +62,17 @@ Item {
     /// are suppressed before that, so adopting `initiallyCollapsed` sets the
     /// card's resting state instead of animating it shut on load.
     property bool _completed: false
+    /// How far open the body is: 0 shut, 1 fully open. The collapse animates
+    /// THIS, and the body's height stays a live binding on it times the content's
+    /// implicit height.
+    ///
+    /// Animating the height directly cannot work. The animation samples its
+    /// target when it starts, and a layout re-measure is asynchronous, so a body
+    /// whose size changed while the card was shut (SettingsRow hides itself via
+    /// `visible: enabled`, so any master toggle does exactly that) would animate
+    /// to a stale height and snap at the end. A live binding tracks the settle
+    /// instead, whenever it lands.
+    property real _expandProgress: 1
     // Header enable toggle
     property bool showToggle: false
     property bool toggleChecked: false
@@ -123,7 +134,7 @@ Item {
 
         root._completed = true;
         if (collapsed) {
-            contentClip.height = 0;
+            root._expandProgress = 0;
             contentClip.opacity = 0;
         }
         if (root.searchAnchor.length > 0)
@@ -216,6 +227,21 @@ Item {
                 bottomRightRadius: 0
             }
 
+            // The disclosure control. Hiding a collapsed body takes its rows out
+            // of the focus chain, so the header itself has to be reachable and
+            // activatable, or a keyboard-only user could never open the card.
+            activeFocusOnTab: root.collapsible
+            Accessible.role: root.collapsible ? Accessible.Button : Accessible.StaticText
+            Accessible.name: root.headerText
+            Accessible.description: root.collapsible ? (root.collapsed ? i18n("Collapsed. Activate to expand.") : i18n("Expanded. Activate to collapse.")) : ""
+            Accessible.onPressAction: root.collapsed = !root.collapsed
+            Keys.onSpacePressed: if (root.collapsible)
+                root.collapsed = !root.collapsed
+            Keys.onReturnPressed: if (root.collapsible)
+                root.collapsed = !root.collapsed
+            Keys.onEnterPressed: if (root.collapsible)
+                root.collapsed = !root.collapsed
+
             // Click to collapse/expand
             MouseArea {
                 z: -1
@@ -223,6 +249,17 @@ Item {
                 enabled: root.collapsible
                 cursorShape: root.collapsible ? Qt.PointingHandCursor : Qt.ArrowCursor
                 onClicked: root.collapsed = !root.collapsed
+            }
+
+            // Keyboard focus ring. The header is a focusable control now, so it
+            // needs to show where focus is.
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                radius: cardBg.radius
+                visible: headerArea.activeFocus
+                border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+                border.color: Kirigami.Theme.highlightColor
             }
 
             // Default header (Heading from headerText)
@@ -331,17 +368,17 @@ Item {
 
             anchors.top: headerArea.bottom
             width: parent.width
-            height: contentColumn.implicitHeight
+            // Live binding, never overwritten by an animation. See _expandProgress.
+            height: contentColumn.implicitHeight * root._expandProgress
             clip: true
-            // A collapsed card is clipped to nothing, but clipping alone leaves
-            // its controls in the tab order, so tabbing through the page walks
-            // invisible fields. Hiding the body at zero height takes them out of
-            // the focus chain. Safe for the animation: Qt does not re-run a
-            // layout while it is invisible, so contentColumn.implicitHeight (and
-            // with it the expand animation's target height) survives the hide.
-            visible: height > 0
             opacity: root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1
-            enabled: root.showToggle ? root.toggleChecked : true
+            // Clipping a shut card to nothing still leaves its controls in the
+            // tab order, so tabbing through the page walks fields nobody can see.
+            // Disabling the body takes them out of the focus chain, and the
+            // header carries the keyboard affordance in their place. The body
+            // stays VISIBLE: an invisible layout stops tracking its children's
+            // visibility for good, and never recovers its implicit height.
+            enabled: (root.showToggle ? root.toggleChecked : true) && root._expandProgress > 0
 
             Item {
                 id: contentColumn
@@ -362,8 +399,8 @@ Item {
                 }
 
                 PhosphorMotionAnimation {
-                    target: contentClip
-                    properties: "height"
+                    target: root
+                    properties: "_expandProgress"
                     to: 0
                     profile: "widget.accordionCollapse"
                     durationOverride: Kirigami.Units.shortDuration
@@ -374,9 +411,9 @@ Item {
                 id: expandAnim
 
                 PhosphorMotionAnimation {
-                    target: contentClip
-                    properties: "height"
-                    to: contentColumn.implicitHeight
+                    target: root
+                    properties: "_expandProgress"
+                    to: 1
                     profile: "widget.accordionExpand"
                     durationOverride: Kirigami.Units.shortDuration
                 }
@@ -390,9 +427,9 @@ Item {
 
                 ScriptAction {
                     script: {
-                        contentClip.height = Qt.binding(function () {
-                            return contentColumn.implicitHeight;
-                        });
+                        // Only opacity is animated imperatively now, so only its
+                        // binding needs restoring. The height binding was never
+                        // broken.
                         contentClip.opacity = Qt.binding(function () {
                             return root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1;
                         });

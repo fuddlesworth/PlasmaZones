@@ -43,6 +43,15 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+/// Ceiling on a single snapshotted profile file. The snapshot map holds these
+/// in memory for the session, and the file is a filesystem boundary a user can
+/// hand-place anything at. Matches ShaderSetStore's set-file cap.
+constexpr qint64 kMaxSnapshotBytes = 4 * 1024 * 1024;
+
+} // namespace
+
 namespace animations_controller_detail {
 
 /// `JsonNameKey`, `profileToVariantMap`, `readProfileJson`,
@@ -245,6 +254,16 @@ bool AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
         m_pendingFileSnapshots.insert(filePath, std::nullopt);
         return true;
     }
+    // A hand-placed profile file is a filesystem boundary like any other. Cap it
+    // rather than slurping an arbitrarily large blob into the snapshot map for
+    // the rest of the session, and refuse (so callers bail) rather than write
+    // over content we cannot restore.
+    const QFileInfo info(filePath);
+    if (!info.isFile() || info.size() > kMaxSnapshotBytes) {
+        qCWarning(lcConfig) << "snapshotFileIfFirst: refusing to snapshot" << filePath
+                            << "— not a regular file, or over the" << kMaxSnapshotBytes << "byte cap";
+        return false;
+    }
     if (!f.open(QIODevice::ReadOnly)) {
         // Mid-session permission drift on an existing file would
         // silently lose pre-edit content if a write proceeded without
@@ -258,11 +277,11 @@ bool AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
     return true;
 }
 
-void AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePath)
+bool AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePath)
 {
     const auto it = m_pendingFileSnapshots.constFind(filePath);
     if (it == m_pendingFileSnapshots.cend())
-        return;
+        return false;
 
     // The snapshot is the ONLY copy of the file's pre-edit content, so it may be
     // dropped only when the file still holds exactly that content: the write it
@@ -271,14 +290,20 @@ void AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePa
     QFile f(filePath);
     if (it.value().has_value()) {
         if (!f.exists() || !f.open(QIODevice::ReadOnly) || f.readAll() != *it.value())
-            return;
+            return false;
     } else if (f.exists()) {
         // Staged as "did not exist", but something created it since.
-        return;
+        return false;
     }
 
+    const bool wasPending = hasPendingChanges();
     m_pendingFileSnapshots.remove(filePath);
-    Q_EMIT pendingChangesChanged();
+    // Sole owner of the signal for this transition: the sub-services used to
+    // emit alongside their rollback call, which fired twice for one flip and
+    // once even when the rollback declined to drop.
+    if (wasPending != hasPendingChanges())
+        Q_EMIT pendingChangesChanged();
+    return true;
 }
 
 bool AnimationsPageController::hasPendingChanges() const
@@ -331,7 +356,7 @@ void AnimationsPageController::commitPending()
         Q_EMIT pendingChangesChanged();
 }
 
-void AnimationsPageController::revertPending()
+bool AnimationsPageController::revertPending()
 {
     // discard() / revertPending() is the StagingDomain contract for "undo
     // everything since the last apply". This method:
@@ -356,10 +381,10 @@ void AnimationsPageController::revertPending()
     // and then have its map edits overwritten by the worker's reply.
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "revertPending: blocked while an async discard is in flight";
-        return;
+        return false;
     }
     if (!hasPendingChanges())
-        return;
+        return true;
 
     const QString profilesDir = userProfilesDir();
     const QString setsDir = userMotionSetsDir();
@@ -433,6 +458,9 @@ void AnimationsPageController::revertPending()
     if (anyMotionSet && m_motionSets)
         m_motionSets->notifyLiveStateChanged();
     Q_EMIT pendingChangesChanged();
+    // The restore ran. Individual files may have failed and been retained for a
+    // retry, which is not the same thing as a refusal.
+    return true;
 }
 
 void AnimationsPageController::asyncRevertPending()

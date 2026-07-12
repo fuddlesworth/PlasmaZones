@@ -174,12 +174,8 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     }
     obj.insert(JsonNameKey, path);
 
-    // Snapshot ONLY if this is the first edit to this path; remove the
-    // snapshot if the write below fails so hasPendingChanges() doesn't
-    // report a phantom pending edit pointing at content we never touched.
-    // Bail before touching disk if the snapshot couldn't be captured —
-    // an unrecoverable revert is worse than the failed write.
-    const bool firstSnapshot = !m_pendingFileSnapshots.contains(filePath);
+    // Snapshot before touching disk, and bail if the pre-edit content could not
+    // be captured: an unrecoverable revert is worse than a failed write.
     if (!snapshotFileIfFirst(filePath)) {
         qCWarning(lcConfig) << "setOverride: refusing to write" << filePath << "without a recoverable snapshot";
         return false;
@@ -187,17 +183,20 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
 
     QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        if (firstSnapshot)
-            m_pendingFileSnapshots.remove(filePath);
+        dropFileSnapshotIfUnchanged(filePath);
         return false;
     }
     file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
     if (!file.commit()) {
-        if (firstSnapshot)
-            m_pendingFileSnapshots.remove(filePath);
+        dropFileSnapshotIfUnchanged(filePath);
         return false;
     }
 
+    // The write may have restored the file to exactly its pre-edit content (the
+    // user undid an edit by hand). The staged snapshot is then a phantom: disk
+    // already holds what Discard would write back, so keeping it would leave the
+    // page dirty forever with nothing to restore.
+    dropFileSnapshotIfUnchanged(filePath);
     const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
     if (wasPending != nowPending)
@@ -226,23 +225,21 @@ bool AnimationsPageController::clearOverride(const QString& path)
     // hasPendingChanges() walk. Mirrors setOverride() ordering above so
     // a future refactor doesn't see two divergent capture-point shapes.
     const bool wasPending = hasPendingChanges();
-    // Mirror setOverride's snapshot-rollback symmetry: capture whether
-    // this call is the first to touch the file, snapshot, and on
-    // remove() failure roll the snapshot back so hasPendingChanges()
-    // doesn't report a phantom pending edit pointing at a file the
-    // user never actually touched (the unsaved-changes badge would
-    // light up and Discard would write the original content back over
-    // an unchanged original — harmless but confusing UX).
-    const bool firstSnapshot = !m_pendingFileSnapshots.contains(filePath);
+    // Mirror setOverride's snapshot symmetry, through the one shared rollback
+    // primitive: it drops the staged entry only while disk still matches it.
     if (!snapshotFileIfFirst(filePath)) {
         qCWarning(lcConfig) << "clearOverride: refusing to delete" << filePath << "without a recoverable snapshot";
         return false;
     }
     if (!file.remove()) {
-        if (firstSnapshot)
-            m_pendingFileSnapshots.remove(filePath);
+        dropFileSnapshotIfUnchanged(filePath);
         return false;
     }
+    // Deleting a file that did not exist before this session's edits returns it
+    // to its pre-edit state (the snapshot is `nullopt` = "was absent"), so the
+    // staged entry is a phantom and has to go, or the page stays dirty with
+    // nothing to discard.
+    dropFileSnapshotIfUnchanged(filePath);
     const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
     if (wasPending != nowPending)

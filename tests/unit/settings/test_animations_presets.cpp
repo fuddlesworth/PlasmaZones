@@ -154,7 +154,8 @@ private Q_SLOTS:
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(!c.addUserPreset(QString(), {{QStringLiteral("duration"), 100}}));
-        // All-symbol slugifies to empty → reject (would write to ".json")
+        // All-symbol slugifies to empty, so there is no usable filename. The
+        // library refuses and toasts rather than failing silently.
         QVERIFY(!c.addUserPreset(QStringLiteral("@@@"), {{QStringLiteral("duration"), 100}}));
     }
 
@@ -262,7 +263,7 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        AnimationsPageController c(nullptr, nullptr);
+        AnimationsPageController c;
         c.setUserProfilesDirOverride(tmp.path());
         QVERIFY(!c.hasPendingChanges());
 

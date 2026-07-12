@@ -46,6 +46,6 @@ ShaderSetsPage {
         return i18np("%n Surface", "%n Surfaces", count);
     }
     applySubtitleFor: function (name) {
-        return i18n("\"%1\" will replace the decoration on every surface it covers.", name);
+        return i18n("“%1” will replace the decoration on every surface it covers.", name);
     }
 }

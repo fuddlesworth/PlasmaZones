@@ -98,6 +98,21 @@ QJsonObject validSetPayload(const QString& name, int version = 1)
     return root;
 }
 
+/// Recursively clear the sets directory, but ONLY inside the QStandardPaths
+/// sandbox. The guard lives here rather than in initTestCase because QtTest
+/// still runs cleanupTestCase after initTestCase fails: a future edit that
+/// dropped setTestModeEnabled would otherwise delete the user's real saved sets
+/// on its way out.
+void wipeSetsDir()
+{
+    const QString dir = decorationSetsDir();
+    if (!dir.contains(QLatin1String("qttest"))) {
+        qWarning("refusing to wipe a sets directory outside the test sandbox");
+        return;
+    }
+    QDir(dir).removeRecursively();
+}
+
 } // namespace
 
 class TestDecorationSets : public QObject
@@ -111,8 +126,9 @@ private Q_SLOTS:
     void initTestCase()
     {
         QStandardPaths::setTestModeEnabled(true);
-        // init() recursively deletes this directory. Refuse to run at all if it
-        // ever resolves outside the sandbox — that would be the user's real data.
+        // init() and cleanupTestCase() recursively delete this directory. Fail
+        // loudly if it ever resolves outside the sandbox. wipeSetsDir() re-checks
+        // independently, because cleanupTestCase runs even when this fails.
         QVERIFY2(decorationSetsDir().contains(QLatin1String("qttest")),
                  "refusing to run outside QStandardPaths test mode");
     }
@@ -120,15 +136,39 @@ private Q_SLOTS:
     /// Each test starts from an empty sets directory.
     void init()
     {
-        QDir(decorationSetsDir()).removeRecursively();
+        wipeSetsDir();
     }
 
     void cleanupTestCase()
     {
-        QDir(decorationSetsDir()).removeRecursively();
+        wipeSetsDir();
     }
 
     // ─── Save / list / apply / remove ───────────────────────────────────────
+
+    /// Apply MERGES: a surface the set does not cover keeps whatever chain it
+    /// has. The file header pins this and the motion side has the same test, but
+    /// the decoration path had none, so a regression to replace-semantics would
+    /// have wiped every uncovered surface with nothing to catch it.
+    void applySet_mergesAndPreservesUncoveredSurfaces()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        // A set covering exactly one surface.
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("tiled-only"), QString()));
+        c.clearOverride(QStringLiteral("window.tiled"));
+
+        // An override on a surface the set says nothing about.
+        c.setChain(QStringLiteral("osd"), QStringList{QStringLiteral("border")});
+
+        QVERIFY(sets->applySet(QStringLiteral("tiled-only")));
+        QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("glow")}));
+        // The load-bearing assertion: the uncovered surface survived.
+        QCOMPARE(c.chainAt(QStringLiteral("osd")), (QStringList{QStringLiteral("border")}));
+    }
 
     /// A decoration set snapshots the baseline + per-surface overrides to a
     /// JSON file, and applying it merges those overrides back into the current
@@ -582,6 +622,8 @@ private Q_SLOTS:
         QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("!!!"), QString()),
                  "a name that slugifies to nothing must be refused");
         QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(),
+                 PhosphorI18n::tr("That name cannot be used. Try one with letters or numbers in it."));
         QVERIFY(sets->availableSets().isEmpty());
     }
 

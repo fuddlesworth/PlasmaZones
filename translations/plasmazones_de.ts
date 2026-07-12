@@ -486,8 +486,8 @@
         <translation type="vanished">Fokus: Zone %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="260"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="265"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="263"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="268"/>
         <source>Focus</source>
         <translation>Fokus</translation>
     </message>
@@ -611,7 +611,7 @@
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="345"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="272"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="275"/>
         <source>Opacity</source>
         <translation type="unfinished"></translation>
     </message>
@@ -734,7 +734,7 @@
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="899"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="370"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="379"/>
         <source>Per-side outer gaps</source>
         <translation type="unfinished"></translation>
     </message>
@@ -935,19 +935,19 @@
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="869"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="580"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="597"/>
         <source>Maximized</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="871"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="571"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="588"/>
         <source>Minimized</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="873"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="573"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="590"/>
         <source>Focused</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1540,7 +1540,7 @@
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="348"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="402"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="288"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="291"/>
         <source>Border color</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1912,7 +1912,7 @@
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="643"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="887"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="336"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="342"/>
         <source>Hide title bars</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4750,7 +4750,7 @@
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="238"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="283"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="433"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="442"/>
         <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="221"/>
         <source>Algorithm</source>
         <translation>Algorithmus</translation>
@@ -4814,7 +4814,7 @@
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="292"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="447"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="456"/>
         <source>Master count</source>
         <translation>Hauptbereich-Anzahl</translation>
     </message>
@@ -4842,8 +4842,8 @@
         <translation>Darstellung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="270"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="319"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="273"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="322"/>
         <source>Colors</source>
         <translation>Farben</translation>
     </message>
@@ -4852,7 +4852,7 @@
         <translation type="vanished">Farbschema:</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="327"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="333"/>
         <source>Use system accent color</source>
         <translation>Systemakzentfarbe verwenden</translation>
     </message>
@@ -4865,7 +4865,7 @@
         <translation type="vanished">Inaktive Farbe:</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="321"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="324"/>
         <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="125"/>
         <source>Decorations</source>
         <translation>Dekorationen</translation>
@@ -4883,7 +4883,7 @@
         <translation type="vanished">Entfernt Titelleisten bei automatisch gekachelten Fenstern. Wird beim Schweben oder Verlassen des Autotile-Modus wiederhergestellt.</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="318"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="321"/>
         <source>Borders</source>
         <translation>Ränder</translation>
     </message>
@@ -5103,7 +5103,7 @@
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="226"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="361"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="370"/>
         <source>Gaps</source>
         <translation>Abstände</translation>
     </message>
@@ -5301,7 +5301,7 @@
         <translation type="vanished">Fenster von ausgeschlossenen Anwendungen oder mit ausgeschlossenen Fensterklassen werden vom Einrasten und Autotiling ignoriert.</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="490"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="499"/>
         <source>Window Filtering</source>
         <translation>Fensterfilterung</translation>
     </message>
@@ -5524,7 +5524,7 @@
         <translation type="vanished">Mindestabstand:</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="487"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="496"/>
         <source>Minimum distance</source>
         <translation>Mindestabstand</translation>
     </message>
@@ -5700,7 +5700,7 @@
         <translation type="vanished">Deckkraft der inaktiven Zone</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="274"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="277"/>
         <source>Border</source>
         <translation>Rand</translation>
     </message>
@@ -5709,8 +5709,8 @@
         <translation type="vanished">Randbreite:</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="298"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="323"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="301"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
         <source>Border width</source>
         <translation>Randbreite</translation>
     </message>
@@ -5719,12 +5719,12 @@
         <translation type="vanished">Randradius:</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="303"/>
         <source>Border radius</source>
         <translation>Randradius</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="276"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="279"/>
         <source>Zone Labels</source>
         <translation>Zonenbeschriftungen</translation>
     </message>
@@ -5749,7 +5749,7 @@
         <translation type="vanished">Skalierung der Beschriftungsschriftgröße</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="278"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="281"/>
         <source>Effects</source>
         <translation>Effekte</translation>
     </message>
@@ -5784,7 +5784,7 @@
         <translation type="vanished">Zonen beim Layout-Wechsel aufleuchten lassen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="182"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="185"/>
         <source>Shader Effects</source>
         <translation>Shader-Effekte</translation>
     </message>
@@ -5869,8 +5869,8 @@
         <translation type="vanished">Aktivierung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="250"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="262"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="253"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="265"/>
         <source>Triggers</source>
         <translation>Auslöser</translation>
     </message>
@@ -5907,7 +5907,7 @@
         <translation type="vanished">Wenn aktiviert, drücken Sie den Aktivierungsauslöser einmal, um das Overlay anzuzeigen, und erneut, um es auszublenden. Wenn deaktiviert, halten Sie den Auslöser gedrückt.</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="252"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="255"/>
         <source>Zone Span</source>
         <translation>Zonenübergreifend</translation>
     </message>
@@ -5932,7 +5932,7 @@
         <translation type="vanished">Kantenschwelle:</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="391"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="400"/>
         <source>Edge threshold</source>
         <translation>Kantenschwelle</translation>
     </message>
@@ -5942,7 +5942,7 @@
     </message>
     <message>
         <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="54"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="257"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="260"/>
         <source>Snap Assist</source>
         <translation>Einrasthilfe</translation>
     </message>
@@ -5963,7 +5963,7 @@
         <translation type="vanished">Verhalten:</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="400"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="409"/>
         <source>Always show after snapping</source>
         <translation>Immer nach dem Einrasten anzeigen</translation>
     </message>
@@ -6012,7 +6012,7 @@
         <translation type="vanished">Wiederöffnen:</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
         <source>Restore windows to their previous zone</source>
         <translation>Fenster in ihrer vorherigen Zone wiederherstellen</translation>
     </message>
@@ -6649,7 +6649,7 @@
         <translation type="vanished">Zuweisungen pro Arbeitsfläche sind bei mehreren virtuellen Arbeitsflächen verfügbar.</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="544"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="553"/>
         <source>Tiling Quick Shortcuts</source>
         <translation>Kachelungs-Schnelltasten</translation>
     </message>
@@ -6730,7 +6730,7 @@
         <translation type="vanished">Zonenauswahl-Popup aktivieren</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="518"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="527"/>
         <source>Position &amp; Trigger</source>
         <translation>Position und Auslöser</translation>
     </message>
@@ -6749,16 +6749,16 @@
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="56"/>
         <location filename="../src/settings/searchcatalog.cpp" line="64"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="166"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="224"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="396"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="169"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="227"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="405"/>
         <source>monitor</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="56"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="394"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="406"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="403"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="415"/>
         <source>display</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6784,13 +6784,13 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="59"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="181"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="184"/>
         <source>opengl</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="60"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="181"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="184"/>
         <source>vulkan</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6801,13 +6801,13 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="60"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="509"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="518"/>
         <source>export</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="61"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="511"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="520"/>
         <source>import</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6818,7 +6818,7 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="63"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="441"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="450"/>
         <source>split</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6834,7 +6834,7 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="66"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="168"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="171"/>
         <source>layout</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6845,14 +6845,14 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="66"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="526"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="535"/>
         <source>grid</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="67"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="134"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="151"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="137"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="154"/>
         <source>preset</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6867,1918 +6867,1954 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="72"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="122"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="75"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="125"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="390"/>
         <source>overlay</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="72"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="75"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="390"/>
         <source>trigger</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="72"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="368"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="372"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="521"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="75"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="377"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="530"/>
         <source>edge</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="73"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="76"/>
         <source>magnet</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="73"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="81"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="114"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="76"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="84"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="117"/>
         <source>snap</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="75"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="160"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="78"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="163"/>
         <source>color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="75"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="281"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="78"/>
         <location filename="../src/settings/searchcatalog.cpp" line="284"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="286"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="288"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="303"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="331"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="287"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="289"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="291"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="306"/>
         <location filename="../src/settings/searchcatalog.cpp" line="334"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="337"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="340"/>
         <source>colour</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="75"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="78"/>
         <source>opacity</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="76"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="294"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="79"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="297"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="299"/>
         <source>transparency</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="76"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="281"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="79"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="284"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="334"/>
         <source>theme</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="76"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="143"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="155"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="160"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="325"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="351"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="79"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="146"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="158"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="163"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="331"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="360"/>
         <source>border</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="78"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="81"/>
         <source>zone selector</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="78"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="401"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="81"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="410"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="525"/>
         <source>picker</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="78"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="81"/>
         <source>chooser</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="79"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="122"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="149"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="236"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="82"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="125"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="152"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
         <source>popup</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="81"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="109"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="113"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="84"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="112"/>
         <location filename="../src/settings/searchcatalog.cpp" line="116"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="143"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="160"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="119"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="146"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="163"/>
         <source>window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="81"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="116"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="84"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="119"/>
         <source>drag</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="82"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="383"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="403"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="456"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="85"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="392"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="465"/>
         <source>modifier</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="82"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="87"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="102"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="85"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="90"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="105"/>
         <source>key</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="84"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="99"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="166"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="87"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="102"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="169"/>
         <source>priority</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="84"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="99"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="460"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="87"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="102"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
         <source>order</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="84"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="99"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="87"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="102"/>
         <source>precedence</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="86"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="101"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="89"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="104"/>
         <source>shortcut</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="86"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="101"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="89"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="104"/>
         <source>hotkey</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="86"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="101"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="89"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="104"/>
         <source>keybind</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="87"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="90"/>
         <source>keyboard</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="89"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="139"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="154"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="92"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="142"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="157"/>
         <source>shader</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="89"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="139"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="92"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="142"/>
         <source>effect</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="89"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="155"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="92"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="158"/>
         <source>glow</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="93"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="96"/>
         <source>tile</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="93"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="231"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="96"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="234"/>
         <source>tiling</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="93"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="96"/>
         <source>auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="94"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="162"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="366"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="371"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="376"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="97"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="165"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="372"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="375"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="380"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
         <source>gap</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="94"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="163"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="366"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="371"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="376"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="97"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="166"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="372"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="375"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="380"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
         <source>spacing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="96"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="99"/>
         <source>algorithm</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="96"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="99"/>
         <source>bsp</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="96"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="99"/>
         <source>binary</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="97"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="100"/>
         <source>spiral</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="97"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="440"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="448"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="100"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="449"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="457"/>
         <source>master</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="97"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="453"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="456"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="100"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="462"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="465"/>
         <source>stack</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="106"/>
         <location filename="../src/settings/searchcatalog.cpp" line="109"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="122"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="129"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="112"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="125"/>
         <location filename="../src/settings/searchcatalog.cpp" line="132"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="184"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="315"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="135"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="187"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="318"/>
         <source>animation</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="106"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="109"/>
         <source>duration</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="106"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="134"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="109"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="137"/>
         <source>easing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="107"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="134"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="110"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="137"/>
         <source>curve</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="107"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="110"/>
         <source>spring</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="107"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="110"/>
         <source>speed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="110"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="113"/>
         <source>open</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="110"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="113"/>
         <source>close</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="110"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="113"/>
         <source>minimize</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="113"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="116"/>
         <source>movement</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="114"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="117"/>
         <source>maximize</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="116"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="119"/>
         <source>dragging</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="117"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="120"/>
         <source>move</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="117"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="120"/>
         <source>wobble</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="117"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="120"/>
         <source>physics</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="120"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="147"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="123"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="150"/>
         <source>osd</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="120"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="123"/>
         <source>notification</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="120"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="147"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="123"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="150"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="506"/>
         <source>on-screen display</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="124"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="127"/>
         <source>desktop</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="124"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="127"/>
         <source>virtual desktop</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="125"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="128"/>
         <source>workspace</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="125"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="128"/>
         <source>switch</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="127"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="130"/>
         <source>side panel</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="127"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="130"/>
         <source>panel</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="127"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="130"/>
         <source>drawer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="129"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="132"/>
         <source>widget</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="132"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="168"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="135"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="171"/>
         <source>editor</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="132"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="135"/>
         <source>layout editor</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="135"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="137"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="152"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="138"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="140"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="155"/>
         <source>profile</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="137"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="140"/>
         <source>motion set</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="113"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="137"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="116"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="140"/>
         <source>motion</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="161"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="164"/>
         <source>title bar</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="143"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="147"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="149"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="161"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="337"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="146"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="150"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="152"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="164"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
         <source>decoration</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="109"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="144"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="162"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="112"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="147"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="165"/>
         <source>appearance</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="162"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="366"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="371"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="376"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="462"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="165"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="372"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="375"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="380"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
         <source>gaps</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="163"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="364"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="367"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="372"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="166"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="373"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="376"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
         <source>padding</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="163"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="364"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="367"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="372"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="166"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="373"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="376"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
         <source>margin</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="165"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="168"/>
         <source>rule</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="165"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="168"/>
         <source>exclude</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="165"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="168"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="478"/>
         <source>float</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="166"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="169"/>
         <source>activity</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="168"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="171"/>
         <source>design</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="169"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="172"/>
         <source>zones</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="171"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="174"/>
         <source>about</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="171"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="174"/>
         <source>version</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="171"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="174"/>
         <source>license</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="172"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="175"/>
         <source>credits</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="178"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="181"/>
         <source>Rendering</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="180"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="183"/>
         <source>Rendering backend</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="181"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="184"/>
         <source>graphics</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="233"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="347"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="236"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="356"/>
         <source>Window filtering</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="235"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="492"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="238"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="358"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="501"/>
         <source>Exclude transient windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="236"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
         <source>dialog</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="149"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="236"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="152"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
         <source>tooltip</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="243"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="246"/>
         <source>Reset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="244"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="247"/>
         <source>reset to defaults</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="244"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="247"/>
         <source>defaults</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="244"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="418"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="247"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="427"/>
         <source>restore</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="259"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="264"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="262"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="267"/>
         <source>Window Handling</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="280"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="283"/>
         <source>System accent color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="281"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="292"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="284"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="295"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="334"/>
         <source>scheme</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="396"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="283"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="286"/>
         <source>Highlight color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="284"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="287"/>
         <source>active</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="284"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="287"/>
         <source>hover</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="286"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="289"/>
         <source>Inactive color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="286"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="334"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="289"/>
         <location filename="../src/settings/searchcatalog.cpp" line="340"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
         <source>unfocused</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="288"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="331"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="334"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="291"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="337"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="340"/>
         <source>outline</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="291"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="294"/>
         <source>Import colors</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="292"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="295"/>
         <source>pywal</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="292"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="295"/>
         <source>json</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="292"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="511"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="295"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="520"/>
         <source>load</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="294"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="297"/>
         <source>Active opacity</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="294"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="297"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="299"/>
         <source>alpha</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="299"/>
         <source>Inactive opacity</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="298"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="323"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="301"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
         <source>thickness</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
         <location filename="../src/settings/searchcatalog.cpp" line="242"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="298"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="323"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="354"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="357"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="445"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="500"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="245"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="301"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="311"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="366"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="454"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="509"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
         <source>size</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="325"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="303"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
         <source>rounding</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="303"/>
         <source>corner</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="302"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="305"/>
         <source>Label color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="303"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="306"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="311"/>
         <source>text</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="303"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="306"/>
         <source>font</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="304"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="307"/>
         <source>Font</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="305"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
         <source>typeface</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="305"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
         <source>family</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="305"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
         <source>style</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="307"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="310"/>
         <source>Label scale</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="311"/>
         <source>multiplier</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="310"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
         <source>Blur behind zones</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="310"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
         <source>frost</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="310"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
         <source>background</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="312"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="315"/>
         <source>Zone numbers</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="316"/>
         <source>index</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="316"/>
         <source>digit</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="316"/>
         <source>label</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="315"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="318"/>
         <source>Flash on layout switch</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="315"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="318"/>
         <source>blink</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="183"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="186"/>
         <source>Frame rate</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="144"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="154"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="71"/>
+        <source>User layouts</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="147"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="157"/>
         <source>surface</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="151"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="154"/>
         <source>decoration set</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="151"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="154"/>
         <source>set</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="152"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="154"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="155"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="157"/>
         <source>pack</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="155"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="158"/>
         <source>glass</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="156"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="159"/>
         <source>blur</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="184"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="187"/>
         <source>fps</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="184"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="187"/>
         <source>refresh</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="185"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="188"/>
         <source>Audio Spectrum</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="187"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="190"/>
         <source>Audio spectrum</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="188"/>
         <location filename="../src/settings/searchcatalog.cpp" line="191"/>
         <location filename="../src/settings/searchcatalog.cpp" line="194"/>
         <location filename="../src/settings/searchcatalog.cpp" line="197"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="199"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="200"/>
         <location filename="../src/settings/searchcatalog.cpp" line="202"/>
         <location filename="../src/settings/searchcatalog.cpp" line="205"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="209"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="208"/>
         <location filename="../src/settings/searchcatalog.cpp" line="212"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="214"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="215"/>
         <location filename="../src/settings/searchcatalog.cpp" line="217"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="219"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="221"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="220"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="222"/>
         <location filename="../src/settings/searchcatalog.cpp" line="224"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="227"/>
         <source>cava</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="188"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="191"/>
         <source>music</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="188"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="191"/>
         <source>visualizer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="189"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="192"/>
         <source>sound</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="190"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="193"/>
         <source>Spectrum bars</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="191"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="194"/>
         <source>bands</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="191"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="205"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="209"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="194"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="208"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="212"/>
         <source>frequency</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="193"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="196"/>
         <source>Noise reduction</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="194"/>
         <location filename="../src/settings/searchcatalog.cpp" line="197"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="200"/>
         <source>smoothing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="194"/>
         <location filename="../src/settings/searchcatalog.cpp" line="197"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="200"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="220"/>
         <source>smooth</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="196"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="199"/>
         <source>Extra smoothing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="198"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="201"/>
         <source>Automatic gain</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="199"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="202"/>
         <source>autosens</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="199"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="202"/>
         <source>sensitivity</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="200"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="202"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="203"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="205"/>
         <source>gain</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="201"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="204"/>
         <source>Sensitivity</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="204"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="207"/>
         <source>Lowest frequency</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="205"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="209"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="208"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="212"/>
         <source>cutoff</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="206"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="209"/>
         <source>bass</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="208"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="211"/>
         <source>Highest frequency</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="210"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="213"/>
         <source>treble</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="211"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="214"/>
         <source>Channels</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="212"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="215"/>
         <source>stereo</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="212"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="215"/>
         <source>mono</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="213"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="216"/>
         <source>Reverse bar order</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="214"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
         <source>flip</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="214"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
         <source>mirror</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="216"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="219"/>
         <source>Monstercat filter</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="219"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="220"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="222"/>
         <source>filter</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="218"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="221"/>
         <source>Wave filter</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="219"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="222"/>
         <source>wave</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="220"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="223"/>
         <source>Audio backend</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="221"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="224"/>
         <source>pipewire</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="221"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="224"/>
         <source>pulseaudio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="222"/>
         <location filename="../src/settings/searchcatalog.cpp" line="225"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="228"/>
         <source>capture</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="223"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="226"/>
         <source>Audio source</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="224"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="227"/>
         <source>device</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="227"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="230"/>
         <source>Layout assignment</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="229"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="232"/>
         <source>Don&apos;t assign a layout by default</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="230"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="233"/>
         <source>default</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="230"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="233"/>
         <source>assign</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="230"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="233"/>
         <source>snapping</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="325"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
         <source>Corner radius</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="330"/>
-        <source>Active border color</source>
+        <source>Apply borders to</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="331"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="346"/>
+        <source>scope</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="331"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="346"/>
+        <source>which windows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="336"/>
+        <source>Active border color</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="337"/>
         <source>focused</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="333"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="339"/>
         <source>Inactive border color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="337"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="346"/>
         <source>titlebar</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="337"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
         <source>header</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="339"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="345"/>
+        <source>Hide title bars on</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="348"/>
         <source>Focus fade duration</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="340"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
         <source>fade</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="340"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
         <source>dim</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="341"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="350"/>
         <source>cross-fade</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="362"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="371"/>
         <source>Inner gap</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="364"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="373"/>
         <source>inner</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="365"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="374"/>
         <source>Outer gap</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="367"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="376"/>
         <source>outer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="373"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="382"/>
         <source>side</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="375"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="384"/>
         <source>Smart gaps</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="377"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="386"/>
         <source>smart</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="377"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="386"/>
         <source>single</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="390"/>
         <source>Activate on every drag</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="383"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="392"/>
         <source>Hold to activate</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="383"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="392"/>
         <source>deactivate</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="389"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="458"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="394"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="398"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
         <source>Toggle mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="389"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="458"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="394"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="398"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
         <source>tap</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="394"/>
         <source>activation</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="387"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="396"/>
         <source>Span modifier</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="387"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="396"/>
         <source>zone span</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="387"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="396"/>
         <source>paint</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="389"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="398"/>
         <source>span</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="391"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="521"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="400"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="530"/>
         <source>distance</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="391"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="400"/>
         <source>multi-zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="393"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="402"/>
         <source>Show zones on all monitors</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="394"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="403"/>
         <source>screens</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="396"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="405"/>
         <source>Filter by aspect ratio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="396"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="405"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="421"/>
         <source>layouts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="401"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="403"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="410"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
         <source>snap assist</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="403"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
         <source>Hold to enable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="405"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="414"/>
         <source>Re-snap on resolution change</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="406"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="415"/>
         <source>resolution</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="408"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
         <source>Open new windows in the last-used zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="409"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="473"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="418"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="437"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
         <source>new window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="409"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="418"/>
         <source>last zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="411"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="420"/>
         <source>Auto-assign new windows for all layouts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="421"/>
         <source>auto-assign</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="567"/>
-        <source>Opened</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="569"/>
-        <source>Closed</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="571"/>
         <location filename="../src/settings/searchcatalog.cpp" line="577"/>
-        <source>Dragged</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="582"/>
-        <source>Snapped Into Zone</source>
+        <source>User sets</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="584"/>
-        <source>Snapped Out of Zone</source>
+        <source>Opened</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="586"/>
-        <source>Layout Switched</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="588"/>
-        <source>Shown</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="589"/>
-        <source>Hidden</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="592"/>
-        <source>Zone Selector Shown</source>
+        <source>Closed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="594"/>
-        <source>Zone Selector Hidden</source>
+        <source>Dragged</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="596"/>
-        <source>Layout Picker Shown</source>
+        <location filename="../src/settings/searchcatalog.cpp" line="599"/>
+        <source>Snapped Into Zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="598"/>
-        <source>Layout Picker Hidden</source>
+        <location filename="../src/settings/searchcatalog.cpp" line="601"/>
+        <source>Snapped Out of Zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="600"/>
-        <source>Snap Assist Shown</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="602"/>
-        <source>Snap Assist Hidden</source>
+        <location filename="../src/settings/searchcatalog.cpp" line="603"/>
+        <source>Layout Switched</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="605"/>
+        <source>Shown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="606"/>
+        <source>Hidden</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="609"/>
+        <source>Zone Selector Shown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="611"/>
+        <source>Zone Selector Hidden</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="613"/>
+        <source>Layout Picker Shown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="615"/>
+        <source>Layout Picker Hidden</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="617"/>
+        <source>Snap Assist Shown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="619"/>
+        <source>Snap Assist Hidden</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="622"/>
         <source>Desktop Switched</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="584"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="884"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="414"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="423"/>
         <source>Restore size on unsnap</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="415"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="424"/>
         <source>unsnap</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="415"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="424"/>
         <source>original size</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="418"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="427"/>
         <source>login</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="420"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="429"/>
         <source>Restore unsnapped windows to their previous position</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="421"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="465"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="430"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="474"/>
         <source>floated</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="421"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="460"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="465"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="430"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="474"/>
         <source>position</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="423"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="432"/>
         <source>Unfloat to a zone when there is no previous zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="424"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="433"/>
         <source>unfloat</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="424"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="433"/>
         <source>fallback</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="435"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="476"/>
         <source>Sticky windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="435"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="476"/>
         <source>all desktops</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="435"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="476"/>
         <source>sticky</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="473"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="437"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
         <source>Focus new windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="111"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="430"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="473"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="475"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="114"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="437"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="439"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="484"/>
         <source>focus</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="430"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="475"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="439"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="484"/>
         <source>Focus follows mouse</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="430"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="475"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="439"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="484"/>
         <source>pointer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="435"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="444"/>
         <source>Max windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="436"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="445"/>
         <source>windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="436"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="445"/>
         <source>maximum</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="436"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="448"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="529"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="445"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="457"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
         <source>count</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="437"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="446"/>
         <source>limit</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="439"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="448"/>
         <source>Master ratio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="440"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="448"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="449"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="457"/>
         <source>center</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="440"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="445"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="449"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="454"/>
         <source>ratio</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="441"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="450"/>
         <source>proportion</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="444"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="453"/>
         <source>Ratio step size</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="445"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="454"/>
         <source>step</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="445"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="454"/>
         <source>increment</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="449"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="458"/>
         <source>number</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="453"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="462"/>
         <source>Always re-insert on drag</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="453"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="462"/>
         <source>insert</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="455"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="464"/>
         <source>Hold to re-insert into stack</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="458"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
         <source>stack preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="460"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
         <source>New window placement</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="462"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
         <source>Respect minimum size</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="462"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
         <source>minimum</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="464"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="473"/>
         <source>Restore untiled windows to their previous position</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="301"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="478"/>
         <source>Drag behavior</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="478"/>
         <source>reorder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="298"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="480"/>
         <source>Overflow behavior</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="480"/>
         <source>max windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="480"/>
         <source>unlimited</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="479"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="488"/>
         <source>Global animation defaults</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="481"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="490"/>
         <source>Multiple windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="491"/>
         <source>sequence</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="491"/>
         <source>simultaneous</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="491"/>
         <source>one by one</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="484"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="493"/>
         <source>Stagger delay</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="485"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="494"/>
         <source>pause</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="485"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="494"/>
         <source>interval</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="485"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="494"/>
         <source>delay</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
         <location filename="../src/settings/searchcatalog.cpp" line="242"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="354"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="357"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="488"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="500"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="245"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="366"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="509"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
         <source>threshold</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="488"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
         <source>skip</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="488"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
         <source>geometry</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="350"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="493"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="359"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="502"/>
         <source>dialogs</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="350"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="493"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="359"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="502"/>
         <source>popups</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="493"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="502"/>
         <source>tooltips</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="350"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="494"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="359"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
         <source>menus</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="496"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="505"/>
         <source>Exclude notifications and OSDs</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="506"/>
         <source>volume</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="506"/>
         <source>brightness</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="238"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="353"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="499"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="241"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="362"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="508"/>
         <source>Minimum window width</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="354"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="500"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="242"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="509"/>
         <source>narrow</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="241"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="356"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="502"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="244"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="365"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="511"/>
         <source>Minimum window height</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="242"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="357"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="245"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="366"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
         <source>short</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="507"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
         <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="194"/>
         <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="225"/>
         <source>Configuration</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="508"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="517"/>
         <source>Backup</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="509"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="518"/>
         <source>save</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="509"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="511"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="518"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="520"/>
         <source>data</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="510"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="519"/>
         <source>Restore</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="515"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="524"/>
         <source>Zone selector popup</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="525"/>
         <source>enable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="525"/>
         <source>toggle</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="520"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="529"/>
         <source>Trigger distance</source>
         <translation>Auslöseabstand</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="521"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="530"/>
         <source>proximity</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="523"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="532"/>
         <source>Layout Arrangement</source>
         <translation>Layout-Anordnung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="525"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="534"/>
         <source>Arrangement</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="526"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="535"/>
         <source>horizontal</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="526"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="535"/>
         <source>vertical</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="528"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="537"/>
         <source>Grid columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="529"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
         <source>columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="529"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
         <source>per row</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="531"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="540"/>
         <source>Max visible rows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="532"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
         <source>rows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="532"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
         <source>scroll</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="532"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
         <source>visible</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="547"/>
         <source>Snapping Layout Priority</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="540"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="549"/>
         <source>Tiling Algorithm Priority</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="542"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="551"/>
         <source>Snapping Quick Shortcuts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="548"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="550"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="559"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="561"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="563"/>
         <source>User shaders</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="552"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="565"/>
         <source>Easing Presets</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="554"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="567"/>
         <source>Spring Presets</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="556"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="560"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="569"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="575"/>
         <source>Save current state</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="558"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="562"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="573"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="579"/>
         <source>Saved sets</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8787,134 +8823,134 @@
         <translation type="obsolete">Schließen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="655"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="672"/>
         <source>Snap Out of Zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="607"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="624"/>
         <source>Slide In</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="609"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="626"/>
         <source>Slide Out</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="611"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="629"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="628"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="646"/>
         <source>Fade In</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="613"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="631"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="630"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="648"/>
         <source>Fade Out</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="614"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="631"/>
         <source>Hover</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="615"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="632"/>
         <source>Press</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="617"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="634"/>
         <source>Toggle On</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="619"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="636"/>
         <source>Toggle Off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="621"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="638"/>
         <source>Show (badge)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="623"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="640"/>
         <source>Hide (badge)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="625"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="642"/>
         <source>Pulse (badge)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="626"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="643"/>
         <source>Tint</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="627"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="644"/>
         <source>Dim</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="633"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="650"/>
         <source>Reorder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="635"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="652"/>
         <source>Expand (accordion)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="637"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="654"/>
         <source>Collapse (accordion)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="639"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="656"/>
         <source>Progress</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="641"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="658"/>
         <source>Zone Highlight</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="643"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="660"/>
         <source>Zone Highlight: Pop</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="645"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="662"/>
         <source>Zone Highlight: Border</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="647"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="664"/>
         <source>Zone Overlay: Layout-Switch Flash</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="649"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="666"/>
         <source>Cursor Hover</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="651"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="668"/>
         <source>Cursor Click</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="653"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="670"/>
         <source>Snap Into Zone (Fill Preview)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="657"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="674"/>
         <source>Snap Resize (Drag Preview)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8943,7 +8979,7 @@
         <translation type="vanished">Scrollen wird aktiviert, wenn weitere Zeilen vorhanden sind</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="534"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="543"/>
         <source>Preview Size</source>
         <translation>Vorschaugröße</translation>
     </message>
@@ -9149,7 +9185,7 @@ Seitenverhältnis: %3</translation>
         <translation>Zonen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="254"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="257"/>
         <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="87"/>
         <source>Display</source>
         <translation>Anzeige</translation>
@@ -9364,34 +9400,34 @@ Seitenverhältnis: %3</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="109"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="129"/>
         <source>Cannot modify sets while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="273"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="330"/>
         <source>Cannot save while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="420"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="488"/>
         <location filename="../src/settings/rulecontroller.cpp" line="151"/>
         <source>Discard already in flight.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="492"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="556"/>
         <source>Failed to restore %1 profile file(s). They remain pending.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="627"/>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="637"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="691"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="701"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller_shaders.cpp" line="179"/>
+        <location filename="../src/settings/animationspagecontroller_shaders.cpp" line="173"/>
         <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="100"/>
         <source>Could not create the user shader directory.</source>
         <translation type="unfinished"></translation>
@@ -9705,49 +9741,145 @@ Seitenverhältnis: %3</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="323"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="401"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="496"/>
         <source>A set named &quot;%1&quot; already exists.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="369"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="343"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="491"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="502"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="561"/>
         <source>Could not read the set &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="376"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="381"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="174"/>
+        <source>Could not back up the existing set, so it was left untouched.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="232"/>
+        <source>Could not write the set to disk.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="347"/>
+        <source>&quot;%1&quot; was written by a newer version of PlasmaZones.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="352"/>
+        <source>&quot;%1&quot; does not match this page.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="356"/>
+        <source>Could not apply &quot;%1&quot;.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="391"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="484"/>
+        <source>That name cannot be used. Try one with letters or numbers in it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="411"/>
+        <source>There is nothing to capture yet.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="452"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="460"/>
+        <source>Could not delete &quot;%1&quot;.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="477"/>
+        <source>A set needs a name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="536"/>
+        <source>Renamed the set, but the old file could not be removed. Delete it by hand from the sets folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="552"/>
+        <source>Could not write to that location.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="570"/>
         <source>Could not write to %1.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="402"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="591"/>
         <source>That file is not a readable set.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="406"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="595"/>
         <source>That set was written by a newer version of PlasmaZones.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="412"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="602"/>
+        <source>That set is empty.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/shadersetstore.cpp" line="608"/>
         <source>That set does not match this page.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="423"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="619"/>
         <source>That set has no usable name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="454"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="418"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="626"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="648"/>
         <source>Could not create the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="459"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="653"/>
         <source>Could not open the sets folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="112"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="174"/>
+        <source>A preset needs a name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="122"/>
+        <source>That name cannot be used for a preset.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="132"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="141"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="160"/>
+        <source>Could not save the preset &quot;%1&quot;.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="225"/>
+        <source>Could not find the preset &quot;%1&quot;.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="233"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="243"/>
+        <source>Could not delete the preset &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

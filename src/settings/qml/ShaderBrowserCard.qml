@@ -219,7 +219,7 @@ ItemDelegate {
                     text: root.usageChipTextFn(_usages.length)
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
-                    ToolTip.visible: hovered.hovered && _usages.length > 0
+                    ToolTip.visible: chipHover.hovered && _usages.length > 0
                     ToolTip.text: {
                         var names = [];
                         for (var i = 0; i < _usages.length; i++)
@@ -229,7 +229,7 @@ ItemDelegate {
                     ToolTip.delay: Kirigami.Units.toolTipDelay
 
                     HoverHandler {
-                        id: hovered
+                        id: chipHover
                     }
                 }
             }

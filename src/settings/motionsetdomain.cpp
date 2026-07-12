@@ -51,10 +51,23 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
 {
     using namespace PhosphorAnimation;
 
-    const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
-    const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
+    // The path taxonomy is fixed, so build it once rather than on every call
+    // (applySet runs this twice, via validate and again via apply).
+    static const QSet<QString> knownPathSet = [] {
+        const QStringList paths = ProfilePaths::allBuiltInPaths();
+        return QSet<QString>(paths.cbegin(), paths.cend());
+    }();
 
     staged->clear();
+    // Motion has no baseline: there is no global default profile to apply one
+    // to. A baseline-carrying file is a decoration set (or hand-edited), and
+    // accepting it would half-apply the set — apply drops the baseline, while
+    // the store still counts it, so the Active badge could never light up.
+    // Refuse it at the boundary instead.
+    if (ShaderSetStore::carriesBaseline(root)) {
+        qCWarning(lcConfig) << "motionset: rejecting a set that carries a baseline";
+        return false;
+    }
     const QJsonArray overrides = root.value(kOverridesKey).toArray();
     staged->reserve(overrides.size());
     for (const QJsonValue& v : overrides) {

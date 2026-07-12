@@ -64,7 +64,7 @@ ExpandableRowDelegate {
         Label {
             Layout.fillWidth: true
             text: row.modelData.description ?? ""
-            opacity: 0.7
+            color: Kirigami.Theme.disabledTextColor
             elide: Text.ElideRight
             visible: text.length > 0
         }
@@ -77,11 +77,13 @@ ExpandableRowDelegate {
     // filesystem cannot report would yield an invalid date, so render only a
     // valid one rather than printing "Invalid Date" at the user.
     Label {
+        id: modifiedStamp
+
         readonly property date modified: row.modelData.modified ?? new Date(NaN)
 
-        visible: !isNaN(modified.getTime())
+        visible: !isNaN(modifiedStamp.modified.getTime())
         Layout.alignment: Qt.AlignVCenter
-        text: visible ? i18n("Updated %1", modified.toLocaleString(Qt.locale(), Locale.ShortFormat)) : ""
+        text: modifiedStamp.visible ? i18n("Updated %1", modifiedStamp.modified.toLocaleString(Qt.locale(), Locale.ShortFormat)) : ""
         color: Kirigami.Theme.disabledTextColor
         font: Kirigami.Theme.smallFont
     }
@@ -146,13 +148,18 @@ ExpandableRowDelegate {
     }
 
     ToolButton {
+        id: overflowButton
+
         icon.name: "overflow-menu"
         display: AbstractButton.IconOnly
         Layout.alignment: Qt.AlignVCenter
         ToolTip.text: i18n("More actions")
         ToolTip.visible: hovered
         Accessible.name: i18n("More actions for set %1", row.setName)
-        onClicked: overflowMenu.popup()
+        // Anchored, not popup()-at-cursor: a keyboard activation has no
+        // meaningful cursor position and would drop the menu wherever the
+        // pointer happened to rest.
+        onClicked: overflowMenu.popup(overflowButton, 0, overflowButton.height)
     }
 
     // ── Menu + dialogs ──────────────────────────────────────────────────
@@ -200,7 +207,9 @@ ExpandableRowDelegate {
         subtitle: row.applySubtitleFor(row.setName)
         standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
         onApplied: {
-            row.bridge.applySet(row.setName);
+            if (row.bridge)
+                row.bridge.applySet(row.setName);
+
             applyConfirm.close();
         }
     }
@@ -211,10 +220,12 @@ ExpandableRowDelegate {
         id: deleteConfirm
 
         title: i18n("Delete set?")
-        subtitle: i18n("\"%1\" will be permanently removed.", row.setName)
+        subtitle: i18n("“%1” will be permanently removed.", row.setName)
         standardButtons: Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
         onDiscarded: {
-            row.bridge.removeSet(row.setName);
+            if (row.bridge)
+                row.bridge.removeSet(row.setName);
+
             deleteConfirm.close();
         }
     }
@@ -226,11 +237,23 @@ ExpandableRowDelegate {
 
         title: i18n("Edit set")
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
-        /// True when the typed name can actually be saved. Gates BOTH the Ok
-        /// button and the Enter key: Kirigami.Dialog.accept() does not consult
-        /// the button box, so an Enter on an empty field would otherwise close
-        /// the dialog and swallow the user's description edit with it.
-        readonly property bool nameUsable: editNameField.text.trim().length > 0
+        /// True when the typed name is one updateSet will actually accept. Gates
+        /// BOTH the Ok button and the Enter key: Ok is AcceptRole and
+        /// Kirigami.Dialog.accept() does not consult the button box, so a name
+        /// the store then refuses would close the dialog anyway and swallow the
+        /// user's description edit along with it. The store refuses an empty
+        /// name, a name that slugifies to nothing, and a collision with another
+        /// set, so all three have to be caught here.
+        readonly property bool nameUsable: {
+            const typed = editNameField.text.trim();
+            if (typed.length === 0 || !row.bridge)
+                return false;
+
+            // Keeping the row's own name is a description-only edit, not a
+            // collision with itself.
+            const taken = row.bridge.existingSetName(typed);
+            return taken.length === 0 || taken === row.setName;
+        }
 
         // Installed on open, not at construction: writing into the closed
         // popup's disabled button subtree makes Qt log a binding-loop warning
@@ -241,7 +264,10 @@ ExpandableRowDelegate {
             });
             editNameField.forceActiveFocus();
         }
-        onAccepted: row.bridge.updateSet(row.setName, editNameField.text.trim(), editDescField.text.trim())
+        onAccepted: {
+            if (row.bridge)
+                row.bridge.updateSet(row.setName, editNameField.text.trim(), editDescField.text.trim());
+        }
 
         ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
@@ -275,6 +301,9 @@ ExpandableRowDelegate {
         nameFilters: [i18n("PlasmaZones Set (*.json)"), i18n("All files (*)")]
         defaultSuffix: "json"
         fileMode: FileDialog.SaveFile
-        onAccepted: row.bridge.exportSet(row.setName, settingsController.urlToLocalFile(selectedFile))
+        onAccepted: {
+            if (row.bridge)
+                row.bridge.exportSet(row.setName, settingsController.urlToLocalFile(selectedFile));
+        }
     }
 }

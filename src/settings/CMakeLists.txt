@@ -394,6 +394,7 @@ qt_add_qml_module(plasmazones-settings
         # Shared drag-and-drop import band (shader packs, layouts /
         # algorithms, sets).
         qml/FileDropZone.qml
+        qml/ImportDropCard.qml
         # Shared row badge (neutral metadata + highlighted state).
         qml/MetadataChip.qml
         qml/FilterMenuButton.qml

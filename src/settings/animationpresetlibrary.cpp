@@ -98,7 +98,7 @@ QVariantList AnimationPresetLibrary::userPresets() const
             continue;
 
         QVariantMap entry = obj.toVariantMap();
-        entry.insert(QStringLiteral("name"), name);
+        entry.insert(presetlib_detail::JsonNameKey, name);
         result.append(entry);
     }
     return result;
@@ -152,14 +152,11 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
     if (!written) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: could not write" << filePath << ":" << file.errorString();
         // The snapshot above staged a file the write never touched. Un-stage it,
-        // or the page reports an unsaved change with nothing to discard. Only
-        // the snapshot moves the dirty state, so with no snapshot wired there is
-        // nothing to roll back or re-notify about.
-        if (m_snapshot) {
-            if (m_rollback)
-                m_rollback(filePath);
-            Q_EMIT pendingChangesChanged();
-        }
+        // or the page reports an unsaved change with nothing to discard. The
+        // rollback owns the dirty-state signal and raises it only when it really
+        // dropped something, so this must not emit as well.
+        if (m_rollback)
+            m_rollback(filePath);
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset \"%1\".").arg(name));
         return false;
     }
@@ -239,12 +236,10 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
     if (!file.remove()) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: could not remove" << filePath;
         // The snapshot above staged a file the delete never touched. Un-stage
-        // it, or the page reports an unsaved change with nothing to discard.
-        if (m_snapshot) {
-            if (m_rollback)
-                m_rollback(filePath);
-            Q_EMIT pendingChangesChanged();
-        }
+        // it, or the page reports an unsaved change with nothing to discard. The
+        // rollback owns the dirty-state signal (see addUserPreset).
+        if (m_rollback)
+            m_rollback(filePath);
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset \"%1\".").arg(name));
         return false;
     }

@@ -257,18 +257,14 @@ public:
     /// per-event shader-param editor.
     Q_INVOKABLE QVariantList shaderParameters(const QString& effectId) const;
 
-    /// XDG-writable user shader directory path (no side effects). Use
-    /// The directory is created on demand by openUserShaderDirectory() and by
-    /// the pack installer, so callers that only need the path get it here
-    /// without a filesystem write.
+    /// XDG-writable user shader directory path (no side effects). The directory
+    /// is created on demand by openUserShaderDirectory() and by the pack
+    /// installer, so a caller that only needs the path pays for no filesystem
+    /// write.
     /// Internal helper — not exposed to QML; the page surfaces an
     /// "Open Folder" button that calls `openUserShaderDirectory()`
     /// directly rather than displaying the path as a label.
     QString userShaderDirectoryPath() const;
-
-    /// Ensure the user shader directory exists; create it if missing.
-    /// @return true when the directory exists (newly created or already
-    /// present).
 
     /// Open the user shader directory in the system file manager,
     /// creating it first if missing.
@@ -403,7 +399,16 @@ public:
     /// own `Settings::load()`.)
     /// Failures (e.g. permission errors during file restore) are
     /// retained in the snapshot so a subsequent revert can retry.
-    void revertPending();
+    /// @return false when the revert was REFUSED outright and nothing was
+    /// restored, which happens only while an asyncRevertPending() worker holds
+    /// the snapshot map. A caller that goes on to declare the state clean (an
+    /// import, a defaults reset) must check this, or it will strand pre-edit
+    /// snapshots that a later Discard writes back over the new state. The
+    /// Discard path itself may ignore it: ApplicationController::discardAllAsync
+    /// dispatches this page's async revert before the settings domain calls
+    /// load(), so hitting the guard there means the async worker already owns
+    /// the restore.
+    bool revertPending();
 
     /// Async sibling of revertPending — runs the QSaveFile restore
     /// loop on a QtConcurrent worker so a Discard with dozens of
@@ -441,7 +446,9 @@ private:
     /// never landed. No-op unless the file on disk still matches the staged
     /// content exactly, so a snapshot guarding an earlier successful edit is
     /// left alone. Handed to the sub-services as a callable.
-    void dropFileSnapshotIfUnchanged(const QString& filePath);
+    /// @return true when the entry was dropped (and pendingChangesChanged was
+    /// emitted if that flipped hasPendingChanges()).
+    bool dropFileSnapshotIfUnchanged(const QString& filePath);
 
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;

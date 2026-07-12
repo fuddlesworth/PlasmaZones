@@ -34,16 +34,6 @@ constexpr QLatin1String kOverridesKey{"overrides"};
 constexpr QLatin1String kPathKey{"path"};
 constexpr QLatin1String kProfileKey{"profile"};
 
-/// True when @p root carries a real baseline. An EMPTY `"baseline": {}` is not
-/// one: the snapshot side omits an empty baseline (it carries no engaged field),
-/// so treating it as real would advertise coverage a set does not have and, on
-/// apply, overwrite the user's baseline with an all-inherit profile. Kept here
-/// as the single definition both the store and the domain validators use.
-bool carriesBaseline(const QJsonObject& root)
-{
-    return !root.value(kBaselineKey).toObject().isEmpty();
-}
-
 /// Root section of a dotted path ("window.appearance.open" → "window").
 /// Drives the coverage chips; QML maps the token to a translated label.
 QString rootSection(const QString& path)
@@ -72,7 +62,7 @@ QStringList coverageSections(const QJsonObject& root)
 /// the instant after the user applied it.
 bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live)
 {
-    const bool hasBaseline = carriesBaseline(set);
+    const bool hasBaseline = ShaderSetStore::carriesBaseline(set);
     const QJsonArray setOverrides = set.value(kOverridesKey).toArray();
     // An empty set covers nothing; it is never "active".
     if (!hasBaseline && setOverrides.isEmpty()) {
@@ -100,6 +90,11 @@ bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live)
 }
 
 } // namespace
+
+bool ShaderSetStore::carriesBaseline(const QJsonObject& root)
+{
+    return !root.value(kBaselineKey).toObject().isEmpty();
+}
 
 ShaderSetStore::ShaderSetStore(Config config, QObject* parent)
     : QObject(parent)
@@ -190,6 +185,13 @@ bool ShaderSetStore::readSetFile(const QString& filePath, QJsonObject* out) cons
     // importSet hands this a user-chosen path, so cap the read before it
     // happens rather than slurping an arbitrarily large file into memory only
     // for the JSON parser to reject it.
+    // The size cap only means something for a regular file: a fifo, a device, or
+    // a procfs entry all report size 0 and would slip past it into an unbounded
+    // readAll(). importSet takes a user-chosen path, so this is a real boundary.
+    if (!QFileInfo(filePath).isFile()) {
+        qCWarning(lcConfig) << "ShaderSetStore: refusing to read a non-regular file" << filePath;
+        return false;
+    }
     if (f.size() > kMaxSetFileBytes) {
         qCWarning(lcConfig) << "ShaderSetStore: set file" << filePath << "is" << f.size() << "bytes, over the"
                             << kMaxSetFileBytes << "byte cap — refusing";
@@ -230,9 +232,10 @@ bool ShaderSetStore::writeSetFile(const QString& filePath, const QJsonObject& ro
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not write the set to disk."));
         // snapshotFile() staged this path for Discard, but the write never
         // landed, so the file is untouched. Un-stage it rather than leave the
-        // page claiming an unsaved change that does not exist.
+        // page claiming an unsaved change that does not exist. The rollback hook
+        // emits the dirty-state change itself, and only when it really dropped
+        // something, so there is no notifyPendingChanges() here.
         rollbackSnapshot(filePath);
-        notifyPendingChanges();
         return false;
     }
     return true;
@@ -296,7 +299,7 @@ QVariantList ShaderSetStore::availableSets() const
             continue;
         }
         const QStringList sections = coverageSections(root);
-        const bool hasBaseline = carriesBaseline(root);
+        const bool hasBaseline = ShaderSetStore::carriesBaseline(root);
 
         // A set file whose stored name is missing or unslugifiable would list a
         // row that every mutator then refuses (they all resolve name -> path),
@@ -404,7 +407,7 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& descri
     // to stage). Refuse the save so the user isn't left with a do-nothing set
     // on disk. Checked before mkpath so a rejected save leaves no empty
     // directory behind.
-    if (root.value(kOverridesKey).toArray().isEmpty() && !carriesBaseline(root)) {
+    if (root.value(kOverridesKey).toArray().isEmpty() && !ShaderSetStore::carriesBaseline(root)) {
         Q_EMIT toastRequested(PhosphorI18n::tr("There is nothing to capture yet."));
         return false;
     }
@@ -455,9 +458,9 @@ bool ShaderSetStore::removeSet(const QString& name)
     if (!file.remove()) {
         qCWarning(lcConfig) << "ShaderSetStore::removeSet: could not remove" << filePath;
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete \"%1\".").arg(name));
-        // The snapshot is already staged, so the domain's dirty state moved
-        // even though the delete failed. Re-notify so the page can re-evaluate.
-        notifyPendingChanges();
+        // The delete never landed, so the file is untouched and the snapshot it
+        // staged has to go back. rollbackSnapshot owns the dirty-state signal.
+        rollbackSnapshot(filePath);
         return false;
     }
     Q_EMIT setsChanged();
@@ -512,10 +515,15 @@ bool ShaderSetStore::updateSet(const QString& oldName, const QString& newName, c
         return false;
     }
     if (newPath != oldPath && !snapshotFile(newPath)) {
+        // oldPath is staged for a rename that is not going to happen.
+        rollbackSnapshot(oldPath);
         return false;
     }
 
     if (!writeSetFile(newPath, root)) {
+        // writeSetFile rolled back newPath. oldPath is this function's own
+        // staging and nothing touched it either.
+        rollbackSnapshot(oldPath);
         return false;
     }
     // Only drop the old file once the new one is safely committed. If the
@@ -590,7 +598,7 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
     // A set carrying nothing would import as a row that applySet then refuses.
     // Name it for what it is rather than falling through to the taxonomy
     // message below, which would misdescribe an empty file as a foreign one.
-    if (root.value(kOverridesKey).toArray().isEmpty() && !carriesBaseline(root)) {
+    if (root.value(kOverridesKey).toArray().isEmpty() && !ShaderSetStore::carriesBaseline(root)) {
         Q_EMIT toastRequested(PhosphorI18n::tr("That set is empty."));
         return false;
     }

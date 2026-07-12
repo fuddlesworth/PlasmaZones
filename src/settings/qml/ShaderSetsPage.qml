@@ -194,108 +194,23 @@ SettingsFlickable {
 
         // ── Import card — the User shaders card's twin: description, drop
         //    zone, result banner, then the explicit sources right-aligned.
-        SettingsCard {
-            Layout.fillWidth: true
+        ImportDropCard {
+            id: importCard
+
             headerText: i18n("User sets")
             searchAnchor: root.importAnchor
-            collapsible: true
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                Label {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    text: root.importDescription
-                    wrapMode: Text.WordWrap
-                    color: Kirigami.Theme.disabledTextColor
-                }
-
-                FileDropZone {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    idleText: i18nc("@info drop-zone idle label", "Drop a set file here to import it")
-                    hoverText: i18nc("@info drop-zone hover label", "Release to import the set")
-                    // The store validates the payload against this domain's
-                    // taxonomy and toasts the concrete refusal reason.
-                    onFileDropped: function (url) {
-                        if (root.bridge)
-                            importResult.show(root.bridge.importSet(url), url);
-                    }
-                }
-
-                Kirigami.InlineMessage {
-                    id: importResult
-
-                    function show(ok, url) {
-                        // A dropped URL is percent-encoded, so decode before
-                        // showing the name. Fall back to a generic noun rather
-                        // than announcing an empty pair of quotes.
-                        let basename = "";
-                        try {
-                            basename = decodeURIComponent(String(url).split("/").pop());
-                        } catch (e) {
-                            basename = String(url).split("/").pop();
-                        }
-                        if (basename.length === 0)
-                            basename = i18nc("@item fallback name for a set file with no usable name", "the file");
-
-                        if (ok) {
-                            type = Kirigami.MessageType.Positive;
-                            text = i18nc("@info set import success", "Imported set \"%1\".", basename);
-                        } else {
-                            type = Kirigami.MessageType.Error;
-                            text = i18nc("@info set import failure", "Could not import \"%1\". The file must be a set saved from this page.", basename);
-                        }
-                        visible = true;
-                        autoHideTimer.restart();
-                    }
-
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    visible: false
-                    showCloseButton: true
-
-                    Timer {
-                        id: autoHideTimer
-
-                        // Long enough to read the result without leaving a
-                        // stale banner pinned to the card.
-                        interval: Kirigami.Units.humanMoment * 3
-                        onTriggered: importResult.visible = false
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    Button {
-                        text: i18n("Import…")
-                        icon.name: "document-import"
-                        flat: true
-                        Accessible.name: i18n("Import a set from a file")
-                        onClicked: importDialog.open()
-                    }
-
-                    Button {
-                        text: i18n("Open Folder")
-                        icon.name: "folder-open"
-                        flat: true
-                        Accessible.name: i18n("Open the sets folder")
-                        onClicked: if (root.bridge)
-                            root.bridge.openSetsDirectory()
-                    }
-                }
-            }
+            description: root.importDescription
+            idleText: i18nc("@info drop-zone idle label", "Drop a set file here to import it")
+            hoverText: i18nc("@info drop-zone hover label", "Release to import the set")
+            // The store validates the payload against this domain's taxonomy and
+            // toasts the concrete refusal reason.
+            importFn: url => root.bridge ? root.bridge.importSet(url) : false
+            openImportDialogFn: () => importDialog.open()
+            openFolderFn: root.bridge ? () => root.bridge.openSetsDirectory() : null
+            importButtonAccessibleName: i18n("Import a set from a file")
+            openFolderAccessibleName: i18n("Open the sets folder")
+            successTextFn: name => i18nc("@info set import success", "Imported set “%1”.", name)
+            failureTextFn: name => i18nc("@info set import failure", "Could not import “%1”. The file must be a set saved from this page.", name)
         }
 
         SettingsCard {
@@ -344,7 +259,7 @@ SettingsFlickable {
         property string takenName: ""
 
         title: i18n("Replace set?")
-        subtitle: i18n("\"%1\" already exists. Saving replaces what it currently holds.", replaceConfirm.takenName)
+        subtitle: i18n("“%1” already exists. Saving replaces what it currently holds.", replaceConfirm.takenName)
         standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
         onApplied: {
             root._save(true);
@@ -363,7 +278,7 @@ SettingsFlickable {
                 return;
 
             const path = settingsController.urlToLocalFile(selectedFile);
-            importResult.show(root.bridge.importSet(path), path);
+            importCard.showResult(root.bridge.importSet(path), path);
         }
     }
 }

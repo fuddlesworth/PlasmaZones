@@ -103,6 +103,13 @@ public:
 
     explicit ShaderSetStore(Config config, QObject* parent = nullptr);
 
+    /// True when @p root carries a real baseline. An EMPTY `"baseline": {}` is
+    /// NOT one: the snapshot side omits an empty baseline because it engages no
+    /// field, so treating one from a hand-edited or foreign file as real would
+    /// apply an all-inherit profile over whatever the user had. The single
+    /// definition the store and every domain validator share.
+    static bool carriesBaseline(const QJsonObject& root);
+
     /// Saved sets, one row per file:
     /// `{ name, description, slug, coverage: [section…], coverageCount,
     ///    hasBaseline, active, modified }`

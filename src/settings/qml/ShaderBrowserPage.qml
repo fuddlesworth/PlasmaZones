@@ -434,105 +434,17 @@ SettingsFlickable {
             text: root.infoBannerText
         }
 
-        SettingsCard {
-            Layout.fillWidth: true
+        ImportDropCard {
             headerText: i18n("User shaders")
-            collapsible: true
             searchAnchor: "userShaders"
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                Label {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    text: root.userShadersDescription
-                    wrapMode: Text.WordWrap
-                    color: Kirigami.Theme.disabledTextColor
-                }
-
-                FileDropZone {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    Layout.preferredHeight: Kirigami.Units.gridUnit * 5
-                    idleText: root.dropZoneIdleText
-                    hoverText: root.dropZoneHoverText
-                    idleIcon: "folder-download"
-                    hoverIcon: "folder-add"
-                    iconSize: Kirigami.Units.iconSizes.large
-                    onFileDropped: function (url) {
-                        var ok = root.bridge ? root.bridge.installShaderPack(url) : false;
-                        installResult.show(ok, url);
-                    }
-                }
-
-                Kirigami.InlineMessage {
-                    id: installResult
-
-                    function show(ok, url) {
-                        // A dropped URL is percent-encoded, so decode before
-                        // showing the name ("My%20Pack" is not what the user
-                        // called it).
-                        // Some drag sources hand over a directory URL with a
-                        // trailing slash, which would split to an empty tail.
-                        const trimmed = String(url).replace(/\/+$/, "");
-                        let basename = "";
-                        try {
-                            basename = decodeURIComponent(trimmed.split("/").pop());
-                        } catch (e) {
-                            basename = trimmed.split("/").pop();
-                        }
-                        if (basename.length === 0)
-                            basename = trimmed;
-
-                        if (ok) {
-                            type = Kirigami.MessageType.Positive;
-                            text = i18nc("@info shader install success", "Installed shader pack “%1”.", basename);
-                        } else {
-                            type = Kirigami.MessageType.Error;
-                            text = i18nc("@info shader install failure", "Could not install “%1”. The folder must contain a metadata.json and not collide with an existing pack.", basename);
-                        }
-                        visible = true;
-                        autoHideTimer.restart();
-                    }
-
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    visible: false
-                    showCloseButton: true
-
-                    Timer {
-                        id: autoHideTimer
-
-                        interval: 6000
-                        onTriggered: installResult.visible = false
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    Button {
-                        text: i18n("Open Folder")
-                        icon.name: "folder-open"
-                        flat: true
-                        Accessible.name: i18n("Open user shader directory")
-                        onClicked: {
-                            if (root.bridge)
-                                root.bridge.openUserShaderDirectory();
-                        }
-                    }
-                }
-            }
+            description: root.userShadersDescription
+            idleText: root.dropZoneIdleText
+            hoverText: root.dropZoneHoverText
+            importFn: url => root.bridge ? root.bridge.installShaderPack(url) : false
+            openFolderFn: root.bridge ? () => root.bridge.openUserShaderDirectory() : null
+            openFolderAccessibleName: i18n("Open user shader directory")
+            successTextFn: name => i18nc("@info shader install success", "Installed shader pack “%1”.", name)
+            failureTextFn: name => i18nc("@info shader install failure", "Could not install “%1”. The folder must contain a metadata.json and not collide with an existing pack.", name)
         }
 
         // ── Search row ──────────────────────────────────────────────────
@@ -623,10 +535,13 @@ SettingsFlickable {
             groupByIndex: root.groupByIndex
             sortByIndex: root.sortByIndex
             sortAscending: root.sortAscending
+            // Qualified deliberately: `root` carries identically-named
+            // groupByIndex / sortByIndex / sortAscending properties, and reading
+            // those here instead of the bar's would be a silent no-op.
             onChanged: {
-                root._preferredGroupId = (root._groupOptions[groupByIndex] || root._groupOptions[0]).id;
-                root._preferredSortId = (root._sortOptions[sortByIndex] || root._sortOptions[0]).id;
-                root.sortAscending = sortAscending;
+                root._preferredGroupId = (root._groupOptions[groupSortBar.groupByIndex] || root._groupOptions[0]).id;
+                root._preferredSortId = (root._sortOptions[groupSortBar.sortByIndex] || root._sortOptions[0]).id;
+                root.sortAscending = groupSortBar.sortAscending;
                 root._savePrefs();
             }
         }

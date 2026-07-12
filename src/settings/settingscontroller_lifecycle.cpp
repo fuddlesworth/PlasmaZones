@@ -256,8 +256,11 @@ void SettingsController::defaults()
     // per-event JSON files are a separate concern — reset() doesn't
     // touch them, and the user would need a dedicated "reset all
     // animation customizations" entry point to clear those).
-    if (m_animationsPage) {
-        m_animationsPage->revertPending();
+    if (m_animationsPage && !m_animationsPage->revertPending()) {
+        // Refused because an async discard is still in flight. The reset leaves
+        // the per-event override files as they are, so say so rather than
+        // reporting defaults that are only half applied.
+        qCWarning(lcConfig) << "defaults: animation snapshots could not be reverted; a discard is in flight";
     }
 
     // Refresh screen list — symmetric with load(), which calls this

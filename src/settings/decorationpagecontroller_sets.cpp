@@ -60,11 +60,7 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* has
     using PhosphorSurfaceShaders::DecorationProfile;
 
     staged->clear();
-    // An EMPTY baseline object is not a baseline. The snapshot side omits an
-    // empty one (it carries no engaged field), so treating `"baseline": {}`
-    // from a hand-edited or foreign file as a real baseline would apply an
-    // all-inherit profile over whatever the user had — a silent wipe.
-    *hasBaseline = !root.value(kBaselineKey).toObject().isEmpty();
+    *hasBaseline = ShaderSetStore::carriesBaseline(root);
     const QJsonArray overrides = root.value(kOverridesKey).toArray();
     staged->reserve(overrides.size());
     for (const QJsonValue& v : overrides) {
@@ -81,11 +77,17 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* has
             qCWarning(lcConfig) << "decorationset: rejecting unknown surface path" << path;
             return false;
         }
-        if (!entry.value(kProfileKey).isObject()) {
-            qCWarning(lcConfig) << "decorationset: missing profile object for" << path;
+        const QJsonObject profile = entry.value(kProfileKey).toObject();
+        // Same rule as the baseline above, for the same reason: an empty profile
+        // engages no field. The snapshot side never emits one, so an empty
+        // profile from a hand-edited or foreign file would stage an all-inherit
+        // override that makes the surface READ as overridden while changing
+        // nothing the user can see.
+        if (!entry.value(kProfileKey).isObject() || profile.isEmpty()) {
+            qCWarning(lcConfig) << "decorationset: missing or empty profile object for" << path;
             return false;
         }
-        staged->push_back({path, DecorationProfile::fromJson(entry.value(kProfileKey).toObject())});
+        staged->push_back({path, DecorationProfile::fromJson(profile)});
     }
     return !staged->isEmpty() || *hasBaseline;
 }

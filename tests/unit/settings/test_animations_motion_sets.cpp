@@ -515,8 +515,12 @@ private Q_SLOTS:
         QVERIFY(QFileInfo(setPath).isDir());
 
         QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
+        // A directory is not a regular file, so the snapshot refuses at that
+        // gate. The ignoreMessage pair pins the branch: an unmatched expectation
+        // fails the test, so neither the missing-file path nor an
+        // already-snapshotted early return can satisfy this.
         QTest::ignoreMessage(QtWarningMsg,
-                             QRegularExpression(QStringLiteral("snapshotFileIfFirst: cannot read existing file")));
+                             QRegularExpression(QStringLiteral("snapshotFileIfFirst: refusing to snapshot")));
         QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing to write")));
         QVERIFY2(!sets->removeSet(QStringLiteral("Precious")),
                  "a delete must be refused when the pre-edit content cannot be captured");
@@ -596,6 +600,11 @@ private Q_SLOTS:
                  "an update must be refused mid-discard");
         QVERIFY2(!sets->importSet(exported), "an import must be refused mid-discard");
         QCOMPARE(toastSpy.count(), 5); // each refusal carries its reason
+        // Pin the REASON, not just the count. The worker is rewriting "Before"
+        // while these run, so a read or missing-file refusal would produce the
+        // same false-plus-one-toast shape. Only the guard says this.
+        for (const QList<QVariant>& args : toastSpy)
+            QCOMPARE(args.first().toString(), PhosphorI18n::tr("Cannot modify sets while a discard is in progress."));
 
         // Let the worker finish before reading the dir back — it is rewriting
         // the same tree underneath us.
