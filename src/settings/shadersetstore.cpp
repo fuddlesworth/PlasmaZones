@@ -34,6 +34,16 @@ constexpr QLatin1String kOverridesKey{"overrides"};
 constexpr QLatin1String kPathKey{"path"};
 constexpr QLatin1String kProfileKey{"profile"};
 
+/// True when @p root carries a real baseline. An EMPTY `"baseline": {}` is not
+/// one: the snapshot side omits an empty baseline (it carries no engaged field),
+/// so treating it as real would advertise coverage a set does not have and, on
+/// apply, overwrite the user's baseline with an all-inherit profile. Kept here
+/// as the single definition both the store and the domain validators use.
+bool carriesBaseline(const QJsonObject& root)
+{
+    return !root.value(kBaselineKey).toObject().isEmpty();
+}
+
 /// Root section of a dotted path ("window.appearance.open" → "window").
 /// Drives the coverage chips; QML maps the token to a translated label.
 QString rootSection(const QString& path)
@@ -62,7 +72,7 @@ QStringList coverageSections(const QJsonObject& root)
 /// the instant after the user applied it.
 bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live)
 {
-    const bool hasBaseline = set.value(kBaselineKey).isObject();
+    const bool hasBaseline = carriesBaseline(set);
     const QJsonArray setOverrides = set.value(kOverridesKey).toArray();
     // An empty set covers nothing; it is never "active".
     if (!hasBaseline && setOverrides.isEmpty()) {
@@ -113,7 +123,11 @@ QString ShaderSetStore::setsDirectory() const
 
 QString ShaderSetStore::setFilePath(const QString& setName) const
 {
-    return animfileutil::jsonFilePath(setsDirectory(), animfileutil::slugify(setName));
+    const QString dir = setsDirectory();
+    if (dir.isEmpty()) {
+        return QString(); // an unconfigured store must not resolve to "/<slug>.json"
+    }
+    return animfileutil::jsonFilePath(dir, animfileutil::slugify(setName));
 }
 
 void ShaderSetStore::notifyLiveStateChanged()
@@ -271,10 +285,19 @@ QVariantList ShaderSetStore::availableSets() const
             continue;
         }
         const QStringList sections = coverageSections(root);
-        const bool hasBaseline = root.value(kBaselineKey).isObject();
+        const bool hasBaseline = carriesBaseline(root);
+
+        // A set file whose stored name is missing or unslugifiable would list a
+        // row that every mutator then refuses (they all resolve name -> path),
+        // leaving the user unable to even delete it. Fall back to the filename,
+        // which is by construction a valid slug — the same fallback importSet uses.
+        QString rowName = root.value(kNameKey).toString();
+        if (rowName.isEmpty() || animfileutil::slugify(rowName).isEmpty()) {
+            rowName = info.completeBaseName();
+        }
 
         QVariantMap row;
-        row.insert(QLatin1String("name"), root.value(kNameKey).toString());
+        row.insert(QLatin1String("name"), rowName);
         row.insert(QLatin1String("description"), root.value(kDescriptionKey).toString());
         row.insert(QLatin1String("slug"), info.completeBaseName());
         row.insert(QLatin1String("coverage"), sections);
@@ -370,7 +393,7 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& descri
     // to stage). Refuse the save so the user isn't left with a do-nothing set
     // on disk. Checked before mkpath so a rejected save leaves no empty
     // directory behind.
-    if (root.value(kOverridesKey).toArray().isEmpty() && !root.value(kBaselineKey).isObject()) {
+    if (root.value(kOverridesKey).toArray().isEmpty() && !carriesBaseline(root)) {
         Q_EMIT toastRequested(PhosphorI18n::tr("There is nothing to capture yet."));
         return false;
     }
@@ -433,7 +456,11 @@ bool ShaderSetStore::removeSet(const QString& name)
 
 bool ShaderSetStore::updateSet(const QString& oldName, const QString& newName, const QString& description)
 {
-    if (oldName.isEmpty() || newName.isEmpty() || !mutationAllowed()) {
+    if (oldName.isEmpty() || !mutationAllowed()) {
+        return false;
+    }
+    if (newName.isEmpty()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("A set needs a name."));
         return false;
     }
     const QString oldPath = setFilePath(oldName);
@@ -498,7 +525,12 @@ bool ShaderSetStore::updateSet(const QString& oldName, const QString& newName, c
 
 bool ShaderSetStore::exportSet(const QString& name, const QString& destLocalPath)
 {
-    if (name.isEmpty() || destLocalPath.isEmpty()) {
+    if (name.isEmpty()) {
+        return false;
+    }
+    if (destLocalPath.isEmpty()) {
+        // urlToLocalFile yields an empty string for a non-local save target.
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not write to that location."));
         return false;
     }
     const QString sourcePath = setFilePath(name);
@@ -547,7 +579,7 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
     // A set carrying nothing would import as a row that applySet then refuses.
     // Name it for what it is rather than falling through to the taxonomy
     // message below, which would misdescribe an empty file as a foreign one.
-    if (root.value(kOverridesKey).toArray().isEmpty() && !root.value(kBaselineKey).isObject()) {
+    if (root.value(kOverridesKey).toArray().isEmpty() && !carriesBaseline(root)) {
         Q_EMIT toastRequested(PhosphorI18n::tr("That set is empty."));
         return false;
     }

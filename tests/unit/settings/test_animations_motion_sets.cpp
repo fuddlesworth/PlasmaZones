@@ -44,6 +44,7 @@
 #include <QStandardPaths>
 #include <QUrl>
 
+#include "phosphor_i18n.h"
 #include "settings/animationspagecontroller.h"
 #include "settings/shadersetstore.h"
 #include "../helpers/SetRowHelpers.h"
@@ -56,9 +57,11 @@ class TestAnimationsMotionSets : public QObject
 
 private Q_SLOTS:
 
-    /// Every test overrides the profiles dir to a QTemporaryDir, but the
-    /// motion-sets dir is derived from GenericDataLocation. Redirect it so a
-    /// test can never write into the user's real ~/.local/share.
+    /// Every test here overrides the profiles dir to a QTemporaryDir, and the
+    /// motion-sets dir hangs off that override, so nothing in this file reaches
+    /// the real data location today. The redirect is a net for a future test
+    /// that forgets setUserProfilesDirOverride: without it, that test would
+    /// write into the user's real ~/.local/share.
     void initTestCase()
     {
         QStandardPaths::setTestModeEnabled(true);
@@ -517,7 +520,12 @@ private Q_SLOTS:
         QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing to write")));
         QVERIFY2(!sets->removeSet(QStringLiteral("Precious")),
                  "a delete must be refused when the pre-edit content cannot be captured");
+        // Assert WHICH refusal fired. A missing-file refusal would also return
+        // false and toast once, so the count alone cannot tell the two apart —
+        // and the point of this test is the snapshot guard specifically.
         QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(),
+                 PhosphorI18n::tr("Could not back up the existing set, so it was left untouched."));
 
         // Nothing was destroyed: the path is untouched.
         QVERIFY(QFileInfo(setPath).isDir());

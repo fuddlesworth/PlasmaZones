@@ -465,12 +465,17 @@ private Q_SLOTS:
         QSignalSpy missingSpy(sets, &ShaderSetStore::toastRequested);
         QVERIFY(!sets->applySet(QStringLiteral("nonexistent")));
         QCOMPARE(missingSpy.count(), 1);
+        QCOMPARE(missingSpy.first().first().toString(),
+                 PhosphorI18n::tr("Could not read the set \"%1\".").arg(QStringLiteral("nonexistent")));
 
         // Newer format version.
         writeSetFile(decorationSetsDir() + QStringLiteral("/newer.json"), validSetPayload(QStringLiteral("newer"), 2));
         QSignalSpy versionSpy(sets, &ShaderSetStore::toastRequested);
         QVERIFY(!sets->applySet(QStringLiteral("newer")));
         QCOMPARE(versionSpy.count(), 1);
+        QCOMPARE(
+            versionSpy.first().first().toString(),
+            PhosphorI18n::tr("\"%1\" was written by a newer version of PlasmaZones.").arg(QStringLiteral("newer")));
 
         // Foreign payload (an event path, not a decoration surface).
         QJsonObject entry;
@@ -484,6 +489,8 @@ private Q_SLOTS:
         QSignalSpy validateSpy(sets, &ShaderSetStore::toastRequested);
         QVERIFY(!sets->applySet(QStringLiteral("foreign")));
         QCOMPARE(validateSpy.count(), 1);
+        QCOMPARE(validateSpy.first().first().toString(),
+                 PhosphorI18n::tr("\"%1\" does not match this page.").arg(QStringLiteral("foreign")));
     }
 
     /// An import carrying no entries would land as a row that applySet then

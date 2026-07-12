@@ -133,6 +133,7 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
 
     connect(m_presets, &AnimationPresetLibrary::userPresetsChanged, this,
             &AnimationsPageController::userPresetsChanged);
+    connect(m_presets, &AnimationPresetLibrary::toastRequested, this, &AnimationsPageController::toastRequested);
     connect(m_presets, &AnimationPresetLibrary::pendingChangesChanged, this,
             &AnimationsPageController::pendingChangesChanged);
     connect(m_motionSets, &ShaderSetStore::pendingChangesChanged, this,

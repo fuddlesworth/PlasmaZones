@@ -37,15 +37,22 @@ public:
     bool addUserPreset(const QString& name, const QVariantMap& profileJson);
     bool removeUserPreset(const QString& name);
 
-    /// Absolute path the named preset serialises to. Empty when @p name
-    /// slugifies to an empty string.
-    QString presetFilePath(const QString& presetName) const;
-
 Q_SIGNALS:
     void userPresetsChanged();
     void pendingChangesChanged();
+    /// Message for the host page to surface. Every refusal path in the two
+    /// mutators emits one, so a rejected name or an unwritable directory
+    /// cannot fail silently with the dialog already closed.
+    void toastRequested(const QString& text);
 
 private:
+    /// Absolute path the named preset serialises to. Empty when @p name
+    /// slugifies to an empty string, or when the profiles directory is
+    /// unconfigured.
+    QString presetFilePath(const QString& presetName) const;
+    /// The profiles directory, or an empty string when no accessor is wired.
+    QString profilesDir() const;
+
     ProfilesDirFn m_profilesDir;
     SnapshotFn m_snapshot;
 };

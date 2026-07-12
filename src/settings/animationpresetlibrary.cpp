@@ -4,6 +4,8 @@
 #include "animationpresetlibrary.h"
 #include "animationfileutils.h"
 
+#include "../phosphor_i18n.h"
+
 #include "../core/logging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -34,7 +36,15 @@ AnimationPresetLibrary::AnimationPresetLibrary(ProfilesDirFn profilesDirFn, Snap
 
 QString AnimationPresetLibrary::presetFilePath(const QString& presetName) const
 {
-    return animfileutil::jsonFilePath(m_profilesDir(), animfileutil::slugify(presetName));
+    // m_profilesDir is injected, so treat an unset callable as an unconfigured
+    // library rather than dereferencing it. Every other reader goes through
+    // here or profilesDir() for the same reason.
+    return animfileutil::jsonFilePath(profilesDir(), animfileutil::slugify(presetName));
+}
+
+QString AnimationPresetLibrary::profilesDir() const
+{
+    return m_profilesDir ? m_profilesDir() : QString();
 }
 
 QVariantList AnimationPresetLibrary::userPresets() const
@@ -42,7 +52,7 @@ QVariantList AnimationPresetLibrary::userPresets() const
     using namespace PhosphorAnimation;
 
     QVariantList result;
-    QDir dir(m_profilesDir());
+    QDir dir(profilesDir());
     if (!dir.exists())
         return result;
 
@@ -96,33 +106,37 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
 {
     using namespace PhosphorAnimation;
 
-    if (name.isEmpty())
+    if (name.isEmpty()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("A preset needs a name."));
         return false;
+    }
 
     // Reject names that match a built-in event path — the file would
     // collide with an override slot. Check both the original name and
     // the slug because slugify lowercases.
     const QString slug = animfileutil::slugify(name);
-    if (slug.isEmpty())
-        return false;
     const QStringList builtInPaths = ProfilePaths::allBuiltInPaths();
-    if (builtInPaths.contains(name) || builtInPaths.contains(slug))
+    if (slug.isEmpty() || builtInPaths.contains(name) || builtInPaths.contains(slug)) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("That name cannot be used for a preset."));
         return false;
+    }
 
-    const QString dir = m_profilesDir ? m_profilesDir() : QString();
+    const QString dir = profilesDir();
     const QString filePath = animfileutil::jsonFilePath(dir, slug);
-    if (dir.isEmpty() || filePath.isEmpty())
-        return false;
     // mkpath AFTER the name checks above, so a refused write leaves no empty
     // profiles directory behind.
-    if (!QDir().mkpath(dir))
+    if (dir.isEmpty() || filePath.isEmpty() || !QDir().mkpath(dir)) {
+        qCWarning(lcConfig) << "AnimationPresetLibrary: no writable profiles directory for" << name;
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset \"%1\".").arg(name));
         return false;
+    }
 
     // A false return means the pre-edit content could not be captured. Writing
     // anyway would lose it for good, with Discard unable to restore.
     if (m_snapshot && !m_snapshot(filePath)) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: refusing to write" << filePath
                             << "— could not capture its pre-edit content";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset \"%1\".").arg(name));
         return false;
     }
 
@@ -137,8 +151,11 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
         qCWarning(lcConfig) << "AnimationPresetLibrary: could not write" << filePath << ":" << file.errorString();
         // The snapshot above already staged the pre-edit content, so the dirty
         // state moved even though the write did not. Re-notify, or the page
-        // keeps a stale flag.
-        Q_EMIT pendingChangesChanged();
+        // keeps a stale flag. Only the snapshot moves it, so with no snapshot
+        // callback wired there is nothing to re-notify about.
+        if (m_snapshot)
+            Q_EMIT pendingChangesChanged();
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset \"%1\".").arg(name));
         return false;
     }
 
@@ -151,8 +168,10 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
 {
     using namespace PhosphorAnimation;
 
-    if (name.isEmpty())
+    if (name.isEmpty()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("A preset needs a name."));
         return false;
+    }
 
     // Override files (those whose stem is a built-in path) are off-limits
     // to the preset CRUD surface. Skip them in the directory scan so the
@@ -177,7 +196,7 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
     }
 
     if (filePath.isEmpty()) {
-        QDir dir(m_profilesDir());
+        QDir dir(profilesDir());
         const auto entries = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files);
         for (const QFileInfo& info : entries) {
             // Skip override files outright — their stem is the path,
@@ -199,25 +218,28 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
         }
     }
 
-    if (filePath.isEmpty())
-        return false;
-
     QFile file(filePath);
-    if (!file.exists())
+    if (filePath.isEmpty() || !file.exists()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not find the preset \"%1\".").arg(name));
         return false;
+    }
     // A false return means the pre-edit content could not be captured. Writing
     // anyway would lose it for good, with Discard unable to restore.
     if (m_snapshot && !m_snapshot(filePath)) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: refusing to write" << filePath
                             << "— could not capture its pre-edit content";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset \"%1\".").arg(name));
         return false;
     }
     if (!file.remove()) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: could not remove" << filePath;
         // The snapshot above already staged the pre-edit content, so the dirty
         // state moved even though the delete did not. Re-notify, or the page
-        // keeps a stale flag.
-        Q_EMIT pendingChangesChanged();
+        // keeps a stale flag. Only the snapshot moves it, so with no snapshot
+        // callback wired there is nothing to re-notify about.
+        if (m_snapshot)
+            Q_EMIT pendingChangesChanged();
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset \"%1\".").arg(name));
         return false;
     }
 

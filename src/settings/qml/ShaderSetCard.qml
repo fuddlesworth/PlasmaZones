@@ -83,7 +83,7 @@ ExpandableRowDelegate {
         Layout.alignment: Qt.AlignVCenter
         text: visible ? i18n("Updated %1", modified.toLocaleString(Qt.locale(), Locale.ShortFormat)) : ""
         color: Kirigami.Theme.disabledTextColor
-        font.pointSize: Kirigami.Theme.smallFont.pointSize
+        font: Kirigami.Theme.smallFont
     }
 
     // ── Badge cluster: metadata (coverage chips → count), then state
@@ -226,14 +226,18 @@ ExpandableRowDelegate {
 
         title: i18n("Edit set")
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
-        // A set needs a name, so Ok stays disabled until there is one. Gating
-        // the button rather than no-oping on accept means an empty name cannot
-        // silently swallow the user's description edit too. Installed on open,
-        // not at construction: writing into the closed popup's disabled button
-        // subtree makes Qt log a binding-loop warning for every row on screen.
+        /// True when the typed name can actually be saved. Gates BOTH the Ok
+        /// button and the Enter key: Kirigami.Dialog.accept() does not consult
+        /// the button box, so an Enter on an empty field would otherwise close
+        /// the dialog and swallow the user's description edit with it.
+        readonly property bool nameUsable: editNameField.text.trim().length > 0
+
+        // Installed on open, not at construction: writing into the closed
+        // popup's disabled button subtree makes Qt log a binding-loop warning
+        // for every row on screen.
         onOpened: {
             standardButton(Kirigami.Dialog.Ok).enabled = Qt.binding(function () {
-                return editNameField.text.trim().length > 0;
+                return editDialog.nameUsable;
             });
             editNameField.forceActiveFocus();
         }
@@ -248,7 +252,8 @@ ExpandableRowDelegate {
                 Layout.fillWidth: true
                 placeholderText: i18n("Set name…")
                 Accessible.name: i18n("Set name")
-                onAccepted: editDialog.accept()
+                onAccepted: if (editDialog.nameUsable)
+                    editDialog.accept()
             }
 
             TextField {
@@ -257,7 +262,8 @@ ExpandableRowDelegate {
                 Layout.fillWidth: true
                 placeholderText: i18n("Description (optional)…")
                 Accessible.name: i18n("Set description")
-                onAccepted: editDialog.accept()
+                onAccepted: if (editDialog.nameUsable)
+                    editDialog.accept()
             }
         }
     }

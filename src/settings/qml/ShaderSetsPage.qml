@@ -221,7 +221,8 @@ SettingsFlickable {
                     // The store validates the payload against this domain's
                     // taxonomy and toasts the concrete refusal reason.
                     onFileDropped: function (url) {
-                        importResult.show(root.bridge.importSet(url), url);
+                        if (root.bridge)
+                            importResult.show(root.bridge.importSet(url), url);
                     }
                 }
 
@@ -243,10 +244,10 @@ SettingsFlickable {
 
                         if (ok) {
                             type = Kirigami.MessageType.Positive;
-                            text = i18nc("@info set import success", "Imported set “%1”.", basename);
+                            text = i18nc("@info set import success", "Imported set \"%1\".", basename);
                         } else {
                             type = Kirigami.MessageType.Error;
-                            text = i18nc("@info set import failure", "Could not import “%1”. The file must be a set saved from this page.", basename);
+                            text = i18nc("@info set import failure", "Could not import \"%1\". The file must be a set saved from this page.", basename);
                         }
                         visible = true;
                         autoHideTimer.restart();
@@ -290,7 +291,8 @@ SettingsFlickable {
                         icon.name: "folder-open"
                         flat: true
                         Accessible.name: i18n("Open the sets folder")
-                        onClicked: root.bridge.openSetsDirectory()
+                        onClicked: if (root.bridge)
+                            root.bridge.openSetsDirectory()
                     }
                 }
             }
@@ -357,6 +359,9 @@ SettingsFlickable {
         nameFilters: [i18n("PlasmaZones Set (*.json)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
+            if (!root.bridge)
+                return;
+
             const path = settingsController.urlToLocalFile(selectedFile);
             importResult.show(root.bridge.importSet(path), path);
         }

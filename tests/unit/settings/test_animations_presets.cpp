@@ -202,11 +202,9 @@ private Q_SLOTS:
         const QString overrideFilePath = tmp.path() + QStringLiteral("/editor.snapIn.json");
         QVERIFY(QFileInfo::exists(overrideFilePath));
 
-        // Hand-craft a hostile preset on disk: `name` field = "editor.snapIn"
-        // but the FILE is not at the canonical override slot. The library
-        // skips it on userPresets() (collision filter) but a naive
-        // remove-by-name walk would still delete it. We're asserting the
-        // override file in the canonical slot remains intact regardless.
+        // The override file's own `name` field is "editor.snapIn", so a naive
+        // remove-by-name directory walk would match it and delete it. The
+        // library must refuse: preset CRUD does not own override files.
         QSignalSpy spy(&c, &AnimationsPageController::userPresetsChanged);
         QVERIFY(!c.removeUserPreset(QStringLiteral("editor.snapIn")));
         QCOMPARE(spy.count(), 0);
@@ -240,7 +238,8 @@ private Q_SLOTS:
         // Plant a malformed file directly.
         QFile bad(tmp.path() + QStringLiteral("/garbage.json"));
         QVERIFY(bad.open(QIODevice::WriteOnly));
-        bad.write("{ this is not valid json");
+        const QByteArray garbage = "{ this is not valid json";
+        QCOMPARE(bad.write(garbage), static_cast<qint64>(garbage.size()));
         bad.close();
 
         // Expect a warning to be logged for the malformed file. The
