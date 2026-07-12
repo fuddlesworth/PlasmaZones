@@ -14,7 +14,7 @@ import org.kde.kirigami as Kirigami
  * Read-only listing with drop-zone install card, filter bar, grouped
  * card grid, and a detail dialog. Drives the Animations → Shaders page
  * (for `data/animations/` packs), the Snapping → Shaders page (for
- * `data/shaders/` overlay packs), and the Decoration → Shaders page (for
+ * `data/overlays/` overlay packs), and the Decoration → Shaders page (for
  * `data/surface/` packs).
  *
  * The host supplies a `bridge` QObject implementing the contract:

@@ -24,7 +24,7 @@ namespace PlasmaZones {
 /// Q_PROPERTY surface for the "Snapping → Shaders" settings page.
 ///
 /// Read-only browser over the snapping overlay shader registry (the
-/// `data/shaders/` family — cosmic-flow, neon-city, etc.) — the
+/// `data/overlays/` family — cosmic-flow, neon-city, etc.) — the
 /// counterpart to @ref AnimationsPageController's animation-shader
 /// surface. Drives the pack-agnostic `ShaderBrowserPage.qml` via a
 /// duck-typed bridge contract: `availableShaderEffects`,

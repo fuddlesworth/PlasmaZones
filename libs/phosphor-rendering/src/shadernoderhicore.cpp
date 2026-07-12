@@ -77,7 +77,7 @@ static constexpr char kShaderCacheKeyDelim = '\0';
 /// the standard delimiter. Stable across runs (mtime is fs metadata)
 /// but invalidates the cache the moment ANY transitively-included
 /// header is modified — closing the gap that previously let an edit
-/// to `data/shaders/shared/common.glsl` (e.g. a UBO layout change) be
+/// to `data/overlays/shared/common.glsl` (e.g. a UBO layout change) be
 /// silently masked by a per-`.frag`/`.vert` cache hit because the
 /// top-level shader file's mtime didn't change.
 ///

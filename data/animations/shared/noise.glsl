@@ -196,7 +196,7 @@ float boundaryMaskAA(vec2 uv) {
 }
 
 // Pointy-top hex-grid helpers shared by the Aretha packs (aretha-materialize
-// and desktop-aretha), ported from data/shaders/aretha-shell. `hexDist`
+// and desktop-aretha), ported from data/overlays/aretha-shell. `hexDist`
 // returns 0 at a cell centre rising to ~0.5 at the edge; `hexLocal` returns
 // the offset from the nearest hex-cell centre for a point in hex-grid space.
 // Distinct from the hexagon / honeycomb packs, which use different hex

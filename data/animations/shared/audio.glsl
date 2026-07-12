@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Opt-in audio-spectrum helpers for ANIMATION shader packs — the transition
-// cousin of surface_audio.glsl (surface family) and data/shaders/shared/
+// cousin of surface_audio.glsl (surface family) and data/overlays/shared/
 // audio.glsl (overlay family). `#include <audio.glsl>` AFTER
 // animation_uniforms.glsl in a pack that reacts to the CAVA spectrum, declare
 // `"audio": true` in the pack's metadata.json, and guard on the helpers (they

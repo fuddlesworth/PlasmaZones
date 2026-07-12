@@ -14,7 +14,7 @@ class QTextStream;
 
 namespace PlasmaZones::ShaderValidate {
 
-// zone/overlay packs (data/shaders/*): ShaderRegistry metadata + the zone entry
+// zone/overlay packs (data/overlays/*): ShaderRegistry metadata + the zone entry
 // scaffold (pZone/pImage); validates frag, multipass buffers, and vertex stage.
 int validatePack(const QString& packDir, QTextStream& out);
 

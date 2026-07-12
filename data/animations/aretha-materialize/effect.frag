@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Aretha Materialize — cyberpunk hex-grid window transition matching the
-// data/shaders/aretha-shell aesthetic (Ghost-in-the-Shell hex grid + cyan /
+// data/overlays/aretha-shell aesthetic (Ghost-in-the-Shell hex grid + cyan /
 // teal / pink data glitch). The window materialises hexagon-by-hexagon along
 // a diagonal data sweep: ahead of the sweep the surface is dissolved into
 // flickering hex cells with chromatic-aberration glitch behind a bright cyan
@@ -19,7 +19,7 @@
 #include <noise.glsl>
 
 // ── Hex helpers ────────────────────────────────────────────────────────────
-// hexDist + hexLocal (ported from data/shaders/aretha-shell) now live in
+// hexDist + hexLocal (ported from data/overlays/aretha-shell) now live in
 // shared/noise.glsl (included above); desktop-aretha shares the same pair.
 
 vec4 pTransition(vec2 uv, float t)

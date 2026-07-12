@@ -37,7 +37,7 @@ constexpr QLatin1String kDefaultVertexShaderFilename{"zone.vert"};
 // segments or symlink-style absolute prefixes) are rejected with a warning and
 // an empty string so the loader fails closed rather than loading arbitrary
 // files. Absolute paths in the JSON are still allowed — the shader catalog
-// installer occasionally points at /usr/share/plasmazones/shaders/common — but
+// installer occasionally points at /usr/share/plasmazones/overlays/common — but
 // relative paths cannot escape their declared root.
 QString resolveRelative(const QString& metadataDir, const QString& maybeRelative)
 {

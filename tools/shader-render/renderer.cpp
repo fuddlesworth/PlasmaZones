@@ -286,7 +286,7 @@ QStringList shaderIncludePaths()
     // for each shader root, push <root>/shared FIRST then <root>. The /shared
     // entry is where common.glsl / audio.glsl / zone.vert live in the source
     // tree; without it `#include <common.glsl>` only resolves accidentally via
-    // an installed copy at /usr/share/plasmazones/shaders/common.glsl, and the
+    // an installed copy at /usr/share/plasmazones/overlays/common.glsl, and the
     // shared zone.vert fallback (see resolveZoneVertexShader) wouldn't find
     // anything either.
     QStringList paths;
@@ -299,10 +299,10 @@ QStringList shaderIncludePaths()
     };
     const QStringList xdg = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
     for (const QString& dir : xdg) {
-        pushRoot(dir + QStringLiteral("/shaders"));
+        pushRoot(dir + QStringLiteral("/overlays"));
     }
-    pushRoot(QStringLiteral("/usr/share/plasmazones/shaders"));
-    pushRoot(QStringLiteral("data/shaders"));
+    pushRoot(QStringLiteral("/usr/share/plasmazones/overlays"));
+    pushRoot(QStringLiteral("data/overlays"));
     paths.append(QStringLiteral("libs/phosphor-rendering/shaders"));
     return paths;
 }
@@ -311,7 +311,7 @@ QStringList shaderIncludePaths()
 // vertexShader explicitly only for packs that ship a non-standard one
 // (currently magnetic-field). Every other zone shader relies on the runtime's
 // fallback to the shared zone.vert that lives at
-// data/shaders/shared/zone.vert. Without this the base ShaderEffect's default
+// data/overlays/shared/zone.vert. Without this the base ShaderEffect's default
 // vertex shader (kDefaultVertexShaderSource — emits only vTexCoord) is used,
 // every zone fragment shader fails to link with `vFragCoord not declared as
 // input from previous stage`, and every preview comes out as the clear colour.
