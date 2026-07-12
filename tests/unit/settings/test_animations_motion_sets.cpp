@@ -48,8 +48,6 @@
 #include "settings/shadersetstore.h"
 #include "../helpers/SetRowHelpers.h"
 
-#include <unistd.h>
-
 using namespace PlasmaZones;
 
 class TestAnimationsMotionSets : public QObject
@@ -492,13 +490,6 @@ private Q_SLOTS:
     /// destroying content Discard could not restore.
     void motionSets_refusesWriteWhenSnapshotFails()
     {
-        // The guard is provoked by making an existing set file unreadable, and
-        // root bypasses file permissions entirely — the read would succeed and
-        // the guard would never fire. Skip rather than fail in the project's
-        // documented Docker flow, which runs as root.
-        if (::geteuid() == 0)
-            QSKIP("chmod 000 is not enforced for root");
-
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
         AnimationsPageController c;
@@ -508,17 +499,17 @@ private Q_SLOTS:
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 250}}));
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Precious"), QStringLiteral("keep me")));
 
-        // Commit so the set file is no longer already snapshotted, then make it
-        // unreadable: snapshotFileIfFirst now fails for it.
+        // Commit so the set file is no longer already snapshotted, then remove
+        // it and put a DIRECTORY in its place. QFile::exists() is still true but
+        // open(ReadOnly) fails, so snapshotFileIfFirst reports the capture
+        // failure — and unlike chmod 000, this provokes it for root too, so the
+        // guard is actually exercised in the project's Docker flow.
         c.commitPending();
         const QString setPath = tmp.path() + QStringLiteral("/motionsets/precious.json");
         QVERIFY(QFileInfo::exists(setPath));
-        const QByteArray before = [&setPath]() {
-            QFile f(setPath);
-            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray{};
-        }();
-        QVERIFY(!before.isEmpty());
-        QVERIFY(QFile::setPermissions(setPath, QFileDevice::Permissions{}));
+        QVERIFY(QFile::remove(setPath));
+        QVERIFY(QDir().mkpath(setPath));
+        QVERIFY(QFileInfo(setPath).isDir());
 
         QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
         QTest::ignoreMessage(QtWarningMsg,
@@ -528,11 +519,8 @@ private Q_SLOTS:
                  "a delete must be refused when the pre-edit content cannot be captured");
         QCOMPARE(toastSpy.count(), 1);
 
-        // The file is still there, byte for byte.
-        QVERIFY(QFile::setPermissions(setPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
-        QFile after(setPath);
-        QVERIFY(after.open(QIODevice::ReadOnly));
-        QCOMPARE(after.readAll(), before);
+        // Nothing was destroyed: the path is untouched.
+        QVERIFY(QFileInfo(setPath).isDir());
     }
 
     /// Motion set writes are staged, so Discard must put the world back: a set

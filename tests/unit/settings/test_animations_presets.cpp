@@ -22,7 +22,6 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>

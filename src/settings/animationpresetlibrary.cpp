@@ -109,12 +109,13 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
     if (builtInPaths.contains(name) || builtInPaths.contains(slug))
         return false;
 
-    const QString dir = m_profilesDir();
-    if (!QDir().mkpath(dir))
-        return false;
-
+    const QString dir = m_profilesDir ? m_profilesDir() : QString();
     const QString filePath = animfileutil::jsonFilePath(dir, slug);
-    if (filePath.isEmpty())
+    if (dir.isEmpty() || filePath.isEmpty())
+        return false;
+    // mkpath AFTER the name checks above, so a refused write leaves no empty
+    // profiles directory behind.
+    if (!QDir().mkpath(dir))
         return false;
 
     // A false return means the pre-edit content could not be captured. Writing
@@ -128,12 +129,18 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
     QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
     obj.insert(presetlib_detail::JsonNameKey, name);
 
+    const QByteArray payload = QJsonDocument(obj).toJson(QJsonDocument::Indented);
     QSaveFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    const bool written =
+        file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(payload) == payload.size() && file.commit();
+    if (!written) {
+        qCWarning(lcConfig) << "AnimationPresetLibrary: could not write" << filePath << ":" << file.errorString();
+        // The snapshot above already staged the pre-edit content, so the dirty
+        // state moved even though the write did not. Re-notify, or the page
+        // keeps a stale flag.
+        Q_EMIT pendingChangesChanged();
         return false;
-    file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
-    if (!file.commit())
-        return false;
+    }
 
     Q_EMIT userPresetsChanged();
     Q_EMIT pendingChangesChanged();
@@ -205,8 +212,14 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
                             << "— could not capture its pre-edit content";
         return false;
     }
-    if (!file.remove())
+    if (!file.remove()) {
+        qCWarning(lcConfig) << "AnimationPresetLibrary: could not remove" << filePath;
+        // The snapshot above already staged the pre-edit content, so the dirty
+        // state moved even though the delete did not. Re-notify, or the page
+        // keeps a stale flag.
+        Q_EMIT pendingChangesChanged();
         return false;
+    }
 
     Q_EMIT userPresetsChanged();
     Q_EMIT pendingChangesChanged();

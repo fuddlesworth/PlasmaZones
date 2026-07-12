@@ -60,7 +60,11 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* has
     using PhosphorSurfaceShaders::DecorationProfile;
 
     staged->clear();
-    *hasBaseline = root.value(kBaselineKey).isObject();
+    // An EMPTY baseline object is not a baseline. The snapshot side omits an
+    // empty one (it carries no engaged field), so treating `"baseline": {}`
+    // from a hand-edited or foreign file as a real baseline would apply an
+    // all-inherit profile over whatever the user had — a silent wipe.
+    *hasBaseline = !root.value(kBaselineKey).toObject().isEmpty();
     const QJsonArray overrides = root.value(kOverridesKey).toArray();
     staged->reserve(overrides.size());
     for (const QJsonValue& v : overrides) {

@@ -348,7 +348,13 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& descri
         return false;
     }
     const QString filePath = setFilePath(name);
-    if (filePath.isEmpty() || !m_config.snapshot) {
+    if (filePath.isEmpty()) {
+        // The name has nothing a filename can be built from (e.g. "!!!").
+        // The Save button only checks for non-blank text, so say why.
+        Q_EMIT toastRequested(PhosphorI18n::tr("That name cannot be used. Try one with letters or numbers in it."));
+        return false;
+    }
+    if (!m_config.snapshot) {
         return false;
     }
     // Overwriting destroys the stored payload, and on a domain with no
@@ -432,7 +438,12 @@ bool ShaderSetStore::updateSet(const QString& oldName, const QString& newName, c
     }
     const QString oldPath = setFilePath(oldName);
     const QString newPath = setFilePath(newName);
-    if (oldPath.isEmpty() || newPath.isEmpty()) {
+    if (newPath.isEmpty()) {
+        // The new name has nothing a filename can be built from (e.g. "!!!").
+        Q_EMIT toastRequested(PhosphorI18n::tr("That name cannot be used. Try one with letters or numbers in it."));
+        return false;
+    }
+    if (oldPath.isEmpty()) {
         return false;
     }
     if (!QFile::exists(oldPath)) {

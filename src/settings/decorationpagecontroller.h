@@ -209,9 +209,10 @@ public:
     /// does not cover keep their current overrides. APPLYING a set writes
     /// through ISettings::setDecorationProfileTree, so that write rides the
     /// normal dirty / apply / discard staging flow. The set FILES themselves
-    /// are not staged (decoration wires no fileSnapshot hook), which is why
-    /// saving over an existing set requires explicit consent. The domain
-    /// closures live in decorationpagecontroller_sets.cpp.
+    /// are not staged (decoration wires no fileSnapshot hook), so no Discard
+    /// can undo a set write here. Saving over an existing set requires explicit
+    /// consent regardless of domain (see ShaderSetStore::saveCurrentAsSet). The
+    /// domain closures live in decorationpagecontroller_sets.cpp.
     ShaderSetStore* setsBridge() const
     {
         return m_sets;

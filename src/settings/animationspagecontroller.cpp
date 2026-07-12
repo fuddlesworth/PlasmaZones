@@ -89,9 +89,8 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     // capture pre-edit content without coupling to the controller's
     // m_pendingFileSnapshots layout. The bool return matters: a false means
     // the pre-edit content could NOT be captured, and a caller that writes
-    // anyway loses it permanently. ShaderSetStore honours it and refuses the
-    // write; AnimationPresetLibrary's void-typed hook discards it, which is
-    // the pre-existing behaviour there.
+    // anyway loses it permanently. Both consumers honour it and refuse the
+    // write (ShaderSetStore::snapshotFile, AnimationPresetLibrary's mutators).
     auto snapshotFn = [this](const QString& filePath) -> bool {
         return snapshotFileIfFirst(filePath);
     };

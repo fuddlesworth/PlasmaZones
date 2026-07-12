@@ -78,6 +78,9 @@ SettingsFlickable {
     /// Every failure toasts its own reason from the store, so there is nothing
     /// for the caller to infer from a bare false.
     function _save(overwrite) {
+        if (!root.bridge)
+            return;
+
         if (root.bridge.saveCurrentAsSet(nameField.text.trim(), descField.text.trim(), overwrite)) {
             nameField.text = "";
             descField.text = "";
@@ -176,7 +179,7 @@ SettingsFlickable {
                             // consent; the store refuses an unconfirmed
                             // overwrite outright. Names collide by slug, so the
                             // prompt names the STORED set, not what was typed.
-                            const taken = root.bridge.existingSetName(nameField.text.trim());
+                            const taken = root.bridge ? root.bridge.existingSetName(nameField.text.trim()) : "";
                             if (taken.length > 0) {
                                 replaceConfirm.takenName = taken;
                                 replaceConfirm.open();
@@ -229,7 +232,7 @@ SettingsFlickable {
                         // A dropped URL is percent-encoded, so decode before
                         // showing the name. Fall back to a generic noun rather
                         // than announcing an empty pair of quotes.
-                        var basename = "";
+                        let basename = "";
                         try {
                             basename = decodeURIComponent(String(url).split("/").pop());
                         } catch (e) {

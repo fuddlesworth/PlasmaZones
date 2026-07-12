@@ -30,8 +30,8 @@
  *   - the version gate refuses a newer, a non-numeric, and a non-integral
  *     version; import refuses an empty set and one over the read size cap
  *   - import and apply validate against the surface taxonomy, rejecting a
- *     whole set atomically on any unknown path, and apply toasts every
- *     failure (QML fires and forgets it)
+ *     whole set atomically on any unknown path, and apply toasts each failure
+ *     reachable here (QML fires and forgets it)
  *
  * Settings is a TreeStubSettings: a StubSettings that actually stores the tree
  * and emits decorationProfileTreeChanged, so the controller's
@@ -51,9 +51,8 @@
 #include <QTemporaryDir>
 #include <QUrl>
 
-#include <PhosphorSurface/DecorationProfileTree.h>
-
 #include "config/configdefaults.h"
+#include "phosphor_i18n.h"
 #include "settings/decorationpagecontroller.h"
 #include "settings/shadersetstore.h"
 #include "../helpers/SetRowHelpers.h"
@@ -232,6 +231,10 @@ private Q_SLOTS:
         c.setChain(QStringLiteral("osd"), QStringList{QStringLiteral("border")});
         QCOMPARE(spy.count(), 0); // still queued, not yet delivered
         QVERIFY2(spy.wait(1000), "a live tree edit must refresh the set rows");
+        // wait() returns on the FIRST emission, so drain the loop before
+        // counting: without this a second, un-coalesced emission could still be
+        // sitting in the queue and the count would pass by luck.
+        QTest::qWait(0);
         QCOMPARE(spy.count(), 1);
     }
 
@@ -504,6 +507,10 @@ private Q_SLOTS:
         QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
         QVERIFY2(!sets->importSet(empty), "a set carrying nothing must be refused");
         QCOMPARE(toastSpy.count(), 1);
+        // The taxonomy validator would refuse an empty set anyway, so the ONLY
+        // thing the store's dedicated empty check buys is an honest message.
+        // Assert it, or this test passes with that check deleted.
+        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("That set is empty."));
         QVERIFY(sets->availableSets().isEmpty());
     }
 
@@ -545,18 +552,30 @@ private Q_SLOTS:
         QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("Nothing"), QString()),
                  "saving an empty decoration tree must be refused");
         QCOMPARE(setsSpy.count(), 0);
-        QVERIFY2(toastSpy.count() == 1, "the refusal must say why");
+        QCOMPARE(toastSpy.count(), 1); // the refusal must say why
         QVERIFY(sets->availableSets().isEmpty());
     }
 
     /// saveCurrentAsSet rejects an empty name (would slugify to an empty
     /// filename).
-    void saveDecorationSet_emptyNameRejected()
+    void saveDecorationSet_emptyOrUnusableNameRejected()
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
         c.setChain(QString(), QStringList{QStringLiteral("border")});
-        QVERIFY(!c.setsBridge()->saveCurrentAsSet(QString(), QString()));
+
+        QVERIFY(!sets->saveCurrentAsSet(QString(), QString()));
+
+        // A name with nothing a filename can be built from ("!!!" slugifies to
+        // nothing). The Save button only checks for non-blank text, so this
+        // reaches the store and must be refused WITH a reason — otherwise the
+        // user clicks Save and watches nothing happen.
+        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
+        QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("!!!"), QString()),
+                 "a name that slugifies to nothing must be refused");
+        QCOMPARE(toastSpy.count(), 1);
+        QVERIFY(sets->availableSets().isEmpty());
     }
 
     /// applySet validates every entry up-front and rejects the whole set on any

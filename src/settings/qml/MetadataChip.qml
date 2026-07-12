@@ -49,7 +49,7 @@ Rectangle {
 
         Label {
             text: root.text
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             opacity: root.highlighted ? 0.85 : 0.7
         }
     }

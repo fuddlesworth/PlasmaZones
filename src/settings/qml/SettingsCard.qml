@@ -15,7 +15,8 @@ import org.phosphor.animation
  * Features:
  *   - Subtle border highlight on hover (accent color)
  *   - Gentle upward translate on hover (-1px)
- *   - Optional collapsible content (set collapsible: true)
+ *   - Optional collapsible content (set collapsible: true; use
+ *     initiallyCollapsed to start closed without binding `collapsed`)
  *   - Smooth 200ms transitions throughout
  *
  * Usage:

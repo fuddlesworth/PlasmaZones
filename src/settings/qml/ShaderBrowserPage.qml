@@ -26,6 +26,7 @@ import org.kde.kirigami as Kirigami
  *
  *   signal shaderEffectsChanged()
  *   signal shaderProfileChanged(const QString& path)  // optional
+ *   signal toastRequested(const QString& text)        // optional
  *
  * Plus a few labels the host can override to suit its domain (e.g.
  * "Browse installed snapping overlay shaders" vs the animation copy).
@@ -456,14 +457,17 @@ SettingsFlickable {
                         // A dropped URL is percent-encoded, so decode before
                         // showing the name ("My%20Pack" is not what the user
                         // called it).
-                        var basename = "";
+                        // Some drag sources hand over a directory URL with a
+                        // trailing slash, which would split to an empty tail.
+                        const trimmed = String(url).replace(/\/+$/, "");
+                        let basename = "";
                         try {
-                            basename = decodeURIComponent(String(url).split("/").pop());
+                            basename = decodeURIComponent(trimmed.split("/").pop());
                         } catch (e) {
-                            basename = String(url).split("/").pop();
+                            basename = trimmed.split("/").pop();
                         }
                         if (basename.length === 0)
-                            basename = String(url);
+                            basename = trimmed;
 
                         if (ok) {
                             type = Kirigami.MessageType.Positive;

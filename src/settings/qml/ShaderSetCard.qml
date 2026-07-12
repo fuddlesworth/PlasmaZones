@@ -90,12 +90,10 @@ ExpandableRowDelegate {
     //    (Active), then actions (Apply → overflow) — grouped so the eye
     //    reads each kind as a unit.
 
-    // Coverage chips — which parts of the taxonomy the set carries. Held in a
-    // plain Row rather than dropped straight into the header RowLayout: a bare
-    // Repeater is itself a zero-width layout child, so the layout would
-    // allocate a slot and spacing for the Repeater on every row. The Row hides
-    // itself when there is nothing to show, and layouts skip invisible
-    // children, so no phantom gap is left.
+    // Coverage chips — which parts of the taxonomy the set carries. The Row
+    // groups them at smallSpacing inside the header's largeSpacing cluster, and
+    // hides itself when there is nothing to show: a visible-but-empty Row would
+    // still eat a spacing slot, leaving a phantom gap in the badge cluster.
     Row {
         visible: (row.modelData.coverage?.length ?? 0) > 0 || row.modelData.hasBaseline === true
         Layout.alignment: Qt.AlignVCenter
@@ -230,11 +228,15 @@ ExpandableRowDelegate {
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
         // A set needs a name, so Ok stays disabled until there is one. Gating
         // the button rather than no-oping on accept means an empty name cannot
-        // silently swallow the user's description edit too.
-        Component.onCompleted: standardButton(Kirigami.Dialog.Ok).enabled = Qt.binding(function () {
-            return editNameField.text.trim().length > 0;
-        })
-        onOpened: editNameField.forceActiveFocus()
+        // silently swallow the user's description edit too. Installed on open,
+        // not at construction: writing into the closed popup's disabled button
+        // subtree makes Qt log a binding-loop warning for every row on screen.
+        onOpened: {
+            standardButton(Kirigami.Dialog.Ok).enabled = Qt.binding(function () {
+                return editNameField.text.trim().length > 0;
+            });
+            editNameField.forceActiveFocus();
+        }
         onAccepted: row.bridge.updateSet(row.setName, editNameField.text.trim(), editDescField.text.trim())
 
         ColumnLayout {

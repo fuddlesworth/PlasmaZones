@@ -754,9 +754,9 @@ target_link_libraries(test_window_appearance_controller PRIVATE Qt6::Test Qt6::C
     PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
 add_test(NAME test_window_appearance_controller COMMAND test_window_appearance_controller)
 
-# Animations-controller sources shared by the three test executables below
-# (page controller / motion sets / shader overrides). One list so a new
-# controller source file can't silently miss one of the three.
+# Animations-controller sources shared by the four test executables below
+# (page controller / motion sets / presets / shader overrides). One list so a
+# new controller source file can't silently miss one of the four.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
@@ -790,8 +790,7 @@ target_link_libraries(test_animations_page_controller
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
 
-# Companion test executable: motion-set + user-preset + pending-changes
-# coverage. Split from test_animations_page_controller to keep each test
+# Companion test executable: motion-set + pending-changes coverage. Split from test_animations_page_controller to keep each test
 # file under the project's <800-line guideline.
 add_executable(test_animations_motion_sets
     settings/test_animations_motion_sets.cpp
