@@ -1787,7 +1787,14 @@ public:
                                               if (sit == m_tracks.end() || !sit->second.target) {
                                                   return;
                                               }
-                                              sit->second.target->setOpacity(v);
+                                              // Clamp: an overshooting curve's value is
+                                              // unbounded, so a hide leg (1 -> 0) with a
+                                              // bouncy spring drives this NEGATIVE (the
+                                              // step response peaks at 1.163 for zeta=0.5,
+                                              // so 1 - 1.163 = -0.163; at zeta=0.05 it is
+                                              // -0.85). The sibling shader leg already
+                                              // clamps for the same reason.
+                                              sit->second.target->setOpacity(qBound(qreal(0.0), v, qreal(1.0)));
                                           },
                                           /*onComplete=*/
                                           [this, surface, target]() {

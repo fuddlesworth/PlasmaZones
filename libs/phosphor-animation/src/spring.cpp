@@ -134,48 +134,73 @@ void Spring::step(qreal dt, CurveState& state, qreal target) const
         return;
     }
 
-    // Semi-implicit (symplectic) Euler, SUBSTEPPED into stable slices.
+    // EXACT (exponential) integrator — not a numerical one.
     //
-    // Euler here is only CONDITIONALLY stable. The velocity update is
-    // `v ← v·(1 - 2ζω·h) + ω²·err·h`, so the damping term alone diverges once
-    // `2ζω·h ≥ 2`, i.e. `ω·ζ ≥ 1/h` — 60 at a 60 Hz frame. That band is not
-    // exotic: the two settings sliders reach ω = 40 and ζ = 4 INDEPENDENTLY, so
-    // their product reaches 160, and 27% of the slider grid lands past the
-    // boundary. At the corner the state reaches -1.4e39 in a second.
+    // A damped spring is a LINEAR ODE with a closed-form solution, and that solution
+    // already lives forty lines up in `evaluate()`. Advancing it by numerical
+    // integration was always a workaround for a problem that does not exist: solve
+    // u'' + 2ζω·u' + ω²·u = 0 (u = value − target) exactly over the step, for the
+    // current (u, v), and you get the true trajectory in one shot.
     //
-    // That was invisible on the shader side (the value is clamped for display) but
-    // the geometry takes it RAW — `AnimatedValue::lerpStateValue` lerps the window's
-    // rect with it — so the window is drawn ~1e39 px off-screen for the whole
-    // animation and then pops back. A vanishing window, at a settings corner a user
-    // can actually reach.
+    // This matters because every numerical scheme tried here was CONDITIONALLY
+    // stable and the condition was reachable. Semi-implicit Euler diverges once
+    // ω·ζ·dt ≥ 1 — the settings sliders reach ω=40 and ζ=4 independently, so 27% of
+    // the slider grid blew up, reaching -1.4e39 and drawing the window off-screen.
+    // Substepping into stable slices fixed that band but needed a slice ceiling, and
+    // the ceiling reopened the same hole above ω·ζ·dt ≥ 64 — reachable from a pack's
+    // curve string ("spring:100,7") at the dt cap, and from a single dropped frame.
+    // A conditionally-stable method with a cheap escape hatch will always leave one.
     //
-    // A magnitude clamp would paper over it; substepping fixes the physics. Slice
-    // the frame so each sub-step is comfortably inside the stability limit, which
-    // costs 6 slices at the slider corner and 1 for every ordinary spring. The
-    // 64-slice ceiling bounds the worst case (a 100 ms stall at ω = 200).
-    const qreal stiffness = omega * omega;
-    const qreal damping = 2.0 * zeta * omega;
-    // Stability wants h < 2/(ζω) for the damping term and h < 2/ω for the spring
-    // term; take the tighter and halve it for margin.
-    const qreal stableH = 0.5 / qMax(1.0e-3, omega * qMax(1.0, zeta));
-    const int slices = qBound(1, static_cast<int>(qCeil(dt / stableH)), 64);
-    const qreal h = dt / slices;
-    for (int i = 0; i < slices; ++i) {
-        const qreal err = target - state.value;
-        const qreal accel = stiffness * err - damping * state.velocity;
-        state.velocity += accel * h;
-        state.value += state.velocity * h;
+    // The exact form is unconditionally stable for ANY dt, ω and ζ, because every
+    // term is a DECAYING exponential: it cannot amplify. It is also cheaper than the
+    // substepping it replaces (one exp and two trig, versus up to 64 slices), and it
+    // needs no divergence backstop, because there is no divergence to catch.
+    const qreal u0 = state.value - target; // displacement from target
+    const qreal v0 = state.velocity;
+    qreal u = 0.0;
+    qreal v = 0.0;
+
+    if (zeta < 1.0 - CriticalDampingEpsilon) {
+        // Underdamped: decaying oscillation. This is the branch that overshoots, and
+        // it reaches the true analytic peak rather than a sampled approximation of it.
+        const qreal omegaD = omega * qSqrt(1.0 - zeta * zeta);
+        const qreal envelope = qExp(-zeta * omega * dt);
+        const qreal c = qCos(omegaD * dt);
+        const qreal s = qSin(omegaD * dt);
+        u = envelope * (u0 * c + ((v0 + zeta * omega * u0) / omegaD) * s);
+        v = envelope * (v0 * c - ((omega * omega * u0 + zeta * omega * v0) / omegaD) * s);
+    } else if (zeta <= 1.0 + CriticalDampingEpsilon) {
+        // Critically damped: the repeated-root case. The near-critical band uses this
+        // too — the underdamped and overdamped forms both divide by a discriminant
+        // that goes to zero here, so they are ill-conditioned and this is not.
+        const qreal envelope = qExp(-omega * dt);
+        u = envelope * (u0 + (v0 + omega * u0) * dt);
+        v = envelope * (v0 - omega * (v0 + omega * u0) * dt);
+    } else {
+        // Overdamped: two real decaying modes. The fast one underflows to zero for a
+        // large zeta, which is correct rather than a loss.
+        const qreal disc = omega * qSqrt(zeta * zeta - 1.0);
+        const qreal r1 = -zeta * omega + disc; // slow mode (dominates the tail)
+        const qreal r2 = -zeta * omega - disc; // fast mode
+        const qreal a = (v0 - r2 * u0) / (r1 - r2);
+        const qreal b = u0 - a;
+        const qreal e1 = qExp(r1 * dt);
+        const qreal e2 = qExp(r2 * dt);
+        u = a * e1 + b * e2;
+        v = a * r1 * e1 + b * r2 * e2;
     }
+
+    state.value = target + u;
+    state.velocity = v;
     state.time += dt;
 
-    // Divergence backstop, retained as a net rather than a fence. Substepping makes
-    // the integrator stable across the whole admitted parameter range, but `omega`
-    // is admitted to 200 by a hand-edited config and the slice ceiling is finite, so
-    // keep a terminal guard: an inf/NaN escaping this class becomes a garbage window
-    // rect and a poisoned shader uniform. A diverged spring has no meaningful state
-    // to preserve, and completing is the only sane terminal.
+    // Terminal net, not a stability fence. The exact form cannot diverge, but a
+    // caller can hand us a state that is ALREADY non-finite (a poisoned lerp
+    // upstream), and propagating that would put a garbage rect on screen and a NaN in
+    // a shader uniform. Fail to the target: a spring with no meaningful state has no
+    // meaningful trajectory.
     if (!std::isfinite(state.value) || !std::isfinite(state.velocity)) {
-        qCWarning(lcSpring) << "spring integrator diverged (omega=" << omega << "zeta=" << zeta << "dt=" << dt
+        qCWarning(lcSpring) << "spring received a non-finite state (omega=" << omega << "zeta=" << zeta << "dt=" << dt
                             << ") — snapping to target";
         state.value = target;
         state.velocity = 0.0;

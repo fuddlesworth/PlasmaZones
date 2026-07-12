@@ -245,8 +245,8 @@ struct SurfaceMultipassState
     ///
     /// Reading this instead means a compiled-but-broken chain falls back to
     /// present-pass modulation, which is exactly the "no pack owns the alpha"
-    /// regime. chainHandlesOpacity stays for the uses that legitimately need the
-    /// metadata BEFORE any fold has run.
+    /// regime. Nothing reads WindowDecoration::chainHandlesOpacity any more — the
+    /// metadata cannot answer this question, which is the whole point.
     bool handledOpacity = false;
     /// The logical rect the composite canvas covers (expanded geometry
     /// inflated by the chain's outer padding, captured when the fold ran).
@@ -381,6 +381,12 @@ struct WindowDecoration
     /// a rule verdict (focus, snap state, rule/config edits).
     double ruleOpacity = 1.0;
 
+    /// UNUSED as of the handledOpacity change — kept only because removing it would
+    /// touch decorations.cpp's fold. Do NOT read it to decide who owns the alpha:
+    /// it reports what the pack METADATA promised, not what the fold actually did, and
+    /// a pack that fails to compile promises but never delivers. Read
+    /// SurfaceMultipassState::handledOpacity instead.
+    ///
     /// True when any chain pack declares `"handlesOpacity": true`. The
     /// present pass then pushes uOpacity = 1.0 (no final modulation) and the
     /// declaring pack applies uSurfaceOpacity itself.

@@ -8,6 +8,7 @@
 #include <QtMath>
 
 #include <cmath>
+#include <limits>
 
 using PhosphorAnimation::CurveState;
 using PhosphorAnimation::Spring;
@@ -288,66 +289,23 @@ private Q_SLOTS:
 
     // ─── Integrator divergence backstop ───
 
-    // Semi-implicit Euler is only conditionally stable (dt < 2/omega), and omega
-    // is admitted up to 200. Without the finiteness backstop in step(), a stiff
-    // spring driven at the 100 ms dt cap reaches NaN in ~120 frames and a value of
-    // -1e227 well before that. That value does not stay inside this class: it
-    // lerps a window's QRectF geometry and is handed to glUniform1f(iTime)
-    // UNCLAMPED for an overshooting curve. Pin the backstop.
-    void testStepDoesNotDivergeAtExtremeStiffness()
+    // The exact integrator cannot diverge — every term is a decaying exponential — so
+    // the guard in step() is a NET for a state that arrives already poisoned (a
+    // non-finite value lerped in from upstream), not a fence against instability.
+    // Pin that: a garbage input must fail to the target rather than propagate, because
+    // propagating it puts a garbage rect on screen and a NaN in a shader uniform.
+    void testStepSnapsToTargetOnAPoisonedState()
     {
-        const Spring stiff(200.0, 0.5); // dt=0.1 is 10x past the stability limit
-        CurveState state;
-        for (int i = 0; i < 200; ++i) {
-            stiff.step(0.1, state, 1.0);
-            QVERIFY2(std::isfinite(state.value), "the integrator must never emit a non-finite value");
-            QVERIFY2(std::isfinite(state.velocity), "the integrator must never emit a non-finite velocity");
+        const Spring s = Spring::snappy();
+        for (const qreal poison : {std::numeric_limits<qreal>::infinity(), -std::numeric_limits<qreal>::infinity(),
+                                   std::numeric_limits<qreal>::quiet_NaN()}) {
+            CurveState state;
+            state.value = poison;
+            s.step(1.0 / 60.0, state, 1.0);
+            QVERIFY2(std::isfinite(state.value), "a poisoned value must not propagate");
+            QCOMPARE(state.value, 1.0);
+            QCOMPARE(state.velocity, 0.0);
         }
-        // A diverged spring fails to the target rather than propagating garbage.
-        QCOMPARE(state.value, 1.0);
-        QCOMPARE(state.velocity, 0.0);
-    }
-
-    // The integrator must stay BOUNDED across the whole settings-slider range, not
-    // merely finite. The two sliders reach omega=40 and zeta=4 independently, so
-    // their product reaches 160 — far past semi-implicit Euler's stability limit of
-    // omega*zeta < 1/dt (60 at 60 Hz). 27% of the slider grid sits past it.
-    //
-    // A finiteness-only assertion does NOT catch this: the blowup is geometric but
-    // stays finite (-1.4e39 at the corner after a second), so it never trips an
-    // isfinite() check — it just draws the window 1e39 px off-screen. The magnitude
-    // bound is the assertion that matters, and it fails without substepping.
-    void testStepStaysBoundedAcrossTheSliderRange()
-    {
-        const qreal dt = 1.0 / 60.0;
-        for (qreal omega = 1.0; omega <= 40.0; omega += 1.0) {
-            for (qreal zeta = 0.1; zeta <= 4.0; zeta += 0.1) {
-                const Spring s(omega, zeta);
-                CurveState state;
-                for (int i = 0; i < 120; ++i) { // two seconds
-                    s.step(dt, state, 1.0);
-                    QVERIFY2(std::isfinite(state.value),
-                             qPrintable(QStringLiteral("non-finite at omega=%1 zeta=%2").arg(omega).arg(zeta)));
-                    QVERIFY2(qAbs(state.value) <= 4.0,
-                             qPrintable(QStringLiteral("omega=%1 zeta=%2 reached %3 — the integrator diverged")
-                                            .arg(omega)
-                                            .arg(zeta)
-                                            .arg(state.value)));
-                }
-            }
-        }
-    }
-
-    // ...and it must still CONVERGE, not merely stay bounded — substepping must not
-    // have turned the physics into treacle.
-    void testStepConvergesAtTheStiffSliderCorner()
-    {
-        const Spring corner(40.0, 4.0); // both sliders at maximum
-        CurveState state;
-        for (int i = 0; i < 300; ++i) {
-            corner.step(1.0 / 60.0, state, 1.0);
-        }
-        QVERIFY2(qAbs(state.value - 1.0) < 0.01, "an overdamped spring must reach its target");
     }
 
     // The backstop must not fire for a spring that is merely underdamped: a normal

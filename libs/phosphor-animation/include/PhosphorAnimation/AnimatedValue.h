@@ -284,16 +284,15 @@ public:
 
         if (curve->isStateful()) {
             // Cap the integrator step at Limits::MaxShaderTimeDeltaSeconds.
-            // Spring::step is semi-implicit Euler, so an unbounded step diverges:
-            // a suspend/resume, GC pause, or scheduler stall would otherwise hand
-            // it a multi-second dt in a single tick, blow the velocity up, and
-            // leave the value garbage. kSafetyCap below is no defence — it tests
-            // ELAPSED and runs AFTER the step, so it forces completion on an
-            // already-corrupt state rather than preventing it. The cap bounds the
-            // blast radius; it does not make the integrator unconditionally
-            // stable (strict stability wants dt < 1/(5*omega), and Spring admits
-            // omega up to 200). Substepping would be the real fix for a stiff
-            // spring.
+            //
+            // NOT for stability: Spring::step is an EXACT exponential integrator
+            // (the closed form of the ODE, not a numerical scheme), so it is
+            // unconditionally stable at any dt, omega and zeta. The cap bounds how
+            // far a stall JUMPS — a suspend/resume or scheduler hitch would
+            // otherwise advance the spring by multiple seconds in one tick, which is
+            // correct physics but reads as a teleport. At the cap a single tick is
+            // 6 frames of motion at 60 Hz; beyond that the animation "skips" rather
+            // than blurring through motion the user never sees.
             //
             // Only this branch integrates dt — the parametric branch derives its
             // value from elapsed/duration, so a stall there merely lands further

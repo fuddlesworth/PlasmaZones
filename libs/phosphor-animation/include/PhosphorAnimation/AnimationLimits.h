@@ -107,8 +107,9 @@ constexpr int MaxAnimationStaggerIntervalMs = 200;
 /// scheduler glitch must not blast a multi-second jump into a consumer
 /// that integrates the delta — shaders that advance state from
 /// `iTimeDelta` (sparkle drift, particle motion, noise advance), and
-/// spring curves, whose `step()` is semi-implicit Euler and is only
-/// stable for `dt < 1/(5*omega)`. 100 ms is generous: at the cap a
+/// spring curves — whose `step()` is an EXACT exponential integrator and is
+/// stable at any dt, so the cap bounds how far a stall JUMPS rather than
+/// whether the integrator survives it. 100 ms is generous: at the cap a
 /// single tick is 6 frames of motion at 60 Hz, beyond which the effect
 /// "skips" rather than blurring through unrealistic motion.
 ///

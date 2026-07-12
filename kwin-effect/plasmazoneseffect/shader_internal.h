@@ -274,13 +274,11 @@ inline qreal clampProgressForCurve(qreal value, const PhosphorAnimation::Curve* 
 /// true; a predictor that must not advance the integrator (the backdrop capture)
 /// passes false and reads the last stepped value.
 ///
-/// The dt is capped at Limits::MaxShaderTimeDeltaSeconds. Spring::step is
-/// semi-implicit Euler, so an unbounded step diverges: a suspend/resume or a
-/// compositor stall would hand it a multi-second dt in one frame and blow the
-/// velocity up. The cap BOUNDS THE BLAST RADIUS; it does not make the integrator
-/// unconditionally stable (Spring admits omega up to 200, and strict stability
-/// wants dt < 1/(5*omega), far below 100 ms). Substepping would be the real fix
-/// if a pack ever needs a stiff spring here. @p lastPaintTimeMs < 0 is the
+/// The dt is capped at Limits::MaxShaderTimeDeltaSeconds — NOT for stability.
+/// Spring::step is an EXACT exponential integrator, so it is unconditionally stable
+/// at any dt. The cap bounds how far a stall JUMPS: a suspend/resume or compositor
+/// hitch would otherwise advance the spring several seconds in one frame, which is
+/// correct physics but reads as a teleport. @p lastPaintTimeMs < 0 is the
 /// "no prior paint" sentinel and yields dt = 0.
 inline qreal easeProgress(const PhosphorAnimation::Curve* curve, PhosphorAnimation::CurveState& state,
                           qint64 lastPaintTimeMs, qint64 nowMs, qreal linear, bool stepCurve)

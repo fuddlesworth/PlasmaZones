@@ -994,14 +994,6 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 lbIt != m_windowDecorations.constEnd()) {
                 layerPad = lbIt->outerPadding;
             }
-            // What the fold ACTUALLY applied, not what the metadata promised — a
-            // handlesOpacity pack that failed to compile never ran, so nothing baked
-            // the alpha and suppressing the modulation here would render the window
-            // fully opaque. See SurfaceMultipassState::handledOpacity.
-            bool chainBakesOpacity = false;
-            if (const auto foIt = m_surfaceMultipass.find(getWindowId(w)); foIt != m_surfaceMultipass.end()) {
-                chainBakesOpacity = foIt->second.handledOpacity;
-            }
             // Surface-layer stack (border / rounded corners, ...): render the
             // window's active layers into an FBO so the animation composites
             // OVER the layered surface and the border stays visible for the
@@ -1022,10 +1014,22 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // last frame's rect on every geometry-change frame. The live-
             // geometry fallback stays for the fold's failure paths, which can
             // erase the multipass entry.
+            //
+            // `chainBakesOpacity` is read here for the SAME reason and from the same
+            // lookup: it reports what the fold ACTUALLY applied, and the fold is what
+            // sets it. Reading it BEFORE renderSurfaceChain — as this first did —
+            // gives last frame's answer, and on a window whose first-ever paint IS the
+            // transition frame (every window.open) there is no entry at all, so it
+            // reads false. A frosted window with a SetOpacity rule would then have the
+            // alpha baked by the fold AND modulated again here: the double-apply that
+            // the iWindowOpacity bug already caused once.
             QRectF layerCanvasGeo = expandedGeo.adjusted(-layerPad, -layerPad, layerPad, layerPad);
-            if (const auto lsIt = m_surfaceMultipass.find(getWindowId(w));
-                lsIt != m_surfaceMultipass.end() && lsIt->second.canvasGeo.isValid()) {
-                layerCanvasGeo = lsIt->second.canvasGeo;
+            bool chainBakesOpacity = false;
+            if (const auto lsIt = m_surfaceMultipass.find(getWindowId(w)); lsIt != m_surfaceMultipass.end()) {
+                if (lsIt->second.canvasGeo.isValid()) {
+                    layerCanvasGeo = lsIt->second.canvasGeo;
+                }
+                chainBakesOpacity = lsIt->second.handledOpacity;
             }
             const QVector4D layerRectInTexture = ShaderInternal::computeTextureSubRect(
                 transition.surfaceExtent ? anchorGeo : expandedGeo, layerCanvasGeo);
@@ -1325,7 +1329,22 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (transition.meshSim.initialized) {
                     const qint64 mdt = (transition.meshLastMs < 0) ? 0 : (nowMs - transition.meshLastMs);
                     transition.meshLastMs = nowMs;
+                    const bool wasSettled = transition.meshSim.settled;
                     ShaderInternal::stepMeshSim(transition.meshSim, w->frameGeometry(), static_cast<qreal>(mdt));
+                    // Request ONE more frame on the settle edge. The lattice flips
+                    // `settled` here, INSIDE the paint — but postPaintScreen has
+                    // already decided whether to inject a repaint for this window, and
+                    // its `heldActive` arm reads the same flag. So on the frame a
+                    // wobble settles, nothing schedules the next paint, and the expiry
+                    // teardown (which only runs from paintWindow, on a frame where the
+                    // leg is inactive) never gets one. The leg then survives on the
+                    // 4 s mesh SAFETY cap — which exists for a lattice that never
+                    // settles, not for the normal path — holding its redirect, its
+                    // shader, and the whole compositor's transformed-windows paint
+                    // path for ~3.5 s after every single drag.
+                    if (!wasSettled && transition.meshSim.settled) {
+                        w->addRepaintFull();
+                    }
                 }
                 if (cached->iMoveMeshLoc >= 0) {
                     // Publish node deflections from ideal grid position, px.

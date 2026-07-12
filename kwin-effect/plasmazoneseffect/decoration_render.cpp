@@ -366,7 +366,7 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // chains). Prefer the per-frame cache prePaintWindow refreshed.
     //
     // Gated on the pack's METADATA flag, not on the linker location, so this push
-    // and the present pass's suppression (WindowDecoration::chainHandlesOpacity,
+    // and the present pass's suppression (SurfaceMultipassState::handledOpacity,
     // folded from the same metadata) agree on who owns the alpha. A pack that links
     // uSurfaceOpacity without declaring handlesOpacity gets 1.0 — the present pass
     // modulates instead — rather than the alpha baked in here AND applied again

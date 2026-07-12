@@ -333,9 +333,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         if (!pk || !pk->shader) {
             continue; // skip a failed pack; the composite carries through unchanged
         }
-        if (pk->handlesOpacity && pk->uOpacityLoc >= 0) {
-            foldAppliedOpacity = true; // this pack draws AND owns the alpha
-        }
         // Defensive: chainBufferTex is sized to chain.size() in the realloc block
         // above and stays in lockstep with `chain`, but guard the unchecked
         // operator[] in case a future edit decouples the two (out-of-bounds [] is
@@ -626,6 +623,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         }
         glActiveTexture(GL_TEXTURE0);
         KWin::GLFramebuffer::popFramebuffer();
+        // Latch AFTER the main pass has actually drawn. Setting it at the top of the
+        // loop — as this first did — claims the alpha was applied on paths where the
+        // pack's main pass never runs (a chainBufferTex size mismatch, an invalid
+        // FBO). pushBorderUniforms is the ONLY site that pushes uSurfaceOpacity and
+        // it lives inside that main pass, so the flag would say the alpha was handled,
+        // both consumers would stand down, and the window would render fully opaque —
+        // the exact fail-open this flag exists to remove, relocated rather than fixed.
+        if (pk->handlesOpacity && pk->uOpacityLoc >= 0) {
+            foldAppliedOpacity = true;
+        }
         src = dst;
     }
 
