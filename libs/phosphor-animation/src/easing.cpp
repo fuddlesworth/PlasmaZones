@@ -169,7 +169,13 @@ bool Easing::overshoots() const
     case Type::BounceIn:
     case Type::BounceOut:
     case Type::BounceInOut:
-        return amplitude > 1.0; // amplitude>1 amplifies bounce dips beyond unit
+        // Bounce never leaves [0,1], at ANY admitted amplitude. bounce-out is
+        // `1 - height*amp*dip` with height <= 0.25 (r = 0.5), amp clamped to <= 3.0
+        // and dip in [0,1], so the output floors at 0.25; bounce-in mirrors it. The
+        // old `amplitude > 1.0` was a false positive, and it is not free: it made
+        // every bounce-* animation pay a 49-sample evaluate() sweep in
+        // AnimatedValue's swept-bounds, once per animating window per frame.
+        return false;
     case Type::CubicBezier:
         // Bezier overshoots iff a y control point leaves [0, 1].
         return y1 < 0.0 || y1 > 1.0 || y2 < 0.0 || y2 > 1.0;

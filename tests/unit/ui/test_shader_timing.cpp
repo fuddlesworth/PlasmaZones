@@ -32,6 +32,7 @@
 using PhosphorAnimation::CurveState;
 using PhosphorAnimation::Easing;
 using PhosphorAnimation::Spring;
+using PlasmaZones::ShaderInternal::clampProgressForCurve;
 using PlasmaZones::ShaderInternal::easeProgress;
 using PlasmaZones::ShaderInternal::resolveTransitionLifetimeMs;
 
@@ -138,28 +139,40 @@ private Q_SLOTS:
         QCOMPARE(easeProgress(&easing, state, -1, 0, 1.0, true), 1.0);
     }
 
-    // A NON-overshooting curve stays clamped: an out-of-range value there is a bug,
-    // not the intent.
+    // The clamp POLICY, tested directly on the function that owns it.
     //
-    // Deliberately a critically-damped SPRING, not an Easing. Easing::evaluate
-    // self-clamps its domain (`x <= 0 → 0`, `x >= 1 → 1`), so an Easing-based
-    // assertion here would be satisfied by evaluate() and never by the clamp under
-    // test — it would pass with the clamp deleted. The clamp only bites on the
-    // STATEFUL branch, where semi-implicit Euler drives even a zeta=1 spring past 1
-    // on a large dt. The QVERIFY2 on the raw state is what keeps this honest: if
-    // the setup ever stops leaving [0,1], the test fails loudly instead of quietly
-    // going vacuous again.
-    void testEaseClampsNonOvershootingCurve()
+    // Not via easeProgress and a spring, which is where this test started: it used
+    // `Spring::smooth()` (zeta = 1) and relied on semi-implicit Euler being unstable
+    // enough to push a critically-damped spring past 1.0. Substepping made the
+    // integrator unconditionally stable, so that premise evaporated — and the test's
+    // own QVERIFY2 caught it rather than silently passing on a setup that no longer
+    // exercised anything.
+    //
+    // With a stable integrator, a NON-overshooting curve cannot leave [0,1] on its
+    // own, so the clamp is now purely defensive: it guards a third-party Curve
+    // registered through CurveRegistry that misbehaves. Test it as what it is — a
+    // pure policy function over a supplied value.
+    void testClampPolicyBoundsNonOvershootingCurves()
     {
-        const Spring smooth = Spring::smooth(); // zeta == 1.0 → overshoots() == false
-        QVERIFY(!smooth.overshoots());
-        CurveState state;
-        qreal maxReturned = 0.0;
-        for (qint64 t = 0; t <= 500; t += 100) { // dt at the cap — Euler overshoots
-            maxReturned = qMax(maxReturned, easeProgress(&smooth, state, t == 0 ? -1 : t - 100, t, 0.0, true));
-        }
-        QVERIFY2(state.value > 1.0, "the integrator must actually leave [0,1] or the clamp is untested");
-        QCOMPARE(maxReturned, 1.0); // ...and easeProgress must still hand out a clamped value
+        const Easing easing; // OutCubic — overshoots() == false
+        QVERIFY(!easing.overshoots());
+        QCOMPARE(clampProgressForCurve(1.4, &easing), 1.0);
+        QCOMPARE(clampProgressForCurve(-0.3, &easing), 0.0);
+        QCOMPARE(clampProgressForCurve(0.5, &easing), 0.5); // in-range is untouched
+
+        // A null curve means linear, and linear is bounded.
+        QCOMPARE(clampProgressForCurve(1.4, nullptr), 1.0);
+        QCOMPARE(clampProgressForCurve(-0.3, nullptr), 0.0);
+    }
+
+    // ...and an OVERSHOOTING curve passes through RAW. Same function, opposite
+    // branch — this is the half that makes the bounce reach the shader at all.
+    void testClampPolicyPassesOvershootingCurvesThrough()
+    {
+        const Spring bouncy(12.0, 0.5); // explicitly underdamped
+        QVERIFY(bouncy.overshoots());
+        QCOMPARE(clampProgressForCurve(1.4, &bouncy), 1.4);
+        QCOMPARE(clampProgressForCurve(-0.3, &bouncy), -0.3);
     }
 
     // An OVERSHOOTING curve is NOT clamped — the overshoot is the curve, and the

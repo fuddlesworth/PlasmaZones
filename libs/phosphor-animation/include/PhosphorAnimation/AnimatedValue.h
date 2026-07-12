@@ -113,6 +113,17 @@ public:
         }
 
         const T newFrom = m_current;
+        // Check the FROM endpoint too, not just newTo. `m_current` is the live
+        // interpolated value, so a retarget landing while the state is garbage (a
+        // diverged integrator, a poisoned lerp) would LATCH that garbage as the new
+        // animation's origin — and every subsequent bounds() / damage rect is then
+        // computed from it. Finish rather than propagate: the value is already wrong,
+        // and completing puts the target on screen.
+        if (!Interpolate<T>::isFinite(newFrom)) {
+            qCWarning(lcAnimatedValue) << "retarget() rejected: non-finite current value; finishing at target";
+            finish();
+            return false;
+        }
         const qreal oldDistance = Interpolate<T>::distance(m_from, m_to);
         const qreal newDistance = Interpolate<T>::distance(newFrom, newTo);
 

@@ -308,6 +308,48 @@ private Q_SLOTS:
         QCOMPARE(state.velocity, 0.0);
     }
 
+    // The integrator must stay BOUNDED across the whole settings-slider range, not
+    // merely finite. The two sliders reach omega=40 and zeta=4 independently, so
+    // their product reaches 160 — far past semi-implicit Euler's stability limit of
+    // omega*zeta < 1/dt (60 at 60 Hz). 27% of the slider grid sits past it.
+    //
+    // A finiteness-only assertion does NOT catch this: the blowup is geometric but
+    // stays finite (-1.4e39 at the corner after a second), so it never trips an
+    // isfinite() check — it just draws the window 1e39 px off-screen. The magnitude
+    // bound is the assertion that matters, and it fails without substepping.
+    void testStepStaysBoundedAcrossTheSliderRange()
+    {
+        const qreal dt = 1.0 / 60.0;
+        for (qreal omega = 1.0; omega <= 40.0; omega += 1.0) {
+            for (qreal zeta = 0.1; zeta <= 4.0; zeta += 0.1) {
+                const Spring s(omega, zeta);
+                CurveState state;
+                for (int i = 0; i < 120; ++i) { // two seconds
+                    s.step(dt, state, 1.0);
+                    QVERIFY2(std::isfinite(state.value),
+                             qPrintable(QStringLiteral("non-finite at omega=%1 zeta=%2").arg(omega).arg(zeta)));
+                    QVERIFY2(qAbs(state.value) <= 4.0,
+                             qPrintable(QStringLiteral("omega=%1 zeta=%2 reached %3 — the integrator diverged")
+                                            .arg(omega)
+                                            .arg(zeta)
+                                            .arg(state.value)));
+                }
+            }
+        }
+    }
+
+    // ...and it must still CONVERGE, not merely stay bounded — substepping must not
+    // have turned the physics into treacle.
+    void testStepConvergesAtTheStiffSliderCorner()
+    {
+        const Spring corner(40.0, 4.0); // both sliders at maximum
+        CurveState state;
+        for (int i = 0; i < 300; ++i) {
+            corner.step(1.0 / 60.0, state, 1.0);
+        }
+        QVERIFY2(qAbs(state.value - 1.0) < 0.01, "an overdamped spring must reach its target");
+    }
+
     // The backstop must not fire for a spring that is merely underdamped: a normal
     // bouncy spring at a normal frame delta overshoots 1.0 and must keep doing so.
     void testStepPreservesLegitimateOvershoot()

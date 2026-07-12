@@ -134,31 +134,46 @@ void Spring::step(qreal dt, CurveState& state, qreal target) const
         return;
     }
 
-    // Semi-implicit (symplectic) Euler: acceleration → velocity → position.
-    // Stable for dt < 1/(5·omega); at omega=30 that's ~6.6 ms, below the
-    // 16 ms frame budget at 60 Hz. Callers that want hard guarantees for
-    // extreme stiffness should substep externally.
+    // Semi-implicit (symplectic) Euler, SUBSTEPPED into stable slices.
+    //
+    // Euler here is only CONDITIONALLY stable. The velocity update is
+    // `v ← v·(1 - 2ζω·h) + ω²·err·h`, so the damping term alone diverges once
+    // `2ζω·h ≥ 2`, i.e. `ω·ζ ≥ 1/h` — 60 at a 60 Hz frame. That band is not
+    // exotic: the two settings sliders reach ω = 40 and ζ = 4 INDEPENDENTLY, so
+    // their product reaches 160, and 27% of the slider grid lands past the
+    // boundary. At the corner the state reaches -1.4e39 in a second.
+    //
+    // That was invisible on the shader side (the value is clamped for display) but
+    // the geometry takes it RAW — `AnimatedValue::lerpStateValue` lerps the window's
+    // rect with it — so the window is drawn ~1e39 px off-screen for the whole
+    // animation and then pops back. A vanishing window, at a settings corner a user
+    // can actually reach.
+    //
+    // A magnitude clamp would paper over it; substepping fixes the physics. Slice
+    // the frame so each sub-step is comfortably inside the stability limit, which
+    // costs 6 slices at the slider corner and 1 for every ordinary spring. The
+    // 64-slice ceiling bounds the worst case (a 100 ms stall at ω = 200).
     const qreal stiffness = omega * omega;
     const qreal damping = 2.0 * zeta * omega;
-    const qreal accel = stiffness * error - damping * state.velocity;
-    state.velocity += accel * dt;
-    state.value += state.velocity * dt;
+    // Stability wants h < 2/(ζω) for the damping term and h < 2/ω for the spring
+    // term; take the tighter and halve it for margin.
+    const qreal stableH = 0.5 / qMax(1.0e-3, omega * qMax(1.0, zeta));
+    const int slices = qBound(1, static_cast<int>(qCeil(dt / stableH)), 64);
+    const qreal h = dt / slices;
+    for (int i = 0; i < slices; ++i) {
+        const qreal err = target - state.value;
+        const qreal accel = stiffness * err - damping * state.velocity;
+        state.velocity += accel * h;
+        state.value += state.velocity * h;
+    }
     state.time += dt;
 
-    // Divergence backstop. The integrator is only conditionally stable, and
-    // `omega` is admitted up to 200 (a hand-edited config or a pack's curve
-    // string reaches it — the slider's narrower band is not the validity
-    // boundary). Past dt >= 2/omega it blows up geometrically: omega=200 at the
-    // 100 ms dt cap reaches NaN within ~120 frames, and one capped frame at
-    // omega=125 is enough to send the value to -1e227.
-    //
-    // The value escapes this class raw: `AnimatedValue::lerpStateValue` lerps a
-    // window's QRectF geometry with it, and `ShaderInternal::easeProgress` hands
-    // it to `glUniform1f(iTime)` UNCLAMPED for an overshooting curve — which is
-    // precisely the underdamped class that diverges. So an inf/NaN here becomes a
-    // garbage window rect and a poisoned shader uniform. Fail to the target
-    // instead: a diverged spring has no meaningful state to preserve, and
-    // completing is the only sane terminal.
+    // Divergence backstop, retained as a net rather than a fence. Substepping makes
+    // the integrator stable across the whole admitted parameter range, but `omega`
+    // is admitted to 200 by a hand-edited config and the slice ceiling is finite, so
+    // keep a terminal guard: an inf/NaN escaping this class becomes a garbage window
+    // rect and a poisoned shader uniform. A diverged spring has no meaningful state
+    // to preserve, and completing is the only sane terminal.
     if (!std::isfinite(state.value) || !std::isfinite(state.velocity)) {
         qCWarning(lcSpring) << "spring integrator diverged (omega=" << omega << "zeta=" << zeta << "dt=" << dt
                             << ") — snapping to target";
