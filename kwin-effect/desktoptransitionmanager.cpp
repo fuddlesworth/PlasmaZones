@@ -39,24 +39,37 @@
 namespace PlasmaZones {
 
 namespace {
-// Output device-pixel size for @p screen (logical geometry scaled to the
-// physical framebuffer). The capture textures and the blend viewport both key on
-// this, so it is derived in one place.
-QSize deviceSizeForOutput(KWin::LogicalOutput* screen)
+// The internal format a desktop capture must use: whatever KWin is blending the
+// output in.
+//
+// Hardcoding GL_RGBA8 (as this did) is wrong on an HDR / wide-gamut output. KWin
+// blends there in the output's container colorimetry with 1.0 mapped onto the
+// display's peak luminance, so 8-bit sRGB values written verbatim land dim and
+// desaturated — a desktop switch flashed the wrong brightness. Inheriting the
+// target's format is the idiom KWin's own blur and screen-transform use. Every
+// format KWin maps a DRM format to carries alpha, so this never silently drops it.
+//
+// Reached through framebuffer() rather than RenderTarget::texture(): that
+// accessor dereferences the framebuffer unconditionally, and it is null on an
+// image-backed target. PlasmaZonesEffect::supported() now requires OpenGL
+// compositing so that cannot happen, but this stays honest rather than resting on
+// a guarantee made in another file.
+GLenum captureFormatFor(const KWin::RenderTarget& outputTarget)
 {
-    return (screen->geometryF().size() * screen->scale()).toSize();
+    const KWin::GLFramebuffer* const fb = outputTarget.framebuffer();
+    const KWin::GLTexture* const targetTex = fb ? fb->colorAttachment() : nullptr;
+    return targetTex ? targetTex->internalFormat() : GL_RGBA8;
 }
 
-// Allocate an output-sized RGBA8 texture for @p screen (LINEAR filter,
-// CLAMP_TO_EDGE) — the shared preamble of both desktop captures. Returns null
-// when the output's device size is empty or GL allocation fails.
-std::unique_ptr<KWin::GLTexture> allocateOutputTexture(KWin::LogicalOutput* screen)
+// Allocate a capture texture of @p deviceSize in @p internalFormat (LINEAR
+// filter, CLAMP_TO_EDGE) — the shared preamble of both desktop captures. Returns
+// null when the size is empty or GL allocation fails.
+std::unique_ptr<KWin::GLTexture> allocateOutputTexture(const QSize& deviceSize, GLenum internalFormat)
 {
-    const QSize textureSize = deviceSizeForOutput(screen);
-    if (textureSize.isEmpty()) {
+    if (deviceSize.isEmpty()) {
         return nullptr;
     }
-    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(internalFormat, deviceSize);
     if (!tex) {
         return nullptr;
     }
@@ -274,7 +287,9 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
 }
 
 std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::VirtualDesktop* desktop,
-                                                                          KWin::LogicalOutput* screen)
+                                                                          KWin::LogicalOutput* screen,
+                                                                          const KWin::RenderTarget& outputTarget,
+                                                                          const KWin::RenderViewport& outputViewport)
 {
     const qreal scale = screen->scale();
     const QRectF logicalGeometry = screen->geometryF();
@@ -283,7 +298,13 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
     // into the on-screen draw that follows in this same frame.
     const ShaderInternal::ScopedGlState glStateGuard;
 
-    std::unique_ptr<KWin::GLTexture> tex = allocateOutputTexture(screen);
+    // Size from the OUTPUT viewport rather than re-deriving it: deviceSize() is
+    // scaledRenderRect().size(), which is how KWin itself rounds. Rounding the
+    // logical size per-component instead (the old deviceSizeForOutput) can differ
+    // by a pixel on a fractional scale with a non-zero origin, which would leave
+    // the capture texture and the blend quad disagreeing by that pixel.
+    std::unique_ptr<KWin::GLTexture> tex =
+        allocateOutputTexture(outputViewport.deviceSize(), captureFormatFor(outputTarget));
     if (!tex) {
         return nullptr;
     }
@@ -310,7 +331,13 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
     // own raw capture and clears it unconditionally on the way out, so holding it
     // across this loop would have it silently cleared by the first folded window.
     {
-        KWin::RenderTarget renderTarget(&fbo);
+        // Capture in the OUTPUT's colour space, not the sRGB default. The window
+        // content is converted into whatever space this target declares, and the
+        // blend later writes those values verbatim into KWin's output target — so
+        // declaring sRGB here while the compositor blends in a wide-gamut float
+        // space is exactly the mismatch that made HDR desktop switches flash the
+        // wrong brightness. Matching the space makes the blend a pass-through.
+        KWin::RenderTarget renderTarget(&fbo, outputTarget.colorDescription());
         KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
         KWin::GLFramebuffer::pushFramebuffer(&fbo);
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -358,14 +385,20 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
     return tex;
 }
 
-std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int mask, KWin::LogicalOutput* screen)
+std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int mask, KWin::LogicalOutput* screen,
+                                                                            const KWin::RenderTarget& outputTarget,
+                                                                            const KWin::RenderViewport& outputViewport)
 {
     const qreal scale = screen->scale();
     const QRectF logicalGeometry = screen->geometryF();
 
     const ShaderInternal::ScopedGlState glStateGuard;
 
-    std::unique_ptr<KWin::GLTexture> tex = allocateOutputTexture(screen);
+    // Same size / format / colour space as the outgoing capture — see
+    // captureDesktop. The two textures are blended against each other and then
+    // written into the output target, so all three must agree.
+    std::unique_ptr<KWin::GLTexture> tex =
+        allocateOutputTexture(outputViewport.deviceSize(), captureFormatFor(outputTarget));
     if (!tex) {
         return nullptr;
     }
@@ -375,7 +408,7 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int 
     }
 
     {
-        KWin::RenderTarget renderTarget(&fbo);
+        KWin::RenderTarget renderTarget(&fbo, outputTarget.colorDescription());
         KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
         KWin::GLFramebuffer::pushFramebuffer(&fbo);
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -526,8 +559,8 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     // scene now, so it is captured via effects->paintScreen — drawWindow on the
     // current desktop's already-visible windows renders black.
     if (!tr.captured) {
-        tr.fromTex = captureDesktop(tr.from, screen);
-        tr.toTex = captureLiveScene(mask, screen);
+        tr.fromTex = captureDesktop(tr.from, screen, renderTarget, viewport);
+        tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
         tr.captured = true;
     }
     CompiledDesktopShader* cs = compiledShader(tr.effectId);
@@ -538,7 +571,11 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
         return false;
     }
 
-    const QSize deviceSize = deviceSizeForOutput(screen);
+    // The output's device size in LOGICAL orientation (scaledRenderRect().size(),
+    // offset-independent). Same source the capture textures are allocated from, so
+    // iResolution, the packs' aspect/texel maths and the sampled textures cannot
+    // disagree by a rounding pixel.
+    const QSize deviceSize = viewport.deviceSize();
 
     const ShaderInternal::ScopedGlState glStateGuard;
     // Draw into the framebuffer KWin handed us, sized to that target, instead of
