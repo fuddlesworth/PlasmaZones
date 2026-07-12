@@ -205,7 +205,10 @@ void AutotileHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const Q
             kw->maximize(KWin::MaximizeRestore);
             --m_suppressMaximizeChanged;
         }
-        m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh));
+        // Snap-out: leaving zone-managed sizing.
+        m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh),
+                                      /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                      PhosphorAnimation::ProfilePaths::WindowSnapOut);
         qCInfo(lcEffect) << "Desktop switch: restored pre-snap geometry from daemon for orphaned window" << windowId;
     });
 }

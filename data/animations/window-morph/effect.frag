@@ -40,7 +40,25 @@ uniform vec4 iToRect;
 
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
-    t = clamp(t, 0.0, 1.0);
+    // `t` is deliberately NOT clamped here. iTime leaves [0,1] for an overshooting
+    // curve (an underdamped spring, a back / elastic ease), and on THIS pack that
+    // overshoot is the whole point: the rect lerp below extrapolates past iToRect,
+    // so the window flies a little past its target and springs back — the bounce.
+    // Clamping at entry, as this used to, silently ate it.
+    //
+    // Two things downstream must still see a bounded value, so they take `tc`:
+    //   - the rect's SIZE. Extrapolating it linearly is nonsense at a large ratio:
+    //     a 400px window maximizing to 3840px computes a width of -116 at t = -0.15.
+    //     The max() below stops the NaN but collapses the rect to a 1px axis, so the
+    //     mask zeroes and the window VANISHES into a sliver before popping back.
+    //     "Before the start" does not mean "negative width".
+    //   - the old→new COLOUR cross-fade, where extrapolating premultiplied colours
+    //     past their endpoints drives them out of range (over-contrast on a unorm8
+    //     target, unbounded on a float/HDR one). A cross-fade has no meaning past
+    //     its ends.
+    // The POSITION carries the bounce, which is where the eye reads it: the window
+    // sails past its target and springs back, at its final size.
+    float tc = clamp(t, 0.0, 1.0);
 
     // Fragment's global logical-screen position. Reconstruct from the OUTPUT
     // origin (iSurfaceScreenPos.xy is the window origin; subtracting the
@@ -49,7 +67,7 @@ vec4 pTransition(vec2 uv, float t) {
     vec2 screenPx = outputOrigin + uv * resolutionSafe();
 
     // Interpolated rect (old -> new), then normalise the fragment into it.
-    vec4 rect = mix(iFromRect, iToRect, t);
+    vec4 rect = vec4(mix(iFromRect.xy, iToRect.xy, t), mix(iFromRect.zw, iToRect.zw, tc));
     vec2 ruv = (screenPx - rect.xy) / max(rect.zw, vec2(1.0));
 
     // Outside the morphing rect: nothing to draw. Small feather to avoid a
@@ -66,7 +84,7 @@ vec4 pTransition(vec2 uv, float t) {
 
     // Cross-fade old -> new across the morph. Inputs are premultiplied
     // (KWin FBO storage); a straight mix of premultiplied colours is correct.
-    return mix(oldC, newC, t) * mask;
+    return mix(oldC, newC, tc) * mask;
 #else
     // Daemon path: morph is compositor-only. Render the surface unchanged so
     // the shader bakes for the daemon target and is harmless if ever run.

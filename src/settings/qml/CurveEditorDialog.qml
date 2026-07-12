@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import "EasingCurve.js" as Easing
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -163,17 +164,21 @@ Kirigami.Dialog {
         // Amplitude (elastic + bounce)
         SettingsRow {
             visible: root.timingMode === CurvePresets.timingModeEasing && (easingPreviewInDialog.curveType.indexOf("elastic") >= 0 || easingPreviewInDialog.curveType.indexOf("bounce") >= 0)
-            title: i18n("Amplitude")
-            description: easingPreviewInDialog.curveType.indexOf("elastic") >= 0 ? i18n("Strength of elastic overshoot") : i18n("Height of bounce peaks")
+            title: easingPreviewInDialog.curveType.indexOf("elastic") >= 0 ? i18n("Overshoot") : i18n("Amplitude")
+            description: easingPreviewInDialog.curveType.indexOf("elastic") >= 0 ? i18n("How far past the target it travels before settling back") : i18n("Height of bounce peaks")
 
             SettingsSlider {
-                Accessible.name: i18n("Amplitude")
-                from: 0.5
-                to: 3
-                stepSize: 0.1
+                readonly property bool isElastic: easingPreviewInDialog.curveType.indexOf("elastic") >= 0
+
+                Accessible.name: isElastic ? i18n("Overshoot") : i18n("Amplitude")
+                // Mirrors Easing::clampAmplitude — see EasingSettings.qml. Elastic's
+                // value is its peak and its floor moves with the period.
+                from: isElastic ? Easing.minElasticPeak(easingPreviewInDialog.elasticPeriod) : 0.5
+                to: isElastic ? 2 : 3
+                stepSize: 0.05
                 value: easingPreviewInDialog.curveAmplitude
                 formatValue: function (v) {
-                    return v.toFixed(1);
+                    return isElastic ? "+" + Math.round((v - 1) * 100) + "%" : v.toFixed(1);
                 }
                 onMoved: value => {
                     var ct = easingPreviewInDialog.curveType;
@@ -206,7 +211,9 @@ Kirigami.Dialog {
                 }
                 onMoved: value => {
                     var ct = easingPreviewInDialog.curveType;
-                    var amp = easingPreviewInDialog.curveAmplitude.toFixed(2);
+                    // Re-clamp against the NEW period — elastic's amplitude floor
+                    // moves with it (minElasticPeak); see EasingSettings.qml.
+                    var amp = Easing.clampAmplitude(true, easingPreviewInDialog.curveAmplitude, value).toFixed(2);
                     root._workingCurve = ct + ":" + amp + "," + value.toFixed(2);
                     root._dirty = true;
                 }

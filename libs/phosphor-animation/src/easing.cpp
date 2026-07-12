@@ -16,15 +16,147 @@ Q_LOGGING_CATEGORY(lcEasing, "phosphoranimation.easing")
 // Elastic / bounce reference formulas
 // ═══════════════════════════════════════════════════════════════════════════════
 
-qreal Easing::evaluateElasticOut(qreal t, qreal amp, qreal per)
+namespace {
+
+/// Elastic's decay rate. The curve's envelope is `2^(-10t)`, so in the natural
+/// exponential form `e^(-Lambda t)` the rate is 10*ln(2). Kept in this form
+/// because the crest solution below is stated in terms of it.
+const qreal ElasticLambda = 10.0 * M_LN2;
+
+/// The two period-dependent terms the crest solution needs.
+///
+/// Elastic is `1 + g * e^(-Lambda t) * sin(w (t - s))`, an exponentially decaying
+/// sine riding on the target. Its first crest is NOT at the sine's own crest — the
+/// envelope is falling underneath it, which drags the maximum earlier. Solving
+/// `d/dt [e^(-Lambda t) sin(w (t - s))] = 0` gives `tan(w (t - s)) = w / Lambda`,
+/// so the crest sits at phase `theta = atan(w / Lambda)` past the pin, i.e. at
+///
+///     t_crest = s + theta / w
+///
+/// which is exact, not an approximation. `beta` is Lambda/w, the decay per radian.
+struct ElasticCrest
+{
+    qreal beta; ///< Lambda / w
+    qreal theta; ///< atan(w / Lambda) — the crest's phase
+    qreal coefficient; ///< e^(-beta * theta) * sin(theta)
+};
+
+ElasticCrest elasticCrest(qreal period)
+{
+    const qreal beta = ElasticLambda * period / (2.0 * M_PI);
+    const qreal theta = qAtan(1.0 / beta);
+    return {beta, theta, qExp(-beta * theta) * qSin(theta)};
+}
+
+/// Peak value reached by elastic-out for internal gain @p gain at @p period.
+///
+/// Substituting t_crest back into the curve, and using the pin `s = asin(1/g) / w`
+/// that forces f(0) = 0:
+///
+///     peak = 1 + g * e^(-beta * (asin(1/g) + theta)) * sin(theta)
+///
+/// Verified against a brute-force scan of the curve to within 1e-9.
+qreal elasticPeakForGain(qreal gain, const ElasticCrest& c)
+{
+    return 1.0 + gain * qExp(-c.beta * qAsin(1.0 / gain)) * c.coefficient;
+}
+
+} // namespace
+
+qreal Easing::minElasticPeak(qreal period)
+{
+    // The curve must START at 0, a full unit below the target, so the wave's
+    // magnitude at t = 0 can never be less than 1 — that is what `asin(1/g)`
+    // encodes, and it is why the gain floors at 1. The peak that gain produces is
+    // therefore the gentlest bounce the curve can make at this period, and at a
+    // short period the crest arrives before the envelope has decayed much, so that
+    // floor is HIGH (about 1.71 at period 0.1, versus 1.05 at period 1.0).
+    //
+    // This is not a limitation the reparametrisation introduced; it is a property
+    // of the curve that the old amplitude parameter merely hid. Callers surface it
+    // as the low end of the overshoot range rather than silently clamping into it.
+    return elasticPeakForGain(1.0, elasticCrest(qBound(MinElasticPeriod, period, MaxElasticPeriod)));
+}
+
+qreal Easing::solveElasticGain(qreal peak, qreal period)
+{
+    // One-entry memo. The bisection costs ~800 ns, and AnimatedValue's swept-bounds
+    // sampler calls evaluate() 49 times in a tight loop on the SAME curve every frame
+    // it is animating — so without this the gain is re-solved 50x per frame per window
+    // for an answer that cannot have changed. Keyed on the exact inputs and holding
+    // only a pure function of them, so a hit is indistinguishable from a miss; the
+    // memo is thread_local because curves are shared across threads (compositor, QML,
+    // daemon) and a shared cache would be a data race for no benefit.
+    //
+    // A single entry suffices precisely BECAUSE the callers are bursty: interleaving
+    // two elastic curves costs one extra solve per burst, not per call.
+    thread_local qreal memoPeak = qQNaN();
+    thread_local qreal memoPeriod = qQNaN();
+    thread_local qreal memoGain = 1.0;
+    if (peak == memoPeak && period == memoPeriod) {
+        return memoGain;
+    }
+
+    const ElasticCrest c = elasticCrest(qBound(MinElasticPeriod, period, MaxElasticPeriod));
+    const qreal target = qBound(elasticPeakForGain(1.0, c), peak, MaxElasticPeak);
+
+    // Bisection, not Newton: the peak is smooth and strictly increasing in the gain,
+    // but its derivative carries a `1 / sqrt(g^2 - 1)` term that blows up as g -> 1,
+    // which is exactly the floor case. Newton overshoots there and needs guarding;
+    // bisection just works, and a fixed iteration count keeps it branch-predictable.
+    //
+    // The bracket is safe by construction: the largest gain any admitted (peak,
+    // period) pair needs is ~4.4, at peak 2.0 and period 1.0.
+    qreal lo = 1.0;
+    qreal hi = 16.0;
+    for (int i = 0; i < ElasticSolveIterations; ++i) {
+        const qreal mid = 0.5 * (lo + hi);
+        if (elasticPeakForGain(mid, c) < target) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+
+    const qreal gain = 0.5 * (lo + hi);
+    memoPeak = peak;
+    memoPeriod = period;
+    memoGain = gain;
+    return gain;
+}
+
+qreal Easing::clampAmplitude(Type t, qreal amp, qreal period)
+{
+    switch (t) {
+    case Type::ElasticIn:
+    case Type::ElasticOut:
+    case Type::ElasticInOut:
+        // Elastic's amplitude IS the peak the curve reaches, so its bounds are the
+        // curve's own reachable range: the ceiling is the overshoot envelope (which
+        // makes it exact rather than a compromise) and the floor is whatever the
+        // gentlest bounce at this period happens to be.
+        return qBound(minElasticPeak(period), amp, MaxElasticPeak);
+    default:
+        // Bounce never leaves [0, 1] at any amplitude, so the envelope has no claim
+        // on it and its value scales dip depth over a range that is entirely live.
+        return qBound(0.5, amp, 3.0);
+    }
+}
+
+qreal Easing::evaluateElasticOut(qreal t, qreal peak, qreal per)
 {
     if (t <= 0.0)
         return 0.0;
     if (t >= 1.0)
         return 1.0;
-    const qreal a = qMax(1.0, amp);
-    const qreal s = per / (2.0 * M_PI) * qAsin(1.0 / a);
-    return a * qPow(2.0, -10.0 * t) * qSin((t - s) * 2.0 * M_PI / per) + 1.0;
+    // Clamp here and not only at the parse/setter clamps: `Easing` is a POD with
+    // public fields, so a direct `curve.amplitude = 9.0` reaches evaluate() without
+    // passing either. The clamp is also what guarantees the curve cannot leave the
+    // overshoot envelope, since the clamped peak IS the curve's maximum.
+    const qreal period = qBound(MinElasticPeriod, per, MaxElasticPeriod);
+    const qreal g = solveElasticGain(peak, period);
+    const qreal s = period / (2.0 * M_PI) * qAsin(1.0 / g);
+    return g * qExp(-ElasticLambda * t) * qSin((t - s) * 2.0 * M_PI / period) + 1.0;
 }
 
 qreal Easing::evaluateBounceOut(qreal t, qreal amp, int n)
@@ -169,7 +301,13 @@ bool Easing::overshoots() const
     case Type::BounceIn:
     case Type::BounceOut:
     case Type::BounceInOut:
-        return amplitude > 1.0; // amplitude>1 amplifies bounce dips beyond unit
+        // Bounce never leaves [0,1], at ANY admitted amplitude. bounce-out is
+        // `1 - height*amp*dip` with height <= 0.25 (r = 0.5), amp clamped to <= 3.0
+        // and dip in [0,1], so the output floors at 0.25; bounce-in mirrors it. The
+        // old `amplitude > 1.0` was a false positive, and it is not free: it made
+        // every bounce-* animation pay a 49-sample evaluate() sweep in
+        // AnimatedValue's swept-bounds, once per animating window per frame.
+        return false;
     case Type::CubicBezier:
         // Bezier overshoots iff a y control point leaves [0, 1].
         return y1 < 0.0 || y1 > 1.0 || y2 < 0.0 || y2 > 1.0;
@@ -226,14 +364,20 @@ Easing Easing::fromString(const QString& str)
             return curve;
         }
 
+        // Read the raw amplitude but do NOT clamp it yet. Elastic's amplitude is its
+        // peak, and the reachable floor depends on the period — which is the NEXT
+        // field. Clamping in field order would bound it against the default period
+        // rather than the one being parsed.
+        qreal rawAmplitude = curve.amplitude;
         if (!params.isEmpty()) {
             const QLocale cLocale = QLocale::c();
             const QStringList parts = params.split(QLatin1Char(','));
+
             if (parts.size() >= 1) {
                 bool ok;
-                qreal a = cLocale.toDouble(parts[0].trimmed(), &ok);
+                const qreal a = cLocale.toDouble(parts[0].trimmed(), &ok);
                 if (ok)
-                    curve.amplitude = qBound(0.5, a, 3.0);
+                    rawAmplitude = a;
             }
             if (parts.size() >= 2) {
                 if (curve.type == Type::ElasticIn || curve.type == Type::ElasticOut
@@ -241,7 +385,7 @@ Easing Easing::fromString(const QString& str)
                     bool ok;
                     qreal p = cLocale.toDouble(parts[1].trimmed(), &ok);
                     if (ok)
-                        curve.period = qBound(0.1, p, 1.0);
+                        curve.period = qBound(MinElasticPeriod, p, MaxElasticPeriod);
                 } else {
                     bool ok;
                     int b = cLocale.toInt(parts[1].trimmed(), &ok);
@@ -250,6 +394,13 @@ Easing Easing::fromString(const QString& str)
                 }
             }
         }
+        // Clamp unconditionally, INCLUDING the no-params case (a bare "elastic-out").
+        // The struct's default amplitude of 1.0 is below every elastic floor, so
+        // leaving it unclamped there would store a value the curve cannot produce and
+        // then silently render a different one — evaluate() clamps regardless. Stored
+        // has to equal used, or the settings UI reads back a number that is not what
+        // the compositor is drawing.
+        curve.amplitude = clampAmplitude(curve.type, rawAmplitude, curve.period);
         return curve;
     }
 

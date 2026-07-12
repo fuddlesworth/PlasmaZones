@@ -39,8 +39,17 @@ vec2 pz_cube_xskew(vec2 p, float persp, float center) {
 }
 #endif // PLASMAZONES_KWIN
 
-vec4 pTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float tRaw) {
 #ifdef PLASMAZONES_KWIN
+    // Clamp the timeline. iTime is NOT bounded to [0,1] — an overshooting curve
+    // (spring, back, elastic) delivers its overshoot — and this transform has hard
+    // [0,1] assumptions in three places: pow(t, 2.0) is undefined for t < 0 and
+    // returns NaN (which then fails every pz_cube_inBounds test, including the
+    // background's, so the WHOLE SCREEN goes black), and both faces divide by t and
+    // by 1.0 - t, which flip sign outside the range. A cube rotation has no
+    // meaningful overshoot to render, so the honest thing is to refuse it rather
+    // than extrapolate past the faces.
+    float t = clamp(tRaw, 0.0, 1.0);
     float uz = p_unzoom * 2.0 * (0.5 - distance(0.5, t));
     vec2 p = -uz * 0.5 + (1.0 + uz) * uv;
     // At the exact endpoints one face is zero-width, so its skew divides by zero

@@ -41,7 +41,11 @@ vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
     vec2 center = vec2(pz_linearEase(0.25, 0.5, 1.0, t), 0.5);
     float dissolve = pz_expEaseInOut(0.0, 1.0, 1.0, t);
-    float str = pz_sinEaseInOut(0.0, p_strength, 0.5, t);
+    // Clamp: pz_sinEaseInOut is PERIODIC in t (it is a cosine), so while it lands
+    // on 0 at t = 1.0 as intended, an overshoot to t = 1.2 swings it back up to
+    // ~0.35 * p_strength and the zoom blur RE-BLOOMS after the transition should
+    // have settled. (The dissolve above is safe: pz_expEaseInOut saturates.)
+    float str = pz_sinEaseInOut(0.0, p_strength, 0.5, clamp(t, 0.0, 1.0));
     vec4 color = vec4(0.0);
     float total = 0.0;
     vec2 toCenter = center - uv;
