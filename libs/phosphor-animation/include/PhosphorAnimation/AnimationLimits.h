@@ -150,19 +150,15 @@ constexpr float MaxShaderTimeDeltaSeconds = 0.1f;
 /// too, by construction — its y control points are themselves clamped to [-1, 2]
 /// at every entry point, and the curve stays within its control hull.
 ///
-/// Elastic is the one curve that can cross it, and does. With amplitude capped
-/// (`Easing::clampAmplitude`) its raw output spans about [-1.6, 2.6] over the
-/// admitted parameter space, so elastic-out grazes past the top and elastic-in
-/// past the bottom (elastic-in-out fits entirely). That excursion is CLIPPED, and
-/// deliberately: the cap already pulled the peak down from ~3.4, and what remains
-/// beyond the envelope lasts a few percent of the leg — under one frame at an
-/// ordinary duration. The alternative, capping amplitude low enough that elastic
-/// never reaches the envelope at its tightest period, costs most of the curve's
-/// expressive range to buy back something too brief to see.
+/// Elastic fits it EXACTLY, which is the nicest part. Its `amplitude` is the peak
+/// the curve reaches (see `Easing::clampAmplitude`), and that peak is capped at
+/// `MaxCurveProgress` — so elastic-out tops out at exactly 2.0 and elastic-in, its
+/// mirror, bottoms out at exactly -1.0. The two of them span the envelope precisely
+/// and neither can cross it. Nothing is ever clipped.
 ///
-/// So: a no-op for springs and beziers, a brief clip at the extreme corner of
-/// elastic's range, and a real bound on a hand-edited profile or a third-party
-/// `CurveRegistry` curve, which is the case that has no other defence.
+/// So the envelope is a no-op for every curve the library produces, and a real bound
+/// only on a hand-edited profile or a third-party `CurveRegistry` curve — the case
+/// that has no other defence, since such a curve supplies its own `evaluate()`.
 ///
 /// It must be enforced by the CONSUMERS rather than inside `Curve::evaluate`,
 /// because a third-party curve supplies its own `evaluate()` and would simply

@@ -96,13 +96,14 @@ Item {
             bouncesCount = 3;
             if (params) {
                 var parts = params.split(",");
-                if (parts.length >= 1) {
-                    var a = parseFloat(parts[0]);
-                    // Mirrors Easing::clampAmplitude: the two families share the
-                    // field but not its bounds, so the clamp has to know the type.
-                    if (isFinite(a))
-                        curveAmplitude = isElastic ? Math.max(1, Math.min(2, a)) : Math.max(0.5, Math.min(3, a));
-                }
+                // Read the raw amplitude but do NOT clamp it yet — elastic's
+                // amplitude is its peak, and the reachable floor depends on the
+                // period, which is the NEXT field. Clamping in field order would
+                // bound it against the default period rather than the parsed one.
+                // Mirrors the same ordering in C++ Easing::fromString.
+                var rawAmp = NaN;
+                if (parts.length >= 1)
+                    rawAmp = parseFloat(parts[0]);
                 if (parts.length >= 2) {
                     if (isElastic) {
                         var p = parseFloat(parts[1]);
@@ -114,6 +115,8 @@ Item {
                             bouncesCount = Math.max(1, Math.min(8, b));
                     }
                 }
+                if (isFinite(rawAmp))
+                    curveAmplitude = Easing.clampAmplitude(isElastic, rawAmp, elasticPeriod);
             }
             curveType = name;
             return;

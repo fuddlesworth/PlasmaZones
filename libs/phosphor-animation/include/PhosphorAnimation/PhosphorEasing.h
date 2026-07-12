@@ -86,8 +86,11 @@ public:
     //
     // Setters mirror the bounds enforced by `Easing::fromString`'s
     // qBound clamps: x ∈ [0, 1], y ∈ [-1, 2], period ∈ [0.1, 1],
-    // bounces ∈ [1, 8]. Amplitude is type-dependent and routes through
-    // `Easing::clampAmplitude` (elastic ∈ [1, 2], bounce ∈ [0.5, 3]).
+    // bounces ∈ [1, 8]. Amplitude routes through `Easing::clampAmplitude`,
+    // whose range depends on BOTH the type and the period (elastic's
+    // amplitude is its peak, floored by what the period can reach;
+    // bounce's is a height scale over [0.5, 3]) — so `setType` and
+    // `setPeriod` re-clamp it, and property order does not matter.
     // NaN/inf are silently dropped (the previous value is preserved).
     // Direct field writes would otherwise let a settings UI sneak
     // pathological values past the parse-path clamp.
@@ -103,7 +106,7 @@ public:
         // share the field, not its bounds), and a QML declaration may well set
         // `amplitude` before `type`. Re-clamp so the pair is coherent whichever
         // order the two properties are written in.
-        m_value.amplitude = Easing::clampAmplitude(m_value.type, m_value.amplitude);
+        m_value.amplitude = Easing::clampAmplitude(m_value.type, m_value.amplitude, m_value.period);
     }
 
     qreal x1() const
@@ -160,7 +163,7 @@ public:
         if (!std::isfinite(v)) {
             return;
         }
-        m_value.amplitude = Easing::clampAmplitude(m_value.type, v);
+        m_value.amplitude = Easing::clampAmplitude(m_value.type, v, m_value.period);
     }
     qreal period() const
     {
@@ -171,7 +174,11 @@ public:
         if (!std::isfinite(v)) {
             return;
         }
-        m_value.period = qBound(0.1, v, 1.0);
+        m_value.period = qBound(Easing::MinElasticPeriod, v, Easing::MaxElasticPeriod);
+        // Elastic's amplitude is its peak, and the gentlest peak it can reach moves
+        // with the period. Dropping the period can therefore strand the amplitude
+        // below what the curve can now produce, so re-clamp against the new floor.
+        m_value.amplitude = Easing::clampAmplitude(m_value.type, m_value.amplitude, m_value.period);
     }
     int bounces() const
     {

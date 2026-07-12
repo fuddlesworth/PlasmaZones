@@ -14,17 +14,67 @@
  * Evaluate elastic-out at time t (0-1).
  * Matches C++ EasingCurve::evaluateElasticOut().
  */
+// Elastic's decay rate: the envelope is 2^(-10t), i.e. e^(-Lambda t).
+var ELASTIC_LAMBDA = 10 * Math.LN2;
+var MAX_ELASTIC_PEAK = 2;
+
+// Mirrors the C++ `Easing` elastic math in
+// libs/phosphor-animation/src/easing.cpp. `amp` is the PEAK the curve reaches,
+// not the classic Penner amplitude, and the internal gain that produces that
+// peak is solved for. The preview has to run the same math the compositor does
+// or it draws a curve the renderer will never produce.
+function _elasticCrest(per) {
+    var beta = ELASTIC_LAMBDA * per / (2 * Math.PI);
+    var theta = Math.atan(1 / beta);
+    return {
+        beta: beta,
+        theta: theta,
+        coefficient: Math.exp(-beta * theta) * Math.sin(theta)
+    };
+}
+
+function _elasticPeakForGain(g, c) {
+    return 1 + g * Math.exp(-c.beta * Math.asin(1 / g)) * c.coefficient;
+}
+
+/// Gentlest peak elastic can reach at this period — the low end of the range,
+/// and it MOVES with the period. Mirrors C++ Easing::minElasticPeak.
+function minElasticPeak(per) {
+    return _elasticPeakForGain(1, _elasticCrest(Math.max(0.1, Math.min(1, per))));
+}
+
+/// Invert a requested peak into the internal gain. Bisection, matching C++
+/// Easing::solveElasticGain (24 steps over [1, 16]).
+function _solveElasticGain(peak, per) {
+    var c = _elasticCrest(per);
+    var target = Math.min(Math.max(peak, minElasticPeak(per)), MAX_ELASTIC_PEAK);
+    var lo = 1, hi = 16;
+    for (var i = 0; i < 24; i++) {
+        var mid = 0.5 * (lo + hi);
+        if (_elasticPeakForGain(mid, c) < target)
+            lo = mid;
+        else
+            hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
 function evaluateElasticOut(t, amp, per) {
     if (t <= 0) return 0;
     if (t >= 1) return 1;
-    if (per <= 0) per = 0.3;
-    // Mirrors Easing::clampAmplitude(Elastic*, amp) — bound, not just floored.
-    // The preview must draw the curve the compositor will actually run, so it
-    // has to honour the same ceiling; drawing an unbounded elastic here would
-    // promise an overshoot the renderer never produces.
-    var a = Math.max(1, Math.min(2, amp));
-    var s = per / (2 * Math.PI) * Math.asin(1 / a);
-    return a * Math.pow(2, -10 * t) * Math.sin((t - s) * 2 * Math.PI / per) + 1;
+    per = Math.max(0.1, Math.min(1, per || 0.3));
+    var g = _solveElasticGain(amp, per);
+    var s = per / (2 * Math.PI) * Math.asin(1 / g);
+    return g * Math.exp(-ELASTIC_LAMBDA * t) * Math.sin((t - s) * 2 * Math.PI / per) + 1;
+}
+
+/// Clamp an amplitude the way C++ Easing::clampAmplitude does: elastic's range
+/// is the curve's own reachable one and depends on the period, bounce's is a
+/// height scale over [0.5, 3] with the period ignored.
+function clampAmplitude(isElastic, amp, per) {
+    if (isElastic)
+        return Math.min(Math.max(amp, minElasticPeak(per)), MAX_ELASTIC_PEAK);
+    return Math.min(Math.max(amp, 0.5), 3);
 }
 
 /**
