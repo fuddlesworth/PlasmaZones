@@ -19,6 +19,7 @@
  *   - updateSet round-trips a rename plus description, and export/import
  *     round-trips a set through a file
  *   - Live edits refresh the rows through ONE coalesced setsChanged
+ *   - A set with one unknown path is rejected WHOLE (atomic apply)
  *
  * The refusal paths (validation, version gate, name rules, overwrite consent)
  * are pinned in test_decoration_sets_validation.cpp.
@@ -310,9 +311,8 @@ private Q_SLOTS:
         QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("glow")}));
     }
 
-    // ─── Version gate ───────────────────────────────────────────────────────
-
-    // ─── Refusals ───────────────────────────────────────────────────────────
+    // ─── Refusals kept with the round-trip (they assert post-state on the
+    //     same fixtures) ─────────────────────────────────────────────────────
 
     /// applySet validates every entry up-front and rejects the whole set on any
     /// unknown surface path, leaving the current tree untouched (atomic apply —

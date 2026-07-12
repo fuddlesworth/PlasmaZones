@@ -70,17 +70,11 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
 
     staged->clear();
     // Motion has no baseline: there is no global default profile to apply one
-    // to. A baseline-carrying file is a decoration set (or hand-edited), and
-    // accepting it would half-apply the set — apply drops the baseline, while
-    // the store still counts it, so the Active badge could never light up.
-    // Refuse it at the boundary instead.
-    // A malformed baseline is refused rather than silently ignored, the same as
-    // a malformed override entry.
-    if (root.contains(kBaselineKey) && !root.value(kBaselineKey).isObject()) {
-        qCWarning(lcConfig) << "motionset: rejecting a set whose baseline is not an object";
-        return false;
-    }
-    if (ShaderSetStore::carriesBaseline(root)) {
+    // to. A file carrying the key at all is a foreign or hand-edited set, and
+    // accepting it would half-apply the set. Refuse the KEY, not just a
+    // non-empty value — the same rule the decoration validator applies, so the
+    // two domains cannot drift on what the shared envelope may carry.
+    if (root.contains(kBaselineKey)) {
         qCWarning(lcConfig) << "motionset: rejecting a set that carries a baseline";
         return false;
     }

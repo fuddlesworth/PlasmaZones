@@ -29,7 +29,7 @@ namespace PlasmaZones {
 /// ```
 /// { "name": …, "description": …, "version": 1,
 ///   "overrides": [ { "path": …, "profile": { … } }, … ] }
-/// (a "baseline" key is REFUSED by both domains — see carriesBaseline())
+/// (a "baseline" key, even an empty one, is REFUSED by both domain validators)
 /// ```
 /// so coverage (which root sections a set touches) and active-detection are
 /// computed generically here rather than per domain.
@@ -102,16 +102,6 @@ public:
     };
 
     explicit ShaderSetStore(Config config, QObject* parent = nullptr);
-
-    /// True when @p root carries a real baseline. An EMPTY `"baseline": {}` is
-    /// NOT one, since it engages no field.
-    ///
-    /// NO domain accepts a baseline today: motion has no such concept, and
-    /// decoration's tree has one but no settings page binds it, so a set carrying
-    /// one could only arrive by import and could never then be seen or cleared.
-    /// Both validators use this to REFUSE such a file. It stays on the store
-    /// rather than in one domain because the envelope is shared.
-    static bool carriesBaseline(const QJsonObject& root);
 
     /// True when @p newName is a name updateSet() will accept: non-empty,
     /// slugifiable to a real filename, and not colliding with a set other than

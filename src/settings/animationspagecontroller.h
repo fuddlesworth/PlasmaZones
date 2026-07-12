@@ -139,8 +139,6 @@ public:
     /// form.
     Q_INVOKABLE QString eventLabel(const QString& path) const;
 
-    /// Wraps `ProfilePaths::parentPath`.
-
     /// Inheritance chain from @p path up to (but excluding) the empty
     /// root. Useful for "snap → zone → global" breadcrumbs.
     Q_INVOKABLE QStringList parentChain(const QString& path) const;
@@ -181,8 +179,11 @@ public:
     /// defaults" for the animation pages: each cleared file is snapshotted like
     /// a normal edit, so the change stages and a subsequent Discard restores it.
     /// The shader tree, animation Profile blob, and window filtering are separate
-    /// Settings keys the caller resets alongside this. @return the number of
-    /// override files actually removed.
+    /// Settings keys the caller resets alongside this.
+    /// @return the number of override files actually removed, or -1 when the
+    /// reset was REFUSED because an async discard owns the snapshot map (the
+    /// page toasts the reason). A caller must not treat -1 as "nothing to
+    /// clear": every override file is still on disk.
     int clearAllOverrides();
 
     /// Library of user-saved Profile presets. Each entry is a Profile JSON
@@ -382,8 +383,9 @@ public:
     /// True iff there are unsaved changes the user could still discard.
     bool hasPendingChanges() const;
 
-    /// Forget the snapshot — every change so far is now "saved." Called
-    /// from `SettingsController::save()`.
+    /// Forget the snapshot — every change so far is now "saved." Called from
+    /// apply(); SettingsController::save() deliberately does NOT call it (that
+    /// would double-dispatch, see settingscontroller_lifecycle.cpp).
     void commitPending();
 
     /// Restore every file in the snapshot to its pre-edit state and

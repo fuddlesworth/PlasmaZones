@@ -64,7 +64,7 @@ bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live)
 {
     const QJsonArray setOverrides = set.value(kOverridesKey).toArray();
     // An empty set covers nothing; it is never "active". No baseline to compare:
-    // both domains refuse a set that carries one (see carriesBaseline).
+    // both domain validators refuse a set that carries the key at all.
     if (setOverrides.isEmpty()) {
         return false;
     }
@@ -87,11 +87,6 @@ bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live)
 }
 
 } // namespace
-
-bool ShaderSetStore::carriesBaseline(const QJsonObject& root)
-{
-    return !root.value(kBaselineKey).toObject().isEmpty();
-}
 
 ShaderSetStore::ShaderSetStore(Config config, QObject* parent)
     : QObject(parent)
@@ -425,7 +420,13 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& rawName, const QString& des
     // Trim here, so the mutators and canUseSetName cannot disagree about what a
     // name IS. Every QML caller trims already; this makes it an invariant.
     const QString name = rawName.trimmed();
-    if (name.isEmpty() || !mutationAllowed()) {
+    if (!mutationAllowed()) {
+        return false;
+    }
+    if (name.isEmpty()) {
+        // The Save button is disabled for blank text, so this is a programmatic
+        // caller. Refuse it the same way updateSet does, with the reason.
+        Q_EMIT toastRequested(PhosphorI18n::tr("A set needs a name."));
         return false;
     }
     const QString filePath = setFilePath(name);

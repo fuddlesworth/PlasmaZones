@@ -319,7 +319,11 @@ private Q_SLOTS:
         QVERIFY(dir.isValid());
         const QString newer = dir.filePath(QStringLiteral("newer.json"));
         writeSetFile(newer, validSetPayload(QStringLiteral("Newer"), 2));
+        QSignalSpy newerSpy(sets, &ShaderSetStore::toastRequested);
         QVERIFY2(!sets->importSet(newer), "a set from a newer build must not be imported");
+        QCOMPARE(newerSpy.count(), 1);
+        QCOMPARE(newerSpy.first().first().toString(),
+                 PhosphorI18n::tr("That set was written by a newer version of PlasmaZones."));
 
         // A present-but-non-numeric version is malformed, not "version 1".
         const QString malformed = dir.filePath(QStringLiteral("malformed.json"));
@@ -501,7 +505,8 @@ private Q_SLOTS:
         QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("Nothing"), QString()),
                  "saving an empty decoration tree must be refused");
         QCOMPARE(setsSpy.count(), 0);
-        QCOMPARE(toastSpy.count(), 1); // the refusal must say why
+        QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("There is nothing to capture yet."));
         QVERIFY(sets->availableSets().isEmpty());
     }
 
@@ -514,7 +519,12 @@ private Q_SLOTS:
         ShaderSetStore* sets = c.setsBridge();
         c.setChain(QString(), QStringList{QStringLiteral("border")});
 
-        QVERIFY(!sets->saveCurrentAsSet(QString(), QString()));
+        {
+            QSignalSpy emptySpy(sets, &ShaderSetStore::toastRequested);
+            QVERIFY(!sets->saveCurrentAsSet(QString(), QString()));
+            QCOMPARE(emptySpy.count(), 1);
+            QCOMPARE(emptySpy.first().first().toString(), PhosphorI18n::tr("A set needs a name."));
+        }
 
         // A name with nothing a filename can be built from ("!!!" slugifies to
         // nothing). The Save button only checks for non-blank text, so this
@@ -610,6 +620,30 @@ private Q_SLOTS:
                  "the row's own name must be usable, or it can never be renamed or re-described");
         QVERIFY2(sets->updateSet(QStringLiteral("my-set"), QStringLiteral("my-set"), QStringLiteral("desc")),
                  "and the mutator must agree with the predicate");
+    }
+    /// A file that is not JSON at all must be refused with its own reason, not
+    /// misreported as empty or as not matching the page.
+    void importSet_refusesAnUnreadableFile()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString garbage = dir.filePath(QStringLiteral("garbage.json"));
+        QFile f(garbage);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        const QByteArray bytes = "this is not json at all {";
+        QCOMPARE(f.write(bytes), static_cast<qint64>(bytes.size()));
+        f.close();
+
+        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("failed to parse")));
+        QVERIFY2(!sets->importSet(garbage), "an unparseable file must be refused");
+        QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("That file is not a readable set."));
+        QVERIFY(sets->availableSets().isEmpty());
     }
 };
 

@@ -652,6 +652,18 @@ private Q_SLOTS:
         QVERIFY2(!sets->importSet(payload), "a motion set carrying a baseline must be refused");
         QCOMPARE(toastSpy.count(), 1);
         QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("That set does not match this page."));
+
+        // The KEY is refused, not just a non-empty value: an empty `{}` is the
+        // same foreign envelope, and tolerating it would let the two domains
+        // drift on what the shared format may carry.
+        root.insert(QStringLiteral("baseline"), QJsonObject{});
+        const QString emptyBaseline = tmp.path() + QStringLiteral("/empty-baseline.json");
+        QFile f2(emptyBaseline);
+        QVERIFY(f2.open(QIODevice::WriteOnly));
+        const QByteArray bytes2 = QJsonDocument(root).toJson();
+        QCOMPARE(f2.write(bytes2), static_cast<qint64>(bytes2.size()));
+        f2.close();
+        QVERIFY2(!sets->importSet(emptyBaseline), "an empty baseline object is refused the same way");
     }
 
     /// The snapshot is the ONLY copy of a file's pre-edit content, so the
