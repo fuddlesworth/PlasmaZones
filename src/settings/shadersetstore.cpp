@@ -321,14 +321,25 @@ bool ShaderSetStore::applySet(const QString& name)
     }
     // Live state moved, so every row's `active` flag is stale.
     Q_EMIT setsChanged();
-    Q_EMIT pendingChangesChanged();
+    notifyPendingChanges();
     return true;
 }
 
-bool ShaderSetStore::setExists(const QString& name) const
+QString ShaderSetStore::existingSetName(const QString& name) const
 {
     const QString filePath = setFilePath(name);
-    return !filePath.isEmpty() && QFile::exists(filePath);
+    if (filePath.isEmpty() || !QFile::exists(filePath)) {
+        return QString();
+    }
+    // Report the stored spelling, not the caller's: the two collide by slug.
+    QJsonObject root;
+    if (readSetFile(filePath, &root)) {
+        const QString stored = root.value(kNameKey).toString();
+        if (!stored.isEmpty()) {
+            return stored;
+        }
+    }
+    return name;
 }
 
 bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& description, bool overwrite)
@@ -354,6 +365,7 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& descri
     // on disk. Checked before mkpath so a rejected save leaves no empty
     // directory behind.
     if (root.value(kOverridesKey).toArray().isEmpty() && !root.value(kBaselineKey).isObject()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("There is nothing to capture yet."));
         return false;
     }
 
@@ -378,7 +390,7 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& descri
     }
 
     Q_EMIT setsChanged();
-    Q_EMIT pendingChangesChanged();
+    notifyPendingChanges();
     return true;
 }
 
@@ -393,6 +405,8 @@ bool ShaderSetStore::removeSet(const QString& name)
     }
     QFile file(filePath);
     if (!file.exists()) {
+        qCWarning(lcConfig) << "ShaderSetStore::removeSet: no such set:" << filePath;
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete \"%1\".").arg(name));
         return false;
     }
     if (!snapshotFile(filePath)) {
@@ -407,7 +421,7 @@ bool ShaderSetStore::removeSet(const QString& name)
         return false;
     }
     Q_EMIT setsChanged();
-    Q_EMIT pendingChangesChanged();
+    notifyPendingChanges();
     return true;
 }
 
@@ -467,7 +481,7 @@ bool ShaderSetStore::updateSet(const QString& oldName, const QString& newName, c
     }
 
     Q_EMIT setsChanged();
-    Q_EMIT pendingChangesChanged();
+    notifyPendingChanges();
     return true;
 }
 
@@ -560,7 +574,7 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
     }
 
     Q_EMIT setsChanged();
-    Q_EMIT pendingChangesChanged();
+    notifyPendingChanges();
     return true;
 }
 

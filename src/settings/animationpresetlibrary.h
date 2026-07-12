@@ -25,7 +25,11 @@ class AnimationPresetLibrary : public QObject
 
 public:
     using ProfilesDirFn = std::function<QString()>;
-    using SnapshotFn = std::function<void(const QString& /*filePath*/)>;
+    /// Capture a file's pre-edit content before it is overwritten or removed.
+    /// False = the capture failed, and the caller must NOT write: proceeding
+    /// would permanently lose content Discard could no longer restore. Same
+    /// contract as ShaderSetStore::FileSnapshotFn.
+    using SnapshotFn = std::function<bool(const QString& /*filePath*/)>;
 
     explicit AnimationPresetLibrary(ProfilesDirFn profilesDirFn, SnapshotFn snapshot, QObject* parent = nullptr);
 

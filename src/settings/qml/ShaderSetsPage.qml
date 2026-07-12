@@ -21,7 +21,7 @@ import org.kde.kirigami as Kirigami
  *   QVariantList availableSets()      // rows: name, description,
  *                                     //   coverage[], coverageCount,
  *                                     //   hasBaseline, active, modified
- *   bool         setExists(name)
+ *   QString      existingSetName(name)
  *   bool         applySet(name)
  *   bool         saveCurrentAsSet(name, description, overwrite)
  *   bool         removeSet(name)
@@ -75,19 +75,13 @@ SettingsFlickable {
 
     /// Commit the save form. @p overwrite carries the user's consent to
     /// replace a set that already holds this name (see the Save button).
+    /// Every failure toasts its own reason from the store, so there is nothing
+    /// for the caller to infer from a bare false.
     function _save(overwrite) {
-        const ok = root.bridge.saveCurrentAsSet(nameField.text.trim(), descField.text.trim(), overwrite);
-        if (ok) {
+        if (root.bridge.saveCurrentAsSet(nameField.text.trim(), descField.text.trim(), overwrite)) {
             nameField.text = "";
             descField.text = "";
-            return;
         }
-        // A name collision, an unwritable folder and a failed write each toast
-        // their own reason from the store. This banner covers the remaining
-        // case (nothing to capture) so the form is never inert without an
-        // explanation.
-        saveStatus.text = i18n("Could not save the set. There must be something to capture first.");
-        saveStatus.visible = true;
     }
 
     Connections {
@@ -121,25 +115,15 @@ SettingsFlickable {
 
         // ── Save current state. Starts collapsed when the user already has
         //    sets, so the list (the thing they came for) is what greets them.
-        //
-        //    The declarative value is load-bearing: SettingsCard reads
-        //    `collapsed` in its OWN Component.onCompleted to zero the content
-        //    clip, and a base type's onCompleted runs BEFORE the instantiating
-        //    scope's. Assigning from our onCompleted would therefore leave the
-        //    card rendered open on the first frame and then animate it shut.
-        //    The self-assignment below drops the binding once the initial value
-        //    has been read, so a later save cannot snap the card closed under
-        //    the cursor (SettingsCard's header click writes `collapsed`
-        //    imperatively, which would break the binding on first use anyway).
+        //    `initiallyCollapsed` is read once at construction: binding
+        //    `collapsed` instead would slam the card shut under the cursor the
+        //    moment the user's first save landed.
         SettingsCard {
-            id: saveCard
-
             Layout.fillWidth: true
             headerText: i18n("Save current state")
             searchAnchor: root.saveAnchor
             collapsible: true
-            collapsed: root.setsList.length > 0
-            Component.onCompleted: saveCard.collapsed = saveCard.collapsed
+            initiallyCollapsed: root.setsList.length > 0
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -179,14 +163,6 @@ SettingsFlickable {
                         Accessible.name: root.descriptionFieldAccessibleName
                     }
 
-                    Kirigami.InlineMessage {
-                        id: saveStatus
-
-                        Layout.fillWidth: true
-                        type: Kirigami.MessageType.Error
-                        showCloseButton: true
-                    }
-
                     Button {
                         Layout.alignment: Qt.AlignRight
                         text: i18n("Save")
@@ -194,13 +170,15 @@ SettingsFlickable {
                         Accessible.name: i18n("Save set")
                         enabled: nameField.text.trim().length > 0
                         onClicked: {
-                            saveStatus.visible = false;
                             // Re-saving over a set is how the user updates one
                             // after tweaking their look, but it destroys the
                             // stored payload. Confirm first, then save with
                             // consent; the store refuses an unconfirmed
-                            // overwrite outright.
-                            if (root.bridge.setExists(nameField.text.trim())) {
+                            // overwrite outright. Names collide by slug, so the
+                            // prompt names the STORED set, not what was typed.
+                            const taken = root.bridge.existingSetName(nameField.text.trim());
+                            if (taken.length > 0) {
+                                replaceConfirm.takenName = taken;
                                 replaceConfirm.open();
                                 return;
                             }
@@ -357,8 +335,11 @@ SettingsFlickable {
     Kirigami.PromptDialog {
         id: replaceConfirm
 
+        /// The STORED name of the set about to be replaced.
+        property string takenName: ""
+
         title: i18n("Replace set?")
-        subtitle: i18n("\"%1\" already exists. Saving replaces what it currently holds.", nameField.text.trim())
+        subtitle: i18n("\"%1\" already exists. Saving replaces what it currently holds.", replaceConfirm.takenName)
         standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
         onApplied: {
             root._save(true);

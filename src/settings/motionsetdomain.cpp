@@ -54,6 +54,7 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
     const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
     const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
 
+    staged->clear();
     const QJsonArray overrides = root.value(kOverridesKey).toArray();
     staged->reserve(overrides.size());
     for (const QJsonValue& v : overrides) {

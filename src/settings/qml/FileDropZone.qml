@@ -24,8 +24,10 @@ import org.kde.kirigami as Kirigami
  *       }
  *   }
  *
- * The idle/hover icons and the height default to the document-import case
- * (the Layouts card); the shader browser overrides all of them.
+ * The idle/hover icons and the icon size default to the document-import case
+ * (the Layouts card); the shader browser overrides them. The height is an
+ * `implicitHeight` default, which a host overrides through its own layout
+ * (e.g. `Layout.preferredHeight`).
  *
  * The signal hands over the raw URL string — callers that need a local path
  * convert via `settingsController.urlToLocalFile`.

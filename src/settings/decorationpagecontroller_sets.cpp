@@ -59,6 +59,7 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* has
 {
     using PhosphorSurfaceShaders::DecorationProfile;
 
+    staged->clear();
     *hasBaseline = root.value(kBaselineKey).isObject();
     const QJsonArray overrides = root.value(kOverridesKey).toArray();
     staged->reserve(overrides.size());

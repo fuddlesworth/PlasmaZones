@@ -48,6 +48,19 @@ Item {
     // Collapse
     property bool collapsible: false
     property bool collapsed: false
+    /// Collapse state to adopt ONCE, at construction. Use this instead of
+    /// binding `collapsed` whenever the initial state derives from data that
+    /// can later change (e.g. "start collapsed if the user already has saved
+    /// items"): a live binding on `collapsed` would slam the card shut again
+    /// the moment that data changed, under the user's cursor, and the header
+    /// click writes `collapsed` imperatively anyway, which would break such a
+    /// binding on first use. Read only in Component.onCompleted, and applied
+    /// without the collapse animation, so the card simply starts closed.
+    property bool initiallyCollapsed: false
+    /// True once Component.onCompleted has run. The collapse/expand animations
+    /// are suppressed before that, so adopting `initiallyCollapsed` sets the
+    /// card's resting state instead of animating it shut on load.
+    property bool _completed: false
     // Header enable toggle
     property bool showToggle: false
     property bool toggleChecked: false
@@ -79,6 +92,13 @@ Item {
     signal toggleClicked(bool checked)
 
     onCollapsedChanged: {
+        // Before Component.onCompleted the card has no resting state yet, so
+        // adopting `initiallyCollapsed` must not animate — it would render the
+        // card open for a frame and then visibly slam it shut. The clip is
+        // zeroed directly below instead.
+        if (!root._completed)
+            return;
+
         if (collapsed) {
             expandAnim.stop();
             collapseAnim.start();
@@ -87,13 +107,20 @@ Item {
             expandAnim.start();
         }
     }
-    // Honour `collapsed: true` at construction time. The
-    // `onCollapsedChanged` handler above only fires on subsequent
+    // Honour `collapsed: true` (or `initiallyCollapsed: true`) at construction
+    // time. The `onCollapsedChanged` handler above only fires on subsequent
     // changes — instantiating `SettingsCard { collapsible: true;
     // collapsed: true }` would otherwise leave the contentClip
     // at its full implicitHeight (the declarative initial value)
     // and the card would render expanded despite the property.
     Component.onCompleted: {
+        // Adopt the one-shot initial state, then forget it. `collapsed` is left
+        // an ordinary writable property, so the header click owns it from here
+        // and no live binding can re-collapse the card later.
+        if (root.initiallyCollapsed)
+            root.collapsed = true;
+
+        root._completed = true;
         if (collapsed) {
             contentClip.height = 0;
             contentClip.opacity = 0;

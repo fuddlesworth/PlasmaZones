@@ -56,36 +56,12 @@
 #include "config/configdefaults.h"
 #include "settings/decorationpagecontroller.h"
 #include "settings/shadersetstore.h"
-#include "../helpers/StubSettings.h"
+#include "../helpers/SetRowHelpers.h"
+#include "../helpers/TreeStubSettings.h"
 
 using namespace PlasmaZones;
 
 namespace {
-
-/// StubSettings that genuinely stores the decoration tree (the base stub's
-/// setter is a no-op) and emits decorationProfileTreeChanged on a real change,
-/// so the controller's write-back path is observable.
-class TreeStubSettings : public StubSettings
-{
-public:
-    using StubSettings::StubSettings;
-
-    PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override
-    {
-        return m_tree;
-    }
-    void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) override
-    {
-        if (m_tree == tree)
-            return;
-        m_tree = tree;
-        Q_EMIT decorationProfileTreeChanged();
-        Q_EMIT settingsChanged();
-    }
-
-private:
-    PhosphorSurfaceShaders::DecorationProfileTree m_tree;
-};
 
 /// Absolute path to the decoration-sets directory the store writes to,
 /// recomputed the way DecorationPageController does. Valid only under
@@ -94,21 +70,6 @@ QString decorationSetsDir()
 {
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return QDir::cleanPath(base + ConfigDefaults::userDecorationSetsSubdir());
-}
-
-/// The row for @p name, or an empty map when no such set is listed. Callers
-/// QVERIFY the result is non-empty BEFORE asserting on a field: a
-/// `for (row : sets) if (row.name == X) QVERIFY(...)` idiom silently runs zero
-/// assertions when the row is absent, so the test would pass vacuously.
-QVariantMap rowFor(ShaderSetStore* sets, const QString& name)
-{
-    const QVariantList rows = sets->availableSets();
-    for (const QVariant& row : rows) {
-        const QVariantMap map = row.toMap();
-        if (map.value(QStringLiteral("name")).toString() == name)
-            return map;
-    }
-    return QVariantMap{};
 }
 
 /// Write @p root to @p path as a hand-crafted set file.
@@ -151,6 +112,10 @@ private Q_SLOTS:
     void initTestCase()
     {
         QStandardPaths::setTestModeEnabled(true);
+        // init() recursively deletes this directory. Refuse to run at all if it
+        // ever resolves outside the sandbox — that would be the user's real data.
+        QVERIFY2(decorationSetsDir().contains(QLatin1String("qttest")),
+                 "refusing to run outside QStandardPaths test mode");
     }
 
     /// Each test starts from an empty sets directory.
@@ -255,10 +220,13 @@ private Q_SLOTS:
 
         // Drain the notify the setChain above already queued. Without this the
         // spy below would catch THAT emission and the test would pass even with
-        // the live-state connection severed.
-        QTest::qWait(0);
-
+        // the live-state connection severed. Assert the drain actually
+        // delivered, so a future change that stops it cannot silently restore
+        // the vacuity.
         QSignalSpy spy(sets, &ShaderSetStore::setsChanged);
+        QTest::qWait(0);
+        QCOMPARE(spy.count(), 1);
+        spy.clear();
         // Two edits in one turn must collapse into a single refresh.
         c.setChain(QStringLiteral("window.snapped"), QStringList{QStringLiteral("border")});
         c.setChain(QStringLiteral("osd"), QStringList{QStringLiteral("border")});
@@ -447,8 +415,8 @@ private Q_SLOTS:
 
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Taken"), QStringLiteral("first")));
-        QVERIFY(sets->setExists(QStringLiteral("Taken")));
-        QVERIFY(!sets->setExists(QStringLiteral("Not Taken")));
+        QCOMPARE(sets->existingSetName(QStringLiteral("Taken")), QStringLiteral("Taken"));
+        QVERIFY(sets->existingSetName(QStringLiteral("Not Taken")).isEmpty());
 
         // A different look, saved under the same name, WITHOUT consent.
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border")});
@@ -480,8 +448,11 @@ private Q_SLOTS:
     }
 
     /// applySet is fire-and-forget from QML, so every failure branch must carry
-    /// its reason to the toast or the user just watches nothing happen.
-    void applySet_toastsEveryFailure()
+    /// its reason to the toast or the user just watches nothing happen. Covers
+    /// the three branches reachable here (read / version / validation); the
+    /// apply-failed branch needs a failing ISettings, and the mutation-guard
+    /// branch is motion-only (decoration wires no guard).
+    void applySet_toastsReadVersionAndValidationFailures()
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
@@ -547,12 +518,14 @@ private Q_SLOTS:
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         const QString huge = dir.filePath(QStringLiteral("huge.json"));
-        QFile f(huge);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        // Just over the store's 4 MiB cap.
-        const QByteArray filler(5 * 1024 * 1024, 'x');
-        QCOMPARE(f.write(filler), static_cast<qint64>(filler.size()));
-        f.close();
+
+        // A VALID set, padded past the cap with a giant description. Garbage
+        // bytes would prove nothing: the JSON parser would reject them even
+        // with the cap removed, so the test could not tell the two apart.
+        QJsonObject root = validSetPayload(QStringLiteral("Huge"));
+        root.insert(QStringLiteral("description"), QString(5 * 1024 * 1024, QLatin1Char('x')));
+        writeSetFile(huge, root);
+        QVERIFY(QFileInfo(huge).size() > 4 * 1024 * 1024);
 
         QVERIFY2(!sets->importSet(huge), "a set file over the size cap must be refused");
         QVERIFY(sets->availableSets().isEmpty());
@@ -568,9 +541,11 @@ private Q_SLOTS:
         ShaderSetStore* sets = c.setsBridge();
 
         QSignalSpy setsSpy(sets, &ShaderSetStore::setsChanged);
+        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
         QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("Nothing"), QString()),
                  "saving an empty decoration tree must be refused");
         QCOMPARE(setsSpy.count(), 0);
+        QVERIFY2(toastSpy.count() == 1, "the refusal must say why");
         QVERIFY(sets->availableSets().isEmpty());
     }
 

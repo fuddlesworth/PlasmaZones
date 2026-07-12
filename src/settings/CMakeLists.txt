@@ -59,7 +59,7 @@ set(plasmazones_settings_SRCS
     animationspagecontroller.h
     animationspagecontroller.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
-    # helpers shared between the two AnimationsPageController TUs. Inline
+    # helpers shared across the four AnimationsPageController TUs. Inline
     # definitions make cross-TU linkage independent of unity-build merging.
     animations_controller_detail.h
     # AnimationsPageController shader-leg methods compile into the same
@@ -125,7 +125,8 @@ set(plasmazones_settings_SRCS
     decorationpagecontroller_browser.cpp
     decorationpagecontroller_sets.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
-    # helpers shared between the two DecorationPageController TUs.
+    # helpers. Consumed only by decorationpagecontroller.cpp; kept separate to
+    # hold the conversion helpers out of the controller TU.
     decoration_controller_detail.h
     tilingalgorithmcontroller.h
     tilingalgorithmcontroller.cpp
@@ -380,8 +381,9 @@ qt_add_qml_module(plasmazones-settings
         qml/DecorationSurfaceCard.qml
         qml/ChainEditor.qml
         # Pack-agnostic shader-browser components — shared by the
-        # animation-shader and snapping-overlay-shader pages. Both pages
-        # are thin wrappers that pass the right controller bridge.
+        # animation-shader, snapping-overlay-shader and decoration-shader
+        # pages. All three are thin wrappers that pass the right controller
+        # bridge.
         qml/ShaderBrowserPage.qml
         qml/ShaderBrowserCard.qml
         # Domain-agnostic sets page + rich set card — shared by the Decoration

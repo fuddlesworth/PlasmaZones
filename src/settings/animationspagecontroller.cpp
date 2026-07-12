@@ -436,8 +436,9 @@ void AnimationsPageController::asyncRevertPending()
     // Track the keys the worker is going to process so the finished
     // handler can MERGE results back into m_pendingFileSnapshots.
     // Today the m_asyncRevertInFlight guard rejects concurrent
-    // setOverride / setShaderOverride / clearShaderOverride* /
-    // addUserPreset / removeUserPreset calls, and — through the
+    // setOverride / clearOverride / clearAllOverrides /
+    // setShaderOverride / clearShaderOverride* / addUserPreset /
+    // removeUserPreset calls, and — through the
     // mutationGuard closure handed to ShaderSetStore — every set
     // mutator (applySet / saveCurrentAsSet / removeSet / updateSet /
     // importSet) during the worker

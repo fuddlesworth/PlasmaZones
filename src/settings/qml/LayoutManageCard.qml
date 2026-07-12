@@ -64,7 +64,7 @@ SettingsCard {
                     // handled by the page, matching the import-dialog path).
                     settingsController.importLayout(path);
                 } else if (settingsController.importAlgorithm(path)) {
-                    if (window && window.showToast)
+                    if (typeof window !== "undefined" && window && window.showToast)
                         window.showToast(i18n("Algorithm imported"));
                 }
             }

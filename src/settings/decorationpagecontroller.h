@@ -206,10 +206,12 @@ public:
     /// under ~/.local/share/plasmazones/decorationsets/<slug>.json.
     /// Applying merges: the baseline (when the set captured one) and every
     /// entry replace the DIRECT profile at their path; surfaces the set
-    /// does not cover keep their current overrides. All writes go through
-    /// ISettings::setDecorationProfileTree, so dirty / apply / discard ride
-    /// the normal staging flow. The domain closures live in
-    /// decorationpagecontroller_sets.cpp.
+    /// does not cover keep their current overrides. APPLYING a set writes
+    /// through ISettings::setDecorationProfileTree, so that write rides the
+    /// normal dirty / apply / discard staging flow. The set FILES themselves
+    /// are not staged (decoration wires no fileSnapshot hook), which is why
+    /// saving over an existing set requires explicit consent. The domain
+    /// closures live in decorationpagecontroller_sets.cpp.
     ShaderSetStore* setsBridge() const
     {
         return m_sets;

@@ -117,8 +117,13 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
     if (filePath.isEmpty())
         return false;
 
-    if (m_snapshot)
-        m_snapshot(filePath);
+    // A false return means the pre-edit content could not be captured. Writing
+    // anyway would lose it for good, with Discard unable to restore.
+    if (m_snapshot && !m_snapshot(filePath)) {
+        qCWarning(lcConfig) << "AnimationPresetLibrary: refusing to write" << filePath
+                            << "— could not capture its pre-edit content";
+        return false;
+    }
 
     QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
     obj.insert(presetlib_detail::JsonNameKey, name);
@@ -193,8 +198,13 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
     QFile file(filePath);
     if (!file.exists())
         return false;
-    if (m_snapshot)
-        m_snapshot(filePath);
+    // A false return means the pre-edit content could not be captured. Writing
+    // anyway would lose it for good, with Discard unable to restore.
+    if (m_snapshot && !m_snapshot(filePath)) {
+        qCWarning(lcConfig) << "AnimationPresetLibrary: refusing to write" << filePath
+                            << "— could not capture its pre-edit content";
+        return false;
+    }
     if (!file.remove())
         return false;
 

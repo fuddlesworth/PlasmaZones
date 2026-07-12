@@ -382,7 +382,7 @@ SettingsFlickable {
         // drop zone falls back to the generic InlineMessage above
         // (which can't carry the concrete failure reason).
         function onToastRequested(text) {
-            if (window && window.showToast)
+            if (typeof window !== "undefined" && window && window.showToast)
                 window.showToast(text);
         }
 
@@ -453,7 +453,15 @@ SettingsFlickable {
                     id: installResult
 
                     function show(ok, url) {
-                        var basename = String(url).split("/").pop();
+                        // A dropped URL is percent-encoded, so decode before
+                        // showing the name ("My%20Pack" is not what the user
+                        // called it).
+                        var basename = "";
+                        try {
+                            basename = decodeURIComponent(String(url).split("/").pop());
+                        } catch (e) {
+                            basename = String(url).split("/").pop();
+                        }
                         if (basename.length === 0)
                             basename = String(url);
 

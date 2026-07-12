@@ -808,6 +808,25 @@ target_link_libraries(test_animations_motion_sets
 )
 add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
 
+# Companion test executable: the user-preset library (AnimationPresetLibrary).
+# Split from test_animations_motion_sets to keep each test file under the
+# project's <800-line guideline, and because presets and sets are separate
+# sub-services of the controller.
+add_executable(test_animations_presets
+    settings/test_animations_presets.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_presets
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_presets COMMAND test_animations_presets)
+
 # Companion test executable: shader-override end-to-end coverage. Split
 # from test_animations_page_controller to keep each test file under the
 # project's <800-line guideline.

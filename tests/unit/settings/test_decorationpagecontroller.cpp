@@ -45,38 +45,11 @@
 #include <PhosphorSurface/DecorationProfileTree.h>
 
 #include "settings/decorationpagecontroller.h"
-#include "../helpers/StubSettings.h"
+#include "../helpers/TreeStubSettings.h"
 
 using namespace PlasmaZones;
 
 namespace {
-
-/// StubSettings that genuinely stores the decoration tree (the base stub's
-/// setter is a no-op) and emits decorationProfileTreeChanged on a real
-/// change, so the controller's write-back path is observable. No Q_OBJECT:
-/// like StubSettings it reuses the ISettings meta-object for the inherited
-/// signal emits.
-class TreeStubSettings : public StubSettings
-{
-public:
-    using StubSettings::StubSettings;
-
-    PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override
-    {
-        return m_tree;
-    }
-    void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) override
-    {
-        if (m_tree == tree)
-            return;
-        m_tree = tree;
-        Q_EMIT decorationProfileTreeChanged();
-        Q_EMIT settingsChanged();
-    }
-
-private:
-    PhosphorSurfaceShaders::DecorationProfileTree m_tree;
-};
 
 /// Seed a baseline chain plus a `window.tiled` leaf override so the reader
 /// tests can tell inherited from directly-set.

@@ -158,21 +158,11 @@ ItemDelegate {
                 // class this shader targets (Geometry / Appearance / Desktop).
                 // Hidden for universal shaders so the grid only calls out the
                 // ones that behave differently.
-                Rectangle {
+                MetadataChip {
                     visible: root._typeBadge.length > 0
-                    implicitWidth: typeBadgeLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
-                    implicitHeight: typeBadgeLabel.implicitHeight + Kirigami.Units.smallSpacing
-                    radius: height / 2
-                    color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
-
-                    Label {
-                        id: typeBadgeLabel
-
-                        anchors.centerIn: parent
-                        text: root._typeBadge
-                        font: Kirigami.Theme.smallFont
-                        color: Kirigami.Theme.highlightColor
-                    }
+                    text: root._typeBadge
+                    highlighted: true
+                    pill: true
                 }
 
                 Label {

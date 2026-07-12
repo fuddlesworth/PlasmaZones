@@ -26,10 +26,12 @@ Rectangle {
     property string iconName: ""
     /// State badge (highlight-tinted) rather than passive metadata.
     property bool highlighted: false
+    /// Fully rounded (a pill) rather than the default soft-cornered badge.
+    property bool pill: false
 
     implicitWidth: content.implicitWidth + Kirigami.Units.largeSpacing
     implicitHeight: content.implicitHeight + Kirigami.Units.smallSpacing
-    radius: Kirigami.Units.smallSpacing
+    radius: root.pill ? height / 2 : Kirigami.Units.smallSpacing
     color: root.highlighted ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18) : Kirigami.Theme.alternateBackgroundColor
 
     RowLayout {

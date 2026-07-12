@@ -46,7 +46,8 @@ public:
     /// Capture the current live state as a set payload (the envelope above,
     /// minus name/description/version — the store stamps those). Must be
     /// deterministic: it is compared against saved payloads to decide which
-    /// set is active. An empty object means "nothing to save".
+    /// set is active. A payload carrying neither a baseline nor any override
+    /// means "nothing to save", and the save is refused.
     using SnapshotFn = std::function<QJsonObject()>;
 
     /// Validate a parsed set payload against the domain's path taxonomy.
@@ -104,10 +105,13 @@ public:
 
     Q_INVOKABLE bool applySet(const QString& name);
 
-    /// True when a set is already stored under @p name. QML asks before
-    /// saving so it can confirm an overwrite rather than spring one on the
-    /// user (see saveCurrentAsSet).
-    Q_INVOKABLE bool setExists(const QString& name) const;
+    /// The name a set is ALREADY stored under, when @p name would land on it,
+    /// or an empty string when the name is free. Names collide by slug, so
+    /// "My Set" and "my set" are the same file: this returns the stored
+    /// spelling so the overwrite confirmation names the set actually at risk
+    /// rather than what the user just typed. QML asks before saving (see
+    /// saveCurrentAsSet).
+    Q_INVOKABLE QString existingSetName(const QString& name) const;
 
     /// Capture live state as a set.
     ///
@@ -116,7 +120,7 @@ public:
     /// stored payload, and on a domain with no fileSnapshot hook (decoration)
     /// no Discard could bring it back. So it requires explicit consent:
     /// @p overwrite defaults to false and the call is REFUSED (with a toast)
-    /// when the name is taken. QML checks setExists() first and passes
+    /// when the name is taken. QML checks existingSetName() first and passes
     /// overwrite=true only after the user confirms.
     Q_INVOKABLE bool saveCurrentAsSet(const QString& name, const QString& description, bool overwrite = false);
 
@@ -139,10 +143,6 @@ public:
 
     /// Open (creating if needed) the sets directory in the file manager.
     Q_INVOKABLE void openSetsDirectory();
-
-    /// Absolute path the named set serialises to. Empty when @p setName
-    /// slugifies to an empty string. Public for tests; QML never needs it.
-    QString setFilePath(const QString& setName) const;
 
     /// Re-emit setsChanged() so QML re-reads the rows. Wired to each
     /// domain's live-state signal: the `active` flag is derived from live
@@ -169,6 +169,10 @@ Q_SIGNALS:
     void toastRequested(const QString& text);
 
 private:
+    /// Absolute path the named set serialises to. Empty when @p setName
+    /// slugifies to an empty string.
+    QString setFilePath(const QString& setName) const;
+
     /// The sets directory, or an empty string when no accessor is wired.
     /// Every filesystem entry point routes through here, so a misconfigured
     /// store refuses cleanly instead of calling an empty std::function.
