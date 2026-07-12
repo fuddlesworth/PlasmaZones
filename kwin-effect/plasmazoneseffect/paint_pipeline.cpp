@@ -316,6 +316,24 @@ void PlasmaZonesEffect::postPaintScreen()
                 backdropDue = stateIt == m_surfaceMultipass.end() || stateIt->second.lastFoldMs < 0
                     || (ShaderInternal::shaderClockNowMs() - stateIt->second.lastFoldMs) >= kBackdropRefoldIntervalMs;
             }
+            // Decorations.Performance: is this window's chain allowed to animate
+            // right now (session not idle, and either it is focused or we animate
+            // everything)? A window that is not allowed simply stops being driven —
+            // it keeps its last composite and paints from it, so it still LOOKS
+            // decorated, it just stops moving. That is what lets the GPU drop out
+            // of its top performance state, which no amount of making the frame
+            // cheaper can achieve.
+            //
+            // A focus cross-fade is exempt: it must be allowed to finish, or a
+            // window losing focus would freeze mid-ramp between its active and
+            // inactive look. The ramp clamps at both ends, so it self-terminates.
+            const bool focusRamping = [&] {
+                const auto fit = m_focusFade.constFind(it.key());
+                return fit != m_focusFade.constEnd() && fit->value > 0.001f && fit->value < 0.999f;
+            }();
+            if (!focusRamping && !decorationMayAnimate(sw)) {
+                continue;
+            }
             if (backdropDue || windowSurfaceAnimates(it.key())) {
                 // Mark this repaint as OURS. addRepaintFull raises
                 // EffectWindow::windowDamaged (the signal fires on repaint

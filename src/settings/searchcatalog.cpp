@@ -340,6 +340,24 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("fade"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("dim"),
                 PhosphorI18n::tr("cross-fade")});
 
+    // Decoration performance (Decorations.Performance) — the Performance card on
+    // the same page. Keyworded for what someone actually types when their fans
+    // spin up after engaging a pack: power, battery, gpu, heat.
+    addSection(search, QStringLiteral("window-appearance"), QStringLiteral("decorationPerformance"),
+               PhosphorI18n::tr("Performance"));
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationAnimateFocusedOnly"),
+               PhosphorI18n::tr("Animate only the active window"),
+               {PhosphorI18n::tr("performance"), PhosphorI18n::tr("power"), PhosphorI18n::tr("battery"),
+                PhosphorI18n::tr("gpu"), PhosphorI18n::tr("heat"), PhosphorI18n::tr("focus")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationPauseWhenIdle"),
+               PhosphorI18n::tr("Pause while you are away"),
+               {PhosphorI18n::tr("performance"), PhosphorI18n::tr("power"), PhosphorI18n::tr("battery"),
+                PhosphorI18n::tr("gpu"), PhosphorI18n::tr("heat"), PhosphorI18n::tr("idle")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationIdleTimeout"),
+               PhosphorI18n::tr("Idle after"),
+               {PhosphorI18n::tr("idle"), PhosphorI18n::tr("timeout"), PhosphorI18n::tr("power"),
+                PhosphorI18n::tr("battery")});
+
     // Window filtering (Decorations.WindowFiltering) — the shared WindowFilterCard
     // on the Window Appearance page. Same anchors the card emits, mirroring the
     // General and Animations filtering entries.

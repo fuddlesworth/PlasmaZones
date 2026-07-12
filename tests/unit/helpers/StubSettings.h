@@ -1027,6 +1027,30 @@ public:
     {
     }
 
+    // Decorations.Performance (ISettings) — bounds on WHEN the decoration chain
+    // animates. Stubbed to the shipped defaults; no test drives them yet.
+    bool decorationAnimateFocusedOnly() const override
+    {
+        return ConfigDefaults::decorationAnimateFocusedOnly();
+    }
+    void setDecorationAnimateFocusedOnly(bool) override
+    {
+    }
+    bool decorationPauseWhenIdle() const override
+    {
+        return ConfigDefaults::decorationPauseWhenIdle();
+    }
+    void setDecorationPauseWhenIdle(bool) override
+    {
+    }
+    int decorationIdleTimeoutSec() const override
+    {
+        return ConfigDefaults::decorationIdleTimeoutSec();
+    }
+    void setDecorationIdleTimeoutSec(int) override
+    {
+    }
+
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override
     {

@@ -1016,6 +1016,14 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
         // pages.
         {CD::decorationProfileTreeKey(), CD::decorationProfileTree().toJson().toVariantMap(), QMetaType::QVariantMap},
     };
+    // What the decoration chain is allowed to keep redrawing. An animated pack
+    // repaints every window carrying it on every vsync, which never lets the GPU
+    // leave its top performance state.
+    schema.groups[CD::decorationsPerformanceGroup()] = {
+        {CD::animateFocusedOnlyKey(), CD::decorationAnimateFocusedOnly(), QMetaType::Bool},
+        {CD::pauseWhenIdleKey(), CD::decorationPauseWhenIdle(), QMetaType::Bool},
+        {CD::idleTimeoutSecKey(), CD::decorationIdleTimeoutSec(), QMetaType::Int},
+    };
 }
 
 } // namespace PlasmaZones

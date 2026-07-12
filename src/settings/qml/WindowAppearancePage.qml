@@ -476,6 +476,67 @@ SettingsFlickable {
             onOuterGapLeftModified: value => root.ctl.writeGap(settingsController.scopeScreenName, "OuterGapLeft", value)
             onOuterGapRightModified: value => root.ctl.writeGap(settingsController.scopeScreenName, "OuterGapRight", value)
         }
+
+        // =====================================================================
+        // PERFORMANCE CARD
+        // =====================================================================
+        // An animated decoration pack redraws every window wearing it on every
+        // frame, and that alone keeps the graphics card in its highest power
+        // state for as long as the packs are on screen. What costs is not how
+        // much each frame draws, it is that there is a frame to draw at all —
+        // so these bound WHEN decorations animate rather than how much they do.
+        // Lives here, next to the decoration settings themselves, because this is
+        // where someone looks when their fans spin up after engaging a pack.
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Performance")
+            searchAnchor: "decorationPerformance"
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Animate only the active window")
+                    searchAnchor: "decorationAnimateFocusedOnly"
+                    description: i18n("Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.")
+
+                    SettingsSwitch {
+                        checked: appSettings.decorationAnimateFocusedOnly
+                        onToggled: appSettings.decorationAnimateFocusedOnly = checked
+                    }
+                }
+
+                SettingsRow {
+                    title: i18n("Pause while you are away")
+                    searchAnchor: "decorationPauseWhenIdle"
+                    description: i18n("Stop animating decorations once you have been idle, and start again on the first key press or mouse movement.")
+
+                    SettingsSwitch {
+                        checked: appSettings.decorationPauseWhenIdle
+                        onToggled: appSettings.decorationPauseWhenIdle = checked
+                    }
+                }
+
+                SettingsRow {
+                    title: i18n("Idle after")
+                    searchAnchor: "decorationIdleTimeout"
+                    description: i18n("How long to wait with no input before decorations stop animating.")
+                    enabled: appSettings.decorationPauseWhenIdle
+
+                    SettingsSlider {
+                        from: root.ctl.decorationIdleTimeoutSecMin
+                        to: root.ctl.decorationIdleTimeoutSecMax
+                        value: appSettings.decorationIdleTimeoutSec
+                        valueSuffix: " s"
+                        labelWidth: Kirigami.Units.gridUnit * 4
+                        onMoved: value => {
+                            return appSettings.decorationIdleTimeoutSec = Math.round(value);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // =====================================================================

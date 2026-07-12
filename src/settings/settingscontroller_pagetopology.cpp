@@ -365,6 +365,12 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::windowsAppearanceGroup(), CD::hideTitleBarsKey()},
              {CD::windowsAppearanceGroup(), CD::titleBarScopeKey()},
              {CD::windowsAppearanceGroup(), CD::focusFadeDurationKey()},
+             // Decoration performance — the Performance card on this page. Bounds
+             // WHEN the decoration chain animates, which is what decides whether
+             // the GPU can leave its top power state at all.
+             {CD::decorationsPerformanceGroup(), CD::animateFocusedOnlyKey()},
+             {CD::decorationsPerformanceGroup(), CD::pauseWhenIdleKey()},
+             {CD::decorationsPerformanceGroup(), CD::idleTimeoutSecKey()},
              // Window filtering — the Decorations → General page (this
              // window-appearance page) hosts the WindowFilterCard bound to the
              // Decorations.WindowFiltering group.

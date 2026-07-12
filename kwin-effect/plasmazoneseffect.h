@@ -1460,6 +1460,36 @@ private:
     /// window; genuine client damage lands outside it and still invalidates.
     bool m_selfRepainting = false;
 
+    // ── Decorations.Performance ─────────────────────────────────────────────
+    // An animated decoration pack repaints every window carrying it on EVERY
+    // vsync. That is what keeps the GPU pinned in its top performance state
+    // (measured: ~110 W and +12 C over an idle desktop with the effect unloaded,
+    // on a card only ~45% busy) — the cost is not the work per frame, it is that
+    // there is work every frame. No amount of shrinking the per-frame work
+    // recovers the idle clocks; only not drawing does. These two gate that.
+
+    /// Animate only the focused window's chain; unfocused windows hold their last
+    /// composite. Divides the continuous redraw by the decorated-window count.
+    bool m_animateFocusedOnly = false;
+
+    /// Stop animating once the session goes idle, resume on the first input.
+    bool m_pauseAnimationWhenIdle = true;
+
+    /// Whether the session is currently idle. Pushed by the daemon, which owns the
+    /// idle detection: idleness is a WAYLAND CLIENT concern (ext-idle-notify-v1)
+    /// and this effect lives inside the compositor, where that protocol is served
+    /// rather than consumed. The effect sees only the resolved boolean.
+    bool m_sessionIdle = false;
+
+    /// Wake every decorated window: re-fold and repaint it once. Needed whenever a
+    /// gate above OPENS (settings flip, session resumes) — a window paused under
+    /// the old gate emits no damage of its own, so without an explicit repaint it
+    /// would stay frozen until something unrelated happened to damage it.
+    void repaintAllDecorations();
+
+    /// Is this window's decoration allowed to animate right now?
+    bool decorationMayAnimate(KWin::EffectWindow* w) const;
+
     // D-Bus communication uses QDBusMessage::createMethodCall exclusively
     // (no QDBusInterface) to avoid synchronous D-Bus introspection that blocks
     // the compositor thread. See ClientHelpers::asyncCall() and ClientHelpers::fireAndForget().
@@ -1794,6 +1824,12 @@ private Q_SLOTS:
     /// logout/login. Dedicated signal (not settingsChanged) so the
     /// Settings app's change detection is unaffected.
     void slotMotionProfileTreeChanged();
+
+    /// The session went idle, or came back. Pauses / resumes decoration-chain
+    /// animation when Decorations.Performance.PauseWhenIdle is on. Resuming has to
+    /// repaint every decorated window: a paused chain emits no damage of its own,
+    /// so it would otherwise stay frozen until something unrelated damaged it.
+    void slotSessionIdleChanged(bool idle);
 
     /// Fetch the unified Rule store via `org.plasmazones.Rules.
     /// getAllRules`, filter to rules carrying any effect-consumed

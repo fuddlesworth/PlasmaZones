@@ -310,6 +310,13 @@ add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migr
 add_subdirectory(libs/phosphor-shaders)     # shader-domain primitives (BaseUniforms, IUniformExtension, ShaderRegistry)
 add_subdirectory(libs/phosphor-surface)     # surface-shader pack subsystem (SurfaceShaderContract/Effect/Registry) - depends on phosphor-shaders/registry/fsloader
 add_subdirectory(libs/phosphor-wayland)       # Wayland layer-shell QPA plugin + LayerSurface - needed by phosphor-screens
+# ext-idle-notify-v1. Built unconditionally (it used to sit behind
+# BUILD_PHOSPHOR_SHELL) because the DAEMON now depends on it: the KWin effect
+# pauses decoration animation while the session is idle, and idleness is a Wayland
+# CLIENT concern the compositor serves rather than consumes, so the daemon has to
+# watch for it and push the result to the effect. Only needs phosphor-wayland, which
+# is already unconditional.
+add_subdirectory(libs/phosphor-service-idle)  # Wayland idle monitoring + inhibition
 add_subdirectory(libs/phosphor-geometry)    # pure geometry math (coordinate transforms, overlap, min-size) - needed by phosphor-screens (swapper directional selector)
 add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision - needed by phosphor-zones
 add_subdirectory(libs/phosphor-zones)       # zone primitives + LayoutManager (depends on phosphor-config IBackend, phosphor-screens ScreenIdentity)
@@ -469,7 +476,6 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-brightness) # display / keyboard backlight brightness (Phase 2.4)
     add_subdirectory(libs/phosphor-service-notifications) # org.freedesktop.Notifications server (Phase 2.5)
     add_subdirectory(libs/phosphor-service-polkit)        # PolicyKit authentication agent (Phase 2.6)
-    add_subdirectory(libs/phosphor-service-idle)          # Wayland idle monitoring + inhibition (Phase 2.7)
     add_subdirectory(libs/phosphor-service-clipboard)     # Wayland clipboard history (data-control) (Phase 2.8)
     add_subdirectory(libs/phosphor-service-lock)          # PAM auth + ext-session-lock-v1 coordination (Phase 2.9)
     add_subdirectory(libs/phosphor-service-session)       # logind session/power actions + inhibitors (Phase 2.10)

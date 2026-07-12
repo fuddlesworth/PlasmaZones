@@ -24,6 +24,8 @@
 #include <QSet>
 #include <QThread>
 
+#include <PhosphorServiceIdle/IdleService.h>
+
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -573,6 +575,66 @@ void Daemon::setupAnimationShaderEffects()
     if (m_overlayService) {
         m_overlayService->setAnimationShaderRegistry(m_animationShaderRegistry.get());
     }
+}
+
+void Daemon::setupIdleService()
+{
+    m_idleService = std::make_unique<PhosphorServiceIdle::IdleService>(this);
+    if (!m_idleService->isSupported()) {
+        // No ext-idle-notify-v1 on this compositor. The decoration chain simply
+        // keeps animating; PauseWhenIdle degrades to a no-op rather than guessing
+        // at idleness from some other signal.
+        qCInfo(lcDaemon) << "Idle notification unsupported by this compositor — "
+                            "decoration PauseWhenIdle will not engage";
+        m_idleService.reset();
+        return;
+    }
+
+    connect(m_idleService.get(), &PhosphorServiceIdle::IdleService::idled, this, [this](int /*stage*/) {
+        if (m_settings && m_settings->decorationPauseWhenIdle() && m_settingsAdaptor) {
+            Q_EMIT m_settingsAdaptor->sessionIdleChanged(true);
+        }
+    });
+    connect(m_idleService.get(), &PhosphorServiceIdle::IdleService::resumed, this, [this]() {
+        // Always announce the resume, even if the toggle went off while we were
+        // idle — the effect would otherwise stay paused on a stale `true`.
+        if (m_settingsAdaptor) {
+            Q_EMIT m_settingsAdaptor->sessionIdleChanged(false);
+        }
+    });
+
+    refreshIdleStages();
+
+    // Re-arm when the ladder moves. A timeout change has to rebuild the stage, and
+    // turning PauseWhenIdle off has to release a session that is already idle, or
+    // the effect would stay paused until the user happened to move the mouse.
+    if (m_settings) {
+        connect(m_settings.get(), &ISettings::decorationIdleTimeoutSecChanged, this, &Daemon::refreshIdleStages);
+        connect(m_settings.get(), &ISettings::decorationPauseWhenIdleChanged, this, [this]() {
+            if (!m_settings->decorationPauseWhenIdle() && m_settingsAdaptor) {
+                Q_EMIT m_settingsAdaptor->sessionIdleChanged(false);
+            }
+            refreshIdleStages();
+        });
+    }
+}
+
+void Daemon::refreshIdleStages()
+{
+    if (!m_idleService || !m_settings) {
+        return;
+    }
+    if (!m_settings->decorationPauseWhenIdle()) {
+        // No stages = never fires. Cheaper and clearer than arming a ladder we
+        // would then ignore in the handlers.
+        m_idleService->setStages({});
+        return;
+    }
+    const int timeoutMs = m_settings->decorationIdleTimeoutSec() * 1000;
+    m_idleService->setStages({QVariantMap{
+        {QStringLiteral("name"), QStringLiteral("decorations")},
+        {QStringLiteral("timeoutMs"), timeoutMs},
+    }});
 }
 
 void Daemon::setupSurfaceShaderEffects()
@@ -1240,6 +1302,18 @@ bool Daemon::init()
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), m_shaderRegistry.get(), &m_profileRegistry, this);
+
+    // Session-idle detection for Decorations.Performance.PauseWhenIdle. The KWin
+    // effect cannot do this itself: idleness arrives over ext-idle-notify-v1, a
+    // Wayland CLIENT protocol that the compositor the effect lives in SERVES rather
+    // than consumes. The daemon is already a client, so it watches and pushes the
+    // resolved boolean over D-Bus.
+    //
+    // Worth the plumbing because it is the only thing that recovers idle GPU power:
+    // an animated decoration pack repaints every window carrying it on every vsync,
+    // and it is the existence of per-frame work — not how cheap that work is — that
+    // keeps the card pinned in its top performance state.
+    setupIdleService();
 
     // Shader adaptor - shader discovery, compilation lifecycle, file monitoring.
     // Held as a member so stop() can detach() it before the unique_ptr member

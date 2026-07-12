@@ -830,6 +830,59 @@ float PlasmaZonesEffect::surfaceShaderTimeSeconds()
 // this is a few hash lookups per call. A window whose packs are not yet compiled
 // (or all static) returns false; the first content paint compiles them and the
 // next postPaintScreen picks the animation up.
+void PlasmaZonesEffect::repaintAllDecorations()
+{
+    if (!KWin::effects || m_windowDecorations.isEmpty()) {
+        return;
+    }
+    // A window paused by one of the gates emits no damage of its own, so when a
+    // gate OPENS (a settings flip, the session resuming, focus moving) it would
+    // otherwise stay frozen on its last composite until something unrelated
+    // happened to damage it. One explicit repaint each puts them back in the paint
+    // loop; from there the normal per-frame driver in postPaintScreen takes over.
+    //
+    // NOT flagged as m_selfRepainting: this is a genuine "your content is stale"
+    // wake-up, and the capture cache SHOULD re-capture on it.
+    for (auto it = m_windowDecorations.cbegin(); it != m_windowDecorations.cend(); ++it) {
+        if (!it->shaderApplied) {
+            continue;
+        }
+        KWin::EffectWindow* const sw = findWindowById(it.key());
+        if (!sw || getWindowId(sw) != it.key() || sw->isDeleted()) {
+            continue;
+        }
+        sw->addRepaintFull();
+        if (it->outerPadding > 0) {
+            QRectF padded = sw->expandedGeometry();
+            if (padded.isEmpty()) {
+                padded = sw->frameGeometry();
+            }
+            const int pad = it->outerPadding;
+            KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
+        }
+    }
+}
+
+bool PlasmaZonesEffect::decorationMayAnimate(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return false;
+    }
+    // Nobody is watching an animation they walked away from, and this is where the
+    // bulk of the wasted power goes: a paused chain lets the GPU fall out of its
+    // top performance state entirely, which shrinking the per-frame work cannot.
+    if (m_pauseAnimationWhenIdle && m_sessionIdle) {
+        return false;
+    }
+    // Only the window in use shimmers. Divides the continuous redraw by the
+    // decorated-window count, which is the single biggest lever available while
+    // the user is still at the machine.
+    if (m_animateFocusedOnly && KWin::effects && KWin::effects->activeWindow() != w) {
+        return false;
+    }
+    return true;
+}
+
 bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
 {
     const auto it = m_windowDecorations.constFind(windowId);

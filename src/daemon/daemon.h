@@ -53,6 +53,10 @@ class ActivityManager;
 class VirtualDesktopManager;
 }
 
+namespace PhosphorServiceIdle {
+class IdleService;
+}
+
 // PhosphorRules::RuleSet is held as a value member below
 // (m_excludeRuleSet) — needs a complete type, so include the header
 // rather than forward-declare. RuleStore stays in the header by
@@ -276,6 +280,16 @@ private:
     void setupAnimationProfiles();
     void setupAnimationShaderEffects();
     void setupSurfaceShaderEffects();
+
+    /// Watch the session going idle and push it to the KWin effect, which pauses
+    /// decoration-chain animation on it. Re-armed whenever the timeout or the
+    /// PauseWhenIdle toggle changes. See m_idleService for why the daemon owns this
+    /// rather than the effect.
+    void setupIdleService();
+
+    /// (Re)arm the idle ladder from the current settings. A single stage: the
+    /// configured timeout. Called on construction and whenever the setting moves.
+    void refreshIdleStages();
     /// Push the current `Settings::animationProfile()` into the registry
     /// under the shell's well-known paths. Called from
     /// `setupAnimationProfiles()` at startup and from the coalescing
@@ -722,6 +736,21 @@ private:
     /// be declared AFTER m_screenManager so the initializer-list construction
     /// order matches.
     std::unique_ptr<OverlayService> m_overlayService;
+    /// Session-idle detection for Decorations.Performance.PauseWhenIdle.
+    ///
+    /// Owned by the DAEMON, not the effect: idleness arrives over
+    /// `ext-idle-notify-v1`, which is a Wayland CLIENT protocol. The effect lives
+    /// inside the compositor, which SERVES that protocol rather than consuming it,
+    /// so it cannot watch for its own session going idle. The daemon is already a
+    /// Wayland client, so it watches and pushes the resolved boolean to the effect
+    /// over D-Bus (SettingsAdaptor::sessionIdleChanged).
+    ///
+    /// The effect pauses decoration-chain animation while idle. That is the only
+    /// lever that lets the GPU leave its top performance state: an animated pack
+    /// repaints every window carrying it on every vsync, and it is the EXISTENCE of
+    /// per-frame work, not its size, that holds the clocks up.
+    std::unique_ptr<PhosphorServiceIdle::IdleService> m_idleService;
+
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;

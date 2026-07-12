@@ -246,6 +246,22 @@ Q_SIGNALS:
     void motionProfileTreeChanged();
 
     /**
+     * @brief Daemon → KWin effect: the session went idle, or came back.
+     *
+     * The effect pauses decoration-chain animation while idle. That is the only
+     * thing that lets the GPU leave its top performance state: an animated pack
+     * repaints every window carrying it on every vsync, and it is the existence of
+     * per-frame work — not its size — that holds the clocks up, so making each
+     * frame cheaper cannot recover the idle power. Not drawing can.
+     *
+     * The daemon owns the detection because idleness is a Wayland CLIENT concern
+     * (`ext-idle-notify-v1`, via PhosphorServiceIdle) and the effect lives inside
+     * the compositor, which serves that protocol rather than consuming it. The
+     * effect only ever sees the resolved boolean.
+     */
+    void sessionIdleChanged(bool idle);
+
+    /**
      * @brief Daemon → KWin effect: please enumerate running windows.
      *
      * Emitted by requestRunningWindows(). The effect answers by calling

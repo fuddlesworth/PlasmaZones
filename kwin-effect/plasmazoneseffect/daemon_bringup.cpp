@@ -635,6 +635,29 @@ void PlasmaZonesEffect::loadCachedSettings()
     // inactive colour loaders above). Re-fetched on every settingsChanged, so a
     // Window Appearance page edit takes effect without a relog. Guarded on an
     // actual value change to avoid a redundant full border rebuild per fetch.
+    // Decorations.Performance. An animated pack repaints every window carrying it
+    // on every vsync, which holds the GPU in its top performance state whatever
+    // the per-frame cost is, so these gate WHEN the chain animates. Flipping
+    // either one has to wake the paused windows back up, or a window frozen under
+    // the old setting would stay frozen until it happened to damage.
+    loadSettingAsync(QStringLiteral("decorationAnimateFocusedOnly"), [this](const QVariant& v) {
+        const bool b = v.toBool();
+        if (m_animateFocusedOnly != b) {
+            m_animateFocusedOnly = b;
+            repaintAllDecorations();
+        }
+    });
+    loadSettingAsync(QStringLiteral("decorationPauseWhenIdle"), [this](const QVariant& v) {
+        const bool b = v.toBool();
+        if (m_pauseAnimationWhenIdle != b) {
+            m_pauseAnimationWhenIdle = b;
+            if (!b) {
+                m_sessionIdle = false;
+            }
+            repaintAllDecorations();
+        }
+    });
+
     loadSettingAsync(QStringLiteral("showWindowBorder"), [this](const QVariant& v) {
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.showBorder != b) {

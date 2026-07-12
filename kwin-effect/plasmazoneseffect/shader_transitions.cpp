@@ -2027,6 +2027,26 @@ void PlasmaZonesEffect::slotMotionProfileTreeChanged()
     loadMotionProfileTreeFromDbus();
 }
 
+void PlasmaZonesEffect::slotSessionIdleChanged(bool idle)
+{
+    if (m_sessionIdle == idle) {
+        return;
+    }
+    m_sessionIdle = idle;
+    if (!m_pauseAnimationWhenIdle) {
+        // Track the state anyway — the setting can be turned on mid-session, and
+        // the next paint should already know whether we are idle.
+        return;
+    }
+    if (!idle) {
+        // Waking. A paused chain emits no damage of its own, so nothing would put
+        // it back in the paint loop without this.
+        repaintAllDecorations();
+    }
+    // Going idle needs no repaint: the windows simply stop being driven and keep
+    // presenting the composite they already hold.
+}
+
 void PlasmaZonesEffect::loadShaderRegistryFromDbus()
 {
     constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths;

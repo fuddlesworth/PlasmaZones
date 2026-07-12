@@ -1364,6 +1364,25 @@ void Settings::setDecorationProfileTreeJson(const QString& json)
     setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
 }
 
+// ── Decorations.Performance (PhosphorConfig::Store-backed) ──────────────────
+// These bound WHEN the decoration chain animates, not how much work it does per
+// frame. An animated pack repaints every window carrying it on every vsync, and
+// that alone holds the GPU in its top performance state however cheap the frame
+// is — so the only lever that returns the card to its idle clocks is to stop
+// drawing when nothing needs to change.
+
+P_STORE_GET(bool, decorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey, bool)
+P_STORE_SET_BOOL(setDecorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey,
+                 decorationAnimateFocusedOnlyChanged)
+
+P_STORE_GET(bool, decorationPauseWhenIdle, decorationsPerformanceGroup, pauseWhenIdleKey, bool)
+P_STORE_SET_BOOL(setDecorationPauseWhenIdle, decorationsPerformanceGroup, pauseWhenIdleKey,
+                 decorationPauseWhenIdleChanged)
+
+P_STORE_GET(int, decorationIdleTimeoutSec, decorationsPerformanceGroup, idleTimeoutSecKey, int)
+P_STORE_SET_INT(setDecorationIdleTimeoutSec, decorationsPerformanceGroup, idleTimeoutSecKey,
+                decorationIdleTimeoutSecChanged)
+
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values
 // to a known backend, so a hand-edited "Rendering.Backend = foobar" reads

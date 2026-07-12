@@ -1151,6 +1151,49 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Decorations.Performance
+    //
+    // An animated pack repaints every window carrying it on every vsync. That
+    // never lets the GPU leave its top performance state — measured at ~110 W and
+    // +12 C over an idle desktop with the effect unloaded, on a GPU that is only
+    // ~45% busy. What costs is not the work per frame but that there IS work every
+    // frame, so these bound WHEN the chain animates, not how much it does.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Animate only the focused window's decoration; unfocused windows hold their
+    /// last composite. Divides the continuous redraw by the number of decorated
+    /// windows on screen. Off by default: it visibly changes what the desktop
+    /// looks like (only the window you are using shimmers), so it is the user's
+    /// call, not ours.
+    static bool decorationAnimateFocusedOnly()
+    {
+        return false;
+    }
+
+    /// Stop animating the decoration chain once the session has been idle for
+    /// decorationIdleTimeoutSec, and resume on the first input. On by default:
+    /// nobody is looking at an animation they walked away from, and this is where
+    /// most of the wasted power actually goes.
+    static bool decorationPauseWhenIdle()
+    {
+        return true;
+    }
+
+    /// Seconds of no input before decoration animation pauses.
+    static int decorationIdleTimeoutSec()
+    {
+        return 30;
+    }
+    static constexpr int decorationIdleTimeoutSecMin()
+    {
+        return 5;
+    }
+    static constexpr int decorationIdleTimeoutSecMax()
+    {
+        return 3600;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Settings
     // ═══════════════════════════════════════════════════════════════════════════
 

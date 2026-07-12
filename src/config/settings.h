@@ -339,6 +339,14 @@ public:
     Q_PROPERTY(QString decorationProfileTreeJson READ decorationProfileTreeJson WRITE setDecorationProfileTreeJson
                    NOTIFY decorationProfileTreeChanged)
 
+    // Decorations.Performance — bounds on WHEN the decoration chain animates.
+    Q_PROPERTY(bool decorationAnimateFocusedOnly READ decorationAnimateFocusedOnly WRITE setDecorationAnimateFocusedOnly
+                   NOTIFY decorationAnimateFocusedOnlyChanged)
+    Q_PROPERTY(bool decorationPauseWhenIdle READ decorationPauseWhenIdle WRITE setDecorationPauseWhenIdle NOTIFY
+                   decorationPauseWhenIdleChanged)
+    Q_PROPERTY(int decorationIdleTimeoutSec READ decorationIdleTimeoutSec WRITE setDecorationIdleTimeoutSec NOTIFY
+                   decorationIdleTimeoutSecChanged)
+
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
                    autotileFocusFollowsMouseChanged)
@@ -985,6 +993,14 @@ public:
     void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) override;
     QString decorationProfileTreeJson() const override;
     void setDecorationProfileTreeJson(const QString& json) override;
+
+    // Decorations.Performance — PhosphorConfig::Store-backed.
+    bool decorationAnimateFocusedOnly() const override;
+    void setDecorationAnimateFocusedOnly(bool value) override;
+    bool decorationPauseWhenIdle() const override;
+    void setDecorationPauseWhenIdle(bool value) override;
+    int decorationIdleTimeoutSec() const override;
+    void setDecorationIdleTimeoutSec(int value) override;
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;

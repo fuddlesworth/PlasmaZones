@@ -798,6 +798,20 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         qCWarning(lcEffect) << "Failed to connect to daemon motionProfileTreeChanged D-Bus signal";
     }
 
+    // Session idle. The daemon owns the detection (ext-idle-notify-v1 is a Wayland
+    // CLIENT protocol, and this effect lives inside the compositor that serves it),
+    // so the effect only ever sees the resolved boolean and pauses / resumes the
+    // decoration chain on it.
+    const bool idleConnected = QDBusConnection::sessionBus().connect(
+        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+        PhosphorProtocol::Service::Interface::Settings, QStringLiteral("sessionIdleChanged"), this,
+        SLOT(slotSessionIdleChanged(bool)));
+    if (idleConnected) {
+        qCInfo(lcEffect) << "Connected to daemon sessionIdleChanged D-Bus signal";
+    } else {
+        qCWarning(lcEffect) << "Failed to connect to daemon sessionIdleChanged D-Bus signal";
+    }
+
     // Connect to keyboard navigation D-Bus signals
     connectNavigationSignals();
 

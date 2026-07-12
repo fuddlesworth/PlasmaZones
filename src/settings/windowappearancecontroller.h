@@ -37,6 +37,13 @@ class WindowAppearanceController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
+    // ── Decoration performance (Decorations.Performance) ──────────────────────
+    // Bounds for the "Idle after" slider. The values themselves live on
+    // ISettings (appSettings) like every other setting; only the range is exposed
+    // here, mirroring how SnappingEffectsController surfaces the frame-rate bounds.
+    Q_PROPERTY(int decorationIdleTimeoutSecMin READ decorationIdleTimeoutSecMin CONSTANT)
+    Q_PROPERTY(int decorationIdleTimeoutSecMax READ decorationIdleTimeoutSecMax CONSTANT)
+
     // ── Window border / title bar (Windows.*) ─────────────────────────────────
     Q_PROPERTY(bool showWindowBorder READ showWindowBorder WRITE setShowWindowBorder NOTIFY showWindowBorderChanged)
     // Scope tokens the "Apply to" pickers speak: "tiled", "normal", "all".
@@ -108,6 +115,15 @@ public:
     }
 
     // Window border / title bar — forward to ISettings.
+    int decorationIdleTimeoutSecMin() const
+    {
+        return ConfigDefaults::decorationIdleTimeoutSecMin();
+    }
+    int decorationIdleTimeoutSecMax() const
+    {
+        return ConfigDefaults::decorationIdleTimeoutSecMax();
+    }
+
     bool showWindowBorder() const;
     QString windowBorderScope() const;
     int windowBorderWidth() const;
