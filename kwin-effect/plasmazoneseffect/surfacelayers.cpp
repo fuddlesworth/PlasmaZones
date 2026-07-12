@@ -157,8 +157,58 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
         // (frost applies the window's opacity to its content sample itself
         // so its slab stays solid).
         "uniform float uOpacity;\n\n"
+        // Colour management. Installing our own shader via OffscreenEffect::
+        // setShader REPLACES KWin's present shader, which carries
+        // ShaderTrait::TransformColorspace and converts the redirected window's
+        // sRGB content into the output's colour space (offscreeneffect.cpp does
+        // exactly this). Dropping that conversion wrote sRGB values verbatim into
+        // the compositor's blending space, so on an HDR output every decorated
+        // window rendered dim and desaturated — persistently, not just during an
+        // animation.
+        //
+        // KWin's GLShader::preprocess resolves `#include "…"` against its own
+        // `:/opengl/` resource for EVERY source it compiles, custom ones included,
+        // so we can pull in its colour-management GLSL rather than reimplement it.
+        // The uniforms it declares are what GLShader::setColorspaceUniforms fills.
+        //
+        // Stage order mirrors KWin's base.frag exactly: encoding → nits, apply the
+        // colorimetry transform, THEN modulate, then tonemap, then encode for the
+        // destination. Opacity has to land in nits space because that is where
+        // base.frag's TRAIT_MODULATE sits, between the colorimetry transform and
+        // tonemapping.
+        //
+        // Deliberately NOT the sourceEncodingToNitsInDestinationColorspace()
+        // convenience: it folds doTonemapping() in at the end, which would tonemap
+        // BEFORE the modulate and then again at our explicit call — a double
+        // compression. Harmless on SDR (that path only clamps, and clamping twice
+        // is idempotent) but wrong on HDR, i.e. precisely the case this exists for.
+        // base.frag spells the steps out for the same reason.
+        //
+        // On an SDR output source and destination are both sRGB: the colorimetry
+        // transform is identity, the transfer functions round-trip, and
+        // doTonemapping degrades to a clamp that cannot bite (for an sRGB source
+        // KWin sets maxTonemappingLuminance == the destination reference, so the
+        // Reinhard branch is unreachable). So this is a no-op there and can only
+        // change HDR.
+        //
+        // That holds at ANY uOpacity, which is not obvious: modulating in nits
+        // space looks like it should brighten a fade versus the old encoded-domain
+        // multiply. It does not, because `result *= uOpacity` scales ALPHA too and
+        // both encodingToNits and nitsToEncoding un-premultiply before their
+        // transfer function and re-premultiply after (by the NEW alpha). The
+        // opacity therefore rides entirely on the alpha channel and the gamma
+        // cancels: both forms emit E(c)·a·o with alpha a·o. Do not "simplify" the
+        // multiply back out of nits space — that is where KWin's TRAIT_MODULATE
+        // sits, and moving it would break the HDR path for no SDR gain.
+        "#include \"colormanagement.glsl\"\n\n"
         "void main() {\n"
-        "    fragColor = texture(uFinal, vTexCoord) * uOpacity;\n"
+        "    vec4 result = texture(uFinal, vTexCoord);\n"
+        "    result = encodingToNits(result, sourceNamedTransferFunction,\n"
+        "                            sourceTransferFunctionParams.x, sourceTransferFunctionParams.y);\n"
+        "    result.rgb = (colorimetryTransform * vec4(result.rgb, 1.0)).rgb;\n"
+        "    result *= uOpacity;\n"
+        "    result.rgb = doTonemapping(result.rgb);\n"
+        "    fragColor = nitsToDestinationEncoding(result);\n"
         "}\n");
 
     // Route BOTH stages through injectKwinDefineAfterVersion, exactly like
@@ -168,8 +218,16 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
     // the raw sources here failed the present compile on NVIDIA (error C7548)
     // and latched multi-pack / padded decoration off for the whole session —
     // the same failure mode surface_compile.cpp documents for frag-only packs.
+    // TransformColorspace is DECLARATIVE ONLY here. With a custom fragment source
+    // `generateCustomShader` uses the traits for nothing but `listDefines`, and
+    // colormanagement.glsl does not read TRAIT_TRANSFORM_COLORSPACE at all (only
+    // KWin's own base.frag does, to decide whether to include the file). The
+    // conversion is explicit in kPresentFragment above and would run with or
+    // without this flag. It is declared so the shader's traits describe what it
+    // actually does — do not delete the GLSL believing the trait drives it.
     auto shader = KWin::ShaderManager::instance()->generateCustomShader(
-        KWin::ShaderTrait::MapTexture, ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentVertex)),
+        KWin::ShaderTrait::MapTexture | KWin::ShaderTrait::TransformColorspace,
+        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentVertex)),
         ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentFragment)));
     // KWin 6.7 removed GLShader::isValid(); generateCustomShader returns nullptr
     // when compilation or linking fails, so a null check is the validity test.

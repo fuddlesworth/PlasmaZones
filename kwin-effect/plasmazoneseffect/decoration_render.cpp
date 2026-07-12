@@ -359,6 +359,15 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 if (m_surfacePresentFinalLoc >= 0) {
                     present->setUniform(m_surfacePresentFinalLoc, unit);
                 }
+                // NOTE: the colour-management uniforms are deliberately NOT pushed
+                // here. Our present shader replaces KWin's, so it must do the
+                // sRGB → output conversion itself (see kPresentFragment), but the
+                // UNIFORMS for it come free: OffscreenData::paint calls
+                // setColorspaceUniforms(sRGB, renderTarget.colorDescription(),
+                // Perceptual) on whatever shader setShader() installed — ours —
+                // with the same render target, after this pre-bind. Setting them
+                // again here would write identical values that KWin then
+                // overwrites with identical values.
                 // Final KWin-style opacity modulation. Pushed EVERY frame —
                 // the program is shared across windows, so a stale value from
                 // another window would leak. 1.0 when a chain pack handles
