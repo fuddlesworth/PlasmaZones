@@ -21,7 +21,10 @@ Item {
     property int animationDuration: CurvePresets.defaultDurationMs
     property bool previewEnabled: true
 
-    onVisibleChanged: if (!visible) { animTimer.stop(); replayDelay.stop(); }
+    onVisibleChanged: if (!visible) {
+        animTimer.stop();
+        replayDelay.stop();
+    }
     readonly property int canvasHeight: Kirigami.Units.gridUnit * 15
     readonly property int boxTrackHeight: Kirigami.Units.gridUnit * 2
     readonly property int boxSize: Math.round(Kirigami.Units.gridUnit * 1.5)
@@ -63,7 +66,6 @@ Item {
             if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
                 if (c !== 'e' && c !== 'E')
                     return true;
-
             }
         }
         return false;
@@ -74,7 +76,7 @@ Item {
         var str = root.curve;
         if (!str || str === "") {
             _resetToDefault();
-            return ;
+            return;
         }
         if (_hasLetter(str)) {
             var colonIdx = str.indexOf(':');
@@ -83,7 +85,7 @@ Item {
             // Validate curve name; unknown names fall back to bezier defaults
             if (_knownCurveTypes.indexOf(name) < 0) {
                 _resetToDefault();
-                return ;
+                return;
             }
             var isElastic = (name === "elastic-in" || name === "elastic-out" || name === "elastic-in-out");
             var isBounce = (name === "bounce-in" || name === "bounce-out" || name === "bounce-in-out");
@@ -96,26 +98,25 @@ Item {
                 var parts = params.split(",");
                 if (parts.length >= 1) {
                     var a = parseFloat(parts[0]);
+                    // Mirrors Easing::clampAmplitude: the two families share the
+                    // field but not its bounds, so the clamp has to know the type.
                     if (isFinite(a))
-                        curveAmplitude = Math.max(0.5, Math.min(3, a));
-
+                        curveAmplitude = isElastic ? Math.max(1, Math.min(2, a)) : Math.max(0.5, Math.min(3, a));
                 }
                 if (parts.length >= 2) {
                     if (isElastic) {
                         var p = parseFloat(parts[1]);
                         if (isFinite(p))
                             elasticPeriod = Math.max(0.1, Math.min(1, p));
-
                     } else if (isBounce) {
                         var b = Math.round(parseFloat(parts[1]));
                         if (isFinite(b))
                             bouncesCount = Math.max(1, Math.min(8, b));
-
                     }
                 }
             }
             curveType = name;
-            return ;
+            return;
         }
         // Bezier: "x1,y1,x2,y2"
         curveType = "bezier";
@@ -131,7 +132,7 @@ Item {
                 cp1y = Math.max(-1, Math.min(2, y1));
                 cp2x = Math.max(0, Math.min(1, x2));
                 cp2y = Math.max(-1, Math.min(2, y2));
-                return ;
+                return;
             }
         }
         _resetToDefault();
@@ -155,7 +156,6 @@ Item {
         var formatted = root.formatCurve();
         if (formatted !== root.curve)
             root.curveEdited(formatted);
-
     }
 
     // Format control point values back into a curve string
@@ -257,7 +257,7 @@ Item {
 
     function replay() {
         if (!root.previewEnabled)
-            return ;
+            return;
 
         animTimer.stop();
         boxTrack.animBox.x = 0;
@@ -540,20 +540,19 @@ Item {
                 hoverEnabled: true
                 preventStealing: true // Crucial: prevents parent ScrollView from stealing vertical drag
                 cursorShape: root.isBezier ? (activeHandle ? Qt.ClosedHandCursor : (hoveredHandle ? Qt.OpenHandCursor : Qt.ArrowCursor)) : Qt.ArrowCursor
-                onPositionChanged: (mouse) => {
+                onPositionChanged: mouse => {
                     if (activeHandle) {
                         // Start drag immediately or with very small threshold for reliability
                         if (!dragStarted) {
                             var dist = Math.sqrt(Math.pow(mouse.x - pressPos.x, 2) + Math.pow(mouse.y - pressPos.y, 2));
                             if (dist > 2)
                                 dragStarted = true;
-
                         }
                         if (dragStarted) {
                             var gw = curveCanvas.width - root.canvasPad * 2;
                             var gh = curveCanvas.height - root.canvasPad * 2;
                             if (gw <= 0 || gh <= 0)
-                                return ;
+                                return;
 
                             var nx = Math.max(0, Math.min(1, root.canvasToX(mouse.x, gw)));
                             var ny = Math.max(root.yMin, Math.min(root.yMax, root.canvasToY(mouse.y, gh)));
@@ -571,7 +570,7 @@ Item {
                         hoveredHandle = nearestHandle(mouse.x, mouse.y);
                     }
                 }
-                onPressed: (mouse) => {
+                onPressed: mouse => {
                     pressPos = Qt.point(mouse.x, mouse.y);
                     dragStarted = false;
                     activeHandle = nearestHandle(mouse.x, mouse.y);
@@ -597,10 +596,8 @@ Item {
                     // Replay on click if it wasn't a significant drag
                     if (!dragStarted)
                         root.replay();
-
                 }
             }
-
         }
 
         // Curve value display
@@ -622,7 +619,5 @@ Item {
             Layout.preferredHeight: root.boxTrackHeight
             boxSize: root.boxSize
         }
-
     }
-
 }

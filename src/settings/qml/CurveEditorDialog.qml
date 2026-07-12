@@ -167,9 +167,12 @@ Kirigami.Dialog {
             description: easingPreviewInDialog.curveType.indexOf("elastic") >= 0 ? i18n("Strength of elastic overshoot") : i18n("Height of bounce peaks")
 
             SettingsSlider {
+                readonly property bool isElastic: easingPreviewInDialog.curveType.indexOf("elastic") >= 0
+
                 Accessible.name: i18n("Amplitude")
-                from: 0.5
-                to: 3
+                // Mirrors Easing::clampAmplitude — see EasingSettings.qml.
+                from: isElastic ? 1 : 0.5
+                to: isElastic ? 2 : 3
                 stepSize: 0.1
                 value: easingPreviewInDialog.curveAmplitude
                 formatValue: function (v) {

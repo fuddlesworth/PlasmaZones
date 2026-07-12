@@ -435,10 +435,20 @@ private:
 
     T lerpStateValue() const
     {
+        // Bound the overshoot envelope HERE, at the one point where a curve's
+        // progress becomes a value, rather than at either producer. Both the
+        // stateless branch (`evaluate()`) and the stateful one (`step()`) reach
+        // the lerp through this, and `m_state.value` must be left alone: for a
+        // stateful curve that field IS the integrator state and is fed back into
+        // the next step(), so clamping it in place would corrupt the physics
+        // instead of bounding the output. Matches the bound the shader applies to
+        // iTime (`ShaderInternal::clampProgressForCurve`), so the pixels and the
+        // window frame overshoot by the same amount. See AnimationLimits.h.
+        const qreal progress = boundCurveProgress(m_state.value);
         if constexpr (std::same_as<T, QColor> && Space == ColorSpace::OkLab) {
-            return detail::lerpColorOkLab(m_from, m_to, m_state.value);
+            return detail::lerpColorOkLab(m_from, m_to, progress);
         } else {
-            return Interpolate<T>::lerp(m_from, m_to, m_state.value);
+            return Interpolate<T>::lerp(m_from, m_to, progress);
         }
     }
 

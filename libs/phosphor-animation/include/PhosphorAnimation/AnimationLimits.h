@@ -142,5 +142,44 @@ constexpr int MaxAnimationStaggerIntervalMs = 200;
 /// visible.
 constexpr float MaxShaderTimeDeltaSeconds = 0.1f;
 
+/// Overshoot envelope for a curve's OUTPUT. A curve is free to leave [0, 1] —
+/// that is what `Curve::overshoots()` means — but not by an unbounded amount.
+/// Where 2.0 comes from: it is the exact peak of an UNDAMPED spring (zeta = 0),
+/// which is the most a spring can overshoot at any stiffness. So the envelope is
+/// the spring ceiling, and no spring is ever touched by it. A cubic-bezier fits
+/// too, by construction — its y control points are themselves clamped to [-1, 2]
+/// at every entry point, and the curve stays within its control hull.
+///
+/// Elastic is the one curve that can cross it, and does. With amplitude capped
+/// (`Easing::clampAmplitude`) its raw output spans about [-1.6, 2.6] over the
+/// admitted parameter space, so elastic-out grazes past the top and elastic-in
+/// past the bottom (elastic-in-out fits entirely). That excursion is CLIPPED, and
+/// deliberately: the cap already pulled the peak down from ~3.4, and what remains
+/// beyond the envelope lasts a few percent of the leg — under one frame at an
+/// ordinary duration. The alternative, capping amplitude low enough that elastic
+/// never reaches the envelope at its tightest period, costs most of the curve's
+/// expressive range to buy back something too brief to see.
+///
+/// So: a no-op for springs and beziers, a brief clip at the extreme corner of
+/// elastic's range, and a real bound on a hand-edited profile or a third-party
+/// `CurveRegistry` curve, which is the case that has no other defence.
+///
+/// It must be enforced by the CONSUMERS rather than inside `Curve::evaluate`,
+/// because a third-party curve supplies its own `evaluate()` and would simply
+/// not call it. Both consumers bound against it, and they have to agree: the
+/// shader and the geometry animator are handed the same curve for the same
+/// window on the same event, so a bound applied to one and not the other would
+/// render the pixels and the window frame at different overshoots.
+///  - `AnimatedValue` (`AnimatedValue.h`, `AnimatedValue_geometric.h`) — the
+///    geometry animator, at the lerp and at the swept-bounds sampler,
+///  - `ShaderInternal::clampProgressForCurve`
+///    (`plasmazoneseffect/shader_internal.h`) — the shader's `iTime`.
+///
+/// Do NOT apply it to a stateful curve's CurveState::value. That field is the
+/// integrator's own state, fed back into the next `step()`; clamping it would
+/// corrupt the physics rather than bound the output. Bound at the point of use.
+constexpr double MinCurveProgress = -1.0;
+constexpr double MaxCurveProgress = 2.0;
+
 } // namespace Limits
 } // namespace PhosphorAnimation

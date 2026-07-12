@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QString>
@@ -106,5 +107,17 @@ protected:
     Curve(Curve&&) = default;
     Curve& operator=(Curve&&) = default;
 };
+
+/// Bound a curve's output to the overshoot envelope
+/// [`Limits::MinCurveProgress`, `Limits::MaxCurveProgress`]. Consumers apply
+/// this to whatever `evaluate()` / `step()` produced, at the point where the
+/// progress is interpolated into a value — never to a stateful curve's own
+/// `CurveState::value`, which is integrator state. See `AnimationLimits.h` for
+/// why the envelope is enforced here, by the callers, and not inside
+/// `Curve::evaluate`.
+inline qreal boundCurveProgress(qreal progress)
+{
+    return qBound(qreal(Limits::MinCurveProgress), progress, qreal(Limits::MaxCurveProgress));
+}
 
 } // namespace PhosphorAnimation

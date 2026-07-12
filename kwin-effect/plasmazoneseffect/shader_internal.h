@@ -232,11 +232,18 @@ inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::C
 
 /// The iTime clamp POLICY, in one place.
 ///
-/// An overshooting curve (underdamped spring, back / elastic ease) passes through
-/// RAW — the overshoot is the curve, and the geometry animator bounces past the
-/// target on the same pick, so flattening it here would make the shader and the
-/// geometry disagree. Every other curve is clamped, where an out-of-range value
-/// is a bug rather than the intent.
+/// An overshooting curve (underdamped spring, elastic ease) keeps its overshoot —
+/// the overshoot IS the curve, and the geometry animator bounces past the target on
+/// the same pick, so flattening it here would make the shader and the geometry
+/// disagree. It is bounded, not clamped: the same overshoot envelope the animator
+/// interpolates within (`PhosphorAnimation::boundCurveProgress`, see
+/// AnimationLimits.h), which every curve the library produces already satisfies, so
+/// it is a backstop for a hand-edited profile or a third-party registered curve
+/// rather than a limit a bundled pack ever meets. A pack author cannot write a
+/// defence against an unstated range, which is why the range is stated.
+///
+/// Every other curve is clamped to [0, 1], where an out-of-range value is a bug
+/// rather than the intent.
 ///
 /// Both progress sources must route through this: `easeProgress` (the time-driven
 /// branch) and `paintWindow`'s animator-driven branch. They are two call sites of
@@ -245,7 +252,7 @@ inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::C
 /// exactly the `window.movement.*` events whose geometry visibly bounces.
 inline qreal clampProgressForCurve(qreal value, const PhosphorAnimation::Curve* curve)
 {
-    return (curve && curve->overshoots()) ? value : qBound(0.0, value, 1.0);
+    return (curve && curve->overshoots()) ? PhosphorAnimation::boundCurveProgress(value) : qBound(0.0, value, 1.0);
 }
 
 /// Ease @p linear through @p curve. Shared by the per-window transition paint

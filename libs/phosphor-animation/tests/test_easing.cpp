@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorAnimation/AnimationLimits.h>
+#include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/Easing.h>
 
 #include <QTest>
@@ -98,18 +100,28 @@ private Q_SLOTS:
 
     void testFromStringClampsElasticRanges()
     {
-        // amplitude [0.5, 3.0], period [0.1, 1.0]
+        // Elastic amplitude [1.0, 2.0] (see Easing::clampAmplitude), period [0.1, 1.0].
         Easing curve = Easing::fromString(QStringLiteral("elastic-out:10.0,5.0"));
-        QVERIFY(qAbs(curve.amplitude - 3.0) < 0.01);
+        QVERIFY(qAbs(curve.amplitude - 2.0) < 0.01);
         QVERIFY(qAbs(curve.period - 1.0) < 0.01);
+
+        // The floor is 1.0, not bounce's 0.5: below 1.0 the curve's own asin(1/a)
+        // term made every value behave exactly like 1.0 anyway.
+        Easing floored = Easing::fromString(QStringLiteral("elastic-in:0.1,0.01"));
+        QVERIFY(qAbs(floored.amplitude - 1.0) < 0.01);
+        QVERIFY(qAbs(floored.period - 0.1) < 0.01);
     }
 
     void testFromStringClampsBounceRanges()
     {
-        // amplitude [0.5, 3.0], bounces [1, 8]
+        // Bounce keeps the wider amplitude [0.5, 3.0] — it never leaves [0, 1], so
+        // the overshoot envelope has no claim on it. bounces [1, 8].
         Easing curve = Easing::fromString(QStringLiteral("bounce-in:0.1,20"));
         QVERIFY(qAbs(curve.amplitude - 0.5) < 0.01);
         QCOMPARE(curve.bounces, 8);
+
+        Easing tall = Easing::fromString(QStringLiteral("bounce-out:3.0,4"));
+        QVERIFY(qAbs(tall.amplitude - 3.0) < 0.01);
     }
 
     // ─── Round-trip ───
@@ -129,7 +141,10 @@ private Q_SLOTS:
             {Easing::Type::CubicBezier, 0.25, 0.10, 0.25, 1.00, 1.0, 0.3, 3},
             {Easing::Type::ElasticOut, 0, 0, 0, 0, 1.2, 0.4, 3},
             {Easing::Type::ElasticIn, 0, 0, 0, 0, 1.5, 0.5, 3},
-            {Easing::Type::ElasticInOut, 0, 0, 0, 0, 0.8, 0.6, 3},
+            // Elastic amplitudes must be inside [1.0, 2.0] or the parse clamps them
+            // and the round-trip legitimately fails. 1.8 exercises the top of the
+            // range; the old 0.8 sat in what was always a dead zone.
+            {Easing::Type::ElasticInOut, 0, 0, 0, 0, 1.8, 0.6, 3},
             {Easing::Type::BounceOut, 0, 0, 0, 0, 1.0, 0.3, 5},
             {Easing::Type::BounceIn, 0, 0, 0, 0, 2.0, 0.3, 3},
             {Easing::Type::BounceInOut, 0, 0, 0, 0, 1.3, 0.3, 6},
@@ -247,6 +262,105 @@ private Q_SLOTS:
     {
         Easing e;
         QVERIFY(qAbs(e.settleTime() - 1.0) < 1e-9);
+    }
+
+    // ─── amplitude bounds ───
+
+    // Elastic and bounce share the `amplitude` field but not its meaning, so they
+    // must not share its bounds. The clamp was type-blind and applied elastic's
+    // ceiling to bounce and bounce's floor to elastic.
+    void testClampAmplitudeIsTypeAware()
+    {
+        // Elastic: the overshoot envelope caps it, and asin(1/a) floors it at 1.
+        QCOMPARE(Easing::clampAmplitude(Easing::Type::ElasticOut, 9.0), 2.0);
+        QCOMPARE(Easing::clampAmplitude(Easing::Type::ElasticIn, 9.0), 2.0);
+        QCOMPARE(Easing::clampAmplitude(Easing::Type::ElasticInOut, 0.1), 1.0);
+        QCOMPARE(Easing::clampAmplitude(Easing::Type::ElasticOut, 1.5), 1.5); // in range, untouched
+
+        // Bounce never leaves [0, 1], so the envelope has no claim on it and its
+        // wider range stays open — the value scales dip depth, and all of it is live.
+        QCOMPARE(Easing::clampAmplitude(Easing::Type::BounceOut, 3.0), 3.0);
+        QCOMPARE(Easing::clampAmplitude(Easing::Type::BounceOut, 0.5), 0.5);
+        QCOMPARE(Easing::clampAmplitude(Easing::Type::BounceOut, 9.0), 3.0);
+    }
+
+    // The old floor of 0.5 advertised a range that did nothing: evaluateElasticOut
+    // floored the amplitude at 1.0 internally, so the entire lower half of the
+    // slider produced a curve identical to amplitude 1.0. The floor now states what
+    // the arithmetic already enforced.
+    void testElasticAmplitudeBelowOneWasADeadZone()
+    {
+        Easing at1 = Easing::fromString(QStringLiteral("elastic-out:1.0,0.3"));
+        Easing atHalf = Easing::fromString(QStringLiteral("elastic-out:0.5,0.3"));
+        QCOMPARE(atHalf.amplitude, 1.0); // clamped up, not stored as 0.5
+        for (int i = 0; i <= 20; ++i) {
+            const qreal t = qreal(i) / 20.0;
+            QVERIFY(qAbs(at1.evaluate(t) - atHalf.evaluate(t)) < 1.0e-12);
+        }
+    }
+
+    // What the amplitude ceiling actually buys. It does NOT bring elastic inside
+    // the overshoot envelope — elastic-out still grazes past the top and elastic-in
+    // past the bottom, and the consumers clip that (briefly, by design). What it
+    // does is BOUND the excursion, so the clip stays small: at the old cap of 3.0
+    // the curve reached ~3.44 / ~-2.44, which is a window flung far enough that
+    // clipping it would be a visible flat spot rather than a fraction of a frame.
+    //
+    // Pinned as a range with headroom, not an exact peak: the point is that the
+    // excursion is bounded and close to the envelope, and an exact figure would
+    // just re-encode the formula. If this fails, the amplitude cap moved.
+    void testAmplitudeCeilingBoundsTheElasticExcursion()
+    {
+        const QVector<Easing::Type> types{Easing::Type::ElasticIn, Easing::Type::ElasticOut,
+                                          Easing::Type::ElasticInOut};
+        for (const Easing::Type type : types) {
+            for (int ai = 0; ai <= 20; ++ai) {
+                for (int pi = 0; pi <= 18; ++pi) {
+                    Easing e;
+                    e.type = type;
+                    // Sweep PAST the admitted range on the amplitude axis: the clamp
+                    // inside evaluate() is what has to hold, since `Easing` is a POD
+                    // whose fields any caller can write directly.
+                    e.amplitude = Easing::clampAmplitude(type, 0.5 + 0.15 * ai); // 0.5 .. 3.5
+                    e.period = qBound(0.1, 0.1 + 0.05 * pi, 1.0);
+                    for (int i = 0; i <= 200; ++i) {
+                        const qreal t = qreal(i) / 200.0;
+                        const qreal v = e.evaluate(t);
+                        QVERIFY2(v >= -1.7 && v <= 2.7,
+                                 qPrintable(QStringLiteral("elastic excursion is unbounded: amp=%1 per=%2 "
+                                                           "t=%3 -> %4")
+                                                .arg(e.amplitude)
+                                                .arg(e.period)
+                                                .arg(t)
+                                                .arg(v)));
+                        // ...and whatever it produced, a consumer bounds it into the
+                        // envelope before interpolating with it.
+                        const qreal bounded = PhosphorAnimation::boundCurveProgress(v);
+                        QVERIFY(bounded >= PhosphorAnimation::Limits::MinCurveProgress
+                                && bounded <= PhosphorAnimation::Limits::MaxCurveProgress);
+                    }
+                }
+            }
+        }
+    }
+
+    // A direct field write bypasses both the parse clamp and the property setter —
+    // `Easing` is a POD with public fields — so evaluate() has to bound it itself,
+    // or a hand-edited profile reaches the geometry lerp with amplitude 50.
+    void testElasticBoundsAPokedAmplitude()
+    {
+        Easing poked;
+        poked.type = Easing::Type::ElasticOut;
+        poked.period = 0.1; // the worst corner
+        poked.amplitude = 50.0; // never survives a clamp, but nothing stops a caller
+
+        Easing capped = poked;
+        capped.amplitude = 2.0; // what the clamp would have produced
+
+        for (int i = 0; i <= 200; ++i) {
+            const qreal t = qreal(i) / 200.0;
+            QCOMPARE(poked.evaluate(t), capped.evaluate(t));
+        }
     }
 };
 

@@ -87,7 +87,7 @@ namespace {
 // the ctor's silent clamp instead of being rejected here.
 constexpr qreal kMaxOmega = 1000.0; // Spring ctor clamps to [0.1, 200]
 constexpr qreal kMaxZeta = 100.0; // Spring ctor clamps to [0, 10]
-constexpr qreal kMaxAmplitude = 1000.0; // Easing ctor clamps elastic to [0.5, 3], bounce > 0
+constexpr qreal kMaxAmplitude = 1000.0; // Easing clamps elastic to [1, 2], bounce to [0.5, 3]
 constexpr qreal kMaxPeriod = 1000.0; // Easing ctor clamps elastic to [0.1, 1]
 constexpr int kMaxBounces = 1000; // Easing ctor clamps to [1, 8]
 

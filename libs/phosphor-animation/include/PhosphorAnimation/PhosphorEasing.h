@@ -85,11 +85,12 @@ public:
     // ─── Property delegates ───
     //
     // Setters mirror the bounds enforced by `Easing::fromString`'s
-    // qBound clamps: x ∈ [0, 1], y ∈ [-1, 2], amplitude ∈ [0.5, 3],
-    // period ∈ [0.1, 1], bounces ∈ [1, 8]. NaN/inf are silently
-    // dropped (the previous value is preserved). Direct field writes
-    // would otherwise let a settings UI sneak pathological values past
-    // the parse-path clamp.
+    // qBound clamps: x ∈ [0, 1], y ∈ [-1, 2], period ∈ [0.1, 1],
+    // bounces ∈ [1, 8]. Amplitude is type-dependent and routes through
+    // `Easing::clampAmplitude` (elastic ∈ [1, 2], bounce ∈ [0.5, 3]).
+    // NaN/inf are silently dropped (the previous value is preserved).
+    // Direct field writes would otherwise let a settings UI sneak
+    // pathological values past the parse-path clamp.
 
     Type type() const
     {
@@ -98,6 +99,11 @@ public:
     void setType(Type t)
     {
         m_value.type = static_cast<Easing::Type>(static_cast<int>(t));
+        // Amplitude's admitted range depends on the type (elastic and bounce
+        // share the field, not its bounds), and a QML declaration may well set
+        // `amplitude` before `type`. Re-clamp so the pair is coherent whichever
+        // order the two properties are written in.
+        m_value.amplitude = Easing::clampAmplitude(m_value.type, m_value.amplitude);
     }
 
     qreal x1() const
@@ -154,7 +160,7 @@ public:
         if (!std::isfinite(v)) {
             return;
         }
-        m_value.amplitude = qBound(0.5, v, 3.0);
+        m_value.amplitude = Easing::clampAmplitude(m_value.type, v);
     }
     qreal period() const
     {

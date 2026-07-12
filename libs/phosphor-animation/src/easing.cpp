@@ -16,13 +16,29 @@ Q_LOGGING_CATEGORY(lcEasing, "phosphoranimation.easing")
 // Elastic / bounce reference formulas
 // ═══════════════════════════════════════════════════════════════════════════════
 
+qreal Easing::clampAmplitude(Type t, qreal amp)
+{
+    switch (t) {
+    case Type::ElasticIn:
+    case Type::ElasticOut:
+    case Type::ElasticInOut:
+        return qBound(1.0, amp, 2.0);
+    default:
+        return qBound(0.5, amp, 3.0);
+    }
+}
+
 qreal Easing::evaluateElasticOut(qreal t, qreal amp, qreal per)
 {
     if (t <= 0.0)
         return 0.0;
     if (t >= 1.0)
         return 1.0;
-    const qreal a = qMax(1.0, amp);
+    // Bound here and not only at the parse/setter clamps: `Easing` is a POD with
+    // public fields, so a direct `curve.amplitude = 9.0` reaches evaluate()
+    // without passing either. The ceiling is what keeps the curve inside the
+    // Limits::MaxCurveProgress envelope; the floor is required by asin(1/a).
+    const qreal a = clampAmplitude(Type::ElasticOut, amp);
     const qreal s = per / (2.0 * M_PI) * qAsin(1.0 / a);
     return a * qPow(2.0, -10.0 * t) * qSin((t - s) * 2.0 * M_PI / per) + 1.0;
 }
@@ -239,7 +255,7 @@ Easing Easing::fromString(const QString& str)
                 bool ok;
                 qreal a = cLocale.toDouble(parts[0].trimmed(), &ok);
                 if (ok)
-                    curve.amplitude = qBound(0.5, a, 3.0);
+                    curve.amplitude = clampAmplitude(curve.type, a);
             }
             if (parts.size() >= 2) {
                 if (curve.type == Type::ElasticIn || curve.type == Type::ElasticOut

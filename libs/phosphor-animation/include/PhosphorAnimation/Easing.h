@@ -44,6 +44,25 @@ public:
     /// Parse from config string. Returns default OutCubic on failure.
     static Easing fromString(const QString& str);
 
+    /// Clamp @p amp to the range the given curve type actually honours. The two
+    /// families share the `amplitude` field but not its meaning, so they do not
+    /// share its bounds:
+    ///
+    /// - Elastic rings past the target, so its amplitude is what decides how far
+    ///   out of [0, 1] the curve goes. It is bounded to [1.0, 2.0]. The ceiling
+    ///   holds the curve's excursion to roughly [-1.6, 2.6], close enough to the
+    ///   `Limits` overshoot envelope that the clip against it lasts a fraction of
+    ///   a frame at an ordinary duration. (It does NOT bring elastic entirely
+    ///   inside the envelope — that would need a cap near 1.3, which costs most of
+    ///   the curve's range to buy back something too brief to see.) The floor is
+    ///   not policy but arithmetic: the phase term `asin(1/a)` needs `a >= 1`, so
+    ///   every value below 1.0 already behaved exactly like 1.0 — the old 0.5 floor
+    ///   advertised half a range that did nothing.
+    /// - Bounce never leaves [0, 1] at any amplitude (see `overshoots()`), so
+    ///   the envelope has no claim on it and it keeps the wider [0.5, 3.0] range,
+    ///   where the value scales dip depth and every part of it is live.
+    static qreal clampAmplitude(Type t, qreal amp);
+
     Type type = Type::CubicBezier;
 
     /// Bezier control points (P1, P2). x clamped [0,1]; y clamped [-1,2].
@@ -52,7 +71,8 @@ public:
     qreal x2 = 0.68;
     qreal y2 = 1.0;
 
-    /// Elastic: oscillation intensity. Bounce: height scale. [0.5, 3.0].
+    /// Elastic: oscillation intensity, [1.0, 2.0]. Bounce: height scale,
+    /// [0.5, 3.0]. Clamp through `clampAmplitude()` — the ranges differ.
     qreal amplitude = 1.0;
     /// Elastic oscillation period. [0.1, 1.0].
     qreal period = 0.3;

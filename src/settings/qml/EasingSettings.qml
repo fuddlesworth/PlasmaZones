@@ -254,8 +254,12 @@ ColumnLayout {
         SettingsSlider {
             Accessible.name: i18n("Amplitude")
             enabled: easingRoot.animationsEnabled
+            // Mirrors Easing::clampAmplitude: elastic rings past the target, so
+            // its amplitude is bounded by the overshoot envelope, and below 1 the
+            // curve's own asin(1/a) term makes every value behave like 1. Bounce
+            // never leaves [0, 1], so its wider range is entirely usable.
             from: curveInfo.isElastic ? 1 : 0.5
-            to: 3
+            to: curveInfo.isElastic ? 2 : 3
             stepSize: 0.1
             value: easingRoot.easingPreview.curveAmplitude
             formatValue: function (v) {

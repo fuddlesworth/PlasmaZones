@@ -165,7 +165,7 @@ private Q_SLOTS:
         QCOMPARE(clampProgressForCurve(-0.3, nullptr), 0.0);
     }
 
-    // ...and an OVERSHOOTING curve passes through RAW. Same function, opposite
+    // ...and an OVERSHOOTING curve keeps its overshoot. Same function, opposite
     // branch — this is the half that makes the bounce reach the shader at all.
     void testClampPolicyPassesOvershootingCurvesThrough()
     {
@@ -173,6 +173,43 @@ private Q_SLOTS:
         QVERIFY(bouncy.overshoots());
         QCOMPARE(clampProgressForCurve(1.4, &bouncy), 1.4);
         QCOMPARE(clampProgressForCurve(-0.3, &bouncy), -0.3);
+    }
+
+    // The overshoot is kept, but it is BOUNDED — a hand-edited profile or a
+    // third-party registered curve cannot hand the shader an arbitrary iTime and
+    // fling the window off-screen. The envelope is the same one the geometry
+    // animator interpolates within, so the two cannot disagree.
+    void testClampPolicyBoundsOvershootToTheEnvelope()
+    {
+        const Spring bouncy(12.0, 0.5);
+        QVERIFY(bouncy.overshoots());
+        QCOMPARE(clampProgressForCurve(9.0, &bouncy), Limits::MaxCurveProgress);
+        QCOMPARE(clampProgressForCurve(-4.0, &bouncy), Limits::MinCurveProgress);
+        // The envelope's own edges survive intact.
+        QCOMPARE(clampProgressForCurve(Limits::MaxCurveProgress, &bouncy), Limits::MaxCurveProgress);
+        QCOMPARE(clampProgressForCurve(Limits::MinCurveProgress, &bouncy), Limits::MinCurveProgress);
+    }
+
+    // The envelope must never fire for a curve the library itself produces, or it
+    // would be silently reshaping bundled animations rather than backstopping bad
+    // ones. A spring is the curve that comes closest: an UNDAMPED one peaks at
+    // exactly MaxCurveProgress, which is where that number came from.
+    void testEnvelopeNeverClipsAnUndampedSpring()
+    {
+        const Spring undamped(12.0, 0.0); // zeta = 0 — the theoretical worst case
+        QVERIFY(undamped.overshoots());
+        CurveState state;
+        qreal peak = 0.0;
+        for (int i = 0; i < 400; ++i) {
+            undamped.step(0.016, state, 1.0);
+            peak = qMax(peak, state.value);
+        }
+        QVERIFY2(peak > 1.9, qPrintable(QStringLiteral("undamped spring should approach 2.0, peaked at %1").arg(peak)));
+        QVERIFY2(peak <= Limits::MaxCurveProgress + 1.0e-9,
+                 qPrintable(QStringLiteral("undamped spring exceeded the envelope at %1 — the envelope is "
+                                           "supposed to be the spring ceiling, so either the integrator or "
+                                           "MaxCurveProgress is wrong")
+                                .arg(peak)));
     }
 
     // An OVERSHOOTING curve is NOT clamped — the overshoot is the curve, and the

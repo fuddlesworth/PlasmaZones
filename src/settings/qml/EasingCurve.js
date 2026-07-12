@@ -18,7 +18,11 @@ function evaluateElasticOut(t, amp, per) {
     if (t <= 0) return 0;
     if (t >= 1) return 1;
     if (per <= 0) per = 0.3;
-    var a = Math.max(1, amp);
+    // Mirrors Easing::clampAmplitude(Elastic*, amp) — bound, not just floored.
+    // The preview must draw the curve the compositor will actually run, so it
+    // has to honour the same ceiling; drawing an unbounded elastic here would
+    // promise an overshoot the renderer never produces.
+    var a = Math.max(1, Math.min(2, amp));
     var s = per / (2 * Math.PI) * Math.asin(1 / a);
     return a * Math.pow(2, -10 * t) * Math.sin((t - s) * 2 * Math.PI / per) + 1;
 }
