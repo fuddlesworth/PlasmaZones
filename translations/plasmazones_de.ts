@@ -535,6 +535,11 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="121"/>
+        <source>Global default</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/settings/rulemodel.cpp" line="164"/>
         <location filename="../src/settings/rulemodel.cpp" line="171"/>
         <location filename="../src/settings/rulemodel.cpp" line="179"/>
@@ -9749,116 +9754,116 @@ Seitenverhältnis: %3</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="450"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="546"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="445"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="541"/>
         <source>A set named &quot;%1&quot; already exists.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="365"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="541"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="552"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="360"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="536"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="547"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="613"/>
         <location filename="../src/settings/shadersetstore.cpp" line="618"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="623"/>
         <source>Could not read the set &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="178"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="175"/>
         <source>Could not back up the existing set, so it was left untouched.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="243"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="240"/>
         <source>Could not write the set to disk.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="369"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="364"/>
         <source>&quot;%1&quot; was written by a newer version of PlasmaZones.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="374"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="369"/>
         <source>&quot;%1&quot; does not match this page.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="378"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="373"/>
         <source>Could not apply &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="440"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="534"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="435"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="529"/>
         <source>That name cannot be used. Try one with letters or numbers in it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="460"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="455"/>
         <source>There is nothing to capture yet.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="501"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="509"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="496"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="504"/>
         <source>Could not delete &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="527"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="522"/>
         <source>A set needs a name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="590"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="585"/>
         <source>Renamed the set, but the old file could not be removed. Delete it by hand from the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="606"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="601"/>
         <source>Could not write to that location.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="632"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="627"/>
         <source>Could not write to %1.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="653"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="648"/>
         <source>That file is not a readable set.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="657"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="652"/>
         <source>That set was written by a newer version of PlasmaZones.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="664"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="659"/>
         <source>That set is empty.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="670"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="665"/>
         <source>That set does not match this page.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="681"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="676"/>
         <source>That set has no usable name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="467"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="688"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="710"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="462"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="683"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="705"/>
         <source>Could not create the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="715"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="710"/>
         <source>Could not open the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>

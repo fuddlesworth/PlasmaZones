@@ -8,12 +8,15 @@
 #include "shadersetstore.h"
 
 #include <PhosphorControl/PageController.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
+
+#include <optional>
 
 namespace PhosphorSurfaceShaders {
 class SurfaceShaderRegistry;
@@ -40,12 +43,20 @@ class ISettings;
 ///
 /// ## Baseline as path ""
 ///
-/// The QML side addresses the baseline (global default) with the empty
-/// path "". Every mutator and reader special-cases "" to read/write the
-/// tree's `baseline()` rather than a per-surface override. So
-/// `resolvedProfile("")` == baseline; `setChain("", ...)` sets the
-/// baseline chain; `clearOverride("")` is rejected (the baseline can't be
-/// "inherited away").
+/// The empty path "" addresses the baseline (global default): every mutator and
+/// reader special-cases it to read or write the tree's `baseline()` rather than a
+/// per-surface override. So `resolvedProfile("")` == baseline, `setChain("", ...)`
+/// sets the baseline chain, and `clearOverride("")` is rejected (the baseline
+/// cannot be "inherited away").
+///
+/// NOTE that NO settings page binds "": the Decoration nav has no General surface
+/// page because there is no meaningful global default (borders and title bars are
+/// window-only, and the daemon surfaces default to no decoration — see
+/// settingscontroller_pageregistration.cpp). The baseline is reachable over D-Bus
+/// and from tests, and the resolve walk-up honours it, but the UI edits the
+/// category root cards ("window", "osd", "popup") instead. Decoration SETS
+/// deliberately neither capture nor apply a baseline for the same reason: an
+/// imported one could never be undone through the UI.
 ///
 /// ## Dirty tracking
 ///
@@ -236,6 +247,17 @@ private:
 
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_registry = nullptr;
     ISettings* m_settings = nullptr;
+
+    /// The profile tree, parsed once per change rather than once per read.
+    /// ISettings::decorationProfileTree() rebuilds it from the config store every
+    /// call (QVariantMap to QJsonObject to fromJson), and refreshing one card
+    /// costs several reads while a slider drag costs several per frame. Invalidated
+    /// on decorationProfileTreeChanged, which is the only thing that can move it,
+    /// including a write from D-Bus or a global reload.
+    mutable std::optional<PhosphorSurfaceShaders::DecorationProfileTree> m_treeCache;
+
+    /// The tree, from cache when it is warm. Empty tree when there are no settings.
+    const PhosphorSurfaceShaders::DecorationProfileTree& tree() const;
     ShaderSetStore* m_sets = nullptr;
 };
 

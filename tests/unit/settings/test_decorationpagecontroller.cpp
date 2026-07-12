@@ -414,15 +414,17 @@ private Q_SLOTS:
 
     // ─── Effect-usage query + param guard ───────────────────────────────────
 
-    /// shaderEffectUsages lists exactly the DIRECT overrides whose chain
-    /// contains the effect, sorted by label, and ignores the baseline / chains
-    /// that don't use it. Registry-independent (a pure tree query).
+    /// shaderEffectUsages lists every chain the effect appears in, sorted by
+    /// label: the direct overrides AND the baseline, which the resolve walk falls
+    /// back to (D-Bus can set one, so a pack used only there is still in use).
+    /// Chains that do not use it are ignored. Registry-independent (a pure tree
+    /// query).
     void shaderEffectUsages_listsDirectOverridesUsingTheEffect()
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
 
-        c.setChain(QString(), QStringList{QStringLiteral("glow")}); // baseline uses glow but is not an override
+        c.setChain(QString(), QStringList{QStringLiteral("glow")}); // the baseline uses glow too
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("border"), QStringLiteral("glow")});
         c.setChain(QStringLiteral("osd"), QStringList{QStringLiteral("glow")});
         c.setChain(QStringLiteral("window.snapped"), QStringList{QStringLiteral("border")}); // no glow
@@ -431,11 +433,11 @@ private Q_SLOTS:
         QStringList paths;
         for (const QVariant& v : usages)
             paths << v.toMap().value(QStringLiteral("path")).toString();
-        QCOMPARE(paths.size(), 2);
+        QCOMPARE(paths.size(), 3);
         QVERIFY2(paths.contains(QStringLiteral("window.tiled")), "the tiled override uses glow");
         QVERIFY2(paths.contains(QStringLiteral("osd")), "the osd override uses glow");
         QVERIFY2(!paths.contains(QStringLiteral("window.snapped")), "the snapped override does not use glow");
-        QVERIFY2(!paths.contains(QString()), "the baseline is not reported as an override usage");
+        QVERIFY2(paths.contains(QString()), "the baseline uses glow, and it is a real chain the tree resolves through");
 
         // An effect nobody uses, and the empty id, both yield nothing.
         QVERIFY(c.shaderEffectUsages(QStringLiteral("nonexistent")).isEmpty());

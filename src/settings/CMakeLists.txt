@@ -22,6 +22,7 @@ set(plasmazones_settings_SRCS
     searchcatalog.cpp
     searchproviders.h
     searchproviders.cpp
+    registryshaderpreviewbackend.h
     settingscontroller.h
     settingscontroller.cpp
     # SettingsController is large enough to violate the 800-line cap

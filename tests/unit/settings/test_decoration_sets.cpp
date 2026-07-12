@@ -10,7 +10,7 @@
  * the project's 800-line guideline — the same split, for the same reason, as
  * the motion side's test_animations_motion_sets.cpp.
  *
- * A decoration set is the baseline plus every per-surface override, captured
+ * A decoration set is every per-surface override, captured
  * as one JSON file under `<GenericDataLocation>/plasmazones/decorationsets`.
  * Pinned behaviour:
  *   - save / list / apply / remove round-trip, with apply MERGING (surfaces
@@ -118,7 +118,7 @@ private Q_SLOTS:
         QCOMPARE(c.chainAt(QStringLiteral("osd")), (QStringList{QStringLiteral("border")}));
     }
 
-    /// A decoration set snapshots the baseline + per-surface overrides to a
+    /// A decoration set snapshots the per-surface overrides to a
     /// JSON file, and applying it merges those overrides back into the current
     /// tree. Full round-trip: save a look, mutate the tree, apply, and confirm
     /// the saved chains are restored; then remove and confirm the listing empties.
@@ -129,25 +129,27 @@ private Q_SLOTS:
         ShaderSetStore* sets = c.setsBridge();
         QVERIFY(sets);
 
-        // Author a look: baseline "border", window.tiled → "glow".
+        // Author a look. The tree's baseline is deliberately NOT part of a set:
+        // no settings page binds it, so a captured one could never be undone.
         c.setChain(QString(), QStringList{QStringLiteral("border")});
         c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
+        c.setChain(QStringLiteral("osd"), QStringList{QStringLiteral("border")});
 
         QSignalSpy setsSpy(sets, &ShaderSetStore::setsChanged);
         QVERIFY(sets->saveCurrentAsSet(QStringLiteral("My Look"), QStringLiteral("a test look")));
         QCOMPARE(setsSpy.count(), 1);
 
-        // The set appears in the listing with the expected summary (baseline
-        // counts as one covered surface, plus the single window.tiled
-        // override), and it is `active` because it still matches the live tree.
+        // The set appears in the listing with the expected summary (the two
+        // overrides it captured, and NOT the baseline), and it is `active` because
+        // it still matches the live tree.
         const QVariantMap set = rowFor(sets, QStringLiteral("My Look"));
         QVERIFY(!set.isEmpty());
         QCOMPARE(sets->availableSets().size(), 1);
         QCOMPARE(set.value(QStringLiteral("description")).toString(), QStringLiteral("a test look"));
         QCOMPARE(set.value(QStringLiteral("slug")).toString(), QStringLiteral("my-look"));
         QCOMPARE(set.value(QStringLiteral("coverageCount")).toInt(), 2);
-        QCOMPARE(set.value(QStringLiteral("hasBaseline")).toBool(), true);
-        QCOMPARE(set.value(QStringLiteral("coverage")).toStringList(), (QStringList{QStringLiteral("window")}));
+        QCOMPARE(set.value(QStringLiteral("coverage")).toStringList(),
+                 (QStringList{QStringLiteral("osd"), QStringLiteral("window")}));
         QVERIFY2(set.value(QStringLiteral("modified")).toDateTime().isValid(), "the row must carry the file mtime");
         QVERIFY2(set.value(QStringLiteral("active")).toBool(), "a just-saved set must read as active");
 
@@ -157,10 +159,11 @@ private Q_SLOTS:
         QVERIFY2(!rowFor(sets, QStringLiteral("My Look")).value(QStringLiteral("active")).toBool(),
                  "editing the live tree away from the set must clear its active flag");
 
-        // Apply restores the saved baseline + override.
+        // Apply restores the saved overrides. The baseline is untouched: a set
+        // neither captures nor applies one.
         QVERIFY(sets->applySet(QStringLiteral("My Look")));
-        QCOMPARE(c.chainAt(QString()), (QStringList{QStringLiteral("border")}));
         QCOMPARE(c.chainAt(QStringLiteral("window.tiled")), (QStringList{QStringLiteral("glow")}));
+        QCOMPARE(c.chainAt(QStringLiteral("osd")), (QStringList{QStringLiteral("border")}));
         QVERIFY2(rowFor(sets, QStringLiteral("My Look")).value(QStringLiteral("active")).toBool(),
                  "the set must read as active again right after applying it");
 

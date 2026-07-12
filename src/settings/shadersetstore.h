@@ -104,10 +104,13 @@ public:
     explicit ShaderSetStore(Config config, QObject* parent = nullptr);
 
     /// True when @p root carries a real baseline. An EMPTY `"baseline": {}` is
-    /// NOT one: the snapshot side omits an empty baseline because it engages no
-    /// field, so treating one from a hand-edited or foreign file as real would
-    /// apply an all-inherit profile over whatever the user had. The single
-    /// definition the store and every domain validator share.
+    /// NOT one, since it engages no field.
+    ///
+    /// NO domain accepts a baseline today: motion has no such concept, and
+    /// decoration's tree has one but no settings page binds it, so a set carrying
+    /// one could only arrive by import and could never then be seen or cleared.
+    /// Both validators use this to REFUSE such a file. It stays on the store
+    /// rather than in one domain because the envelope is shared.
     static bool carriesBaseline(const QJsonObject& root);
 
     /// True when @p newName is a name updateSet() will accept: non-empty,
@@ -127,7 +130,7 @@ public:
 
     /// Saved sets, one row per file:
     /// `{ name, description, slug, coverage: [section…], coverageCount,
-    ///    hasBaseline, active, modified }`
+    ///    active, modified }`
     /// `active` is true when every entry the set carries is already live
     /// with an equal profile (containment, not equality — apply merges, so
     /// unrelated live overrides must not clear the badge). `modified` is the

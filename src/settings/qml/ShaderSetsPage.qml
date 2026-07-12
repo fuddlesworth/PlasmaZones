@@ -20,7 +20,7 @@ import org.kde.kirigami as Kirigami
  *
  *   QVariantList availableSets()      // rows: name, description,
  *                                     //   coverage[], coverageCount,
- *                                     //   hasBaseline, active, modified
+ *                                     //   active, modified
  *   QString      existingSetName(name)
  *   bool         applySet(name)
  *   bool         saveCurrentAsSet(name, description, overwrite)

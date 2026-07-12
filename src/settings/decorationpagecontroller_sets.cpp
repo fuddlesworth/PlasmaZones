@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Decoration-set domain closures for the shared ShaderSetStore. A set is a
-// named snapshot of the decoration profile tree (baseline + per-surface direct
+// named snapshot of the decoration profile tree (per-surface direct
 // overrides), persisted as one JSON file under
 // ~/.local/share/plasmazones/decorationsets. Unlike motion sets (which
 // snapshot per-path override FILES), the decoration tree is config-backed, so
@@ -55,31 +55,21 @@ struct StagedEntry
 /// Shared by validate (the import / apply gate) and apply (the commit), so the
 /// two can never drift apart on what counts as a valid entry.
 /// @return false when any entry is malformed, or when the set covers nothing.
-bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* hasBaseline,
-                  PhosphorSurfaceShaders::DecorationProfile* baseline = nullptr)
+bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
 {
     using PhosphorSurfaceShaders::DecorationProfile;
 
     staged->clear();
-    // Whole-set discipline: a malformed baseline refuses the set rather than
-    // being silently ignored, the same way a malformed override entry does.
-    if (root.contains(kBaselineKey) && !root.value(kBaselineKey).isObject()) {
-        qCWarning(lcConfig) << "decorationset: rejecting a set whose baseline is not an object";
+    // Decoration sets do NOT carry a baseline, for the same reason the Decoration
+    // nav has no General surface page: there is no meaningful global default (see
+    // settingscontroller_pageregistration.cpp — borders and title bars are
+    // window-only, and the daemon surfaces default to no decoration). The tree
+    // still HAS a baseline, reachable over D-Bus, but no settings page binds it, so
+    // a baseline in a set file could only ever ARRIVE through an import and could
+    // then never be seen or cleared. Refuse it at the boundary, as motion does.
+    if (root.contains(kBaselineKey)) {
+        qCWarning(lcConfig) << "decorationset: rejecting a set that carries a baseline";
         return false;
-    }
-    *hasBaseline = ShaderSetStore::carriesBaseline(root);
-    if (*hasBaseline) {
-        // Same rule as an override entry: a baseline that parses to all-inherit
-        // engages nothing, and applying it would wipe the user's global default
-        // for no gain. Parse it ONCE, here, so apply cannot disagree with validate.
-        const DecorationProfile parsed = DecorationProfile::fromJson(root.value(kBaselineKey).toObject());
-        if (parsed == DecorationProfile{}) {
-            qCWarning(lcConfig) << "decorationset: baseline engages no field, refusing the set";
-            return false;
-        }
-        if (baseline != nullptr) {
-            *baseline = parsed;
-        }
     }
     // Whole-set discipline, same as the baseline above: a present-but-non-array
     // `overrides` would otherwise read as "no overrides" and let a file import and
@@ -123,7 +113,7 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* has
         }
         staged->push_back({path, profile});
     }
-    return !staged->isEmpty() || *hasBaseline;
+    return !staged->isEmpty();
 }
 
 } // namespace
@@ -152,31 +142,25 @@ void DecorationPageController::initSetsStore()
         return decorationSetsDirectoryPath();
     };
 
-    // ── Snapshot: serialise the live tree (baseline + direct overrides).
-    //    Paths are sorted so the output is deterministic, which the store
-    //    relies on when it compares this snapshot against a saved set to
-    //    decide which one is active.
+    // ── Snapshot: serialise the live tree's direct overrides. NOT the baseline:
+    //    no settings page can reach it, so a set carrying one could never be
+    //    undone through the UI (see stageEntries). Paths are sorted so the output
+    //    is stable across saves, which keeps a set file diffable.
     config.snapshot = [this]() -> QJsonObject {
         if (!m_settings) {
             return QJsonObject{};
         }
-        const DecorationProfileTree tree = m_settings->decorationProfileTree();
+        const DecorationProfileTree& tree = this->tree();
 
         QJsonObject root;
-        // The baseline is part of the look — capture it when it carries any
-        // engaged field (an empty profile serialises to an empty object).
-        const QJsonObject baselineJson = tree.baseline().toJson();
-        if (!baselineJson.isEmpty()) {
-            root.insert(kBaselineKey, baselineJson);
-        }
         QJsonArray overrides;
         QStringList paths = tree.overriddenPaths();
         paths.sort();
         for (const QString& p : paths) {
-            // Skip an override that engages no field, exactly as the baseline
-            // above is skipped. A tree can hold one (config.json is hand-editable
-            // and fromJson stores every entry), and emitting it would write a set
-            // file that stageEntries then refuses forever.
+            // Skip an override that engages no field. A tree can hold one
+            // (config.json is hand-editable and fromJson stores every entry), and
+            // emitting it would write a set file that stageEntries then refuses
+            // forever.
             const QJsonObject profileJson = tree.directOverride(p).toJson();
             if (profileJson.isEmpty()) {
                 continue;
@@ -192,8 +176,7 @@ void DecorationPageController::initSetsStore()
 
     config.validate = [](const QJsonObject& root) -> bool {
         QList<StagedEntry> staged;
-        bool hasBaseline = false;
-        return stageEntries(root, &staged, &hasBaseline);
+        return stageEntries(root, &staged);
     };
 
     // ── Apply: merge into ONE tree and persist once. Surfaces the set does
@@ -203,15 +186,10 @@ void DecorationPageController::initSetsStore()
             return false;
         }
         QList<StagedEntry> staged;
-        bool hasBaseline = false;
-        DecorationProfile baseline;
-        if (!stageEntries(root, &staged, &hasBaseline, &baseline)) {
+        if (!stageEntries(root, &staged)) {
             return false;
         }
-        DecorationProfileTree tree = m_settings->decorationProfileTree();
-        if (hasBaseline) {
-            tree.setBaseline(baseline);
-        }
+        DecorationProfileTree tree = this->tree(); // a COPY: the closure mutates it
         for (const StagedEntry& e : staged) {
             tree.setOverride(e.path, e.profile);
         }

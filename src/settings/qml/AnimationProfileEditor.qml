@@ -218,7 +218,7 @@ ColumnLayout {
                 Label {
                     Layout.fillWidth: true
                     text: root.summarySecondary()
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
                     elide: Text.ElideRight
                 }

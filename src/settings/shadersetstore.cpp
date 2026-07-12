@@ -62,13 +62,10 @@ QStringList coverageSections(const QJsonObject& root)
 /// the instant after the user applied it.
 bool payloadContainedIn(const QJsonObject& set, const QJsonObject& live)
 {
-    const bool hasBaseline = ShaderSetStore::carriesBaseline(set);
     const QJsonArray setOverrides = set.value(kOverridesKey).toArray();
-    // An empty set covers nothing; it is never "active".
-    if (!hasBaseline && setOverrides.isEmpty()) {
-        return false;
-    }
-    if (hasBaseline && live.value(kBaselineKey).toObject() != set.value(kBaselineKey).toObject()) {
+    // An empty set covers nothing; it is never "active". No baseline to compare:
+    // both domains refuse a set that carries one (see carriesBaseline).
+    if (setOverrides.isEmpty()) {
         return false;
     }
 
@@ -313,7 +310,6 @@ QVariantList ShaderSetStore::availableSets() const
             continue;
         }
         const QStringList sections = coverageSections(root);
-        const bool hasBaseline = ShaderSetStore::carriesBaseline(root);
 
         // Every mutator resolves a row by name -> slugify(name) + ".json", so a
         // row whose name does not slugify back to THIS file's stem is one the
@@ -338,8 +334,7 @@ QVariantList ShaderSetStore::availableSets() const
         row.insert(QLatin1String("slug"), info.completeBaseName());
         row.insert(QLatin1String("coverage"), sections);
         // The baseline counts as one covered surface in the summary.
-        row.insert(QLatin1String("coverageCount"), root.value(kOverridesKey).toArray().size() + (hasBaseline ? 1 : 0));
-        row.insert(QLatin1String("hasBaseline"), hasBaseline);
+        row.insert(QLatin1String("coverageCount"), root.value(kOverridesKey).toArray().size());
         row.insert(QLatin1String("active"), payloadContainedIn(root, live));
         // File mtime, for the row's "Updated …" line.
         row.insert(QLatin1String("modified"), info.lastModified());
@@ -456,7 +451,7 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& rawName, const QString& des
     // to stage). Refuse the save so the user isn't left with a do-nothing set
     // on disk. Checked before mkpath so a rejected save leaves no empty
     // directory behind.
-    if (root.value(kOverridesKey).toArray().isEmpty() && !ShaderSetStore::carriesBaseline(root)) {
+    if (root.value(kOverridesKey).toArray().isEmpty()) {
         Q_EMIT toastRequested(PhosphorI18n::tr("There is nothing to capture yet."));
         return false;
     }
@@ -660,7 +655,7 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
     // A set carrying nothing would import as a row that applySet then refuses.
     // Name it for what it is rather than falling through to the taxonomy
     // message below, which would misdescribe an empty file as a foreign one.
-    if (root.value(kOverridesKey).toArray().isEmpty() && !ShaderSetStore::carriesBaseline(root)) {
+    if (root.value(kOverridesKey).toArray().isEmpty()) {
         Q_EMIT toastRequested(PhosphorI18n::tr("That set is empty."));
         return false;
     }

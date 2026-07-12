@@ -314,7 +314,7 @@ Kirigami.Dialog {
                             }
                             color: Kirigami.Theme.disabledTextColor
                             font.italic: true
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font: Kirigami.Theme.smallFont
                             elide: Text.ElideRight
                         }
                     }

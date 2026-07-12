@@ -110,7 +110,7 @@ ExpandableRowDelegate {
             anchors.centerIn: parent
             font.bold: true
             font.capitalization: Font.AllUppercase
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             color: Kirigami.Theme.textColor
         }
     }
@@ -197,7 +197,7 @@ ExpandableRowDelegate {
 
             anchors.centerIn: parent
             text: row.sectionLabel
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             opacity: 0.85
         }
     }
@@ -223,7 +223,7 @@ ExpandableRowDelegate {
             // condition/action/priority badges below — keeping them
             // consistent so the eye reads the badge cluster as a unit.
             text: i18nc("Badge shown when the rule's match is a composite expression", "Composite")
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             opacity: 0.7
         }
     }
@@ -242,7 +242,7 @@ ExpandableRowDelegate {
 
             anchors.centerIn: parent
             text: i18np("%n Condition", "%n Conditions", row.conditionCount)
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             opacity: 0.7
         }
     }
@@ -261,7 +261,7 @@ ExpandableRowDelegate {
 
             anchors.centerIn: parent
             text: i18np("%n Action", "%n Actions", row.actionCount)
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             opacity: 0.7
         }
     }
@@ -282,7 +282,7 @@ ExpandableRowDelegate {
 
             anchors.centerIn: parent
             text: row.managed ? i18nc("Priority badge for a managed baseline rule that always sorts last", "Lowest priority") : i18nc("Badge showing the rule's raw priority integer", "Priority %1", row.priority)
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             opacity: 0.7
         }
     }

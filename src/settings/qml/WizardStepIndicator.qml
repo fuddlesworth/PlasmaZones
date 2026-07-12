@@ -50,7 +50,7 @@ RowLayout {
                 Label {
                     anchors.centerIn: parent
                     text: (stepIndicator.index + 1).toString()
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font: Kirigami.Theme.smallFont
                     font.weight: Font.Bold
                     color: stepIndicator.index <= root.currentStep ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                     opacity: stepIndicator.index <= root.currentStep ? 1 : 0.4

@@ -13,8 +13,9 @@
  * Pinned behaviour:
  *   - Whole-set discipline: one bad entry refuses the SET, atomically. An
  *     unknown surface path, a non-array `overrides`, a non-object `profile`,
- *     a profile or baseline that engages no field, and an empty payload are all
- *     refused rather than partially applied
+ *     a profile that engages no field, a set carrying a BASELINE (no settings
+ *     page can reach one, so an imported baseline could never be undone), and an
+ *     empty payload are all refused rather than partially applied
  *   - A set written by a NEWER format version is refused, not silently truncated
  *   - Save refuses an unconfirmed overwrite but honours a confirmed one, and
  *     refuses a name that is empty or slugifies to nothing
@@ -106,9 +107,11 @@ private Q_SLOTS:
         QVERIFY2(!c.hasOverride(QStringLiteral("window.tiled")), "and nothing may be written to the tree");
     }
 
-    /// Same rule for the baseline: one that parses to all-inherit would wipe the
-    /// user's global default for no gain.
-    void applySet_rejectsABaselineThatEngagesNothing()
+    /// A decoration set must not carry a baseline at all. The tree has one, and
+    /// D-Bus can set it, but no settings page binds it — so a baseline arriving
+    /// through an import could never be seen or cleared again. Refuse it, exactly
+    /// as the motion domain does.
+    void applySet_rejectsASetCarryingABaseline()
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);
@@ -121,15 +124,34 @@ private Q_SLOTS:
         entry.insert(QStringLiteral("profile"),
                      QJsonObject{{QStringLiteral("chain"), QJsonArray{QStringLiteral("glow")}}});
         QJsonObject root;
-        root.insert(QStringLiteral("name"), QStringLiteral("hollowbase"));
+        root.insert(QStringLiteral("name"), QStringLiteral("withbase"));
         root.insert(QStringLiteral("version"), 1);
         root.insert(QStringLiteral("overrides"), QJsonArray{entry});
-        // Non-empty object, but every key is wrong-typed, so it parses to nothing.
-        root.insert(QStringLiteral("baseline"), QJsonObject{{QStringLiteral("chain"), 7}});
-        writeSetFile(decorationSetsDir() + QStringLiteral("/hollowbase.json"), root);
+        root.insert(QStringLiteral("baseline"),
+                    QJsonObject{{QStringLiteral("chain"), QJsonArray{QStringLiteral("glow")}}});
+        writeSetFile(decorationSetsDir() + QStringLiteral("/withbase.json"), root);
 
-        QVERIFY2(!sets->applySet(QStringLiteral("hollowbase")), "a baseline that engages no field must be refused");
+        QVERIFY2(!sets->applySet(QStringLiteral("withbase")), "a set carrying a baseline must be refused");
+        // Neither the baseline nor the surface it also named was touched.
         QCOMPARE(c.chainAt(QString()), (QStringList{QStringLiteral("border")}));
+        QVERIFY(!c.hasOverride(QStringLiteral("window.tiled")));
+    }
+
+    /// A set the store itself writes never carries a baseline, even when the live
+    /// tree has one.
+    void saveCurrentAsSet_doesNotCaptureTheBaseline()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        c.setChain(QString(), QStringList{QStringLiteral("border")});
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Look"), QString()));
+
+        // Round-trips: what it wrote, it can also read back.
+        QVERIFY2(sets->applySet(QStringLiteral("Look")), "a set the store wrote must be one it accepts");
+        QCOMPARE(rowFor(sets, QStringLiteral("Look")).value(QStringLiteral("coverageCount")).toInt(), 1);
     }
 
     /// A present-but-non-array `overrides` used to read as "no overrides", so a set
@@ -144,12 +166,10 @@ private Q_SLOTS:
         root.insert(QStringLiteral("name"), QStringLiteral("bent"));
         root.insert(QStringLiteral("version"), 1);
         root.insert(QStringLiteral("overrides"), QStringLiteral("not an array"));
-        root.insert(QStringLiteral("baseline"),
-                    QJsonObject{{QStringLiteral("chain"), QJsonArray{QStringLiteral("border")}}});
         writeSetFile(decorationSetsDir() + QStringLiteral("/bent.json"), root);
 
         QVERIFY2(!sets->applySet(QStringLiteral("bent")),
-                 "a malformed overrides field must refuse the whole set, not apply the baseline alone");
+                 "a malformed overrides field must refuse the whole set, not read as no overrides");
     }
 
     /// Every mutator resolves a row by name to slugify(name) + ".json", so a file
@@ -462,7 +482,7 @@ private Q_SLOTS:
         QVERIFY(sets->availableSets().isEmpty());
     }
 
-    /// Saving with an empty tree (no baseline, no overrides) is refused: the
+    /// Saving with an empty tree (no overrides) is refused: the
     /// resulting set would be a no-op that applySet then rejects, so it must
     /// never reach disk.
     void saveDecorationSet_emptyTreeRejected()

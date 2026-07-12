@@ -16,10 +16,9 @@ import org.kde.kirigami as Kirigami
  *
  * Layout, left to right: the name over its description, then the trailing
  * cluster — the last-updated stamp (fixed position, so a long description
- * cannot push it around), the metadata badges (coverage chips, a "Baseline"
- * chip, the coverage-count badge), the "Active" pill when the set matches
- * live state, and the actions (Apply, hidden while active, plus the overflow
- * menu).
+ * cannot push it around), the metadata badges (coverage chips and the
+ * coverage-count badge), the "Active" pill when the set matches live state, and
+ * the actions (Apply, hidden while active, plus the overflow menu).
  *
  * Apply is hidden while the set is active: the pill already says there is
  * nothing to apply, and a permanently disabled button reads as broken.
@@ -104,7 +103,7 @@ ExpandableRowDelegate {
     // hides itself when there is nothing to show: a visible-but-empty Row would
     // still eat a spacing slot, leaving a phantom gap in the badge cluster.
     Row {
-        visible: (row.modelData.coverage?.length ?? 0) > 0 || row.modelData.hasBaseline === true
+        visible: (row.modelData.coverage?.length ?? 0) > 0
         Layout.alignment: Qt.AlignVCenter
         spacing: Kirigami.Units.smallSpacing
 
@@ -118,13 +117,6 @@ ExpandableRowDelegate {
 
                 text: row.coverageLabel(chip.modelData)
             }
-        }
-
-        // The baseline is the set's global default, not one surface, so it
-        // gets its own chip rather than a taxonomy label.
-        MetadataChip {
-            visible: row.modelData.hasBaseline === true
-            text: i18nc("@label chip for a set's global default profile", "Baseline")
         }
     }
 
@@ -151,7 +143,7 @@ ExpandableRowDelegate {
         icon.name: "dialog-ok-apply"
         Layout.alignment: Qt.AlignVCenter
         Accessible.name: i18n("Apply set %1", row.setName)
-        onClicked: applyConfirm.open()
+        onClicked: row._openDialog(applyConfirmLoader, null)
     }
 
     ToolButton {
@@ -166,37 +158,57 @@ ExpandableRowDelegate {
         // Anchored, not popup()-at-cursor: a keyboard activation has no
         // meaningful cursor position and would drop the menu wherever the
         // pointer happened to rest.
-        onClicked: overflowMenu.popup(overflowButton, 0, overflowButton.height)
+        onClicked: {
+            overflowMenuLoader.active = true;
+            overflowMenuLoader.item.popup(overflowButton, 0, overflowButton.height);
+        }
     }
 
     // ── Menu + dialogs ──────────────────────────────────────────────────
 
-    Menu {
-        id: overflowMenu
+    // The menu and the four dialogs are built on FIRST USE, not up front. The
+    // Repeater rebuilds every row whenever setsChanged fires (which the store also
+    // raises for live-state edits), and a row that has never been interacted with
+    // has no reason to carry five popups through that.
+    Loader {
+        id: overflowMenuLoader
 
-        MenuItem {
-            text: i18n("Edit…")
-            icon.name: "document-edit"
-            onTriggered: {
-                editNameField.text = row.setName;
-                editDescField.text = row.modelData.description ?? "";
-                editDialog.open();
+        active: false
+        sourceComponent: Menu {
+            MenuItem {
+                text: i18n("Edit…")
+                icon.name: "document-edit"
+                onTriggered: row._openDialog(editDialogLoader, function (dlg) {
+                    dlg.nameText = row.setName;
+                    dlg.descText = row.modelData.description ?? "";
+                })
+            }
+
+            MenuItem {
+                text: i18n("Export…")
+                icon.name: "document-export"
+                onTriggered: row._openDialog(exportDialogLoader, null)
+            }
+
+            MenuSeparator {}
+
+            MenuItem {
+                text: i18n("Delete")
+                icon.name: "edit-delete"
+                onTriggered: row._openDialog(deleteConfirmLoader, null)
             }
         }
+    }
 
-        MenuItem {
-            text: i18n("Export…")
-            icon.name: "document-export"
-            onTriggered: exportDialog.open()
-        }
+    /// Materialise @p loader's item if it is not there yet, run @p setup on it, and
+    /// open it. Loader.item is null until the component is instantiated, so every
+    /// caller would otherwise repeat the same three lines.
+    function _openDialog(loader, setup) {
+        loader.active = true;
+        if (setup)
+            setup(loader.item);
 
-        MenuSeparator {}
-
-        MenuItem {
-            text: i18n("Delete")
-            icon.name: "edit-delete"
-            onTriggered: deleteConfirm.open()
-        }
+        loader.item.open();
     }
 
     // Apply replaces the profile on every path the set covers. Confirm
@@ -207,102 +219,122 @@ ExpandableRowDelegate {
     // Accept / Reject) does not dismiss the dialog. Without it the prompt
     // stays on screen after the set is applied. Same reason deleteConfirm
     // below closes itself, and the same fix CurveEditorDialog uses.
-    Kirigami.PromptDialog {
-        id: applyConfirm
+    Loader {
+        id: applyConfirmLoader
 
-        title: i18n("Apply set?")
-        subtitle: row.applySubtitleFor(row.setName)
-        standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
-        onApplied: {
-            if (row.bridge)
-                row.bridge.applySet(row.setName);
+        active: false
+        sourceComponent: Kirigami.PromptDialog {
+            title: i18n("Apply set?")
+            subtitle: row.applySubtitleFor(row.setName)
+            standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
+            onApplied: {
+                if (row.bridge)
+                    row.bridge.applySet(row.setName);
 
-            applyConfirm.close();
+                close();
+            }
         }
     }
 
     // Delete is permanent — the JSON file is removed and only a backup
     // would bring it back.
-    Kirigami.PromptDialog {
-        id: deleteConfirm
+    Loader {
+        id: deleteConfirmLoader
 
-        title: i18n("Delete set?")
-        subtitle: i18n("“%1” will be permanently removed.", row.setName)
-        standardButtons: Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
-        onDiscarded: {
-            if (row.bridge)
-                row.bridge.removeSet(row.setName);
+        active: false
+        sourceComponent: Kirigami.PromptDialog {
+            title: i18n("Delete set?")
+            subtitle: i18n("“%1” will be permanently removed.", row.setName)
+            standardButtons: Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
+            onDiscarded: {
+                if (row.bridge)
+                    row.bridge.removeSet(row.setName);
 
-            deleteConfirm.close();
+                close();
+            }
         }
     }
 
     // Metadata editor — name and description travel together through one
     // updateSet call so a rename can't drop the description (or vice versa).
-    Kirigami.PromptDialog {
-        id: editDialog
+    Loader {
+        id: editDialogLoader
 
-        title: i18n("Edit set")
-        standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
-        /// True when the typed name is one updateSet will actually accept. Gates
-        /// BOTH the Ok button and the Enter key: Ok is AcceptRole and
-        /// Kirigami.Dialog.accept() does not consult the button box, so a name
-        /// the store then refuses would close the dialog anyway and swallow the
-        /// user's description edit along with it.
-        ///
-        /// canUseSetName is the store's own refusal set (empty, unslugifiable,
-        /// or colliding with another set). QML cannot reproduce the slug rule, so
-        /// asking the store is the only way this cannot drift from it.
-        readonly property bool nameUsable: row.bridge ? row.bridge.canUseSetName(editNameField.text, row.setName) : false
+        active: false
+        sourceComponent: Kirigami.PromptDialog {
+            id: editDialog
 
-        // Installed on open, not at construction: the gate is only meaningful
-        // while the dialog is live, and onOpened is already where focus is set.
-        onOpened: {
-            standardButton(Kirigami.Dialog.Ok).enabled = Qt.binding(function () {
-                return editDialog.nameUsable;
-            });
-            editNameField.forceActiveFocus();
-        }
-        onAccepted: {
-            if (row.bridge)
-                row.bridge.updateSet(row.setName, editNameField.text.trim(), editDescField.text.trim());
-        }
+            /// Seeded by _openDialog before open(): the Loader's item does not
+            /// exist until then, so the row cannot reach the fields directly.
+            property string nameText: ""
+            property string descText: ""
+            /// True when the typed name is one updateSet will actually accept.
+            /// Gates BOTH the Ok button and the Enter key: Ok is AcceptRole and
+            /// Kirigami.Dialog.accept() does not consult the button box, so a name
+            /// the store then refuses would close the dialog anyway and swallow the
+            /// user's description edit along with it.
+            ///
+            /// canUseSetName is the store's own refusal set (empty, unslugifiable,
+            /// or colliding with another set). QML cannot reproduce the slug rule,
+            /// so asking the store is the only way this cannot drift from it.
+            readonly property bool nameUsable: row.bridge ? row.bridge.canUseSetName(editNameField.text, row.setName) : false
 
-        ColumnLayout {
-            spacing: Kirigami.Units.smallSpacing
-
-            TextField {
-                id: editNameField
-
-                Layout.fillWidth: true
-                placeholderText: i18n("Set name…")
-                Accessible.name: i18n("Set name")
-                onAccepted: if (editDialog.nameUsable)
-                    editDialog.accept()
+            title: i18n("Edit set")
+            standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
+            // Installed on open, not at construction: the gate is only meaningful
+            // while the dialog is live, and onOpened is already where focus is set.
+            onOpened: {
+                standardButton(Kirigami.Dialog.Ok).enabled = Qt.binding(function () {
+                    return editDialog.nameUsable;
+                });
+                editNameField.forceActiveFocus();
+            }
+            onAccepted: {
+                if (row.bridge)
+                    row.bridge.updateSet(row.setName, editNameField.text.trim(), editDescField.text.trim());
             }
 
-            TextField {
-                id: editDescField
+            ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
 
-                Layout.fillWidth: true
-                placeholderText: i18n("Description (optional)…")
-                Accessible.name: i18n("Set description")
-                onAccepted: if (editDialog.nameUsable)
-                    editDialog.accept()
+                TextField {
+                    id: editNameField
+
+                    Layout.fillWidth: true
+                    text: editDialog.nameText
+                    placeholderText: i18n("Set name…")
+                    Accessible.name: i18n("Set name")
+                    onAccepted: if (editDialog.nameUsable)
+                        editDialog.accept()
+                }
+
+                TextField {
+                    id: editDescField
+
+                    Layout.fillWidth: true
+                    text: editDialog.descText
+                    placeholderText: i18n("Description (optional)…")
+                    Accessible.name: i18n("Set description")
+                    onAccepted: if (editDialog.nameUsable)
+                        editDialog.accept()
+                }
             }
         }
     }
 
-    FileDialog {
-        id: exportDialog
+    Loader {
+        id: exportDialogLoader
 
-        title: i18n("Export Set")
-        nameFilters: [i18n("PlasmaZones Set (*.json)"), i18n("All files (*)")]
-        defaultSuffix: "json"
-        fileMode: FileDialog.SaveFile
-        onAccepted: {
-            if (row.bridge)
-                row.bridge.exportSet(row.setName, settingsController.urlToLocalFile(selectedFile));
+        active: false
+        sourceComponent: FileDialog {
+            title: i18n("Export Set")
+            nameFilters: [i18n("PlasmaZones Set (*.json)"), i18n("All files (*)")]
+            defaultSuffix: "json"
+            fileMode: FileDialog.SaveFile
+            onAccepted: {
+                if (row.bridge)
+                    row.bridge.exportSet(row.setName, settingsController.urlToLocalFile(selectedFile));
+            }
         }
     }
 }

@@ -378,7 +378,7 @@ ColumnLayout {
                             Layout.minimumWidth: paramRow.index === 0 ? Kirigami.Units.gridUnit * 8 : 0
                             text: paramRow.modelData.label
                             font.capitalization: Font.AllUppercase
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font: Kirigami.Theme.smallFont
                             opacity: 0.55
                         }
 

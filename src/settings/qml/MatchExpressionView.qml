@@ -520,7 +520,7 @@ ColumnLayout {
                         // upper-case only the first word.
                         text: delegate.kind === "all" ? i18nc("Match-tree group where every child must match", "ALL of") : delegate.kind === "any" ? i18nc("Match-tree group where at least one child must match", "ANY of") : i18nc("Match-tree group where no child may match", "NONE of")
                         font.bold: true
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        font: Kirigami.Theme.smallFont
                         // Foreground textColor guarantees high contrast
                         // against the tinted pill fill on every theme.
                         color: Kirigami.Theme.textColor
@@ -579,7 +579,7 @@ ColumnLayout {
                         Layout.minimumWidth: Kirigami.Units.gridUnit * 8
                         text: root._opLabel(delegate.fieldWire, delegate.opWire)
                         font.capitalization: Font.AllUppercase
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        font: Kirigami.Theme.smallFont
                         opacity: 0.55
                     }
 
