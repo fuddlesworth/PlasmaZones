@@ -150,7 +150,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="userShaderDirectory">
             <annotation name="org.gtk.GDBus.DocString" value="Get path to the user shader installation directory."/>
             <arg name="path" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Path to ~/.local/share/plasmazones/shaders."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Path to ~/.local/share/plasmazones/overlays."/>
             </arg>
         </method>
         <method name="openUserShaderDirectory">

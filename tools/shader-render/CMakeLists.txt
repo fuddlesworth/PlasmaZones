@@ -3,7 +3,7 @@
 #
 # plasmazones-shader-render — headless offscreen renderer for the
 # bundled shader catalog.  Used by the documentation site
-# (phosphor-works.github.io/plasmazones/shaders/) and anyone who
+# (phosphor-works.github.io/plasmazones/overlays/) and anyone who
 # needs reproducible shader previews without a display, compositor,
 # or screen-capture tool.
 

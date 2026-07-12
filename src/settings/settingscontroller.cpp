@@ -735,7 +735,7 @@ SettingsController::SettingsController(QObject* parent)
 
     // Overlay shader registry — settings-side mirror of the daemon's. The
     // PlasmaZones::ShaderRegistry subclass auto-wires the standard system
-    // + user search paths (`plasmazones/shaders`), so no extra path
+    // + user search paths (`plasmazones/overlays`), so no extra path
     // bookkeeping is needed here. Read-only browser surface — there is no
     // per-event override store; assignments live on `Layout::shaderId`
     // (per-layout) and the snapping page surfaces "Used by" by walking

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Desktop Aretha — a virtual-desktop switch in the Ghost-in-the-Shell / Aretha
-// aesthetic (data/shaders/aretha-shell, data/animations/aretha-materialize).
+// aesthetic (data/overlays/aretha-shell, data/animations/aretha-materialize).
 // The outgoing desktop flips to the incoming one hexagon by hexagon along a
 // diagonal data sweep: ahead of the sweep each hex cell still shows the
 // outgoing desktop, behind it the incoming one, and on the materialising front

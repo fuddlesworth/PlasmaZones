@@ -71,16 +71,16 @@ QString resolveLayoutPath(const QString& layoutArg, const QString& layoutDir)
 
 QString defaultShaderDir()
 {
-    // Prefer in-tree data/shaders for development; fall back to
+    // Prefer in-tree data/overlays for development; fall back to
     // the installed location.
-    const QString cwd = QDir(QStringLiteral("data/shaders")).absolutePath();
+    const QString cwd = QDir(QStringLiteral("data/overlays")).absolutePath();
     if (QDir(cwd).exists())
         return cwd;
-    const QString xdg = QStandardPaths::locate(QStandardPaths::AppDataLocation, QStringLiteral("shaders"),
+    const QString xdg = QStandardPaths::locate(QStandardPaths::AppDataLocation, QStringLiteral("overlays"),
                                                QStandardPaths::LocateDirectory);
     if (!xdg.isEmpty())
         return xdg;
-    return QStringLiteral("/usr/share/plasmazones/shaders");
+    return QStringLiteral("/usr/share/plasmazones/overlays");
 }
 
 QString defaultLayoutDir()
@@ -165,7 +165,7 @@ int main(int argc, char* argv[])
     QCommandLineOption shaderDirOpt(
         QStringLiteral("shader-dir"),
         QStringLiteral("Directory containing <id>/metadata.json. "
-                       "Defaults to data/shaders/ in the cwd, then /usr/share/plasmazones/shaders/."),
+                       "Defaults to data/overlays/ in the cwd, then /usr/share/plasmazones/overlays/."),
         QStringLiteral("path"), defaultShaderDir());
     parser.addOption(shaderDirOpt);
 

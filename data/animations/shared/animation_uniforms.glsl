@@ -191,7 +191,7 @@ uniform vec4 iAnchorRectInTexture;
 // and the daemon's SurfaceAnimator wires the shaderAnchor's live
 // texture provider to slot 0 of the underlying user-texture array.
 // Animation shaders treat this as their input image; overlay shaders
-// (see data/shaders/) use the same uTexture0 name for their first
+// (see data/overlays/) use the same uTexture0 name for their first
 // user-declared texture, so author shader source compiles unchanged
 // across categories — semantics differ only at the runtime binding
 // layer.
@@ -258,7 +258,7 @@ uniform vec4 iLayerRectInTexture;
 // element stride of 16 bytes in std140 (rule 4: rounded up to vec4
 // alignment). That makes `int _pad0[2]` 32 bytes — NOT 8 — which would
 // shove the next field 24 bytes past where the C `BaseUniforms` upload
-// places it. Sibling daemon `data/shaders/common.glsl` solves this by
+// places it. Sibling daemon `data/overlays/common.glsl` solves this by
 // declaring no explicit padding and relying on std140's natural
 // vec4-alignment of the next array to bridge the gap. Match that
 // pattern here: after `int iFlipBufferY` (4 bytes at offset 580,
@@ -360,7 +360,7 @@ layout(std140, binding = 0) uniform AnimationUniforms {
 layout(binding = 7) uniform sampler2D uTexture0;
 // User-declared textures — see AnimationShaderEffect::TextureSlot or
 // the runtime `uTexture<N>` parameter override. Bindings 8..10 match
-// the overlay shader convention (data/shaders/shared/textures.glsl)
+// the overlay shader convention (data/overlays/shared/textures.glsl)
 // so animation and overlay shaders speak the same sampler-name and
 // binding-point dialect.
 layout(binding = 8) uniform sampler2D uTexture1;

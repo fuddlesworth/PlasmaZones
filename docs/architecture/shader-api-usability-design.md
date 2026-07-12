@@ -29,7 +29,7 @@ roughly where autotile was before its rework. A motivated GPU programmer can wri
 a shader; nearly everyone else bounces off.
 
 There are in fact **two** shader systems with the same problems: overlay/zone
-shaders (`data/shaders/*`, 26 packs) and animation/transition shaders
+shaders (`data/overlays/*`, 26 packs) and animation/transition shaders
 (`data/animations/*`, 53 packs). The body of this document develops the design
 against the zone system, then the
 [Animation / transition shaders](#the-second-system--animation--transition-shaders)
@@ -69,10 +69,10 @@ is **parity with it along five axes**:
 
 ## The current authoring surface (grounded)
 
-A user shader pack is a directory under `~/.local/share/plasmazones/shaders/<id>/`
+A user shader pack is a directory under `~/.local/share/plasmazones/overlays/<id>/`
 containing `metadata.json`, `effect.frag`, optional buffer passes
 (`pass0.frag`…), an optional `zone.vert`, and an optional `preview.png`. Bundled
-packs live in `data/shaders/` (installed to `…/share/plasmazones/shaders/`).
+packs live in `data/overlays/` (installed to `…/share/plasmazones/overlays/`).
 
 > **Two shader systems.** This is one of *two* shader registries. The other —
 > **animation / transition shaders** (`data/animations/*`, 53 bundled packs,
@@ -123,7 +123,7 @@ into a vec4 lane:
 > slot 8 → `customParams[2].x`, slot 5 → `customParams[1].y`, …
 
 Because this is miserable and error-prone, real shaders hand-write accessor
-boilerplate. From `data/shaders/nexus-cascade/effect.frag`:
+boilerplate. From `data/overlays/nexus-cascade/effect.frag`:
 
 ```glsl
 float getChromaStrength() { return customParams[3].x >= 0.0 ? customParams[3].x : 4.0; }
@@ -246,7 +246,7 @@ symbols. Existing explicit `slot` declarations keep working.
 
 #### What this actually looks like — `cosmic-flow` before / after
 
-This is the real bundled `data/shaders/cosmic-flow/` pack (24 parameters),
+This is the real bundled `data/overlays/cosmic-flow/` pack (24 parameters),
 trimmed to the parts that change.
 
 **Before — metadata.** Every parameter carries a hand-assigned `slot`, and the
@@ -340,7 +340,7 @@ loads the shader, and let CI gate the bundled set.
 
 Because `QShaderBaker` is headless CPU glslang, this needs **no compositor, no GPU,
 no Wayland session** — it runs in CI exactly like `luau-analyze` does for
-algorithms. Add a CTest entry that runs it over `data/shaders/*` so a broken
+algorithms. Add a CTest entry that runs it over `data/overlays/*` so a broken
 bundled pack fails the build.
 
 Exit non-zero on any failure so it composes in scripts and pre-commit.
@@ -348,7 +348,7 @@ Exit non-zero on any failure so it composes in scripts and pre-commit.
 Sample output:
 
 ```
-$ plasmazones-shader-validate ~/.local/share/plasmazones/shaders/my-shader
+$ plasmazones-shader-validate ~/.local/share/plasmazones/overlays/my-shader
 my-shader  (3 params, single-pass)
   metadata     OK
   effect.frag  ERROR
@@ -479,7 +479,7 @@ full-frame + `main()` triad covers everything else cleanly.)
 
 #### T2.1 — Bundled `hello-world` pack + "Create shader" action
 
-- Add a minimal, heavily-commented `data/shaders/hello-world/` pack: one
+- Add a minimal, heavily-commented `data/overlays/hello-world/` pack: one
   fragment shader, two or three named params, no multipass — the shader analogue
   of the 10-line `my-columns.luau` quick-start. With T1.1 its body reads
   `p_speed`, `p_color` directly. The entire pack is two short files:
@@ -527,7 +527,7 @@ full-frame + `main()` triad covers everything else cleanly.)
 #### T2.2 — Editor support (the `.luaurc` analogue)
 
 - Ship the shared GLSL headers at a documented, stable path (they already install
-  under `…/share/plasmazones/shaders/shared/`).
+  under `…/share/plasmazones/overlays/shared/`).
 - Document the include search path and a recommended editor config so
   `glsl-language-server` / `glslls` resolves `#include <common.glsl>` and friends.
 - For the generated `p_*` defines: the validator (T1.2) gains a `--emit-preamble`
@@ -580,7 +580,7 @@ PlasmaZones has two shader registries (per `AnimationShaderContract.h`):
 | | Overlay / zone shaders | Animation / transition shaders |
 |---|---|---|
 | Registry | `PhosphorShaders::ShaderRegistry` | `AnimationShaderRegistry` |
-| Source | `data/shaders/*` | `data/animations/*` (53 packs) |
+| Source | `data/overlays/*` | `data/animations/*` (53 packs) |
 | Lifetime | long-lived ambient effect | short-lived 0→1 transition |
 | `iTime` | wrapped wall-clock seconds | per-leg progress in `[0,1]` |
 | Runtimes | daemon RHI only | **daemon RHI *and* kwin-effect (classic GL)** |
@@ -807,7 +807,7 @@ that closes the cross-app gap.
 - A shader author can implement `pZone` (or `pImage`) with no `main()` and have
   it compile and render; packs that define `main()` are wrapped/used unchanged.
 - `plasmazones-shader-validate <pack>` reports per-stage OK/errors over
-  `data/shaders/*`, runs in CI (`shader_validate_bundled`), and exits non-zero on
+  `data/overlays/*`, runs in CI (`shader_validate_bundled`), and exits non-zero on
   failure. *(Animation packs are gated equivalently by
   `test_animation_shader_preamble_bake`; an animation CLI mode is future work.)*
 - glslang errors reference the author's file/line.

@@ -14,7 +14,7 @@
 namespace PlasmaZones::ShaderRender {
 
 /**
- * @brief Subset of data/shaders/<id>/metadata.json the renderer needs.
+ * @brief Subset of data/overlays/<id>/metadata.json the renderer needs.
  *
  * Mirrors the fields the daemon reads when constructing a ShaderEffect.
  * The bake / hot-reload bits aren't relevant here — every render is a
@@ -93,7 +93,7 @@ struct ShaderMetadata
 };
 
 /**
- * @brief Parse data/shaders/<id>/metadata.json into ShaderMetadata.
+ * @brief Parse data/overlays/<id>/metadata.json into ShaderMetadata.
  *
  * Returns false if the file is missing, malformed, the fragment shader
  * (declared, or the effect.frag default when the field is omitted) does
