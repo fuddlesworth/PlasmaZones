@@ -449,14 +449,16 @@ void SettingsController::resetPage(const QString& page)
     // user rules on the Rules page). Suppress onSettingsPropertyChanged during
     // the config reset; mark the active page dirty explicitly below.
     if (isAnimationPage(page)) {
-        if (m_animationsPage != nullptr) {
+        {
             const LoadingScope loadingScope(m_loading);
             // A refusal (-1) means the override files are untouched, so resetting
             // the config keys would leave the page half reset and reported clean.
             // The page has already toasted the reason.
-            if (m_animationsPage->clearAllOverrides() < 0) {
+            if (m_animationsPage != nullptr && m_animationsPage->clearAllOverrides() < 0) {
                 return;
             }
+            // Outside the page-controller null check: the config keys are settings
+            // state and do not depend on the page controller existing.
             m_settings.resetKeys(animationConfigKeys());
         }
         // isPageDirty(animation) is value-based (hasPendingChanges || any

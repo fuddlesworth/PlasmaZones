@@ -49,8 +49,14 @@ void SettingsController::load()
     // page controller's pre-edit snapshot rewinds those files. Shader
     // overrides don't need this — they ride Settings::load()'s
     // Q_PROPERTY re-emit like every other page setting.
-    if (m_animationsPage)
-        m_animationsPage->revertPending();
+    // False means the page is NOT clean afterwards: either an async discard owns
+    // the snapshot map, or a file could not be restored and was retained for a
+    // retry. Either way, forcing needsSave false below would strand those
+    // snapshots, and the next Discard would write them back over the new state.
+    const bool animationsClean = !m_animationsPage || m_animationsPage->revertPending();
+    if (!animationsClean) {
+        qCWarning(lcConfig) << "load: animation snapshots are still staged after the revert";
+    }
     // Rules are owned by the daemon (rules.json); Discard
     // re-fetches the daemon's authoritative set, dropping staged edits.
     if (m_rulesPage)
@@ -86,7 +92,9 @@ void SettingsController::load()
     if (hadStagedTile)
         Q_EMIT stagedTilingOrderChanged();
     m_loading = false;
-    setNeedsSave(false);
+    if (animationsClean) {
+        setNeedsSave(false);
+    }
 }
 
 void SettingsController::save()
@@ -260,7 +268,8 @@ void SettingsController::defaults()
         // Refused because an async discard is still in flight. The reset leaves
         // the per-event override files as they are, so say so rather than
         // reporting defaults that are only half applied.
-        qCWarning(lcConfig) << "defaults: animation snapshots could not be reverted; a discard is in flight";
+        qCWarning(lcConfig) << "defaults: animation snapshots are still staged after the revert (a discard is in "
+                               "flight, or a restore failed)";
     }
 
     // Refresh screen list — symmetric with load(), which calls this

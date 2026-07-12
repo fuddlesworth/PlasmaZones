@@ -706,6 +706,30 @@ private Q_SLOTS:
         QVERIFY(done.wait(5000));
         QVERIFY(!c.hasPendingChanges());
     }
+    /// A reset that runs while the discard worker owns the snapshot map would have
+    /// every clearOverride refuse individually, and the caller would read the
+    /// resulting 0 as "there was nothing to clear" rather than "nothing was
+    /// cleared". It reports -1 instead, and the override files stay put.
+    void clearAllOverrides_refusesWhileAsyncDiscardIsInFlight()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 200}}));
+
+        QSignalSpy done(&c, &AnimationsPageController::discardResult);
+        QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
+        c.asyncRevertPending(); // sets the in-flight flag synchronously
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("clearAllOverrides: refusing while an async discard")));
+        QCOMPARE(c.clearAllOverrides(), -1);
+        QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+
+        QVERIFY(done.wait(5000));
+    }
 };
 
 QTEST_MAIN(TestAnimationsMotionSets)

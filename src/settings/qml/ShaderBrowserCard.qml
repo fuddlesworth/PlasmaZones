@@ -42,6 +42,12 @@ import org.phosphor.animation
 ItemDelegate {
     id: root
 
+    // ItemDelegate defaults to Qt.NoFocus, which left every shader card out of the
+    // tab chain: opening a pack's details was mouse-only, and the focus-border
+    // branch below could never fire. StrongFocus also gives AbstractButton the
+    // Space/Enter to clicked() path for free.
+    focusPolicy: Qt.StrongFocus
+
     required property var effect
     required property var bridge
     property int usagesRev: 0

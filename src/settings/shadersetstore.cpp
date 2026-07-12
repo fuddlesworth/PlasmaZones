@@ -283,11 +283,12 @@ QString ShaderSetStore::uniqueSetName(const QString& desiredName) const
     }
     QString candidate = desiredName;
     for (int suffix = 2; QFile::exists(setFilePath(candidate)); ++suffix) {
-        candidate = QStringLiteral("%1 (%2)").arg(desiredName).arg(suffix);
-        // Cap the collision walk rather than scanning forever.
+        // Cap the collision walk rather than scanning forever. Checked before the
+        // candidate is built, so the loop does not give up on a name it never tried.
         if (suffix > 999) {
             return QString();
         }
+        candidate = QStringLiteral("%1 (%2)").arg(desiredName).arg(suffix);
     }
     return candidate;
 }
@@ -389,14 +390,22 @@ bool ShaderSetStore::canUseSetName(const QString& newName, const QString& curren
     if (trimmed.isEmpty()) {
         return false;
     }
-    // An unslugifiable name has no filename to write to. setFilePath() is the
-    // same call the mutators make, so this cannot drift from what they accept.
-    if (setFilePath(trimmed).isEmpty()) {
+    // Compare PATHS, which is what updateSet actually does. Comparing stored names
+    // instead would refuse every input for a row listed under its filename stem
+    // (the stored name is not the stem, so it never looks like "your own name"),
+    // permanently disabling Ok for a row the mutator would happily rename.
+    //
+    // setFilePath() is the same call the mutators make, so an unslugifiable name
+    // resolves to an empty path here exactly as it does there. It is also a pure
+    // slugify plus a stat, where the old stored-name compare opened and parsed the
+    // colliding file on every keystroke.
+    const QString newPath = setFilePath(trimmed);
+    if (newPath.isEmpty()) {
         return false;
     }
-    const QString taken = existingSetName(trimmed);
-    // Keeping your own name is a description-only edit, not a self-collision.
-    return taken.isEmpty() || taken == currentName;
+    // Keeping your own name (or changing only its case, which slugs the same) is a
+    // description-only edit, not a self-collision.
+    return newPath == setFilePath(currentName) || !QFile::exists(newPath);
 }
 
 QString ShaderSetStore::existingSetName(const QString& name) const
@@ -438,7 +447,7 @@ bool ShaderSetStore::saveCurrentAsSet(const QString& rawName, const QString& des
     // fileSnapshot hook nothing could restore it. Allowed, but only with
     // explicit consent — QML confirms first and then passes overwrite=true.
     if (!overwrite && QFile::exists(filePath)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("A set named \"%1\" already exists.").arg(name));
+        Q_EMIT toastRequested(PhosphorI18n::tr("A set named \"%1\" already exists.").arg(existingSetName(name)));
         return false;
     }
 

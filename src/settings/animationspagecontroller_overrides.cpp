@@ -19,6 +19,7 @@
 #include "../config/configdefaults.h"
 #include "../core/isettings.h"
 #include "../core/logging.h"
+#include "../phosphor_i18n.h"
 #include "animations_controller_detail.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -266,10 +267,21 @@ int AnimationsPageController::clearAllOverrides()
     // snapshotted; it emits overrideChanged / pendingChangesChanged per removed
     // file so the pages refresh and the staged-changes state updates.
     int cleared = 0;
+    int failed = 0;
     const QStringList paths = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
     for (const QString& path : paths) {
-        if (clearOverride(path))
+        if (clearOverride(path)) {
             ++cleared;
+        } else if (hasOverride(path)) {
+            // The file is still there, so this was a real failure and not the
+            // "nothing to clear" no-op. Counting it as either would report a reset
+            // that did not happen.
+            ++failed;
+        }
+    }
+    if (failed > 0) {
+        qCWarning(lcConfig) << "clearAllOverrides:" << failed << "override files could not be removed";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Some animation overrides could not be reset."));
     }
     return cleared;
 }

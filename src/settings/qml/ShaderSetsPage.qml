@@ -168,10 +168,17 @@ SettingsFlickable {
                     }
 
                     Button {
+                        id: saveButton
+
                         Layout.alignment: Qt.AlignRight
                         text: i18n("Save")
                         icon.name: "document-save"
                         Accessible.name: i18n("Save set")
+                        // Deliberately NOT bridge.canUseSetName: that refuses a
+                        // colliding name, and a collision on the save path is the
+                        // replace-an-existing-set flow, which replaceConfirm below
+                        // asks about. An unslugifiable name is refused by the
+                        // store with a toast, and no dialog is dismissed by it.
                         enabled: nameField.text.trim().length > 0
                         onClicked: {
                             // Re-saving over a set is how the user updates one
@@ -216,7 +223,8 @@ SettingsFlickable {
 
         SettingsCard {
             Layout.fillWidth: true
-            headerText: i18n("Saved sets (%1)", root.setsList.length)
+            headerText: i18n("Saved sets")
+            headerTrailingText: i18np("%1 set", "%1 sets", root.setsList.length)
             searchAnchor: root.savedAnchor
 
             contentItem: ColumnLayout {

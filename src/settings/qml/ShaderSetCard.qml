@@ -44,8 +44,11 @@ ExpandableRowDelegate {
 
     // Everything fits on the row itself, so there is nothing to expand.
     expandable: false
-    // The shell is an ItemDelegate, so the row is focusable even with the
-    // click inert. Name it, or a screen reader announces an unlabelled row.
+    // The shell is an ItemDelegate, so the row is focusable even with the click
+    // inert. Name it, or a screen reader announces an unlabelled row — and give it
+    // a list-item role, or the row is announced as a button that does nothing when
+    // activated. The actions live in the trailing controls, not on the row.
+    Accessible.role: Accessible.ListItem
     Accessible.name: row.setName
 
     // ── Header ──────────────────────────────────────────────────────────

@@ -84,6 +84,10 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged)
         qCWarning(lcConfig) << "motionset: rejecting a set that carries a baseline";
         return false;
     }
+    if (root.contains(kOverridesKey) && !root.value(kOverridesKey).isArray()) {
+        qCWarning(lcConfig) << "motionset: rejecting a set whose overrides are not an array";
+        return false;
+    }
     const QJsonArray overrides = root.value(kOverridesKey).toArray();
     staged->reserve(overrides.size());
     for (const QJsonValue& v : overrides) {
@@ -136,9 +140,9 @@ ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::fun
     // ── Snapshot: walk the profiles dir and keep the files whose `name`
     //    matches a known event path. Non-path names (user presets) are
     //    skipped so a set stays portable and self-contained. QDir::Name
-    //    ordering keeps the output deterministic, which the store relies on
-    //    when it compares this snapshot against a saved set to decide which
-    //    one is active.
+    //    ordering keeps the on-disk output stable across saves, which makes a set
+    //    file diffable. Active-detection does NOT depend on it: the store indexes
+    //    live overrides by path into a hash.
     config.snapshot = [profilesDir = std::move(profilesDir)]() -> QJsonObject {
         using namespace PhosphorAnimation;
 
@@ -152,6 +156,14 @@ ShaderSetStore::Config makeConfig(std::function<QString()> profilesDir, std::fun
         }
         const auto files = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
         for (const QFileInfo& info : files) {
+            // The profiles dir is hand-editable and this walk runs on the GUI
+            // thread on every setsChanged, so cap it like every other read of a
+            // user-writable path.
+            if (!info.isFile() || info.size() > kMaxProfileFileBytes) {
+                qCWarning(lcConfig) << "motionset snapshot: skipping" << info.absoluteFilePath()
+                                    << "— not a regular file, or over the" << kMaxProfileFileBytes << "byte cap";
+                continue;
+            }
             QFile f(info.absoluteFilePath());
             if (!f.open(QIODevice::ReadOnly)) {
                 qCWarning(lcConfig) << "motionset snapshot: cannot open" << info.absoluteFilePath();

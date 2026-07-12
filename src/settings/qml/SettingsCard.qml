@@ -63,13 +63,13 @@ Item {
     /// card's resting state instead of animating it shut on load.
     property bool _completed: false
     /// True while the body is interactive. Drives `enabled` on the body, which is
-    /// what keeps a shut card's controls out of the tab order. Set true BEFORE
-    /// the expand ramp starts rather than derived from _expandProgress: the rows
-    /// hide themselves when disabled (SettingsRow binds `visible: enabled`), so
-    /// re-enabling them is what makes the layout re-measure, and that re-measure
-    /// is asynchronous. Deriving it from the ramp meant the body's height was
-    /// still collapsed for the first frames of the expand and the card jumped
-    /// most of the way open in a single frame.
+    /// what keeps a shut card's controls out of the tab order.
+    ///
+    /// Set true at the START of the expand and false at the END of the collapse,
+    /// so the rows are measurable for every frame the height is non-zero. The rows
+    /// hide themselves when disabled (SettingsRow binds `visible: enabled`), so a
+    /// value derived from the ramp would drop them out of the layout while the
+    /// card was still visibly sliding.
     property bool _bodyLive: true
     /// How far open the body is: 0 shut, 1 fully open. The collapse animates
     /// THIS, and the body's height stays a live binding on it times the content's
@@ -128,10 +128,13 @@ Item {
             collapseAnim.start();
         } else {
             collapseAnim.stop();
-            // Re-enable first, then ramp on the NEXT tick, so the rows are back
-            // and the layout has re-measured before the height binding is read.
+            // Re-enable, THEN ramp, in the same tick. QQuickLayout polishes in the
+            // same frame as the animation tick, so the rows are measured before the
+            // first height sample. Deferring the start with Qt.callLater would
+            // queue a start that a same-tick collapse could not revoke, and the
+            // card would fly fully open before sliding shut.
             root._bodyLive = true;
-            Qt.callLater(expandAnim.start);
+            expandAnim.start();
         }
     }
     // Honour `collapsed: true` (or `initiallyCollapsed: true`) at construction
@@ -256,7 +259,9 @@ Item {
             // activatable, or a keyboard-only user could never open the card.
             activeFocusOnTab: root.collapsible
             Accessible.role: root.collapsible ? Accessible.Button : Accessible.StaticText
-            Accessible.name: root.headerText
+            // A custom header supplies no headerText, so fall back to whatever it
+            // names itself rather than announcing an unnamed button.
+            Accessible.name: root.headerText.length > 0 ? root.headerText : (root.header && root.header.Accessible.name ? root.header.Accessible.name : "")
             Accessible.description: root.collapsible ? (root.collapsed ? i18n("Collapsed. Activate to expand.") : i18n("Expanded. Activate to collapse.")) : ""
             Accessible.onPressAction: root.collapsed = !root.collapsed
             Keys.onSpacePressed: if (root.collapsible)
@@ -415,23 +420,30 @@ Item {
                 implicitHeight: root.contentItem ? root.contentItem.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
             }
 
+            // Fade and slide run TOGETHER, in both directions. Sequencing them the
+            // other way meant the opacity was still 0 for the whole expand ramp, so
+            // a collapse issued during it spent its entire fade-out leg animating 0
+            // to 0 while the height sat frozen mid-open — an empty box hanging in
+            // mid-air for ~100ms.
             SequentialAnimation {
                 id: collapseAnim
 
-                PhosphorMotionAnimation {
-                    target: contentClip
-                    properties: "opacity"
-                    to: 0
-                    profile: "widget.fadeOut"
-                    durationOverride: Kirigami.Units.veryShortDuration * 2
-                }
+                ParallelAnimation {
+                    PhosphorMotionAnimation {
+                        target: contentClip
+                        properties: "opacity"
+                        to: 0
+                        profile: "widget.fadeOut"
+                        durationOverride: Kirigami.Units.veryShortDuration * 2
+                    }
 
-                PhosphorMotionAnimation {
-                    target: root
-                    properties: "_expandProgress"
-                    to: 0
-                    profile: "widget.accordionCollapse"
-                    durationOverride: Kirigami.Units.shortDuration
+                    PhosphorMotionAnimation {
+                        target: root
+                        properties: "_expandProgress"
+                        to: 0
+                        profile: "widget.accordionCollapse"
+                        durationOverride: Kirigami.Units.shortDuration
+                    }
                 }
 
                 ScriptAction {
@@ -444,19 +456,21 @@ Item {
             SequentialAnimation {
                 id: expandAnim
 
-                PhosphorMotionAnimation {
-                    target: root
-                    properties: "_expandProgress"
-                    to: 1
-                    profile: "widget.accordionExpand"
-                    durationOverride: Kirigami.Units.shortDuration
-                }
+                ParallelAnimation {
+                    PhosphorMotionAnimation {
+                        target: root
+                        properties: "_expandProgress"
+                        to: 1
+                        profile: "widget.accordionExpand"
+                        durationOverride: Kirigami.Units.shortDuration
+                    }
 
-                PhosphorMotionAnimation {
-                    target: contentClip
-                    properties: "opacity"
-                    to: root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1
-                    profile: "widget.fadeIn"
+                    PhosphorMotionAnimation {
+                        target: contentClip
+                        properties: "opacity"
+                        to: root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1
+                        profile: "widget.fadeIn"
+                    }
                 }
 
                 ScriptAction {

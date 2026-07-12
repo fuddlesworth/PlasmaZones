@@ -622,7 +622,8 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // the config we imported.
         const bool animationsReverted = !m_animationsPage || m_animationsPage->revertPending();
         if (!animationsReverted) {
-            qCWarning(lcConfig) << "importConfig: animation snapshots could not be reverted; a discard is in flight";
+            qCWarning(lcConfig) << "importConfig: animation snapshots are still staged after the revert (a discard is "
+                                   "in flight, or a restore failed)";
         }
         if (m_rulesPage) {
             m_rulesPage->revert();

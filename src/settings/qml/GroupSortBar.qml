@@ -53,9 +53,6 @@ RowLayout {
     // Re-point the combos at the current index properties. Call after any
     // imperative write to groupByIndex / sortByIndex (the combo currentIndex
     // binding is initial-only and breaks on user interaction).
-    // Re-point the combos at the current index properties. Call after any
-    // imperative write to groupByIndex / sortByIndex (the combo currentIndex
-    // binding is initial-only and breaks on user interaction).
     //
     // sortAscending needs no re-pointing here: the direction button reads and
     // writes root.sortAscending directly, so the host's own write to that

@@ -38,6 +38,7 @@
  * read-mutate-write loop round-trips without the real PhosphorConfig::Store.
  */
 
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -146,6 +147,102 @@ private Q_SLOTS:
 
     // ─── Save / list / apply / remove ───────────────────────────────────────
 
+    /// fromJson silently drops unknown and wrong-typed keys, so an entry whose
+    /// chain is a string parses to an all-inherit profile. Staging that would make
+    /// the surface READ as overridden while changing nothing the user can see.
+    void applySet_rejectsAnEntryWhoseProfileEngagesNothing()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        // A well-formed entry on a REAL surface, whose profile parses to nothing:
+        // `chain` is a string where an array belongs.
+        QJsonObject entry;
+        entry.insert(QStringLiteral("path"), QStringLiteral("window.tiled"));
+        entry.insert(QStringLiteral("profile"), QJsonObject{{QStringLiteral("chain"), QStringLiteral("glow")}});
+        QJsonObject root;
+        root.insert(QStringLiteral("name"), QStringLiteral("hollow"));
+        root.insert(QStringLiteral("version"), 1);
+        root.insert(QStringLiteral("overrides"), QJsonArray{entry});
+        writeSetFile(decorationSetsDir() + QStringLiteral("/hollow.json"), root);
+
+        QVERIFY2(!sets->applySet(QStringLiteral("hollow")),
+                 "an override that engages no field must be refused, not staged as a phantom");
+        QVERIFY2(!c.hasOverride(QStringLiteral("window.tiled")), "and nothing may be written to the tree");
+    }
+
+    /// Same rule for the baseline: one that parses to all-inherit would wipe the
+    /// user's global default for no gain.
+    void applySet_rejectsABaselineThatEngagesNothing()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        c.setChain(QString(), QStringList{QStringLiteral("border")});
+
+        QJsonObject entry;
+        entry.insert(QStringLiteral("path"), QStringLiteral("window.tiled"));
+        entry.insert(QStringLiteral("profile"),
+                     QJsonObject{{QStringLiteral("chain"), QJsonArray{QStringLiteral("glow")}}});
+        QJsonObject root;
+        root.insert(QStringLiteral("name"), QStringLiteral("hollowbase"));
+        root.insert(QStringLiteral("version"), 1);
+        root.insert(QStringLiteral("overrides"), QJsonArray{entry});
+        // Non-empty object, but every key is wrong-typed, so it parses to nothing.
+        root.insert(QStringLiteral("baseline"), QJsonObject{{QStringLiteral("chain"), 7}});
+        writeSetFile(decorationSetsDir() + QStringLiteral("/hollowbase.json"), root);
+
+        QVERIFY2(!sets->applySet(QStringLiteral("hollowbase")), "a baseline that engages no field must be refused");
+        QCOMPARE(c.chainAt(QString()), (QStringList{QStringLiteral("border")}));
+    }
+
+    /// A present-but-non-array `overrides` used to read as "no overrides", so a set
+    /// could import and apply with everything it claimed silently dropped.
+    void applySet_rejectsNonArrayOverrides()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        QJsonObject root;
+        root.insert(QStringLiteral("name"), QStringLiteral("bent"));
+        root.insert(QStringLiteral("version"), 1);
+        root.insert(QStringLiteral("overrides"), QStringLiteral("not an array"));
+        root.insert(QStringLiteral("baseline"),
+                    QJsonObject{{QStringLiteral("chain"), QJsonArray{QStringLiteral("border")}}});
+        writeSetFile(decorationSetsDir() + QStringLiteral("/bent.json"), root);
+
+        QVERIFY2(!sets->applySet(QStringLiteral("bent")),
+                 "a malformed overrides field must refuse the whole set, not apply the baseline alone");
+    }
+
+    /// Every mutator resolves a row by name to slugify(name) + ".json", so a file
+    /// whose stem does not match cannot be applied, renamed or deleted. Listing it
+    /// would show the user a row they can never act on.
+    void availableSets_skipsAnUnaddressableFile()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        // Hand-placed: the stem is "My Set", but "My Set" slugifies to "my-set".
+        QJsonObject root;
+        root.insert(QStringLiteral("name"), QStringLiteral("My Set"));
+        root.insert(QStringLiteral("version"), 1);
+        QJsonObject entry;
+        entry.insert(QStringLiteral("path"), QStringLiteral("window.tiled"));
+        entry.insert(QStringLiteral("profile"),
+                     QJsonObject{{QStringLiteral("chain"), QJsonArray{QStringLiteral("glow")}}});
+        root.insert(QStringLiteral("overrides"), QJsonArray{entry});
+        writeSetFile(decorationSetsDir() + QStringLiteral("/My Set.json"), root);
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("skipping")));
+        QVERIFY2(rowFor(sets, QStringLiteral("My Set")).isEmpty(), "an unaddressable file must not be listed");
+        QVERIFY2(rowFor(sets, QStringLiteral("my-set")).isEmpty(), "and not under its slug either");
+    }
+
     /// canUseSetName is the Ok-gate for the rename dialog, and the ONLY thing
     /// standing between the user and a dismissed dialog that silently drops their
     /// description edit. It has to agree with updateSet exactly.
@@ -177,12 +274,15 @@ private Q_SLOTS:
         QVERIFY(sets->updateSet(QStringLiteral("Mine"), QStringLiteral("Fresh"), QString()));
     }
 
-    /// A write that fails AFTER its snapshot was staged must un-stage it, or the
-    /// page sits dirty with nothing to discard. Provoked with a directory in the
-    /// destination's place rather than by revoking permissions, so it runs as root
-    /// too — CLAUDE.md's documented build flow is Docker, which runs as root, and
-    /// a permissions-based test would silently QSKIP there.
-    void failedSetWriteUnstagesItsSnapshot()
+    /// A write that cannot land must fail loudly and list nothing. Provoked with a
+    /// directory in the destination's place rather than by revoking permissions, so
+    /// it runs as root too. CLAUDE.md's documented build flow is Docker, which runs
+    /// as root, and a permissions-based test would silently QSKIP there.
+    ///
+    /// This does NOT pin the snapshot rollback: decoration wires no fileSnapshot
+    /// hook, so nothing is ever staged here. The rollback is pinned on the motion
+    /// side, which is the domain that stages.
+    void failedSetWriteToastsAndListsNothing()
     {
         TreeStubSettings settings;
         DecorationPageController c(nullptr, &settings);

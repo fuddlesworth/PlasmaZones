@@ -195,14 +195,6 @@
     </message>
 </context>
 <context>
-    <name>PhosphorI18n</name>
-    <message>
-        <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="261"/>
-        <source>Cannot reset while a discard is in progress.</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>PlasmaZones::Daemon</name>
     <message>
         <source>Layout: %1</source>
@@ -9694,7 +9686,7 @@ Seitenverhältnis: %3</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_lifecycle.cpp" line="172"/>
+        <location filename="../src/settings/settingscontroller_lifecycle.cpp" line="180"/>
         <source>Failed to apply assignment changes: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9754,17 +9746,17 @@ Seitenverhältnis: %3</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="441"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="537"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="450"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="546"/>
         <source>A set named &quot;%1&quot; already exists.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="364"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="532"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="543"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="605"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="610"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="365"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="541"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="552"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="614"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="619"/>
         <source>Could not read the set &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9779,121 +9771,131 @@ Seitenverhältnis: %3</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="368"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="369"/>
         <source>&quot;%1&quot; was written by a newer version of PlasmaZones.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="373"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="374"/>
         <source>&quot;%1&quot; does not match this page.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="377"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="378"/>
         <source>Could not apply &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="431"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="525"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="440"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="534"/>
         <source>That name cannot be used. Try one with letters or numbers in it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="451"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="460"/>
         <source>There is nothing to capture yet.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="492"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="500"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="501"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="509"/>
         <source>Could not delete &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="518"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="527"/>
         <source>A set needs a name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="577"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="586"/>
         <source>Renamed the set, but the old file could not be removed. Delete it by hand from the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="593"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="602"/>
         <source>Could not write to that location.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="619"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="628"/>
         <source>Could not write to %1.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="640"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="649"/>
         <source>That file is not a readable set.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="644"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="653"/>
         <source>That set was written by a newer version of PlasmaZones.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="651"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="660"/>
         <source>That set is empty.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="657"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="666"/>
         <source>That set does not match this page.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="668"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="677"/>
         <source>That set has no usable name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="458"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="675"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="697"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="467"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="684"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="706"/>
         <source>Could not create the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="702"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="711"/>
         <source>Could not open the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="126"/>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="194"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="130"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="198"/>
         <source>A preset needs a name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="136"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="140"/>
         <source>That name cannot be used for a preset.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="146"/>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="155"/>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="174"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="150"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="159"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="178"/>
         <source>Could not save the preset &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="245"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="249"/>
         <source>Could not find the preset &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="253"/>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="263"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="257"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="267"/>
         <source>Could not delete the preset &quot;%1&quot;.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="262"/>
+        <source>Cannot reset while a discard is in progress.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="284"/>
+        <source>Some animation overrides could not be reset.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

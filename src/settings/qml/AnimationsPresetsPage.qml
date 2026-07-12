@@ -90,13 +90,6 @@ SettingsFlickable {
             root._deletingPreset = false;
         }
 
-        // Surface controller-emitted toast requests (e.g. removeUserPreset
-        // refused mid-discard) through the shell `window.showToast`.
-        function onToastRequested(text) {
-            if (window && window.showToast)
-                window.showToast(text);
-        }
-
         target: settingsController.animationsPage
     }
 

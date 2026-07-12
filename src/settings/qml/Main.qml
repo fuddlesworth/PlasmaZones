@@ -99,6 +99,26 @@ PhosphorUi.SettingsAppWindow {
         toast.show(msg);
     }
 
+    // Page-controller toasts, wired once here rather than per page. A refusal can
+    // be raised from a controller while a completely different page is loaded (a
+    // Reset blocked by an in-flight discard, say), and a page-scoped Connections
+    // would drop it on the floor.
+    Connections {
+        target: settingsController.animationsPage
+
+        function onToastRequested(text) {
+            window.showToast(text);
+        }
+    }
+
+    Connections {
+        target: settingsController.decorationPage
+
+        function onToastRequested(text) {
+            window.showToast(text);
+        }
+    }
+
     controller: settingsController.app
     title: i18n("PlasmaZones Settings")
     // Sized in Kirigami grid units so the window scales with the

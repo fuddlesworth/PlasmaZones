@@ -66,7 +66,7 @@ Item {
             radius: height / 2
             color: Kirigami.Theme.highlightedTextColor
             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-            border.width: 0.5
+            border.width: Math.max(1, Math.round(Screen.devicePixelRatio)) * 0.5
             y: pad
             x: root.checked ? parent.width - width - pad : pad
 

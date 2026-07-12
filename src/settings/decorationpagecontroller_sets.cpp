@@ -81,6 +81,13 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* has
             *baseline = parsed;
         }
     }
+    // Whole-set discipline, same as the baseline above: a present-but-non-array
+    // `overrides` would otherwise read as "no overrides" and let a file import and
+    // apply with every override it claims silently dropped.
+    if (root.contains(kOverridesKey) && !root.value(kOverridesKey).isArray()) {
+        qCWarning(lcConfig) << "decorationset: rejecting a set whose overrides are not an array";
+        return false;
+    }
     const QJsonArray overrides = root.value(kOverridesKey).toArray();
     staged->reserve(overrides.size());
     for (const QJsonValue& v : overrides) {
@@ -95,6 +102,10 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* has
         // traversal-attempting paths.
         if (path.isEmpty() || !PhosphorSurfaceShaders::decorationSurfaceSupported(path)) {
             qCWarning(lcConfig) << "decorationset: rejecting unknown surface path" << path;
+            return false;
+        }
+        if (!entry.value(kProfileKey).isObject()) {
+            qCWarning(lcConfig) << "decorationset: profile for" << path << "is not an object";
             return false;
         }
         // Judge the PARSED profile, not the raw object. fromJson ignores unknown

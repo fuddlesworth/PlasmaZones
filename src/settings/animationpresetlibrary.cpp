@@ -61,7 +61,11 @@ QVariantList AnimationPresetLibrary::userPresets() const
     using namespace PhosphorAnimation;
 
     QVariantList result;
-    QDir dir(profilesDir());
+    const QString dirPath = profilesDir();
+    if (dirPath.isEmpty())
+        return result;
+
+    QDir dir(dirPath);
     if (!dir.exists())
         return result;
 

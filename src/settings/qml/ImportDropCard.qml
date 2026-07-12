@@ -71,7 +71,6 @@ SettingsCard {
         autoHideTimer.restart();
     }
 
-    Layout.fillWidth: true
     collapsible: true
 
     contentItem: ColumnLayout {
@@ -135,7 +134,7 @@ SettingsCard {
                 text: card.importButtonText
                 icon.name: "document-import"
                 flat: true
-                Accessible.name: card.importButtonAccessibleName
+                Accessible.name: card.importButtonAccessibleName.length > 0 ? card.importButtonAccessibleName : card.importButtonText
                 onClicked: card.openImportDialogFn()
             }
 
@@ -144,7 +143,7 @@ SettingsCard {
                 text: i18n("Open Folder")
                 icon.name: "folder-open"
                 flat: true
-                Accessible.name: card.openFolderAccessibleName
+                Accessible.name: card.openFolderAccessibleName.length > 0 ? card.openFolderAccessibleName : text
                 onClicked: card.openFolderFn()
             }
         }

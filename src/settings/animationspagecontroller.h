@@ -395,15 +395,18 @@ public:
     /// own `Settings::load()`.)
     /// Failures (e.g. permission errors during file restore) are
     /// retained in the snapshot so a subsequent revert can retry.
-    /// @return false when the revert was REFUSED outright and nothing was
-    /// restored, which happens only while an asyncRevertPending() worker holds
-    /// the snapshot map. A caller that goes on to declare the state clean (an
-    /// import, a defaults reset) must check this, or it will strand pre-edit
-    /// snapshots that a later Discard writes back over the new state. The
-    /// Discard path itself may ignore it: ApplicationController::discardAllAsync
-    /// dispatches this page's async revert before the settings domain calls
-    /// load(), so hitting the guard there means the async worker already owns
-    /// the restore.
+    /// @return true when the page is CLEAN afterwards. False has two causes, and
+    /// a caller that goes on to declare the state clean (an import, a defaults
+    /// reset) must honour both, or it strands pre-edit snapshots that a later
+    /// Discard writes back over the new state:
+    ///   * the revert was REFUSED outright, because an asyncRevertPending() worker
+    ///     holds the snapshot map, or
+    ///   * some file could not be restored (permission drift) and was RETAINED for
+    ///     a retry.
+    /// The Discard path itself may ignore the result: ApplicationController's
+    /// discardAllAsync dispatches this page's async revert before the settings
+    /// domain calls load(), so hitting the guard there means the async worker
+    /// already owns the restore.
     bool revertPending();
 
     /// Async sibling of revertPending — runs the QSaveFile restore

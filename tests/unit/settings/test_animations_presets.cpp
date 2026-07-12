@@ -266,9 +266,14 @@ private Q_SLOTS:
         c.setUserProfilesDirOverride(tmp.path());
         QVERIFY(!c.hasPendingChanges());
 
-        // Read-execute only: the directory still exists (so the snapshot side
-        // stages a "did not exist" entry for the new file and allows the write),
-        // but QSaveFile cannot create anything inside it.
+        // Read-execute only: the directory still exists (so the snapshot stages a
+        // "did not exist" entry for the new file and allows the write), but
+        // QSaveFile cannot create anything inside it.
+        //
+        // A directory at the destination would NOT work here: the snapshot guard
+        // refuses a non-regular file before the write is ever attempted, so it
+        // would test that guard instead of this one. The drop-vs-keep semantics of
+        // the rollback are pinned by the two tests below, which do run as root.
         QVERIFY(QFile::setPermissions(tmp.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
 
         QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
@@ -287,6 +292,42 @@ private Q_SLOTS:
         QCOMPARE(toastSpy.count(), 1);
         // The load-bearing assertion: the failed write staged nothing.
         QVERIFY(!c.hasPendingChanges());
+    }
+
+    /// Create a preset and delete it in the same session and disk is back where it
+    /// started, so the staged "this file did not exist" snapshot is a phantom.
+    /// Keeping it left the page dirty forever with nothing for Discard to restore.
+    void createThenDeleteAPresetLeavesThePageClean()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+        QVERIFY(!c.hasPendingChanges());
+
+        QVERIFY(c.addUserPreset(QStringLiteral("Temp"), {{QStringLiteral("duration"), 200}}));
+        QVERIFY2(c.hasPendingChanges(), "a new preset is an unsaved change");
+
+        QVERIFY(c.removeUserPreset(QStringLiteral("Temp")));
+        QVERIFY2(!c.hasPendingChanges(), "deleting it again puts disk back as it was, so nothing may remain staged");
+    }
+
+    /// The mirror: deleting a preset that existed BEFORE this session is a real
+    /// change, and its snapshot is the only copy of the file. It must survive.
+    void deletingAPreexistingPresetKeepsItsSnapshot()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.addUserPreset(QStringLiteral("Keeper"), {{QStringLiteral("duration"), 200}}));
+        c.commitPending(); // the preset is now part of the committed baseline
+        QVERIFY(!c.hasPendingChanges());
+
+        QVERIFY(c.removeUserPreset(QStringLiteral("Keeper")));
+        QVERIFY2(c.hasPendingChanges(),
+                 "deleting a pre-existing preset IS an unsaved change, and Discard must be able to restore it");
     }
 };
 
