@@ -574,6 +574,17 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     const bool ruleBorderOnly = wb.ruleBorder && chain.size() == 1;
     wb.chainTranslucent = !(ruleBorderOnly && wb.ruleBorderRadius == 0 && !wb.needsBackdrop && !wb.chainHandlesOpacity);
 
+    // The cached static-prefix fold (SurfaceMultipassState::prefixTex) bakes the
+    // pack parameters resolved above, and they have just been re-resolved — drop
+    // it. Normally the whole state is erased by removeWindowDecoration (which
+    // updateWindowDecoration runs first), but that path deliberately KEEPS the
+    // state while a transition is mid-flight, so a parameter edit landing during an
+    // animation would otherwise leave the prefix folded with the old values.
+    if (const auto sit = m_surfaceMultipass.find(windowId); sit != m_surfaceMultipass.end()) {
+        sit->second.prefixValid = false;
+        sit->second.prefixPackCount = -1;
+    }
+
     // Corner rounding and the outline are entirely the SHADER's job (the
     // rounded-rect SDF in the border fragment shader), identically for decorated
     // and borderless windows. It operates on the COMPOSITED redirected texture, so

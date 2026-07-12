@@ -63,6 +63,45 @@ void drawFullscreenQuad()
     vbo->render(GL_TRIANGLE_STRIP);
 }
 
+/// Does this pack's output depend on anything that varies between frames?
+///
+/// A pack is STATIC when its fold is a pure function of its input composite and
+/// its resolved parameters — so given the same input texture it paints the same
+/// pixels forever, and the fold can be cached. Everything a pack reads that is
+/// NOT constant for a given (window size, parameter set) is enumerated here:
+///
+///   iTime            continuous seconds
+///   audio spectrum   the live CAVA bars
+///   uBackdrop        the scene behind the window
+///   uSurfaceFocused  focus, and the cross-fade ramp between the two states
+///   uSurfaceOpacity  the rule-resolved window opacity
+///   iMouse           the cursor
+///
+/// Everything else on CompiledSurfacePack (uSurfaceSize, uSurfaceScale, the frame
+/// rect, custom params and colours) is fixed for a given size and parameter set,
+/// and both of those already force a full realloc + refold when they change.
+///
+/// Deliberately introspective, never keyed on a pack id: it is the compiled
+/// shader's linked uniforms that decide this. A new pack that happens to be as
+/// simple as opacity-tint is picked up as static with no change here.
+bool packIsStatic(const PlasmaZones::CompiledSurfacePack& pk)
+{
+    const auto passVaries = [](int time, int audio, int backdrop) {
+        return time >= 0 || audio >= 0 || backdrop >= 0;
+    };
+    if (passVaries(pk.uTimeLoc, pk.iAudioSpectrumSizeLoc, pk.uBackdropLoc) || pk.uFocusedLoc >= 0 || pk.uOpacityLoc >= 0
+        || pk.iMouseLoc >= 0) {
+        return false;
+    }
+    // A static main pass fed by a time-varying buffer pass is still time-varying.
+    for (const PlasmaZones::CompiledSurfaceBufferPass& bp : pk.bufferPasses) {
+        if (passVaries(bp.uTimeLoc, bp.iAudioSpectrumSizeLoc, bp.uBackdropLoc)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 // Render the window's active surface-layer stack for an in-flight transition
@@ -295,19 +334,28 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // The capture target lives alongside the ping-pong pair and is sized
         // identically; a stale capture at the old size must never be presented,
         // so the realloc invalidates it.
+        // The capture and static-prefix targets live alongside the ping-pong pair
+        // and are sized identically; a stale one at the old size must never be
+        // presented, so the realloc invalidates both.
         if (!allocFailed) {
             state.captureValid = false;
+            state.prefixValid = false;
+            state.prefixPackCount = -1;
             state.captureFbo.reset();
-            state.captureTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
-            if (!state.captureTex) {
-                allocFailed = true;
-            } else {
-                state.captureTex->setFilter(GL_LINEAR);
-                state.captureTex->setWrapMode(GL_CLAMP_TO_EDGE);
-                state.captureFbo = std::make_unique<KWin::GLFramebuffer>(state.captureTex.get());
-                if (!state.captureFbo->valid()) {
-                    allocFailed = true;
+            state.prefixFbo.reset();
+            const auto allocTarget = [&](std::unique_ptr<KWin::GLTexture>& tex,
+                                         std::unique_ptr<KWin::GLFramebuffer>& fbo) {
+                tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+                if (!tex) {
+                    return false;
                 }
+                tex->setFilter(GL_LINEAR);
+                tex->setWrapMode(GL_CLAMP_TO_EDGE);
+                fbo = std::make_unique<KWin::GLFramebuffer>(tex.get());
+                return fbo->valid();
+            };
+            if (!allocTarget(state.captureTex, state.captureFbo) || !allocTarget(state.prefixTex, state.prefixFbo)) {
+                allocFailed = true;
             }
         }
         if (allocFailed) {
@@ -400,6 +448,32 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         state.captureValid = false;
     }
 
+    // How many packs at the head of the chain are STATIC? Their fold is a pure
+    // function of the capture, so it can be cached across frames while the
+    // animated packs behind them keep folding over it every frame.
+    //
+    // This is a leading RUN, not a set: once a time-varying pack has folded, its
+    // output differs every frame, so every pack downstream is fed a different
+    // input every frame no matter how simple it is. Stop at the first pack that
+    // varies — and at the first that failed to compile, whose skip would otherwise
+    // desync the count from the packs actually folded below.
+    int staticPrefix = 0;
+    while (staticPrefix < chain.size()) {
+        const CompiledSurfacePack* const pk = compiledPackLazy(chain.at(staticPrefix));
+        if (!pk || !pk->shader || staticPrefix >= static_cast<int>(state.chainBufferTex.size()) || !packIsStatic(*pk)) {
+            break;
+        }
+        ++staticPrefix;
+    }
+    // Worth caching only when something DYNAMIC follows the static run. If the
+    // whole chain is static the composite already only re-folds when the capture
+    // does, so a prefix copy would be pure overhead.
+    const bool usePrefix = captureCacheable && staticPrefix > 0 && staticPrefix < foldablePacks;
+    // The prefix is downstream of the capture: a re-capture invalidates it.
+    if (!state.captureValid || !usePrefix || state.prefixPackCount != staticPrefix) {
+        state.prefixValid = false;
+    }
+
     if (!state.captureValid) {
         KWin::GLFramebuffer& fbo = foldablePacks > 0 ? *state.captureFbo : *state.compositeFbo[0];
         setShader(w, nullptr);
@@ -456,11 +530,23 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     KWin::GLTexture* srcTex = foldablePacks > 0 ? state.captureTex.get() : state.compositeTex[0].get();
     int dstSlot = 0;
     int lastDst = 0;
-    for (int k = 0; k < chain.size(); ++k) {
+    // A live prefix means the static head already sits in prefixTex, folded over
+    // the still-valid capture: start the animated packs straight off it.
+    int firstPack = 0;
+    if (state.prefixValid) {
+        srcTex = state.prefixTex.get();
+        firstPack = staticPrefix;
+    }
+    for (int k = firstPack; k < chain.size(); ++k) {
         CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
         if (!pk || !pk->shader) {
             continue; // skip a failed pack; the composite carries through unchanged
         }
+        // While rebuilding, the LAST static pack folds into prefixTex rather than a
+        // ping-pong slot, so the run is cached in place with no extra copy. The
+        // ping-pong then resumes from there for the animated packs (which never
+        // write prefixTex, so it survives as their source next frame).
+        const bool writesPrefix = usePrefix && !state.prefixValid && k == staticPrefix - 1;
         // Defensive: chainBufferTex is sized to chain.size() in the realloc block
         // above and stays in lockstep with `chain`, but guard the unchecked
         // operator[] in case a future edit decouples the two (out-of-bounds [] is
@@ -583,10 +669,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             KWin::GLFramebuffer::popFramebuffer();
         }
 
-        // 2b: pack k's MAIN as a fullscreen FBO pass → the next composite slot.
+        // 2b: pack k's MAIN as a fullscreen FBO pass → the next composite slot, or
+        // into prefixTex when this is the last static pack of a rebuild.
         const int dst = dstSlot;
-        KWin::GLTexture* const target = state.compositeTex[dst].get();
-        KWin::GLFramebuffer& fbo = *state.compositeFbo[dst];
+        KWin::GLTexture* const target = writesPrefix ? state.prefixTex.get() : state.compositeTex[dst].get();
+        KWin::GLFramebuffer& fbo = writesPrefix ? *state.prefixFbo : *state.compositeFbo[dst];
         KWin::GLFramebuffer::pushFramebuffer(&fbo);
         glViewport(0, 0, target->width(), target->height());
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -706,9 +793,18 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         }
         glActiveTexture(GL_TEXTURE0);
         KWin::GLFramebuffer::popFramebuffer();
-        srcTex = state.compositeTex[dst].get();
-        lastDst = dst;
-        dstSlot = 1 - dst;
+        if (writesPrefix) {
+            // The static run is now cached. The animated packs fold out of it and
+            // ping-pong through the composite pair, leaving prefixTex untouched so
+            // it can serve as their source again next frame.
+            srcTex = state.prefixTex.get();
+            state.prefixValid = true;
+            state.prefixPackCount = staticPrefix;
+        } else {
+            srcTex = state.compositeTex[dst].get();
+            lastDst = dst;
+            dstSlot = 1 - dst;
+        }
     }
 
     state.finalSlot = lastDst;

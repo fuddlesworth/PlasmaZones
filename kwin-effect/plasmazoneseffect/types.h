@@ -239,6 +239,25 @@ struct SurfaceMultipassState
     std::unique_ptr<KWin::GLFramebuffer> captureFbo;
     bool captureValid = false;
 
+    /// The composite after folding the chain's leading run of STATIC packs (see
+    /// packIsStatic) over the capture. Those packs are a pure function of the
+    /// capture and their parameters, so while the capture holds, their fold holds
+    /// too and the animated packs downstream can run straight off this instead.
+    ///
+    /// Cacheability is a property of the PREFIX, not of a pack on its own: each
+    /// pack folds over the running composite, so the first time-varying pack makes
+    /// every pack after it time-varying as well, however simple those are. Hence
+    /// the leading run, and hence `prefixPackCount` — the number of packs this
+    /// texture has folded, which must match the chain's current static run for the
+    /// cache to be reusable.
+    ///
+    /// Invalidated with the capture (it is downstream of it), and by any chain or
+    /// size change, which already rebuild everything here.
+    std::unique_ptr<KWin::GLTexture> prefixTex;
+    std::unique_ptr<KWin::GLFramebuffer> prefixFbo;
+    bool prefixValid = false;
+    int prefixPackCount = -1;
+
     QStringList chainKey; ///< the chain `chainBufferTex` was allocated for
     QSize compositeSize; ///< full textureSize the composite targets were allocated for
     int finalSlot = 0; ///< which compositeTex slot holds the final fold
