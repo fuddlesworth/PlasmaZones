@@ -291,7 +291,28 @@ public:
             // still bounds its lifetime.
             curve->step(qMin(dtSeconds, static_cast<qreal>(Limits::MaxShaderTimeDeltaSeconds)), m_state, 1.0);
 
+            // A stateful curve's lifetime is its own analytical settle time. The
+            // convergence test below is necessary but NOT sufficient: it wants
+            // |velocity| <= 1e-6, which an UNDAMPED spring (zeta = 0, inside
+            // Spring's own qBound(0, zeta, 10) and reachable from the wire string
+            // "spring:12,0") never satisfies — it oscillates forever, so without
+            // this bound it would run to kSafetyCap, pinning per-frame repaints
+            // for a full minute. Even a merely low-damping spring overshoots the
+            // envelope: "spring:1,0.2" converges only after ~46 s.
+            //
+            // settleTime() is the curve's own definition of "done" (bounded by
+            // Spring::MaxSettleSeconds), so this is a physics bound, not a policy
+            // one — it stays correct for consumers outside the compositor's
+            // duration envelope, such as the daemon's SurfaceAnimator. It is also
+            // the SAME rule ShaderInternal::resolveTransitionLifetimeMs applies on
+            // the shader side, so the geometry leg and the shader leg of one curve
+            // now agree on how long they run instead of diverging (they differed
+            // by 2.35x for the default spring: 0.41 s vs the 1e-4 lock at 0.96 s).
+            const qreal elapsedMs = std::chrono::duration<qreal, std::milli>(elapsed).count();
+            const qreal settleMs = curve->settleTime() * 1000.0;
             if (m_state.value >= 1.0 && qAbs(m_state.velocity) <= 1.0e-6) {
+                complete = true;
+            } else if (std::isfinite(settleMs) && elapsedMs >= settleMs) {
                 complete = true;
             } else if (elapsed > kSafetyCap) {
                 qCWarning(lcAnimatedValue) << "stateful curve exceeded safety cap; forcing completion";

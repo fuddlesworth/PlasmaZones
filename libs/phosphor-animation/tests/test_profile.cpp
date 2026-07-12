@@ -191,7 +191,10 @@ private Q_SLOTS:
         QCOMPARE(restored, original);
     }
 
-    void testPresetNameEngagedEmptyOverridesParent()
+    // NOTE: no parent and no tree here — this is the JSON round-trip alone.
+    // test_profiletree.cpp carries the identically-shaped case that DOES exercise
+    // a parent override.
+    void testPresetNameEngagedEmptyRoundTripsInJson()
     {
         // Regression: presetName is std::optional<QString>, so an engaged
         // empty-string override is distinct from a nullopt "inherit".

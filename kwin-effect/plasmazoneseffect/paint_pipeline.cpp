@@ -86,6 +86,24 @@ qreal timeDrivenProgress(ShaderTransition& st, qint64 nowMs, bool stepCurve, boo
         // wobble rings out instead of being cut off at the release frame.
         progress = 1.0;
         active = true;
+    } else if (st.progressCurve && st.progressCurve->isStateful() && !st.springSettled && elapsed > st.durationMs) {
+        // STATEFUL completion frame, mirroring AnimatedValue::advance's snap.
+        // settleTime() is the 2% settling band, so the integrator is still ~0.98
+        // at expiry and the leg would otherwise tear down short of its endpoint
+        // and pop. Emit one final frame at exactly 1.0.
+        //
+        // Only the paint pass (stepCurve) latches; the backdrop predictor reads
+        // the same progress without consuming the one-shot, so the two agree on
+        // this frame instead of the predictor sitting at 0.98 while the draw
+        // lands on 1.0. postPaintScreen carries a matching repaint arm — without
+        // it no damage is scheduled for this frame and the snap never paints.
+        progress = 1.0;
+        active = true;
+        if (stepCurve) {
+            st.progressCurveState.value = 1.0;
+            st.progressCurveState.velocity = 0.0;
+            st.springSettled = true;
+        }
     }
     // Held-move release leg (velocity/trail move packs): the release handler
     // stamps releaseStartMs instead of clearing the hold flag, and progress ramps
@@ -102,6 +120,24 @@ qreal timeDrivenProgress(ShaderTransition& st, qint64 nowMs, bool stepCurve, boo
     if (active && st.releaseStartMs >= 0) {
         const qreal down = qreal(nowMs - st.releaseStartMs) / qreal(st.durationMs);
         progress = qBound(0.0, progress - qMax(down, 0.0), 1.0);
+    }
+    // Re-grab resume: the accrued down-ramp, decaying back to 0 over the same
+    // durationMs. At the re-grab frame the offset equals the ramp the release
+    // leg above had accrued, so the first resumed frame reproduces the last
+    // released frame exactly — continuous by construction. Applied to the
+    // PAINTED progress (not to the clock) so it is correct for a stateless
+    // curve and a stateful spring alike: the spring's integrator keeps its own
+    // value and this only lifts the offset off it. See the rationale on
+    // ShaderTransition::regrabStartMs for why rewinding startTimeMs cannot work.
+    if (active && st.regrabStartMs >= 0) {
+        const qreal back = qreal(nowMs - st.regrabStartMs) / qreal(st.durationMs);
+        const qreal offset = st.regrabDownOffset - qMax(back, 0.0);
+        if (offset <= 0.0) {
+            st.regrabStartMs = -1;
+            st.regrabDownOffset = 0.0;
+        } else {
+            progress = qBound(0.0, progress - offset, 1.0);
+        }
     }
     return progress;
 }
@@ -252,8 +288,17 @@ void PlasmaZonesEffect::postPaintScreen()
             if (!w || w->isDeleted()) {
                 continue;
             }
-            const bool timeBasedActive =
-                transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs;
+            // The spring completion frame lands one tick AFTER the nominal
+            // clock expires (settleTime() is the 2% band, so the integrator is
+            // still short of 1 — see timeDrivenProgress), by which point the
+            // in-window test below is already false. Without this arm no damage
+            // is scheduled for that frame on an undamaged window and the snap
+            // never paints, which is the common case for window.open / focus.
+            const bool springFinalFrame = transition.durationMs > 0 && transition.progressCurve
+                && transition.progressCurve->isStateful() && !transition.springSettled
+                && (now - transition.startTimeMs) > transition.durationMs;
+            const bool timeBasedActive = springFinalFrame
+                || (transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs);
             // Held move/resize transitions live past their nominal duration
             // (timeBasedActive goes false), and a soft-body lattice keeps
             // ringing AFTER release when the window emits no damage of its

@@ -45,10 +45,11 @@ class PlasmaZonesEffect;
 /// The effect owns one instance. On `desktopChanged` the effect resolves the
 /// `desktop.switch` shader from the shader profile tree and calls begin(); if no
 /// shader is assigned begin() is a no-op and KWin's normal switch proceeds. When
-/// a transition is live the effect claims `setActiveFullScreenEffect(this)` so
+/// a transition is live begin() claims `setActiveFullScreenEffect(m_effect)` so
 /// KWin's built-in Slide bows out, forces a full-screen paint via the mask, and
 /// routes paintScreen through paintOutput() which draws the blend instead of the
-/// live scene until progress reaches 1.
+/// live scene until progress reaches 1. The claim is taken only when no other
+/// effect holds the screen, and released only while KWin still reports it as ours.
 class DesktopTransitionManager
 {
 public:
@@ -100,7 +101,16 @@ public:
 
     /// Schedule the next frame while any transition is live (called from
     /// postPaintScreen). No-op when idle.
-    void scheduleRepaints() const;
+    ///
+    /// Also REAPS transitions whose lifetime has run out. paintOutput() settles an
+    /// output only when that output is painted, so an output that stops being
+    /// painted mid-transition (DPMS-asleep but still enabled, or one KWin has
+    /// stopped rendering) would never settle while a sibling output kept painting:
+    /// m_active would never empty, the active-fullscreen-effect claim would never
+    /// release, and Slide/Overview/Cube would stay suppressed for the rest of the
+    /// session. postPaintScreen runs regardless of which output painted, so the
+    /// wall-clock reap here makes settling independent of being painted.
+    void scheduleRepaints();
 
     /// Drop every compiled desktop-transition shader so the next switch recompiles
     /// against freshly reloaded pack source. Called from the AnimationShaderRegistry
@@ -225,6 +235,15 @@ private:
     /// Free an output's transition and, when the last one goes, release the
     /// active-fullscreen-effect claim.
     void endOutput(KWin::LogicalOutput* screen);
+
+    /// Release the active-fullscreen-effect claim once no transition is left.
+    ///
+    /// Releases only when KWin still reports US as the active full-screen effect.
+    /// An unconditional `setActiveFullScreenEffect(nullptr)` would clear a claim
+    /// that Overview or Cube took while our transition was in flight, unsuppressing
+    /// every effect that was bowing out to THEM. The claim in begin() is guarded
+    /// symmetrically: it only takes the screen when nobody else holds it.
+    void releaseFullScreenClaimIfIdle();
 
     /// Make the compositor GL context current so GLTexture/GLShader frees issue
     /// their glDelete* against a live context. Every off-paint-thread mutator that

@@ -79,6 +79,11 @@ QStringList ProfileTree::overriddenPaths() const
     return m_insertionOrder;
 }
 
+bool ProfileTree::hasAnyOverride() const
+{
+    return !m_insertionOrder.isEmpty();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Mutation
 // ═══════════════════════════════════════════════════════════════════════════════

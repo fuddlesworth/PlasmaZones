@@ -741,6 +741,16 @@ private:
     // node resolution. Pass a windowless @p query (hasWindow() false) + empty
     // @p windowId for events with no per-window rule scope (desktop switch);
     // the Rule layer is then skipped and only the tree cascade applies.
+    //
+    // The returned DURATION is clamped into [Limits::MinAnimationDurationMs,
+    // Limits::MaxAnimationDurationMs] — callers do not need to re-clamp, and
+    // applyWindowGeometry depends on it (WindowAnimator's own clampProfile uses a
+    // looser envelope). A null returned CURVE means linear iTime, but in practice
+    // it is unreachable after settings load: daemon_bringup builds the animator's
+    // global curve with CurveRegistry::create(), which never returns null.
+    //
+    // The duration does NOT bound a stateful (spring) curve, which derives its
+    // lifetime from settleTime() instead — see AnimationLimits.h.
     PhosphorAnimation::Profile resolveEventMotionProfile(const QString& profilePath,
                                                          const PhosphorRules::WindowQuery& query,
                                                          const QString& windowId) const;
@@ -805,6 +815,10 @@ private:
     /// unrelated push rebuilt them.
     bool hasDecorationTreeContent() const
     {
+        // NOTE: DecorationProfileTree is PhosphorSurfaceShaders', not
+        // PhosphorAnimation::ProfileTree — it has no hasAnyOverride(). Not a hot
+        // path (this runs on reconcile, not per frame), so the QStringList copy
+        // is fine here.
         return !m_decorationTree.resolve(QString()).effectiveChain().isEmpty()
             || !m_decorationTree.overriddenPaths().isEmpty();
     }

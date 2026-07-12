@@ -230,11 +230,21 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // Rule-resolved window opacity, for handlesOpacity packs (frost dims its
     // content sample; the present pass skips its final modulation for such
     // chains). Prefer the per-frame cache prePaintWindow refreshed.
+    //
+    // Gated on the pack's METADATA flag, not on the linker location, so this push
+    // and the present pass's suppression (BorderState::chainHandlesOpacity, folded
+    // from the same metadata) agree on who owns the alpha. A pack that links
+    // uSurfaceOpacity without declaring handlesOpacity gets 1.0 — the present pass
+    // modulates instead — rather than the alpha baked in here AND applied again
+    // there. Single-apply invariant; see CompiledSurfacePack::handlesOpacity.
     if (pack.uOpacityLoc >= 0) {
-        qreal resolved = wb.ruleOpacity;
-        if (m_shaderManager.frameOpacityCached(w)) {
-            const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
-            resolved = frameOpacity ? qBound(0.0, *frameOpacity, 1.0) : 1.0;
+        qreal resolved = 1.0;
+        if (pack.handlesOpacity) {
+            resolved = wb.ruleOpacity;
+            if (m_shaderManager.frameOpacityCached(w)) {
+                const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
+                resolved = frameOpacity ? qBound(0.0, *frameOpacity, 1.0) : 1.0;
+            }
         }
         shader->setUniform(pack.uOpacityLoc, static_cast<float>(resolved));
     }
@@ -406,15 +416,27 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 constexpr int kSurfaceLayerUnitDraw = ShaderInternal::kSurfaceLayerUnit;
                 glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnitDraw);
                 comp->bind();
-                // Old-content snapshot (morph cross-fades): same clobber, same
-                // last-moment rebind.
-                if (st->oldSnapshot) {
-                    constexpr int kOldSnapshotUnitDraw = ShaderInternal::kOldSnapshotUnit;
-                    glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnitDraw);
-                    st->oldSnapshot->bind();
-                }
                 glActiveTexture(GL_TEXTURE0);
             }
+        }
+        // Old-content snapshot (morph cross-fades): the same clobber and the same
+        // last-moment rebind, but INDEPENDENT of the surface composite.
+        // beginShaderTransition redirects EVERY transition window, decorated or
+        // not, so the unbind described above hits an undecorated window running a
+        // morph just as hard — and that is the MAJORITY case, since most windows
+        // carry no decoration pack. Nesting this inside the composite branch left
+        // exactly those windows sampling an unbound unit.
+        //
+        // Guarded on iOldWindowLoc so this bind and the paint pipeline's unbind
+        // test the SAME predicate. A pack whose metadata declares needsSnapshot
+        // but whose GLSL never samples uOldWindow has the location linked away;
+        // the pipeline then skips its unbind, so binding here regardless would
+        // leak the snapshot unit into the next effect in KWin's chain.
+        if (st->oldSnapshot && st->cached->iOldWindowLoc >= 0) {
+            constexpr int kOldSnapshotUnitDraw = ShaderInternal::kOldSnapshotUnit;
+            glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnitDraw);
+            st->oldSnapshot->bind();
+            glActiveTexture(GL_TEXTURE0);
         }
     }
     KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
@@ -423,8 +445,10 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     // texture hygiene mirroring paint_pipeline.cpp, so a stray bind doesn't leak
     // into the next window's draw. No-op when boundChannels == 0 (single-pass).
     // The transition-rebind branch above binds the layer / old-snapshot units
-    // (4/5) but intentionally does NOT unbind them here: paint_pipeline.cpp owns
-    // their teardown on its own transition path.
+    // (ShaderInternal::kSurfaceLayerUnit / kOldSnapshotUnit — derived constants
+    // that move with kMaxUserTextureSlots, so do not spell them as numbers) but
+    // intentionally does NOT unbind them here: paint_pipeline.cpp owns their
+    // teardown on its own transition path.
     for (int i = 0; i < boundChannels; ++i) {
         glActiveTexture(GL_TEXTURE0 + kSurfaceChannelBaseUnit + i);
         glBindTexture(GL_TEXTURE_2D, 0);

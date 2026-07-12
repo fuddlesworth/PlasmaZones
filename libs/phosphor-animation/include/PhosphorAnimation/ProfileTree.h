@@ -49,6 +49,15 @@ public:
     /// elsewhere) without importing this tree's baseline — resolve() would
     /// instead start from m_baseline and collapse an empty chain to the
     /// library default.
+    ///
+    /// The tree carries TWO representations of the global level, and only one is
+    /// skipped. The BASELINE is ignored, as above. But an OVERRIDE stored at the
+    /// literal path `"global"` is a genuine chain member (ProfilePaths::parentPath
+    /// routes every category root there), so it overlays on top of @p base like
+    /// any other ancestor. The two never collide today because the D-Bus adaptor
+    /// routes a `Global`-keyed profile to setBaseline() and every other path to
+    /// setOverride(); putting a global profile through setOverride() instead would
+    /// double-apply it over the caller's own base.
     Profile overlayChainOnto(const QString& path, Profile base) const;
 
     /// Direct override at @p path without walking parents.
@@ -59,6 +68,15 @@ public:
 
     /// Every path with a direct override, in insertion order.
     QStringList overriddenPaths() const;
+
+    /// True when no path in the tree carries an override.
+    ///
+    /// Prefer this over `overriddenPaths().isEmpty()` on a hot path: the latter
+    /// returns a QStringList BY VALUE, so a mere emptiness test costs a
+    /// copy-on-write refcount atomic pair. The compositor's default-state fast
+    /// path runs it per animated snap and per shader install, where the whole
+    /// point is to be free.
+    bool hasAnyOverride() const;
 
     /// Install an explicit override. Empty path is rejected (no-op).
     void setOverride(const QString& path, const Profile& profile);

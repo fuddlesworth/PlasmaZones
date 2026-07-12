@@ -207,7 +207,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // precision and on fractional-scale outputs may keep sub-pixel residue
     // from prior moveResize commits, so a float-bit-exact equality against
     // an integer `geo` would silently miss and run a redundant moveResize.
-    if (QRectF(geo) == window->frameGeometry().toRect() && !m_windowAnimator->hasAnimation(window)) {
+    if (geo == window->frameGeometry().toRect() && !m_windowAnimator->hasAnimation(window)) {
         qCDebug(lcEffect) << "moveResize: window already at target geometry, skipping:" << geo;
         // Release first-frame open suppression here. The settle-detection
         // hook on windowFrameGeometryChanged would otherwise wait forever
@@ -327,7 +327,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // Compared against the animator's own `baseProfile` so the override is
         // passed whenever the effective profile differs from what the animator
         // would use unaided.
-        const bool hasMotionOverrides = !m_shaderManager.motionProfileTree().overriddenPaths().isEmpty();
+        const bool hasMotionOverrides = m_shaderManager.motionProfileTree().hasAnyOverride();
         const bool hasAnimationRules = !m_shaderManager.animationRuleSet().isEmpty();
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;
@@ -479,6 +479,23 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                         mt->needsSnapshot = true;
                     }
                 }
+            }
+        } else {
+            // The animator DECLINED this leg — SnapPolicy refused the spec, or the
+            // move fell under Profile::minDistance with no size change (a
+            // user-settable 0-200px threshold, so this is reachable in a default-ish
+            // config, not just a corner case). The whole install block above is
+            // therefore skipped, including its stale-morph teardown — but the
+            // moveResize higher up has ALREADY committed the new geometry.
+            //
+            // A live transition that OWNS GEOMETRY (declares iFromRect) froze its
+            // from/to rects at the previous leg's endpoints and nothing retargets
+            // them, so it would go on painting toward the OLD target across a window
+            // that already sits at the new one. Same hazard the in-branch teardown
+            // exists to prevent, on the path where the animator never ran.
+            if (const ShaderTransition* live = m_shaderManager.findTransition(window);
+                live && live->cached && live->cached->iFromRectLoc >= 0) {
+                endShaderTransition(window);
             }
         }
 

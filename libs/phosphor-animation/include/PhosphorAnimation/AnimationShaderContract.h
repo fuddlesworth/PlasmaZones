@@ -186,22 +186,33 @@ namespace PhosphorAnimationShaders {
 /// `#ifdef PLASMAZONES_KWIN` branch entirely.
 namespace AnimationShaderContract {
 
-/// `float iTime` — transition progress in [0.0, 1.0]. Both runtimes
-/// drive this from a 0..1 timeline (kwin: lifecycle elapsed/duration or
-/// animator state value; daemon: `SurfaceAnimator::runLeg`'s
-/// `shaderTime->start(0.0, 1.0, ...)`). Authors should `clamp(iTime,
-/// 0.0, 1.0)` defensively in case a future timeline overshoots.
+/// `float iTime` — transition progress, normally in [0.0, 1.0].
+///
+/// **`iTime` CAN LEAVE [0, 1].** A curve that overshoots (an underdamped
+/// spring, a back / elastic ease) delivers its overshoot to the shader
+/// rather than being flattened: `iTime` may exceed 1.0 and dip below 0.0
+/// for those curves, because the overshoot IS the curve, and the geometry
+/// animator bounces past its target on the same pick. Authors MUST
+/// `clamp(iTime, 0.0, 1.0)` defensively wherever an out-of-range value
+/// would misbehave — a `texture()` fetch, or a `mix()` whose endpoints
+/// must not be extrapolated past. Where the overshoot is meaningful
+/// (a rect lerp, a scale), let it through and the pack bounces for free.
+/// Non-overshooting curves are still clamped by the host.
 ///
 /// **Curve shape is NOT guaranteed to be linear.** Both runtimes feed
 /// `iTime` through the resolved `Profile`'s easing curve:
 ///
-///   • Compositor (kwin-effect): `paintWindow` reads progress from either
-///     the time-based (`(now - startTimeMs) / durationMs`, linear) or
-///     `m_windowAnimator->animationFor(w)` (curved by the geometry
-///     animation's profile). Lifecycle events (`window.open`,
-///     `window.close`, focus etc.) ride the linear branch;
-///     `window.snap*` / `window.layoutSwitch` events ride the curved
-///     one (their geometry tween drives progress).
+///   • Compositor (kwin-effect): BOTH branches are curve-shaped. The
+///     time-driven branch (`window.appearance.*` — open, close, minimize,
+///     focus — and the desktop switch) eases its linear
+///     `(now - startTimeMs) / durationMs` through the curve resolved by
+///     the motion cascade (global → the category's "All" node → the
+///     per-event node → a Rule override). The animator-driven branch
+///     (`window.movement.*` via `applyWindowGeometry`) reads the already
+///     curve-shaped geometry animation's state value. A stateful spring
+///     integrates per frame toward 1 and rings out over its settle time.
+///     There is no longer a linear branch: a null curve is reachable only
+///     before settings load, so in practice every event is curved.
 ///   • Daemon (SurfaceAnimator): the `shaderTime` AnimatedValue runs
 ///     under the resolved `showShaderProfile` / `hideShaderProfile`
 ///     curve, falling back to the opacity profile's curve when the

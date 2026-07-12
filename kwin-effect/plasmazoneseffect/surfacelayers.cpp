@@ -375,7 +375,12 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             for (size_t i = 0; i < pk->bufferPasses.size(); ++i) {
                 std::unique_ptr<KWin::GLTexture> bt = KWin::GLTexture::allocate(GL_RGBA8, bufferSize);
                 if (!bt) {
-                    bufs.clear(); // pack k degrades to no buffers (iChannels sampled as 0)
+                    // Pack k degrades to no buffers. The fold's main pass then
+                    // binds the transparent fallback to every iChannel the pack
+                    // still declares, so they genuinely sample 0 — an unset
+                    // sampler2D would otherwise read unit 0, i.e. the running
+                    // composite.
+                    bufs.clear();
                     break;
                 }
                 bt->setFilter(GL_LINEAR);
@@ -582,6 +587,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && backdropAvailable;
         bool mainAudioBound = false;
         bool mainUserTexturesBound = false;
+        // Highest iChannel unit bound by the main pass, +1. Tracked rather than
+        // recomputed from passCount, because a declared-but-unrendered channel is
+        // also bound (to the transparent fallback) and must be unbound too.
+        int mainChannelsBound = 0;
         {
             KWin::ShaderBinder binder(pk->shader.get());
             // Identity MVP so the NDC fullscreen quad from drawFullscreenQuad maps
@@ -599,6 +608,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             for (int i = 0; i < n; ++i) {
                 glActiveTexture(GL_TEXTURE1 + i);
                 bufs[i]->bind();
+                mainChannelsBound = i + 1;
                 if (pk->iChannelLoc[i] >= 0) {
                     pk->shader->setUniform(pk->iChannelLoc[i], 1 + i);
                 }
@@ -607,6 +617,43 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                                         0.0f, 0.0f);
                     pk->shader->setUniform(pk->iChannelResolutionLoc[i], res);
                 }
+            }
+            // Slots the pack DECLARES but this fold rendered no buffer for — a
+            // buffer allocation failed (collapsing passCount to 0), or the pack
+            // forward-references a channel a later pass would fill.
+            //
+            // Leaving them alone does NOT make them sample transparent black. The
+            // linker kept iChannelLoc, and an UNSET sampler2D reads texture unit
+            // 0 — which at this moment holds the RUNNING COMPOSITE. A frost pack
+            // would sample the unblurred window as its own blur buffer. The
+            // program is also shared across windows and frames, so the sampler can
+            // instead retain a unit index set during a PREVIOUS window's
+            // successful fold, whose units now hold unrelated texels. Bind the
+            // transparent fallback so an unrendered channel really does read as 0,
+            // which is what the allocation-failure path claims to deliver.
+            for (int i = n; i < 4; ++i) {
+                if (pk->iChannelLoc[i] < 0) {
+                    continue; // the pack never samples this channel
+                }
+                // Park the destination unit BEFORE the call, mirroring the
+                // user-texture fallback below: the first-ever call creates the
+                // texture, and GLTexture::upload binds it on the CURRENTLY ACTIVE
+                // unit — which is TEXTURE0 here, holding the running composite.
+                glActiveTexture(GL_TEXTURE1 + i);
+                KWin::GLTexture* const fallback = transparentFallbackTexture();
+                if (!fallback) {
+                    glActiveTexture(GL_TEXTURE0);
+                    continue; // allocation failed — keep the old omit behaviour
+                }
+                fallback->bind();
+                mainChannelsBound = i + 1;
+                pk->shader->setUniform(pk->iChannelLoc[i], 1 + i);
+                if (pk->iChannelResolutionLoc[i] >= 0) {
+                    pk->shader->setUniform(pk->iChannelResolutionLoc[i],
+                                           QVector4D(static_cast<float>(fallback->width()),
+                                                     static_cast<float>(fallback->height()), 0.0f, 0.0f));
+                }
+                glActiveTexture(GL_TEXTURE0);
             }
             // Backdrop (needsBackdrop packs) on unit 5 — units 1..n above
             // hold this pack's buffer outputs.
@@ -670,7 +717,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, pad, windowId);
             drawFullscreenQuad();
         }
-        for (int i = 0; i < qMin(static_cast<int>(passCount), 4); ++i) {
+        for (int i = 0; i < mainChannelsBound; ++i) {
             glActiveTexture(GL_TEXTURE1 + i);
             glBindTexture(GL_TEXTURE_2D, 0);
         }

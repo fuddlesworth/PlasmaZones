@@ -283,9 +283,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             // `window.move`, and synchronously colliding with the
             // `windowStartUserMovedResized` lambda's `window.move` install
             // means whichever fires second wins (it would be `window.move`
-            // here). See `ProfilePaths::CursorDrag` doc comment — the path
-            // is reserved for a future cursor-decoration / drag-shadow
-            // surface.
+            // here). The `cursor` class (`ProfilePaths::Cursor`, with its
+            // `CursorHover` / `CursorClick` leaves) is reserved for a future
+            // cursor-decoration / drag-shadow surface and carries no drag leaf.
 
             // Fire beginDrag async to get a daemon-authoritative policy.
             // While the reply is pending, we

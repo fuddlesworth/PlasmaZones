@@ -2065,7 +2065,7 @@ PhosphorAnimation::Profile PlasmaZonesEffect::resolveEventMotionProfile(const QS
     // override set to keep the default-state fast-path (no chain walk).
     const auto& motionTree = m_shaderManager.motionProfileTree();
     PhosphorAnimation::Profile resolved =
-        motionTree.overriddenPaths().isEmpty() ? base : motionTree.overlayChainOnto(profilePath, base);
+        motionTree.hasAnyOverride() ? motionTree.overlayChainOnto(profilePath, base) : base;
     // Rule override (top of the cascade): a per-window Timing / Curve rule for
     // this (window, event) replaces the resolved curve / duration. Skipped for
     // windowless events (desktop switch) and when no rules are configured.

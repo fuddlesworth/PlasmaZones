@@ -793,18 +793,21 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 if (st->cached->iFromRectLoc >= 0 && !st->fromGeometry.isValid()) {
                     st->fromGeometry = window->frameGeometry();
                 }
-                // Re-grab during a release leg: resume the grab-in ramp
-                // from the current (descending) progress rather than
-                // snapping back to pinned-1 — rewind startTimeMs so
-                // elapsed/duration lands on the ramped-down value, then
-                // clear the release stamp. A fresh grab (releaseStartMs
-                // still -1) skips this and keeps its normal ramp.
+                // Re-grab during a release leg: resume from the current
+                // (descending) progress rather than snapping back to pinned-1.
+                // Freeze the accrued down-ramp and hand it to the decaying
+                // re-grab offset, which paintWindow subtracts from the painted
+                // progress and ramps to 0 over durationMs. startTimeMs is left
+                // ALONE on purpose — rewinding it cannot reconstruct the
+                // resumed value once iTime is curve-eased, and does nothing at
+                // all for a stateful spring. See ShaderTransition::regrabStartMs.
+                // A fresh grab (releaseStartMs still -1) skips this and keeps
+                // its normal ramp.
                 if (st->releaseStartMs >= 0 && st->durationMs > 0) {
                     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-                    const qreal grabP = qBound<qreal>(0.0, qreal(nowMs - st->startTimeMs) / qreal(st->durationMs), 1.0);
                     const qreal downP = qMax<qreal>(0.0, qreal(nowMs - st->releaseStartMs) / qreal(st->durationMs));
-                    const qreal current = qBound<qreal>(0.0, grabP - downP, 1.0);
-                    st->startTimeMs = nowMs - qint64(current * st->durationMs);
+                    st->regrabDownOffset = qMin<qreal>(1.0, downP);
+                    st->regrabStartMs = nowMs;
                     st->releaseStartMs = -1;
                 }
                 // HELD transition: the drag is open-ended, so the shader

@@ -301,6 +301,34 @@ private Q_SLOTS:
         QCOMPARE(*composed.staggerInterval, 40); // base
     }
 
+    // A CURVE-ONLY override must apply its curve and PRESERVE the caller's base
+    // duration. This is the exact regression overlayChainOnto was built to fix:
+    // a curve-only node collapsing a user's global duration to the library
+    // default. It is also the only field that is a bare shared_ptr rather than a
+    // std::optional, so it takes an `if (src.curve)` pointer-truthiness branch in
+    // overlay() that no other field exercises — testOverlayChainOntoLeafOnly...
+    // covers duration-only, and the movement-All case below always sets curve AND
+    // duration together, so neither can tell "curve applied, duration preserved"
+    // apart from "curve applied, duration overwritten".
+    void testOverlayChainOntoCurveOnlyOverrideKeepsBaseDuration()
+    {
+        ProfileTree tree;
+
+        Profile movementAll;
+        movementAll.curve = std::make_shared<Spring>(Spring::snappy());
+        QVERIFY(!movementAll.duration.has_value()); // curve ONLY
+        tree.setOverride(PP::WindowMovement, movementAll);
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+        animatorGlobal.curve = std::make_shared<Easing>();
+
+        const Profile composed = tree.overlayChainOnto(PP::WindowSnapIn, animatorGlobal);
+        QVERIFY(composed.curve != nullptr);
+        QCOMPARE(composed.curve->typeId(), QStringLiteral("spring")); // the override's curve
+        QCOMPARE(*composed.duration, 300.0); // the caller's base, NOT the library default
+    }
+
     // presetName and sequenceMode overlay through the chain like every other
     // field (the shared overlay() helper copies all six).
     void testOverlayChainOntoPresetAndSequenceMode()

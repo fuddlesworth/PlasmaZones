@@ -279,7 +279,13 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     // is a race against Slide's own handler (its check is signal-time only, not
     // re-validated at paint), so it wins when our handler runs first; disabling
     // KWin's Desktop-Switch animation guarantees a clean single transition.
-    if (!m_fullScreenClaimed) {
+    //
+    // Only take the screen when nobody else holds it. Overwriting a live claim
+    // would evict whoever owns it (Overview open across a desktop switch), and
+    // our release would then go on to clear THEIR claim — see
+    // releaseFullScreenClaimIfIdle. Losing the claim is the benign outcome: we
+    // simply do not suppress Slide this once.
+    if (!m_fullScreenClaimed && !KWin::effects->activeFullScreenEffect()) {
         KWin::effects->setActiveFullScreenEffect(m_effect);
         m_fullScreenClaimed = true;
     }
@@ -416,7 +422,17 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int 
         // Render the live scene (the now-current INCOMING desktop) into the FBO
         // via KWin's own composite. This is the downstream chain call (effects
         // below us + the scene), NOT a re-entry into our own paintScreen.
-        KWin::effects->paintScreen(renderTarget, viewport, mask, KWin::Region(screen->geometry()), screen);
+        //
+        // The region parameter is DEVICE space, and this FBO's device space starts
+        // at (0, 0) because the viewport above is built with a QPoint() render
+        // offset. screen->geometry() is LOGICAL and output-positioned, so on a 2x
+        // output it would cover half the FBO, and on any secondary monitor (origin
+        // 1920,0) it would not intersect the FBO at all. Inert today only because
+        // our prePaintScreen sets PAINT_SCREEN_TRANSFORMED, which routes the scene
+        // through the generic infinite-region path — the moment that mask bit
+        // changes, the second monitor's incoming capture goes black.
+        KWin::effects->paintScreen(renderTarget, viewport, mask,
+                                   KWin::Region(KWin::Rect(QPoint(), viewport.deviceSize())), screen);
         KWin::GLFramebuffer::popFramebuffer();
     }
     return tex;
@@ -554,6 +570,20 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     tr.lastPaintTimeMs = nowMs;
     const float t = float(easedT);
 
+    // Compile BEFORE capturing. Each capture allocates an output-sized texture and
+    // renders the entire stacking order, so doing it first would burn two
+    // full-screen captures only to throw them away when the shader turns out not
+    // to compile. compiledShader()'s failure sentinel stops a broken pack being
+    // RE-COMPILED, not re-captured, so that waste would repeat on every desktop
+    // switch for the rest of the session.
+    CompiledDesktopShader* cs = compiledShader(tr.effectId);
+    if (!cs || !cs->shader) {
+        // Compile failed — abandon the transition rather than paint a black
+        // screen; the normal scene paints the settled desktop.
+        endOutput(screen);
+        return false;
+    }
+
     // Deferred capture (once). The OUTGOING desktop is no longer current, so its
     // windows are reconstructed via drawWindow. The INCOMING desktop IS the live
     // scene now, so it is captured via effects->paintScreen — drawWindow on the
@@ -563,10 +593,8 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
         tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
         tr.captured = true;
     }
-    CompiledDesktopShader* cs = compiledShader(tr.effectId);
-    if (!cs || !cs->shader || !tr.fromTex || !tr.toTex) {
-        // Compile or capture failed — abandon the transition rather than paint a
-        // black screen; the normal scene paints the settled desktop.
+    if (!tr.fromTex || !tr.toTex) {
+        // Capture failed — same abandon path.
         endOutput(screen);
         return false;
     }
@@ -657,10 +685,23 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
 void DesktopTransitionManager::endOutput(KWin::LogicalOutput* screen)
 {
     m_active.erase(screen);
-    if (m_active.empty() && m_fullScreenClaimed && KWin::effects) {
-        KWin::effects->setActiveFullScreenEffect(nullptr);
-        m_fullScreenClaimed = false;
+    releaseFullScreenClaimIfIdle();
+}
+
+void DesktopTransitionManager::releaseFullScreenClaimIfIdle()
+{
+    if (!m_active.empty() || !m_fullScreenClaimed || !KWin::effects) {
+        return;
     }
+    // Clear the claim only while KWin still reports it as OURS. Overview or Cube
+    // can take the screen while our transition is in flight; writing nullptr
+    // unconditionally would drop THEIR claim and unsuppress every effect that was
+    // bowing out to them. Dropping our own flag either way keeps us from later
+    // clearing a claim we no longer hold.
+    if (KWin::effects->activeFullScreenEffect() == m_effect) {
+        KWin::effects->setActiveFullScreenEffect(nullptr);
+    }
+    m_fullScreenClaimed = false;
 }
 
 void DesktopTransitionManager::ensureGlContextCurrent()
@@ -670,10 +711,34 @@ void DesktopTransitionManager::ensureGlContextCurrent()
     }
 }
 
-void DesktopTransitionManager::scheduleRepaints() const
+void DesktopTransitionManager::scheduleRepaints()
 {
     if (!KWin::effects) {
         return; // only reached from postPaintScreen (effects live), guard for parity
+    }
+    // Reap expired transitions by WALL CLOCK, not by being painted. paintOutput()
+    // is the only other settle path, and it runs only for an output that is
+    // actually painting — so an output that stops being painted mid-transition
+    // (DPMS-asleep but enabled, or one KWin has stopped rendering) would sit in
+    // m_active forever while a sibling kept painting, and the fullscreen claim
+    // would never release. postPaintScreen calls us on every frame regardless of
+    // which output painted, so expiry is handled here even for an unpainted one.
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    bool erasedAny = false;
+    for (auto it = m_active.begin(); it != m_active.end();) {
+        if (nowMs - it->second.startTimeMs >= it->second.durationMs) {
+            if (!erasedAny) {
+                // The captured GLTextures free on erase and want a live context.
+                ensureGlContextCurrent();
+                erasedAny = true;
+            }
+            it = m_active.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (erasedAny) {
+        releaseFullScreenClaimIfIdle();
     }
     // Keys are always non-null: begin() skips null outputs and outputRemoved()
     // reaps a disconnected one, so a null screen can never be stored.
@@ -721,9 +786,8 @@ void DesktopTransitionManager::desktopRemoved(KWin::VirtualDesktop* desktop)
             ++it;
         }
     }
-    if (erasedAny && m_active.empty() && m_fullScreenClaimed && KWin::effects) {
-        KWin::effects->setActiveFullScreenEffect(nullptr);
-        m_fullScreenClaimed = false;
+    if (erasedAny) {
+        releaseFullScreenClaimIfIdle();
     }
 }
 
@@ -749,10 +813,7 @@ void DesktopTransitionManager::reset()
     ensureGlContextCurrent();
     m_active.clear();
     m_shaderCache.clear();
-    if (m_fullScreenClaimed && KWin::effects) {
-        KWin::effects->setActiveFullScreenEffect(nullptr);
-        m_fullScreenClaimed = false;
-    }
+    releaseFullScreenClaimIfIdle();
 }
 
 } // namespace PlasmaZones

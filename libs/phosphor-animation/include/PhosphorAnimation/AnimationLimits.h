@@ -18,15 +18,15 @@
  * The duration bounds are ENFORCED clamps, not merely slider policy.
  * They cap how long an animation may hold per-frame repaints — and, for
  * the desktop switch, the fullscreen-effect claim — so a hand-edited
- * per-event profile JSON cannot arm a multi-minute animation. Four
+ * per-event profile JSON cannot arm a multi-minute animation. Five call
  * sites clamp against them (keep in sync when adding one):
  *  - the settings load (`daemon_bringup.cpp`),
- *  - the Rule timing slot (`shader_resolve.cpp`),
+ *  - the Rule timing slot, TWICE — once in
+ *    `resolveAnimationShaderAndDuration` and once in
+ *    `resolveAnimationMotionProfile` (both `shader_resolve.cpp`),
  *  - `PlasmaZonesEffect::resolveEventMotionProfile`
  *    (`shader_transitions.cpp`), which bounds the motion cascade's
- *    resolved duration at the source, so every consumer — including the
- *    WindowAnimator, whose own clamp uses a looser envelope — inherits
- *    it,
+ *    resolved DURATION at the source,
  *  - `ShaderInternal::resolveTransitionLifetimeMs`
  *    (`kwin-effect/plasmazoneseffect/shader_internal.h`), which bounds a
  *    shader transition's LIFETIME and folds in the spring settle-time
@@ -35,6 +35,17 @@
  *    it.
  * Changing a bound changes runtime behaviour on those paths, not just
  * the slider range.
+ *
+ * These bounds constrain a DURATION. They do NOT bound a STATEFUL
+ * (spring) curve, which derives its lifetime from its own physics and
+ * ignores the duration entirely — see `AnimatedValue::advance`. A spring
+ * is bounded instead by `Curve::settleTime()` (itself capped at
+ * `Spring::MaxSettleSeconds`), which both the geometry animator and
+ * `resolveTransitionLifetimeMs` use, so the two legs of one curve agree.
+ * `resolveTransitionLifetimeMs` additionally folds that settle time into
+ * the envelope above; the geometry animator does not, because the
+ * envelope is compositor policy and `AnimatedValue` is shared with
+ * consumers that are deliberately outside it (below).
  *
  * NOT universal: the daemon's `SurfaceAnimator` (OSD / popup / overlay
  * surfaces) reads `Profile::effectiveDuration()` raw and is bounded
@@ -95,12 +106,15 @@ constexpr int MaxAnimationStaggerIntervalMs = 200;
 ///  - the daemon's overlay shader push (`overlayservice/shader.cpp`),
 ///  - the daemon-side `SurfaceAnimator`'s shader delta
 ///    (`surfaceanimator.cpp`),
-///  - the compositor's per-window transition paint, for BOTH the
-///    `iTimeDelta` uniform and the spring integrator's dt
+///  - the compositor's `iTimeDelta` uniform
 ///    (`plasmazoneseffect/paint_pipeline.cpp`),
-///  - the compositor's desktop-switch paint, for its spring integrator
-///    (`desktoptransitionmanager.cpp`). That path uploads no
-///    `iTimeDelta` uniform.
+///  - `ShaderInternal::easeProgress`
+///    (`plasmazoneseffect/shader_internal.h`), the SINGLE clamp for the
+///    spring integrator's dt on BOTH compositor paint paths — the
+///    per-window transition and the desktop switch, which share it.
+///    Neither `paint_pipeline.cpp` nor `desktoptransitionmanager.cpp`
+///    clamps the integrator dt itself; they route through this helper.
+///    The desktop switch uploads no `iTimeDelta` uniform.
 /// A synthetic fixed step (`tools/shader-render` renders at 1/fps)
 /// cannot spike and needs no clamp.
 ///

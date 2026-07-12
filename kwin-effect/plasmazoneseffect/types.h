@@ -120,6 +120,20 @@ struct CompiledSurfacePack
     int uScaleLoc = -1; ///< uSurfaceScale — logical-to-device pixel scale
     int uFocusedLoc = -1; ///< uSurfaceFocused — 1.0 focused / 0.0 unfocused
     int uOpacityLoc = -1; ///< uSurfaceOpacity — rule-resolved window opacity (handlesOpacity packs)
+    /// The pack's `"handlesOpacity"` METADATA flag, cached at compile time.
+    ///
+    /// Gates the uSurfaceOpacity push. Without it the push was gated on the
+    /// LINKER (`uOpacityLoc >= 0`) while the present pass's final modulation was
+    /// suppressed on the METADATA (`BorderState::chainHandlesOpacity`) — two
+    /// different authorities for one invariant. A pack that samples
+    /// uSurfaceOpacity (directly, or indirectly via the shared
+    /// `surfaceSlabOpen()` helper) but omits `"handlesOpacity": true` from its
+    /// metadata would have the rule alpha applied TWICE: once baked into the fold,
+    /// once by the present pass. That is the single-apply invariant the
+    /// iWindowOpacity bug already broke once. Metadata is now the sole authority
+    /// for both consumers; a pack that links the uniform without declaring the
+    /// flag simply gets 1.0 pushed and the present pass modulates, as intended.
+    bool handlesOpacity = false;
     int uTimeLoc = -1; ///< iTime — continuous seconds; -1 ⟺ static pack (drives the repaint gate)
     /// uTexture0 — the input-surface sampler (unit 0). Every decorated window
     /// (one-pack chains included) folds through renderSurfaceChainComposite,
@@ -538,6 +552,18 @@ struct ShaderTransition
     int durationMs = 0;
     std::shared_ptr<const PhosphorAnimation::Curve> progressCurve;
     PhosphorAnimation::CurveState progressCurveState;
+    /// One-shot latch for a STATEFUL (spring) curve's completion frame.
+    ///
+    /// A spring's lifetime is `settleTime()`, which is by definition the 2%
+    /// SETTLING BAND — the integrator is still ~0.98 when the clock expires,
+    /// and `Spring::step`'s own convergence lock wants 1e-4, two orders tighter.
+    /// Without a final frame the leg is torn down 2% short and the plain window
+    /// pops in. `AnimatedValue::advance` snaps `value = 1.0, velocity = 0` on
+    /// completion; this latch is how the paint pass mirrors that, emitting one
+    /// last frame at exactly 1.0. The shortfall EXCEEDS 2% whenever the
+    /// compositor stutters, because the dt cap makes the spring advance less
+    /// than wall-clock across a hitch — precisely when a transition is running.
+    bool springSettled = false;
     /// Monotonic per-window generation. Each `beginShaderTransition` bumps
     /// the counter for that window; the timer-driven `endShaderTransition`
     /// scheduled by `tryBeginShaderForEvent` captures the generation at
@@ -703,9 +729,30 @@ struct ShaderTransition
     /// shader plays iTime 1→0 after the button lets go and a
     /// dissolve-while-held pack can rematerialise. -1 = not released (or
     /// a mesh pack, whose ring-out rides the settle gate instead). The
-    /// drag-start handler clears it on a re-grab and rewinds startTimeMs
-    /// so the grab-in ramp resumes from the current value.
+    /// drag-start handler clears it on a re-grab and hands the accrued
+    /// ramp-down to `regrabDownOffset` (see below).
     qint64 releaseStartMs = -1;
+    /// Re-grab during a release leg: the down-ramp accrued at the moment of
+    /// re-grab, decaying back to 0 over `durationMs` from `regrabStartMs`.
+    ///
+    /// This exists because the resumed progress cannot be reconstructed by
+    /// rewinding `startTimeMs`. That worked only while iTime was linear: the
+    /// eased progress is `curve(linear)`, so rebasing the LINEAR clock to the
+    /// ramped-down value paints `curve(v)` rather than `v` and jumps (0.375 at
+    /// v = 0.5 under the default OutCubic). For a STATEFUL spring it is not
+    /// merely wrong but inert — `easeProgress` ignores `linear` entirely and
+    /// reads the integrator, which is still settled at ~1 from the completed
+    /// grab-in, so the rewind moves nothing and progress snaps straight back up.
+    ///
+    /// Subtracting a decaying offset from the painted progress instead is
+    /// continuous by construction for BOTH curve kinds and needs no curve
+    /// inverse (curves have no general one, and an overshooting curve is not
+    /// injective): at the re-grab frame the offset equals the accrued down-ramp
+    /// exactly, so the first resumed frame reproduces the last released frame.
+    /// It is also symmetric with the release leg, which is likewise a linear
+    /// offset in progress space. -1 = no re-grab in flight.
+    qint64 regrabStartMs = -1;
+    qreal regrabDownOffset = 0.0;
     /// Frame origin at grab — iMoveOffset = current origin - this.
     QPointF grabOrigin;
     /// Underdamped spring filter over the instantaneous frame velocity;

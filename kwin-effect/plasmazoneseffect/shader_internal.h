@@ -215,8 +215,14 @@ inline QVector4D computeTextureSubRect(const QRectF& inner, const QRectF& outer)
 /// the curve's physics and is bounded by nothing upstream — and it keeps the
 /// helper correct for any future caller that hands it a raw tree duration.
 ///
-/// Consequence at parity across both callers: a very low-stiffness spring whose
-/// settleTime() exceeds the max is cut mid-ring rather than allowed to overrun.
+/// Consequence at parity across both callers: a spring whose settleTime() exceeds
+/// the max is CUT, and for a very soft one that means cut before it visibly
+/// starts, not merely mid-ring. `omega=0.1, zeta=0.1` settles in 391 s, floored to
+/// Spring::MaxSettleSeconds (30 s) and then clamped to 2 s here — at which point
+/// the integrated value is still ~0.02, so the transition tears down with iTime
+/// near ZERO and the window snaps. The clamp is doing its job (it is the only
+/// thing between such a profile and a pinned repaint), but a pack author tuning a
+/// soft spring should know the envelope, not the physics, is what they hit.
 inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::Curve* curve)
 {
     const int lifetime = (curve && curve->isStateful()) ? qRound(curve->settleTime() * 1000.0) : nominalMs;
@@ -224,13 +230,27 @@ inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::C
                   PhosphorAnimation::Limits::MaxAnimationDurationMs);
 }
 
-/// Ease @p linear through @p curve, returning progress clamped to the [0, 1]
-/// iTime contract. Shared by the per-window transition paint and the desktop
-/// switch, which otherwise carried this logic (and its dt cap) twice.
+/// Ease @p linear through @p curve. Shared by the per-window transition paint
+/// and the desktop switch, which otherwise carried this logic (and its dt cap)
+/// twice.
 ///
 /// A null curve is linear. A stateless curve evaluates @p linear directly. A
 /// STATEFUL (spring) curve integrates @p state toward 1 by the inter-frame dt
 /// and returns the integrated value, ignoring @p linear.
+///
+/// OVERSHOOT: a curve that reports `overshoots()` (an underdamped spring, a
+/// back / elastic ease) returns its value UNCLAMPED, so iTime can exceed 1 — and
+/// dip below 0 — for those curves. That is deliberate: the overshoot IS the
+/// curve, and clamping it flattens a bouncy pick into a plateau at 1.0 while the
+/// geometry animator (`AnimatedValue::advance`, which likewise does not clamp)
+/// bounces past the target. Flattening here would make the shader and the
+/// geometry disagree about the same curve. Non-overshooting curves stay clamped,
+/// where an out-of-range value is a bug rather than the intent.
+///
+/// Packs must therefore treat iTime as UNBOUNDED for these curves —
+/// `AnimationShaderContract::kITime` tells authors to clamp defensively, and a
+/// pack that samples a texture or lerps a rect on iTime without clamping will
+/// extrapolate past its endpoint on an overshooting pick.
 ///
 /// @p stepCurve owns the SINGLE per-frame integrator step: the paint pass passes
 /// true; a predictor that must not advance the integrator (the backdrop capture)
@@ -250,8 +270,10 @@ inline qreal easeProgress(const PhosphorAnimation::Curve* curve, PhosphorAnimati
     if (!curve) {
         return linear;
     }
+    const bool overshoots = curve->overshoots();
     if (!curve->isStateful()) {
-        return qBound(0.0, curve->evaluate(linear), 1.0);
+        const qreal eased = curve->evaluate(linear);
+        return overshoots ? eased : qBound(0.0, eased, 1.0);
     }
     if (stepCurve) {
         const qreal dt = lastPaintTimeMs < 0
@@ -260,7 +282,7 @@ inline qreal easeProgress(const PhosphorAnimation::Curve* curve, PhosphorAnimati
                      static_cast<qreal>(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds));
         curve->step(dt, state, 1.0);
     }
-    return qBound(0.0, state.value, 1.0);
+    return overshoots ? state.value : qBound(0.0, state.value, 1.0);
 }
 
 /// Pre-baked uniform / param key strings for the hot paths.

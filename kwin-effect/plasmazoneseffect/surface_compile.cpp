@@ -308,6 +308,17 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     packState.uScaleLoc = shader->uniformLocation(SC::kUSurfaceScale);
     packState.uFocusedLoc = shader->uniformLocation(SC::kUSurfaceFocused);
     packState.uOpacityLoc = shader->uniformLocation(SC::kUSurfaceOpacity);
+    // Pack metadata is the SOLE authority on who owns the rule alpha — the linker
+    // location alone is not, or a pack that samples uSurfaceOpacity without
+    // declaring "handlesOpacity" would get it applied twice (once folded, once by
+    // the present pass, which suppresses itself on the metadata flag). See
+    // CompiledSurfacePack::handlesOpacity.
+    packState.handlesOpacity = eff.handlesOpacity;
+    if (packState.uOpacityLoc >= 0 && !eff.handlesOpacity) {
+        qCWarning(lcEffect) << "Surface shader pack" << packId
+                            << "samples uSurfaceOpacity but does not declare \"handlesOpacity\": true — the rule"
+                               " alpha will be applied by the present pass, not by the pack";
+    }
     // iTime — present (>= 0) only when the pack's main references it; that is the
     // signal the window must be driven to repaint continuously (windowSurfaceAnimates).
     packState.uTimeLoc = shader->uniformLocation(SC::kITime);
