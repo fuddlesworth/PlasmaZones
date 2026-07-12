@@ -384,6 +384,26 @@ struct WindowDecoration
     /// declaring pack applies uSurfaceOpacity itself.
     bool chainHandlesOpacity = false;
 
+    /// Whether the composited chain actually paints non-opaque pixels over the
+    /// window's frame, and therefore whether prePaintWindow must clear the
+    /// window's opaque region (`WindowPrePaintData::setTranslucent`).
+    ///
+    /// This is an OCCLUSION hint, not a rendering one: KWin decides what to
+    /// composite BEHIND a window before any of our shaders run, so the fragment
+    /// stage cannot supply it — by the time a pack outputs alpha < 1 the scene
+    /// has already skipped (or not skipped) whatever sits underneath. Declaring
+    /// translucency when the chain is in fact opaque is not harmless: it defeats
+    /// occlusion culling for every window BELOW this one, which then composite
+    /// (and, if they are decorated, re-fold) for nothing.
+    ///
+    /// Proven-opaque is the narrow case and everything else is conservatively
+    /// translucent: a chain is opaque only when it is the rule-backed border
+    /// alone, with square corners, no backdrop sampling and no opacity handling.
+    /// ANY user pack forces translucent — pack metadata declares what a pack
+    /// needs (needsBackdrop / handlesOpacity / padding), never that its output
+    /// covers every texel, so we cannot prove opacity for one and must not guess.
+    bool chainTranslucent = true;
+
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but
     /// not the margin band OUTSIDE them, so the glow would trail during a

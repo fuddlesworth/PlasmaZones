@@ -431,21 +431,32 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         }
     }
 
-    // Keep a static bordered window in KWin's paint set so the drawWindow
-    // override keeps getting called for it on idle frames. KWin's simple-screen
-    // path culls a fully-opaque, undamaged window out of the paint cycle
-    // entirely (its opaque region is occluded / unchanged), which would drop
-    // drawWindow for it and the passive border blit would only run while the
-    // window happens to be animating or damaged. setTranslucent() clears the
-    // window's opaque region so KWin always recomposites it (and thus calls
-    // drawWindow), letting the border shader re-blit the redirected FBO every
-    // frame with no FBO re-render. Gated on the cheap isEmpty() hot-path check
-    // and shaderApplied so only windows we actually border pay the cost; the
-    // transform-driven branch above already set translucent for transitioning
-    // windows, so this only adds the idle bordered case.
+    // Clear the opaque region for a decorated window whose chain actually paints
+    // non-opaque pixels over the frame — rounded corners, a tint below 1.0, a
+    // glass pack sampling the scene behind. KWin decides what to composite BEHIND
+    // a window before any of our shaders run, so this cannot be expressed in the
+    // fragment stage: by the time a pack outputs alpha < 1 the scene has already
+    // skipped whatever sits underneath, and the pack blends against stale pixels.
+    //
+    // It is asserted from the RESOLVED CHAIN (WindowDecoration::chainTranslucent),
+    // not from the mere existence of a decoration. Claiming translucency for an
+    // opaque chain is not free: it costs every window BELOW this one its damage
+    // culling, so they composite — and re-fold, if they are decorated too — for
+    // nothing. A square-cornered rule border is genuinely opaque and keeps its
+    // opaque region; every user pack chain is conservatively translucent.
+    //
+    // This flag used to be set for EVERY decorated window, to keep it in KWin's
+    // paint set so drawWindow kept firing on idle frames. An opaque chain does not
+    // need that: an undamaged window's pixels — border and all, baked into the
+    // composite that was last presented — are still on screen and still correct,
+    // so there is nothing to redraw. The cases where the composite changes with no
+    // window damage (a focus cross-fade, an iTime pack, a backdrop refresh) all
+    // schedule their own repaints in postPaintScreen already. Forcing a repaint
+    // here instead would be worse than the flag it replaced: it would manufacture
+    // damage every frame and stop an idle desktop from ever idling.
     if (w && !transformDriven && !m_windowDecorations.isEmpty()) {
         const auto bit = m_windowDecorations.constFind(getWindowId(w));
-        if (bit != m_windowDecorations.constEnd() && bit->shaderApplied) {
+        if (bit != m_windowDecorations.constEnd() && bit->shaderApplied && bit->chainTranslucent) {
             data.setTranslucent();
         }
     }

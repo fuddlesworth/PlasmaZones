@@ -560,6 +560,20 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         wb.ruleBorderInactiveColor = appearance.inactiveColor.value_or(wb.ruleBorderActiveColor);
     }
 
+    // Does this chain actually paint non-opaque pixels over the window's frame?
+    // See WindowDecoration::chainTranslucent — this drives prePaintWindow's
+    // setTranslucent(), which is an occlusion hint the shader stage cannot give
+    // us, and which costs every window BELOW this one its damage culling when we
+    // assert it falsely.
+    //
+    // Opaque is the narrow, provable case: the rule-backed border on its own,
+    // square-cornered (a radius rounds the frame's corners away to transparent),
+    // sampling no backdrop and applying no opacity of its own. A user pack can
+    // round corners, glow, tint or blur, and nothing in its metadata promises it
+    // covers every texel — so any user pack in the chain stays translucent.
+    const bool ruleBorderOnly = wb.ruleBorder && chain.size() == 1;
+    wb.chainTranslucent = !(ruleBorderOnly && wb.ruleBorderRadius == 0 && !wb.needsBackdrop && !wb.chainHandlesOpacity);
+
     // Corner rounding and the outline are entirely the SHADER's job (the
     // rounded-rect SDF in the border fragment shader), identically for decorated
     // and borderless windows. It operates on the COMPOSITED redirected texture, so
