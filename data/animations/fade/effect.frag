@@ -48,7 +48,13 @@ vec4 fadeBody(vec2 uv, float t, bool windowFadingIn) {
 
         vec2 center = vec2(0.5, 0.5);
         float scale = mix(1.0, 1.0 - p_scaleAmount, p);
-        vec2 scaled_uv = (uv - center) / scale + center;
+        // Floor the divisor. `scale` rides the RAW leg progress, which is no longer
+        // bounded to [0,1] (an overshooting curve delivers its overshoot), so this is
+        // safe today only because metadata.json caps p_scaleAmount at 0.3 — scale
+        // would not reach 0 until a 3.3x overshoot. Do not rely on that coincidence:
+        // raise the cap or widen the envelope and this becomes a divide-by-zero, a
+        // NaN, and a black window.
+        vec2 scaled_uv = (uv - center) / max(scale, 0.05) + center;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
         vec4 color = surfaceColor(scaled_uv) * boundaryMask(scaled_uv);
@@ -64,7 +70,13 @@ vec4 fadeBody(vec2 uv, float t, bool windowFadingIn) {
 
         vec2 center = vec2(0.5, 0.5);
         float scale = mix(1.0 - p_scaleAmount, 1.0, p);
-        vec2 scaled_uv = (uv - center) / scale + center;
+        // Floor the divisor. `scale` rides the RAW leg progress, which is no longer
+        // bounded to [0,1] (an overshooting curve delivers its overshoot), so this is
+        // safe today only because metadata.json caps p_scaleAmount at 0.3 — scale
+        // would not reach 0 until a 3.3x overshoot. Do not rely on that coincidence:
+        // raise the cap or widen the envelope and this becomes a divide-by-zero, a
+        // NaN, and a black window.
+        vec2 scaled_uv = (uv - center) / max(scale, 0.05) + center;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
         vec4 color = surfaceColor(scaled_uv) * boundaryMask(scaled_uv);

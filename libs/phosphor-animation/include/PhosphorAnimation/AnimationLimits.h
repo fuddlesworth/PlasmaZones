@@ -48,12 +48,16 @@
  * disagree about the same curve: the shader leg cuts at
  * `MaxAnimationDurationMs` via `ShaderInternal::resolveTransitionLifetimeMs`,
  * while the geometry leg would run out to the raw settle time — and a
- * SLIDER-reachable soft spring (`zeta*omega < 1.956`, e.g. "spring:10,0.15")
- * settles in 2.6 s, leaving the window animating for seconds after its
+ * SLIDER-reachable soft spring (`zeta*omega < 2.649`, e.g. "spring:10,0.15")
+ * settles in 3.5 s, leaving the window animating for seconds after its
  * shader was torn down. So `WindowAnimator` resolves the lifetime through
  * that same helper and passes it as `MotionSpec::maxLifetimeMs`, and
- * `AnimatedValue::advance` folds it into the completion test. The two legs
- * therefore agree BY CONSTRUCTION, not by coincidence.
+ * `AnimatedValue::advance` folds it into the completion test. The geometry leg
+ * can therefore never OUTLIVE the shader leg — which is the failure that
+ * mattered. They are not identical at the fast end: a spring settling under
+ * `MinAnimationDurationMs` completes the geometry at its true settle time while
+ * the shader is floored to 50 ms and simply holds at iTime ≈ 1, which is
+ * harmless.
  *
  * NOT universal: the daemon's `SurfaceAnimator` (OSD / popup / overlay
  * surfaces) reads `Profile::effectiveDuration()` raw and is bounded

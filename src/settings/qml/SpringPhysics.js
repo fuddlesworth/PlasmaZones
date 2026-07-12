@@ -93,38 +93,57 @@ function isSettled(t, stiffness, dampingRatio, epsilon) {
  * Each repaint of CurveThumbnail / SpringPreview triggered this, and the
  * C++ side already exposes the closed-form solution: switch to it.
  *
- * Underdamped (ζ < 1):     T = -ln(eps) / (ζ · ω)
- * Critically damped (ζ=1): T ≈ 5.834 / ω    (-W₋₁(-eps · e⁻¹) · 1/ω)
- * Overdamped (ζ > 1):      T = -ln(eps) / (ω · (ζ - √(ζ²-1)))
+ * Each branch bounds the RESIDUAL — amplitude and decay — not the bare
+ * exponential, mirroring C++ Spring::settleTime():
  *
- * `epsilon` defaults to 0.02 — same threshold the C++ side uses.
+ * Underdamped (ζ < 1):     T = [-ln(eps) - ½·ln(1-ζ²)] / (ζ · ω)
+ * Critically damped (ζ=1): T ≈ 7.4301 / ω    (root of (1+ωt)·exp(-ωt) = eps)
+ * Overdamped (ζ > 1):      T = [-ln(eps) + ln(c₁)] / (ω · (ζ - √(ζ²-1))),
+ *                          c₁ = (ζ + √(ζ²-1)) / (2√(ζ²-1))
+ *
+ * `epsilon` is the settling band and defaults to 0.005 — the same band
+ * C++ Spring uses (SettleBand in spring.cpp). It IS honoured: this used to
+ * hardcode 0.02 and discard the argument, so after the C++ band was tightened
+ * the tuner told the user "~408ms" for a spring that actually ran 552ms, and
+ * clipped the preview canvas short of the real ring-out.
  */
 function estimateSettleTime(stiffness, dampingRatio, epsilon) {
-    // The critical-damped factor 5.834 is the analytical solution to
-    // (1+ωt)·exp(-ωt) = 0.02 — it is BAKED to eps=0.02. The other
-    // branches scale with -ln(eps), so a non-default eps would mix
-    // inconsistent regimes at the critical-band blend. Hardcode 0.02
-    // to match C++ Spring::settleTime() (libs/phosphor-animation/src/
-    // spring.cpp:38) and document that the parameter is reserved.
-    void epsilon; // currently unused; kept in the signature for future use.
     var omega = Math.sqrt(Math.max(1e-6, stiffness));
     var zeta = Math.max(0, Math.min(10, dampingRatio));
-    var eps = 0.02;
+    var eps = (epsilon !== undefined && epsilon > 0) ? epsilon : 0.005;
     var maxT = 10;
 
-    // Critical-damping epsilon — match C++ Spring::CriticalDampingEpsilon
-    // (libs/phosphor-animation/src/spring.cpp:38). A wider band here would
-    // produce a settle time on a different ζ partition than evaluate()
-    // does, causing visible canvas-width stutter in SpringPreview.
+    // Critical-damping epsilon — match C++ Spring::CriticalDampingEpsilon. A wider
+    // band here would produce a settle time on a different ζ partition than
+    // evaluate() does, causing visible canvas-width stutter in SpringPreview.
     var critBand = 1e-3;
+
+    // The critical branch has no closed form, so its coefficient is the numerical
+    // root of (1+x)·exp(-x) = eps. Solve it here rather than baking a constant, so
+    // a caller passing a different band gets a coherent answer across all three
+    // regimes instead of a critical branch silently stuck on the default.
+    function criticalFactor(band) {
+        var lo = 1, hi = 60;
+        for (var i = 0; i < 200; ++i) {
+            var mid = 0.5 * (lo + hi);
+            if ((1 + mid) * Math.exp(-mid) > band)
+                lo = mid;
+            else
+                hi = mid;
+        }
+        return 0.5 * (lo + hi);
+    }
 
     var t;
     if (Math.abs(zeta - 1) < critBand) {
-        t = 5.834 / omega;
+        t = criticalFactor(eps) / omega;
     } else if (zeta < 1) {
-        t = -Math.log(eps) / (zeta * omega);
+        var oneMinusZetaSq = Math.max(1e-6, 1 - zeta * zeta);
+        t = (-Math.log(eps) - 0.5 * Math.log(oneMinusZetaSq)) / (zeta * omega);
     } else {
-        t = -Math.log(eps) / (omega * (zeta - Math.sqrt(zeta * zeta - 1)));
+        var disc = Math.sqrt(zeta * zeta - 1);
+        var c1 = (zeta + disc) / Math.max(1e-6, 2 * disc);
+        t = (-Math.log(eps) + Math.log(Math.max(1, c1))) / (omega * (zeta - disc));
     }
     if (!isFinite(t) || t < 0)
         t = maxT;

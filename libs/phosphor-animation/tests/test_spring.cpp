@@ -5,6 +5,8 @@
 
 #include <QTest>
 
+#include <QtMath>
+
 #include <cmath>
 
 using PhosphorAnimation::CurveState;
@@ -243,6 +245,45 @@ private Q_SLOTS:
         Spring stiff(30.0, 1.0);
         Spring loose(4.0, 1.0);
         QVERIFY(stiff.settleTime() < loose.settleTime());
+    }
+
+    // settleTime() IS the animation's lifetime, so the residual at t == 1 is the
+    // terminal jump the user sees when the animation ends and the window snaps to
+    // its final rect. That residual must be bounded by the settling band across
+    // EVERY damping regime — which requires settleTime() to bound the amplitude as
+    // well as the decay. Bounding the bare exponential (the classic shortcut) left
+    // 2.8% at zeta = 0.99, worse than the 2% band it was tightened to escape,
+    // because the step response's amplitude coefficient diverges as zeta → 1 from
+    // either side.
+    //
+    // This sweep is the only thing that fails if the band is loosened OR if the
+    // amplitude term is dropped again. Without it the whole change is untested.
+    void testSettleTimeBoundsTheResidualAcrossAllRegimes()
+    {
+        constexpr qreal kBand = 0.005;
+        const QList<qreal> zetas = {0.3, 0.5, 0.8, 0.95, 0.99, 1.0, 1.0011, 1.05, 1.5, 3.0};
+        for (const qreal z : zetas) {
+            const Spring s(12.0, z);
+            const qreal residual = qAbs(1.0 - s.evaluate(1.0));
+            QVERIFY2(residual <= kBand + 1.0e-6,
+                     qPrintable(QStringLiteral("zeta=%1 leaves a %2%% residual at t=1, outside the %3%% band")
+                                    .arg(z)
+                                    .arg(residual * 100.0)
+                                    .arg(kBand * 100.0)));
+        }
+    }
+
+    // Pin the critical coefficient itself: it is the numerical root of
+    // (1 + x)·exp(-x) = SettleBand and has no closed form, so a band change that
+    // forgets to re-solve it would otherwise pass silently.
+    void testCriticalSettleFactorMatchesTheBand()
+    {
+        const Spring critical(10.0, 1.0);
+        // omega * settleTime == CriticalSettleFactor == 7.4301 for a 0.5% band.
+        const qreal omegaT = 10.0 * critical.settleTime();
+        QVERIFY(qAbs(omegaT - 7.4301) < 1.0e-3);
+        // ...and that really is the root: (1 + x)·exp(-x) lands on the band.
+        QVERIFY(qAbs((1.0 + omegaT) * qExp(-omegaT) - 0.005) < 1.0e-5);
     }
 
     // ─── Integrator divergence backstop ───

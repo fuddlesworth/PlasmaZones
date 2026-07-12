@@ -25,13 +25,19 @@ Q_LOGGING_CATEGORY(lcSpring, "phosphoranimation.spring")
 // that instant is the size of the terminal jump the user sees when the animation
 // completes and the window snaps to its final rect.
 //
-// 0.5%, not the 2% control-theory convention. 2% is the right band for settling
-// a control loop and the wrong one for a visible animation: on a 1500 px move it
-// leaves a 35 px jump for a critically damped spring (the bundled Spring::smooth)
-// and 23 px for Spring::bouncy — plainly visible. 0.5% puts the residual under
-// 8 px, below the threshold where the eye reads it as a jump. The cost is a ~30%
-// longer spring (1.35x underdamped, 1.27x critical), which is the honest price of
-// letting the spring actually arrive instead of cutting it short.
+// 0.5%, not the 2% control-theory convention. 2% is the right band for settling a
+// control loop and the wrong one for a visible animation: on a 1500 px move it
+// leaves 30 px on the bundled Spring::smooth (ζ=1) and 35 px on Spring::bouncy
+// (ζ=0.5) — plainly visible. 0.5% holds every regime under 8 px, below where the
+// eye reads it as a jump.
+//
+// The band only means anything because settleTime() bounds the RESIDUAL rather
+// than the bare exponential — see the derivation there. Bounding the decay alone
+// left 42 px at ζ=0.99, worse than the 2% band it replaced.
+//
+// The cost is a ~30% longer spring (1.35x underdamped, 1.27x critical, more as
+// ζ → 1 where the amplitude term bites), which is the honest price of letting the
+// spring arrive instead of cutting it short.
 static constexpr qreal SettleBand = 0.005;
 
 // Settling coefficient for a CRITICALLY damped second-order system. The
@@ -165,30 +171,50 @@ qreal Spring::settleTime() const
 {
     // Settling to within SettleBand of the target, for a second-order system.
     //
-    // - Underdamped (ζ < 1): envelope exp(-ζω·t) = band dominates
-    //   → t = -ln(band)/(ζω) ≈ 5.298/(ζω). Ignores the 1/sqrt(1-ζ²)
-    //   amplitude factor (which diverges as ζ→1); acceptable because
-    //   the critical-band blend below covers the ζ≈1 regime.
-    // - Critically damped: (1 + ωt)·exp(-ωt) = band → ωt ≈ 7.4301
-    //   (see CriticalSettleFactor).
-    // - Overdamped (ζ > 1): slow pole p₁ = ω(ζ - √(ζ²-1)) dominates:
-    //   t ≈ -ln(band)/p₁.
+    // Each branch bounds the RESIDUAL — amplitude AND decay — not the decay
+    // alone. Bounding only the exponential is the classic shortcut and it is
+    // wrong for exactly the regime that matters here: the step response's
+    // amplitude coefficient diverges as ζ → 1 from either side, so dropping it
+    // leaves a residual far larger than the band precisely where the terminal
+    // jump is most visible. Measured at ζ = 0.99 the decay-only form left 2.8%
+    // (42 px on a 1500 px move) — worse than the 2% band this function was
+    // tightened to escape. Folding the amplitude into the log holds every regime
+    // at or under the band (≤ 0.5%, ≤ 7.5 px).
     //
-    // Continuity: the formulas step-change at ζ = 1 ± ε by up to ~30%.
-    // To avoid visible jumps as the user live-edits ζ near 1.0 (which
-    // would jitter repaint budgets), the ε-wide band around critical
-    // linearly blends between the two regime formulas at the band edges.
+    // - Underdamped (ζ < 1): residual ≈ exp(-ζω·t) / √(1-ζ²) = band
+    //   → t = [-ln(band) - ½·ln(1-ζ²)] / (ζω).
+    // - Critically damped: (1 + ωt)·exp(-ωt) = band → ωt ≈ 7.4301
+    //   (see CriticalSettleFactor; no closed form, solved numerically).
+    // - Overdamped (ζ > 1): the slow mode dominates, with coefficient
+    //   c₁ = (ζ+√(ζ²-1)) / (2√(ζ²-1)) → t = [-ln(band) + ln(c₁)] / p₁,
+    //   p₁ = ω(ζ - √(ζ²-1)).
+    //
+    // Continuity: the formulas still step-change at ζ = 1 ± ε, though the
+    // amplitude terms shrink the gap considerably. To avoid visible jumps as the
+    // user live-edits ζ near 1.0 (which would jitter repaint budgets), the ε-wide
+    // band around critical linearly blends between the two regime formulas at the
+    // band edges.
     constexpr qreal target = SettleBand;
     const qreal lnTarget = -qLn(target); // ≈ 5.298
     const qreal safeOmega = qMax(1.0e-3, omega);
 
     auto underdampedSettle = [&](qreal zetaVal) {
-        return lnTarget / qMax(1.0e-3, zetaVal * safeOmega);
+        // ½·ln(1-ζ²) is negative, so subtracting it LENGTHENS the settle — the
+        // amplitude is > 1 for an underdamped spring and the decay has further to
+        // travel. Guard the log against ζ → 1 (the caller only reaches this branch
+        // below 1 - CriticalDampingEpsilon, so 1-ζ² ≥ 2e-3, but be explicit).
+        const qreal oneMinusZetaSq = qMax(1.0e-6, 1.0 - zetaVal * zetaVal);
+        const qreal lnAmplitude = -0.5 * qLn(oneMinusZetaSq);
+        return (lnTarget + lnAmplitude) / qMax(1.0e-3, zetaVal * safeOmega);
     };
     auto overdampedSettle = [&](qreal zetaVal) {
         const qreal disc = qSqrt(qMax(0.0, zetaVal * zetaVal - 1.0));
         const qreal p1 = safeOmega * (zetaVal - disc);
-        return lnTarget / qMax(1.0e-3, p1);
+        // c₁ → ∞ as disc → 0 (ζ → 1 from above), which is exactly why the
+        // decay-only form under-reported the settle there.
+        const qreal c1 = (zetaVal + disc) / qMax(1.0e-6, 2.0 * disc);
+        const qreal lnAmplitude = qLn(qMax(1.0, c1));
+        return (lnTarget + lnAmplitude) / qMax(1.0e-3, p1);
     };
     const qreal criticalSettle = CriticalSettleFactor / safeOmega;
 

@@ -305,7 +305,7 @@ public:
             // compositor's duration envelope — the daemon's SurfaceAnimator. It is
             // NOT sufficient for the compositor: its shader leg cuts the same curve
             // at MaxAnimationDurationMs (2 s), so a slider-reachable soft spring
-            // (zeta*omega < 1.956) would leave the geometry animation requesting
+            // (zeta*omega < 2.649) would leave the geometry animation requesting
             // frames for seconds after its shader was torn down. A consumer that
             // has already resolved a lifetime for this curve passes it as
             // `maxLifetimeMs`, and the two legs then provably agree.

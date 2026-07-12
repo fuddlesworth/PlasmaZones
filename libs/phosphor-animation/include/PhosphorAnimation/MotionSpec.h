@@ -36,13 +36,14 @@ struct MotionSpec
     /// duration envelope cannot bound it and `advance()` otherwise ends it at the
     /// curve's raw `settleTime()`, itself capped only by Spring's internal 30 s.
     /// A consumer that has ALREADY resolved a lifetime for the same curve on
-    /// another leg passes it here so the two legs provably agree rather than
-    /// coincidentally agreeing.
+    /// another leg passes it here, so this animation can never OUTLIVE that leg.
+    /// (It may still finish EARLIER — a spring that settles below the consumer's
+    /// floor completes on its own physics — which is harmless.)
     ///
     /// The compositor needs this: its shader leg cuts a transition at
     /// `MaxAnimationDurationMs` (2 s) via `ShaderInternal::resolveTransitionLifetimeMs`,
-    /// while a slider-reachable soft spring (zeta*omega < 1.956, e.g. "spring:10,0.15")
-    /// settles in 2.6 s and would leave the geometry animation requesting frames
+    /// while a slider-reachable soft spring (zeta*omega < 2.649, e.g. "spring:10,0.15")
+    /// settles in 3.5 s and would leave the geometry animation requesting frames
     /// for seconds after its shader was gone.
     ///
     /// The library imposes NO default: `std::nullopt` keeps the pure-physics

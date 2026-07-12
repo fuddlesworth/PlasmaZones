@@ -168,7 +168,7 @@ WindowAnimator::startAnimationWithResult(KWin::EffectWindow* handle, const QRect
     // one curve is cut at MaxAnimationDurationMs (2 s) while this geometry
     // animation keeps requesting frames out to the curve's raw settleTime —
     // seconds later, with no shader left on the window. Slider-reachable, not just
-    // hand-editable: "spring:10,0.15" settles in 2.6 s. Routing both legs through
+    // hand-editable: "spring:10,0.15" settles in 3.5 s. Routing both legs through
     // resolveTransitionLifetimeMs makes them provably agree rather than
     // coincidentally agree. A stateless curve is unaffected (the helper hands the
     // nominal straight back, and the parametric branch bounds itself by duration).

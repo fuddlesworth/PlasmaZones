@@ -217,7 +217,7 @@ inline QVector4D computeTextureSubRect(const QRectF& inner, const QRectF& outer)
 ///
 /// Consequence at parity across both callers: a spring whose settleTime() exceeds
 /// the max is CUT, and for a very soft one that means cut before it visibly
-/// starts, not merely mid-ring. `omega=0.1, zeta=0.1` settles in 391 s, floored to
+/// starts, not merely mid-ring. `omega=0.1, zeta=0.1` settles in 530 s, floored to
 /// Spring::MaxSettleSeconds (30 s) and then clamped to 2 s here — at which point
 /// the integrated value is still ~0.02, so the transition tears down with iTime
 /// near ZERO and the window snaps. The clamp is doing its job (it is the only
