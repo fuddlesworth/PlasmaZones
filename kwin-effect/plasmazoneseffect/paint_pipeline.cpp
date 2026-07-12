@@ -959,11 +959,17 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // anchorRectInTexture's split) is located WITHIN that padded
             // canvas. Unpadded windows reduce to the uTexture0 mapping.
             qreal layerPad = 0.0;
-            bool chainBakesOpacity = false;
             if (const auto lbIt = m_windowDecorations.constFind(getWindowId(w));
                 lbIt != m_windowDecorations.constEnd()) {
                 layerPad = lbIt->outerPadding;
-                chainBakesOpacity = lbIt->chainHandlesOpacity;
+            }
+            // What the fold ACTUALLY applied, not what the metadata promised — a
+            // handlesOpacity pack that failed to compile never ran, so nothing baked
+            // the alpha and suppressing the modulation here would render the window
+            // fully opaque. See SurfaceMultipassState::handledOpacity.
+            bool chainBakesOpacity = false;
+            if (const auto foIt = m_surfaceMultipass.find(getWindowId(w)); foIt != m_surfaceMultipass.end()) {
+                chainBakesOpacity = foIt->second.handledOpacity;
             }
             // Surface-layer stack (border / rounded corners, ...): render the
             // window's active layers into an FBO so the animation composites

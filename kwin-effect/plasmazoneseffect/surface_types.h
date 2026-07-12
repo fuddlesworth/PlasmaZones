@@ -233,6 +233,21 @@ struct SurfaceMultipassState
     QStringList chainKey; ///< the chain `chainBufferTex` was allocated for
     QSize compositeSize; ///< full textureSize the composite targets were allocated for
     int finalSlot = 0; ///< which compositeTex slot holds the final fold
+    /// Did the LAST fold actually apply the window's rule alpha?
+    ///
+    /// Reports what the fold DID, not what the metadata promised.
+    /// `WindowDecoration::chainHandlesOpacity` is folded from registry metadata
+    /// alone, with no reference to whether the pack's GLSL compiled — so a
+    /// handlesOpacity pack that FAILS to compile is skipped by the fold (nothing
+    /// applies uSurfaceOpacity) while both consumers still stand down on the
+    /// metadata, and the window renders FULLY OPAQUE, silently dropping the user's
+    /// SetOpacity rule. Fail-open on a rule they set.
+    ///
+    /// Reading this instead means a compiled-but-broken chain falls back to
+    /// present-pass modulation, which is exactly the "no pack owns the alpha"
+    /// regime. chainHandlesOpacity stays for the uses that legitimately need the
+    /// metadata BEFORE any fold has run.
+    bool handledOpacity = false;
     /// The logical rect the composite canvas covers (expanded geometry
     /// inflated by the chain's outer padding, captured when the fold ran).
     /// The layer-rect remap and the padded quads read THIS instead of

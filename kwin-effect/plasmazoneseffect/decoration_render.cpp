@@ -518,7 +518,18 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 // opacity itself (frost), else the freshest resolved value.
                 if (m_surfacePresentOpacityLoc >= 0) {
                     float presentOpacity = 1.0f;
-                    if (!bit->chainHandlesOpacity) {
+                    // Read what the fold ACTUALLY DID, not what the metadata
+                    // promised. A handlesOpacity pack that failed to compile is
+                    // skipped by the fold, so nothing applied uSurfaceOpacity —
+                    // standing down on the metadata there would render the window
+                    // fully opaque and silently drop its SetOpacity rule. Falling
+                    // back to modulation is exactly the "no pack owns the alpha"
+                    // regime. See SurfaceMultipassState::handledOpacity.
+                    bool foldOwnsOpacity = false;
+                    if (const auto foIt = m_surfaceMultipass.find(getWindowId(w)); foIt != m_surfaceMultipass.end()) {
+                        foldOwnsOpacity = foIt->second.handledOpacity;
+                    }
+                    if (!foldOwnsOpacity) {
                         qreal resolved = bit->ruleOpacity;
                         if (m_shaderManager.frameOpacityCached(w)) {
                             const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);

@@ -322,10 +322,19 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // load-bearing if m_compiledPacks were ever swapped for a node-relocating
     // container, so keep it.
     int src = 0;
+    // Did a pack that ACTUALLY DREW take ownership of the window's rule alpha? The
+    // metadata flag alone cannot answer this: a handlesOpacity pack that fails to
+    // compile is skipped below, so nothing applies uSurfaceOpacity — and if both
+    // consumers stood down on the metadata, the window would render fully opaque and
+    // silently drop the user's SetOpacity rule. See SurfaceMultipassState::handledOpacity.
+    bool foldAppliedOpacity = false;
     for (int k = 0; k < chain.size(); ++k) {
         CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
         if (!pk || !pk->shader) {
             continue; // skip a failed pack; the composite carries through unchanged
+        }
+        if (pk->handlesOpacity && pk->uOpacityLoc >= 0) {
+            foldAppliedOpacity = true; // this pack draws AND owns the alpha
         }
         // Defensive: chainBufferTex is sized to chain.size() in the realloc block
         // above and stays in lockstep with `chain`, but guard the unchecked
@@ -621,6 +630,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     }
 
     state.finalSlot = src;
+    state.handledOpacity = foldAppliedOpacity;
     state.lastFoldMs = ShaderInternal::shaderClockNowMs();
     return state.compositeTex[src].get();
 }
