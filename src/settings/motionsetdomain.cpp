@@ -38,6 +38,11 @@ constexpr QLatin1String kPathKey{"path"};
 constexpr QLatin1String kProfileKey{"profile"};
 constexpr QLatin1String kBaselineKey{"baseline"};
 
+/// Ceiling on one profile file read during the snapshot walk, which runs on the
+/// GUI thread on every setsChanged. The profiles dir is hand-editable, so it is
+/// a filesystem boundary like any other. Matches the store's set-file cap.
+constexpr qint64 kMaxProfileFileBytes = 4 * 1024 * 1024;
+
 struct StagedEntry
 {
     QString path;

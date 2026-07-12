@@ -55,7 +55,8 @@ struct StagedEntry
 /// Shared by validate (the import / apply gate) and apply (the commit), so the
 /// two can never drift apart on what counts as a valid entry.
 /// @return false when any entry is malformed, or when the set covers nothing.
-bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* hasBaseline)
+bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* hasBaseline,
+                  PhosphorSurfaceShaders::DecorationProfile* baseline = nullptr)
 {
     using PhosphorSurfaceShaders::DecorationProfile;
 
@@ -67,6 +68,19 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* has
         return false;
     }
     *hasBaseline = ShaderSetStore::carriesBaseline(root);
+    if (*hasBaseline) {
+        // Same rule as an override entry: a baseline that parses to all-inherit
+        // engages nothing, and applying it would wipe the user's global default
+        // for no gain. Parse it ONCE, here, so apply cannot disagree with validate.
+        const DecorationProfile parsed = DecorationProfile::fromJson(root.value(kBaselineKey).toObject());
+        if (parsed == DecorationProfile{}) {
+            qCWarning(lcConfig) << "decorationset: baseline engages no field, refusing the set";
+            return false;
+        }
+        if (baseline != nullptr) {
+            *baseline = parsed;
+        }
+    }
     const QJsonArray overrides = root.value(kOverridesKey).toArray();
     staged->reserve(overrides.size());
     for (const QJsonValue& v : overrides) {
@@ -83,16 +97,20 @@ bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* has
             qCWarning(lcConfig) << "decorationset: rejecting unknown surface path" << path;
             return false;
         }
-        // toObject() yields {} for a missing or non-object value, so this one
-        // check covers both. An empty profile engages no field: staging it would
-        // make the surface READ as overridden while changing nothing the user can
-        // see. The snapshot side skips these for the same reason.
-        const QJsonObject profile = entry.value(kProfileKey).toObject();
-        if (profile.isEmpty()) {
-            qCWarning(lcConfig) << "decorationset: missing or empty profile object for" << path;
+        // Judge the PARSED profile, not the raw object. fromJson ignores unknown
+        // and wrong-typed keys, so `{"chain": "border"}` (a string where an array
+        // belongs) is a non-empty object that still parses to an all-inherit
+        // profile. Staging that would make the surface READ as overridden while
+        // changing nothing the user can see. An engaged-but-empty field is fine
+        // and is NOT this case: `chain: []` ("explicitly no packs") parses to an
+        // engaged optional. This is the same rule the snapshot applies when it
+        // skips an override whose toJson() is empty.
+        const DecorationProfile profile = DecorationProfile::fromJson(entry.value(kProfileKey).toObject());
+        if (profile == DecorationProfile{}) {
+            qCWarning(lcConfig) << "decorationset: profile for" << path << "engages no field, refusing the set";
             return false;
         }
-        staged->push_back({path, DecorationProfile::fromJson(profile)});
+        staged->push_back({path, profile});
     }
     return !staged->isEmpty() || *hasBaseline;
 }
@@ -175,12 +193,13 @@ void DecorationPageController::initSetsStore()
         }
         QList<StagedEntry> staged;
         bool hasBaseline = false;
-        if (!stageEntries(root, &staged, &hasBaseline)) {
+        DecorationProfile baseline;
+        if (!stageEntries(root, &staged, &hasBaseline, &baseline)) {
             return false;
         }
         DecorationProfileTree tree = m_settings->decorationProfileTree();
         if (hasBaseline) {
-            tree.setBaseline(DecorationProfile::fromJson(root.value(kBaselineKey).toObject()));
+            tree.setBaseline(baseline);
         }
         for (const StagedEntry& e : staged) {
             tree.setOverride(e.path, e.profile);

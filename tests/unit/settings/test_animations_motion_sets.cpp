@@ -28,6 +28,11 @@
  *   - The in-flight-discard mutation guard refuses every set write
  *   - Pending changes signal emission for revert/commit
  *   - Atomic motion-set application (rejects whole malformed set)
+ *   - Motion has no baseline, so a baseline-carrying set is refused at import
+ *   - The phantom-snapshot rollback drops a staging whose file is back to its
+ *     pre-edit content, and KEEPS one whose edit actually landed
+ *   - revertPending() reports its own refusal while an async discard is in
+ *     flight, so a caller cannot mark the state clean underneath the worker
  */
 
 #include <QSignalSpy>

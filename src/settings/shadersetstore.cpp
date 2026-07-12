@@ -265,7 +265,9 @@ bool ShaderSetStore::versionAccepted(const QJsonObject& root, const QString& con
         qCWarning(lcConfig) << "ShaderSetStore:" << context << "— version is not a whole number, refusing";
         return false;
     }
-    const int version = versionVal.toInt(m_config.formatVersion);
+    // Compare as a double: toInt() hands back the DEFAULT for anything outside
+    // int range, which would read a version of 1e300 as the current one.
+    const double version = versionVal.toDouble(m_config.formatVersion);
     if (version > m_config.formatVersion) {
         qCWarning(lcConfig) << "ShaderSetStore:" << context << "— set version" << version
                             << "is newer than this build understands (" << m_config.formatVersion << "), refusing";
@@ -282,7 +284,7 @@ QString ShaderSetStore::uniqueSetName(const QString& desiredName) const
     QString candidate = desiredName;
     for (int suffix = 2; QFile::exists(setFilePath(candidate)); ++suffix) {
         candidate = QStringLiteral("%1 (%2)").arg(desiredName).arg(suffix);
-        // Guard against a name whose slug can't grow (pathological input).
+        // Cap the collision walk rather than scanning forever.
         if (suffix > 999) {
             return QString();
         }
@@ -312,13 +314,21 @@ QVariantList ShaderSetStore::availableSets() const
         const QStringList sections = coverageSections(root);
         const bool hasBaseline = ShaderSetStore::carriesBaseline(root);
 
-        // A set file whose stored name is missing or unslugifiable would list a
-        // row that every mutator then refuses (they all resolve name -> path),
-        // leaving the user unable to even delete it. Fall back to the filename,
-        // which is by construction a valid slug — the same fallback importSet uses.
+        // Every mutator resolves a row by name -> slugify(name) + ".json", so a
+        // row whose name does not slugify back to THIS file's stem is one the
+        // user could see but never apply, rename or delete. That happens for a
+        // file hand-placed in the sets dir (which openSetsDirectory invites) with
+        // a name the store did not write. Fall back to the stem, and skip the file
+        // outright when even that cannot address it.
         QString rowName = root.value(kNameKey).toString();
-        if (rowName.isEmpty() || animfileutil::slugify(rowName).isEmpty()) {
+        if (rowName.isEmpty() || animfileutil::slugify(rowName) != info.completeBaseName()) {
             rowName = info.completeBaseName();
+        }
+        if (animfileutil::slugify(rowName) != info.completeBaseName()) {
+            qCWarning(lcConfig) << "ShaderSetStore: skipping" << info.fileName()
+                                << "— its name does not resolve back to this file, so it could not be applied or"
+                                   " deleted";
+            continue;
         }
 
         QVariantMap row;
@@ -406,8 +416,11 @@ QString ShaderSetStore::existingSetName(const QString& name) const
     return name;
 }
 
-bool ShaderSetStore::saveCurrentAsSet(const QString& name, const QString& description, bool overwrite)
+bool ShaderSetStore::saveCurrentAsSet(const QString& rawName, const QString& description, bool overwrite)
 {
+    // Trim here, so the mutators and canUseSetName cannot disagree about what a
+    // name IS. Every QML caller trims already; this makes it an invariant.
+    const QString name = rawName.trimmed();
     if (name.isEmpty() || !mutationAllowed()) {
         return false;
     }
@@ -495,8 +508,9 @@ bool ShaderSetStore::removeSet(const QString& name)
     return true;
 }
 
-bool ShaderSetStore::updateSet(const QString& oldName, const QString& newName, const QString& description)
+bool ShaderSetStore::updateSet(const QString& oldName, const QString& rawNewName, const QString& description)
 {
+    const QString newName = rawNewName.trimmed();
     if (oldName.isEmpty() || !mutationAllowed()) {
         return false;
     }

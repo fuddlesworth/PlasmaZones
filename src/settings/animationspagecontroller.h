@@ -140,7 +140,6 @@ public:
     Q_INVOKABLE QString eventLabel(const QString& path) const;
 
     /// Wraps `ProfilePaths::parentPath`.
-    Q_INVOKABLE QString parentPath(const QString& path) const;
 
     /// Inheritance chain from @p path up to (but excluding) the empty
     /// root. Useful for "snap → zone → global" breadcrumbs.

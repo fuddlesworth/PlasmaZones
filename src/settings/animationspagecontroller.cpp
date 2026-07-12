@@ -468,9 +468,11 @@ bool AnimationsPageController::revertPending()
     if (anyMotionSet && m_motionSets)
         m_motionSets->notifyLiveStateChanged();
     Q_EMIT pendingChangesChanged();
-    // The restore ran. Individual files may have failed and been retained for a
-    // retry, which is not the same thing as a refusal.
-    return true;
+    // True means the state really is clean now. A retained entry is a file whose
+    // restore FAILED, and a caller that goes on to declare the session clean (an
+    // import, a defaults reset) must not do so while one is still staged: the
+    // next Discard would write it back over the new state.
+    return m_pendingFileSnapshots.isEmpty();
 }
 
 void AnimationsPageController::asyncRevertPending()
@@ -618,7 +620,7 @@ void AnimationsPageController::asyncRevertPending()
 }
 
 // ─── Path discovery ────────────────────────────────────────────────────
-// `sectionForPath`, `eventLabel`, `parentPath`, `parentChain` live in
+// `sectionForPath`, `eventLabel`, `parentChain` live in
 // `animationspagecontroller_paths.cpp` so this TU stays under the
 // project's 800-line cap. Same class, separate TU, no API change.
 

@@ -451,7 +451,12 @@ void SettingsController::resetPage(const QString& page)
     if (isAnimationPage(page)) {
         if (m_animationsPage != nullptr) {
             const LoadingScope loadingScope(m_loading);
-            m_animationsPage->clearAllOverrides();
+            // A refusal (-1) means the override files are untouched, so resetting
+            // the config keys would leave the page half reset and reported clean.
+            // The page has already toasted the reason.
+            if (m_animationsPage->clearAllOverrides() < 0) {
+                return;
+            }
             m_settings.resetKeys(animationConfigKeys());
         }
         // isPageDirty(animation) is value-based (hasPendingChanges || any

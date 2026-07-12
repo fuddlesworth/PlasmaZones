@@ -25,6 +25,7 @@ import org.kde.kirigami as Kirigami
  *   bool         applySet(name)
  *   bool         saveCurrentAsSet(name, description, overwrite)
  *   bool         removeSet(name)
+ *   bool         canUseSetName(newName, currentName)
  *   bool         updateSet(oldName, newName, description)
  *   bool         exportSet(name, localPath)
  *   bool         importSet(pathOrUrl)

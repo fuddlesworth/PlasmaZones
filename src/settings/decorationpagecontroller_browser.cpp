@@ -123,7 +123,8 @@ QVariantList DecorationPageController::shaderEffectUsages(const QString& effectI
         entry.insert(QLatin1String("label"), surfacePathLabel(p));
         out.append(entry);
     }
-    // Deterministic UI order — overriddenPaths() iterates a hash.
+    // Alphabetical UI order. overriddenPaths() returns insertion order, which is
+    // deterministic but not what a reader scanning the list expects.
     std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
         return a.toMap().value(QLatin1String("label")).toString() < b.toMap().value(QLatin1String("label")).toString();
     });

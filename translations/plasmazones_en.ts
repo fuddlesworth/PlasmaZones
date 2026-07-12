@@ -2,6 +2,14 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="en_US">
 <context>
+    <name>PhosphorI18n</name>
+    <message>
+        <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="261"/>
+        <source>Cannot reset while a discard is in progress.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>plasmazones</name>
     <message>
         <location filename="../src/editor/controller/settings.cpp" line="49"/>
@@ -688,19 +696,19 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="498"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="500"/>
         <location filename="../src/settings/rulecontroller.cpp" line="151"/>
         <source>Discard already in flight.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="566"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="568"/>
         <source>Failed to restore %1 profile file(s). They remain pending.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="701"/>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="711"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="703"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="713"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4092,37 +4100,42 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="609"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="607"/>
+        <source>Emphasized</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="610"/>
         <source>Zone Selector Shown</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="611"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="612"/>
         <source>Zone Selector Hidden</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="613"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="614"/>
         <source>Layout Picker Shown</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="615"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="616"/>
         <source>Layout Picker Hidden</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="617"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="618"/>
         <source>Snap Assist Shown</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="619"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="620"/>
         <source>Snap Assist Hidden</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="622"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="623"/>
         <source>Desktop Switched</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4691,134 +4704,134 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="672"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="673"/>
         <source>Snap Out of Zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="624"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="625"/>
         <source>Slide In</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="626"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="627"/>
         <source>Slide Out</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="628"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="646"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="629"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="647"/>
         <source>Fade In</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="630"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="648"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="631"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="649"/>
         <source>Fade Out</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="631"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="632"/>
         <source>Hover</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="632"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="633"/>
         <source>Press</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="634"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="635"/>
         <source>Toggle On</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="636"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="637"/>
         <source>Toggle Off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="638"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="639"/>
         <source>Show (badge)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="640"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="641"/>
         <source>Hide (badge)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="642"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="643"/>
         <source>Pulse (badge)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="643"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="644"/>
         <source>Tint</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="644"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="645"/>
         <source>Dim</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="650"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="651"/>
         <source>Reorder</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="652"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="653"/>
         <source>Expand (accordion)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="654"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="655"/>
         <source>Collapse (accordion)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="656"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="657"/>
         <source>Progress</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="658"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="659"/>
         <source>Zone Highlight</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="660"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="661"/>
         <source>Zone Highlight: Pop</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="662"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="663"/>
         <source>Zone Highlight: Border</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="664"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="665"/>
         <source>Zone Overlay: Layout-Switch Flash</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="666"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="667"/>
         <source>Cursor Hover</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="668"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="669"/>
         <source>Cursor Click</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="670"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="671"/>
         <source>Snap Into Zone (Fill Preview)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="674"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="675"/>
         <source>Snap Resize (Drag Preview)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5091,17 +5104,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="428"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="523"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="441"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="537"/>
         <source>A set named &quot;%1&quot; already exists.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="354"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="518"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="529"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="591"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="596"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="364"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="532"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="543"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="605"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="610"/>
         <source>Could not read the set &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5116,120 +5129,120 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="358"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="368"/>
         <source>&quot;%1&quot; was written by a newer version of PlasmaZones.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="363"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="373"/>
         <source>&quot;%1&quot; does not match this page.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="367"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="377"/>
         <source>Could not apply &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="418"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="511"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="431"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="525"/>
         <source>That name cannot be used. Try one with letters or numbers in it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="438"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="451"/>
         <source>There is nothing to capture yet.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="479"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="487"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="492"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="500"/>
         <source>Could not delete &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="504"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="518"/>
         <source>A set needs a name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="563"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="577"/>
         <source>Renamed the set, but the old file could not be removed. Delete it by hand from the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="579"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="593"/>
         <source>Could not write to that location.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="605"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="619"/>
         <source>Could not write to %1.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="626"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="640"/>
         <source>That file is not a readable set.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="630"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="644"/>
         <source>That set was written by a newer version of PlasmaZones.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="637"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="651"/>
         <source>That set is empty.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="643"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="657"/>
         <source>That set does not match this page.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="654"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="668"/>
         <source>That set has no usable name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="445"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="661"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="683"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="458"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="675"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="697"/>
         <source>Could not create the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="688"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="702"/>
         <source>Could not open the sets folder.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="112"/>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="180"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="126"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="194"/>
         <source>A preset needs a name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="122"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="136"/>
         <source>That name cannot be used for a preset.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="132"/>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="141"/>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="160"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="146"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="155"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="174"/>
         <source>Could not save the preset &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="231"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="245"/>
         <source>Could not find the preset &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="239"/>
-        <location filename="../src/settings/animationpresetlibrary.cpp" line="249"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="253"/>
+        <location filename="../src/settings/animationpresetlibrary.cpp" line="263"/>
         <source>Could not delete the preset &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>

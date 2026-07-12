@@ -252,9 +252,8 @@ ExpandableRowDelegate {
         /// asking the store is the only way this cannot drift from it.
         readonly property bool nameUsable: row.bridge ? row.bridge.canUseSetName(editNameField.text, row.setName) : false
 
-        // Installed on open, not at construction: writing into the closed
-        // popup's disabled button subtree makes Qt log a binding-loop warning
-        // for every row on screen.
+        // Installed on open, not at construction: the gate is only meaningful
+        // while the dialog is live, and onOpened is already where focus is set.
         onOpened: {
             standardButton(Kirigami.Dialog.Ok).enabled = Qt.binding(function () {
                 return editDialog.nameUsable;

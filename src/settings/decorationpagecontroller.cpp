@@ -96,8 +96,9 @@ DecorationPageController::DecorationPageController(PhosphorSurfaceShaders::Surfa
         // mutators write the tree back.
         connect(m_settings, &ISettings::decorationProfileTreeChanged, this, &DecorationPageController::profilesChanged);
     }
-    // Must come after the profilesChanged wiring above: the store connects to
-    // that signal to refresh its `active` flags.
+    // initSetsStore() wires profilesChanged into the store's
+    // notifyLiveStateChanged, so an edit made anywhere on the Decoration pages
+    // re-derives the `active` badge on every saved set.
     initSetsStore();
 }
 

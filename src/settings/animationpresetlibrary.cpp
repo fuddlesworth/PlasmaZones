@@ -25,7 +25,14 @@ namespace presetlib_detail {
 
 static constexpr QLatin1String JsonNameKey{"name"};
 
+/// Ceiling on a preset file read on the GUI thread. Matches the snapshot cap in
+/// AnimationsPageController: the profiles dir is a filesystem boundary a user can
+/// hand-place anything in.
+constexpr qint64 kMaxPresetFileBytes = 4 * 1024 * 1024;
+
 } // namespace presetlib_detail
+
+using presetlib_detail::kMaxPresetFileBytes;
 
 AnimationPresetLibrary::AnimationPresetLibrary(ProfilesDirFn profilesDirFn, SnapshotFn snapshot,
                                                SnapshotRollbackFn rollback, QObject* parent)
@@ -63,6 +70,13 @@ QVariantList AnimationPresetLibrary::userPresets() const
 
     const auto entries = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
     for (const QFileInfo& info : entries) {
+        // The profiles dir is hand-editable, and this walk runs on the GUI thread
+        // on every rebind. Cap it, the same way the snapshot side does.
+        if (!info.isFile() || info.size() > kMaxPresetFileBytes) {
+            qCWarning(lcConfig) << "AnimationPresetLibrary: skipping" << info.absoluteFilePath()
+                                << "— not a regular file, or over the size cap";
+            continue;
+        }
         QFile f(info.absoluteFilePath());
         if (!f.open(QIODevice::ReadOnly)) {
             qCWarning(lcConfig) << "AnimationPresetLibrary: cannot open" << info.absoluteFilePath();
@@ -249,6 +263,13 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset \"%1\".").arg(name));
         return false;
     }
+
+    // Deleting a preset created earlier in this session puts disk back exactly as
+    // it started, so the staged snapshot is a phantom. The rollback declines
+    // unless disk really still matches the stage, so deleting a PRE-EXISTING
+    // preset keeps its snapshot as Discard's way back.
+    if (m_rollback)
+        m_rollback(filePath);
 
     Q_EMIT userPresetsChanged();
     Q_EMIT pendingChangesChanged();

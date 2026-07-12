@@ -252,6 +252,15 @@ bool AnimationsPageController::clearOverride(const QString& path)
 
 int AnimationsPageController::clearAllOverrides()
 {
+    // Refuse outright while the discard worker owns the snapshot map: every
+    // clearOverride() below would refuse individually, and the caller would read
+    // the resulting 0 as "there was nothing to clear" rather than "nothing was
+    // cleared". Report it as a refusal instead.
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "clearAllOverrides: refusing while an async discard is in flight";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+        return -1;
+    }
     // Clear every built-in event path. clearOverride is a no-op (returns false)
     // for paths without an override file, so only real overrides are removed and
     // snapshotted; it emits overrideChanged / pendingChangesChanged per removed

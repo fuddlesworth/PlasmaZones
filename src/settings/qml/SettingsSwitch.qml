@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -25,6 +26,25 @@ Item {
     Accessible.role: Accessible.CheckBox
     Accessible.name: root.accessibleName
     Accessible.checked: root.checked
+    Accessible.onToggleAction: root.toggled(!root.checked)
+    // Keyboard reachable. A card's master toggle hides its rows when off, and
+    // those rows leave the focus chain with them, so a toggle that only answered
+    // to the mouse would strand a keyboard user in a card they cannot re-enable.
+    activeFocusOnTab: true
+    Keys.onSpacePressed: root.toggled(!root.checked)
+    Keys.onReturnPressed: root.toggled(!root.checked)
+    Keys.onEnterPressed: root.toggled(!root.checked)
+
+    // Focus ring, so the keyboard position is visible.
+    Rectangle {
+        anchors.fill: track
+        anchors.margins: -Kirigami.Units.smallSpacing / 2
+        radius: height / 2
+        color: "transparent"
+        visible: root.activeFocus
+        border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+        border.color: Kirigami.Theme.highlightColor
+    }
 
     // Track
     Rectangle {

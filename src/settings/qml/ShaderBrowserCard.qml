@@ -115,7 +115,7 @@ ItemDelegate {
             spacing: Kirigami.Units.smallSpacing
 
             Rectangle {
-                readonly property bool _hasPreview: root.effect && root.effect.previewPath && root.effect.previewPath.length > 0
+                readonly property bool _hasPreview: !!(root.effect && root.effect.previewPath && root.effect.previewPath.length > 0)
 
                 Layout.fillWidth: true
                 Layout.preferredHeight: width * 9 / 16

@@ -72,7 +72,7 @@ set(plasmazones_settings_SRCS
     # TU grew past 800 lines after the F#2c async-revert addition.
     animationspagecontroller_overrides.cpp
     # AnimationsPageController path-discovery helpers
-    # (sectionForPath / eventLabel / parentPath / parentChain). Same
+    # (sectionForPath / eventLabel / parentChain). Same
     # split rationale — small per-Q_INVOKABLE methods extracted so the
     # main TU stays under the 800-line cap.
     animationspagecontroller_paths.cpp

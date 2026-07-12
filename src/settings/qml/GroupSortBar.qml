@@ -43,10 +43,24 @@ RowLayout {
     property string disabledSortTooltip: ""
 
     signal changed
+    /// Emitted for the control the user ACTUALLY activated, alongside changed().
+    /// A host that stores its selection by option id cannot infer this from an
+    /// index delta: picking the option a fallback already shows moves no index,
+    /// yet it is still an explicit choice and has to be adopted.
+    signal groupPicked(int index)
+    signal sortPicked(int index)
 
     // Re-point the combos at the current index properties. Call after any
     // imperative write to groupByIndex / sortByIndex (the combo currentIndex
     // binding is initial-only and breaks on user interaction).
+    // Re-point the combos at the current index properties. Call after any
+    // imperative write to groupByIndex / sortByIndex (the combo currentIndex
+    // binding is initial-only and breaks on user interaction).
+    //
+    // sortAscending needs no re-pointing here: the direction button reads and
+    // writes root.sortAscending directly, so the host's own write to that
+    // property IS the update. A host that pushes state must set it (see
+    // ShaderBrowserPage._applyGroupSortBarSync).
     function syncFromState() {
         groupCombo.currentIndex = root.groupByIndex;
         sortCombo.currentIndex = root.sortByIndex;
@@ -78,6 +92,7 @@ RowLayout {
                 return;
 
             root.groupByIndex = index;
+            root.groupPicked(index);
             root.changed();
         }
     }
@@ -108,6 +123,7 @@ RowLayout {
                 return;
             }
             root.sortByIndex = index;
+            root.sortPicked(index);
             root.changed();
         }
 

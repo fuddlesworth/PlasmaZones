@@ -62,6 +62,15 @@ Item {
     /// are suppressed before that, so adopting `initiallyCollapsed` sets the
     /// card's resting state instead of animating it shut on load.
     property bool _completed: false
+    /// True while the body is interactive. Drives `enabled` on the body, which is
+    /// what keeps a shut card's controls out of the tab order. Set true BEFORE
+    /// the expand ramp starts rather than derived from _expandProgress: the rows
+    /// hide themselves when disabled (SettingsRow binds `visible: enabled`), so
+    /// re-enabling them is what makes the layout re-measure, and that re-measure
+    /// is asynchronous. Deriving it from the ramp meant the body's height was
+    /// still collapsed for the first frames of the expand and the card jumped
+    /// most of the way open in a single frame.
+    property bool _bodyLive: true
     /// How far open the body is: 0 shut, 1 fully open. The collapse animates
     /// THIS, and the body's height stays a live binding on it times the content's
     /// implicit height.
@@ -113,10 +122,16 @@ Item {
 
         if (collapsed) {
             expandAnim.stop();
+            // _bodyLive goes false at the END of the collapse (collapseAnim's
+            // trailing ScriptAction), so the rows stay measurable for the whole
+            // slide shut.
             collapseAnim.start();
         } else {
             collapseAnim.stop();
-            expandAnim.start();
+            // Re-enable first, then ramp on the NEXT tick, so the rows are back
+            // and the layout has re-measured before the height binding is read.
+            root._bodyLive = true;
+            Qt.callLater(expandAnim.start);
         }
     }
     // Honour `collapsed: true` (or `initiallyCollapsed: true`) at construction
@@ -135,6 +150,7 @@ Item {
         root._completed = true;
         if (collapsed) {
             root._expandProgress = 0;
+            root._bodyLive = false;
             contentClip.opacity = 0;
         }
         if (root.searchAnchor.length > 0)
@@ -214,7 +230,11 @@ Item {
             // default header component (it is only nulled for a CUSTOM header),
             // so an invisible headerArea would otherwise keep its band, and both
             // cardBg.height and contentClip's top anchor count it.
-            height: visible ? headerLoader.height : 0
+            //
+            // A custom header is reparented UNDER the loader, which then holds no
+            // item at all: a Loader takes no height from its children, so the band
+            // has to measure the custom header itself or the body draws over it.
+            height: visible ? Math.max(headerLoader.height, root.header ? root.header.implicitHeight : 0) : 0
             visible: root.headerText.length > 0 || root.header !== null
             // Single uniform header fill: the whole header row is one proper
             // header color, distinct from the content rows below. Only the TOP
@@ -378,14 +398,15 @@ Item {
             opacity: root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1
             // Clipping a shut card to nothing still leaves its controls in the
             // tab order, so tabbing through the page walks fields nobody can see.
-            // Disabling the body takes them out of the focus chain, and the
-            // header carries the keyboard affordance in their place.
+            // Disabling the body takes them out of the focus chain, and the header
+            // carries the keyboard affordance in their place.
             //
-            // The body stays VISIBLE rather than hidden. A hidden layout does not
-            // re-measure while it is hidden, and it only catches up a frame or
-            // more after it is shown, which is exactly the window the expand
-            // needs its height in.
-            enabled: (root.showToggle ? root.toggleChecked : true) && root._expandProgress > 0
+            // Disabling also hides the rows, because SettingsRow binds
+            // `visible: enabled`, and a hidden row stops contributing to the
+            // layout's implicit height. That re-measure is asynchronous, which is
+            // why _bodyLive is set on the way OPEN before the ramp starts and
+            // dropped on the way SHUT only once the ramp has finished.
+            enabled: (root.showToggle ? root.toggleChecked : true) && root._bodyLive
 
             Item {
                 id: contentColumn
@@ -411,6 +432,12 @@ Item {
                     to: 0
                     profile: "widget.accordionCollapse"
                     durationOverride: Kirigami.Units.shortDuration
+                }
+
+                ScriptAction {
+                    // Height is already 0, so the rows collapsing out of the
+                    // layout now costs nothing visible.
+                    script: root._bodyLive = false
                 }
             }
 

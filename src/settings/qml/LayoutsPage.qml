@@ -500,10 +500,11 @@ SettingsFlickable {
         nameFilters: [i18n("Luau files (*.luau)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            if (settingsController.importAlgorithm(root.filePathFromUrl(selectedFile))) {
-                if (window && window.showToast)
-                    window.showToast(i18n("Algorithm imported"));
-            }
+            // Report both outcomes, like the drop zone in LayoutManageCard. A
+            // silent failure read as a chosen file that simply vanished.
+            const ok = settingsController.importAlgorithm(root.filePathFromUrl(selectedFile));
+            if (window && window.showToast)
+                window.showToast(ok ? i18n("Algorithm imported") : i18n("Could not import that algorithm. It must be a Luau file this build can read."));
         }
     }
 

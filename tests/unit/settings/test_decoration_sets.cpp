@@ -146,6 +146,70 @@ private Q_SLOTS:
 
     // ─── Save / list / apply / remove ───────────────────────────────────────
 
+    /// canUseSetName is the Ok-gate for the rename dialog, and the ONLY thing
+    /// standing between the user and a dismissed dialog that silently drops their
+    /// description edit. It has to agree with updateSet exactly.
+    void canUseSetName_matchesWhatUpdateSetAccepts()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Mine"), QString()));
+        QVERIFY(sets->saveCurrentAsSet(QStringLiteral("Other"), QString()));
+
+        QVERIFY2(!sets->canUseSetName(QString(), QStringLiteral("Mine")), "an empty name is refused");
+        QVERIFY2(!sets->canUseSetName(QStringLiteral("   "), QStringLiteral("Mine")), "whitespace only is refused");
+        QVERIFY2(!sets->canUseSetName(QStringLiteral("!!!"), QStringLiteral("Mine")),
+                 "a name that slugifies to nothing is refused");
+        QVERIFY2(!sets->canUseSetName(QStringLiteral("Other"), QStringLiteral("Mine")),
+                 "a collision with a DIFFERENT set is refused");
+        QVERIFY2(sets->canUseSetName(QStringLiteral("Mine"), QStringLiteral("Mine")),
+                 "keeping your own name is a description-only edit, not a self-collision");
+        QVERIFY2(sets->canUseSetName(QStringLiteral("Fresh"), QStringLiteral("Mine")), "a free name is accepted");
+
+        // Now prove the predicate agrees with the mutator on every one of those.
+        QVERIFY(!sets->updateSet(QStringLiteral("Mine"), QString(), QString()));
+        QVERIFY(!sets->updateSet(QStringLiteral("Mine"), QStringLiteral("!!!"), QString()));
+        QVERIFY(!sets->updateSet(QStringLiteral("Mine"), QStringLiteral("Other"), QString()));
+        QVERIFY(sets->updateSet(QStringLiteral("Mine"), QStringLiteral("Mine"), QStringLiteral("desc only")));
+        QVERIFY(sets->updateSet(QStringLiteral("Mine"), QStringLiteral("Fresh"), QString()));
+    }
+
+    /// A write that fails AFTER its snapshot was staged must un-stage it, or the
+    /// page sits dirty with nothing to discard. Provoked with a directory in the
+    /// destination's place rather than by revoking permissions, so it runs as root
+    /// too — CLAUDE.md's documented build flow is Docker, which runs as root, and
+    /// a permissions-based test would silently QSKIP there.
+    void failedSetWriteUnstagesItsSnapshot()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        ShaderSetStore* sets = c.setsBridge();
+
+        // A DIRECTORY where the set file wants to be: QSaveFile cannot commit
+        // over it, so the write fails after the snapshot has been staged.
+        const QString destination = decorationSetsDir() + QStringLiteral("/doomed.json");
+        QVERIFY(QDir().mkpath(destination));
+        QVERIFY(QFileInfo(destination).isDir());
+
+        c.setChain(QStringLiteral("window.tiled"), QStringList{QStringLiteral("glow")});
+        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("could not write")));
+        // overwrite=true: the destination "exists" (it is the directory), so the
+        // collision check would otherwise refuse before the write is even tried,
+        // and the write is what this test is about.
+        QVERIFY2(!sets->saveCurrentAsSet(QStringLiteral("Doomed"), QString(), /*overwrite=*/true),
+                 "a save whose write cannot land must fail");
+        QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("Could not write the set to disk."));
+
+        // The directory is untouched, and no half-written set is listed.
+        QVERIFY(QFileInfo(destination).isDir());
+        QVERIFY2(rowFor(sets, QStringLiteral("Doomed")).isEmpty(), "no half-written set may be listed");
+    }
+
     /// Apply MERGES: a surface the set does not cover keeps whatever chain it
     /// has. The file header pins this and the motion side has the same test, but
     /// the decoration path had none, so a regression to replace-semantics would

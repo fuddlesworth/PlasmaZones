@@ -548,17 +548,18 @@ SettingsFlickable {
             // Qualified deliberately: `root` carries identically-named
             // groupByIndex / sortByIndex / sortAscending properties, and reading
             // those here instead of the bar's would be a silent no-op.
+            // Adopt a preference only from the control the user actually
+            // activated. Inferring it from an index delta silently dropped an
+            // explicit pick that happened to land on the index a fallback was
+            // already showing, leaving a stale preference the user could not
+            // clear.
+            onGroupPicked: function (index) {
+                root._preferredGroupId = (root._groupOptions[index] || root._groupOptions[0]).id;
+            }
+            onSortPicked: function (index) {
+                root._preferredSortId = (root._sortOptions[index] || root._sortOptions[0]).id;
+            }
             onChanged: {
-                // Adopt only what the user actually moved. Rewriting both ids
-                // unconditionally would overwrite a remembered Type choice with
-                // whatever fallback the combo is showing while the axis is
-                // hidden, which is the very thing storing ids protects against.
-                if (groupSortBar.groupByIndex !== root.groupByIndex)
-                    root._preferredGroupId = (root._groupOptions[groupSortBar.groupByIndex] || root._groupOptions[0]).id;
-
-                if (groupSortBar.sortByIndex !== root.sortByIndex)
-                    root._preferredSortId = (root._sortOptions[groupSortBar.sortByIndex] || root._sortOptions[0]).id;
-
                 root.sortAscending = groupSortBar.sortAscending;
                 root._savePrefs();
             }
@@ -675,12 +676,24 @@ SettingsFlickable {
     }
     // The bar's combo bindings are initial-only (they break on the first user
     // pick), so a derived index change has to be pushed into it.
+    //
+    // Deferred by a tick on purpose. The option lists and the bar's model
+    // bindings update in the same pass, and pushing an index against the model
+    // the bar has NOT yet rebuilt gets rejected as out of range: the ComboBox
+    // then resets itself to 0 and the bar silently shows Name while the page
+    // sorts by Type. Waiting a tick means the model is already the new one.
     function _syncGroupSortBar() {
         if (!root._completed)
             return;
 
+        Qt.callLater(root._applyGroupSortBarSync);
+    }
+    function _applyGroupSortBarSync() {
         groupSortBar.groupByIndex = root.groupByIndex;
         groupSortBar.sortByIndex = root.sortByIndex;
+        // The bar's `sortAscending: root.sortAscending` binding breaks the first
+        // time the direction button writes it, so push this one too.
+        groupSortBar.sortAscending = root.sortAscending;
         groupSortBar.syncFromState();
     }
     function _indexOfOption(options, id) {
