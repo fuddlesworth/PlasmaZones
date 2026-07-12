@@ -1812,12 +1812,17 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // (window.move during window.snapIn, window.focus interrupting
     // window.maximize) leave a stale timer that tears down the SUCCESSOR
     // when its own timer hasn't fired yet.
-    const auto* installedTransition = m_shaderManager.findTransition(window);
+    auto* installedTransition = m_shaderManager.findTransition(window);
     if (!installedTransition) {
         // Defensive: beginShaderTransition reported true but the entry
         // is gone (synchronous teardown raced us). Nothing to time.
         return;
     }
+    // Mark the held-move leg by IDENTITY. The drag handlers must not infer it from
+    // liveness: `window.movement.move` is opt-in with no default shader, so the
+    // common case installs nothing at all and `findTransition` would hand them an
+    // unrelated leg to pin and reverse. See ShaderTransition::heldMove.
+    installedTransition->heldMove = (profilePath == PhosphorAnimation::ProfilePaths::WindowMove);
     const quint64 myGeneration = installedTransition->generation;
     QPointer<KWin::EffectWindow> safeWindow(window);
     QTimer::singleShot(effectiveDurationMs, this, [this, safeWindow, myGeneration]() {

@@ -772,7 +772,16 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // guard preserves an existing capture on a retargeted transition,
             // mirroring drag_snap; a failed capture clears needsSnapshot and
             // the shader-side fallback covers it.
-            if (auto* st = m_shaderManager.findTransition(window); st && st->cached) {
+            // `heldMove`, NOT liveness. window.movement.move is opt-in with no
+            // default shader, so the stock config installs nothing here and
+            // findTransition would hand back an unrelated leg — most reachably the
+            // window.focus leg the click that began this drag installed moments ago.
+            // Pinning THAT at progress 1, bumping its generation (killing its
+            // teardown timer) and ramping it 1→0 on release plays the focus
+            // animation backward after the drop; a maximize pack that declares
+            // iFromRect would freeze the window at its pre-drag rect for the whole
+            // drag. See ShaderTransition::heldMove.
+            if (auto* st = m_shaderManager.findTransition(window); st && st->cached && st->heldMove) {
                 if (st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
                     st->needsSnapshot = true;
                 }
@@ -851,7 +860,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // teardown lands. Generation-guarded exactly like the duration
         // timer so an interrupting transition owns its own lifetime.
         if (window) {
-            if (auto* st = m_shaderManager.findTransition(window); st && st->holdUntilRelease) {
+            // `heldMove &&` guards the mirror of the drag-start defect: releasing
+            // must only ever act on the leg the drag itself installed, never on
+            // whatever is live. holdUntilRelease alone is not that test — it is the
+            // flag the old drag-start bug wrongly set on an unrelated leg.
+            if (auto* st = m_shaderManager.findTransition(window); st && st->heldMove && st->holdUntilRelease) {
                 QPointer<KWin::EffectWindow> safeWindow(window);
                 if (st->meshSim.initialized) {
                     // Soft-body lattice: hand teardown to the settle gate.
@@ -901,9 +914,30 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     // to prevent. The releaseStartMs < 0 guard on this branch
                     // makes a duplicate finish signal a no-op instead of
                     // restarting the ramp and double-scheduling teardown.
-                    st->releaseStartMs = ShaderInternal::shaderClockNowMs();
+                    //
+                    // Fold any in-flight RE-GRAB offset into this release rather
+                    // than leaving both live. A release during a still-decaying
+                    // re-grab leaves paintWindow subtracting two offsets whose
+                    // slopes are equal and opposite (+1/durationMs and
+                    // -1/durationMs), so they cancel and the progress FREEZES on a
+                    // plateau until the re-grab offset expires — the dissolve
+                    // visibly stalls before it starts. Rebasing releaseStartMs by
+                    // the residual makes `down` start at exactly that residual, so
+                    // the ramp is continuous at this frame and descends at the
+                    // normal rate; the tail is shortened to match so the teardown
+                    // timer still lands when the ramp reaches 0 rather than cutting
+                    // it mid-flight.
+                    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+                    qreal residual = 0.0;
+                    if (st->regrabStartMs >= 0 && st->durationMs > 0) {
+                        residual = qBound<qreal>(
+                            0.0, st->regrabDownOffset - qreal(nowMs - st->regrabStartMs) / qreal(st->durationMs), 1.0);
+                        st->regrabStartMs = -1;
+                        st->regrabDownOffset = 0.0;
+                    }
+                    st->releaseStartMs = nowMs - qint64(residual * st->durationMs);
                     const quint64 myGeneration = st->generation;
-                    const int rampMs = st->durationMs;
+                    const int rampMs = qMax(1, qRound((1.0 - residual) * st->durationMs));
                     QTimer::singleShot(rampMs, this, [this, safeWindow, myGeneration]() {
                         if (!safeWindow) {
                             return;

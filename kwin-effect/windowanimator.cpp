@@ -3,6 +3,8 @@
 
 #include "windowanimator.h"
 
+#include "plasmazoneseffect/shader_internal.h"
+
 #include <PhosphorAnimation/Curve.h>
 
 #include <effect/effect.h>
@@ -156,10 +158,22 @@ WindowAnimator::startAnimationWithResult(KWin::EffectWindow* handle, const QRect
         params.profile = m_profile;
     }
     params.retargetPolicy = m_retargetPolicy;
-    const auto spec = PhosphorAnimation::SnapPolicy::createSnapSpec(oldFrame, newFrame, params, clk);
+    auto spec = PhosphorAnimation::SnapPolicy::createSnapSpec(oldFrame, newFrame, params, clk);
     if (!spec) {
         return StartResult::PolicyRejected;
     }
+    // Bound a STATEFUL (spring) curve's lifetime by the SAME rule the shader leg
+    // uses. A spring ignores profile.duration and runs on its physics, so
+    // clampProfile above cannot reach it: without this, the shader transition for
+    // one curve is cut at MaxAnimationDurationMs (2 s) while this geometry
+    // animation keeps requesting frames out to the curve's raw settleTime —
+    // seconds later, with no shader left on the window. Slider-reachable, not just
+    // hand-editable: "spring:10,0.15" settles in 2.6 s. Routing both legs through
+    // resolveTransitionLifetimeMs makes them provably agree rather than
+    // coincidentally agree. A stateless curve is unaffected (the helper hands the
+    // nominal straight back, and the parametric branch bounds itself by duration).
+    spec->maxLifetimeMs = ShaderInternal::resolveTransitionLifetimeMs(qRound(spec->profile.effectiveDuration()),
+                                                                      spec->profile.curve.get());
 
     PhosphorAnimation::AnimatedValue<QRectF> anim;
     if (!anim.start(oldFrame, newFrame, *spec)) {

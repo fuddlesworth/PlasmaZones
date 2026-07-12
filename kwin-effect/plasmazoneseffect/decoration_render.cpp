@@ -409,7 +409,16 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     // KWin's draw, the same place the rest path's present bind lives — that
     // path never exhibited the loss. Uniform values persist on the program;
     // only the raw unit binding needs re-asserting.
-    if (const ShaderTransition* const st = m_shaderManager.findTransition(w); st && st->cached) {
+    // Skipped during our own offscreen capture: the fold's nested drawWindow
+    // re-enters here with m_capturingSnapshot set, and binding the composite to a
+    // sampler unit THEN would bind the FBO's own colour attachment as a texture
+    // (compositeTex[finalSlot] is the render target for an even-length chain) — a
+    // feedback-loop configuration. Inert today only because the capture runs under
+    // KWin's default shader, which samples unit 0 alone.
+    bool reboundLayerUnit = false;
+    bool reboundSnapshotUnit = false;
+    const ShaderTransition* const st = m_capturingSnapshot ? nullptr : m_shaderManager.findTransition(w);
+    if (st && st->cached) {
         const auto reIt = m_surfaceMultipass.find(getWindowId(w));
         if (reIt != m_surfaceMultipass.end()) {
             if (KWin::GLTexture* const comp = reIt->second.compositeTex[reIt->second.finalSlot].get()) {
@@ -417,6 +426,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnitDraw);
                 comp->bind();
                 glActiveTexture(GL_TEXTURE0);
+                reboundLayerUnit = true;
             }
         }
         // Old-content snapshot (morph cross-fades): the same clobber and the same
@@ -437,6 +447,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
             glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnitDraw);
             st->oldSnapshot->bind();
             glActiveTexture(GL_TEXTURE0);
+            reboundSnapshotUnit = true;
         }
     }
     KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
@@ -444,16 +455,27 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     // Unbind the multipass channel units we bound and restore GL_TEXTURE0 —
     // texture hygiene mirroring paint_pipeline.cpp, so a stray bind doesn't leak
     // into the next window's draw. No-op when boundChannels == 0 (single-pass).
-    // The transition-rebind branch above binds the layer / old-snapshot units
-    // (ShaderInternal::kSurfaceLayerUnit / kOldSnapshotUnit — derived constants
-    // that move with kMaxUserTextureSlots, so do not spell them as numbers) but
-    // intentionally does NOT unbind them here: paint_pipeline.cpp owns their
-    // teardown on its own transition path.
     for (int i = 0; i < boundChannels; ++i) {
         glActiveTexture(GL_TEXTURE0 + kSurfaceChannelBaseUnit + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
-    if (boundChannels > 0) {
+    // The layer / old-snapshot units are unbound HERE, by the same block that
+    // bound them, rather than left to paint_pipeline.cpp. Its hygiene block sits
+    // inside `if (active) { ... return; }`, so on a transition's EXPIRY frame —
+    // where the leg is still installed but inactive, and paintWindow falls through
+    // to the unconditional drawWindow — the rebind above fires and nothing unbinds
+    // it. Owning both halves locally makes the pair symmetric on every path;
+    // paint_pipeline's unbind then degrades to a harmless no-op on the active one,
+    // since OffscreenEffect::drawWindow has already issued the draw by then.
+    if (reboundSnapshotUnit) {
+        glActiveTexture(GL_TEXTURE0 + ShaderInternal::kOldSnapshotUnit);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    if (reboundLayerUnit) {
+        glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceLayerUnit);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    if (boundChannels > 0 || reboundLayerUnit || reboundSnapshotUnit) {
         glActiveTexture(GL_TEXTURE0);
     }
 }

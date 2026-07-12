@@ -20,6 +20,8 @@
 
 #include <QTest>
 
+#include <cmath>
+
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/Easing.h>
@@ -101,6 +103,20 @@ private Q_SLOTS:
         QCOMPARE(resolveTransitionLifetimeMs(300, &undamped), Limits::MaxAnimationDurationMs);
     }
 
+    // A very stiff, well-damped spring settles FASTER than the minimum, and the
+    // envelope floors it — the other end of the same clamp. With the 0.5% settling
+    // band, settleTime = -ln(0.005) / (zeta*omega) = 5.298 / (zeta*omega), so
+    // Spring(200, 0.6) settles in 44.2 ms, just under the 50 ms floor. The QVERIFY
+    // is load-bearing: it fails loudly if a band change moves this spring back
+    // above the floor, instead of letting the QCOMPARE pass for the wrong reason.
+    void testLifetimeFastSpringFloorsAtMinimum()
+    {
+        const Spring stiff(200.0, 0.6);
+        QVERIFY2(stiff.settleTime() * 1000.0 < Limits::MinAnimationDurationMs,
+                 "test setup must settle below the floor or the clamp is untested");
+        QCOMPARE(resolveTransitionLifetimeMs(300, &stiff), Limits::MinAnimationDurationMs);
+    }
+
     // ─── easeProgress ───
 
     // A null curve is linear: iTime is the raw elapsed ratio.
@@ -122,26 +138,41 @@ private Q_SLOTS:
         QCOMPARE(easeProgress(&easing, state, -1, 0, 1.0, true), 1.0);
     }
 
-    // A NON-overshooting curve stays clamped: an out-of-range value there is a
-    // bug, not the intent.
+    // A NON-overshooting curve stays clamped: an out-of-range value there is a bug,
+    // not the intent.
+    //
+    // Deliberately a critically-damped SPRING, not an Easing. Easing::evaluate
+    // self-clamps its domain (`x <= 0 → 0`, `x >= 1 → 1`), so an Easing-based
+    // assertion here would be satisfied by evaluate() and never by the clamp under
+    // test — it would pass with the clamp deleted. The clamp only bites on the
+    // STATEFUL branch, where semi-implicit Euler drives even a zeta=1 spring past 1
+    // on a large dt. The QVERIFY2 on the raw state is what keeps this honest: if
+    // the setup ever stops leaving [0,1], the test fails loudly instead of quietly
+    // going vacuous again.
     void testEaseClampsNonOvershootingCurve()
     {
-        const Easing easing; // OutCubic — monotone, no overshoot
-        QVERIFY(!easing.overshoots());
+        const Spring smooth = Spring::smooth(); // zeta == 1.0 → overshoots() == false
+        QVERIFY(!smooth.overshoots());
         CurveState state;
-        QVERIFY(easeProgress(&easing, state, -1, 0, 2.0, true) <= 1.0);
-        QVERIFY(easeProgress(&easing, state, -1, 0, -1.0, true) >= 0.0);
+        qreal maxReturned = 0.0;
+        for (qint64 t = 0; t <= 500; t += 100) { // dt at the cap — Euler overshoots
+            maxReturned = qMax(maxReturned, easeProgress(&smooth, state, t == 0 ? -1 : t - 100, t, 0.0, true));
+        }
+        QVERIFY2(state.value > 1.0, "the integrator must actually leave [0,1] or the clamp is untested");
+        QCOMPARE(maxReturned, 1.0); // ...and easeProgress must still hand out a clamped value
     }
 
     // An OVERSHOOTING curve is NOT clamped — the overshoot is the curve, and the
     // geometry animator bounces past its target on the same pick, so flattening
     // it here would make the shader and the geometry disagree.
+    //
+    // The damping is stated explicitly rather than taken from a preset: a QSKIP on
+    // "preset turned out not to be underdamped" would let a retuned preset silently
+    // stop testing the passthrough while the suite stayed green.
     void testEaseLetsOvershootThrough()
     {
-        const Spring spring = Spring::snappy();
-        if (!spring.overshoots()) {
-            QSKIP("the snappy spring preset is not underdamped; nothing to assert");
-        }
+        const Spring spring(12.0, 0.5); // explicitly underdamped
+        QVERIFY2(spring.overshoots(), "test setup must be underdamped");
         CurveState state;
         qreal peak = 0.0;
         // Integrate at a steady 16 ms for two seconds and watch for a value > 1.

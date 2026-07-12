@@ -8,21 +8,38 @@
 #include <QStringList>
 #include <QtMath>
 
+#include <cmath>
+
 namespace PhosphorAnimation {
 
 Q_LOGGING_CATEGORY(lcSpring, "phosphoranimation.spring")
 
-// Step-response 2% settling time for a second-order system. Settling time
-// is capped at MaxSettleSeconds to keep repaint budgets and timer delays
-// bounded even for pathological parameters (omega near 0 or zeta huge).
-static constexpr qreal MaxSettleSeconds = 30.0;
+// Step-response settling time for a second-order system. Settling time is
+// capped at Spring::MaxSettleSeconds (declared in the header, because callers
+// reason about the bound) to keep repaint budgets and timer delays bounded even
+// for pathological parameters (omega near 0 or zeta huge).
 
-// 2% settling coefficient for a critically damped second-order system.
-// Solves (1 + ωt)·exp(-ωt) = 0.02 for ωt numerically → ωt ≈ 5.834. The
-// previous code used 5.0, which gave envelope(settleTime) ≈ 0.04 (twice
-// the target band) — at zeta=1 this made `evaluate(1)` sit ~4% below the
-// target instead of the advertised 2%.
-static constexpr qreal CriticalSettleFactor = 5.834;
+// The settling band: how close to the target the response must be before the
+// spring is called "done". `settleTime()` IS the animation's lifetime — both the
+// geometry animator and the shader transition end on it — so the residual at
+// that instant is the size of the terminal jump the user sees when the animation
+// completes and the window snaps to its final rect.
+//
+// 0.5%, not the 2% control-theory convention. 2% is the right band for settling
+// a control loop and the wrong one for a visible animation: on a 1500 px move it
+// leaves a 35 px jump for a critically damped spring (the bundled Spring::smooth)
+// and 23 px for Spring::bouncy — plainly visible. 0.5% puts the residual under
+// 8 px, below the threshold where the eye reads it as a jump. The cost is a ~30%
+// longer spring (1.35x underdamped, 1.27x critical), which is the honest price of
+// letting the spring actually arrive instead of cutting it short.
+static constexpr qreal SettleBand = 0.005;
+
+// Settling coefficient for a CRITICALLY damped second-order system. The
+// underdamped and overdamped branches derive their coefficient from SettleBand
+// directly (`-ln(band)`), but the critical response is (1 + ωt)·exp(-ωt), which
+// has no closed form — solve (1 + ωt)·exp(-ωt) = SettleBand numerically.
+// At 0.005 that is ωt ≈ 7.4301. Re-solve this if SettleBand changes.
+static constexpr qreal CriticalSettleFactor = 7.4301;
 
 // Convergence threshold for step()-driven animation: when value is within
 // ConvergeValueEps of target AND |velocity| < ConvergeVelEps, the spring
@@ -63,8 +80,8 @@ qreal Spring::evaluate(qreal t) const
 
     // Map normalized t to real seconds via the settle-time domain. The
     // spring's analytical position at real-time τ is evaluated here; at
-    // t==1 we've reached settle time and the function is within the 2%
-    // settle band (see settleTime()). The analytical step response is
+    // t==1 we've reached settle time and the function is within the
+    // SettleBand of the target (see settleTime()). The analytical step response is
     // evaluated all the way through t=1 — no special cased "if (t >=
     // 1.0) return 1.0;" — so there is no visible step-to-unity
     // discontinuity near the endpoint.
@@ -121,27 +138,48 @@ void Spring::step(qreal dt, CurveState& state, qreal target) const
     state.velocity += accel * dt;
     state.value += state.velocity * dt;
     state.time += dt;
+
+    // Divergence backstop. The integrator is only conditionally stable, and
+    // `omega` is admitted up to 200 (a hand-edited config or a pack's curve
+    // string reaches it — the slider's narrower band is not the validity
+    // boundary). Past dt >= 2/omega it blows up geometrically: omega=200 at the
+    // 100 ms dt cap reaches NaN within ~120 frames, and one capped frame at
+    // omega=125 is enough to send the value to -1e227.
+    //
+    // The value escapes this class raw: `AnimatedValue::lerpStateValue` lerps a
+    // window's QRectF geometry with it, and `ShaderInternal::easeProgress` hands
+    // it to `glUniform1f(iTime)` UNCLAMPED for an overshooting curve — which is
+    // precisely the underdamped class that diverges. So an inf/NaN here becomes a
+    // garbage window rect and a poisoned shader uniform. Fail to the target
+    // instead: a diverged spring has no meaningful state to preserve, and
+    // completing is the only sane terminal.
+    if (!std::isfinite(state.value) || !std::isfinite(state.velocity)) {
+        qCWarning(lcSpring) << "spring integrator diverged (omega=" << omega << "zeta=" << zeta << "dt=" << dt
+                            << ") — snapping to target";
+        state.value = target;
+        state.velocity = 0.0;
+    }
 }
 
 qreal Spring::settleTime() const
 {
-    // 2% settling for second-order system.
+    // Settling to within SettleBand of the target, for a second-order system.
     //
-    // - Underdamped (ζ < 1): envelope exp(-ζω·t) = 0.02 dominates
-    //   → t = -ln(0.02)/(ζω) ≈ 3.912/(ζω). Ignores the 1/sqrt(1-ζ²)
+    // - Underdamped (ζ < 1): envelope exp(-ζω·t) = band dominates
+    //   → t = -ln(band)/(ζω) ≈ 5.298/(ζω). Ignores the 1/sqrt(1-ζ²)
     //   amplitude factor (which diverges as ζ→1); acceptable because
     //   the critical-band blend below covers the ζ≈1 regime.
-    // - Critically damped: (1 + ωt)·exp(-ωt) = 0.02 → ωt ≈ 5.834
+    // - Critically damped: (1 + ωt)·exp(-ωt) = band → ωt ≈ 7.4301
     //   (see CriticalSettleFactor).
     // - Overdamped (ζ > 1): slow pole p₁ = ω(ζ - √(ζ²-1)) dominates:
-    //   t ≈ -ln(0.02)/p₁.
+    //   t ≈ -ln(band)/p₁.
     //
     // Continuity: the formulas step-change at ζ = 1 ± ε by up to ~30%.
     // To avoid visible jumps as the user live-edits ζ near 1.0 (which
     // would jitter repaint budgets), the ε-wide band around critical
     // linearly blends between the two regime formulas at the band edges.
-    constexpr qreal target = 0.02;
-    const qreal lnTarget = -qLn(target); // ≈ 3.912
+    constexpr qreal target = SettleBand;
+    const qreal lnTarget = -qLn(target); // ≈ 5.298
     const qreal safeOmega = qMax(1.0e-3, omega);
 
     auto underdampedSettle = [&](qreal zetaVal) {
@@ -162,7 +200,7 @@ qreal Spring::settleTime() const
     } else {
         // Critical band: quadratic Bézier-ish blend (underdamped → critical →
         // overdamped) pinned to the regime formulas at the band edges and
-        // exactly to the critical 2% settle at ζ = 1. Keeps the function
+        // exactly to the critical settle at ζ = 1. Keeps the function
         // C0-continuous and close to the physically correct value.
         const qreal zLow = 1.0 - CriticalDampingEpsilon;
         const qreal zHigh = 1.0 + CriticalDampingEpsilon;
@@ -178,7 +216,7 @@ qreal Spring::settleTime() const
             seconds = criticalSettle + (upper - criticalSettle) * alpha;
         }
     }
-    return qMin(MaxSettleSeconds, qMax(0.001, seconds));
+    return qMin(Spring::MaxSettleSeconds, qMax(0.001, seconds));
 }
 
 QString Spring::toString() const

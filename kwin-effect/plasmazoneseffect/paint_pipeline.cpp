@@ -86,25 +86,15 @@ qreal timeDrivenProgress(ShaderTransition& st, qint64 nowMs, bool stepCurve, boo
         // wobble rings out instead of being cut off at the release frame.
         progress = 1.0;
         active = true;
-    } else if (st.progressCurve && st.progressCurve->isStateful() && !st.springSettled && elapsed > st.durationMs) {
-        // STATEFUL completion frame, mirroring AnimatedValue::advance's snap.
-        // settleTime() is the 2% settling band, so the integrator is still ~0.98
-        // at expiry and the leg would otherwise tear down short of its endpoint
-        // and pop. Emit one final frame at exactly 1.0.
-        //
-        // Only the paint pass (stepCurve) latches; the backdrop predictor reads
-        // the same progress without consuming the one-shot, so the two agree on
-        // this frame instead of the predictor sitting at 0.98 while the draw
-        // lands on 1.0. postPaintScreen carries a matching repaint arm — without
-        // it no damage is scheduled for this frame and the snap never paints.
-        progress = 1.0;
-        active = true;
-        if (stepCurve) {
-            st.progressCurveState.value = 1.0;
-            st.progressCurveState.velocity = 0.0;
-            st.springSettled = true;
-        }
     }
+    // NOTE: there is deliberately NO "completion frame" branch here for a
+    // stateful curve. One was tried and was unreachable: it needed a paint at
+    // `elapsed > durationMs`, but tryBeginShaderForEvent's teardown timer fires
+    // AT durationMs (and Qt's coarse timer may fire up to 5% early), so the leg
+    // is erased before such a frame can land. The residual it was meant to hide
+    // is instead removed at the source — Spring's settling band is 0.5%, not the
+    // 2% control-theory convention, so the integrator is already within half a
+    // percent of 1.0 when the clock expires. See SettleBand in spring.cpp.
     // Held-move release leg (velocity/trail move packs): the release handler
     // stamps releaseStartMs instead of clearing the hold flag, and progress ramps
     // back toward 0 over the same durationMs — the shader plays iTime 1→0 after
@@ -288,17 +278,8 @@ void PlasmaZonesEffect::postPaintScreen()
             if (!w || w->isDeleted()) {
                 continue;
             }
-            // The spring completion frame lands one tick AFTER the nominal
-            // clock expires (settleTime() is the 2% band, so the integrator is
-            // still short of 1 — see timeDrivenProgress), by which point the
-            // in-window test below is already false. Without this arm no damage
-            // is scheduled for that frame on an undamaged window and the snap
-            // never paints, which is the common case for window.open / focus.
-            const bool springFinalFrame = transition.durationMs > 0 && transition.progressCurve
-                && transition.progressCurve->isStateful() && !transition.springSettled
-                && (now - transition.startTimeMs) > transition.durationMs;
-            const bool timeBasedActive = springFinalFrame
-                || (transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs);
+            const bool timeBasedActive =
+                transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs;
             // Held move/resize transitions live past their nominal duration
             // (timeBasedActive goes false), and a soft-body lattice keeps
             // ringing AFTER release when the window emits no damage of its
@@ -639,11 +620,21 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     if (st->reverse) {
                         t = 1.0 - t;
                     }
+                    // Clamp for the GEOMETRY lerp only — the uniform stays
+                    // unclamped (an overshooting curve's bounce is the point). An
+                    // overshooting t on a SHRINKING morph (unmaximize 1920→300 px)
+                    // drives the width term negative, `QRectF::isValid()` then fails
+                    // and we silently fall back to the animator's rect — a DIFFERENT
+                    // rect than the draw, so the frost pane samples the wrong slice
+                    // exactly on the loudest frames. A contract-compliant pack clamps
+                    // iTime before lerping its rect too, so clamping here is what the
+                    // draw actually does.
+                    const qreal gt = qBound(0.0, t, 1.0);
                     const QRectF& f = st->fromGeometry;
                     const QRectF& g = st->toGeometry;
                     animatedFrame =
-                        QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
-                               f.width() + (g.width() - f.width()) * t, f.height() + (g.height() - f.height()) * t);
+                        QRectF(f.x() + (g.x() - f.x()) * gt, f.y() + (g.y() - f.y()) * gt,
+                               f.width() + (g.width() - f.width()) * gt, f.height() + (g.height() - f.height()) * gt);
                 }
             }
             if (!animatedFrame.isValid()) {
@@ -807,7 +798,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         } else {
             const auto* anim = m_windowAnimator->animationFor(w);
             if (anim && anim->isAnimating()) {
-                progress = qBound(0.0, anim->state().value, 1.0);
+                // Same clamp POLICY as the time-driven source (ShaderInternal::
+                // easeProgress): an overshooting curve's value passes through raw,
+                // everything else is clamped. Clamping here unconditionally — as
+                // this once did — flattened iTime at 1.0 for exactly the
+                // window.movement.* events whose GEOMETRY visibly bounces, so the
+                // shader and the rect disagreed about the same curve. That is the
+                // divergence the unclamped policy exists to prevent, and this was
+                // the majority event class.
+                progress = ShaderInternal::clampProgressForCurve(anim->state().value, anim->spec().profile.curve.get());
                 active = true;
             }
         }
@@ -815,8 +814,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // assigned shader covers both directions of a paired event:
         // window.open plays 0→1, window.close plays the same shader 1→0;
         // going-to-minimized plays 1→0 while unminimize plays 0→1; same
-        // for maximize/unmaximize. Both progress sources are guaranteed
-        // to be in [0, 1] above, so the flip is bound-preserving.
+        // for maximize/unmaximize. The flip is symmetric about 0.5 and preserves
+        // whatever range the curve produced — an overshooting curve leaves [0,1]
+        // (1.08 mirrors to -0.08, the correct reversed overshoot), so this is NOT
+        // a bound-preserving operation and must not be assumed to be one.
         if (transition.reverse) {
             progress = 1.0 - progress;
         }

@@ -264,16 +264,32 @@ inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::C
 /// wants dt < 1/(5*omega), far below 100 ms). Substepping would be the real fix
 /// if a pack ever needs a stiff spring here. @p lastPaintTimeMs < 0 is the
 /// "no prior paint" sentinel and yields dt = 0.
+/// The iTime clamp POLICY, in one place.
+///
+/// An overshooting curve (underdamped spring, back / elastic ease) passes through
+/// RAW — the overshoot is the curve, and the geometry animator bounces past the
+/// target on the same pick, so flattening it here would make the shader and the
+/// geometry disagree. Every other curve is clamped, where an out-of-range value
+/// is a bug rather than the intent.
+///
+/// Both progress sources must route through this: `easeProgress` (the time-driven
+/// branch) and `paintWindow`'s animator-driven branch. They are two call sites of
+/// one policy, and when the policy lived in two places only one of them got
+/// updated — the animator branch kept clamping, which flattened the bounce for
+/// exactly the `window.movement.*` events whose geometry visibly bounces.
+inline qreal clampProgressForCurve(qreal value, const PhosphorAnimation::Curve* curve)
+{
+    return (curve && curve->overshoots()) ? value : qBound(0.0, value, 1.0);
+}
+
 inline qreal easeProgress(const PhosphorAnimation::Curve* curve, PhosphorAnimation::CurveState& state,
                           qint64 lastPaintTimeMs, qint64 nowMs, qreal linear, bool stepCurve)
 {
     if (!curve) {
         return linear;
     }
-    const bool overshoots = curve->overshoots();
     if (!curve->isStateful()) {
-        const qreal eased = curve->evaluate(linear);
-        return overshoots ? eased : qBound(0.0, eased, 1.0);
+        return clampProgressForCurve(curve->evaluate(linear), curve);
     }
     if (stepCurve) {
         const qreal dt = lastPaintTimeMs < 0
@@ -282,7 +298,7 @@ inline qreal easeProgress(const PhosphorAnimation::Curve* curve, PhosphorAnimati
                      static_cast<qreal>(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds));
         curve->step(dt, state, 1.0);
     }
-    return overshoots ? state.value : qBound(0.0, state.value, 1.0);
+    return clampProgressForCurve(state.value, curve);
 }
 
 /// Pre-baked uniform / param key strings for the hot paths.

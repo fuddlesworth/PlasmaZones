@@ -295,24 +295,33 @@ public:
             // convergence test below is necessary but NOT sufficient: it wants
             // |velocity| <= 1e-6, which an UNDAMPED spring (zeta = 0, inside
             // Spring's own qBound(0, zeta, 10) and reachable from the wire string
-            // "spring:12,0") never satisfies — it oscillates forever, so without
-            // this bound it would run to kSafetyCap, pinning per-frame repaints
-            // for a full minute. Even a merely low-damping spring overshoots the
-            // envelope: "spring:1,0.2" converges only after ~46 s.
+            // "spring:12,0") never satisfies — it oscillates forever, so without a
+            // bound it would run to kSafetyCap, pinning per-frame repaints for a
+            // full minute. Even a merely soft spring overruns badly: "spring:1,0.2"
+            // converges only after ~46 s.
             //
-            // settleTime() is the curve's own definition of "done" (bounded by
-            // Spring::MaxSettleSeconds), so this is a physics bound, not a policy
-            // one — it stays correct for consumers outside the compositor's
-            // duration envelope, such as the daemon's SurfaceAnimator. It is also
-            // the SAME rule ShaderInternal::resolveTransitionLifetimeMs applies on
-            // the shader side, so the geometry leg and the shader leg of one curve
-            // now agree on how long they run instead of diverging (they differed
-            // by 2.35x for the default spring: 0.41 s vs the 1e-4 lock at 0.96 s).
+            // settleTime() alone is a PHYSICS bound (itself capped at 30 s inside
+            // Spring), which is right for consumers deliberately outside the
+            // compositor's duration envelope — the daemon's SurfaceAnimator. It is
+            // NOT sufficient for the compositor: its shader leg cuts the same curve
+            // at MaxAnimationDurationMs (2 s), so a slider-reachable soft spring
+            // (zeta*omega < 1.956) would leave the geometry animation requesting
+            // frames for seconds after its shader was torn down. A consumer that
+            // has already resolved a lifetime for this curve passes it as
+            // `maxLifetimeMs`, and the two legs then provably agree.
+            //
+            // settleMs must be positive as well as finite: Curve is polymorphic and
+            // a third-party curve returning 0 or a negative settle time would
+            // otherwise complete on the second tick and snap the animation. Such a
+            // curve falls through to kSafetyCap instead.
             const qreal elapsedMs = std::chrono::duration<qreal, std::milli>(elapsed).count();
-            const qreal settleMs = curve->settleTime() * 1000.0;
+            qreal lifetimeMs = curve->settleTime() * 1000.0;
+            if (m_spec.maxLifetimeMs) {
+                lifetimeMs = qMin(lifetimeMs, static_cast<qreal>(*m_spec.maxLifetimeMs));
+            }
             if (m_state.value >= 1.0 && qAbs(m_state.velocity) <= 1.0e-6) {
                 complete = true;
-            } else if (std::isfinite(settleMs) && elapsedMs >= settleMs) {
+            } else if (lifetimeMs > 0.0 && std::isfinite(lifetimeMs) && elapsedMs >= lifetimeMs) {
                 complete = true;
             } else if (elapsed > kSafetyCap) {
                 qCWarning(lcAnimatedValue) << "stateful curve exceeded safety cap; forcing completion";

@@ -732,6 +732,14 @@ void DesktopTransitionManager::scheduleRepaints()
                 ensureGlContextCurrent();
                 erasedAny = true;
             }
+            // Repaint the output we are about to drop. The blend was the last
+            // thing painted on it, and the settled scene still has to be drawn —
+            // KWin only composites on damage, so without this the output keeps
+            // presenting the frozen final blend frame until something unrelated
+            // damages it. paintOutput's settle path does not need this because it
+            // returns false and paintScreen falls through to the real scene in the
+            // SAME frame; a reap has no such frame to fall through to.
+            KWin::effects->addRepaint(it->first->geometry());
             it = m_active.erase(it);
         } else {
             ++it;
@@ -780,6 +788,12 @@ void DesktopTransitionManager::desktopRemoved(KWin::VirtualDesktop* desktop)
             if (!erasedAny) {
                 ensureGlContextCurrent();
                 erasedAny = true;
+            }
+            // Repaint the output for the same reason the wall-clock reap does: the
+            // blend was the last thing drawn on it and the settled scene still
+            // needs a frame, which nothing else will schedule.
+            if (KWin::effects) {
+                KWin::effects->addRepaint(it->first->geometry());
             }
             it = m_active.erase(it);
         } else {

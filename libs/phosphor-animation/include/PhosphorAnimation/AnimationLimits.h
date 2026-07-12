@@ -38,14 +38,22 @@
  *
  * These bounds constrain a DURATION. They do NOT bound a STATEFUL
  * (spring) curve, which derives its lifetime from its own physics and
- * ignores the duration entirely — see `AnimatedValue::advance`. A spring
- * is bounded instead by `Curve::settleTime()` (itself capped at
- * `Spring::MaxSettleSeconds`), which both the geometry animator and
- * `resolveTransitionLifetimeMs` use, so the two legs of one curve agree.
- * `resolveTransitionLifetimeMs` additionally folds that settle time into
- * the envelope above; the geometry animator does not, because the
- * envelope is compositor policy and `AnimatedValue` is shared with
- * consumers that are deliberately outside it (below).
+ * ignores the duration entirely — see `AnimatedValue::advance`. Absent
+ * anything else a spring is bounded only by `Curve::settleTime()`, itself
+ * capped at 30 s inside `Spring`. That is a PHYSICS bound, and it is the
+ * right one for a consumer deliberately outside this envelope (the
+ * daemon's `SurfaceAnimator`).
+ *
+ * It is NOT enough for the compositor, whose two legs would otherwise
+ * disagree about the same curve: the shader leg cuts at
+ * `MaxAnimationDurationMs` via `ShaderInternal::resolveTransitionLifetimeMs`,
+ * while the geometry leg would run out to the raw settle time — and a
+ * SLIDER-reachable soft spring (`zeta*omega < 1.956`, e.g. "spring:10,0.15")
+ * settles in 2.6 s, leaving the window animating for seconds after its
+ * shader was torn down. So `WindowAnimator` resolves the lifetime through
+ * that same helper and passes it as `MotionSpec::maxLifetimeMs`, and
+ * `AnimatedValue::advance` folds it into the completion test. The two legs
+ * therefore agree BY CONSTRUCTION, not by coincidence.
  *
  * NOT universal: the daemon's `SurfaceAnimator` (OSD / popup / overlay
  * surfaces) reads `Profile::effectiveDuration()` raw and is bounded

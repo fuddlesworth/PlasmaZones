@@ -451,6 +451,35 @@ private Q_SLOTS:
         QCOMPARE(*tree.baseline().duration, 123.0);
     }
 
+    // hasAnyOverride() is the compositor's default-state fast-path gate: false
+    // means "skip the cascade resolve and hand the caller's base straight back".
+    // It must track the override set exactly, and must NOT be confused by a
+    // baseline (which is not an override).
+    void testHasAnyOverrideTracksTheOverrideSet()
+    {
+        ProfileTree tree;
+        QVERIFY(!tree.hasAnyOverride()); // empty tree
+
+        Profile baseline;
+        baseline.duration = 123.0;
+        tree.setBaseline(baseline);
+        QVERIFY(!tree.hasAnyOverride()); // a baseline is not an override
+
+        Profile p;
+        p.duration = 400.0;
+        tree.setOverride(PP::WindowSnapIn, p);
+        QVERIFY(tree.hasAnyOverride());
+        QCOMPARE(tree.hasAnyOverride(), !tree.overriddenPaths().isEmpty()); // agrees with the slow form
+
+        tree.clearOverride(PP::WindowSnapIn);
+        QVERIFY(!tree.hasAnyOverride());
+
+        tree.setOverride(PP::WindowSnapIn, p);
+        tree.setOverride(PP::Osd, p);
+        tree.clearAllOverrides();
+        QVERIFY(!tree.hasAnyOverride());
+    }
+
     void testSetOverrideRejectsEmptyPath()
     {
         ProfileTree tree;

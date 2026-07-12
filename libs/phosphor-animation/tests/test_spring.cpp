@@ -5,6 +5,8 @@
 
 #include <QTest>
 
+#include <cmath>
+
 using PhosphorAnimation::CurveState;
 using PhosphorAnimation::Spring;
 
@@ -224,9 +226,15 @@ private Q_SLOTS:
     void testSettleTimeBounded()
     {
         Spring weak(0.2, 0.05);
-        // Even pathological parameters produce a finite settle time.
-        QVERIFY(weak.settleTime() < 31.0);
+        // Even pathological parameters produce a finite settle time, bounded by
+        // the class's own published ceiling rather than a magic number.
+        QVERIFY(weak.settleTime() <= Spring::MaxSettleSeconds);
         QVERIFY(weak.settleTime() > 0.0);
+
+        // The extreme: an UNDAMPED spring never settles analytically, so it must
+        // land exactly on the ceiling rather than running away.
+        Spring undamped(12.0, 0.0);
+        QCOMPARE(undamped.settleTime(), Spring::MaxSettleSeconds);
     }
 
     void testSettleTimeOrder()
@@ -235,6 +243,43 @@ private Q_SLOTS:
         Spring stiff(30.0, 1.0);
         Spring loose(4.0, 1.0);
         QVERIFY(stiff.settleTime() < loose.settleTime());
+    }
+
+    // ─── Integrator divergence backstop ───
+
+    // Semi-implicit Euler is only conditionally stable (dt < 2/omega), and omega
+    // is admitted up to 200. Without the finiteness backstop in step(), a stiff
+    // spring driven at the 100 ms dt cap reaches NaN in ~120 frames and a value of
+    // -1e227 well before that. That value does not stay inside this class: it
+    // lerps a window's QRectF geometry and is handed to glUniform1f(iTime)
+    // UNCLAMPED for an overshooting curve. Pin the backstop.
+    void testStepDoesNotDivergeAtExtremeStiffness()
+    {
+        const Spring stiff(200.0, 0.5); // dt=0.1 is 10x past the stability limit
+        CurveState state;
+        for (int i = 0; i < 200; ++i) {
+            stiff.step(0.1, state, 1.0);
+            QVERIFY2(std::isfinite(state.value), "the integrator must never emit a non-finite value");
+            QVERIFY2(std::isfinite(state.velocity), "the integrator must never emit a non-finite velocity");
+        }
+        // A diverged spring fails to the target rather than propagating garbage.
+        QCOMPARE(state.value, 1.0);
+        QCOMPARE(state.velocity, 0.0);
+    }
+
+    // The backstop must not fire for a spring that is merely underdamped: a normal
+    // bouncy spring at a normal frame delta overshoots 1.0 and must keep doing so.
+    void testStepPreservesLegitimateOvershoot()
+    {
+        const Spring bouncy(12.0, 0.5);
+        CurveState state;
+        qreal peak = 0.0;
+        for (int i = 0; i < 120; ++i) {
+            bouncy.step(0.016, state, 1.0);
+            QVERIFY(std::isfinite(state.value));
+            peak = qMax(peak, state.value);
+        }
+        QVERIFY2(peak > 1.0, "an underdamped spring must still overshoot — the backstop must not clamp it");
     }
 
     // ─── Cloning & equality ───
