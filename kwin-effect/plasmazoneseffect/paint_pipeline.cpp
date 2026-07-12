@@ -564,33 +564,48 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             //      that rides the quad, which motion masks. The reference
             //      blur effects disable blur outright on transformed
             //      windows; this degrades strictly less.
-            QRectF animatedFrame = m_windowAnimator->currentValue(w, QRectF());
-            if (!animatedFrame.isValid()) {
-                if (ShaderTransition* st = m_shaderManager.findTransition(w);
-                    st && st->fromGeometry.isValid() && st->toGeometry.isValid() && st->durationMs > 0) {
-                    // Same progress the draw will use, via the shared SSOT.
-                    // stepCurve=false: paintWindow owns the stateful curve's
-                    // single per-frame step, so this read must not advance it.
-                    // The reverse flip is applied here, as paintWindow does.
-                    bool stActive = false;
-                    qreal t = timeDrivenProgress(*st, frameNowMs, /*stepCurve=*/false, stActive);
-                    // Honour `active`: an installed-but-expired leg (elapsed past
-                    // durationMs, not held) paints no shader this frame and the
-                    // window sits at its rest rect. Lerping its 0-progress would
-                    // snap the pane back to fromGeometry — the PRE-maximize rect —
-                    // on the expiry frame. Leaving animatedFrame invalid falls back
-                    // to the rest-rect capture, which is where the draw actually is.
-                    if (stActive) {
-                        if (st->reverse) {
-                            t = 1.0 - t;
-                        }
-                        const QRectF& f = st->fromGeometry;
-                        const QRectF& g = st->toGeometry;
-                        animatedFrame =
-                            QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
-                                   f.width() + (g.width() - f.width()) * t, f.height() + (g.height() - f.height()) * t);
+            //
+            // PRECEDENCE MUST MIRROR THE DRAW. paintWindow gives a geometry-morph
+            // shader priority: when the live transition declares iFromRect
+            // (`shaderOwnsGeometry`) it interpolates the drawn rect itself and the
+            // WindowAnimator's translate+scale is SKIPPED. Consulting the animator
+            // first here would invert that — a maximize morph installed while a
+            // snap animation is still in flight (the snap's animator entry is not
+            // removed) would predict the snap's rect while the draw paints the
+            // morph's, and the pane would sample the wrong scene slice for the
+            // overlap.
+            QRectF animatedFrame;
+            ShaderTransition* st = m_shaderManager.findTransition(w);
+            const bool shaderOwnsGeometry = st && st->cached && st->cached->iFromRectLoc >= 0;
+            if (shaderOwnsGeometry && st->fromGeometry.isValid() && st->toGeometry.isValid() && st->durationMs > 0) {
+                // Same progress the draw will use, via the shared SSOT.
+                // stepCurve=false: paintWindow owns the stateful curve's single
+                // per-frame step, so this read must not advance it. The reverse
+                // flip is applied here, as paintWindow does.
+                bool stActive = false;
+                qreal t = timeDrivenProgress(*st, frameNowMs, /*stepCurve=*/false, stActive);
+                // Honour `active`: an installed-but-expired leg (elapsed past
+                // durationMs, not held) paints no shader this frame and the window
+                // sits at its rest rect. Lerping its 0-progress would snap the pane
+                // back to fromGeometry — the PRE-maximize rect — on the expiry
+                // frame. Leaving animatedFrame invalid falls back to the rest-rect
+                // capture, which is where the draw actually is.
+                if (stActive) {
+                    if (st->reverse) {
+                        t = 1.0 - t;
                     }
+                    const QRectF& f = st->fromGeometry;
+                    const QRectF& g = st->toGeometry;
+                    animatedFrame =
+                        QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
+                               f.width() + (g.width() - f.width()) * t, f.height() + (g.height() - f.height()) * t);
                 }
+            }
+            if (!animatedFrame.isValid()) {
+                // No morph owns the geometry (or it is a durationMs == 0 morph
+                // riding the animator's timeline, whose rect the animator has):
+                // the animator's current rect is what the draw transforms by.
+                animatedFrame = m_windowAnimator->currentValue(w, QRectF());
             }
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, animatedFrame);
         }

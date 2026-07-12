@@ -419,32 +419,38 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             const QString snapShaderId = shaderProfile.effectiveEffectId();
             const bool snapShaderApplies =
                 !snapShaderId.isEmpty() && resolvedShaderAppliesToEvent(snapShaderId, profilePath);
-            if (!snapShaderApplies && !snapShaderId.isEmpty() && m_shaderManager.findTransition(window)) {
-                // A refused pack resolved while ANY transition is still live
-                // on this window — typically a morph from an earlier leg of
-                // this drag, but a settling wobble or an in-flight focus
-                // leg present at snap time is cleared the same way (an open
-                // leg can never reach here: it holds addedGrabHeld, so the
-                // enclosing block is skipped via openAnimationInFlight) (only
-                // reachable when the rule set or tree is edited mid-drag —
-                // every applyWindowGeometry path shares the geometry class,
-                // so the gate cannot flip between retargets otherwise). Tear
-                // the live transition down for a clean slate: skipping the
-                // block would leave a stale morph painting toward the OLD
-                // target (mt->toGeometry never updated) while the
-                // WindowAnimator (retargeted above) heads to the new one.
-                endShaderTransition(window);
+            // Tear down a live transition this snap leg is NOT going to replace.
+            // Both no-install outcomes leave a stale-morph hazard, so both are
+            // handled here (only reachable when the rule set or tree is edited
+            // mid-drag — every applyWindowGeometry path shares the geometry class,
+            // so the gate cannot flip between retargets otherwise; an open leg can
+            // never reach here either, it holds addedGrabHeld and the enclosing
+            // block is skipped via openAnimationInFlight):
+            //
+            //  1. A REFUSED pack (non-empty id that provably cannot drive this
+            //     leg): clear ANY live transition — a morph from an earlier leg of
+            //     this drag, or a settling wobble / in-flight focus leg — for a
+            //     clean slate.
+            //  2. An EMPTY id (the tree or a rule was edited to "None" mid-drag):
+            //     clear only a transition that OWNS GEOMETRY (declares iFromRect).
+            //     Its from/to rects are frozen at the PREVIOUS leg's endpoints and
+            //     nothing retargets them, so leaving it would keep painting toward
+            //     the OLD target while the WindowAnimator (retargeted above) heads
+            //     to the new one — the identical stale-morph failure case 1 exists
+            //     to prevent. A NON-geometry transition is deliberately left alone
+            //     here: a settling wobble rings out over the WindowAnimator
+            //     translate, exactly as on a long drag that snaps mid-settle. The
+            //     bundled move pack declares no iFromRect, so shaderOwnsGeometry
+            //     stays false, the animator keeps the geometry, and the two
+            //     compose. A hybrid move+geometry pack that DOES declare iFromRect
+            //     would own geometry — and is therefore torn down, correctly.
+            if (!snapShaderApplies) {
+                const ShaderTransition* live = m_shaderManager.findTransition(window);
+                const bool liveOwnsGeometry = live && live->cached && live->cached->iFromRectLoc >= 0;
+                if (live && (!snapShaderId.isEmpty() || liveOwnsGeometry)) {
+                    endShaderTransition(window);
+                }
             }
-            // When the snap leg resolves NO shader at all (empty id), a live
-            // settling move transition is deliberately LEFT ALONE: the wobble
-            // rings out over the WindowAnimator translate, exactly as it does
-            // on a long drag that snaps mid-settle. The bundled move pack
-            // (wobble) declares no iFromRect, so shaderOwnsGeometry stays
-            // false and the animator keeps the geometry — they compose. A
-            // hybrid move+geometry pack that declares iFromRect (see the
-            // move-start hookup in window_lifecycle.cpp) would instead own
-            // geometry here and suppress the animator translate for its
-            // settle tail.
             if (snapShaderApplies) {
                 beginShaderTransition(window, shaderProfile);
                 // If the installed shader is a geometry morph (declares
