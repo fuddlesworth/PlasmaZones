@@ -11,7 +11,8 @@
 #include "animationpresetlibrary.h"
 #include "animations_controller_detail.h"
 #include "dbusutils.h"
-#include "motionsetstore.h"
+#include "motionsetdomain.h"
+#include "shadersetstore.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
@@ -99,13 +100,23 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     auto writeOverrideFn = [this](const QString& path, const QVariantMap& profile) {
         return setOverride(path, profile);
     };
+    // The store is reachable straight from QML (`animationsPage.setsBridge`),
+    // so the in-flight-discard gate the old controller-level forwarders
+    // enforced has to travel WITH it — otherwise a set write could land
+    // mid-revert and be clobbered by the worker's restore walk.
+    auto mutationGuardFn = [this]() -> QString {
+        if (m_asyncRevertInFlight)
+            return PhosphorI18n::tr("Cannot modify sets while a discard is in progress.");
+        return QString();
+    };
 
     // Sub-service construction lands BEFORE the dirty-forwarder wiring
     // below so any pendingChangesChanged synchronously fired from a
     // ctor (e.g. AnimationPresetLibrary loading pre-existing
     // overrides on first construct) isn't missed by the forwarder.
     m_presets = new AnimationPresetLibrary(profilesDirFn, snapshotFn, this);
-    m_motionSets = new MotionSetStore(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn, this);
+    m_motionSets = new ShaderSetStore(
+        motionset::makeConfig(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn, mutationGuardFn), this);
 
     m_lastHadPendingChanges = hasPendingChanges();
     connect(this, &AnimationsPageController::pendingChangesChanged, this, [this]() {
@@ -120,14 +131,15 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
             &AnimationsPageController::userPresetsChanged);
     connect(m_presets, &AnimationPresetLibrary::pendingChangesChanged, this,
             &AnimationsPageController::pendingChangesChanged);
-    connect(m_motionSets, &MotionSetStore::motionSetsChanged, this, &AnimationsPageController::motionSetsChanged);
-    connect(m_motionSets, &MotionSetStore::pendingChangesChanged, this,
+    connect(m_motionSets, &ShaderSetStore::pendingChangesChanged, this,
             &AnimationsPageController::pendingChangesChanged);
-    // applyMotionSet's per-path overrideChanged emissions ride through
-    // the m_writeOverride callback (which the controller wires to its
-    // own setOverride). MotionSetStore therefore exposes no
-    // overrideChanged signal — the controller is the single source of
-    // truth for that signal.
+    // A set's `active` flag is derived from the live override files, so it
+    // goes stale whenever an event's profile is edited anywhere else.
+    connect(this, &AnimationsPageController::overrideChanged, m_motionSets, &ShaderSetStore::notifyLiveStateChanged);
+    // A set apply's per-path overrideChanged emissions ride through the
+    // writeOverride callback (which the controller wires to its own
+    // setOverride). ShaderSetStore therefore exposes no overrideChanged
+    // signal — the controller is the single source of truth for it.
 
     if (m_shaderRegistry) {
         connect(m_shaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
@@ -378,8 +390,8 @@ void AnimationsPageController::revertPending()
         Q_EMIT overrideChanged(path);
     if (anyPreset)
         Q_EMIT userPresetsChanged();
-    if (anyMotionSet)
-        Q_EMIT motionSetsChanged();
+    if (anyMotionSet && m_motionSets)
+        m_motionSets->notifyLiveStateChanged();
     Q_EMIT pendingChangesChanged();
 }
 
@@ -466,8 +478,8 @@ void AnimationsPageController::asyncRevertPending()
                 Q_EMIT overrideChanged(path);
             if (result.anyPreset)
                 Q_EMIT userPresetsChanged();
-            if (result.anyMotionSet)
-                Q_EMIT motionSetsChanged();
+            if (result.anyMotionSet && m_motionSets)
+                m_motionSets->notifyLiveStateChanged();
             Q_EMIT pendingChangesChanged();
             // Emit discardResult LAST and clear the in-flight flag AFTER
             // the emit so any DirectConnection slot wired to
@@ -628,42 +640,10 @@ bool AnimationsPageController::removeUserPreset(const QString& name)
     return m_presets && m_presets->removeUserPreset(name);
 }
 
-// ─── Motion sets — delegated ───────────────────────────────────────────
-
-QVariantList AnimationsPageController::availableMotionSets() const
-{
-    return m_motionSets ? m_motionSets->availableMotionSets() : QVariantList{};
-}
-
-bool AnimationsPageController::applyMotionSet(const QString& name)
-{
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "applyMotionSet: blocked during discard";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
-        return false;
-    }
-    return m_motionSets && m_motionSets->applyMotionSet(name);
-}
-
-bool AnimationsPageController::saveCurrentAsMotionSet(const QString& name, const QString& description)
-{
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "saveCurrentAsMotionSet: blocked during discard";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
-        return false;
-    }
-    return m_motionSets && m_motionSets->saveCurrentAsMotionSet(name, description);
-}
-
-bool AnimationsPageController::removeMotionSet(const QString& name)
-{
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "removeMotionSet: blocked during discard";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
-        return false;
-    }
-    return m_motionSets && m_motionSets->removeMotionSet(name);
-}
+// Motion sets live entirely in the shared ShaderSetStore reached through
+// `setsBridge()` — QML talks to it directly. The in-flight-discard gate the
+// old forwarders enforced now travels with the store as its mutationGuard
+// (wired in the constructor).
 
 // ─── Shader effects ────────────────────────────────────────────────────
 // The effectToMap / parameterInfoToMap / shaderProfileToMap helpers used

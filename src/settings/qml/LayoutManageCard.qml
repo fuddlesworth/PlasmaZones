@@ -51,60 +51,23 @@ SettingsCard {
             color: Kirigami.Theme.disabledTextColor
         }
 
-        Rectangle {
-            id: dropZone
-
-            readonly property bool _highlight: dropArea.containsDrag
-
+        FileDropZone {
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
             Layout.preferredHeight: Kirigami.Units.gridUnit * 4
-            radius: Kirigami.Units.smallSpacing
-            color: _highlight ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
-            border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
-            border.color: _highlight ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.25)
-
-            RowLayout {
-                anchors.centerIn: parent
-                spacing: Kirigami.Units.largeSpacing
-
-                Kirigami.Icon {
-                    source: dropZone._highlight ? "document-import" : "document-open"
-                    implicitWidth: Kirigami.Units.iconSizes.medium
-                    implicitHeight: Kirigami.Units.iconSizes.medium
-                    color: dropZone._highlight ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
-                }
-
-                Label {
-                    text: dropZone._highlight ? (root._snapping ? i18n("Release to import layout") : i18n("Release to import algorithm")) : (root._snapping ? i18n("Drop a layout file here") : i18n("Drop an algorithm file here"))
-                    color: dropZone._highlight ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
-                    font.italic: !dropZone._highlight
-                }
-            }
-
-            DropArea {
-                id: dropArea
-
-                anchors.fill: parent
-                keys: ["text/uri-list"]
-                onDropped: function (drop) {
-                    var urls = drop.urls;
-                    if (!urls || urls.length === 0) {
-                        drop.accepted = false;
-                        return;
-                    }
-                    var path = settingsController.urlToLocalFile(String(urls[0]));
-                    if (root._snapping) {
-                        // importLayout is fire-and-forget: success → layoutsChanged
-                        // rebuild, failure → layoutOperationFailed toast (both
-                        // handled by the page, matching the import-dialog path).
-                        settingsController.importLayout(path);
-                    } else if (settingsController.importAlgorithm(path)) {
-                        if (window && window.showToast)
-                            window.showToast(i18n("Algorithm imported"));
-                    }
-                    drop.accepted = true;
+            idleText: root._snapping ? i18n("Drop a layout file here") : i18n("Drop an algorithm file here")
+            hoverText: root._snapping ? i18n("Release to import layout") : i18n("Release to import algorithm")
+            onFileDropped: function (url) {
+                var path = settingsController.urlToLocalFile(url);
+                if (root._snapping) {
+                    // importLayout is fire-and-forget: success → layoutsChanged
+                    // rebuild, failure → layoutOperationFailed toast (both
+                    // handled by the page, matching the import-dialog path).
+                    settingsController.importLayout(path);
+                } else if (settingsController.importAlgorithm(path)) {
+                    if (window && window.showToast)
+                        window.showToast(i18n("Algorithm imported"));
                 }
             }
         }

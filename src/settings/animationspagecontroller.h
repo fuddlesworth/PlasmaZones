@@ -3,6 +3,10 @@
 
 #pragma once
 
+// Not forward-declared: moc needs the complete type to register the
+// ShaderSetStore* Q_PROPERTY below as a pointer meta-type.
+#include "shadersetstore.h"
+
 #include <PhosphorControl/PageController.h>
 #include <QByteArray>
 #include <QHash>
@@ -22,7 +26,6 @@ namespace PlasmaZones {
 
 class AnimationPresetLibrary;
 class ISettings;
-class MotionSetStore;
 
 /// Q_PROPERTY surface for the "Animations" settings page.
 ///
@@ -53,7 +56,7 @@ class MotionSetStore;
 /// ## Composition
 ///
 /// The controller delegates persistence-heavy concerns to two child
-/// QObjects: `AnimationPresetLibrary` (preset CRUD) and `MotionSetStore`
+/// QObjects: `AnimationPresetLibrary` (preset CRUD) and `ShaderSetStore`
 /// (motion-set CRUD). Their signals are forwarded to the controller's
 /// own signals via `connect()` so QML rebinds without poking at the
 /// sub-services directly.
@@ -65,6 +68,9 @@ class AnimationsPageController : public PhosphorControl::PageController
     Q_PROPERTY(qreal springOmegaMax READ springOmegaMax CONSTANT)
     Q_PROPERTY(qreal springZetaMin READ springZetaMin CONSTANT)
     Q_PROPERTY(qreal springZetaMax READ springZetaMax CONSTANT)
+
+    /// The motion-set store, bound by AnimationsMotionSetsPage as its `bridge`.
+    Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
 
 public:
     /// @param shaderRegistry Optional — when null, all `*ShaderEffects()` /
@@ -197,31 +203,19 @@ public:
     /// `userPresetsChanged()`.
     Q_INVOKABLE bool removeUserPreset(const QString& name);
 
-    // ── Motion sets (Phase 7) ────────────────────────────────────────
+    // ── Motion sets ──────────────────────────────────────────────────
 
-    /// Lists the user's saved motion-set files. Each row:
-    ///   { name, description, overrideCount, slug }
-    Q_INVOKABLE QVariantList availableMotionSets() const;
-
-    /// Reads the motion-set file at @p name and writes one per-path
-    /// override file for every entry. Atomic: validates every entry
-    /// up-front; rejects the whole set on any malformed entry rather
-    /// than committing partial state. "Merge" semantics: existing
-    /// overrides at paths NOT in the set are preserved. Emits
-    /// `overrideChanged()` for each path written and a single
-    /// `pendingChangesChanged()` at the end. @return true on
-    /// successful read + per-path writes.
-    Q_INVOKABLE bool applyMotionSet(const QString& name);
-
-    /// Snapshots the current set of per-path override files into a
-    /// motion-set JSON under
-    /// `~/.local/share/plasmazones/motionsets/<slug>.json`. @p
-    /// description is freeform metadata for the UI; pass an empty
-    /// string to omit.
-    Q_INVOKABLE bool saveCurrentAsMotionSet(const QString& name, const QString& description);
-
-    /// Delete a saved motion-set file.
-    Q_INVOKABLE bool removeMotionSet(const QString& name);
+    /// The motion-set store — the `bridge` ShaderSetsPage binds to.
+    /// Motion sets snapshot the per-event override FILES under
+    /// `~/.local/share/plasmazones/motionsets/<slug>.json`. Applying
+    /// merges: overrides at paths NOT in the set are preserved. Writes ride
+    /// this controller's `setOverride`, so each one snapshots pre-edit
+    /// content and Discard restores it. The domain closures live in
+    /// motionsetdomain.cpp.
+    ShaderSetStore* setsBridge() const
+    {
+        return m_motionSets;
+    }
 
     // ── Shader effects (Phase 6) ─────────────────────────────────────
 
@@ -368,9 +362,6 @@ Q_SIGNALS:
     /// rebind without poking at the registry directly.
     void shaderEffectsChanged();
 
-    /// Emitted on any successful add/removeMotionSet or apply.
-    void motionSetsChanged();
-
     /// Emitted whenever `hasPendingChanges()` may have flipped. The
     /// SettingsController's slot calls `setNeedsSave(true)` when there
     /// are pending changes; emits with `false`-equivalent state on
@@ -449,7 +440,7 @@ private:
     // `this` as parent so ~AnimationsPageController tears them down
     // automatically. No manual delete; no QPointer needed.
     AnimationPresetLibrary* m_presets = nullptr;
-    MotionSetStore* m_motionSets = nullptr;
+    ShaderSetStore* m_motionSets = nullptr;
 
     /// Pre-edit file contents keyed by absolute path. `std::nullopt`
     /// means "the file did not exist before this session." Mutated only

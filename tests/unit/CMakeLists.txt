@@ -764,7 +764,8 @@ set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/shadersetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/motionsetdomain.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
 )
 
@@ -846,6 +847,7 @@ add_executable(test_decorationpagecontroller
     ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_browser.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_sets.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/shadersetstore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
 )

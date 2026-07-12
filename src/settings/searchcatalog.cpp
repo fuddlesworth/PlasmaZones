@@ -554,7 +554,15 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Spring Presets"));
     addSection(search, QStringLiteral("animations-motionsets"), QStringLiteral("saveMotionSet"),
                PhosphorI18n::tr("Save current state"));
+    addSection(search, QStringLiteral("animations-motionsets"), QStringLiteral("importMotionSets"),
+               PhosphorI18n::tr("User sets"));
     addSection(search, QStringLiteral("animations-motionsets"), QStringLiteral("savedMotionSets"),
+               PhosphorI18n::tr("Saved sets"));
+    addSection(search, QStringLiteral("decorations-sets"), QStringLiteral("saveDecorationSet"),
+               PhosphorI18n::tr("Save current state"));
+    addSection(search, QStringLiteral("decorations-sets"), QStringLiteral("importDecorationSets"),
+               PhosphorI18n::tr("User sets"));
+    addSection(search, QStringLiteral("decorations-sets"), QStringLiteral("savedDecorationSets"),
                PhosphorI18n::tr("Saved sets"));
 
     // Animation events (reveal-tagged on the event list's outer delegates)

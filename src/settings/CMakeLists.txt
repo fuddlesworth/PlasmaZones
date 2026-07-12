@@ -86,8 +86,12 @@ set(plasmazones_settings_SRCS
     # animationspagecontroller.cpp under the project's 800-line cap.
     animationpresetlibrary.h
     animationpresetlibrary.cpp
-    motionsetstore.h
-    motionsetstore.cpp
+    # Shared set store (motion sets + decoration sets) and the motion-set
+    # domain closures that specialise it.
+    shadersetstore.h
+    shadersetstore.cpp
+    motionsetdomain.h
+    motionsetdomain.cpp
     animationfileutils.h
     animationfileutils.cpp
     editorpagecontroller.h
@@ -380,6 +384,14 @@ qt_add_qml_module(plasmazones-settings
         # are thin wrappers that pass the right controller bridge.
         qml/ShaderBrowserPage.qml
         qml/ShaderBrowserCard.qml
+        # Domain-agnostic sets page + rich set card — shared by the Decoration
+        # Sets and Motion Sets pages. Both are thin wrappers that pass the
+        # right ShaderSetStore bridge plus their domain copy.
+        qml/ShaderSetsPage.qml
+        qml/ShaderSetCard.qml
+        # Shared drag-and-drop import band (shader packs, layouts /
+        # algorithms, sets).
+        qml/FileDropZone.qml
         qml/FilterMenuButton.qml
         # Stay-open checkable menu item shared by every filter menu
         # (Layouts via LayoutFilterBar, Rules + shader browser via

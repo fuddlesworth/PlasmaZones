@@ -30,6 +30,7 @@
 #include <PhosphorAnimation/Profile.h>
 
 #include "settings/animationspagecontroller.h"
+#include "settings/shadersetstore.h"
 
 using namespace PlasmaZones;
 
@@ -228,16 +229,16 @@ private Q_SLOTS:
         QVERIFY(
             c.addUserPreset(QStringLiteral("My Preset"), {{QStringLiteral("curve"), QStringLiteral("0.5,0,0.5,1")}}));
 
-        QSignalSpy spy(&c, &AnimationsPageController::motionSetsChanged);
-        QVERIFY(c.saveCurrentAsMotionSet(QStringLiteral("My Set"), QStringLiteral("test set")));
+        QSignalSpy spy(c.setsBridge(), &ShaderSetStore::setsChanged);
+        QVERIFY(c.setsBridge()->saveCurrentAsSet(QStringLiteral("My Set"), QStringLiteral("test set")));
         QCOMPARE(spy.count(), 1);
 
-        const QVariantList sets = c.availableMotionSets();
+        const QVariantList sets = c.setsBridge()->availableSets();
         QCOMPARE(sets.size(), 1);
         const QVariantMap set = sets.first().toMap();
         QCOMPARE(set.value(QStringLiteral("name")).toString(), QStringLiteral("My Set"));
         // Should capture the 2 path overrides, NOT the preset
-        QCOMPARE(set.value(QStringLiteral("overrideCount")).toInt(), 2);
+        QCOMPARE(set.value(QStringLiteral("coverageCount")).toInt(), 2);
     }
 
     void applyMotionSet_writesPerPathFiles()
@@ -249,11 +250,11 @@ private Q_SLOTS:
 
         // Build set, then clear overrides, then apply
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 333}}));
-        QVERIFY(c.saveCurrentAsMotionSet(QStringLiteral("snappy-set"), QString()));
+        QVERIFY(c.setsBridge()->saveCurrentAsSet(QStringLiteral("snappy-set"), QString()));
         QVERIFY(c.clearOverride(QStringLiteral("editor.snapIn")));
         QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
 
-        QVERIFY(c.applyMotionSet(QStringLiteral("snappy-set")));
+        QVERIFY(c.setsBridge()->applySet(QStringLiteral("snappy-set")));
         QVERIFY(c.hasOverride(QStringLiteral("editor.snapIn")));
         QCOMPARE(c.rawProfile(QStringLiteral("editor.snapIn")).value(QStringLiteral("duration")).toInt(), 333);
     }
@@ -267,14 +268,14 @@ private Q_SLOTS:
 
         // Save a set with one path
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 222}}));
-        QVERIFY(c.saveCurrentAsMotionSet(QStringLiteral("set-a"), QString()));
+        QVERIFY(c.setsBridge()->saveCurrentAsSet(QStringLiteral("set-a"), QString()));
         QVERIFY(c.clearOverride(QStringLiteral("editor.snapIn")));
 
         // Set an UNRELATED override
         QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 555}}));
 
         // Apply set-a; osd.show should still be 555 (merge, not replace)
-        QVERIFY(c.applyMotionSet(QStringLiteral("set-a")));
+        QVERIFY(c.setsBridge()->applySet(QStringLiteral("set-a")));
         QCOMPARE(c.rawProfile(QStringLiteral("osd.show")).value(QStringLiteral("duration")).toInt(), 555);
         QVERIFY(c.hasOverride(QStringLiteral("editor.snapIn")));
     }
@@ -287,13 +288,13 @@ private Q_SLOTS:
         c.setUserProfilesDirOverride(tmp.path());
 
         QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 222}}));
-        QVERIFY(c.saveCurrentAsMotionSet(QStringLiteral("To Remove"), QString()));
-        QCOMPARE(c.availableMotionSets().size(), 1);
+        QVERIFY(c.setsBridge()->saveCurrentAsSet(QStringLiteral("To Remove"), QString()));
+        QCOMPARE(c.setsBridge()->availableSets().size(), 1);
 
-        QSignalSpy spy(&c, &AnimationsPageController::motionSetsChanged);
-        QVERIFY(c.removeMotionSet(QStringLiteral("To Remove")));
+        QSignalSpy spy(c.setsBridge(), &ShaderSetStore::setsChanged);
+        QVERIFY(c.setsBridge()->removeSet(QStringLiteral("To Remove")));
         QCOMPARE(spy.count(), 1);
-        QVERIFY(c.availableMotionSets().isEmpty());
+        QVERIFY(c.setsBridge()->availableSets().isEmpty());
     }
 
     /// Manually plant a malformed motion-set file (mixing valid and
@@ -341,7 +342,7 @@ private Q_SLOTS:
         // No prior override at editor.snapIn.
         QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
 
-        QVERIFY(!c.applyMotionSet(QStringLiteral("bad-set")));
+        QVERIFY(!c.setsBridge()->applySet(QStringLiteral("bad-set")));
 
         // Critical: the valid entry MUST NOT have been written. Atomic
         // semantics — all-or-nothing. Pre-fix this would be true.

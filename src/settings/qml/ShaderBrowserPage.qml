@@ -434,53 +434,19 @@ SettingsFlickable {
                     color: Kirigami.Theme.disabledTextColor
                 }
 
-                Rectangle {
-                    id: dropZone
-
-                    readonly property bool _highlight: dropArea.containsDrag
-
+                FileDropZone {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 5
-                    radius: Kirigami.Units.smallSpacing
-                    color: _highlight ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
-                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
-                    border.color: _highlight ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.25)
-
-                    RowLayout {
-                        anchors.centerIn: parent
-                        spacing: Kirigami.Units.largeSpacing
-
-                        Kirigami.Icon {
-                            source: dropZone._highlight ? "folder-add" : "folder-download"
-                            implicitWidth: Kirigami.Units.iconSizes.large
-                            implicitHeight: Kirigami.Units.iconSizes.large
-                            color: dropZone._highlight ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
-                        }
-
-                        Label {
-                            text: dropZone._highlight ? root.dropZoneHoverText : root.dropZoneIdleText
-                            color: dropZone._highlight ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
-                            font.italic: !dropZone._highlight
-                        }
-                    }
-
-                    DropArea {
-                        id: dropArea
-
-                        anchors.fill: parent
-                        keys: ["text/uri-list"]
-                        onDropped: function (drop) {
-                            var urls = drop.urls;
-                            if (!urls || urls.length === 0) {
-                                drop.accepted = false;
-                                return;
-                            }
-                            var ok = root.bridge ? root.bridge.installShaderPack(String(urls[0])) : false;
-                            installResult.show(ok, urls[0]);
-                            drop.accepted = true;
-                        }
+                    idleText: root.dropZoneIdleText
+                    hoverText: root.dropZoneHoverText
+                    idleIcon: "folder-download"
+                    hoverIcon: "folder-add"
+                    iconSize: Kirigami.Units.iconSizes.large
+                    onFileDropped: function (url) {
+                        var ok = root.bridge ? root.bridge.installShaderPack(url) : false;
+                        installResult.show(ok, url);
                     }
                 }
 

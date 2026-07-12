@@ -1,55 +1,89 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// DecorationPageController decoration-set CRUD — the Motion Sets twin for
-// surface-pack decoration. A set is a named snapshot of the decoration
-// profile tree (baseline + per-surface direct overrides), persisted as one
-// JSON file under ~/.local/share/plasmazones/decorationsets. Unlike motion
-// sets (which snapshot per-path override FILES), the decoration tree is
-// config-backed, so apply mutates ONE tree and persists it through
-// ISettings::setDecorationProfileTree — dirty / apply / discard ride the
-// normal settings staging flow with no extra snapshot plumbing.
+// Decoration-set domain closures for the shared ShaderSetStore. A set is a
+// named snapshot of the decoration profile tree (baseline + per-surface direct
+// overrides), persisted as one JSON file under
+// ~/.local/share/plasmazones/decorationsets. Unlike motion sets (which
+// snapshot per-path override FILES), the decoration tree is config-backed, so
+// apply mutates ONE tree and persists it through
+// ISettings::setDecorationProfileTree — dirty / apply / discard ride the normal
+// settings staging flow with no extra snapshot plumbing. The generic store
+// handles the envelope (name / description / version), the coverage summary,
+// and every file operation.
 
 #include "decorationpagecontroller.h"
 
 #include "../config/configdefaults.h"
 #include "../core/isettings.h"
 #include "../core/logging.h"
-#include "../phosphor_i18n.h"
-#include "animationfileutils.h"
+#include "shadersetstore.h"
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 
 #include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonParseError>
+#include <QList>
 #include <QLoggingCategory>
-#include <QSaveFile>
 #include <QStandardPaths>
+#include <QStringList>
 
 namespace PlasmaZones {
 
 namespace {
 
-constexpr QLatin1String kNameKey{"name"};
-constexpr QLatin1String kDescriptionKey{"description"};
-constexpr QLatin1String kVersionKey{"version"};
 constexpr QLatin1String kBaselineKey{"baseline"};
 constexpr QLatin1String kOverridesKey{"overrides"};
 constexpr QLatin1String kPathKey{"path"};
 constexpr QLatin1String kProfileKey{"profile"};
 
-// Current on-disk decoration-set format. saveCurrentAsDecorationSet stamps it;
-// applyDecorationSet refuses a newer version so a set written by a future build
-// (with fields this build can't understand) fails cleanly instead of applying a
-// silently truncated look. A missing/older version parses as the legacy v1 shape.
+/// Current on-disk decoration-set format. The store stamps it on save and
+/// refuses a NEWER file on apply / import.
 constexpr int kSetFormatVersion = 1;
+
+struct StagedEntry
+{
+    QString path;
+    PhosphorSurfaceShaders::DecorationProfile profile;
+};
+
+/// Validate + stage every entry in @p root. Whole-set discipline: one
+/// malformed entry rejects the set rather than committing partial state.
+/// Shared by validate (the import / apply gate) and apply (the commit), so the
+/// two can never drift apart on what counts as a valid entry.
+/// @return false when any entry is malformed, or when the set covers nothing.
+bool stageEntries(const QJsonObject& root, QList<StagedEntry>* staged, bool* hasBaseline)
+{
+    using PhosphorSurfaceShaders::DecorationProfile;
+
+    *hasBaseline = root.value(kBaselineKey).isObject();
+    const QJsonArray overrides = root.value(kOverridesKey).toArray();
+    staged->reserve(overrides.size());
+    for (const QJsonValue& v : overrides) {
+        if (!v.isObject()) {
+            qCWarning(lcConfig) << "decorationset: non-object entry in set";
+            return false;
+        }
+        const QJsonObject entry = v.toObject();
+        const QString path = entry.value(kPathKey).toString();
+        // Membership in the supported surface taxonomy is the same rule the
+        // controller's setters enforce. It also rejects empty and
+        // traversal-attempting paths.
+        if (path.isEmpty() || !PhosphorSurfaceShaders::decorationSurfaceSupported(path)) {
+            qCWarning(lcConfig) << "decorationset: rejecting unknown surface path" << path;
+            return false;
+        }
+        if (!entry.value(kProfileKey).isObject()) {
+            qCWarning(lcConfig) << "decorationset: missing profile object for" << path;
+            return false;
+        }
+        staged->push_back({path, DecorationProfile::fromJson(entry.value(kProfileKey).toObject())});
+    }
+    return !staged->isEmpty() || *hasBaseline;
+}
 
 } // namespace
 
@@ -59,212 +93,86 @@ QString DecorationPageController::decorationSetsDirectoryPath() const
     return QDir::cleanPath(base + ConfigDefaults::userDecorationSetsSubdir());
 }
 
-QString DecorationPageController::decorationSetFilePath(const QString& setName) const
-{
-    return animfileutil::jsonFilePath(decorationSetsDirectoryPath(), animfileutil::slugify(setName));
-}
-
-QVariantList DecorationPageController::availableDecorationSets() const
-{
-    QVariantList result;
-    QDir dir(decorationSetsDirectoryPath());
-    if (!dir.exists()) {
-        return result;
-    }
-    const auto files = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
-    for (const QFileInfo& info : files) {
-        QFile f(info.absoluteFilePath());
-        if (!f.open(QIODevice::ReadOnly)) {
-            qCWarning(lcConfig) << "availableDecorationSets: cannot open" << info.absoluteFilePath();
-            continue;
-        }
-        QJsonParseError err{};
-        const auto doc = QJsonDocument::fromJson(f.readAll(), &err);
-        if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-            qCWarning(lcConfig) << "availableDecorationSets: failed to parse" << info.absoluteFilePath() << ":"
-                                << err.errorString();
-            continue;
-        }
-        const QJsonObject obj = doc.object();
-        QVariantMap row;
-        row.insert(QLatin1String("name"), obj.value(kNameKey).toString());
-        row.insert(QLatin1String("description"), obj.value(kDescriptionKey).toString());
-        row.insert(QLatin1String("slug"), info.completeBaseName());
-        // Baseline counts as one covered surface in the row summary.
-        const int baselineCount = obj.contains(kBaselineKey) ? 1 : 0;
-        row.insert(QLatin1String("overrideCount"), obj.value(kOverridesKey).toArray().size() + baselineCount);
-        result.append(row);
-    }
-    return result;
-}
-
 // NOTE: this TU is compiled with -fno-lto -Wno-maybe-uninitialized in BOTH
 // consuming targets (src/settings/CMakeLists.txt for plasmazones-settings,
 // tests/unit/CMakeLists.txt for test_decorationpagecontroller — source-file
 // properties are directory-scoped, so each consumer sets its own) — GCC 16's
 // LTO pass emits false-positive -Wmaybe-uninitialized warnings against the
-// staged.push_back() below.
-bool DecorationPageController::applyDecorationSet(const QString& name)
+// staged.push_back() above.
+void DecorationPageController::initSetsStore()
 {
     using PhosphorSurfaceShaders::DecorationProfile;
     using PhosphorSurfaceShaders::DecorationProfileTree;
-    if (!m_settings || name.isEmpty()) {
-        return false;
-    }
-    const QString filePath = decorationSetFilePath(name);
-    if (filePath.isEmpty()) {
-        return false;
-    }
-    QFile f(filePath);
-    if (!f.exists() || !f.open(QIODevice::ReadOnly)) {
-        return false;
-    }
-    QJsonParseError err{};
-    const auto doc = QJsonDocument::fromJson(f.readAll(), &err);
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        qCWarning(lcConfig) << "applyDecorationSet: failed to parse" << filePath << ":" << err.errorString();
-        return false;
-    }
-    const QJsonObject root = doc.object();
 
-    // A set written by a newer build may carry fields this build drops on parse,
-    // so applying it would commit a silently truncated look. Refuse it. A
-    // missing version (legacy files) reads as the current format.
-    const QJsonValue versionVal = root.value(kVersionKey);
-    // A present-but-non-numeric version is malformed. Treat it as unknown
-    // (newer) and refuse, rather than silently reading it as the current format
-    // and applying a set this build may not fully understand.
-    if (!versionVal.isUndefined() && !versionVal.isDouble()) {
-        qCWarning(lcConfig) << "applyDecorationSet: non-numeric version in" << filePath << "— refusing";
-        return false;
-    }
-    const int version = versionVal.toInt(kSetFormatVersion);
-    if (version > kSetFormatVersion) {
-        qCWarning(lcConfig) << "applyDecorationSet: set version" << version << "in" << filePath
-                            << "is newer than this build understands (" << kSetFormatVersion << ") — refusing";
-        return false;
-    }
-
-    // Validate every entry up-front — reject the whole set on any malformed
-    // entry rather than committing partial state (same staging discipline as
-    // MotionSetStore::applyMotionSet). Path membership in the supported
-    // surface taxonomy is the same rule the controller setters enforce.
-    struct StagedEntry
-    {
-        QString path;
-        PhosphorSurfaceShaders::DecorationProfile profile;
+    ShaderSetStore::Config config;
+    config.formatVersion = kSetFormatVersion;
+    config.setsDir = [this]() {
+        return decorationSetsDirectoryPath();
     };
-    QList<StagedEntry> staged;
-    const QJsonArray overrides = root.value(kOverridesKey).toArray();
-    staged.reserve(overrides.size());
-    for (const QJsonValue& v : overrides) {
-        if (!v.isObject()) {
-            qCWarning(lcConfig) << "applyDecorationSet: non-object entry in" << filePath;
+
+    // ── Snapshot: serialise the live tree (baseline + direct overrides).
+    //    Paths are sorted so the output is deterministic, which the store
+    //    relies on when it compares this snapshot against a saved set to
+    //    decide which one is active.
+    config.snapshot = [this]() -> QJsonObject {
+        if (!m_settings) {
+            return QJsonObject{};
+        }
+        const DecorationProfileTree tree = m_settings->decorationProfileTree();
+
+        QJsonObject root;
+        // The baseline is part of the look — capture it when it carries any
+        // engaged field (an empty profile serialises to an empty object).
+        const QJsonObject baselineJson = tree.baseline().toJson();
+        if (!baselineJson.isEmpty()) {
+            root.insert(kBaselineKey, baselineJson);
+        }
+        QJsonArray overrides;
+        QStringList paths = tree.overriddenPaths();
+        paths.sort();
+        for (const QString& p : paths) {
+            QJsonObject entry;
+            entry.insert(kPathKey, p);
+            entry.insert(kProfileKey, tree.directOverride(p).toJson());
+            overrides.append(entry);
+        }
+        root.insert(kOverridesKey, overrides);
+        return root;
+    };
+
+    config.validate = [](const QJsonObject& root) -> bool {
+        QList<StagedEntry> staged;
+        bool hasBaseline = false;
+        return stageEntries(root, &staged, &hasBaseline);
+    };
+
+    // ── Apply: merge into ONE tree and persist once. Surfaces the set does
+    //    not cover keep their current overrides (motion-set semantics).
+    config.apply = [this](const QJsonObject& root) -> bool {
+        if (!m_settings) {
             return false;
         }
-        const QJsonObject entry = v.toObject();
-        const QString path = entry.value(kPathKey).toString();
-        if (path.isEmpty() || !PhosphorSurfaceShaders::decorationSurfaceSupported(path)) {
-            qCWarning(lcConfig) << "applyDecorationSet: rejecting unknown surface path" << path << "in" << filePath;
+        QList<StagedEntry> staged;
+        bool hasBaseline = false;
+        if (!stageEntries(root, &staged, &hasBaseline)) {
             return false;
         }
-        if (!entry.value(kProfileKey).isObject()) {
-            qCWarning(lcConfig) << "applyDecorationSet: missing profile object for" << path << "in" << filePath;
-            return false;
+        DecorationProfileTree tree = m_settings->decorationProfileTree();
+        if (hasBaseline) {
+            tree.setBaseline(DecorationProfile::fromJson(root.value(kBaselineKey).toObject()));
         }
-        staged.push_back({path, DecorationProfile::fromJson(entry.value(kProfileKey).toObject())});
-    }
-    const bool hasBaseline = root.value(kBaselineKey).isObject();
-    if (staged.isEmpty() && !hasBaseline) {
-        return false;
-    }
+        for (const StagedEntry& e : staged) {
+            tree.setOverride(e.path, e.profile);
+        }
+        m_settings->setDecorationProfileTree(tree);
+        return true;
+    };
 
-    // Merge into ONE tree and persist once. Surfaces the set does not
-    // cover keep their current overrides (motion-set semantics).
-    DecorationProfileTree tree = m_settings->decorationProfileTree();
-    if (hasBaseline) {
-        tree.setBaseline(DecorationProfile::fromJson(root.value(kBaselineKey).toObject()));
-    }
-    for (const StagedEntry& e : staged) {
-        tree.setOverride(e.path, e.profile);
-    }
-    m_settings->setDecorationProfileTree(tree);
-    return true;
-}
+    m_sets = new ShaderSetStore(std::move(config), this);
 
-bool DecorationPageController::saveCurrentAsDecorationSet(const QString& name, const QString& description)
-{
-    using PhosphorSurfaceShaders::DecorationProfile;
-    using PhosphorSurfaceShaders::DecorationProfileTree;
-    if (!m_settings || name.isEmpty()) {
-        return false;
-    }
-    const QString filePath = decorationSetFilePath(name);
-    if (filePath.isEmpty()) {
-        return false;
-    }
-    const DecorationProfileTree tree = m_settings->decorationProfileTree();
-
-    QJsonObject rootObj;
-    rootObj.insert(kNameKey, name);
-    if (!description.isEmpty()) {
-        rootObj.insert(kDescriptionKey, description);
-    }
-    rootObj.insert(kVersionKey, kSetFormatVersion);
-    // The baseline is part of the look — capture it when it carries any
-    // engaged field (an empty profile serialises to an empty object).
-    const QJsonObject baselineJson = tree.baseline().toJson();
-    if (!baselineJson.isEmpty()) {
-        rootObj.insert(kBaselineKey, baselineJson);
-    }
-    QJsonArray overrides;
-    QStringList paths = tree.overriddenPaths();
-    paths.sort(); // deterministic file content across saves
-    for (const QString& p : paths) {
-        QJsonObject entry;
-        entry.insert(kPathKey, p);
-        entry.insert(kProfileKey, tree.directOverride(p).toJson());
-        overrides.append(entry);
-    }
-    // An empty tree (no baseline, no overrides) would save a set that
-    // applyDecorationSet then silently rejects (nothing to stage). Refuse the
-    // save so the user isn't left with a do-nothing set on disk. Checked before
-    // mkpath so a rejected save leaves no empty directory behind.
-    if (baselineJson.isEmpty() && overrides.isEmpty()) {
-        return false;
-    }
-    rootObj.insert(kOverridesKey, overrides);
-
-    if (!QDir().mkpath(decorationSetsDirectoryPath())) {
-        return false;
-    }
-    QSaveFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return false;
-    }
-    file.write(QJsonDocument(rootObj).toJson(QJsonDocument::Indented));
-    if (!file.commit()) {
-        return false;
-    }
-    Q_EMIT decorationSetsChanged();
-    return true;
-}
-
-bool DecorationPageController::removeDecorationSet(const QString& name)
-{
-    if (name.isEmpty()) {
-        return false;
-    }
-    const QString filePath = decorationSetFilePath(name);
-    if (filePath.isEmpty()) {
-        return false;
-    }
-    QFile file(filePath);
-    if (!file.exists() || !file.remove()) {
-        return false;
-    }
-    Q_EMIT decorationSetsChanged();
-    return true;
+    // The `active` badge is derived from live state, so it goes stale when
+    // the user edits a chain anywhere else on the Decoration pages.
+    connect(this, &DecorationPageController::profilesChanged, m_sets, &ShaderSetStore::notifyLiveStateChanged);
 }
 
 } // namespace PlasmaZones

@@ -3,6 +3,10 @@
 
 #pragma once
 
+// Not forward-declared: moc needs the complete type to register the
+// ShaderSetStore* Q_PROPERTY below as a pointer meta-type.
+#include "shadersetstore.h"
+
 #include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QString>
@@ -56,6 +60,9 @@ class ISettings;
 class DecorationPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
+
+    /// The decoration-set store, bound by DecorationSetsPage as its `bridge`.
+    Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
 
 public:
     /// @param registry Optional — when null, all `*ShaderEffects()` /
@@ -193,20 +200,19 @@ public:
     /// browser's "Used in" chips.
     Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
 
-    // ── Decoration sets (the Motion Sets twin) ──────────────────────────
-    // Named snapshots of the decoration profile tree, persisted as JSON
-    // under ~/.local/share/plasmazones/decorationsets/<slug>.json.
-    // Applying merges: the baseline (when the set captured one) and every
-    // entry replace the DIRECT profile at their path; surfaces the set
-    // does not cover keep their current overrides. All writes go through
-    // ISettings::setDecorationProfileTree, so dirty / apply / discard ride
-    // the normal staging flow.
-
-    /// Saved sets as {name, description, slug, overrideCount} rows.
-    Q_INVOKABLE QVariantList availableDecorationSets() const;
-    Q_INVOKABLE bool applyDecorationSet(const QString& name);
-    Q_INVOKABLE bool saveCurrentAsDecorationSet(const QString& name, const QString& description);
-    Q_INVOKABLE bool removeDecorationSet(const QString& name);
+    /// The decoration-set store — the `bridge` ShaderSetsPage binds to.
+    /// Named snapshots of the decoration profile tree, persisted as JSON
+    /// under ~/.local/share/plasmazones/decorationsets/<slug>.json.
+    /// Applying merges: the baseline (when the set captured one) and every
+    /// entry replace the DIRECT profile at their path; surfaces the set
+    /// does not cover keep their current overrides. All writes go through
+    /// ISettings::setDecorationProfileTree, so dirty / apply / discard ride
+    /// the normal staging flow. The domain closures live in
+    /// decorationpagecontroller_sets.cpp.
+    ShaderSetStore* setsBridge() const
+    {
+        return m_sets;
+    }
 
 Q_SIGNALS:
     /// Re-emit of `SurfaceShaderRegistry::effectsChanged` so QML can
@@ -222,17 +228,17 @@ Q_SIGNALS:
     /// failures with the concrete reason). Routed by ShaderBrowserPage.
     void toastRequested(const QString& text);
 
-    /// Emitted on any successful save/removeDecorationSet so the Sets page
-    /// refreshes its Q_INVOKABLE-loaded list.
-    void decorationSetsChanged();
-
 private:
+    /// Construct m_sets with the decoration domain closures. Called from the
+    /// constructor; defined in decorationpagecontroller_sets.cpp.
+    void initSetsStore();
+
     QString userShaderDirectoryPath() const;
     QString decorationSetsDirectoryPath() const;
-    QString decorationSetFilePath(const QString& setName) const;
 
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_registry = nullptr;
     ISettings* m_settings = nullptr;
+    ShaderSetStore* m_sets = nullptr;
 };
 
 } // namespace PlasmaZones
