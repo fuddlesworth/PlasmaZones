@@ -132,7 +132,7 @@ void DecorationPageController::setSetsDirOverride(const QString& dir)
     m_setsDirOverride = dir;
 }
 
-// NOTE: this TU is compiled with -fno-lto -Wno-maybe-uninitialized in every
+// NOTE: under GCC, this TU is compiled with -fno-lto -Wno-maybe-uninitialized in every
 // consuming target (src/settings/CMakeLists.txt for plasmazones-settings, and
 // tests/unit/CMakeLists.txt, whose one directory-scoped call covers every
 // decoration-controller test target in that directory — source-file

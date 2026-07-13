@@ -36,7 +36,6 @@ SettingsFlickable {
     readonly property var _easingUserPresets: filterUserPresets(false)
     // QVariantList from C++
     readonly property var _springUserPresets: filterUserPresets(true)
-    // QVariantList from C++
     property bool _deletingPreset: false
 
     function isSpringEntry(curveStr) {

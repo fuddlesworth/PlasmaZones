@@ -427,7 +427,8 @@ PhosphorUi.SettingsAppWindow {
     // ── Ctrl+PgUp / Ctrl+PgDown — step through navigable pages ──────
     // Guarded: page navigation must not fire while any of the inline
     // confirm dialogs (whatsNewDialog, resetConfirmDialog,
-    // defaultsConfirmDialog, sectionToggleDiscardConfirm, daemonStopConfirm),
+    // defaultsConfirmDialog, sectionToggleDiscardConfirm, daemonStopConfirm,
+    // resetPageConfirmDialog, discardPageConfirmDialog),
     // the shortcut
     // overlay, the active page's own modal stack (RulesPage's
     // forceSaveConfirm / addRuleWizard / ruleEditorSheet /

@@ -693,6 +693,28 @@ private Q_SLOTS:
         QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("That file is not a readable set."));
         QVERIFY(sets->availableSets().isEmpty());
     }
+    /// An imported file whose stored name AND filename both slugify to nothing
+    /// has no name the store could ever address it by. It is refused with its
+    /// own reason rather than imported as an unreachable row.
+    void importSet_refusesAnUnnameablePayload()
+    {
+        TreeStubSettings settings;
+        DecorationPageController c(nullptr, &settings);
+        c.setSetsDirOverride(decorationSetsDir());
+        ShaderSetStore* sets = c.setsBridge();
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QJsonObject root = validSetPayload(QStringLiteral("!!!"));
+        const QString payload = dir.filePath(QStringLiteral("!!!.json"));
+        writeSetFile(payload, root);
+
+        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
+        QVERIFY2(!sets->importSet(payload), "a payload with no usable name must be refused");
+        QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("That set has no usable name."));
+        QVERIFY(sets->availableSets().isEmpty());
+    }
 };
 
 QTEST_MAIN(TestDecorationSetsValidation)

@@ -695,7 +695,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/settings/animationspagecontroller.cpp" line="573"/>
-        <source>Failed to restore %n profile file. It remains pending.</source>
+        <source>Could not restore %n profile file(s). They remain pending.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
             <numerusform></numerusform>
