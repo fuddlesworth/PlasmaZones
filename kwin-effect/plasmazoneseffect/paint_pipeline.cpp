@@ -1591,7 +1591,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 // the window texture (unpadded chain, anchor-extent draw —
                 // the layer rect is the identity), point the shader's window
                 // sampler at the composite unit. Every sample then reads the
-                // DECORATED window, including the 25 bundled packs that
+                // DECORATED window, including the many bundled packs that
                 // sample uTexture0 raw and bypass surfaceColor() — without
                 // this, those shaders drop the border / frost / glass for
                 // the whole transition. Padded chains (glow) keep unit 0:
