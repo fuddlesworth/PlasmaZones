@@ -150,8 +150,11 @@ struct CompiledSurfacePack
     /// Audio-spectrum locations (surface_audio.glsl): iAudioSpectrumSize (bar
     /// count int) + the uAudioSpectrum sampler. -1 for a pack that never reads
     /// the CAVA spectrum (the linker drops both — the common case). A pack with
-    /// iAudioSpectrumSizeLoc >= 0 is audio-reactive: it drives the run gate
-    /// (syncEffectAudioState) and the per-frame repaint gate (windowSurfaceAnimates).
+    /// iAudioSpectrumSizeLoc >= 0 is audio-reactive at the shader level: it drives
+    /// the per-frame repaint gate (windowSurfaceAnimates) and the bind. The cava
+    /// run gate is driven SEPARATELY by the pack's `audio` metadata (see
+    /// hasAudioReactiveDecoration), which resolves before a pack's first compile
+    /// and so cannot key on this linked location.
     int iAudioSpectrumSizeLoc = -1;
     int uAudioSpectrumLoc = -1;
     /// iMouse — cursor in the surface texture's top-down device-px space,
@@ -186,7 +189,7 @@ struct CompiledSurfacePack
 
     /// Pack-declared parameter uniform locations + resolved-default values.
     /// float/int/bool params pack into customParams[N], colours into
-    /// customColors[N]. The reserved "border" pack declares borderWidth /
+    /// customColors[N]. The built-in "border" pack declares borderWidth /
     /// cornerRadius / useSystemAccent (customParams[0]) and active/inactive
     /// colours (customColors[0..1]); its per-window rule/config appearance
     /// rides WindowDecoration::packParamValues, routed by param id like any
@@ -545,7 +548,7 @@ struct WindowDecoration
     bool shaderApplied = false;
 
     /// The resolved decoration shader-pack chain for this window: either the
-    /// reserved {"border"} base (easy mode — no user packs anywhere on the
+    /// built-in {"border"} base (easy mode — no user packs anywhere on the
     /// window's surface path) or the user's own pack chain, e.g. {"glow",
     /// "border-sweep"} (custom mode — any user pack suppresses the plain
     /// border outright, see updateWindowDecoration). The idle present path

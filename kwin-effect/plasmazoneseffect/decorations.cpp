@@ -281,10 +281,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
 
     // DECORATE GATE: the chain is either the plain layers (easy mode — the
-    // reserved "border" base and/or the "opacity-tint" layer, both on →
+    // built-in "border" base and/or the "opacity-tint" layer, both on →
     // both render, opacity-tint folding OVER the border so the window fades
     // as a whole) or the user packs (custom mode). Neither → nothing to
-    // render.
+    // render. ("built-in", not "reserved": the two ids are also selectable
+    // packs — see updateWindowDecoration's userPacks — and this easy-mode
+    // injection just runs when no user pack occupies the chain.)
     QStringList chain;
     if (showBorder) {
         chain.append(QStringLiteral("border"));
@@ -333,7 +335,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // accent when the daemon has delivered one, else the Breeze default.
     const QColor accentOr = m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9"));
     if (showBorder) {
-        // Easy mode: the resolved border appearance rides the reserved
+        // Easy mode: the resolved border appearance rides the built-in
         // "border" pack's OWN declared parameters (borderWidth / cornerRadius /
         // activeColor / inactiveColor, see data/surface/border/metadata.json),
         // routed by id through the same translateSurfaceParams path every

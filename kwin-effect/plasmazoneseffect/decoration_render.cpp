@@ -420,7 +420,7 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     }
     // Pack-declared parameters (customParams / customColors). Seed from THIS
     // window's resolved values (updateWindowDecoration fills packParamValues from
-    // the window's own DecorationProfile — for the reserved "border" base pack
+    // the window's own DecorationProfile — for the built-in "border" base pack
     // that resolution already carries the window's rule/config border
     // appearance, routed by param id like any other pack override), falling
     // back to the compiled pack's baked baseline when the registry couldn't

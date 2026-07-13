@@ -228,7 +228,7 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
         return &packState;
     }
     // Named-param preamble (`#define p_<id> ...`) for pack-declared parameters.
-    // Every pack routes its knobs through these — the reserved "border" pack
+    // Every pack routes its knobs through these — the built-in "border" pack
     // included, whose width/radius/colours are its own declared params seeded
     // from the resolved appearance.
     expanded = PhosphorShaders::spliceAfterVersion(expanded,
