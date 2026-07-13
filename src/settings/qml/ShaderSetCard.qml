@@ -108,8 +108,8 @@ ExpandableRowDelegate {
     }
 
     // ── Badge cluster: metadata (coverage chips → count), then state
-    //    (Active), then actions (Apply → overflow) — grouped so the eye
-    //    reads each kind as a unit.
+    //    (Active), then actions (Apply → edit / export / delete) — grouped
+    //    so the eye reads each kind as a unit.
 
     // Coverage chips — which parts of the taxonomy the set carries. The Row
     // groups them at smallSpacing inside the header's largeSpacing cluster, and
