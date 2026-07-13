@@ -99,8 +99,14 @@ vec4 getInputColor(vec2 coords) {
     return color;
 }
 
+// Routes through PZ_FINALIZE_COLOR (identity by default; the kwin-effect
+// window-animation path overrides it with the sRGB → output-colorspace
+// conversion) so BMW packs with a hand-written main() — which bypass the
+// entry scaffold's generated fragColor write — still get colour-managed
+// on HDR. The macro comes from animation_uniforms.glsl, which the caller
+// contract above already requires be included before this header.
 void setOutputColor(vec4 outColor) {
-    fragColor = vec4(outColor.rgb * outColor.a, outColor.a);
+    fragColor = PZ_FINALIZE_COLOR(vec4(outColor.rgb * outColor.a, outColor.a));
 }
 
 // ── Composition: BMW common.glsl:189 verbatim ───────────────────────

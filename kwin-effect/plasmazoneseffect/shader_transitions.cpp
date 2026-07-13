@@ -803,6 +803,63 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         expanded = PhosphorShaders::spliceAfterVersion(
             expanded, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
 
+        // HDR colour management. Installing this shader via
+        // OffscreenEffect::setShader REPLACES KWin's present shader, which
+        // normally carries the sRGB → output-colorspace conversion
+        // (ShaderTrait::TransformColorspace in KWin's own base.frag). Without
+        // it the transition writes sRGB verbatim into KWin's blending space —
+        // on an HDR output that space is gamma2.2 in the display's container
+        // colorimetry with 1.0 = peak luminance, so every window animation
+        // rendered dim and desaturated. Same bug class as the decoration
+        // present shader fix in decoration_render.cpp (kPresentFragment); the
+        // conversion below mirrors it, and KWin's base.frag, step for step:
+        // encoding → nits, colorimetry transform, tonemap, destination
+        // encoding.
+        //
+        // Deliberately NOT sourceEncodingToNitsInDestinationColorspace(): it
+        // folds doTonemapping() in at the end, which would tonemap twice — a
+        // double compression on HDR, precisely the case this exists for. No
+        // opacity modulate either: unlike the present shader, this path's
+        // window-rule opacity is folded into the sample by surfaceColor()
+        // (animation_uniforms.glsl), and this shader is compiled without the
+        // Modulate trait so KWin's TRAIT_MODULATE slot never applies.
+        //
+        // The override must be spliced AFTER expandIncludes ran above:
+        // colormanagement.glsl lives in KWin's `:/opengl/` resource, which
+        // KWin's GLShader::preprocess resolves for every source it compiles
+        // (custom ones included) — the phosphor include resolver would fail
+        // the whole expansion on it. The `#define` lands before the expanded
+        // animation_uniforms.glsl text, whose `#ifndef PZ_FINALIZE_COLOR`
+        // identity default then yields to this override; the generated entry
+        // main()s and bmw_compat's setOutputColor route their fragColor
+        // writes through the macro.
+        //
+        // The colorspace uniforms come free: KWin's OffscreenData::paint
+        // calls setColorspaceUniforms(sRGB, renderTarget.colorDescription(),
+        // Perceptual) on whatever shader setShader() installed. Do not push
+        // them from drawWindow — that is a redundant write KWin overwrites.
+        //
+        // On SDR this whole block is an exact no-op (identity colorimetry,
+        // round-tripping transfer functions, tonemap degrades to a clamp that
+        // cannot bite), so "SDR pixel-identical" is the regression test.
+        //
+        // The desktop-switch path (desktoptransitionmanager.cpp) deliberately
+        // does NOT get this splice: its capture FBOs inherit the output's
+        // colorDescription, so both blend inputs already live in the blending
+        // space and converting again would double-transform. It keeps the
+        // identity default.
+        static const QString kFinalizeColorBlock = QStringLiteral(
+            "#include \"colormanagement.glsl\"\n"
+            "vec4 pzFinalizeColor(vec4 c) {\n"
+            "    c = encodingToNits(c, sourceNamedTransferFunction,\n"
+            "                       sourceTransferFunctionParams.x, sourceTransferFunctionParams.y);\n"
+            "    c.rgb = (colorimetryTransform * vec4(c.rgb, 1.0)).rgb;\n"
+            "    c.rgb = doTonemapping(c.rgb);\n"
+            "    return nitsToDestinationEncoding(c);\n"
+            "}\n"
+            "#define PZ_FINALIZE_COLOR(c) pzFinalizeColor(c)\n");
+        expanded = PhosphorShaders::spliceAfterVersion(expanded, kFinalizeColorBlock);
+
         // Selects the default-block branch in `animation_uniforms.glsl`.
         // KWin's `KWin::GLShader` API addresses default-block uniforms only
         // (no UBO bind path), so the canonical header's `#ifdef
@@ -854,8 +911,16 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             }
         }
 
-        auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture,
-                                                                            vertWithKwinDefine, fragWithKwinDefine);
+        // TransformColorspace is DECLARATIVE ONLY here, exactly as on the
+        // decoration present shader (decoration_render.cpp): with a custom
+        // fragment source generateCustomShader uses the traits for nothing
+        // but listDefines, and colormanagement.glsl never reads
+        // TRAIT_TRANSFORM_COLORSPACE. The conversion is the explicit
+        // pzFinalizeColor splice above and runs with or without this flag; it
+        // is declared so the shader's traits describe what it actually does.
+        auto shader = KWin::ShaderManager::instance()->generateCustomShader(
+            KWin::ShaderTrait::MapTexture | KWin::ShaderTrait::TransformColorspace, vertWithKwinDefine,
+            fragWithKwinDefine);
         // KWin 6.7 removed GLShader::isValid(); generateCustomShader now returns
         // nullptr when compilation or linking fails, so a null check is the
         // validity test.

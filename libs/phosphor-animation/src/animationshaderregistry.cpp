@@ -769,11 +769,18 @@ QString AnimationShaderRegistry::animationEntryPrologue()
 
 QList<PhosphorShaders::EntryCandidate> AnimationShaderRegistry::animationEntryCandidates()
 {
+    // Both generated mains route the final colour through PZ_FINALIZE_COLOR
+    // (declared with an identity default in animation_uniforms.glsl, which the
+    // prologue includes). The kwin-effect window-animation path overrides it
+    // with the sRGB → output-colorspace conversion HDR needs; every other
+    // consumer compiles the identity form. See the hook's doc block in
+    // animation_uniforms.glsl.
+    //
     // Symmetric: one function, `t` is raw iTime (the runtime still flips it on
     // reverse legs, so the shader auto-mirrors with no direction code).
     static const QString transitionMain = QStringLiteral(
         "void main() {\n"
-        "    fragColor = pTransition(vTexCoord, iTime);\n"
+        "    fragColor = PZ_FINALIZE_COLOR(pTransition(vTexCoord, iTime));\n"
         "}\n");
     // Asymmetric: the harness un-flips iTime (legProgress → forward 0→1) and
     // dispatches by direction, so the author never touches iIsReversed/iTime
@@ -781,7 +788,7 @@ QList<PhosphorShaders::EntryCandidate> AnimationShaderRegistry::animationEntryCa
     static const QString inOutMain = QStringLiteral(
         "void main() {\n"
         "    float p_t = legProgress();\n"
-        "    fragColor = p_reversed ? pOut(vTexCoord, p_t) : pIn(vTexCoord, p_t);\n"
+        "    fragColor = PZ_FINALIZE_COLOR(p_reversed ? pOut(vTexCoord, p_t) : pIn(vTexCoord, p_t));\n"
         "}\n");
 
     PhosphorShaders::EntryCandidate transition;

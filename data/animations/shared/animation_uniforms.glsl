@@ -152,9 +152,9 @@ uniform vec2 iAnchorPosInFbo;
 
 // Window's effective rule-resolved opacity in [0, 1] — compositor path
 // only. A `SetOpacity` rule must dim the window for the whole
-// transition, but the custom transition shader is compiled
-// `MapTexture`-only (no `Modulate` trait), so KWin never applies
-// `data.opacity()` to it. `surfaceColor()` below multiplies the
+// transition, but the custom transition shader is compiled without the
+// `Modulate` trait, so KWin never applies `data.opacity()` to it.
+// `surfaceColor()` below multiplies the
 // premultiplied surface sample by this uniform so the dim holds across
 // the animation instead of snapping in only after it ends. The
 // kwin-effect pushes 1.0 for windows with no matching rule, so the
@@ -399,7 +399,7 @@ vec4 surfaceColor(vec2 uv) {
     // window-rule opacity: uTexture0 is premultiplied, so multiplying the
     // whole sample by the [0, 1] `iWindowOpacity` is the correct
     // premultiplied-alpha dim. This is what makes a `SetOpacity` rule hold
-    // throughout a transition (the MapTexture-only shader can't see
+    // throughout a transition (with no `Modulate` trait the shader can't see
     // `data.opacity()`); the effect feeds 1.0 when no rule matches, so the
     // common case is unchanged. Every window-content shader reads the
     // surface through this helper (directly or via bmw_compat's
@@ -462,5 +462,29 @@ vec4 premultiply(vec4 c) {
 vec2 resolutionSafe() {
     return max(iResolution, vec2(1.0));
 }
+
+// ─── Final-colour hook (HDR colour management) ─────────────────────────
+// Every final `fragColor` write in the animation pipeline routes through
+// `PZ_FINALIZE_COLOR(...)`: the entry scaffold's generated main()s
+// (animationshaderregistry.cpp) and bmw_compat's `setOutputColor()`. The
+// guarded default below is identity.
+//
+// The kwin-effect WINDOW-animation path overrides it before this header
+// is included: shader_transitions.cpp splices KWin's colormanagement.glsl
+// plus `#define PZ_FINALIZE_COLOR(c) pzFinalizeColor(c)` right after
+// `#version`, converting the shader's sRGB output into the output's
+// blending space. Installing a shader via OffscreenEffect::setShader
+// REPLACES KWin's present shader (which normally carries that
+// conversion), so without the override HDR outputs render every window
+// animation dim and desaturated.
+//
+// Everything else keeps identity: the daemon RHI runtime (Qt colour-
+// manages the scene graph output), shadervalidate, the bake tests, and
+// the desktop-switch path (its capture FBOs inherit the output's
+// colorDescription, so its inputs already live in the blending space and
+// converting again would be wrong).
+#ifndef PZ_FINALIZE_COLOR
+#define PZ_FINALIZE_COLOR(c) (c)
+#endif
 
 #endif // PLASMAZONES_ANIMATION_UNIFORMS_GLSL
