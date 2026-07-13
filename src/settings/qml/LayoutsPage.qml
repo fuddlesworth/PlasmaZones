@@ -443,7 +443,7 @@ SettingsFlickable {
                                 // (KCM / future preview) `window.layoutContextMenu`
                                 // is undefined; suppress the right-button mask so a
                                 // missing menu doesn't pretend to exist.
-                                contextMenuEnabled: window && window.layoutContextMenu
+                                contextMenuEnabled: typeof window !== "undefined" && window && window.layoutContextMenu
                                 onSelected: idx => {
                                     root.selectedLayoutId = String(modelData.id);
                                 }
@@ -455,7 +455,7 @@ SettingsFlickable {
                                     deleteConfirmDialog.open();
                                 }
                                 onContextMenuRequested: layout => {
-                                    if (window && window.layoutContextMenu)
+                                    if (typeof window !== "undefined" && window && window.layoutContextMenu)
                                         window.layoutContextMenu.showForLayout(layout);
                                 }
                             }
@@ -503,7 +503,7 @@ SettingsFlickable {
             // Report both outcomes, like the drop zone in LayoutManageCard. A
             // silent failure read as a chosen file that simply vanished.
             const ok = settingsController.importAlgorithm(root.filePathFromUrl(selectedFile));
-            if (window && window.showToast)
+            if (typeof window !== "undefined" && window && window.showToast)
                 window.showToast(ok ? i18n("Algorithm imported") : i18n("Could not import that algorithm. It must be a Luau file this build can read."));
         }
     }
@@ -526,7 +526,7 @@ SettingsFlickable {
     // parameter name for grep-friendliness even though it is unused here.
     Connections {
         function onKzonesImportFinished(count, message) {
-            if (window && window.showToast)
+            if (typeof window !== "undefined" && window && window.showToast)
                 window.showToast(message);
         }
 
@@ -553,8 +553,8 @@ SettingsFlickable {
         // When LayoutsPage is hosted outside Main.qml (KCM / preview host),
         // `window.layoutContextMenu` is undefined; an unguarded target would
         // emit a runtime warning on every signal fire. Disable entirely then.
-        enabled: window && window.layoutContextMenu
-        target: window && window.layoutContextMenu ? window.layoutContextMenu : null
+        enabled: typeof window !== "undefined" && window && window.layoutContextMenu
+        target: typeof window !== "undefined" && window && window.layoutContextMenu ? window.layoutContextMenu : null
     }
 
     // New Layout wizard dialog
@@ -586,14 +586,14 @@ SettingsFlickable {
         function onAlgorithmOperationFailed(reason) {
             // Only show toast when the wizard dialog is closed — if the dialog
             // is open, it shows the error inline via its own Connections block
-            if (!newAlgorithmDialog.opened && window && window.showToast)
+            if (!newAlgorithmDialog.opened && typeof window !== "undefined" && window && window.showToast)
                 window.showToast(reason);
         }
 
         function onLayoutOperationFailed(reason) {
             // Only show toast when the wizard dialog is closed — if the dialog
             // is open, it shows the error inline via its own Connections block
-            if (!newLayoutDialog.opened && window && window.showToast)
+            if (!newLayoutDialog.opened && typeof window !== "undefined" && window && window.showToast)
                 window.showToast(reason);
         }
 

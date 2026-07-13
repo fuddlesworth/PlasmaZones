@@ -251,14 +251,13 @@ bool ShaderSetStore::versionAccepted(const QJsonObject& root, const QString& con
     // committing a set this build may not fully understand. A non-integral
     // number is refused for the same reason: QJsonValue::toInt() would hand
     // back the default for it, silently reading "1.5" as the current version.
-    if (!versionVal.isUndefined()
-        && (!versionVal.isDouble() || versionVal.toDouble() != std::floor(versionVal.toDouble()))) {
-        qCWarning(lcConfig) << "ShaderSetStore:" << context << "— version is not a whole number, refusing";
-        return false;
-    }
     // Compare as a double: toInt() hands back the DEFAULT for anything outside
     // int range, which would read a version of 1e300 as the current one.
     const double version = versionVal.toDouble(m_config.formatVersion);
+    if (!versionVal.isUndefined() && (!versionVal.isDouble() || version != std::floor(version))) {
+        qCWarning(lcConfig) << "ShaderSetStore:" << context << "— version is not a whole number, refusing";
+        return false;
+    }
     if (version > m_config.formatVersion) {
         qCWarning(lcConfig) << "ShaderSetStore:" << context << "— set version" << version
                             << "is newer than this build understands (" << m_config.formatVersion << "), refusing";

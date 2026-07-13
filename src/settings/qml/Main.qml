@@ -103,6 +103,11 @@ PhosphorUi.SettingsAppWindow {
     // be raised from a controller while a completely different page is loaded (a
     // Reset blocked by an in-flight discard, say), and a page-scoped Connections
     // would drop it on the floor.
+    //
+    // The per-page ShaderSetStore bridges (each page controller's setsBridge) are
+    // NOT wired here, on purpose: every one of their toasts is raised by a user
+    // action on the sets page itself, so the page's own Connections is the right
+    // scope and the shell would just duplicate it.
     Connections {
         target: settingsController.animationsPage
 

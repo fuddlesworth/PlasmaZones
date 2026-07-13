@@ -594,7 +594,13 @@ private Q_SLOTS:
 
         QSignalSpy setsSpy(sets, &ShaderSetStore::setsChanged);
         QVERIFY(!sets->applySet(QStringLiteral("nonexistent")));
+
+        QSignalSpy toastSpy(sets, &ShaderSetStore::toastRequested);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("removeSet: no such set")));
         QVERIFY(!sets->removeSet(QStringLiteral("nonexistent")));
+        QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(),
+                 PhosphorI18n::tr("Could not delete \"%1\".").arg(QStringLiteral("nonexistent")));
         QCOMPARE(setsSpy.count(), 0);
     }
     /// Export is fire-and-forget from QML's side, so every failure has to carry
