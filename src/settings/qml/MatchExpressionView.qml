@@ -8,6 +8,8 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.plasmazones.settings
 
+import "FontUtils.js" as FontUtils
+
 /**
  * @brief Read-only match-expression preview backed by
  *        `QtQuick.Controls.TreeView` over a `MatchExpressionTreeModel`.
@@ -519,8 +521,12 @@ ColumnLayout {
                         // since font.capitalization can't selectively
                         // upper-case only the first word.
                         text: delegate.kind === "all" ? i18nc("Match-tree group where every child must match", "ALL of") : delegate.kind === "any" ? i18nc("Match-tree group where at least one child must match", "ANY of") : i18nc("Match-tree group where no child may match", "NONE of")
-                        font.bold: true
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                        // illegal duplicate binding that fails the whole document. FontUtils
+                        // passes only the size dimension the theme font actually carries.
+                        font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                            bold: true
+                        })
                         // Foreground textColor guarantees high contrast
                         // against the tinted pill fill on every theme.
                         color: Kirigami.Theme.textColor
@@ -578,8 +584,12 @@ ColumnLayout {
                         Layout.alignment: Qt.AlignVCenter
                         Layout.minimumWidth: Kirigami.Units.gridUnit * 8
                         text: root._opLabel(delegate.fieldWire, delegate.opWire)
-                        font.capitalization: Font.AllUppercase
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                        // illegal duplicate binding that fails the whole document. FontUtils
+                        // passes only the size dimension the theme font actually carries.
+                        font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                            capitalization: Font.AllUppercase
+                        })
                         opacity: 0.55
                     }
 

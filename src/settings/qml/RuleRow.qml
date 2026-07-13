@@ -9,6 +9,8 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.plasmazones.settings
 
+import "FontUtils.js" as FontUtils
+
 /**
  * @brief One rule row in the flat RulesPage priority list.
  *
@@ -108,9 +110,13 @@ ExpandableRowDelegate {
             id: pillLabel
 
             anchors.centerIn: parent
-            font.bold: true
-            font.capitalization: Font.AllUppercase
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+            // illegal duplicate binding that fails the whole document. FontUtils
+            // passes only the size dimension the theme font actually carries.
+            font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                bold: true,
+                capitalization: Font.AllUppercase
+            })
             color: Kirigami.Theme.textColor
         }
     }
@@ -197,7 +203,7 @@ ExpandableRowDelegate {
 
             anchors.centerIn: parent
             text: row.sectionLabel
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             opacity: 0.85
         }
     }
@@ -223,7 +229,7 @@ ExpandableRowDelegate {
             // condition/action/priority badges below — keeping them
             // consistent so the eye reads the badge cluster as a unit.
             text: i18nc("Badge shown when the rule's match is a composite expression", "Composite")
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             opacity: 0.7
         }
     }
@@ -242,7 +248,7 @@ ExpandableRowDelegate {
 
             anchors.centerIn: parent
             text: i18np("%n Condition", "%n Conditions", row.conditionCount)
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             opacity: 0.7
         }
     }
@@ -261,7 +267,7 @@ ExpandableRowDelegate {
 
             anchors.centerIn: parent
             text: i18np("%n Action", "%n Actions", row.actionCount)
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             opacity: 0.7
         }
     }
@@ -282,7 +288,7 @@ ExpandableRowDelegate {
 
             anchors.centerIn: parent
             text: row.managed ? i18nc("Priority badge for a managed baseline rule that always sorts last", "Lowest priority") : i18nc("Badge showing the rule's raw priority integer", "Priority %1", row.priority)
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             opacity: 0.7
         }
     }

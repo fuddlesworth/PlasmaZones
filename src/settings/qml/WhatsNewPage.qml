@@ -85,7 +85,7 @@ Kirigami.Dialog {
                         Label {
                             text: releaseCard.modelData.date
                             opacity: 0.5
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font: Kirigami.Theme.smallFont
                             Layout.alignment: Qt.AlignBaseline
                         }
 

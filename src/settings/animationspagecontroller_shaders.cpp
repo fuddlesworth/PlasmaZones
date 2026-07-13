@@ -3,11 +3,10 @@
 
 // Shader-leg methods for AnimationsPageController:
 //   * Available-shader enumeration (availableShaderEffects,
-//     availableShaderEffectsForPath, shaderEffectInfo, shaderParameters,
+//     availableShaderEffectsForPath, shaderParameters,
 //     supportsShaderLeg).
 //   * User shader directory + shader-pack install
-//     (userShaderDirectoryPath, ensureUserShaderDirectory,
-//     openUserShaderDirectory, installShaderPack).
+//     (userShaderDirectoryPath, openUserShaderDirectory, installShaderPack).
 //   * Per-event shader read + override (rawShaderProfile,
 //     resolvedShaderProfile, setShaderOverride, clearShaderOverride,
 //     shaderOverrideDescendantCount, clearShaderOverrideDescendants,
@@ -131,13 +130,6 @@ QVariantList AnimationsPageController::availableShaderEffectsForPath(const QStri
     return result;
 }
 
-QVariantMap AnimationsPageController::shaderEffectInfo(const QString& effectId) const
-{
-    if (!m_shaderRegistry || effectId.isEmpty() || !m_shaderRegistry->hasEffect(effectId))
-        return {};
-    return effectToMap(m_shaderRegistry->effect(effectId));
-}
-
 QVariantList AnimationsPageController::shaderParameters(const QString& effectId) const
 {
     if (!m_shaderRegistry || effectId.isEmpty() || !m_shaderRegistry->hasEffect(effectId))
@@ -159,11 +151,6 @@ QString AnimationsPageController::userShaderDirectoryPath() const
     // confusing "directory not found" downstream.
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return QDir::cleanPath(base + ConfigDefaults::userAnimationsSubdir());
-}
-
-bool AnimationsPageController::ensureUserShaderDirectory()
-{
-    return QDir().mkpath(userShaderDirectoryPath());
 }
 
 void AnimationsPageController::openUserShaderDirectory()
@@ -297,7 +284,7 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     // `ShaderProfile::effectId = std::optional<QString>("")`. This is
     // the "explicit no effect" sentinel — `ShaderProfile::overlay`
     // treats it as a real value that wins over a parent's effectId,
-    // so inheritance from an ancestor (e.g. `panel` → "dissolve") is
+    // so inheritance from an ancestor (e.g. `popup` → "dissolve") is
     // BLOCKED at this path and every descendant resolves to no shader.
     // Parameters PASSED ALONGSIDE an empty effectId are preserved on
     // the disable sentinel — callers that need to clear them entirely
@@ -414,9 +401,12 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
     if (!m_settings)
         return 0;
     if (m_asyncRevertInFlight) {
+        // -1, not 0: a caller must be able to tell "refused, try again" from
+        // "there was nothing to clear" — the clearAllOverrides convention.
         qCWarning(lcConfig) << "clearShaderOverrideDescendants: refusing while async discard is in flight; path="
                             << path;
-        return 0;
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+        return -1;
     }
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     const QStringList toClear = collectShaderOverrideDescendants(tree, path);
