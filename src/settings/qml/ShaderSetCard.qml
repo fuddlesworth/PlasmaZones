@@ -48,10 +48,14 @@ ExpandableRowDelegate {
     // a list-item role, or the row is announced as a button that does nothing when
     // activated. The actions live in the trailing controls, not on the row.
     Accessible.role: Accessible.ListItem
-    // Fold the Active state into the name: the pill is a plain Rectangle with no
-    // accessible role, so without this a screen reader cannot tell the applied
-    // set from any other row.
-    Accessible.name: row.isActive ? i18nc("@item accessible name of the currently applied set", "%1, active", row.setName) : row.setName
+    // Fold the Active state and the coverage count into the name: the pill and
+    // the badges are plain Rectangles with no accessible role, so without this a
+    // screen reader cannot tell the applied set from any other row, nor how much
+    // a set covers.
+    Accessible.name: {
+        const count = row.coverageCountLabel(row.modelData.coverageCount ?? 0);
+        return row.isActive ? i18nc("@item accessible name of the currently applied set, with its coverage summary", "%1, active, %2", row.setName, count) : i18nc("@item accessible name of a saved set, with its coverage summary", "%1, %2", row.setName, count);
+    }
 
     // ── Header ──────────────────────────────────────────────────────────
 

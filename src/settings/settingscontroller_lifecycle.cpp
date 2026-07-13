@@ -277,6 +277,12 @@ void SettingsController::defaults()
         // Refused because an async discard is still in flight. The reset leaves
         // the per-event override files as they are, so say so rather than
         // reporting defaults that are only half applied.
+        //
+        // Deliberately NOT the asyncRevertInFlight() shortcut load() takes: on
+        // the Discard path the worker owns the restore and finishing it IS the
+        // goal, but defaults() wants the files reset NOW, so treating a busy
+        // worker as clean would silently skip that work. Same posture as
+        // importAllSettings().
         qCWarning(lcConfig) << "defaults: animation snapshots are still staged after the revert (a discard is in "
                                "flight, or a restore failed)";
     }

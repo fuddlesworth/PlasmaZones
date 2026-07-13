@@ -292,10 +292,13 @@ public:
     Q_INVOKABLE QVariantMap resolvedShaderProfile(const QString& path) const;
 
     /// Assign @p effectId (with optional @p parameters) to @p path.
-    /// An empty @p effectId clears the assignment at this path,
-    /// equivalent to `clearShaderOverride(path)`. Emits
-    /// `pendingChangesChanged()` whenever the call actually changed
-    /// state.
+    /// An empty @p effectId writes an explicit "no effect" sentinel at this
+    /// path, which BLOCKS inheritance from every ancestor for it and its
+    /// descendants. That is deliberately the opposite of
+    /// `clearShaderOverride(path)`, which removes the entry so resolution
+    /// falls through to the parent again — the sentinel is what makes "I
+    /// disabled all popups" stick even when a parent assigns a shader. Emits
+    /// `pendingChangesChanged()` whenever the call actually changed state.
     Q_INVOKABLE bool setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& parameters);
 
     /// Remove the shader override at @p path; ancestors take over via
