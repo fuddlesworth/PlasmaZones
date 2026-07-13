@@ -78,8 +78,6 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // accumulation generation: their dest slices overwrite in place and
     // the valid rect grows to the union. A stale generation restarts the
     // rect at this capture's slice.
-    const qint64 pinned = m_shaderManager.currentFrameClockMs();
-    const qint64 frameStamp = pinned >= 0 ? pinned : ShaderInternal::shaderClockNowMs();
     // Snapshot GL state BEFORE the realloc branch's clear (which sets the clear
     // colour to transparent): the guard must capture the pristine ambient state
     // so it hands blend/viewport/scissor/clear-colour back the way it found them
@@ -102,7 +100,6 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropTex->setWrapMode(GL_CLAMP_TO_EDGE);
         state.backdropSize = textureSize;
         state.backdropRect = QVector4D();
-        state.backdropFrameMs = -1;
         // Wrap the texture once, here — the per-frame capture blit below reuses it.
         state.backdropFbo = std::make_unique<KWin::GLFramebuffer>(state.backdropTex.get());
         if (!state.backdropFbo->valid()) {

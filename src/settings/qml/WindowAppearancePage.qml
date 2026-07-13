@@ -454,11 +454,11 @@ SettingsFlickable {
                             // preview the live highlight instead of coercing the
                             // token to black.
                             const raw = root.ctl.windowTintColor;
-                            return raw === root.accentToken ? (appSettings ? appSettings.highlightColor : Kirigami.Theme.highlightColor) : raw;
+                            return raw === root.accentToken ? appSettings.highlightColor : raw;
                         }
                         onClicked: {
                             const raw = root.ctl.windowTintColor;
-                            tintColorDialog.selectedColor = raw === root.accentToken ? (appSettings ? appSettings.highlightColor : root.defaultBorderHex) : raw;
+                            tintColorDialog.selectedColor = raw === root.accentToken ? appSettings.highlightColor : raw;
                             tintColorDialog.open();
                         }
                     }
@@ -672,7 +672,7 @@ SettingsFlickable {
                     enabled: appSettings.decorationPauseWhenIdle
 
                     SettingsSlider {
-                        Accessible.name: i18n("Idle after")
+                        accessibleName: i18n("Idle after")
                         from: root.ctl.decorationIdleTimeoutSecMin
                         to: root.ctl.decorationIdleTimeoutSecMax
                         // The range runs to an hour, so a 1s step would put the

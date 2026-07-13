@@ -387,7 +387,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // above and stays in lockstep with `chain`, but guard the unchecked
         // operator[] in case a future edit decouples the two (out-of-bounds [] is
         // UB; the bounds-correct outcome is to skip the pack's buffer passes).
-        if (k >= static_cast<int>(state.chainBufferTex.size())) {
+        if (k >= static_cast<int>(state.chainBufferTex.size()) || k >= static_cast<int>(state.chainBufferFbo.size())) {
             continue;
         }
         const std::vector<std::unique_ptr<KWin::GLTexture>>& bufs = state.chainBufferTex[k];

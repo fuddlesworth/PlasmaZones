@@ -1046,14 +1046,6 @@ private:
                             const CompiledSurfacePack& pack, qreal scale, float timeSec, const QPointF& foldCursor,
                             qreal texturePaddingLogical = 0.0, const QString& windowId = {});
 
-    /// The window's rule-resolved opacity, preferring the per-frame value
-    /// prePaintWindow cached over the decoration's own last-resolved one.
-    ///
-    /// ONE resolver, because three sites must agree exactly or the fold caches under
-    /// a key that does not describe the composite it produced: the fold's foldedOpacity
-    /// cache key, the uSurfaceOpacity push for a handlesOpacity pack, and the present
-    /// pass's final modulation when no pack owns the alpha.
-
     /// Advance the per-window smoothed focus value (m_focusFade) toward the
     /// hard 0/1 target and return it, so focus changes cross-fade instead of
     /// snapping. Called by pushBorderUniforms only for a pack that reads focus.

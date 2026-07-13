@@ -63,6 +63,10 @@ public:
     {
         ++setAdjacentThresholdCalls;
         lastAdjacentThreshold = v;
+        // Chain to the real member-backed setter so adjacentThreshold() reflects
+        // the write — otherwise the getter is pinned to the base default and a
+        // write-then-read test would silently see a stale value.
+        StubSettings::setAdjacentThreshold(v);
     }
     int setAdjacentThresholdCalls = 0;
     int lastAdjacentThreshold = -1;

@@ -179,6 +179,107 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // Schema clampDouble validator (window opacity / tint strength scalars)
+    //
+    // Both are [0.0, 1.0] scalars fed straight into the effect's alpha/tint
+    // modulation. The min leg is the load-bearing one: windowOpacity defaults to
+    // 1.0 (== max) and windowTintStrength defaults to 0.0 (== min), so a
+    // clamp-to-bound and a fall-back-to-default are indistinguishable on one side.
+    // Testing the OTHER side of each proves the value snaps to the violated bound
+    // rather than the default.
+    // =========================================================================
+
+    void testReadValidatedWindowOpacity_belowMin_clampsToMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeDouble(ConfigDefaults::opacityKey(), -1.0);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        // 0.0 (min) is distinct from the 1.0 default, so a fall-back-to-default
+        // validator would fail this.
+        QCOMPARE(settings.windowOpacity(), ConfigDefaults::windowOpacityMin());
+    }
+
+    void testReadValidatedWindowOpacity_aboveMax_clampsToMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeDouble(ConfigDefaults::opacityKey(), 5.0);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowOpacity(), ConfigDefaults::windowOpacityMax());
+    }
+
+    void testReadValidatedWindowTintStrength_aboveMax_clampsToMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeDouble(ConfigDefaults::tintStrengthKey(), 5.0);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        // 1.0 (max) is distinct from the 0.0 default.
+        QCOMPARE(settings.windowTintStrength(), ConfigDefaults::windowTintStrengthMax());
+    }
+
+    void testReadValidatedWindowTintStrength_belowMin_clampsToMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeDouble(ConfigDefaults::tintStrengthKey(), -1.0);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowTintStrength(), ConfigDefaults::windowTintStrengthMin());
+    }
+
+    /**
+     * Sanity baseline: a valid mid-range value round-trips untouched, so the
+     * clamp tests above aren't masking a validator that snaps everything to a
+     * bound.
+     */
+    void testReadValidatedWindowOpacityTint_validValue_preserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeDouble(ConfigDefaults::opacityKey(), 0.5);
+            windows->writeDouble(ConfigDefaults::tintStrengthKey(), 0.5);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowOpacity(), 0.5);
+        QCOMPARE(settings.windowTintStrength(), 0.5);
+    }
+
+    // =========================================================================
     // Schema validColorOr validator (invalid color string)
     // =========================================================================
 
@@ -227,14 +328,16 @@ private Q_SLOTS:
             auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
             windows->writeString(ConfigDefaults::borderScopeKey(), QStringLiteral("garbage"));
             windows->writeString(ConfigDefaults::titleBarScopeKey(), QStringLiteral("garbage"));
+            windows->writeString(ConfigDefaults::opacityTintScopeKey(), QStringLiteral("garbage"));
             windows.reset();
             backend->sync();
         }
 
         Settings settings;
-        // Both scopes fall back to the schema default (=="tiled").
+        // Every closed-set scope falls back to its schema default (=="tiled").
         QCOMPARE(settings.windowBorderScope(), ConfigDefaults::windowBorderScope());
         QCOMPARE(settings.windowTitleBarScope(), ConfigDefaults::windowTitleBarScope());
+        QCOMPARE(settings.windowOpacityTintScope(), ConfigDefaults::windowOpacityTintScope());
     }
 
     /**

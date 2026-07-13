@@ -449,17 +449,6 @@ struct SurfaceMultipassState
     /// means "no capture this frame" and pushes uHasBackdrop = 0.
     QVector4D backdropRect;
 
-    /// Multi-output capture accumulation: paintWindow runs per OUTPUT, so a
-    /// canvas straddling two outputs is captured once per output per frame,
-    /// EACH blitting only its own slice into the shared texture. The first
-    /// capture of a frame clears the texture; same-frame captures accumulate
-    /// (their dest sub-rects are disjoint) and backdropRect grows to the
-    /// UNION, so a window mid-move across a monitor boundary gets a complete
-    /// backdrop instead of whichever slice painted last (winner-takes-all
-    /// left most of the pane clamped and visibly killed the blur during
-    /// cross-monitor animations).
-    qint64 backdropFrameMs = -1;
-
     /// Every output that has blitted into the CURRENT accumulation generation.
     ///
     /// This, and NOT a clock, is what separates one generation from the next. A canvas

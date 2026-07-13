@@ -15,6 +15,7 @@
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 
+#include "surface_fold.h"
 #include "window_query.h"
 
 namespace PlasmaZones {
@@ -208,14 +209,7 @@ void PlasmaZonesEffect::releaseDecorationGl(KWin::EffectWindow* w, int outerPadd
     // A padded chain painted a margin band OUTSIDE the window rect; per-window
     // repaints clip to the window item, so damage the band at screen level or the
     // stale glow lingers after removal.
-    if (outerPadding > 0 && KWin::effects) {
-        QRectF padded = w->expandedGeometry();
-        if (padded.isEmpty()) {
-            padded = w->frameGeometry();
-        }
-        KWin::effects->addRepaint(
-            KWin::RectF(padded.adjusted(-outerPadding, -outerPadding, outerPadding, outerPadding)));
-    }
+    damagePaddedBand(w, outerPadding);
 }
 
 void PlasmaZonesEffect::clearAllDecorations()

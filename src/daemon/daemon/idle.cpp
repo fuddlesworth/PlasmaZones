@@ -92,8 +92,12 @@ void Daemon::setupIdleService()
     // which every publisher goes through. The cost is one ext-idle-notify-v1 object we
     // sometimes ignore, which is nothing. What it buys is that turning the feature on
     // takes effect immediately rather than at some unpredictable point in the future.
+    // Single-shot and shared by two callers of refreshIdleStages: the settings debounce
+    // (below) and the arm-retry (in refreshIdleStages). Each start() passes its own interval,
+    // so a pending retry and a pending debounce coalesce into one refresh, and stop() in the
+    // daemon teardown cancels either — a plain QTimer::singleShot for the retry would outlive
+    // that teardown and could not be coalesced.
     m_idleStagesRefreshTimer.setSingleShot(true);
-    m_idleStagesRefreshTimer.setInterval(kIdleStagesRefreshDebounceMs);
     m_idleConnections << connect(&m_idleStagesRefreshTimer, &QTimer::timeout, this, &Daemon::refreshIdleStages);
 
     // DEBOUNCED, because a rebuild is not free and not silent: it destroys and recreates
@@ -108,7 +112,7 @@ void Daemon::setupIdleService()
     // skipped and the ladder would sit pinned to its startup timeout for the process
     // lifetime, so the slider would become a silent no-op.
     m_idleConnections << connect(m_settings.get(), &ISettings::decorationIdleTimeoutSecChanged, this, [this] {
-        m_idleStagesRefreshTimer.start();
+        m_idleStagesRefreshTimer.start(kIdleStagesRefreshDebounceMs);
     });
 
     // The TOGGLE rebuilds nothing. It only changes the answer, so publish the new one at
@@ -184,6 +188,17 @@ void Daemon::refreshIdleStages()
     // Setting the ladder it already has is a no-op inside IdleService (it does not
     // re-arm and does not resume), which is what makes this safe to call freely.
     const int timeoutMs = m_settings->decorationIdleTimeoutSec() * 1000;
+    // A non-positive timeout can only arrive from a config hand-edited below the schema
+    // floor (the slider's minimum is well above zero). toStages drops a <=0 stage, so the
+    // ladder below would be empty, isArmed() would report false, and the retry path would
+    // spend its whole budget rebuilding the same empty ladder before blaming "arming" for a
+    // misconfiguration. Treat it as disabled: clear the ladder and keep the retry budget
+    // intact so a later valid timeout arms cleanly.
+    if (timeoutMs <= 0) {
+        m_idleService->setStages({});
+        m_idleArmRetriesLeft = kIdleArmRetries;
+        return;
+    }
     const QVariantList ladder{QVariantMap{
         {PhosphorServiceIdle::StageKey::Name, QStringLiteral("decorations")},
         {PhosphorServiceIdle::StageKey::TimeoutMs, timeoutMs},
@@ -213,7 +228,7 @@ void Daemon::refreshIdleStages()
     --m_idleArmRetriesLeft;
     qCInfo(lcDaemon) << "Idle ladder did not arm (no seat yet?) — retrying in" << kIdleArmRetryDelayMs << "ms";
     m_idleService->setStages({});
-    QTimer::singleShot(kIdleArmRetryDelayMs, this, &Daemon::refreshIdleStages);
+    m_idleStagesRefreshTimer.start(kIdleArmRetryDelayMs);
 }
 
 } // namespace PlasmaZones
