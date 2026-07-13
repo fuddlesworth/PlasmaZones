@@ -99,8 +99,13 @@ void NavigationHandler::syncZonesFromDaemon()
             // (and zone-scoped layer rules release via the sweep inside) on
             // the failure path too — mirrors the getFloatingWindows reply
             // handler in daemon_bringup.cpp, which documents the same
-            // invalid-reply reasoning.
+            // invalid-reply reasoning. The border sweep re-folds every
+            // decorated window's placement-scoped appearance slots (opacity,
+            // tint, border colour) against the cleared placement — the cache
+            // clear alone revives nothing now that those slots bake at
+            // updateWindowDecoration time.
             m_effect->invalidateAllRuleCaches();
+            m_effect->scheduleBorderSweep();
             return;
         }
 
@@ -116,11 +121,16 @@ void NavigationHandler::syncZonesFromDaemon()
             }
         }
         qCDebug(lcEffect) << "Synced" << zoneEntryCount() << "snapped-window zones from daemon";
-        // Re-seeding the zone cache changes the IsSnapped / Zone match inputs; drop
-        // the stale placement-scoped opacity verdicts so a `WHEN isSnapped` /
-        // `Zone(...)` SetOpacity rule re-resolves against the fresh state on the
-        // next frame (mirrors the daemon-loss invalidation).
+        // Re-seeding the zone cache changes the IsSnapped / Zone match inputs;
+        // drop the stale placement-scoped verdicts, then schedule a border
+        // sweep so every decorated window re-folds its appearance slots (a
+        // `WHEN isSnapped` / `Zone(...)` SetOpacity or border rule bakes into
+        // the decoration at updateWindowDecoration time, so a cache clear
+        // without a rebuild would leave the folded values stale). The sweep
+        // is coalesced, so this and the getFloatingWindows re-seed collapse
+        // into one updateAllDecorations pass.
         m_effect->invalidateAllRuleCaches();
+        m_effect->scheduleBorderSweep();
     });
 }
 

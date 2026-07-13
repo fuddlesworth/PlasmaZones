@@ -103,6 +103,12 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int innerGapMax READ innerGapMax CONSTANT)
     Q_PROPERTY(int outerGapMin READ outerGapMin CONSTANT)
     Q_PROPERTY(int outerGapMax READ outerGapMax CONSTANT)
+    // Opacity / tint strength bounds on the wire [0.0, 1.0] scale; the page's
+    // percent sliders scale them by 100, mirroring the value bindings.
+    Q_PROPERTY(double windowOpacityMin READ windowOpacityMin CONSTANT)
+    Q_PROPERTY(double windowOpacityMax READ windowOpacityMax CONSTANT)
+    Q_PROPERTY(double windowTintStrengthMin READ windowTintStrengthMin CONSTANT)
+    Q_PROPERTY(double windowTintStrengthMax READ windowTintStrengthMax CONSTANT)
 
 public:
     explicit WindowAppearanceController(ISettings& settings, QObject* parent = nullptr);
@@ -241,6 +247,22 @@ public:
     int outerGapMax() const
     {
         return ConfigDefaults::outerGapMax();
+    }
+    double windowOpacityMin() const
+    {
+        return ConfigDefaults::windowOpacityMin();
+    }
+    double windowOpacityMax() const
+    {
+        return ConfigDefaults::windowOpacityMax();
+    }
+    double windowTintStrengthMin() const
+    {
+        return ConfigDefaults::windowTintStrengthMin();
+    }
+    double windowTintStrengthMax() const
+    {
+        return ConfigDefaults::windowTintStrengthMax();
     }
 
 Q_SIGNALS:

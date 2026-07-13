@@ -223,6 +223,52 @@ private Q_SLOTS:
         QVERIFY(!s.toJson().contains(QLatin1String("needsBackdrop")));
     }
 
+    void providesBorder_flag_parses_and_roundtrips()
+    {
+        // "providesBorder" marks a decoration pack that renders the window
+        // border itself, so the plain border layer is suppressed and the
+        // pack's shared border params are seeded from the border setting.
+        // Pin the parse, the false default, and the toJson round-trip.
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("fancy-border"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("providesBorder"), true);
+
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(meta);
+        QVERIFY(e.providesBorder);
+        QVERIFY(SurfaceShaderEffect::fromJson(e.toJson()).providesBorder);
+
+        QJsonObject metaPlain;
+        metaPlain.insert(QLatin1String("id"), QStringLiteral("plain"));
+        metaPlain.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        const SurfaceShaderEffect s = SurfaceShaderEffect::fromJson(metaPlain);
+        QVERIFY(!s.providesBorder);
+        QVERIFY(!s.toJson().contains(QLatin1String("providesBorder")));
+    }
+
+    void providesOpacityTint_flag_parses_and_roundtrips()
+    {
+        // "providesOpacityTint" marks the reserved opacity-tint layer pack,
+        // whose params are seeded from the plain opacity/tint setting and the
+        // SetOpacity / SetTint* rule slots. Pin the parse, the false default,
+        // and the toJson round-trip.
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("opacity-tint"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("providesOpacityTint"), true);
+
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(meta);
+        QVERIFY(e.providesOpacityTint);
+        QVERIFY(SurfaceShaderEffect::fromJson(e.toJson()).providesOpacityTint);
+
+        QJsonObject metaPlain;
+        metaPlain.insert(QLatin1String("id"), QStringLiteral("plain"));
+        metaPlain.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        const SurfaceShaderEffect s = SurfaceShaderEffect::fromJson(metaPlain);
+        QVERIFY(!s.providesOpacityTint);
+        QVERIFY(!s.toJson().contains(QLatin1String("providesOpacityTint")));
+    }
+
     void paddingParam_parses_and_roundtrips()
     {
         // "paddingParam" names the parameter whose resolved value is the

@@ -642,18 +642,19 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
     // A bulk placement change (daemon loss clears the zone/floating caches; the
     // daemon-ready re-seeds repopulate them) moves neither the windowId nor the
     // ruleSet revision the match cache is keyed on, so every placement-scoped
-    // verdict would survive stale. Drop the whole cache; the full repaint makes
-    // every opacity-only window re-resolve against the current placement on the
-    // next frame (border windows recover through their own restore/rebuild path).
+    // verdict would survive stale. Drop the whole cache. The clear alone
+    // revives nothing: appearance slots (opacity, tint, border colour) are
+    // FOLDED into the window's decoration at updateWindowDecoration time, so
+    // each caller pairs this sweep with its own decoration path — daemon loss
+    // tears the decorations down (clearAllDecorations), the daemon-ready
+    // re-seeds schedule a border sweep to re-fold every window against the
+    // fresh placement.
     m_shaderManager.animationRuleEvaluator().clearCache();
-    if (KWin::effects && m_shaderManager.hasOpacityRules()) {
-        KWin::effects->addRepaintFull();
-    }
     // Window-layer rules need the same placement-scoped re-resolve, but they
     // are EVENT-driven (during normal operation only reconcileRuleWindowLayer
     // writes keepAbove/keepBelow; restoreAllRuleWindowLayers is
-    // destructor-only), so the cache clear above does nothing for them on
-    // its own — opacity revives per-frame in paintWindow, layer does not.
+    // destructor-only), so neither the cache clear above nor the callers'
+    // decoration paths touch them.
     // Re-reconcile every window right here at the bulk-placement chokepoint so
     // BOTH edges are covered: on daemon loss a `WHEN IsFloating` layer rule
     // releases its keep-above against the cleared placement (snapshot restore)

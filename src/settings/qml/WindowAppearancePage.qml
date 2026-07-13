@@ -387,8 +387,8 @@ SettingsFlickable {
 
                     SettingsSlider {
                         accessibleName: i18n("Opacity")
-                        from: 0
-                        to: 100
+                        from: Math.round(root.ctl.windowOpacityMin * 100)
+                        to: Math.round(root.ctl.windowOpacityMax * 100)
                         value: Math.round(root.ctl.windowOpacity * 100)
                         onMoved: value => root.ctl.windowOpacity = value / 100
                     }
@@ -406,8 +406,8 @@ SettingsFlickable {
 
                     SettingsSlider {
                         accessibleName: i18n("Tint strength")
-                        from: 0
-                        to: 100
+                        from: Math.round(root.ctl.windowTintStrengthMin * 100)
+                        to: Math.round(root.ctl.windowTintStrengthMax * 100)
                         value: Math.round(root.ctl.windowTintStrength * 100)
                         onMoved: value => root.ctl.windowTintStrength = value / 100
                     }

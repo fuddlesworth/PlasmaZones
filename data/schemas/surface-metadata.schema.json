@@ -17,7 +17,10 @@
         "vertexShader": { "type": "string" },
         "animated": { "type": "boolean" },
         "audio": { "type": "boolean" },
-        "handlesOpacity": { "type": "boolean" },
+        "handlesOpacity": {
+            "type": "boolean",
+            "description": "Retired and ignored. Opacity is layer-backed now (the compositor folds the window's resolved opacity into the chain), so packs no longer declare it. Accepted only so pre-existing pack metadata still validates."
+        },
         "providesBorder": { "type": "boolean" },
         "providesOpacityTint": { "type": "boolean" },
         "needsBackdrop": { "type": "boolean" },

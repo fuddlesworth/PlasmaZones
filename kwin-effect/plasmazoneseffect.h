@@ -1296,13 +1296,15 @@ private:
     /// cache is keyed (windowId, ruleSet revision); neither moves on a bulk
     /// placement change, so a placement-scoped opacity verdict would otherwise
     /// stay cached (e.g. a `WHEN isSnapped` SetOpacity window staying dimmed after
-    /// the cache that made it "snapped" was cleared). Drops the whole match cache
-    /// and forces a full repaint so opacity rules re-resolve against the current
-    /// IsSnapped / IsFloating / Zone state, then re-reconciles every window's
-    /// rule layer — keepAbove/keepBelow is event-driven, so the cache clear
-    /// alone would leave it stale on both the loss and re-seed edges. Borders
-    /// recover via their own restore / rebuild path. No-op when there are no
-    /// animation rules and no rule-held layer snapshots.
+    /// the cache that made it "snapped" was cleared). Drops the whole match cache,
+    /// then re-reconciles every window's rule layer — keepAbove/keepBelow is
+    /// event-driven, so the cache clear alone would leave it stale on both the
+    /// loss and re-seed edges. Appearance slots (opacity, tint, border colour)
+    /// bake into the decoration at updateWindowDecoration time, so each caller
+    /// pairs this with its own decoration path: daemon loss tears the
+    /// decorations down (clearAllDecorations), the daemon-ready re-seeds
+    /// schedule a border sweep to re-fold against the fresh placement. No-op
+    /// when there are no animation rules and no rule-held layer snapshots.
     void invalidateAllRuleCaches();
 
     /// Flush coalesced per-rule-cache invalidations queued by

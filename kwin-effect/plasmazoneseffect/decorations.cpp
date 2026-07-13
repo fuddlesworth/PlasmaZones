@@ -279,9 +279,8 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // (its empty-chain sentinel blocks decoration outright), and its
     // per-pack params override the tree profile's map below. The reserved
     // "border" and "opacity-tint" ids were already filtered by the resolver,
-    // and the tree's
-    // per-layer disable set deliberately does not apply — a rule chain is
-    // explicit. Reads the same cached per-window action walk the opacity /
+    // and the tree's per-layer disable set deliberately does not apply — a
+    // rule chain is explicit. Reads the same cached per-window action walk the opacity /
     // border-appearance resolvers use, so it refreshes on every trigger
     // that re-runs updateWindowDecoration (rule edits, focus, snap flips,
     // desktop changes).
@@ -377,6 +376,9 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
             allPackParams.insert(it.key(), it.value());
         }
     }
+    // Shared accent fallback for the plain layers below: the live system
+    // accent when the daemon has delivered one, else the Breeze default.
+    const QColor accentOr = m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9"));
     if (showBorder) {
         // Easy mode: the resolved border appearance rides the reserved
         // "border" pack's OWN declared parameters (borderWidth / cornerRadius /
@@ -397,8 +399,6 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         borderParams.insert(QStringLiteral("cornerRadius"),
                             appearance->borderRadius.value_or(PhosphorCompositor::DecorationDefaults::BorderRadius));
         borderParams.insert(QStringLiteral("useSystemAccent"), false);
-        const QColor accentOr =
-            m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9"));
         const QColor active = appearance->activeColor.value_or(accentOr);
         borderParams.insert(QStringLiteral("activeColor"), active);
         borderParams.insert(QStringLiteral("inactiveColor"), appearance->inactiveColor.value_or(active));
@@ -429,8 +429,6 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         QVariantMap otParams;
         otParams.insert(QStringLiteral("opacity"), effectiveOpacity);
         otParams.insert(QStringLiteral("tintStrength"), appearance->tintStrength.value_or(0.0));
-        const QColor accentOr =
-            m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9"));
         otParams.insert(QStringLiteral("tintColor"), appearance->tintColor.value_or(accentOr));
         allPackParams.insert(QStringLiteral("opacity-tint"), otParams);
     }

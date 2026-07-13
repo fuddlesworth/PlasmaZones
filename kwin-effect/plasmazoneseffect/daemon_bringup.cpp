@@ -274,13 +274,17 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
                 m_navigationHandler->seedFloatingWindows(reply.value());
             }
             // The clear (and any re-seed) changed the IsFloating match input;
-            // drop the stale placement-scoped verdicts so a `WHEN isFloating`
-            // rule re-resolves against the fresh state on the next frame
-            // (mirrors the daemon-loss invalidation). Runs on the invalid-reply
-            // path too — the unconditional clear above changed state there as
-            // well, and skipping it would leave a cached "floating" verdict
-            // pinned to a window that is no longer floating.
+            // drop the stale placement-scoped verdicts, then schedule a
+            // border sweep so every decorated window re-folds its appearance
+            // slots against the fresh state (a `WHEN isFloating` SetOpacity or
+            // border rule bakes into the decoration at updateWindowDecoration
+            // time, so the cache clear alone revives nothing). Runs on the
+            // invalid-reply path too — the unconditional clear above changed
+            // state there as well, and skipping it would leave a cached
+            // "floating" verdict pinned to a window that is no longer
+            // floating. The sweep is coalesced with syncZonesFromDaemon's.
             invalidateAllRuleCaches();
+            scheduleBorderSweep();
         });
     }
 

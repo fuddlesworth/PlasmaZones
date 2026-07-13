@@ -39,8 +39,9 @@ bool hasBool(const QJsonObject& params, QLatin1StringView key)
 }
 
 /// Validates that @p params has a number in [0, @p maxValue] at @p key.
-/// Consumers truncate to int; the upper bound keeps a hand-edited payload from
-/// carrying an absurd value into the geometry/border path.
+/// Geometry/border consumers truncate to int; the unit-scale slots (opacity,
+/// tint strength) read the double as-is. Either way the upper bound keeps a
+/// hand-edited payload from carrying an absurd value downstream.
 bool hasNumberInRange(const QJsonObject& params, QLatin1StringView key, double maxValue)
 {
     const QJsonValue v = params.value(key);
@@ -709,12 +710,7 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::Opacity),
         .validate =
             [](const QJsonObject& p) {
-                const QJsonValue v = p.value(ActionParam::Value);
-                if (!v.isDouble()) {
-                    return false;
-                }
-                const double d = v.toDouble();
-                return d >= 0.0 && d <= 1.0;
+                return hasNumberInRange(p, ActionParam::Value, 1.0);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -838,12 +834,7 @@ void ActionRegistry::registerBuiltins()
                 },
             .validate =
                 [](const QJsonObject& p) {
-                    const QJsonValue v = p.value(ActionParam::Value);
-                    if (!v.isDouble()) {
-                        return false;
-                    }
-                    const double d = v.toDouble();
-                    return d >= 0.0 && d <= 1.0;
+                    return hasNumberInRange(p, ActionParam::Value, 1.0);
                 },
             .terminal = false,
             .allowedKeys = {QString(ActionParam::Value)},
@@ -1132,12 +1123,7 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::TintStrength),
         .validate =
             [](const QJsonObject& p) {
-                const QJsonValue v = p.value(ActionParam::Value);
-                if (!v.isDouble()) {
-                    return false;
-                }
-                const double d = v.toDouble();
-                return d >= 0.0 && d <= 1.0;
+                return hasNumberInRange(p, ActionParam::Value, 1.0);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
