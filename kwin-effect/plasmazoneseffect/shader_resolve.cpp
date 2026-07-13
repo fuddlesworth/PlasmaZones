@@ -339,12 +339,12 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
         return std::nullopt;
     }
     // The load-time validator guarantees `chain` is present and an array;
-    // re-check here (defence in depth against programmatic construction
-    // paths) and drop non-string entries plus the reserved config/rule-owned
-    // ids: "border" (SetBorderVisible governs it) and "opacity-tint"
-    // (SetOpacityTintVisible) — a hand-edited rule must not inject a second
-    // plain layer into the fold, nor flip the window into custom mode with a
-    // reserved pack running on baked defaults.
+    // re-check here (defence in depth against programmatic construction paths)
+    // and drop non-string entries. NO pack id is reserved: a rule chain may name
+    // "border" / "opacity-tint" like any other pack. They also back the plain
+    // layers, but the effect injects those ONLY for a window with no user packs,
+    // and a non-empty rule chain IS user packs — so naming one here takes the
+    // plain layer's place rather than stacking a second copy on top of it.
     const QJsonValue chainVal = action->params.value(PhosphorRules::ActionParam::Chain);
     if (!chainVal.isArray()) {
         return std::nullopt;
@@ -353,21 +353,18 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
     const QJsonArray arr = chainVal.toArray();
     for (const QJsonValue& entry : arr) {
         const QString id = entry.toString();
-        if (id.isEmpty() || id == QLatin1String("border") || id == QLatin1String("opacity-tint")) {
+        if (id.isEmpty()) {
             continue;
         }
         out.chain.append(id);
     }
     // Optional per-pack params override, same nested-object shape the tree
-    // profile uses ({packId -> {paramId -> value}}); mirrors how the
-    // animation override reads ActionParam::Params in
-    // resolveAnimationShaderProfile. Drop the reserved ids for symmetry with
-    // the chain filter above — the plain layers' params come from the
-    // resolved appearance (SetBorder* / SetOpacity / SetTint*), never the
-    // chain.
+    // profile uses ({packId -> {paramId -> value}}); mirrors how the animation
+    // override reads ActionParam::Params in resolveAnimationShaderProfile. Kept
+    // whole, including any "border" / "opacity-tint" entry: those ids are
+    // ordinary packs in a rule chain, so a rule that names one must be able to
+    // set its params too.
     out.params = action->params.value(PhosphorRules::ActionParam::Params).toObject().toVariantMap();
-    out.params.remove(QStringLiteral("border"));
-    out.params.remove(QStringLiteral("opacity-tint"));
     return out;
 }
 

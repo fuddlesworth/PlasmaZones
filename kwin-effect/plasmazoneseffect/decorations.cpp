@@ -199,30 +199,25 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         return;
     }
 
-    // User decoration packs from the tree. The reserved "border" and
-    // "opacity-tint" ids are config/rule-owned (the plain layers), so an
-    // explicit user entry for either is dropped here — otherwise a stray
-    // tree entry would flip the window into CUSTOM mode, silently disabling
-    // every plain layer, and render the reserved pack with its baked
-    // defaults instead of the resolved appearance.
+    // User decoration packs from the tree. NO id is reserved: "border" and
+    // "opacity-tint" are selectable packs like any other. They also back the
+    // plain layers in easy mode, but that injection happens below ONLY when
+    // userPacks is empty, so a user entry for either can never double-apply with
+    // its plain layer — it simply takes over, rendering through its own params
+    // (the settings side seeds those from the plain setting when the pack is
+    // added to a chain).
     // enabledChain(): packs the user toggled off stay in the profile but must
     // not render, exactly like a disabled rule is skipped by the evaluator.
-    QStringList userPacks;
     const QString surfacePath = resolveSurfacePathFor(windowId);
     const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = m_decorationTree.resolve(surfacePath);
-    const QStringList treeChain = resolvedProfile.enabledChain();
-    for (const QString& pack : treeChain) {
-        if (pack != QLatin1String("border") && pack != QLatin1String("opacity-tint")) {
-            userPacks.append(pack);
-        }
-    }
+    QStringList userPacks = resolvedProfile.enabledChain();
 
     // Rule-resolved decoration-chain override: a matched
     // OverrideDecorationChain rule REPLACES the tree's user packs wholesale
     // (its empty-chain sentinel blocks decoration outright), and its
-    // per-pack params override the tree profile's map below. The reserved
-    // "border" and "opacity-tint" ids were already filtered by the resolver,
-    // and the tree's per-layer disable set deliberately does not apply — a
+    // per-pack params override the tree profile's map below. A rule chain may
+    // name any pack, "border" / "opacity-tint" included, and the tree's
+    // per-layer disable set deliberately does not apply — a
     // rule chain is explicit. Reads the same cached per-window action walk the opacity /
     // border-appearance resolvers use, so it refreshes on every trigger
     // that re-runs updateWindowDecoration (rule edits, focus, snap flips,
@@ -239,7 +234,10 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // rule slots) neither render nor apply. Only a window with NO user packs
     // resolves the appearance: the config-backed defaults (each gated by its
     // scope) with per-window rule overrides layered on top, rendered by the
-    // reserved "border" and "opacity-tint" surface-shader packs. An empty rule
+    // "border" and "opacity-tint" surface-shader packs. Those two ids are also
+    // user-selectable; picking one is what puts the window in custom mode, and
+    // this easy-mode injection then does not run — so a pack and its own plain
+    // layer never both render. An empty rule
     // chain (the "no decoration" sentinel) strips the user packs and thus
     // lands back in easy mode — SetBorderVisible / SetOpacityTintVisible stay
     // the layer-off switches. The title-bar slot is NOT part of this split
@@ -336,9 +334,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // live system accent (matching the useSystemAccent default), which is
         // forced off because the colours arrive here already accent-resolved.
         // inactiveColor mirrors active when unset. The shader picks active vs
-        // inactive by uSurfaceFocused. Neither the tree nor a rule chain can
-        // carry "border" params (both strip the reserved id), so this insert
-        // overwrites nothing.
+        // inactive by uSurfaceFocused. This branch runs ONLY in easy mode
+        // (userPacks empty), where the resolved appearance owns the plain
+        // layer's params outright — so the insert deliberately overwrites any
+        // stale "border" entry the tree profile still carries from a time the
+        // user had the pack picked. Pick it again and we are in custom mode,
+        // this branch does not run, and the tree's params win instead.
         QVariantMap borderParams;
         borderParams.insert(QStringLiteral("borderWidth"),
                             appearance->borderWidth.value_or(PhosphorCompositor::DecorationDefaults::BorderWidth));
@@ -542,7 +543,16 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // Padded chains paint OUTSIDE the window's expanded rect; addRepaintFull
     // (and addLayerRepaint) clip to the window item, so the margin band needs
     // screen-level damage (the documented surface-extent repaint pitfall).
-    damagePaddedBand(w, wb.outerPadding);
+    //
+    // The UNION of the outgoing and incoming bands, not just the incoming one.
+    // The refresh above removes with keepSurfaceState, which deliberately skips
+    // releaseDecorationGl — and releaseDecorationGl is what used to damage the
+    // band the OUTGOING chain painted. So when a refresh SHRINKS the padding (a
+    // tree/rule edit dropping the glow pack, a rule chain replacing a padded
+    // chain, a smaller glowSize), the annulus between the old and new bands is
+    // outside both this damage and addRepaintFull's window-item clip, and the
+    // old glow lingers there until something unrelated repaints the screen.
+    damagePaddedBand(w, qMax(priorOuterPadding, wb.outerPadding));
 }
 
 void PlasmaZonesEffect::updateAllDecorations()
