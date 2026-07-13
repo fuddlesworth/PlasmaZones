@@ -782,6 +782,43 @@ private Q_SLOTS:
         QVERIFY2(!params.contains(QStringLiteral("activeColor")), "undeclared id must not be inserted");
         QVERIFY2(!params.contains(QStringLiteral("inactiveColor")), "undeclared id must not be inserted");
     }
+
+    /// availableShaderEffects() offers EVERY registered pack, including "border" and
+    /// "opacity-tint". Those two also back the plain easy-mode layers, but they are
+    /// selectable packs like any other: the effect injects the plain layer only for a
+    /// window whose chain has no user packs, so picking one cannot double-apply. This pins
+    /// the removal of the old picker filter that hid exactly those two ids.
+    void availableShaderEffects_offersBorderAndOpacityTintPacks()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // Author the two reserved-named packs plus an ordinary one, so a filter keyed on
+        // the id (the bug this guards against) would drop the first two and leave the third.
+        QJsonObject borderMeta = fancyBorderMetadata();
+        borderMeta.insert(QLatin1String("id"), QLatin1String("border"));
+        QJsonObject opacityTintMeta = fadeTintMetadata();
+        opacityTintMeta.insert(QLatin1String("id"), QLatin1String("opacity-tint"));
+        QVERIFY(writePack(tmp.path(), QStringLiteral("border"), borderMeta));
+        QVERIFY(writePack(tmp.path(), QStringLiteral("opacity-tint"), opacityTintMeta));
+        QVERIFY(writePack(tmp.path(), QStringLiteral("glowish"), glowishMetadata()));
+
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("border")));
+        QVERIFY(registry.hasEffect(QStringLiteral("opacity-tint")));
+
+        TreeStubSettings settings;
+        DecorationPageController c(&registry, &settings);
+
+        QStringList offeredIds;
+        const QVariantList offered = c.availableShaderEffects();
+        for (const QVariant& entry : offered) {
+            offeredIds.append(entry.toMap().value(QStringLiteral("id")).toString());
+        }
+        QVERIFY2(offeredIds.contains(QStringLiteral("border")), "the border pack must be selectable");
+        QVERIFY2(offeredIds.contains(QStringLiteral("opacity-tint")), "the opacity-tint pack must be selectable");
+        QVERIFY2(offeredIds.contains(QStringLiteral("glowish")), "an ordinary pack must still be offered");
+    }
 };
 
 QTEST_MAIN(TestDecorationPageController)

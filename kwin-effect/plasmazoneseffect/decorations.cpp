@@ -658,7 +658,7 @@ bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
 QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId) const
 {
     // MEMBERSHIP-only resolution: isTiledWindow tests bucket membership, and the
-    // resolved profile's effectiveChain() (an empty chain = no decoration) is the
+    // resolved profile's enabledChain() (an empty chain = no decoration) is the
     // sole render gate (see updateWindowDecoration) — there is no separate show-border
     // gate. Autotile-first precedence; falls back to window.floating for an
     // unmanaged window.

@@ -319,6 +319,25 @@ private Q_SLOTS:
         QVERIFY(!ok);
     }
 
+    void testSetPerScreenSettings_emptyMapUnknownCategory_returnsFalse()
+    {
+        // Ordering contract: an empty map is a valid no-op ONLY for a category that was
+        // first recognised as writable. The empty-map short-circuit must run AFTER the
+        // category guards, or an empty write to a bogus category reports success and the
+        // caller never learns it addressed a category that does not exist. Pins the exact
+        // regression of hoisting `if (values.isEmpty()) return true;` back above the guards.
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("bogus"), {});
+        QVERIFY(!ok);
+    }
+
+    void testSetPerScreenSettings_emptyMapReadOnlyCategory_returnsFalse()
+    {
+        // Same ordering contract for the read-only "snapping" projection: an empty write to
+        // it must be rejected, not reported as a successful no-op.
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("snapping"), {});
+        QVERIFY(!ok);
+    }
+
     void testSetPerScreenSettings_implausibleScreenId_returnsFalse()
     {
         // The screenId is caller-supplied over the session bus. An empty or control-char id
