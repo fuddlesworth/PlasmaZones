@@ -284,15 +284,22 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // binding the transition path relies on being re-asserted on every fold, and an
     // early return that skipped it would strand the window on the wrong shader.
     if (allStatic && state.compositeValid && state.compositeTex[state.finalSlot]) {
-        // Stamp the fold time even though nothing was folded: the composite IS
-        // current as of now, which is what the field means. Without this, a chain
-        // whose metadata declares needsBackdrop but whose compiled shaders never
-        // actually reference uBackdrop is classified cacheable, early-returns
-        // forever, and lastFoldMs stays frozen — so postPaintScreen's backdropDue
-        // test reads permanently true and drives an addRepaintFull every ~33ms for
-        // the rest of the session, and the desktop can never idle.
+        // Stamp the fold time even though nothing was folded: the composite IS current as
+        // of now, which is what the field means.
         state.lastFoldMs = ShaderInternal::shaderClockNowMs();
-        state.backdropRepaintPending = false; // the repaint the driver asked for has landed
+        // LEAVE backdropRepaintPending SET. Reaching here proves no pack in this chain
+        // varies per frame — which means none of them samples uBackdrop, whatever the
+        // metadata's needsBackdrop says (a pack whose shader failed to compile, or whose
+        // uBackdrop uses were optimised out of the link, lands here with needsBackdrop
+        // still true). A backdrop refold therefore cannot change a single pixel, so the
+        // driver must not ask for another one.
+        //
+        // Clearing the flag here is what an earlier pass did, and it converted a benign
+        // one-shot stall into a permanent 30Hz wake-up: the driver armed, this path cleared,
+        // 33ms later it armed again, forever, for a window whose composite is provably
+        // byte-identical. The flag stays set until a fold that actually folds something
+        // clears it — and a chain that starts varying per frame (a recompile lands, a pack
+        // starts animating) stops taking this path and clears it on its next real fold.
         return state.compositeTex[state.finalSlot].get();
     }
 
@@ -399,7 +406,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // uBackdrop) only drives the bind. A pack's main pass typically
             // reads the blurred buffers rather than uBackdrop itself, so its
             // own sampler location being -1 must not zero the gate.
-            const bool backdropAvailable = state.backdropTex && state.backdropRect.z() > 0.0f;
+            const bool backdropAvailable = backdropUsable(state);
             const bool passHasBackdrop = pass.uBackdropLoc >= 0 && backdropAvailable;
             bool passAudioBound = false;
             {
@@ -539,7 +546,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // Same split as the buffer passes: the gate VALUE reflects capture
         // availability; the main pass's own sampler location only gates the
         // bind (frost's main reads the blurred buffers, not uBackdrop).
-        const bool backdropAvailable = state.backdropTex && state.backdropRect.z() > 0.0f;
+        const bool backdropAvailable = backdropUsable(state);
         const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && backdropAvailable;
         bool mainAudioBound = false;
         bool mainUserTexturesBound = false;
@@ -729,7 +736,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     state.foldedOpacity = plan.foldOpacity;
     state.foldedCursor = plan.foldCursor;
     state.lastFoldMs = ShaderInternal::shaderClockNowMs();
-    state.backdropRepaintPending = false; // the repaint the driver asked for has landed
+    // Both drivers' repaints have landed: this fold actually folded, so the composite
+    // reflects the scene behind the window AND the live cursor.
+    state.backdropRepaintPending = false;
+    state.hoverRepaintPending = false;
     return state.compositeTex[lastDst].get();
 }
 

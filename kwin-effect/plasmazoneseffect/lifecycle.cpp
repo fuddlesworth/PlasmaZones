@@ -155,18 +155,23 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // back (KWin destroys the offscreen framebuffer), and the two cache
                 // clears destroy GLShaders and GLTextures, i.e. glDeleteProgram and
                 // glDeleteTextures. Its SIBLING handler (the surface registry's, below)
-                // has done this from the start and explains why; this one was written to
-                // the same contract and did not honour it.
+                // has done this from the start and explains why.
                 //
-                // Drain UNCONDITIONALLY. endShaderTransition makes the GL context current
-                // itself (it destroys the window's offscreen texture and framebuffer), so
-                // gating the drain on a context here bought nothing — and worse, the
-                // residual self-heal below would notice the undrained transitions, log a
-                // CRITICAL, and then drain them anyway, which made the gate a false alarm
-                // generator rather than a safety measure. Bailing outright, which this
-                // first did, was worse still: it left the caches populated, so a
-                // hot-reloaded pack kept rendering from its OLD compiled shader for the
-                // rest of the session.
+                // It is NOT enough that endShaderTransition makes the context current
+                // itself: it only runs from the drain loop, once per LIVE transition, and
+                // the ordinary hot-reload (a user saves a .glsl, no window mid-animation)
+                // drains nothing at all. The cache clears below then run against no
+                // context. An earlier pass removed this call on exactly that reasoning and
+                // left this paragraph standing over the hole.
+                ensureGlContextCurrent();
+
+                // Drain UNCONDITIONALLY. Gating the drain on the context bought nothing —
+                // and worse, the residual self-heal below would notice the undrained
+                // transitions, log a CRITICAL, and then drain them anyway, which made the
+                // gate a false-alarm generator rather than a safety measure. Bailing
+                // outright, which this first did, was worse still: it left the caches
+                // populated, so a hot-reloaded pack kept rendering from its OLD compiled
+                // shader for the rest of the session.
                 QVarLengthArray<KWin::EffectWindow*, 8> windows;
                 for (auto& [w, _] : m_shaderManager.shaderTransitions())
                     windows.push_back(w);

@@ -39,6 +39,15 @@ public:
     virtual void setTimeout(std::chrono::milliseconds timeout) = 0;
     [[nodiscard]] virtual std::chrono::milliseconds timeout() const = 0;
 
+    /// Did the arming actually take? A source that reports FALSE will never emit an edge,
+    /// so a consumer gating on idleness is gated on a fact nobody is reporting. Defaults to
+    /// true because a fake is armed by construction; only the Wayland-backed source can
+    /// fail to arm, and only it overrides this.
+    [[nodiscard]] virtual bool isArmed() const
+    {
+        return true;
+    }
+
 Q_SIGNALS:
     /// The timeout elapsed without activity.
     void idled();

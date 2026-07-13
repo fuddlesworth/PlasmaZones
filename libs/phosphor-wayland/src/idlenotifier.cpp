@@ -122,6 +122,11 @@ std::chrono::milliseconds IdleNotifier::timeout() const
     return d->timeout;
 }
 
+bool IdleNotifier::isArmed() const
+{
+    return d->notification != nullptr;
+}
+
 bool IdleNotifier::isIdle() const
 {
     return d->idle;

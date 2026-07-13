@@ -494,11 +494,25 @@ struct SurfaceMultipassState
     /// lastFoldMs never advances, and a clock-only test says "due" again on the very next
     /// frame. That is a full repaint every vsync, forever, and the desktop can never idle.
     ///
-    /// So the driver arms this when it asks, and only the fold disarms it. An unpainted
-    /// window costs exactly ONE wasted repaint instead of one per frame; a window that is
-    /// really being painted behaves exactly as before, because its fold clears the flag on
-    /// the very frame the repaint lands.
+    /// So the driver arms this when it asks, and only a fold that ACTUALLY FOLDS disarms
+    /// it. An unpainted window costs exactly ONE wasted repaint instead of one per frame; a
+    /// window that is really being painted behaves exactly as before, because its fold
+    /// clears the flag on the very frame the repaint lands.
+    ///
+    /// The cached-composite early return deliberately does NOT clear it. Reaching that
+    /// return proves nothing in the chain varies per frame, so no refold can change a pixel
+    /// and the driver must stop asking. Clearing it there turned this one-shot into a
+    /// permanent 30Hz wake-up for any window whose needsBackdrop metadata outlives its
+    /// shader's actual use of uBackdrop.
     bool backdropRepaintPending = false;
+
+    /// A hover repaint has been ASKED FOR and has not yet produced a fold. Exactly the same
+    /// hazard as backdropRepaintPending, on exactly the same reasoning: the hover driver
+    /// fires on every pointer-motion event and converges by comparing foldedCursor, which
+    /// only a FOLD can advance. An occluded window is never painted, so it never folds, so
+    /// its foldedCursor can never converge on the live pointer — and it would take a full
+    /// repaint request per motion event, forever, on a window nobody can see.
+    bool hoverRepaintPending = false;
 
     /// When the composite last folded (shader clock, ms). Rate-limits the
     /// backdrop-driven forced repaints in postPaintScreen to ~30fps, the

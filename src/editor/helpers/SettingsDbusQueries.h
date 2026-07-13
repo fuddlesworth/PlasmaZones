@@ -28,7 +28,7 @@ namespace SettingsDbusQueries {
  * reason this helper exists. Used on the editor startup hot path by
  * refreshGlobalGapOverlaySettings() in gaps.cpp.
  *
- * still sees the user's real configured values. Returns an empty map if
+ * Returns an empty map if
  * the daemon is unreachable or the call times out (500 ms cap); callers
  * should treat missing keys and empty maps the same way (use defaults).
  */

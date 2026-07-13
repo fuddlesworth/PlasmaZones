@@ -103,6 +103,11 @@ void IdleService::setStages(const QVariantList& stages)
     d->machine.setStages(toStages(stages));
 }
 
+bool IdleService::isArmed() const
+{
+    return d->machine.isArmed();
+}
+
 int IdleService::currentStage() const
 {
     return d->machine.currentStage();

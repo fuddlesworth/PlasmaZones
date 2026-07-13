@@ -820,7 +820,12 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
 
     QVariant validated = validatePerScreenAutotileValue(key, value);
     if (!validated.isValid()) {
-        qCWarning(lcConfig) << "Rejected per-screen autotile setting:" << (key + QLatin1Char('=') + value.toString());
+        // DEBUG, and the value is not echoed. Both the key and the value arrive from
+        // whoever called setPerScreenSetting on the session bus, so a warning here let any
+        // process fill the daemon's log with content of its own choosing, unbounded in
+        // length and rate. The adaptor's own logs were demoted for exactly this reason and
+        // the attacker-controlled strings simply reached a warning one frame deeper.
+        qCDebug(lcConfig) << "Rejected per-screen autotile setting" << key;
         return;
     }
 

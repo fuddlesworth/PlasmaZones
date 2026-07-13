@@ -184,10 +184,36 @@ void Daemon::refreshIdleStages()
     // Setting the ladder it already has is a no-op inside IdleService (it does not
     // re-arm and does not resume), which is what makes this safe to call freely.
     const int timeoutMs = m_settings->decorationIdleTimeoutSec() * 1000;
-    m_idleService->setStages({QVariantMap{
+    const QVariantList ladder{QVariantMap{
         {PhosphorServiceIdle::StageKey::Name, QStringLiteral("decorations")},
         {PhosphorServiceIdle::StageKey::TimeoutMs, timeoutMs},
-    }});
+    }};
+    m_idleService->setStages(ladder);
+
+    // Did it actually arm? Supporting the protocol and managing to USE it are two different
+    // facts, and only the second one matters: arming needs a seat whose input devices the
+    // compositor has advertised, and the daemon can win that race at login. Arming then does
+    // nothing, isSupported() still says true, and idle detection is dead for the session
+    // with a single warning to show for it. Nothing would ever rebuild it, because the only
+    // rebuild trigger is a timeout change and setting the ladder it already has is a no-op.
+    //
+    // So retry, with the ladder cleared first — an empty ladder is a REAL change, so the
+    // next set is not swallowed by that no-op rule. Bounded, because a compositor that
+    // genuinely cannot arm should not be retried forever; when the budget runs out the
+    // feature degrades to off, which is what it already did silently.
+    if (m_idleService->isArmed()) {
+        m_idleArmRetriesLeft = kIdleArmRetries;
+        return;
+    }
+    if (m_idleArmRetriesLeft <= 0) {
+        qCWarning(lcDaemon) << "Idle notification is supported but would not arm — decoration PauseWhenIdle is off "
+                               "for this session";
+        return;
+    }
+    --m_idleArmRetriesLeft;
+    qCInfo(lcDaemon) << "Idle ladder did not arm (no seat yet?) — retrying in" << kIdleArmRetryDelayMs << "ms";
+    m_idleService->setStages({});
+    QTimer::singleShot(kIdleArmRetryDelayMs, this, &Daemon::refreshIdleStages);
 }
 
 } // namespace PlasmaZones

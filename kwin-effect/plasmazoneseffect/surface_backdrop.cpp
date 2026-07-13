@@ -180,7 +180,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
                        static_cast<float>(destF.y() / textureSize.height()),
                        static_cast<float>(destF.width() / textureSize.width()),
                        static_cast<float>(destF.height() / textureSize.height()));
-    if (sameGeneration && state.backdropRect.z() > 0.0f && state.backdropRect.w() > 0.0f) {
+    if (sameGeneration && backdropUsable(state)) {
         const float x0 = qMin(state.backdropRect.x(), destNorm.x());
         const float y0 = qMin(state.backdropRect.y(), destNorm.y());
         const float x1 = qMax(state.backdropRect.x() + state.backdropRect.z(), destNorm.x() + destNorm.z());

@@ -87,6 +87,18 @@ public:
     /// resume. That is what makes it safe to call on every settings change.
     void setStages(const QVariantList& stages);
 
+    /// Did the current ladder actually ARM?
+    ///
+    /// isSupported() answers "does the compositor speak the protocol". This answers "did we
+    /// manage to use it", and the two genuinely differ: arming needs a seat with its input
+    /// devices advertised, and a client that starts while the compositor is still bringing
+    /// the seat up arms nothing at all. Idle detection is then dead for the session while
+    /// isSupported() cheerfully keeps saying true. False for an empty ladder (nothing is
+    /// being watched). A caller that wants to survive that race must be able to ask, and to
+    /// rebuild: clear the ladder and set it again, which is a real change and so is not
+    /// swallowed by the no-op rule above.
+    [[nodiscard]] bool isArmed() const;
+
     /// 0 when active; otherwise the 1-based index of the deepest stage currently
     /// reached.
     [[nodiscard]] int currentStage() const;

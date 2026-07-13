@@ -55,7 +55,18 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegi
     , m_saveTimer(new QTimer(this))
     , m_motionTreeNotifyTimer(new QTimer(this))
 {
+    // The assert is the developer-facing half. The RELEASE half is the early return: every
+    // registry lambda below closes over m_settings, and the debounced save timer
+    // dereferences it outright, so a null here is a crash on the first getSetting rather
+    // than a Qt warning. The class is built to tolerate a null m_settings elsewhere (detach()
+    // exists precisely for that), so refusing to wire anything up is both safe and honest —
+    // an adaptor with no settings behind it answers nothing, which beats answering wrongly.
     Q_ASSERT(settings);
+    if (!settings) {
+        qCCritical(lcDbusSettings) << "SettingsAdaptor constructed with no settings — the D-Bus settings surface will "
+                                      "not answer";
+        return;
+    }
     initializeRegistry();
 
     // Configure debounced save timer (performance optimization)
@@ -1073,7 +1084,7 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
         // Use debounced save instead of immediate save (performance optimization)
         // This batches multiple rapid setting changes into a single disk write
         scheduleSave();
-        qCInfo(lcDbusSettings) << "Setting" << key << "updated, save scheduled";
+        qCDebug(lcDbusSettings) << "Setting" << key << "updated, save scheduled";
     } else {
         qCWarning(lcDbusSettings) << "Failed to set setting:" << key;
     }
@@ -1364,8 +1375,10 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
     // One debounced save for the whole batch. The per-screen save path
     // coalesces multiple category updates into a single disk write.
     scheduleSave();
-    qCInfo(lcDbusSettings) << "setPerScreenSettings: batch applied" << values.size() << "keys on screen" << screenId
-                           << "category" << category;
+    // DEBUG: screenId and category are caller-supplied and unvalidated, and every bus peer
+    // can drive this in a loop. Same reasoning as the unknown-key paths above.
+    qCDebug(lcDbusSettings) << "setPerScreenSettings: batch applied" << values.size() << "keys on screen" << screenId
+                            << "category" << category;
     return true;
 }
 

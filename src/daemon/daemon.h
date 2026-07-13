@@ -282,9 +282,12 @@ private:
     void setupSurfaceShaderEffects();
 
     /// Watch the session going idle and push it to the KWin effect, which pauses
-    /// decoration-chain animation on it. Re-armed whenever the timeout changes. The
-    /// PauseWhenIdle toggle deliberately does NOT re-arm it — see idle.cpp. See m_idleService for why the daemon owns
-    /// this rather than the effect.
+    /// decoration-chain animation on it. See m_idleService for why the daemon owns this
+    /// rather than the effect.
+    ///
+    /// Called from init(), and again from start() after a stop(). A TIMEOUT change does not
+    /// come through here — it re-arms the ladder via refreshIdleStages() — and the
+    /// PauseWhenIdle toggle re-arms nothing at all, deliberately (see idle.cpp).
     void setupIdleService();
 
     /// (Re)arm the idle ladder from the current timeout. A single stage, armed whenever
@@ -293,17 +296,17 @@ private:
     /// the feature back on). Called from init() and whenever the timeout moves.
     void refreshIdleStages();
 
-    /// Is the session idle, as far as decoration pausing is concerned?
-    ///
-    /// The seat being idle is a FACT (the ladder reports it whenever the compositor
-    /// supports idle notification); pausing on it is a CHOICE (the PauseWhenIdle
-    /// setting). This is the single place the two are combined, so the toggle cannot be
-    /// honoured on one publishing path and forgotten on another.
     /// Disconnect every connection setupIdleService made whose sender outlives the idle
     /// service, and forget them. Used by BOTH stop() and a re-entrant setupIdleService, so
     /// a second setup cannot stack duplicates on top of live connections.
     void teardownIdleConnections();
 
+    /// Is the session idle, as far as decoration pausing is concerned?
+    ///
+    /// The seat being idle is a FACT (the ladder reports it whenever the compositor
+    /// supports idle notification). Pausing on it is a CHOICE (the PauseWhenIdle setting).
+    /// This is the single place the two are combined, so the toggle cannot be honoured on
+    /// one publishing path and forgotten on another.
     [[nodiscard]] bool sessionIdleNow() const;
 
     /// Announce the session's idle state to the KWin effect, on CHANGE only.
@@ -782,6 +785,15 @@ private:
     /// deferred to one net reconfigure once the value settles.
     QTimer m_idleStagesRefreshTimer;
     static constexpr int kIdleStagesRefreshDebounceMs = 250;
+
+    /// Retry budget for an idle ladder that would not arm. The failure this covers is a
+    /// login race (the seat's input devices are not advertised yet), so it resolves in well
+    /// under a second or it is not going to resolve at all — a handful of tries a second
+    /// apart is generous. When the budget runs out the feature degrades to off, which is
+    /// what it silently did before anyone was checking.
+    static constexpr int kIdleArmRetries = 5;
+    static constexpr int kIdleArmRetryDelayMs = 1000;
+    int m_idleArmRetriesLeft = kIdleArmRetries;
 
     /// The last idle state we announced. The effect starts up assuming an active
     /// session, so this starts false and the two agree from the outset.

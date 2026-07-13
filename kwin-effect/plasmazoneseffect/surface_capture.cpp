@@ -38,6 +38,8 @@
 
 #include <algorithm> // std::max, unioning the two not-animating spans
 
+#include <cmath>
+
 #include <epoxy/gl.h>
 
 namespace PlasmaZones {
@@ -59,11 +61,24 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
     // window crossing between outputs of different scale keeps the same
     // compositeSize while uSurfaceScale (which packs multiply logical-px border
     // widths and radii by) moves under it.
-    if (state.compositeSize != textureSize || !qFuzzyCompare(state.captureScaleKey, captureScale)
+    // Explicit epsilon, NOT qFuzzyCompare — the same rule planSurfaceFold spells out below
+    // for the focus/opacity keys, and there is no reason for this file to hold two spellings
+    // of it. captureScaleKey starts at exactly 0.0, and qFuzzyCompare is a RELATIVE
+    // comparison whose tolerance collapses to zero against zero. It is safe here only by
+    // accident (an empty textureSize returns before this, so captureScale is never 0), and
+    // an accident is not a contract.
+    constexpr qreal kScaleEpsilon = 1e-6;
+    if (state.compositeSize != textureSize || std::abs(state.captureScaleKey - captureScale) > kScaleEpsilon
         || !state.compositeTex[0] || !state.compositeTex[1]) {
         bool allocFailed = false;
         for (size_t i = 0; i < state.compositeTex.size(); ++i) {
             auto& t = state.compositeTex[i];
+            // Drop the FRAMEBUFFER first. Reassigning the texture destroys the old one while
+            // its framebuffer still wraps it — legal in GL (the attachment auto-detaches),
+            // but it is the reverse of the order every sibling path uses (allocSurfaceTarget,
+            // the backdrop realloc), and an object destroyed out from under its own wrapper
+            // is not a habit worth keeping.
+            state.compositeFbo[i].reset();
             t = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
             if (!t) {
                 allocFailed = true;
@@ -122,9 +137,10 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
     // downscaled by that pack's bufferScale; a pack that fails to compile (or has
     // no buffers) leaves an empty inner vector and renders single-pass in the fold.
     if (state.chainKey != chain) {
+        // Framebuffers before textures, for the reason given at the composite realloc above.
+        state.chainBufferFbo.clear();
         state.chainBufferTex.clear();
         state.chainBufferTex.resize(chain.size());
-        state.chainBufferFbo.clear();
         state.chainBufferFbo.resize(chain.size());
         for (int k = 0; k < chain.size(); ++k) {
             CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));

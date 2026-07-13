@@ -27,6 +27,17 @@
 
 namespace PlasmaZones {
 
+/// Does @p state hold a backdrop a pack can actually sample?
+///
+/// ONE predicate. The fold asked "is the width positive" while the backdrop's own union
+/// asked "are the width AND the height positive", so a slice that rounded to zero height
+/// read as available to the fold, which then pushed uHasBackdrop = 1 with a zero-height
+/// rect for a pack to divide by.
+inline bool backdropUsable(const SurfaceMultipassState& state)
+{
+    return state.backdropTex && state.backdropRect.z() > 0.0f && state.backdropRect.w() > 0.0f;
+}
+
 /// The rect a padded decoration actually covers: the window's expanded geometry (its
 /// frame, if it reports none) grown by the chain's outer padding.
 ///

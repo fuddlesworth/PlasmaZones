@@ -47,6 +47,7 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <type_traits>
 #include <optional>
 #include <unordered_map>
 #include <vector>
@@ -1015,15 +1016,11 @@ private:
     /// @p texturePaddingLogical: outer margin (logical px) baked into the
     /// TARGET texture's canvas — non-zero only on the padded composite path,
     /// where the geometry uniforms must describe the inflated space.
-    /// @p timeSec: the clock the FOLD decided on, in surfaceShaderTimeSeconds()
-    /// units. Threaded in rather than sampled here because a chain that
-    /// Decorations.Performance has paused is handed a frozen clock — see
-    /// SurfaceMultipassState::pausedAtSec / timeOffsetSec. Sampling live here would let a paused
-    /// window's packs disagree with the frozen composite they are folding into.
-    /// @p animating is false for a chain Decorations.Performance has paused. Every
-    /// per-frame input it pushes is then frozen with the clock — see @p timeSec, and
-    /// the cursor sentinel in the body. Freeze the fold or freeze its inputs, never one
-    /// without the other.
+    /// @p timeSec: the clock the FOLD decided on, in seconds. Threaded in rather than
+    /// sampled here because a chain that Decorations.Performance has paused is handed a
+    /// frozen clock — see SurfaceMultipassState::pausedAtMs / timeOffsetMs. Sampling live
+    /// here would let a paused window's packs disagree with the frozen composite they are
+    /// folding into.
     /// @p foldCursor is the cursor the FOLD resolved (SurfaceFoldPlan::foldCursor) — a
     /// global point, or kCursorOutside when the pointer is elsewhere or the chain is
     /// paused. Handed in rather than re-derived, because the fold keys its cache on this
@@ -1052,7 +1049,34 @@ private:
     /// Resolves a pack id to its compiled program, compiling on a cache miss. The fold
     /// memoises the decoration-profile lookup behind this, so the input side takes it
     /// as a callable rather than resolving the tree a second time.
-    using CompiledPackResolver = std::function<CompiledSurfacePack*(const QString&)>;
+    ///
+    /// A NON-OWNING reference to the caller's lambda, not a std::function. The fold's
+    /// resolver captures three pointers (24 bytes), which is past libstdc++'s 16-byte
+    /// small-object buffer — so every conversion to std::function HEAP-ALLOCATED, and the
+    /// fold converts twice. At eight decorated windows across two outputs at 60Hz that is
+    /// some four thousand malloc/free pairs a second, added by a refactor that shipped
+    /// inside a performance PR. The callee only ever invokes it during the call, so a
+    /// borrowed reference is all it ever needed.
+    class CompiledPackResolver
+    {
+    public:
+        template<typename F, typename = std::enable_if_t<!std::is_same_v<std::decay_t<F>, CompiledPackResolver>>>
+        CompiledPackResolver(F&& fn) // NOLINT(google-explicit-constructor): behaves as a callable
+            : m_ctx(static_cast<void*>(std::addressof(fn)))
+            , m_invoke([](void* ctx, const QString& packId) -> CompiledSurfacePack* {
+                return (*static_cast<std::remove_reference_t<F>*>(ctx))(packId);
+            })
+        {
+        }
+        CompiledSurfacePack* operator()(const QString& packId) const
+        {
+            return m_invoke(m_ctx, packId);
+        }
+
+    private:
+        void* m_ctx;
+        CompiledSurfacePack* (*m_invoke)(void*, const QString&);
+    };
 
     /// (Re)allocate a window's composite / capture / per-pack buffer targets for the
     /// current size, scale and chain, dropping every cache an allocation makes stale.
@@ -1094,39 +1118,6 @@ private:
     /// blits (ping-pong). Implemented in surfacelayers.cpp.
     KWin::GLTexture* renderSurfaceChain(ShaderTransition& transition, KWin::EffectWindow* w, qreal scale);
 
-    /// Render the MULTIPASS surface pack's buffer passes for @p w into its
-    /// per-window FBO chain (m_surfaceMultipass), so the IDLE drawWindow path can
-    /// bind the buffer outputs as iChannel0..3 for the main pass. The results are
-    /// consumed via m_surfaceMultipass (drawWindow re-checks readiness itself);
-    /// the bool return (true = buffer textures ready, false = single-pass pack /
-    /// allocation failure / collapsed surface) is a convenience for logging or
-    /// future callers and is ignored by the current paintWindow driver.
-    /// Implemented in surfacelayers.cpp.
-    ///
-    /// IDLE-path only. During a window-animation transition a multipass pack
-    /// degrades to single-pass (renderSurfaceChain runs the border via the main
-    /// shader with iChannels unbound); wiring buffer passes into the transition
-    /// chain is a follow-up.
-
-    /// Composite a MULTI-PACK decoration chain (chain.size() > 1) for @p w into a
-    /// per-window ping-pong FBO. The final fold is consumed via
-    /// m_surfaceMultipass's finalSlot (drawWindow reads it there); the returned
-    /// texture (nullptr on single-pack / no border / allocation failure) is a
-    /// convenience mirror of that state, ignored by the current paintWindow
-    /// driver. Captures the raw surface, then folds each pack
-    /// over the running composite: the pack's buffer passes run sampling the
-    /// composite, then its main runs as a fullscreen FBO pass (composite on unit
-    /// 0, its buffers as iChannels) into the other slot. drawWindow presents the
-    /// final slot through surfacePresentShader(). Buffers are cached per
-    /// window+chain (animation-ready). Implemented in surfacelayers.cpp; like
-    /// the composite fold it MUST be driven from paintWindow (it captures
-    /// via effects->drawWindow).
-    /// @p captureRestoreShader: the shader to hand the OffscreenEffect slot
-    /// back to after the raw capture (null = surfacePresentShader(), the rest
-    /// path's redirect; transitions pass their animation shader).
-    /// @p force: run even for a single-pack unpadded chain — the transition
-    /// surface-layer path needs the composite regardless (there is no
-    /// OffscreenData blit to fall back on mid-animation).
     /// Blit the scene BEHIND @p w (everything painted below it this frame)
     /// from the live render target into the window's backdropTex, over the
     /// SAME padded canvas renderSurfaceChainComposite uses — texel-aligned
@@ -1142,6 +1133,26 @@ private:
     void captureWindowBackdrop(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                KWin::EffectWindow* w, const WindowDecoration& wb,
                                const QRectF& animatedFrame = QRectF());
+
+    /// Fold @p w's decoration chain into a per-window ping-pong composite, and return the
+    /// texture holding the result (null on no decoration / allocation failure). drawWindow
+    /// presents it through surfacePresentShader().
+    ///
+    /// Captures the raw window surface, then folds each pack over the running composite: the
+    /// pack's buffer passes run first (sampling the composite), then its main pass runs as a
+    /// fullscreen FBO draw — composite on unit 0, its own buffers as iChannels — into the
+    /// other slot. MUST be driven from paintWindow: the capture re-enters
+    /// effects->drawWindow.
+    ///
+    /// Three caches decide how much of that actually runs on a given frame, and
+    /// planSurfaceFold (surface_capture.cpp) owns all three: the window capture is
+    /// damage-gated, the leading run of packs that do not vary per frame is folded once and
+    /// reused, and a chain where NOTHING varies per frame returns its previous composite
+    /// untouched.
+    ///
+    /// @p captureRestoreShader: the shader to hand the OffscreenEffect slot back to after
+    /// the raw capture (null = surfacePresentShader(), the rest path's redirect; transitions
+    /// pass their animation shader).
     KWin::GLTexture* renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
                                                  KWin::GLShader* captureRestoreShader = nullptr);
 
@@ -1155,14 +1166,11 @@ private:
     int m_surfacePresentOpacityLoc = -1; ///< uOpacity (final modulation) location on the present shader
     bool m_surfacePresentFailed = false; ///< latch a failed present-shader compile
 
-    /// Continuous seconds for the surface contract's `iTime`, relative to an
-    /// epoch captured at first use (so the value starts near 0 and keeps float
-    /// precision over a long session). Monotonic (steady_clock). Pushed to every
-    /// pass whose shader references iTime.
-    float surfaceShaderTimeSeconds();
-
-    /// The same clock as surfaceShaderTimeSeconds(), in integer milliseconds. The
-    /// per-window animation clock accounts in this domain — see SurfaceMultipassState.
+    /// The shared clock behind the surface contract's `iTime`, in integer milliseconds,
+    /// relative to an epoch captured at first use. Monotonic (steady_clock). Every
+    /// per-window clock is derived from this one by subtracting the time that window spent
+    /// not animating — see SurfaceMultipassState. The seconds-valued sibling this used to
+    /// have is gone: it was left behind by the integer rewrite with no callers at all.
     qint64 surfaceShaderTimeMs();
     qint64 m_surfaceTimeEpochMs = -1; ///< steady-clock ms captured on the first iTime push
 

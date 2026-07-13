@@ -49,6 +49,12 @@ public:
     void setStages(const QList<IdleStage>& stages);
     [[nodiscard]] QList<IdleStage> stages() const;
 
+    /// Did every stage of the current ladder actually arm? False for an EMPTY ladder too:
+    /// nothing is watching, so nothing can report. A caller that armed a ladder and gets
+    /// false back knows its idle detection is dead and can rebuild rather than wait forever
+    /// for an edge that will never come.
+    [[nodiscard]] bool isArmed() const;
+
     /// 0 when active; otherwise the 1-based index of the deepest stage currently
     /// fired.
     [[nodiscard]] int currentStage() const;

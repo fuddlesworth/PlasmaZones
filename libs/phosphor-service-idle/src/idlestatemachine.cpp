@@ -42,6 +42,16 @@ void IdleStateMachine::setStages(const QList<IdleStage>& stages)
     Q_EMIT stagesChanged();
 }
 
+bool IdleStateMachine::isArmed() const
+{
+    if (m_sources.empty()) {
+        return false;
+    }
+    return std::all_of(m_sources.cbegin(), m_sources.cend(), [](const IIdleSource::Ptr& source) {
+        return source && source->isArmed();
+    });
+}
+
 QList<IdleStage> IdleStateMachine::stages() const
 {
     return m_stages;

@@ -217,14 +217,17 @@ void IdleStateMachineTest::reconfigureWhileIdleResets()
 
 // Emptying the ladder WHILE IDLE must resume, not just disarm.
 //
-// reconfigureWhileIdleResets above only covers replacing one ladder with another.
-// Clearing it is the path consumers actually use to turn idle detection off, and they
-// depend on the resume edge: the PlasmaZones daemon empties the ladder when the user
-// turns "pause decorations when idle" off, and the compositor effect un-pauses on the
-// resulting sessionIdleChanged(false). Without that edge, a user who went idle and then
-// switched the setting off would be left with every decorated window frozen until the
-// next real idle-to-active cycle. An optimisation that skipped rebuild() for an empty
-// ladder would break that silently, and no other test in this file would notice.
+// reconfigureWhileIdleResets above only covers replacing one ladder with another. This pins
+// the library's contract for clearing it: an empty ladder means "nothing is being watched",
+// and a machine that stayed latched at idle would report an idleness it can no longer
+// observe. So the state machine resumes on the way down, and an optimisation that skipped
+// rebuild() for an empty ladder would break that silently with no other test noticing.
+//
+// Deliberately NOT justified by "this is what the PlasmaZones daemon does when the user
+// turns pause-when-idle off". It is not — the daemon leaves its ladder armed for exactly
+// the reason this test describes, because an empty ladder cannot tell it the seat went idle
+// while the feature was off (see src/daemon/daemon/idle.cpp). Citing a consumer that behaves
+// the opposite way would be an argument for reintroducing the bug that design avoids.
 void IdleStateMachineTest::clearStagesWhileIdleResumes()
 {
     RecordingFactory rec;

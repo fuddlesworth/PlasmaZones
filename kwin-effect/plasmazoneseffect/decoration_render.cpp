@@ -392,7 +392,7 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     //
     // The value comes from the FOLD, not from a live clock read here: a chain that
     // Decorations.Performance has paused is folded against a frozen clock so it holds
-    // the frame it was paused on (SurfaceMultipassState::pausedAtSec / timeOffsetSec). Sampling live
+    // the frame it was paused on (SurfaceMultipassState::pausedAtMs / timeOffsetMs). Sampling live
     // here would let the packs run on while the composite they draw into does not.
     if (pack.uTimeLoc >= 0) {
         shader->setUniform(pack.uTimeLoc, timeSec);
@@ -420,8 +420,13 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
         const QPointF cursorGlobal = foldCursor;
         float localX = -1.0f;
         float localY = -1.0f;
-        const bool inside = cursorGlobal.x() >= expanded.left() && cursorGlobal.x() < expanded.right()
-            && cursorGlobal.y() >= expanded.top() && cursorGlobal.y() < expanded.bottom();
+        // Ask the SENTINEL, do not re-derive the containment test. foldCursorFor already ran
+        // it against the canvas the fold recorded, and the fold keyed its cache on the
+        // answer. Re-deriving it here against live geometry can only ever DISAGREE with that
+        // key — the shader would get (-1,-1) while the cache believes it baked a live
+        // pointer, which is the frozen-hover bug an earlier pass fixed, walking back in
+        // through a second spelling of the same rule.
+        const bool inside = cursorGlobal != kCursorOutside;
         if (inside) {
             localX = static_cast<float>((cursorGlobal.x() - expanded.left()) * scale);
             localY = static_cast<float>((cursorGlobal.y() - expanded.top()) * scale);

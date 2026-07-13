@@ -28,14 +28,14 @@
 
 namespace PlasmaZones {
 
-// Continuous seconds for the surface `iTime` uniform, relative to an epoch
-// captured on first use so the value starts near 0 (a steady_clock value since
-// boot is large enough to lose visible sub-frame precision as a float).
-// Milliseconds since the same epoch surfaceShaderTimeSeconds() counts from.
+// Milliseconds since an epoch captured on first use, so the value starts near 0 rather
+// than at a steady_clock reading since boot.
 //
-// The per-window clock accounting works in integers: a float's resolution decays with the
-// magnitude of the epoch (after a week of uptime its ULP is four frames), and the value it
-// ultimately wants is a DIFFERENCE of two large near-equal numbers.
+// INTEGERS, and there is no seconds-valued sibling any more. A float's resolution decays
+// with the magnitude of the epoch (after a week of uptime its ULP is four frames), and what
+// the per-window clock actually wants is a DIFFERENCE of two large near-equal numbers —
+// exactly where float cancellation bites. The single cast to float happens at the uniform,
+// on a value the per-window offset has already brought back down to a few seconds.
 qint64 PlasmaZonesEffect::surfaceShaderTimeMs()
 {
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
@@ -43,15 +43,6 @@ qint64 PlasmaZonesEffect::surfaceShaderTimeMs()
         m_surfaceTimeEpochMs = nowMs;
     }
     return nowMs - m_surfaceTimeEpochMs;
-}
-
-float PlasmaZonesEffect::surfaceShaderTimeSeconds()
-{
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-    if (m_surfaceTimeEpochMs < 0) {
-        m_surfaceTimeEpochMs = nowMs;
-    }
-    return static_cast<float>(static_cast<double>(nowMs - m_surfaceTimeEpochMs) / 1000.0);
 }
 
 // Wake every decorated window: put it back in the paint loop with one repaint.
@@ -180,6 +171,16 @@ void PlasmaZonesEffect::repaintHoverDecorations(const QPointF& cursor)
             || sit->second.foldedCursor == foldCursorFor(sw, sit->second.canvasGeo, /*mayAnimate=*/true, cursor)) {
             continue;
         }
+        // A repaint we have already ASKED FOR is not due again — the same one-shot the
+        // backdrop driver uses, for the same reason. foldedCursor is advanced only by a
+        // FOLD, and KWin will not paint a window fully occluded by an opaque one above it.
+        // Such a window can never converge, so without this it would take a full repaint
+        // request on every pointer-motion event for the rest of the session. The fold
+        // clears the flag on the frame the repaint actually lands.
+        if (sit->second.hoverRepaintPending) {
+            continue;
+        }
+        sit->second.hoverRepaintPending = true;
         sw->addRepaintFull();
         // A padded chain draws OUTSIDE the window rect, and addRepaintFull clips to the
         // window item — so without this, a cursor-following glow updates its inner canvas

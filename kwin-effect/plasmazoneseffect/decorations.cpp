@@ -475,12 +475,13 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
                                              if (it == m_windowDecorations.end() || !ew || !KWin::effects) {
                                                  return;
                                              }
-                                             QRectF padded = ew->expandedGeometry();
-                                             if (padded.isEmpty()) {
-                                                 padded = ew->frameGeometry();
-                                             }
-                                             const int pad = it->outerPadding;
-                                             padded.adjust(-pad, -pad, pad, pad);
+                                             // The SAME helper the recorder above uses. This
+                                             // was a sixth hand-rolled copy, and it used an
+                                             // int pad where the helper uses qreal — a band
+                                             // computed one way and damaged another is
+                                             // exactly the stale-glow trail the helper exists
+                                             // to prevent.
+                                             const QRectF padded = paddedBandRect(ew, it->outerPadding);
                                              if (it->lastPaddedGeo.isValid()) {
                                                  KWin::effects->addRepaint(KWin::RectF(it->lastPaddedGeo));
                                              }
