@@ -931,6 +931,71 @@ public:
         Q_EMIT hideWindowTitleBarsChanged();
         Q_EMIT settingsChanged();
     }
+    bool showWindowOpacityTint() const override
+    {
+        return m_showWindowOpacityTint;
+    }
+    void setShowWindowOpacityTint(bool v) override
+    {
+        if (m_showWindowOpacityTint == v) {
+            return;
+        }
+        m_showWindowOpacityTint = v;
+        Q_EMIT showWindowOpacityTintChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString windowOpacityTintScope() const override
+    {
+        return m_windowOpacityTintScope;
+    }
+    void setWindowOpacityTintScope(const QString& v) override
+    {
+        if (m_windowOpacityTintScope == v) {
+            return;
+        }
+        m_windowOpacityTintScope = v;
+        Q_EMIT windowOpacityTintScopeChanged();
+        Q_EMIT settingsChanged();
+    }
+    double windowOpacity() const override
+    {
+        return m_windowOpacity;
+    }
+    void setWindowOpacity(double v) override
+    {
+        if (qFuzzyCompare(m_windowOpacity, v)) {
+            return;
+        }
+        m_windowOpacity = v;
+        Q_EMIT windowOpacityChanged();
+        Q_EMIT settingsChanged();
+    }
+    double windowTintStrength() const override
+    {
+        return m_windowTintStrength;
+    }
+    void setWindowTintStrength(double v) override
+    {
+        if (qFuzzyCompare(m_windowTintStrength, v)) {
+            return;
+        }
+        m_windowTintStrength = v;
+        Q_EMIT windowTintStrengthChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString windowTintColor() const override
+    {
+        return m_windowTintColor;
+    }
+    void setWindowTintColor(const QString& v) override
+    {
+        if (m_windowTintColor == v) {
+            return;
+        }
+        m_windowTintColor = v;
+        Q_EMIT windowTintColorChanged();
+        Q_EMIT settingsChanged();
+    }
     QString windowTitleBarScope() const override
     {
         return m_windowTitleBarScope;
@@ -2227,6 +2292,11 @@ private:
     bool m_decorationAnimateFocusedOnly = ConfigDefaults::decorationAnimateFocusedOnly();
     bool m_decorationPauseWhenIdle = ConfigDefaults::decorationPauseWhenIdle();
     int m_decorationIdleTimeoutSec = ConfigDefaults::decorationIdleTimeoutSec();
+    bool m_showWindowOpacityTint = ConfigDefaults::showWindowOpacityTint();
+    QString m_windowOpacityTintScope = ConfigDefaults::windowOpacityTintScope();
+    double m_windowOpacity = ConfigDefaults::windowOpacity();
+    double m_windowTintStrength = ConfigDefaults::windowTintStrength();
+    QString m_windowTintColor = ConfigDefaults::windowTintColor();
 };
 
 } // namespace PlasmaZones

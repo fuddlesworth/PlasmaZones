@@ -442,6 +442,22 @@ inline constexpr QLatin1StringView SetBorderRadius{"setBorderRadius"};
 inline constexpr QLatin1StringView SetBorderColorActive{"setBorderColorActive"};
 inline constexpr QLatin1StringView SetBorderColorInactive{"setBorderColorInactive"};
 
+// ── Per-window opacity+tint layer overrides (domain Window) ──
+// Effect-side per-window overrides of the plain opacity+tint layer, folded
+// into the reserved "opacity-tint" surface pack exactly like the SetBorder*
+// family feeds the "border" pack (each its own slot so independent rules
+// cascade per-property). The layer's opacity keeps the existing `SetOpacity`
+// slot and is layer-backed, full stop: when the layer renders, its value
+// folds into the pack's opacity param (rule wins over the config value).
+// Custom chains do not honour it — packs dim through their own parameters
+// (frost/glass `contentOpacity`) — and neither does an undecorated window.
+// SetTintColor carries a single colour param (`ActionParam::Value`): a hex
+// string OR the `BorderColorToken::Accent` sentinel, resolved to the live
+// system accent like the border colours.
+inline constexpr QLatin1StringView SetOpacityTintVisible{"setOpacityTintVisible"};
+inline constexpr QLatin1StringView SetTintStrength{"setTintStrength"};
+inline constexpr QLatin1StringView SetTintColor{"setTintColor"};
+
 // ── Per-context gap overrides (domain Context) ──
 // Resolved daemon-side at zone-geometry time as the highest-precedence gap
 // layer (rule > per-screen > layout > global). Match on screen / desktop /
@@ -654,6 +670,12 @@ inline constexpr QLatin1StringView BorderWidth{"border-width"};
 inline constexpr QLatin1StringView BorderRadius{"border-radius"};
 inline constexpr QLatin1StringView BorderColorActive{"border-color-active"};
 inline constexpr QLatin1StringView BorderColorInactive{"border-color-inactive"};
+// Per-window opacity+tint layer slots (SetOpacityTintVisible /
+// SetTintStrength / SetTintColor), feeding the plain opacity+tint layer's
+// reserved pack the way the border slots feed "border".
+inline constexpr QLatin1StringView OpacityTintVisible{"opacity-tint-visible"};
+inline constexpr QLatin1StringView TintStrength{"tint-strength"};
+inline constexpr QLatin1StringView TintColor{"tint-color"};
 // Per-context gap slots (mirror the PerScreenSnappingKey set).
 inline constexpr QLatin1StringView InnerGap{"inner-gap"};
 inline constexpr QLatin1StringView OuterGap{"outer-gap"};

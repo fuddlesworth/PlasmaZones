@@ -1,13 +1,12 @@
 {
     "id": "duotone",
     "name": "Duotone",
-    "description": "The scene behind the window blurred and remapped onto a two-colour gradient by brightness, the concert-poster look. Shadows take the first colour and highlights the second. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "description": "The scene behind the window blurred and remapped onto a two-colour gradient by brightness, the concert-poster look. Shadows take the first colour and highlights the second. It shows through wherever the window itself is translucent, and lowering the Content opacity parameter fades the window content so the gradient shows on opaque windows too.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Blur",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
-    "handlesOpacity": true,
     "multipass": true,
     "bufferScale": 0.25,
     "bufferShaders": [
@@ -34,6 +33,16 @@
             "max": 32,
             "description": "Corner rounding of the pane (px, match the Border pack)",
             "group": "Shape"
+        },
+        {
+            "id": "contentOpacity",
+            "name": "Content opacity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 1.0,
+            "group": "Content",
+            "description": "How visible the window content stays over the pane, where 1.0 is fully opaque and 0.0 shows only the duotone backdrop"
         },
         {
             "id": "contrast",

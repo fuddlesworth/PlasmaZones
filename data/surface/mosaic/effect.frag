@@ -9,8 +9,11 @@
 // composite as the blur family: the pane shows through wherever the
 // window itself is translucent.
 //
-// handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
-// the pane stays solid and translucency reveals the mosaic.
+// Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
+// (SetOpacity is layer-backed and custom chains own their alpha). The pack's
+// own contentOpacity parameter fades the window content so the mosaic shows
+// on opaque windows; a theme's own translucent pixels reveal it the same way
+// with no parameter involved.
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the pack renders a still tint slab with the same corner rounding.
 
@@ -18,6 +21,9 @@
 
 vec4 pSurface(vec2 uv) {
     SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    // Fade the window content over the pane; the translucency it frees is
+    // filled by the mosaic in slabComposite below.
+    slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
     vec2 px = slab.px;
     float mask = slab.mask;
 

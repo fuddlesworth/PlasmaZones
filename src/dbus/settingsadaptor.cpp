@@ -445,6 +445,14 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_STRING_SETTING("windowBorderColorInactive", windowBorderColorInactive, setWindowBorderColorInactive)
     REGISTER_BOOL_SETTING("hideWindowTitleBars", hideWindowTitleBars, setHideWindowTitleBars)
     REGISTER_STRING_SETTING("windowTitleBarScope", windowTitleBarScope, setWindowTitleBarScope)
+    // Plain opacity+tint layer (same config-backed-default model as the
+    // border block above). The tint colour carries a hex string OR the
+    // "accent" sentinel, so it marshals as a plain string too.
+    REGISTER_BOOL_SETTING("showWindowOpacityTint", showWindowOpacityTint, setShowWindowOpacityTint)
+    REGISTER_STRING_SETTING("windowOpacityTintScope", windowOpacityTintScope, setWindowOpacityTintScope)
+    REGISTER_DOUBLE_SETTING("windowOpacity", windowOpacity, setWindowOpacity)
+    REGISTER_DOUBLE_SETTING("windowTintStrength", windowTintStrength, setWindowTintStrength)
+    REGISTER_STRING_SETTING("windowTintColor", windowTintColor, setWindowTintColor)
     REGISTER_INT_SETTING("focusFadeDuration", focusFadeDuration, setFocusFadeDuration)
     REGISTER_STRING_SETTING("labelFontFamily", labelFontFamily, setLabelFontFamily)
     // Custom setter with range validation (0.25-3.0) instead of REGISTER_DOUBLE_SETTING

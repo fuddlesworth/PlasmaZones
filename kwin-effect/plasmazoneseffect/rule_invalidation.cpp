@@ -67,7 +67,6 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
     // placement-state change, so drop it once so border / opacity rules re-resolve
     // against the new snapped / floating / zone state.
     m_shaderManager.animationRuleEvaluator().clearCache();
-    const bool hasOpacity = m_shaderManager.hasOpacityRules();
     for (const QString& windowId : windowIds) {
         KWin::EffectWindow* w = findWindowById(windowId);
         if (!w) {
@@ -101,17 +100,10 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
         // re-apply on a float/snap flip — this is the trigger that makes
         // "floating windows above tiled windows" follow the float toggle.
         reconcileRuleWindowLayer(liveId, w);
-        // An opacity-only (borderless) window needs an explicit repaint for its
-        // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
-        //
-        // Flagged as OURS, for the same reason as that site: windowDamaged fires on
-        // repaint SCHEDULING, so an unflagged repaint here would clear the window's
-        // captureValid and cold-start the decoration capture cache on every float/snap
-        // flip. Only the opacity moved, and the fold keys on that itself.
-        if (hasOpacity) {
-            const auto selfRepaint = selfRepaintScope();
-            w->addRepaintFull();
-        }
+        // No explicit repaint is needed for opacity: it is layer-backed now, so a
+        // re-resolved SetOpacity value reaches the screen through the updateWindowDecoration
+        // re-fold above, which repaints the window itself (an undecorated window carries no
+        // rule opacity at all).
     }
 }
 
@@ -137,13 +129,13 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
     // A bulk placement change (daemon loss clears the zone/floating caches; the
     // daemon-ready re-seeds repopulate them) moves neither the windowId nor the
     // ruleSet revision the match cache is keyed on, so every placement-scoped
-    // verdict would survive stale. Drop the whole cache; the full repaint makes
-    // every opacity-only window re-resolve against the current placement on the
-    // next frame (border windows recover through their own restore/rebuild path).
+    // verdict would survive stale. Drop the whole cache. The clear alone revives
+    // nothing: appearance slots (opacity, tint, border colour) are FOLDED into the
+    // window's decoration at updateWindowDecoration time, so each caller pairs this
+    // sweep with its own decoration path — daemon loss tears the decorations down
+    // (clearAllDecorations), and the daemon-ready re-seeds schedule a border sweep to
+    // re-fold every window against the fresh placement.
     m_shaderManager.animationRuleEvaluator().clearCache();
-    if (KWin::effects && m_shaderManager.hasOpacityRules()) {
-        KWin::effects->addRepaintFull();
-    }
     // Window-layer rules need the same placement-scoped re-resolve, but they
     // are EVENT-driven (during normal operation only reconcileRuleWindowLayer
     // writes keepAbove/keepBelow; restoreAllRuleWindowLayers is

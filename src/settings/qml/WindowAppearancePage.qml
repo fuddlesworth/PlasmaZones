@@ -32,6 +32,8 @@ SettingsFlickable {
     // The border detail controls (width, radius, colours) are hidden while the
     // border is off so the user cannot edit values that would not apply.
     readonly property bool borderVisible: root.ctl.showWindowBorder
+    // Same hide-while-off treatment for the opacity+tint layer's rows.
+    readonly property bool opacityTintVisible: root.ctl.showWindowOpacityTint
     // The title-bar scope row is only meaningful while title bars are hidden.
     readonly property bool hideTitleBarsOn: root.ctl.hideWindowTitleBars
 
@@ -162,6 +164,18 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
+                // Easy/custom mode split: any decoration shader pack on a
+                // window replaces this plain border outright (see the effect's
+                // updateWindowDecoration), so say so where the border is edited.
+                Label {
+                    Layout.fillWidth: true
+                    visible: root.borderVisible
+                    text: i18n("Windows that use custom decoration shaders show those instead of this border.")
+                    font.italic: true
+                    color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.WordWrap
+                }
+
                 SettingsRow {
                     visible: root.borderVisible
                     title: i18n("Apply to")
@@ -234,24 +248,16 @@ SettingsFlickable {
                         }
                     }
                 }
-            }
-        }
 
-        // =================================================================
-        // Colors Card — active + inactive border colours, with a system
-        // accent toggle that writes the "accent" sentinel.
-        // =================================================================
-        SettingsCard {
-            Layout.fillWidth: true
-            visible: root.borderVisible
-            headerText: i18n("Colors")
-            searchAnchor: "colors"
-            collapsible: true
+                SettingsSeparator {
+                    visible: root.borderVisible
+                }
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
+                // ── Border colours — a border concern, so they live in this
+                // card: system accent toggle (writes the "accent" sentinel)
+                // with explicit active/inactive pickers when it is off.
                 SettingsRow {
+                    visible: root.borderVisible
                     title: i18n("Use system accent color")
                     searchAnchor: "useSystemAccentColor"
                     description: i18n("Follow the system color scheme for the border color")
@@ -271,11 +277,11 @@ SettingsFlickable {
                 }
 
                 SettingsSeparator {
-                    visible: !useAccentSwitch.checked
+                    visible: root.borderVisible && !useAccentSwitch.checked
                 }
 
                 SettingsRow {
-                    visible: !useAccentSwitch.checked
+                    visible: root.borderVisible && !useAccentSwitch.checked
                     title: i18n("Active border color")
                     searchAnchor: "activeBorderColor"
                     description: i18n("Border color for the focused window")
@@ -298,11 +304,11 @@ SettingsFlickable {
                 }
 
                 SettingsSeparator {
-                    visible: !useAccentSwitch.checked
+                    visible: root.borderVisible && !useAccentSwitch.checked
                 }
 
                 SettingsRow {
-                    visible: !useAccentSwitch.checked
+                    visible: root.borderVisible && !useAccentSwitch.checked
                     title: i18n("Inactive border color")
                     searchAnchor: "inactiveBorderColor"
                     description: i18n("Border color for unfocused windows")
@@ -319,6 +325,141 @@ SettingsFlickable {
                             const raw = root.ctl.windowBorderColorInactive;
                             inactiveBorderColorDialog.selectedColor = raw === root.accentToken ? appSettings.inactiveColor : raw;
                             inactiveBorderColorDialog.open();
+                        }
+                    }
+                }
+            }
+        }
+
+        // =================================================================
+        // Opacity Card — the plain opacity+tint layer: fades matched windows
+        // and can wash them with a colour, rendered by the reserved
+        // opacity-tint decoration shader. Custom decoration shaders replace
+        // it wholesale, mirroring the Borders card above.
+        // =================================================================
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Opacity and tint")
+            searchAnchor: "opacityTint"
+            showToggle: true
+            toggleChecked: root.ctl.showWindowOpacityTint
+            onToggleClicked: checked => root.ctl.showWindowOpacityTint = checked
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                Label {
+                    Layout.fillWidth: true
+                    visible: root.opacityTintVisible
+                    text: i18n("Windows that use custom decoration shaders show those instead of this opacity and tint.")
+                    font.italic: true
+                    color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.WordWrap
+                }
+
+                SettingsRow {
+                    visible: root.opacityTintVisible
+                    title: i18n("Apply to")
+                    searchAnchor: "opacityTintScope"
+                    description: i18n("Which windows are faded and tinted")
+
+                    WideComboBox {
+                        id: opacityTintScopeCombo
+
+                        Accessible.name: i18n("Apply opacity and tint to")
+                        textRole: "label"
+                        model: root.scopeOptions
+                        currentIndex: root.scopeIndex(root.ctl.opacityTintScope)
+                        onActivated: index => root.ctl.opacityTintScope = root.scopeOptions[index].scope
+                    }
+                }
+
+                SettingsSeparator {
+                    visible: root.opacityTintVisible
+                }
+
+                SettingsRow {
+                    visible: root.opacityTintVisible
+                    title: i18n("Opacity")
+                    searchAnchor: "windowOpacity"
+                    description: i18n("How visible matched windows stay, where 100% is fully opaque")
+
+                    SettingsSlider {
+                        accessibleName: i18n("Opacity")
+                        from: Math.round(root.ctl.windowOpacityMin * 100)
+                        to: Math.round(root.ctl.windowOpacityMax * 100)
+                        value: Math.round(root.ctl.windowOpacity * 100)
+                        onMoved: value => root.ctl.windowOpacity = value / 100
+                    }
+                }
+
+                SettingsSeparator {
+                    visible: root.opacityTintVisible
+                }
+
+                SettingsRow {
+                    visible: root.opacityTintVisible
+                    title: i18n("Tint strength")
+                    searchAnchor: "tintStrength"
+                    description: i18n("How strongly the tint color blends over the window, where 0% keeps it untinted")
+
+                    SettingsSlider {
+                        accessibleName: i18n("Tint strength")
+                        from: Math.round(root.ctl.windowTintStrengthMin * 100)
+                        to: Math.round(root.ctl.windowTintStrengthMax * 100)
+                        value: Math.round(root.ctl.windowTintStrength * 100)
+                        onMoved: value => root.ctl.windowTintStrength = value / 100
+                    }
+                }
+
+                SettingsSeparator {
+                    visible: root.opacityTintVisible
+                }
+
+                SettingsRow {
+                    visible: root.opacityTintVisible
+                    title: i18n("Use system accent color")
+                    searchAnchor: "useSystemAccentTint"
+                    description: i18n("Follow the system color scheme for the tint color")
+
+                    SettingsSwitch {
+                        id: useAccentTintSwitch
+
+                        checked: root.ctl.windowTintColor === root.accentToken
+                        accessibleName: i18n("Use system accent color for the tint")
+                        onToggled: function (newValue) {
+                            // The tint colour's config default IS the border
+                            // default (ConfigDefaults::windowTintColor returns
+                            // windowBorderColorActive), so toggling accent off
+                            // restores the same fallback the border swatches use.
+                            root.ctl.windowTintColor = newValue ? root.accentToken : root.defaultBorderHex;
+                        }
+                    }
+                }
+
+                SettingsSeparator {
+                    visible: root.opacityTintVisible && !useAccentTintSwitch.checked
+                }
+
+                SettingsRow {
+                    visible: root.opacityTintVisible && !useAccentTintSwitch.checked
+                    title: i18n("Tint color")
+                    searchAnchor: "tintColor"
+                    description: i18n("Color the window is washed with when the tint strength is above zero")
+
+                    ColorSwatchRow {
+                        color: {
+                            // Same accent-sentinel mapping as the border swatches:
+                            // preview the live highlight instead of coercing the
+                            // token to black.
+                            const raw = root.ctl.windowTintColor;
+                            return raw === root.accentToken ? (appSettings ? appSettings.highlightColor : Kirigami.Theme.highlightColor) : raw;
+                        }
+                        onClicked: {
+                            const raw = root.ctl.windowTintColor;
+                            tintColorDialog.selectedColor = raw === root.accentToken ? (appSettings ? appSettings.highlightColor : root.defaultBorderHex) : raw;
+                            tintColorDialog.open();
                         }
                     }
                 }
@@ -378,7 +519,7 @@ SettingsFlickable {
                     description: i18n("How long decorations take to fade between focused and unfocused. Zero switches instantly.")
 
                     SettingsSlider {
-                        Accessible.name: i18n("Focus fade duration")
+                        accessibleName: i18n("Focus fade duration")
                         from: root.ctl.focusFadeDurationMin
                         to: root.ctl.focusFadeDurationMax
                         stepSize: 10
@@ -566,5 +707,13 @@ SettingsFlickable {
         options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Inactive Border Color")
         onAccepted: root.ctl.windowBorderColorInactive = root.colorToHex(selectedColor)
+    }
+
+    ColorDialog {
+        id: tintColorDialog
+
+        options: ColorDialog.ShowAlphaChannel
+        title: i18n("Choose Tint Color")
+        onAccepted: root.ctl.windowTintColor = root.colorToHex(selectedColor)
     }
 }

@@ -39,8 +39,9 @@ bool hasBool(const QJsonObject& params, QLatin1StringView key)
 }
 
 /// Validates that @p params has a number in [0, @p maxValue] at @p key.
-/// Consumers truncate to int; the upper bound keeps a hand-edited payload from
-/// carrying an absurd value into the geometry/border path.
+/// Geometry/border consumers truncate to int; the unit-scale slots (opacity,
+/// tint strength) read the double as-is. Either way the upper bound keeps a
+/// hand-edited payload from carrying an absurd value downstream.
 bool hasNumberInRange(const QJsonObject& params, QLatin1StringView key, double maxValue)
 {
     const QJsonValue v = params.value(key);
@@ -709,12 +710,7 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::Opacity),
         .validate =
             [](const QJsonObject& p) {
-                const QJsonValue v = p.value(ActionParam::Value);
-                if (!v.isDouble()) {
-                    return false;
-                }
-                const double d = v.toDouble();
-                return d >= 0.0 && d <= 1.0;
+                return hasNumberInRange(p, ActionParam::Value, 1.0);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -838,12 +834,7 @@ void ActionRegistry::registerBuiltins()
                 },
             .validate =
                 [](const QJsonObject& p) {
-                    const QJsonValue v = p.value(ActionParam::Value);
-                    if (!v.isDouble()) {
-                        return false;
-                    }
-                    const double d = v.toDouble();
-                    return d >= 0.0 && d <= 1.0;
+                    return hasNumberInRange(p, ActionParam::Value, 1.0);
                 },
             .terminal = false,
             .allowedKeys = {QString(ActionParam::Value)},
@@ -1101,6 +1092,66 @@ void ActionRegistry::registerBuiltins()
         .category = QStringLiteral("borderAppearance"),
         .displayOrder = 5,
         .tags = {QString(Tag::Border), QString(Tag::Effect)},
+    });
+    // Per-window opacity+tint layer slots, feeding the plain layer's reserved
+    // "opacity-tint" pack the way the border slots feed "border". Visible
+    // mirrors SetBorderVisible (an engaged true turns the layer on for the
+    // matched window even when the global toggle is off; false forces it
+    // off). Strength is wire-encoded [0.0, 1.0] like SetOpacity (percent in
+    // the editor); the colour accepts a hex shape or the accent sentinel. The
+    // layer's opacity itself stays on the SetOpacity slot above — when the
+    // layer renders, that rule's value folds into the pack's opacity param
+    // (rule wins over config); custom chains do not honour it (packs dim
+    // through their own parameters, e.g. frost/glass contentOpacity).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOpacityTintVisible),
+        .slotFor = constantSlot(ActionSlot::OpacityTintVisible),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("appearance"),
+        .displayOrder = 0,
+        .tags = {QString(Tag::Effect)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetTintStrength),
+        .slotFor = constantSlot(ActionSlot::TintStrength),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, 1.0);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = 0.0,
+                     .max = 100.0,
+                     .scale = 0.01,
+                     .defaultDisplay = 30.0}},
+        .category = QStringLiteral("appearance"),
+        .displayOrder = 1,
+        .tags = {QString(Tag::Effect)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetTintColor),
+        .slotFor = constantSlot(ActionSlot::TintColor),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasHexColorOrAccent(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+        .category = QStringLiteral("appearance"),
+        .displayOrder = 2,
+        .tags = {QString(Tag::Effect)},
     });
     // Decoration-chain override: an ordered surface-pack list (empty array =
     // "no decoration" sentinel, so `Chain` must be PRESENT and an array but

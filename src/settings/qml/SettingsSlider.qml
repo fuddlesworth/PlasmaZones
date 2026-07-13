@@ -26,6 +26,10 @@ RowLayout {
     property int sliderWidth: Kirigami.Units.gridUnit * 16
     property int labelWidth: Kirigami.Units.gridUnit * 3
     property var formatValue: null
+    //* @brief Screen-reader name for the INNER Slider (the focusable control).
+    //* Setting Accessible.name on this RowLayout wrapper never reaches the
+    //* Slider, so callers use this instead (mirrors SettingsSwitch).
+    property string accessibleName: ""
     //* @brief Provides direct access to the internal Slider for Binding targets.
     readonly property alias slider: slider
 
@@ -43,6 +47,7 @@ RowLayout {
     Slider {
         id: slider
 
+        Accessible.name: root.accessibleName
         Layout.preferredWidth: root.sliderWidth
         from: root.from
         to: root.to

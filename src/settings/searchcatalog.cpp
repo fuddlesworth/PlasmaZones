@@ -319,7 +319,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
 
     // Window Appearance (config-backed Windows.* / Gaps.* page)
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("borders"), PhosphorI18n::tr("Borders"));
-    addSection(search, QStringLiteral("window-appearance"), QStringLiteral("colors"), PhosphorI18n::tr("Colors"));
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("decorations"),
                PhosphorI18n::tr("Decorations"));
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("borderWidth"),
@@ -338,6 +337,22 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("inactiveBorderColor"),
                PhosphorI18n::tr("Inactive border color"),
                {PhosphorI18n::tr("colour"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("outline")});
+    addSection(search, QStringLiteral("window-appearance"), QStringLiteral("opacityTint"),
+               PhosphorI18n::tr("Opacity and tint"));
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("opacityTintScope"),
+               PhosphorI18n::tr("Apply opacity and tint to"),
+               {PhosphorI18n::tr("scope"), PhosphorI18n::tr("which windows"), PhosphorI18n::tr("transparency")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("windowOpacity"),
+               PhosphorI18n::tr("Opacity"),
+               {PhosphorI18n::tr("transparency"), PhosphorI18n::tr("translucent"), PhosphorI18n::tr("fade")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("tintStrength"),
+               PhosphorI18n::tr("Tint strength"),
+               {PhosphorI18n::tr("wash"), PhosphorI18n::tr("blend"), PhosphorI18n::tr("colour")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("useSystemAccentTint"),
+               PhosphorI18n::tr("Use system accent color for the tint"),
+               {PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("colour")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("tintColor"), PhosphorI18n::tr("Tint color"),
+               {PhosphorI18n::tr("wash"), PhosphorI18n::tr("colour"), PhosphorI18n::tr("accent")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("hideTitleBars"),
                PhosphorI18n::tr("Hide title bars"),
                {PhosphorI18n::tr("titlebar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("header")});

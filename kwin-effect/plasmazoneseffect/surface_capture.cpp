@@ -212,7 +212,7 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
 // compositeTex[0].
 void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state,
                                              const QRectF& logicalGeometry, qreal captureScale, bool intoCaptureTex,
-                                             bool captureCacheable)
+                                             bool captureCacheable, qreal captureOpacity)
 {
     KWin::GLFramebuffer& fbo = intoCaptureTex ? *state.captureFbo : *state.compositeFbo[0];
     setShader(w, nullptr);
@@ -231,13 +231,12 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
         glClear(GL_COLOR_BUFFER_BIT);
         KWin::ItemEffect keepRenderable(w->windowItem());
         KWin::WindowPaintData captureData;
-        // Capture RAW (opacity 1.0). Rule opacity is applied downstream
-        // as a shader concern: the present passthrough modulates the
-        // final composite (KWin-style uniform ghosting), unless a chain
-        // pack declares handlesOpacity and applies uSurfaceOpacity to
-        // its own content sample instead (frost). Dimming the capture
-        // here would double-apply against either.
-        captureData.setOpacity(1.0);
+        // Almost always RAW (1.0): opacity is a downstream pack-param concern in the
+        // layer-backed model (the opacity-tint layer's folded param, or a pack's own
+        // contentOpacity). The caller passes < 1.0 only on the ONE fail-safe path — an
+        // opacity-baking chain whose opacity-tint pack failed to compile — where nothing
+        // else would apply the window's resolved opacity. See the call site.
+        captureData.setOpacity(captureOpacity);
         const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
         KWin::effects->drawWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
         KWin::GLFramebuffer::popFramebuffer();
@@ -434,7 +433,10 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
         : kCursorOutside;
     const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
     plan.foldFocus = chainReadsFocus ? advanceFocusFade(windowId, focusedNow) : 0.0f;
-    plan.foldOpacity = static_cast<float>(resolvedWindowOpacity(w, deco));
+    // v3.2 layer-backed model: the effective opacity is folded into the opacity-tint pack
+    // param and carried on the decoration. Key the fold cache on it so the capture fail-safe
+    // (opacity-tint pack missing) re-captures when the value moves.
+    plan.foldOpacity = static_cast<float>(deco.foldedOpacity);
     // Explicit epsilon, NOT qFuzzyCompare: both values settle at exactly 0.0, which
     // qFuzzyCompare is documented not to handle (it is a RELATIVE comparison, and
     // against zero its tolerance collapses to zero). It happens to fail SAFE here —

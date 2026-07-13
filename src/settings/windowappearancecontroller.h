@@ -24,8 +24,9 @@ class ISettings;
 /// forwards each value's READ/WRITE to the matching ISettings getter/setter and
 /// re-emits the ISettings::*Changed NOTIFY to QML. It also carries the CONSTANT
 /// slider bounds (border width/radius, focus fade duration, the decoration idle
-/// timeout, and the shared gap range) sourced from the same defaults the schema
-/// clamps against so the UI range can never drift.
+/// timeout, the shared gap range, and the opacity / tint-strength unit ranges)
+/// sourced from the same defaults the schema clamps against so the UI range can
+/// never drift.
 ///
 /// Dirty tracking: the underlying values ARE Q_PROPERTY on Settings, so
 /// SettingsController's meta-object loop already wires their NOTIFY to
@@ -56,6 +57,17 @@ class WindowAppearanceController : public PhosphorControl::PageController
         QString titleBarScope READ windowTitleBarScope WRITE setWindowTitleBarScope NOTIFY windowTitleBarScopeChanged)
     // Decoration focus cross-fade duration (ms); 0 switches instantly.
     Q_PROPERTY(int focusFadeDuration READ focusFadeDuration WRITE setFocusFadeDuration NOTIFY focusFadeDurationChanged)
+    // ── Plain opacity+tint layer (Windows.*) ──────────────────────────────────
+    // Opacity/strength are [0.0, 1.0]; the tint colour shares the border
+    // colours' "#AARRGGBB" or "accent" sentinel shape.
+    Q_PROPERTY(bool showWindowOpacityTint READ showWindowOpacityTint WRITE setShowWindowOpacityTint NOTIFY
+                   showWindowOpacityTintChanged)
+    Q_PROPERTY(QString opacityTintScope READ windowOpacityTintScope WRITE setWindowOpacityTintScope NOTIFY
+                   windowOpacityTintScopeChanged)
+    Q_PROPERTY(double windowOpacity READ windowOpacity WRITE setWindowOpacity NOTIFY windowOpacityChanged)
+    Q_PROPERTY(
+        double windowTintStrength READ windowTintStrength WRITE setWindowTintStrength NOTIFY windowTintStrengthChanged)
+    Q_PROPERTY(QString windowTintColor READ windowTintColor WRITE setWindowTintColor NOTIFY windowTintColorChanged)
 
     // ── Shared inner/outer gap model (Gaps.*) ─────────────────────────────────
     Q_PROPERTY(int innerGap READ innerGap WRITE setInnerGap NOTIFY innerGapChanged)
@@ -94,6 +106,12 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int innerGapMax READ innerGapMax CONSTANT)
     Q_PROPERTY(int outerGapMin READ outerGapMin CONSTANT)
     Q_PROPERTY(int outerGapMax READ outerGapMax CONSTANT)
+    // Opacity / tint strength bounds on the wire [0.0, 1.0] scale; the page's
+    // percent sliders scale them by 100, mirroring the value bindings.
+    Q_PROPERTY(double windowOpacityMin READ windowOpacityMin CONSTANT)
+    Q_PROPERTY(double windowOpacityMax READ windowOpacityMax CONSTANT)
+    Q_PROPERTY(double windowTintStrengthMin READ windowTintStrengthMin CONSTANT)
+    Q_PROPERTY(double windowTintStrengthMax READ windowTintStrengthMax CONSTANT)
 
 public:
     explicit WindowAppearanceController(ISettings& settings, QObject* parent = nullptr);
@@ -129,6 +147,18 @@ public:
     void setHideWindowTitleBars(bool hide);
     void setWindowTitleBarScope(const QString& scope);
     void setFocusFadeDuration(int ms);
+
+    // Plain opacity+tint layer — forward to ISettings.
+    bool showWindowOpacityTint() const;
+    QString windowOpacityTintScope() const;
+    double windowOpacity() const;
+    double windowTintStrength() const;
+    QString windowTintColor() const;
+    void setShowWindowOpacityTint(bool show);
+    void setWindowOpacityTintScope(const QString& scope);
+    void setWindowOpacity(double opacity);
+    void setWindowTintStrength(double strength);
+    void setWindowTintColor(const QString& color);
 
     // Shared inner/outer gaps — forward to ISettings.
     int innerGap() const;
@@ -229,6 +259,22 @@ public:
     {
         return ConfigDefaults::outerGapMax();
     }
+    double windowOpacityMin() const
+    {
+        return ConfigDefaults::windowOpacityMin();
+    }
+    double windowOpacityMax() const
+    {
+        return ConfigDefaults::windowOpacityMax();
+    }
+    double windowTintStrengthMin() const
+    {
+        return ConfigDefaults::windowTintStrengthMin();
+    }
+    double windowTintStrengthMax() const
+    {
+        return ConfigDefaults::windowTintStrengthMax();
+    }
 
 Q_SIGNALS:
     void showWindowBorderChanged();
@@ -240,6 +286,11 @@ Q_SIGNALS:
     void hideWindowTitleBarsChanged();
     void windowTitleBarScopeChanged();
     void focusFadeDurationChanged();
+    void showWindowOpacityTintChanged();
+    void windowOpacityTintScopeChanged();
+    void windowOpacityChanged();
+    void windowTintStrengthChanged();
+    void windowTintColorChanged();
     void innerGapChanged();
     void outerGapChanged();
     void usePerSideOuterGapChanged();

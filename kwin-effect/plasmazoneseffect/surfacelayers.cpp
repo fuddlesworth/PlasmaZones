@@ -6,7 +6,6 @@
 #include "shader_internal.h"
 #include "surface_fold.h"
 #include "types.h"
-#include "window_query.h"
 
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
@@ -263,8 +262,30 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // was allocated and never written. Re-capture on the flip, which costs exactly one
     // frame and happens almost never.
     if (!state.captureValid) {
+        // The capture is RAW (opacity 1.0), with ONE fail-safe exception: an opacity-baking
+        // chain (the plain opacity-tint layer) whose opacity-tint pack has no compiled shader
+        // would apply the window's resolved opacity nowhere, silently rendering a SetOpacity'd
+        // window fully opaque. Dim the capture by the folded value there instead — the nested
+        // draw runs KWin's default modulating shader and the pack that owns the value never
+        // runs, so single-apply holds. Any other chain captures raw and dims downstream as a
+        // pack-param concern (frost/glass contentOpacity, the tint layer's own param). The
+        // opacity is part of the capture cache key (plan.foldOpacity), so a change re-captures.
+        qreal captureOpacity = 1.0;
+        if (deco.chainBakesOpacity && !qFuzzyCompare(deco.foldedOpacity + 1.0, 2.0)) {
+            const CompiledSurfacePack* const otPack = compiledPackLazy(QStringLiteral("opacity-tint"));
+            if (!otPack || !otPack->shader) {
+                captureOpacity = qBound(0.0, deco.foldedOpacity, 1.0);
+                // Latched: pack-level condition, and this runs per window per frame — unlatched
+                // it would spam at vsync. Cleared with the compile cache on registry reload.
+                if (!m_opacityTintFallbackWarned) {
+                    m_opacityTintFallbackWarned = true;
+                    qCWarning(lcEffect) << "opacity-tint pack unavailable — applying window opacity" << captureOpacity
+                                        << "at capture time for" << windowId;
+                }
+            }
+        }
         captureWindowSurface(w, state, logicalGeometry, captureScale,
-                             /*intoCaptureTex=*/!plan.captureInComposite, captureCacheable);
+                             /*intoCaptureTex=*/!plan.captureInComposite, captureCacheable, captureOpacity);
     }
     // Hand the OffscreenEffect slot back: to the passthrough present on the rest
     // path, or to the caller's animation shader mid-transition. Runs on the
@@ -348,34 +369,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     if (state.prefixValid) {
         srcTex = state.prefixTex.get();
         firstPack = staticPrefix;
-    }
-    // Did a pack that ACTUALLY DREW take ownership of the window's rule alpha? The
-    // metadata flag alone cannot answer this: a handlesOpacity pack that fails to
-    // compile is skipped below, so nothing applies uSurfaceOpacity — and if both
-    // consumers stood down on the metadata, the window would render fully opaque and
-    // silently drop the user's SetOpacity rule. See SurfaceMultipassState::handledOpacity.
-    //
-    // The packs SKIPPED by a live prefix count too. Their fold is baked into
-    // prefixTex, so a handlesOpacity pack in the static head has already applied the
-    // alpha even though the loop below never visits it. Starting from false there
-    // would report the fold as not owning an alpha it very much baked in, and the
-    // present pass would modulate it a second time.
-    //
-    // The test has to be EXACTLY the one the loop applies below, metadata AND linked
-    // uniform. A pack that declares handlesOpacity but whose compiled GLSL never links
-    // uSurfaceOpacity applies no alpha at all — pushBorderUniforms pushes it only when
-    // uOpacityLoc >= 0 — so trusting the metadata alone here would report an alpha
-    // nobody applied, both consumers would stand down, and the window would render
-    // fully opaque with the user's SetOpacity rule silently dropped. That fail-open is
-    // the entire reason this is a fold-reported fact and not a metadata one, and it
-    // must not creep back in on the prefix path.
-    bool foldAppliedOpacity = false;
-    for (int k = 0; k < firstPack; ++k) {
-        const CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
-        if (pk && pk->shader && pk->handlesOpacity && pk->uOpacityLoc >= 0) {
-            foldAppliedOpacity = true;
-            break;
-        }
     }
     for (int k = firstPack; k < chain.size(); ++k) {
         CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
@@ -749,16 +742,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         }
         glActiveTexture(GL_TEXTURE0);
         KWin::GLFramebuffer::popFramebuffer();
-        // Latch AFTER the main pass has actually drawn. Setting it at the top of the
-        // loop — as this first did — claims the alpha was applied on paths where the
-        // pack's main pass never runs (a chainBufferTex size mismatch, an invalid
-        // FBO). pushBorderUniforms is the ONLY site that pushes uSurfaceOpacity and
-        // it lives inside that main pass, so the flag would say the alpha was handled,
-        // both consumers would stand down, and the window would render fully opaque —
-        // the exact fail-open this flag exists to remove, relocated rather than fixed.
-        if (pk->handlesOpacity && pk->uOpacityLoc >= 0) {
-            foldAppliedOpacity = true;
-        }
         if (writesPrefix) {
             // The static run is now cached. The animated packs fold out of it and
             // ping-pong through the composite pair, leaving prefixTex untouched so
@@ -779,7 +762,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // in as keys instead, so record what this fold used — the next one refuses the
     // cache if either has moved.
     state.compositeValid = allStatic;
-    state.handledOpacity = foldAppliedOpacity;
     state.foldedFocus = plan.foldFocus;
     state.foldedOpacity = plan.foldOpacity;
     state.foldedCursor = plan.foldCursor;

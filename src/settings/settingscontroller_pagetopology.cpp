@@ -379,6 +379,11 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::decorationsPerformanceGroup(), CD::animateFocusedOnlyKey()},
              {CD::decorationsPerformanceGroup(), CD::pauseWhenIdleKey()},
              {CD::decorationsPerformanceGroup(), CD::idleTimeoutSecKey()},
+             {CD::windowsAppearanceGroup(), CD::showOpacityTintKey()},
+             {CD::windowsAppearanceGroup(), CD::opacityTintScopeKey()},
+             {CD::windowsAppearanceGroup(), CD::opacityKey()},
+             {CD::windowsAppearanceGroup(), CD::tintStrengthKey()},
+             {CD::windowsAppearanceGroup(), CD::tintColorKey()},
              // Window filtering — the Decorations → General page (this
              // window-appearance page) hosts the WindowFilterCard bound to the
              // Decorations.WindowFiltering group.

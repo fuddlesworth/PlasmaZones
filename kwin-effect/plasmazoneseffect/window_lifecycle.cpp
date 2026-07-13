@@ -443,48 +443,15 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     // resolved at its FIRST focus state forever (a `WHEN focused` border
     // colour would never revert when the window loses focus). Mirror the
     // windowClass / desktopFile invalidation: drop the whole cache so the
-    // re-resolve below (and the next per-frame opacity resolve) sees the new
-    // focus state. Gated on a non-empty rule set so the no-rules case pays
-    // nothing. The per-frame opacity cache clears every frame at
-    // postPaintScreen, so a focus-scoped opacity re-resolves on the next paint.
+    // updateAllDecorations re-resolve below sees the new focus state. Gated
+    // on a non-empty rule set so the no-rules case pays nothing. Opacity
+    // needs no separate handling: it is layer-backed, so a focus-scoped
+    // SetOpacity re-folds through the same decoration rebuild (each
+    // updateWindowDecoration repaints its window), and a window without the
+    // opacity-tint layer carries no rule opacity at all.
     if (!m_shaderManager.animationRuleSet().isEmpty()) {
         m_shaderManager.animationRuleEvaluator().clearCache();
-
-        // A focus-scoped SetOpacity rule changes a window's resolved opacity
-        // when it gains or loses focus. updateAllDecorations() below repaints any
-        // bordered window (updateWindowDecoration requests a full repaint), but an
-        // opacity-only (borderless) window has no border to re-resolve — so
-        // without an explicit repaint its re-resolved opacity would not reach
-        // the screen until some unrelated damage happened to repaint it. Force a
-        // repaint of both the window gaining focus (w) and the one losing it
-        // (m_lastActivatedWindow). Gated on hasOpacityRules() because pure
-        // border-colour changes are already covered by updateAllDecorations()'s
-        // per-window repaint.
-        //
-        // Flagged as OURS. addRepaintFull raises EffectWindow::windowDamaged (the
-        // signal fires on repaint SCHEDULING, not only on client content damage), and
-        // the decoration capture cache listens to that signal to know the window's
-        // content went stale. Neither window's CONTENT changed here — only its
-        // resolved opacity, which the fold keys on itself (foldedOpacity). Without the
-        // flag, every click would clear captureValid for both windows and force the
-        // fold's most expensive step, a full effects->drawWindow() re-entry, for any
-        // user who has a SetOpacity rule at all. The flagged repaint that
-        // updateAllDecorations issues below cannot undo it either: nothing restores
-        // captureValid except an actual re-capture.
-        if (m_shaderManager.hasOpacityRules()) {
-            const auto selfRepaint = selfRepaintScope();
-            if (w) {
-                w->addRepaintFull();
-            }
-            if (m_lastActivatedWindow && m_lastActivatedWindow != w) {
-                m_lastActivatedWindow->addRepaintFull();
-            }
-        }
     }
-    // Track the now-active window as the next focus change's "previously
-    // active" window. Updated unconditionally (even with no rules yet) so the
-    // pointer is correct if opacity rules are added before the next activation.
-    m_lastActivatedWindow = w;
 
     // Re-resolve every window's border against the new focus state so the
     // active window picks up the active colour and the rest the inactive one.
@@ -701,15 +668,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // WindowClass matcher so they don't need the cache drop.
         auto invalidateRuleCache = [this, safeW]() {
             m_shaderManager.animationRuleEvaluator().clearCache();
-            // The cache drop alone only helps per-frame consumers (opacity
-            // re-resolves in paintWindow). The stacking layer is EVENT-driven
-            // and the eager window-added apply ran against the pre-swap
-            // placeholder class — re-drive it so a layer rule keyed to the
-            // real class applies (and one keyed to the placeholder releases)
-            // without waiting for an incidental sweep. The hasWindowLayerRules
-            // fast path keeps this free for sessions with no layer rules.
+            // The cache drop alone revives nothing: appearance slots (opacity,
+            // tint, border colour) bake into the decoration at
+            // updateWindowDecoration time, and the stacking layer is
+            // EVENT-driven. Both applied eagerly at window-added against the
+            // pre-swap placeholder class — re-drive them here so a rule keyed
+            // to the real class applies (and one keyed to the placeholder
+            // releases) without waiting for an incidental focus / placement
+            // sweep. Decoration re-folds only for an on-desktop window
+            // (matching updateAllDecorations' gate); an off-desktop swap is
+            // picked up by the desktop-switch rebuild.
             if (safeW && !safeW->isDeleted()) {
-                reconcileRuleWindowLayer(getWindowId(safeW), safeW);
+                const QString wid = getWindowId(safeW);
+                if (safeW->isOnCurrentDesktop()) {
+                    updateWindowDecoration(wid, safeW);
+                }
+                reconcileRuleWindowLayer(wid, safeW);
             }
         };
         connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);

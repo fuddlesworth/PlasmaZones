@@ -13,6 +13,7 @@
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
+#include <QColor>
 #include <QLatin1String>
 
 #include <algorithm>
@@ -48,6 +49,31 @@ QStringList overrideDescendantsOf(const DecorationProfileTree& tree, const QStri
 DecorationProfile directProfileAt(const DecorationProfileTree& tree, const QString& path)
 {
     return path.isEmpty() ? tree.baseline() : tree.directOverride(path);
+}
+
+/// @p params filtered to the packs in @p chain. Filtering prevents a
+/// materialized direct override from carrying stale params for a pack the
+/// chain no longer contains (they would silently resurrect if that pack is
+/// ever re-added).
+QVariantMap paramsFilteredToChain(const QVariantMap& params, const QStringList& chain)
+{
+    QVariantMap out;
+    for (auto it = params.constBegin(); it != params.constEnd(); ++it) {
+        if (chain.contains(it.key()))
+            out.insert(it.key(), it.value());
+    }
+    return out;
+}
+
+/// The resolved effective parameters at @p path, filtered to the packs in the
+/// resolved effective chain. The base map for ENGAGING a direct parameters
+/// override at an inheriting path: DecorationProfile::overlay replaces the
+/// map wholesale, so engaging from empty would drop sibling packs' inherited
+/// params, while engaging unfiltered could materialize stale params.
+QVariantMap inheritedParamsForChain(const DecorationProfileTree& tree, const QString& path)
+{
+    const DecorationProfile resolved = tree.resolve(path);
+    return paramsFilteredToChain(resolved.effectiveParameters(), resolved.effectiveChain());
 }
 
 /// Write @p profile back as the DIRECT profile at @p path (baseline for the
@@ -119,8 +145,16 @@ QVariantList DecorationPageController::availableShaderEffects() const
         return result;
     const auto effects = m_registry->availableEffects();
     result.reserve(effects.size());
-    for (const auto& effect : effects)
+    for (const auto& effect : effects) {
+        // The reserved "border" and "opacity-tint" packs render the PLAIN
+        // config/rule-owned layers; the kwin effect strips them from every
+        // user chain (tree and rule alike), so offering them in the picker
+        // would produce an entry that silently never renders. Their knobs
+        // live on the Windows appearance page instead.
+        if (effect.id == QLatin1String("border") || effect.id == QLatin1String("opacity-tint"))
+            continue;
         result.append(effectToMap(effect));
+    }
     return result;
 }
 
@@ -165,6 +199,11 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
         return;
     DecorationProfileTree tree = this->tree();
     DecorationProfile profile = directProfileAt(tree, path);
+    // Packs newly entering the chain, for the border-seed below. The previous
+    // chain is the DIRECT one when engaged, else the resolved effective chain
+    // (same first-direct-edit seeding rationale as setChainLayerEnabled): a
+    // pack the user was already previewing via inheritance is not "new".
+    const QStringList prevChain = profile.chain ? *profile.chain : tree.resolve(path).effectiveChain();
     profile.chain = chain;
     // Drop per-pack parameter overrides for any pack no longer in the chain, so
     // removing a pack discards its settings — re-adding it later starts from the
@@ -192,6 +231,98 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
                                       }),
                        disabled.end());
         profile.disabledPacks = disabled;
+    }
+    // Plain-look handoff: any user pack suppresses the plain Windows border
+    // and opacity+tint layers wholesale in the kwin effect, so a pack newly
+    // added to the chain that provides one of those looks (providesBorder /
+    // providesOpacityTint metadata) gets its shared contract params seeded
+    // from the matching setting — the user's border keeps its size and colour
+    // (and their fade its strength and tint) when they trade the plain layer
+    // for a pack. Seeds only while the matching plain layer is on (otherwise
+    // there is no look to carry), only ids the pack declares (border-rgb has
+    // no colour slots, border-double no borderWidth), clamped to the pack's
+    // declared bounds, and never over an existing value. The "accent" colour
+    // sentinel is not a valid QColor and is skipped, leaving the pack's own
+    // default colours.
+    if (m_registry && (m_settings->showWindowBorder() || m_settings->showWindowOpacityTint())) {
+        // Base the working map on the DIRECT override when one is engaged, else
+        // on the RESOLVED effective parameters. Seeding engages the optional
+        // (profile.parameters = allParams below), and DecorationProfile::overlay
+        // replaces the map wholesale — starting from an empty map at an
+        // inheriting path would materialize a direct override of just the
+        // seeded pack and silently drop every other pack's inherited params.
+        // Filtered to the new chain, mirroring the pruning block above (which
+        // only runs on an already-engaged optional), so packs dropped by this
+        // edit don't get their stale inherited params materialized. Same
+        // engage-from-resolved discipline as setChainLayerEnabled's disabled
+        // set.
+        QVariantMap allParams;
+        if (profile.parameters) {
+            allParams = *profile.parameters;
+        } else {
+            allParams = paramsFilteredToChain(tree.resolve(path).effectiveParameters(), chain);
+        }
+        bool seeded = false;
+        for (const QString& packId : chain) {
+            if (prevChain.contains(packId) || !m_registry->hasEffect(packId))
+                continue;
+            const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_registry->effect(packId);
+            const bool seedBorder = effect.providesBorder && m_settings->showWindowBorder();
+            const bool seedOpacityTint = effect.providesOpacityTint && m_settings->showWindowOpacityTint();
+            if (!seedBorder && !seedOpacityTint)
+                continue;
+            QVariantMap packParams = allParams.value(packId).toMap();
+            const auto seedParam = [&](const QString& id, const QVariant& value) {
+                if (packParams.contains(id))
+                    return;
+                for (const auto& p : effect.parameters) {
+                    if (p.id != id)
+                        continue;
+                    QVariant v = value;
+                    // Clamp NUMERIC params only — a colour string also
+                    // canConvert<double>() (to 0.0), so gate on the declared
+                    // type, not on convertibility.
+                    const bool numeric = p.type == QLatin1String("int") || p.type == QLatin1String("float");
+                    // min <= max guard: qBound is UB on an inverted range, and
+                    // the declared bounds come from pack-authored metadata.
+                    if (numeric && p.minValue.isValid() && p.maxValue.isValid()
+                        && p.minValue.toDouble() <= p.maxValue.toDouble()) {
+                        v = qBound(p.minValue.toDouble(), v.toDouble(), p.maxValue.toDouble());
+                        // Keep integer params integral so the editor's spinbox
+                        // round-trips without a fractional cast.
+                        if (p.type == QLatin1String("int"))
+                            v = v.toInt();
+                    }
+                    packParams.insert(id, v);
+                    seeded = true;
+                    break;
+                }
+            };
+            if (seedBorder) {
+                seedParam(QStringLiteral("borderWidth"), m_settings->windowBorderWidth());
+                seedParam(QStringLiteral("cornerRadius"), m_settings->windowBorderRadius());
+                // Colours ride as their #AARRGGBB strings — the runtime
+                // converts to QColor and JSON persistence round-trips them
+                // untouched.
+                const QString active = m_settings->windowBorderColorActive();
+                if (QColor(active).isValid())
+                    seedParam(QStringLiteral("activeColor"), active);
+                const QString inactive = m_settings->windowBorderColorInactive();
+                if (QColor(inactive).isValid())
+                    seedParam(QStringLiteral("inactiveColor"), inactive);
+            }
+            if (seedOpacityTint) {
+                seedParam(QStringLiteral("opacity"), m_settings->windowOpacity());
+                seedParam(QStringLiteral("tintStrength"), m_settings->windowTintStrength());
+                const QString tint = m_settings->windowTintColor();
+                if (QColor(tint).isValid())
+                    seedParam(QStringLiteral("tintColor"), tint);
+            }
+            if (!packParams.isEmpty())
+                allParams.insert(packId, packParams);
+        }
+        if (seeded)
+            profile.parameters = allParams;
     }
     writeDirectProfile(m_settings, tree, path, profile);
 }
@@ -236,8 +367,12 @@ void DecorationPageController::setChainParam(const QString& path, const QString&
     DecorationProfileTree tree = this->tree();
     DecorationProfile profile = directProfileAt(tree, path);
     // Copy-mutate the {packId -> {paramId -> value}} two-level map, engaging
-    // the parameters optional if it was inherited.
-    QVariantMap params = profile.parameters.value_or(QVariantMap());
+    // the parameters optional if it was inherited. Engaging bases on the
+    // RESOLVED effective map, not an empty one: DecorationProfile::overlay
+    // replaces the map wholesale, so a first per-param edit at an inheriting
+    // path would otherwise materialize an override of just this pack and drop
+    // every other pack's inherited params (same discipline as setChain's seed).
+    QVariantMap params = profile.parameters ? *profile.parameters : inheritedParamsForChain(tree, path);
     QVariantMap packParams = params.value(packId).toMap();
     packParams.insert(paramId, value);
     params.insert(packId, packParams);
@@ -253,7 +388,8 @@ void DecorationPageController::setChainParams(const QString& path, const QString
         return;
     DecorationProfileTree tree = this->tree();
     DecorationProfile profile = directProfileAt(tree, path);
-    QVariantMap allParams = profile.parameters.value_or(QVariantMap());
+    // Engage-from-resolved, same rationale as setChainParam above.
+    QVariantMap allParams = profile.parameters ? *profile.parameters : inheritedParamsForChain(tree, path);
     QVariantMap packParams = allParams.value(packId).toMap();
     for (auto it = params.constBegin(); it != params.constEnd(); ++it)
         packParams.insert(it.key(), it.value());

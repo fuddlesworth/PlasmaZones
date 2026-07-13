@@ -13,8 +13,10 @@
 // behind them (uHasBackdrop = 0), so the pack renders the ORIGINAL pseudo
 // look there — the translucent tint slab with the same grain and vignette.
 //
-// handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
-// the pane stays solid and translucency reveals the frosted backdrop.
+// Content dimming: the window sample is dimmed by the pack's own
+// p_contentOpacity parameter, so the pane stays solid and translucency
+// reveals the frosted backdrop. A theme's own transparent pixels reveal it
+// the same way with no parameter involved.
 
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
@@ -44,6 +46,9 @@ float frostedTexture(vec2 p, float time) {
 
 vec4 pSurface(vec2 uv) {
     SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    // Fade the window content over the pane; the translucency it frees is
+    // filled by the frosted backdrop in slabComposite below.
+    slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
 
     // Frame-normalized coordinate for the grain and vignette, so the look
     // scales with the pane like the original's uv did with the panel.
