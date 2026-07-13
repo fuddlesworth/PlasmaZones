@@ -59,7 +59,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Map of setting key to value."/>
             </arg>
             <arg name="success" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if every key was known to the registry and every key that has a setter applied successfully. Read-only keys (motionProfileTree, animationShaderSearchPaths, the per-monitor gap projections) are skipped without failing the batch. Only an unknown key makes this false."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True if every key was known to the registry and every key that has a setter applied successfully. Read-only keys (motionProfileTree, animationShaderSearchPaths, the global gap getters) are skipped without failing the batch. This is false when a key is unknown OR when a setter rejects its value (an out-of-range enum, an invalid blob)."/>
             </arg>
         </method>
         <method name="getSettingKeys">

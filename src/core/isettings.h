@@ -128,6 +128,7 @@ public:
     //   - IZoneSelectorSettings: zone selector UI configuration
     //   - IWindowBehaviorSettings: snap restore, sticky handling
     //   - IDefaultLayoutSettings: default layout ID
+    //   - IOrderingSettings: manual layout/algorithm ordering
     //   - IAnimationSettings: animation/shader-profile state + window filtering
     //
     // See settings_interfaces.h for the full API.

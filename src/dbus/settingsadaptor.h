@@ -117,9 +117,10 @@ public Q_SLOTS:
      * @param settings Map of setting key -> value
      * @return true if every key was known to the registry and every key that HAS a setter
      *         applied successfully. A key that is registered read-only (motionProfileTree,
-     *         animationShaderSearchPaths, the gap projections) is skipped without failing
-     *         the batch — see the skip's rationale at the call site. Only an UNKNOWN key
-     *         makes this false.
+     *         animationShaderSearchPaths, the global gap getters) is skipped without failing
+     *         the batch — see the skip's rationale at the call site. This is false when a key
+     *         is unknown OR when a setter rejects its value (an out-of-range enum, an invalid
+     *         blob); such a setter returns false and flips the batch result.
      */
     bool setSettings(const QVariantMap& settings);
 

@@ -7,11 +7,14 @@
 
 #include "StubSettings.h"
 
-/// StubSettings that genuinely STORES the decoration tree (the base stub's
-/// setter is a no-op) and emits decorationProfileTreeChanged on a real change,
-/// so a controller's read-mutate-write loop is observable. Shared by the
-/// decoration page-controller and decoration-set tests, which both need it —
-/// two copies would drift.
+/// Named StubSettings alias for the decoration-tree tests (page-controller and
+/// decoration-set), shared so their setup reads the same way and cannot drift.
+///
+/// The base StubSettings now genuinely stores the tree and emits
+/// decorationProfileTreeChanged on a real change (it was upgraded from a no-op
+/// setter — see StubSettings::setDecorationProfileTreeJson), so these overrides
+/// mirror the base rather than adding behaviour. They are kept only as the named
+/// seam; a test could equally use StubSettings directly.
 class TreeStubSettings : public PlasmaZones::StubSettings
 {
 public:
