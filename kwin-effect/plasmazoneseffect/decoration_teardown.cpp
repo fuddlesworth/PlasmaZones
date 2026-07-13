@@ -105,8 +105,10 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
     // refresh, and a synchronous stop() here would block the compositor thread
     // (cava terminate + waitForFinished) and then respawn when the decoration is
     // re-added a step later. scheduleEffectAudioSync collapses the remove+readd
-    // to one net decision at event-loop return. Runs before the transition
-    // early-return below so both exits keep the run gate in sync.
+    // to one net decision at event-loop return. Runs unconditionally on every
+    // remove (refresh and genuine teardown), so the run gate stays in sync
+    // regardless of whether releaseSurfaceState below skips the FBO erase for a
+    // live transition — this function itself has no transition early-return.
     scheduleEffectAudioSync();
     // NB: m_focusFade is deliberately NOT scrubbed here. updateWindowDecoration
     // calls removeWindowDecoration as its remove-first step on every refresh
