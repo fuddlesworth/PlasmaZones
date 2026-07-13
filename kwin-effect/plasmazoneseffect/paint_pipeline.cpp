@@ -943,10 +943,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // canvas. Unpadded windows reduce to the uTexture0 mapping.
             qreal layerPad = 0.0;
             bool chainBakesOpacity = false;
+            double foldedOpacity = 1.0;
             if (const auto lbIt = m_windowDecorations.constFind(getWindowId(w));
                 lbIt != m_windowDecorations.constEnd()) {
                 layerPad = lbIt->outerPadding;
                 chainBakesOpacity = lbIt->chainBakesOpacity;
+                foldedOpacity = lbIt->foldedOpacity;
             }
             // Surface-layer stack (border / rounded corners, ...): render the
             // window's active layers into an FBO so the animation composites
@@ -1147,21 +1149,29 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 }
                 if (cached->iWindowOpacityLoc >= 0) {
                     // SetOpacity is layer-backed: only a chain carrying the
-                    // plain opacity-tint layer bakes the rule into its
-                    // composite (the folded opacity param), and when the fold
-                    // produced the composite this shader samples
-                    // (surfaceLayerTex) the rule alpha is already in it —
+                    // plain opacity-tint layer bakes the window's opacity
+                    // into its composite (the folded opacity param), and when
+                    // the fold produced the composite this shader samples
+                    // (surfaceLayerTex) the alpha is already in it —
                     // re-applying here would dim twice. So push 1.0
                     // everywhere EXCEPT the bare-uTexture0 fallback of an
                     // opacity-baking chain: the fold didn't run there, so
-                    // the rule-resolved cache is the only dim the window
-                    // gets for the transition's duration. Custom chains and
-                    // undecorated windows never honour the rule, so they
-                    // stay at 1.0 outright.
+                    // this push is the only dim the window gets for the
+                    // transition's duration. The decoration's foldedOpacity
+                    // carries the resolved value for BOTH sources (config
+                    // default with the SetOpacity rule winning); the per-frame
+                    // rule cache refines it when present, but is populated
+                    // only while opacity RULES are loaded, so it cannot be
+                    // the sole source — config-only opacity would render
+                    // opaque here. Custom chains and undecorated windows
+                    // never honour the setting, so they stay at 1.0 outright.
                     float winOpacity = 1.0f;
-                    if (chainBakesOpacity && !surfaceLayerTex && m_shaderManager.frameOpacityCached(w)) {
-                        if (const auto cachedOpacity = m_shaderManager.cachedFrameOpacity(w)) {
-                            winOpacity = static_cast<float>(*cachedOpacity);
+                    if (chainBakesOpacity && !surfaceLayerTex) {
+                        winOpacity = static_cast<float>(qBound(0.0, foldedOpacity, 1.0));
+                        if (m_shaderManager.frameOpacityCached(w)) {
+                            if (const auto cachedOpacity = m_shaderManager.cachedFrameOpacity(w)) {
+                                winOpacity = static_cast<float>(*cachedOpacity);
+                            }
                         }
                     }
                     shader->setUniform(cached->iWindowOpacityLoc, winOpacity);

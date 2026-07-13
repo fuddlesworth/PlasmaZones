@@ -7,7 +7,6 @@
     "category": "Blur",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
-    "handlesOpacity": true,
     "parameters": [
         {
             "id": "cellSize",

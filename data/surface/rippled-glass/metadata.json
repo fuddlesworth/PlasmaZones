@@ -7,7 +7,6 @@
     "category": "Blur",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
-    "handlesOpacity": true,
     "animated": true,
     "multipass": true,
     "bufferScale": 0.25,

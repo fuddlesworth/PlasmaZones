@@ -130,8 +130,16 @@ QVariantList DecorationPageController::availableShaderEffects() const
         return result;
     const auto effects = m_registry->availableEffects();
     result.reserve(effects.size());
-    for (const auto& effect : effects)
+    for (const auto& effect : effects) {
+        // The reserved "border" and "opacity-tint" packs render the PLAIN
+        // config/rule-owned layers; the kwin effect strips them from every
+        // user chain (tree and rule alike), so offering them in the picker
+        // would produce an entry that silently never renders. Their knobs
+        // live on the Windows appearance page instead.
+        if (effect.id == QLatin1String("border") || effect.id == QLatin1String("opacity-tint"))
+            continue;
         result.append(effectToMap(effect));
+    }
     return result;
 }
 

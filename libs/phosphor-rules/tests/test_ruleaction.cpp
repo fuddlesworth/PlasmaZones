@@ -516,7 +516,21 @@ private Q_SLOTS:
         s.insert(QStringLiteral("value"), 0.0);
         QVERIFY(RuleAction::fromJson(s).has_value());
         s.insert(QStringLiteral("value"), 0.5);
-        QVERIFY(RuleAction::fromJson(s).has_value());
+        const auto strength = RuleAction::fromJson(s);
+        QVERIFY(strength.has_value());
+
+        // Delivery contract, mirroring testSetWindowLayer_tokenVocabularyAndSlot:
+        // Tag::Effect is the SOLE admission gate into the KWin effect's rule
+        // set, and each action must resolve its OWN distinct slot — a dropped
+        // tag or a copy-pasted wrong constantSlot passes every validation
+        // assertion above while the rule silently never renders.
+        QVERIFY(ActionRegistry::instance().hasTag(QString(ActionType::SetOpacityTintVisible), Tag::Effect));
+        QVERIFY(ActionRegistry::instance().hasTag(QString(ActionType::SetTintStrength), Tag::Effect));
+        QCOMPARE(ActionRegistry::instance().slotFor(*strength), QString(ActionSlot::TintStrength));
+        vis.insert(QStringLiteral("value"), true);
+        const auto visible = RuleAction::fromJson(vis);
+        QVERIFY(visible.has_value());
+        QCOMPARE(ActionRegistry::instance().slotFor(*visible), QString(ActionSlot::OpacityTintVisible));
     }
 
     void testSetTintColor_requireHexOrAccent()
@@ -541,6 +555,10 @@ private Q_SLOTS:
         const auto roundTripped = RuleAction::fromJson(reloaded->toJson());
         QVERIFY(roundTripped.has_value());
         QCOMPARE(*roundTripped, *reloaded);
+        // Delivery contract (see testOpacityTintActions_validate): the tag
+        // admits the action into the effect's rule set, the slot routes it.
+        QVERIFY(ActionRegistry::instance().hasTag(QString(ActionType::SetTintColor), Tag::Effect));
+        QCOMPARE(ActionRegistry::instance().slotFor(*reloaded), QString(ActionSlot::TintColor));
     }
 
     // ── overlay-appearance actions (context-domain) ──

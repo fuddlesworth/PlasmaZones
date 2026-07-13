@@ -8,7 +8,6 @@
     "animated": true,
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
-    "handlesOpacity": true,
     "multipass": true,
     "bufferScale": 0.25,
     "bufferShaders": [

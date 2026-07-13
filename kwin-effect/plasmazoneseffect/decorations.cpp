@@ -256,8 +256,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         return;
     }
 
-    // User decoration packs from the tree. The "border" id is rule-owned, so an
-    // explicit user "border" entry is dropped here (the rule path owns it).
+    // User decoration packs from the tree. The reserved "border" and
+    // "opacity-tint" ids are config/rule-owned (the plain layers), so an
+    // explicit user entry for either is dropped here — otherwise a stray
+    // tree entry would flip the window into CUSTOM mode, silently disabling
+    // every plain layer, and render the reserved pack with its baked
+    // defaults instead of the resolved appearance.
     // enabledChain(): packs the user toggled off stay in the profile but must
     // not render, exactly like a disabled rule is skipped by the evaluator.
     QStringList userPacks;
@@ -265,7 +269,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = m_decorationTree.resolve(surfacePath);
     const QStringList treeChain = resolvedProfile.enabledChain();
     for (const QString& pack : treeChain) {
-        if (pack != QLatin1String("border")) {
+        if (pack != QLatin1String("border") && pack != QLatin1String("opacity-tint")) {
             userPacks.append(pack);
         }
     }

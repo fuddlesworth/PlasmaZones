@@ -1,7 +1,7 @@
 {
     "id": "glass",
     "name": "Glass",
-    "description": "A pane of glass over the scene behind the window. The backdrop is blurred and bends toward the edges like a bevelled lens, with slight colour fringing and a soft rim light. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "description": "A pane of glass over the scene behind the window. The backdrop is blurred and bends toward the edges like a bevelled lens, with slight colour fringing and a soft rim light. It shows through wherever the window itself is translucent, and lowering the Content opacity parameter fades the window content to reveal more of it.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Blur",
