@@ -17,7 +17,6 @@
 #include "animationspagecontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../core/isettings.h"
 #include "../core/logging.h"
 #include "../phosphor_i18n.h"
 #include "animations_controller_detail.h"
@@ -282,6 +281,10 @@ int AnimationsPageController::clearAllOverrides()
     if (failed > 0) {
         qCWarning(lcConfig) << "clearAllOverrides:" << failed << "override files could not be removed";
         Q_EMIT toastRequested(PhosphorI18n::tr("Some animation overrides could not be reset."));
+        // Report the incomplete reset the same way as the refusal above: a
+        // positive count here would let the caller finish its reset path and
+        // declare the page clean while override files remain on disk.
+        return -1;
     }
     return cleared;
 }

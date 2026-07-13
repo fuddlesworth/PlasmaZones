@@ -451,9 +451,10 @@ void SettingsController::resetPage(const QString& page)
     if (isAnimationPage(page)) {
         {
             const LoadingScope loadingScope(m_loading);
-            // A refusal (-1) means the override files are untouched, so resetting
-            // the config keys would leave the page half reset and reported clean.
-            // The page has already toasted the reason.
+            // -1 means the reset did not complete (refused mid-discard, or some
+            // override files could not be removed), so resetting the config keys
+            // would leave the page half reset and reported clean. The page has
+            // already toasted the reason; the user can retry once it is resolved.
             if (m_animationsPage != nullptr && m_animationsPage->clearAllOverrides() < 0) {
                 return;
             }

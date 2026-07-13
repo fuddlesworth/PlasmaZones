@@ -181,9 +181,10 @@ public:
     /// The shader tree, animation Profile blob, and window filtering are separate
     /// Settings keys the caller resets alongside this.
     /// @return the number of override files actually removed, or -1 when the
-    /// reset was REFUSED because an async discard owns the snapshot map (the
-    /// page toasts the reason). A caller must not treat -1 as "nothing to
-    /// clear": every override file is still on disk.
+    /// reset did not complete: either it was REFUSED because an async discard
+    /// owns the snapshot map (every override file is still on disk), or some
+    /// files could not be removed (a partial reset). The page toasts the reason
+    /// in both cases. A caller must not treat -1 as "nothing to clear".
     int clearAllOverrides();
 
     /// Library of user-saved Profile presets. Each entry is a Profile JSON

@@ -246,13 +246,12 @@ bool ShaderSetStore::writeSetFile(const QString& filePath, const QJsonObject& ro
 bool ShaderSetStore::versionAccepted(const QJsonObject& root, const QString& context) const
 {
     const QJsonValue versionVal = root.value(kVersionKey);
-    // A present-but-non-numeric version is malformed. Treat it as unknown
-    // (newer) and refuse, rather than reading it as the current format and
-    // committing a set this build may not fully understand. A non-integral
-    // number is refused for the same reason: QJsonValue::toInt() would hand
-    // back the default for it, silently reading "1.5" as the current version.
-    // Compare as a double: toInt() hands back the DEFAULT for anything outside
-    // int range, which would read a version of 1e300 as the current one.
+    // A present-but-non-numeric or non-integral version is malformed. Treat it
+    // as unknown (newer) and refuse, rather than reading it as the current
+    // format and committing a set this build may not fully understand. Compare
+    // as a double, NOT via toInt(): toInt() hands back the default for a
+    // fractional value or anything outside int range, which would silently read
+    // "1.5" or 1e300 as the current version.
     const double version = versionVal.toDouble(m_config.formatVersion);
     if (!versionVal.isUndefined() && (!versionVal.isDouble() || version != std::floor(version))) {
         qCWarning(lcConfig) << "ShaderSetStore:" << context << "— version is not a whole number, refusing";
@@ -326,7 +325,10 @@ QVariantList ShaderSetStore::availableSets() const
         row.insert(QLatin1String("description"), root.value(kDescriptionKey).toString());
         row.insert(QLatin1String("slug"), info.completeBaseName());
         row.insert(QLatin1String("coverage"), sections);
-        // One entry per covered path.
+        // One entry per covered path. The raw entry count: for store-written
+        // files it is exact (the snapshot filters empty entries); a hand-placed
+        // file may carry entries applySet later rejects, and one carrying zero
+        // renders without the count badge (the card hides it at 0).
         row.insert(QLatin1String("coverageCount"), root.value(kOverridesKey).toArray().size());
         row.insert(QLatin1String("active"), payloadContainedIn(root, live));
         // File mtime, for the row's "Updated …" line.
@@ -357,7 +359,10 @@ bool ShaderSetStore::applySet(const QString& name)
         Q_EMIT toastRequested(PhosphorI18n::tr("\"%1\" was written by a newer version of PlasmaZones.").arg(name));
         return false;
     }
-    if (m_config.validate && !m_config.validate(root)) {
+    // A null validate closure refuses, like apply below: the ctor documents that
+    // every closure call site null-checks so a release build refuses cleanly.
+    // Skipping validation would apply an unvetted payload instead.
+    if (!m_config.validate || !m_config.validate(root)) {
         qCWarning(lcConfig) << "ShaderSetStore::applySet: validation refused" << filePath;
         Q_EMIT toastRequested(PhosphorI18n::tr("\"%1\" does not match this page.").arg(name));
         return false;
@@ -659,8 +664,9 @@ bool ShaderSetStore::importSet(const QString& sourcePathOrUrl)
         return false;
     }
     // Validate against THIS domain's taxonomy, so a motion set dropped on the
-    // decoration page is refused at the boundary instead of failing later.
-    if (m_config.validate && !m_config.validate(root)) {
+    // decoration page is refused at the boundary instead of failing later. A
+    // null validate closure refuses too (see applySet).
+    if (!m_config.validate || !m_config.validate(root)) {
         Q_EMIT toastRequested(PhosphorI18n::tr("That set does not match this page."));
         return false;
     }

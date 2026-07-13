@@ -480,13 +480,21 @@ Kirigami.Dialog {
                     opacity: (root.currentShaderInfo && root.currentShaderInfo.description) ? 0.8 : 0.5
                     // One binding: a font.<sub> sibling next to a whole-group
                     // `font:` is an illegal duplicate binding that fails the
-                    // whole document.
-                    font: Qt.font({
-                        family: Kirigami.Theme.smallFont.family,
-                        pointSize: Kirigami.Theme.smallFont.pointSize,
-                        pixelSize: Kirigami.Theme.smallFont.pixelSize,
-                        italic: !(root.currentShaderInfo && root.currentShaderInfo.description)
-                    })
+                    // whole document. The theme font carries exactly one valid
+                    // size (the other reads -1, which Qt.font warns on), so
+                    // pass only the one that is set.
+                    font: {
+                        const base = Kirigami.Theme.smallFont;
+                        const props = {
+                            family: base.family,
+                            italic: !(root.currentShaderInfo && root.currentShaderInfo.description)
+                        };
+                        if (base.pixelSize > 0)
+                            props.pixelSize = base.pixelSize;
+                        else
+                            props.pointSize = base.pointSize;
+                        return Qt.font(props);
+                    }
                     verticalAlignment: Text.AlignTop
                 }
 
@@ -512,13 +520,19 @@ Kirigami.Dialog {
                     }
                     elide: Text.ElideRight
                     opacity: 0.5
-                    // One binding (see the description label above).
-                    font: Qt.font({
-                        family: Kirigami.Theme.smallFont.family,
-                        pointSize: Kirigami.Theme.smallFont.pointSize,
-                        pixelSize: Kirigami.Theme.smallFont.pixelSize,
-                        italic: true
-                    })
+                    // One binding, one valid size (see the description label above).
+                    font: {
+                        const base = Kirigami.Theme.smallFont;
+                        const props = {
+                            family: base.family,
+                            italic: true
+                        };
+                        if (base.pixelSize > 0)
+                            props.pixelSize = base.pixelSize;
+                        else
+                            props.pointSize = base.pointSize;
+                        return Qt.font(props);
+                    }
                 }
             }
 

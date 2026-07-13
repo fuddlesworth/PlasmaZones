@@ -109,14 +109,22 @@ ExpandableRowDelegate {
 
             anchors.centerIn: parent
             // One binding: a font.<sub> sibling next to a whole-group `font:` is an
-            // illegal duplicate binding that fails the whole document.
-            font: Qt.font({
-                family: Kirigami.Theme.smallFont.family,
-                pointSize: Kirigami.Theme.smallFont.pointSize,
-                pixelSize: Kirigami.Theme.smallFont.pixelSize,
-                bold: true,
-                capitalization: Font.AllUppercase
-            })
+            // illegal duplicate binding that fails the whole document. The theme
+            // font carries exactly one valid size (the other reads -1, which
+            // Qt.font warns on), so pass only the one that is set.
+            font: {
+                const base = Kirigami.Theme.smallFont;
+                const props = {
+                    family: base.family,
+                    bold: true,
+                    capitalization: Font.AllUppercase
+                };
+                if (base.pixelSize > 0)
+                    props.pixelSize = base.pixelSize;
+                else
+                    props.pointSize = base.pointSize;
+                return Qt.font(props);
+            }
             color: Kirigami.Theme.textColor
         }
     }

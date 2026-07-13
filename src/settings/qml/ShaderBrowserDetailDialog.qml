@@ -314,13 +314,21 @@ Kirigami.Dialog {
                             }
                             color: Kirigami.Theme.disabledTextColor
                             // One binding: a font.<sub> sibling next to a whole-group `font:` is an
-                            // illegal duplicate binding that fails the whole document.
-                            font: Qt.font({
-                                family: Kirigami.Theme.smallFont.family,
-                                pointSize: Kirigami.Theme.smallFont.pointSize,
-                                pixelSize: Kirigami.Theme.smallFont.pixelSize,
-                                italic: true
-                            })
+                            // illegal duplicate binding that fails the whole document. The theme
+                            // font carries exactly one valid size (the other reads -1, which
+                            // Qt.font warns on), so pass only the one that is set.
+                            font: {
+                                const base = Kirigami.Theme.smallFont;
+                                const props = {
+                                    family: base.family,
+                                    italic: true
+                                };
+                                if (base.pixelSize > 0)
+                                    props.pixelSize = base.pixelSize;
+                                else
+                                    props.pointSize = base.pointSize;
+                                return Qt.font(props);
+                            }
                             elide: Text.ElideRight
                         }
                     }

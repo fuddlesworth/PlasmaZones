@@ -127,7 +127,10 @@ ExpandableRowDelegate {
         }
     }
 
+    // Hidden at zero, like the coverage Row above: a "0 Surfaces" badge would
+    // only appear for a hand-placed set file the store cannot apply anyway.
     MetadataChip {
+        visible: (row.modelData.coverageCount ?? 0) > 0
         Layout.alignment: Qt.AlignVCenter
         text: row.coverageCountLabel(row.modelData.coverageCount ?? 0)
     }

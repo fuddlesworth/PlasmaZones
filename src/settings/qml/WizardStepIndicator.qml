@@ -51,13 +51,21 @@ RowLayout {
                     anchors.centerIn: parent
                     text: (stepIndicator.index + 1).toString()
                     // One binding: a font.<sub> sibling next to a whole-group `font:` is an
-                    // illegal duplicate binding that fails the whole document.
-                    font: Qt.font({
-                        family: Kirigami.Theme.smallFont.family,
-                        pointSize: Kirigami.Theme.smallFont.pointSize,
-                        pixelSize: Kirigami.Theme.smallFont.pixelSize,
-                        weight: Font.Bold
-                    })
+                    // illegal duplicate binding that fails the whole document. The theme
+                    // font carries exactly one valid size (the other reads -1, which
+                    // Qt.font warns on), so pass only the one that is set.
+                    font: {
+                        const base = Kirigami.Theme.smallFont;
+                        const props = {
+                            family: base.family,
+                            weight: Font.Bold
+                        };
+                        if (base.pixelSize > 0)
+                            props.pixelSize = base.pixelSize;
+                        else
+                            props.pointSize = base.pointSize;
+                        return Qt.font(props);
+                    }
                     color: stepIndicator.index <= root.currentStep ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                     opacity: stepIndicator.index <= root.currentStep ? 1 : 0.4
                 }

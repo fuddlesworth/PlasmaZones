@@ -520,13 +520,21 @@ ColumnLayout {
                         // upper-case only the first word.
                         text: delegate.kind === "all" ? i18nc("Match-tree group where every child must match", "ALL of") : delegate.kind === "any" ? i18nc("Match-tree group where at least one child must match", "ANY of") : i18nc("Match-tree group where no child may match", "NONE of")
                         // One binding: a font.<sub> sibling next to a whole-group `font:` is an
-                        // illegal duplicate binding that fails the whole document.
-                        font: Qt.font({
-                            family: Kirigami.Theme.smallFont.family,
-                            pointSize: Kirigami.Theme.smallFont.pointSize,
-                            pixelSize: Kirigami.Theme.smallFont.pixelSize,
-                            bold: true
-                        })
+                        // illegal duplicate binding that fails the whole document. The theme
+                        // font carries exactly one valid size (the other reads -1, which
+                        // Qt.font warns on), so pass only the one that is set.
+                        font: {
+                            const base = Kirigami.Theme.smallFont;
+                            const props = {
+                                family: base.family,
+                                bold: true
+                            };
+                            if (base.pixelSize > 0)
+                                props.pixelSize = base.pixelSize;
+                            else
+                                props.pointSize = base.pointSize;
+                            return Qt.font(props);
+                        }
                         // Foreground textColor guarantees high contrast
                         // against the tinted pill fill on every theme.
                         color: Kirigami.Theme.textColor
@@ -585,13 +593,21 @@ ColumnLayout {
                         Layout.minimumWidth: Kirigami.Units.gridUnit * 8
                         text: root._opLabel(delegate.fieldWire, delegate.opWire)
                         // One binding: a font.<sub> sibling next to a whole-group `font:` is an
-                        // illegal duplicate binding that fails the whole document.
-                        font: Qt.font({
-                            family: Kirigami.Theme.smallFont.family,
-                            pointSize: Kirigami.Theme.smallFont.pointSize,
-                            pixelSize: Kirigami.Theme.smallFont.pixelSize,
-                            capitalization: Font.AllUppercase
-                        })
+                        // illegal duplicate binding that fails the whole document. The theme
+                        // font carries exactly one valid size (the other reads -1, which
+                        // Qt.font warns on), so pass only the one that is set.
+                        font: {
+                            const base = Kirigami.Theme.smallFont;
+                            const props = {
+                                family: base.family,
+                                capitalization: Font.AllUppercase
+                            };
+                            if (base.pixelSize > 0)
+                                props.pixelSize = base.pixelSize;
+                            else
+                                props.pointSize = base.pointSize;
+                            return Qt.font(props);
+                        }
                         opacity: 0.55
                     }
 
