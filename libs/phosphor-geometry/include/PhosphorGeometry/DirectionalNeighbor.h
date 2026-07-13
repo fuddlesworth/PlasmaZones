@@ -41,10 +41,14 @@ PHOSPHORGEOMETRY_EXPORT std::optional<Direction> directionFromString(QStringView
  *   3. **Nearest along the travel axis** — within the preferred tier, the
  *      smallest edge gap toward @p direction wins.
  *   4. **Perpendicular-centre tie-break** — equal gaps break by the smaller
- *      orthogonal centre distance. The result is deterministic for a given
- *      candidate list; two candidates identical on every tier (same overlap,
- *      gap within epsilon, equal perpendicular centre distance) resolve to the
- *      lower index.
+ *      orthogonal centre distance.
+ *   5. **Travel-axis-centre tie-break** — equal gaps AND equal perpendicular
+ *      distances break by the smaller centre distance along the travel axis.
+ *      A stack of mutually overlapping zones all clamps to edge gap zero, so
+ *      this tier is what makes such stacks step to the nearest zone one at a
+ *      time in BOTH directions instead of resolving by candidate order. The
+ *      result is deterministic for a given candidate list; two candidates
+ *      identical on every tier resolve to the lower index.
  *
  * Coordinate-system agnostic: @p focus and every entry of @p candidates must
  * live in one shared space (absolute pixels, normalized [0,1], etc.).
