@@ -463,4 +463,28 @@ vec2 resolutionSafe() {
     return max(iResolution, vec2(1.0));
 }
 
+// ─── Final-colour hook (HDR colour management) ─────────────────────────
+// Every final `fragColor` write in the animation pipeline routes through
+// `PZ_FINALIZE_COLOR(...)`: the entry scaffold's generated main()s
+// (animationshaderregistry.cpp) and bmw_compat's `setOutputColor()`. The
+// guarded default below is identity.
+//
+// The kwin-effect WINDOW-animation path overrides it before this header
+// is included: shader_transitions.cpp splices KWin's colormanagement.glsl
+// plus `#define PZ_FINALIZE_COLOR(c) pzFinalizeColor(c)` right after
+// `#version`, converting the shader's sRGB output into the output's
+// blending space. Installing a shader via OffscreenEffect::setShader
+// REPLACES KWin's present shader (which normally carries that
+// conversion), so without the override HDR outputs render every window
+// animation dim and desaturated.
+//
+// Everything else keeps identity: the daemon RHI runtime (Qt colour-
+// manages the scene graph output), shadervalidate, the bake tests, and
+// the desktop-switch path (its capture FBOs inherit the output's
+// colorDescription, so its inputs already live in the blending space and
+// converting again would be wrong).
+#ifndef PZ_FINALIZE_COLOR
+#define PZ_FINALIZE_COLOR(c) (c)
+#endif
+
 #endif // PLASMAZONES_ANIMATION_UNIFORMS_GLSL
