@@ -79,8 +79,9 @@ public:
     /// fires and `currentStage` returns to 0. Passing an empty list therefore both
     /// disarms idle detection AND releases an already-idle session. That is contract, not
     /// incidental behaviour, and it is pinned by IdleStateMachine's
-    /// clearStagesWhileIdleResumes test — a consumer that empties the ladder must be able
-    /// to rely on the resume edge to release whatever it gated on idleness.
+    /// clearStagesWhileIdleResumes test: whatever a consumer gated on idleness must be
+    /// released when idle detection goes away, or it stays gated on a fact nobody is
+    /// reporting any more.
     ///
     /// Setting the ladder it already has is a no-op: it does NOT re-arm and does NOT
     /// resume. That is what makes it safe to call on every settings change.

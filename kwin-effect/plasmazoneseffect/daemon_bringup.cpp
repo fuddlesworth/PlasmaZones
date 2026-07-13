@@ -667,12 +667,12 @@ void PlasmaZonesEffect::loadCachedSettings()
         if (m_pauseAnimationWhenIdle != b) {
             m_pauseAnimationWhenIdle = b;
             if (!b) {
-                // Drop any stale idle latch. The daemon announces the release itself
-                // (it force-publishes the correct state on this very setting change, and
-                // clearing the ladder drives its state machine back to active anyway),
-                // so this is belt and braces for a daemon that is dead, restarting, or
-                // older than that behaviour — in which case nothing else would ever clear
-                // the latch and every decorated window would stay frozen.
+                // Drop any stale idle latch. The daemon publishes false on this very change
+                // (the value really moves, so its change-check passes), so this is belt and
+                // braces for a daemon that is dead or restarting — in which case nothing
+                // else would ever clear the latch and every decorated window would stay
+                // frozen. It does NOT force-publish here, and it does not clear the ladder:
+                // the ladder stays armed by design.
                 //
                 // Only ever written in the OFF direction. Writing our own mirror of the
                 // daemon's state in the ON direction would be guessing: it is the daemon

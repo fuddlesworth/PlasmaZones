@@ -30,6 +30,7 @@
 
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
+#include <QLoggingCategory>
 #include <QPoint>
 #include <QRectF>
 #include <QScopeGuard>
@@ -40,6 +41,8 @@
 #include <epoxy/gl.h>
 
 namespace PlasmaZones {
+
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 // (Re)allocate this window's composite / capture / per-pack buffer targets for the
 // current size, scale and chain, and drop every cache an allocation makes stale.
@@ -104,6 +107,8 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
             // Drop the half-allocated state. Erase AFTER the loop has ended so
             // we never destroy the container mid-iteration (state is a reference
             // into the map being erased).
+            qCWarning(lcEffect) << "Surface target allocation failed for" << windowId << "at" << textureSize
+                                << "— dropping this window's decoration (out of VRAM?)";
             m_surfaceMultipass.erase(windowId);
             return false;
         }
@@ -264,6 +269,9 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // whichever was missed:
     const float sharedNow = surfaceShaderTimeSeconds();
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    // Well clear of any real frame interval, and well under any gap a person would notice
+    // as a phase jump.
+    constexpr qint64 kNotPaintedGapMs = 250;
     if (plan.mayAnimate) {
         // How long has this window NOT been animating? Two sensors, and they measure the
         // SAME interval from different ends — so take the larger, never the sum. Adding
@@ -305,7 +313,6 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
         // only ever measures back to the pause. Its iTime jumped forward by exactly that
         // span — the phase pop this accounting exists to prevent, arriving through the
         // door nobody was watching.
-        constexpr qint64 kNotPaintedGapMs = 250;
         if (state.lastFoldMs >= 0 && nowMs - state.lastFoldMs > kNotPaintedGapMs) {
             state.timeOffsetSec += static_cast<float>(nowMs - state.lastFoldMs) / 1000.0f;
         }
@@ -409,7 +416,17 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // window on the desktop re-fold its entire chain every time the pointer moved
     // ANYWHERE — each one to reproduce the identical outside sentinel it already had.
     // A paused chain reads it as absent too, matching what pushBorderUniforms pushes.
-    plan.foldCursor = chainReadsCursor ? foldCursorFor(w, state.canvasGeo, plan.mayAnimate) : kCursorOutside;
+    // Keyed on the GATE, not on plan.mayAnimate. A live transition widens mayAnimate to
+    // true (the transition is the thing being watched, and its clock and audio must run),
+    // but the CURSOR must not be widened with it: a paused window would then bake the live
+    // pointer into its key on every frame of the animation, and when the transition ends
+    // nothing repaints it — the driver skips a paused window and so does the hover wake-up
+    // — so the highlight stays frozen wherever the pointer happened to be, indefinitely.
+    // windowSurfaceAnimates re-evaluates this same expression, so the two must key on the
+    // same gate on EVERY path, transitions included.
+    plan.foldCursor = chainReadsCursor
+        ? foldCursorFor(w, state.canvasGeo, decorationMayAnimate(w), m_shaderManager.m_cachedCursorGlobal)
+        : kCursorOutside;
     const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
     plan.foldFocus = chainReadsFocus ? advanceFocusFade(windowId, focusedNow) : 0.0f;
     plan.foldOpacity = static_cast<float>(resolvedWindowOpacity(w, deco));

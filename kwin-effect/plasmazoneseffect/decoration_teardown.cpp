@@ -82,14 +82,20 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
     // captureValid and cold-start the capture cache anyway. Both on every focus
     // change, for every decorated window. The three exits in updateWindowDecoration
     // where the refresh finds the window undecoratable run the release themselves.
-    if (wb.shaderApplied && !keepSurfaceState) {
-        releaseDecorationGl(target, wb.outerPadding);
-    }
+    // Disconnect BEFORE releasing the GL. releaseDecorationGl issues an addRepaintFull, and
+    // windowDamaged fires on repaint SCHEDULING — so with the damage handler still live, a
+    // teardown repaint reads as content damage and clears captureValid on state we are
+    // about to erase anyway. It nets out today only because the erase happens to follow,
+    // which is an accident of ordering rather than a design, and the fold gave up
+    // hand-rolling teardown for exactly that reason.
     if (wb.paddedGeoConnection) {
         disconnect(wb.paddedGeoConnection);
     }
     if (wb.damageConnection) {
         disconnect(wb.damageConnection);
+    }
+    if (wb.shaderApplied && !keepSurfaceState) {
+        releaseDecorationGl(target, wb.outerPadding);
     }
     m_windowDecorations.erase(it);
     // The audio-reactive decoration set may have shrunk — re-evaluate whether the
@@ -152,12 +158,23 @@ void PlasmaZonesEffect::releaseSurfaceState(const QString& windowId, KWin::Effec
     if (target && m_shaderManager.findTransition(target)) {
         return;
     }
+    // Find FIRST, and only then pay for the context. Most calls have nothing to erase:
+    // updateAllDecorations runs updateWindowDecoration for every on-desktop window on every
+    // focus change, and each one that turns out not to be decoratable (docks, panels, the
+    // desktop, notifications — and, on the default configuration, every ordinary window)
+    // lands here. Making the context current for each of them, to erase nothing, is a
+    // driver round-trip per window per focus change, in a patch whose whole purpose is to
+    // stop doing work like that.
+    const auto it = m_surfaceMultipass.find(windowId);
+    if (it == m_surfaceMultipass.end()) {
+        return;
+    }
     // Erasing the entry destroys its GLTextures and GLFramebuffers, i.e. glDeleteTextures
     // and glDeleteFramebuffers. Most callers reach here off the paint cycle (a window
     // closing, a rule sweep on a zero-timer, a D-Bus reply), where the context is not
     // current.
     ensureGlContextCurrent();
-    m_surfaceMultipass.erase(windowId);
+    m_surfaceMultipass.erase(it);
 }
 
 // Hand the window's OffscreenEffect redirect and shader slot back to KWin, and

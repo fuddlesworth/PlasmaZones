@@ -33,10 +33,11 @@ namespace PlasmaZones {
 
 void Daemon::setupIdleService()
 {
-    // Re-entrant: start() calls this again after a stop(). Every connection it makes whose
-    // sender outlives m_idleService is recorded below and severed by stop(), so a second
-    // run cannot stack duplicates.
-    m_idleConnections.clear();
+    // Re-entrant: start() calls this again after a stop(). DISCONNECT, do not merely drop
+    // the handles — clearing the list would leave the old connections live and the next run
+    // would stack duplicates on top of them, which is precisely the failure this list exists
+    // to prevent.
+    teardownIdleConnections();
 
     // No QObject parent: the unique_ptr owns it. Passing `this` as well would be
     // dual ownership (it survives only because member destruction runs before
@@ -125,6 +126,14 @@ void Daemon::setupIdleService()
                                          publishSessionIdle(sessionIdleNow(), /*force=*/true);
                                      });
     }
+}
+
+void Daemon::teardownIdleConnections()
+{
+    for (QMetaObject::Connection& c : m_idleConnections) {
+        disconnect(c);
+    }
+    m_idleConnections.clear();
 }
 
 bool Daemon::sessionIdleNow() const

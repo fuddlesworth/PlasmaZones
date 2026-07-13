@@ -38,7 +38,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     // highlight freezes until something unrelated damages the screen. This is the only
     // cursor-position signal the effect gets.
     if (pos != oldpos) {
-        repaintHoverDecorations();
+        repaintHoverDecorations(pos);
     }
 
     if (buttonsChanged && m_dragTracker->isDragging()) {

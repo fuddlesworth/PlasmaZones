@@ -67,7 +67,7 @@ namespace {
 /// The scrape works on raw text, so a comment that merely mentions `loadSettingAsync(`
 /// inflates the call-site tally and fails the test pointing at prose. That is the safe
 /// direction, but a tripwire that cries wolf is a tripwire someone eventually loosens —
-/// and loosening this one is how it came to be broken four times. Strip the comments and
+/// and loosening this one is how it came to be broken repeatedly. Strip the comments and
 /// it counts only code. String literals are left alone: a key IS a string literal, so they
 /// are the one thing the scrape must still be able to see.
 QString withoutComments(const QString& src)
@@ -99,7 +99,7 @@ QString withoutComments(const QString& src)
         // like the start of a comment, and everything after it on the line (a real fetch,
         // say) would be silently deleted from what the scrape sees. Silently. No effect
         // source contains such a literal today; relying on that is exactly the kind of
-        // luck this file has already run out of four times.
+        // luck this file has already run out of, repeatedly.
         if (inString) {
             if (c == QLatin1Char('\\')) {
                 out.append(c);
@@ -114,6 +114,42 @@ QString withoutComments(const QString& src)
             }
             out.append(c);
             continue;
+        }
+        // A CHAR literal. '"' would otherwise open a phantom string that runs to the next
+        // quote anywhere in the file, swallowing everything in between — including a real
+        // fetch — from what the scrape sees.
+        if (c == QLatin1Char('\'')) {
+            out.append(c);
+            for (++i; i < src.size(); ++i) {
+                const QChar q = src.at(i);
+                out.append(q);
+                if (q == QLatin1Char('\\') && i + 1 < src.size()) {
+                    out.append(src.at(++i));
+                    continue;
+                }
+                if (q == QLatin1Char('\'')) {
+                    break;
+                }
+            }
+            continue;
+        }
+        // A RAW string, R"delim(...)delim". Its body may contain quotes, backslashes and
+        // "//" freely, none of which mean anything — treating it as an ordinary string ends
+        // it at the first inner quote, and everything after that on the line reads as a
+        // comment and is deleted. The effect embeds GLSL, which is exactly where a raw
+        // string shows up.
+        if (c == QLatin1Char('R') && next == QLatin1Char('"')) {
+            const qsizetype open = src.indexOf(QLatin1Char('('), i + 2);
+            if (open > 0) {
+                const QString delim = src.mid(i + 2, open - (i + 2));
+                const QString close = QLatin1Char(')') + delim + QLatin1Char('"');
+                const qsizetype end = src.indexOf(close, open + 1);
+                if (end > 0) {
+                    out.append(src.mid(i, end + close.size() - i));
+                    i = end + close.size() - 1;
+                    continue;
+                }
+            }
         }
         if (c == QLatin1Char('"')) {
             inString = true;
@@ -163,10 +199,9 @@ QString readSource(const QString& path, QString* whyFailed)
 ///
 /// There used to be a third shape — bind the constant to a local `kName` first, then
 /// pass the alias — and resolving an identifier back to a key is where this scrape went
-/// wrong THREE separate times, each time binding a fetch to the wrong key while its own
-/// self-check balanced. The aliases are gone from the effect (the constant is named where
-/// it is used), and the scrape no longer tries to resolve identifiers at all: a fetch
-/// whose key it cannot read off the call site is UNRESOLVED, and unresolved is LOUD.
+/// wrong repeatedly, each time binding a fetch to the wrong key while its own self-check balanced. The aliases are gone
+/// from the effect (the constant is named where it is used), and the scrape no longer tries to resolve identifiers at
+/// all: a fetch whose key it cannot read off the call site is UNRESOLVED, and unresolved is LOUD.
 ///
 /// Still not covered, and deliberately so rather than silently: a key assembled at
 /// runtime, or a fetch hidden behind a macro. Neither exists, and both would have to be
@@ -191,7 +226,7 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
     // identifiers that repeat across namespaces (ServiceName, ObjectPath, Interface). A
     // header-wide scrape would let a future SettingProperty member that shares a name with
     // any of them bind a fetch to the WRONG key, silently, which is the bug this file has
-    // now had written into it four times.
+    // now had written into it repeatedly.
     const qsizetype nsStart = constantsSrc.indexOf(QLatin1String("namespace SettingProperty {"));
     if (nsStart < 0) {
         *whyFailed = QStringLiteral("ServiceConstants.h has no SettingProperty namespace — did it move?");
@@ -214,6 +249,19 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
         const auto m = cit.next();
         constants.insert(m.captured(1), m.captured(2));
     }
+    // Prove the scrape SAW every constant in the block. Miss one — because clang-format
+    // wrapped a long declaration, or someone wrote `constexpr auto` — and every fetch
+    // through it silently stops being checked. Counting declarations is cheap; discovering
+    // months later that a key was never guarded is not.
+    const qsizetype declared = settingPropertySrc.count(QLatin1String("constexpr"));
+    if (declared != constants.size()) {
+        *whyFailed = QStringLiteral(
+                         "scraped %1 of %2 SettingProperty constants — one is declared in a shape the "
+                         "scrape does not recognise, and every fetch through it would go unchecked")
+                         .arg(constants.size())
+                         .arg(declared);
+        return {};
+    }
 
     // Any call that fetches a setting, in every shape the effect writes. Escapes
     // rather than a raw string: a raw string inside QStringLiteral does not survive
@@ -223,9 +271,9 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
     // hand), and a new wrapper forgotten from it contributed to NEITHER the numerator nor
     // the denominator — the tally balanced and the key went unchecked. Silently. Now a
     // wrapper is recognised by what it does, not by what it is called.
-    static const QRegularExpression fetchRe(
-        QLatin1String("load[A-Za-z0-9_]*\\(\\s*(?:this,\\s*)?(?:QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"
-                      "|PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+))"));
+    static const QRegularExpression fetchRe(QLatin1String(
+        "(?<![A-Za-z0-9_])load[A-Za-z0-9_]*\\(\\s*(?:this,\\s*)?(?:QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"
+        "|PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+))"));
     // Direct calls to the PRIMITIVE that name a key. The tally below is anchored on the
     // primitive — every fetch, through however many wrappers, funnels into it — while the
     // scrape above is deliberately broader. Two different jobs: the scrape collects keys,
@@ -233,12 +281,20 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
     static const QRegularExpression primitiveRe(
         QLatin1String("loadSettingAsync\\(\\s*(?:this,\\s*)?(?:QStringLiteral\\(\"[A-Za-z0-9_]+\"\\)"
                       "|PhosphorProtocol::Service::SettingProperty::[A-Za-z0-9_]+)"));
-    // Call sites that do not name a key: they take it as a parameter.
+    // The call sites that legitimately do not name a key: they take it as a PARAMETER,
+    // because they ARE the plumbing. Each is pinned by its full declaration shape.
+    //
+    // Keying these on the identifier `name` was its own silent hole. `name` is an ordinary
+    // identifier, so a genuine runtime-assembled fetch that happened to use it —
+    // `const QString name = prefix + suffix; loadSettingAsync(name, cb);` — matched, was
+    // classified a known non-fetch, and its key was never checked. The SAME fetch with the
+    // local called `key` was loud. Whether a real setting got guarded came down to what
+    // somebody named a variable.
     static const QRegularExpression nonFetchRe(
-        QLatin1String("PlasmaZonesEffect::loadSettingAsync\\(const QString" // the definition
-                      "|void loadSettingAsync\\(const QString" // its declaration, in the header
-                      "|loadSettingAsync\\(this,\\s*name\\b" // its forwarding call
-                      "|loadSettingAsync\\(name\\b")); // inside a wrapper body
+        QLatin1String("PlasmaZonesEffect::loadSettingAsync\\(const QString& name" // the definition
+                      "|void loadSettingAsync\\(const QString& name" // its declaration
+                      "|ClientHelpers::loadSettingAsync\\(this, name, std::forward" // its one forwarder
+                      "|loadSettingAsync\\(name, \\[this, field\\]")); // the two audio wrappers
 
     // EVERY effect source, RECURSIVELY, found at test time. A hand-written file list is a
     // list to forget, and so is a hand-written directory list: the effect already has
@@ -269,9 +325,18 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
             // Two shapes, both of which NAME the key at the call site: a literal, or a
             // SettingProperty constant resolved from ServiceConstants.h. Anything else
             // resolves to nothing and trips the tally below, loudly.
+            // A constant we cannot RESOLVE is reported here, not skipped. The tally cannot
+            // catch it: the tally recognises a call site by its SHAPE, and this call has the
+            // right shape — so it balanced perfectly while the key it fetches was never
+            // compared against the registry at all. Anything the scrape cannot read is LOUD,
+            // with no exceptions, because every exception has turned out to be one of these.
             const QString key = !m.captured(1).isEmpty() ? m.captured(1) : constants.value(m.captured(2));
             if (key.isEmpty()) {
-                continue; // unresolvable; the tally below catches it
+                *unaccounted << QStringLiteral(
+                                    "%1: cannot resolve SettingProperty::%2 — is it declared in "
+                                    "ServiceConstants.h in the shape the scrape expects?")
+                                    .arg(QFileInfo(path).fileName(), m.captured(2));
+                continue;
             }
             keys << key;
             ++scraped;

@@ -16,6 +16,7 @@
 #include <opengl/glframebuffer.h>
 #include <opengl/gltexture.h>
 
+#include <QRectF>
 #include <QSize>
 
 #include <memory>
@@ -43,6 +44,38 @@ inline bool allocSurfaceTarget(std::unique_ptr<KWin::GLTexture>& tex, std::uniqu
         return false;
     }
     return true;
+}
+
+/// The padded canvas a decorated window's composite (and its backdrop) is built on.
+///
+/// ONE definition, because the backdrop MUST be texel-aligned with the composite it is
+/// sampled beside — surface_backdrop.cpp said so in a comment and then re-derived the same
+/// arithmetic from scratch to achieve it. The failure mode of a drift between the two is a
+/// silently misaligned frost, which nothing would catch.
+///
+/// The scale is capped so a very large window on a very high-DPI output cannot ask for a
+/// texture past the driver's limit; past the cap the canvas is pinned on its long axis and
+/// captureScale drops, which is why captureScale is a cache key in its own right.
+struct SurfaceCanvas
+{
+    QRectF logicalGeometry; ///< the window's expanded rect, inflated by the chain's padding
+    qreal captureScale = 1.0; ///< the output scale, reduced if the cap bites
+    QSize textureSize; ///< the canvas in device px — empty means "nothing to draw"
+};
+
+inline SurfaceCanvas surfaceCanvasFor(const QRectF& expandedOrFrame, qreal outerPadding, qreal outputScale)
+{
+    constexpr qreal kMaxSurfaceDim = 8192.0;
+    SurfaceCanvas canvas;
+    canvas.logicalGeometry = expandedOrFrame;
+    canvas.logicalGeometry.adjust(-outerPadding, -outerPadding, outerPadding, outerPadding);
+    canvas.captureScale = outputScale;
+    const qreal longestPx = qMax(canvas.logicalGeometry.width(), canvas.logicalGeometry.height()) * canvas.captureScale;
+    if (longestPx > kMaxSurfaceDim) {
+        canvas.captureScale *= kMaxSurfaceDim / longestPx;
+    }
+    canvas.textureSize = (canvas.logicalGeometry.size() * canvas.captureScale).toSize();
+    return canvas;
 }
 
 /// Can this pack's fold be reused across frames?

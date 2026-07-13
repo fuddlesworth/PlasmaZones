@@ -586,6 +586,14 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (effectId.isEmpty() || !window)
         return false;
 
+    // Everything below is GL: it compiles the pack's shader (glCreateShader /
+    // glLinkProgram), uploads its user textures (glTexImage2D), and runs the LRU eviction,
+    // whose victim's destructor is glDeleteTextures. And every caller reaches here OFF the
+    // paint cycle — a KWin window signal, a D-Bus reply, a drag ending — where the
+    // compositor's context is not current. endShaderTransition, its counterpart, has done
+    // this from the start and says why; the begin side never did.
+    ensureGlContextCurrent();
+
     // A timing curve is meaningless on the animator-driven path (durationMs == 0):
     // that leg reads its progress from the WindowAnimator, whose own profile
     // ALREADY carries the curve, so applying one here would double-ease. The

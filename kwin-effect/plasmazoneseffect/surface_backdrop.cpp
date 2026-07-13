@@ -4,6 +4,7 @@
 #include "../plasmazoneseffect.h"
 
 #include "shader_internal.h"
+#include "surface_fold.h"
 #include "types.h"
 #include "window_query.h"
 
@@ -37,18 +38,18 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // and the composite canvas are texel-aligned — a pack samples both with
     // the same uv (backdropTexel / surfaceTexel).
     const qreal pad = wb.outerPadding;
-    QRectF logicalGeometry = w->expandedGeometry();
-    if (logicalGeometry.isEmpty()) {
-        logicalGeometry = w->frameGeometry();
+    QRectF windowRect = w->expandedGeometry();
+    if (windowRect.isEmpty()) {
+        windowRect = w->frameGeometry();
     }
-    logicalGeometry.adjust(-pad, -pad, pad, pad);
-    qreal captureScale = viewport.scale();
-    constexpr qreal kMaxSurfaceDim = 8192.0;
-    const qreal longestPx = qMax(logicalGeometry.width(), logicalGeometry.height()) * captureScale;
-    if (longestPx > kMaxSurfaceDim) {
-        captureScale *= kMaxSurfaceDim / longestPx;
-    }
-    const QSize textureSize = (logicalGeometry.size() * captureScale).toSize();
+    // The SAME canvas the fold builds, from the same helper — not a second derivation that
+    // happens to agree. Texel alignment between the backdrop and the composite is what lets
+    // a pack sample both with one uv, and a drift between two copies of this arithmetic
+    // would misalign the frost silently.
+    const SurfaceCanvas canvas = surfaceCanvasFor(windowRect, pad, viewport.scale());
+    const QRectF logicalGeometry = canvas.logicalGeometry;
+    const qreal captureScale = canvas.captureScale;
+    const QSize textureSize = canvas.textureSize;
     if (textureSize.isEmpty()) {
         return;
     }

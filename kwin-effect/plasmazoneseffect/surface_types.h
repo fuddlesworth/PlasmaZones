@@ -225,9 +225,10 @@ struct CompiledSurfacePack
 /// The cursor, when it is not over a window's canvas. Far outside any real screen, so a
 /// never-folded state can never compare equal to a live pointer.
 ///
-/// ONE definition. The fold keys on it, the repaint driver compares against it, and the
-/// shader is handed it — and when those three each spelled it themselves, the only thing
-/// keeping them in agreement was that nobody had edited one of them yet.
+/// ONE definition, shared by the two that must agree EXACTLY: the fold keys its cache on
+/// it and the repaint driver decides whether to drive on it. (The shader is handed its own
+/// (-1, -1) "cursor absent" sentinel instead — a canvas-relative value, not a global one —
+/// so it is deliberately not this constant.)
 inline constexpr QPointF kCursorOutside(-1.0e9, -1.0e9);
 
 /// What one fold decided to reuse, computed up front by planSurfaceFold().
@@ -261,7 +262,7 @@ struct SurfaceFoldPlan
     /// The STATE this fold bakes in, and therefore the key its cache is valid under.
     float foldFocus = 0.0f;
     float foldOpacity = 1.0f;
-    QPointF foldCursor;
+    QPointF foldCursor = kCursorOutside;
 };
 
 /// Per-window GL state for the decoration composite fold
@@ -508,8 +509,9 @@ struct SurfaceMultipassState
 /// The border APPEARANCE (width / radius / colour) is no longer host state on
 /// this struct: it is the resolved pack's own declared PARAMETERS, baked into the
 /// CompiledSurfacePack's customParams/customColors at compile time and pushed by
-/// pushBorderUniforms. This struct now only records WHICH pack chain renders and
-/// the per-window hide-titlebar choice; the appearance lives with the pack.
+/// pushBorderUniforms. This struct records WHICH pack chain renders and the per-window
+/// values that feed it; the appearance lives with the pack. (Title-bar hiding is not here
+/// at all — it is persistent window state, owned by DecorationManager.)
 struct WindowDecoration
 {
     /// True when THIS border owns the window's OffscreenEffect redirect +

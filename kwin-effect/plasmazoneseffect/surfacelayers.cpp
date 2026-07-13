@@ -181,18 +181,14 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // decoration-shadow margin of its own (borderless windows). apply()
     // presents the composite on a matching padded quad.
     const qreal pad = bit->outerPadding;
-    QRectF logicalGeometry = w->expandedGeometry();
-    if (logicalGeometry.isEmpty()) {
-        logicalGeometry = w->frameGeometry();
+    QRectF windowRect = w->expandedGeometry();
+    if (windowRect.isEmpty()) {
+        windowRect = w->frameGeometry();
     }
-    logicalGeometry.adjust(-pad, -pad, pad, pad);
-    qreal captureScale = scale;
-    constexpr qreal kMaxSurfaceDim = 8192.0;
-    const qreal longestPx = qMax(logicalGeometry.width(), logicalGeometry.height()) * captureScale;
-    if (longestPx > kMaxSurfaceDim) {
-        captureScale *= kMaxSurfaceDim / longestPx;
-    }
-    const QSize textureSize = (logicalGeometry.size() * captureScale).toSize();
+    const SurfaceCanvas canvas = surfaceCanvasFor(windowRect, pad, scale);
+    const QRectF logicalGeometry = canvas.logicalGeometry;
+    const qreal captureScale = canvas.captureScale;
+    const QSize textureSize = canvas.textureSize;
     if (textureSize.isEmpty()) {
         return nullptr;
     }
@@ -325,7 +321,13 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // the bind below would be a null deref inside the compositor — a far worse outcome
     // than the one frame of cold fold this guard costs. The chainBufferTex bounds check
     // in the loop below is defensive for exactly the same reason.
-    if (state.prefixValid && state.prefixTex) {
+    if (state.prefixValid && !state.prefixTex) {
+        // Half a guard is worse than none: skipping the read but leaving the flag set means
+        // writesPrefix (which requires !prefixValid) never fires again, so the cache is dead
+        // for this window forever while the flag goes on claiming it is live.
+        state.prefixValid = false;
+    }
+    if (state.prefixValid) {
         srcTex = state.prefixTex.get();
         firstPack = staticPrefix;
     }
@@ -447,6 +449,35 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                         pass.shader->setUniform(pass.iChannelResolutionLoc[j], res);
                     }
                 }
+                // Bind a transparent fallback to every channel this pass DECLARES but has
+                // no prior buffer output for — which for the FIRST buffer pass is all of
+                // them, since there is nothing before it. An unset sampler2D reads texture
+                // unit 0, and unit 0 holds the RUNNING COMPOSITE: a pack whose first buffer
+                // pass samples iChannel0 was reading the window back into itself. The main
+                // pass, the audio slot and the user-texture slots all bind a fallback for
+                // exactly this reason; the buffer passes were left out of it.
+                for (size_t j = i; j < 4; ++j) {
+                    if (pass.iChannelLoc[j] < 0) {
+                        continue; // the pass never samples this channel
+                    }
+                    // Park the destination unit BEFORE the call: the first-ever call
+                    // creates the texture, and GLTexture::upload binds it on the ACTIVE
+                    // unit, which is TEXTURE0 here.
+                    glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
+                    KWin::GLTexture* const fallback = transparentFallbackTexture();
+                    if (!fallback) {
+                        glActiveTexture(GL_TEXTURE0);
+                        continue; // allocation failed — keep the old omit behaviour
+                    }
+                    fallback->bind();
+                    pass.shader->setUniform(pass.iChannelLoc[j], 1 + static_cast<int>(j));
+                    if (pass.iChannelResolutionLoc[j] >= 0) {
+                        pass.shader->setUniform(pass.iChannelResolutionLoc[j],
+                                                QVector4D(static_cast<float>(fallback->width()),
+                                                          static_cast<float>(fallback->height()), 0.0f, 0.0f));
+                    }
+                    glActiveTexture(GL_TEXTURE0);
+                }
                 // Per-window param values for THIS chain pack; the compiled
                 // pack's baked baseline is the fallback (same seeding as the
                 // main-pass pushBorderUniforms below).
@@ -475,7 +506,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     bindSurfaceAudio(pass.shader.get(), pass.iAudioSpectrumSizeLoc, pass.uAudioSpectrumLoc, mayAnimate);
                 drawFullscreenQuad();
             }
-            for (size_t j = 0; j < i && j < 4; ++j) {
+            // Unbind all four channel units, not just the prior-buffer ones: the loop
+            // above also binds a transparent fallback to every channel the pass declares
+            // but has no buffer for, and leaving those bound would leak this pass's state
+            // into the next one.
+            for (size_t j = 0; j < 4; ++j) {
                 glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
                 glBindTexture(GL_TEXTURE_2D, 0);
             }

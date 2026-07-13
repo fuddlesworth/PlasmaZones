@@ -299,6 +299,11 @@ private:
     /// supports idle notification); pausing on it is a CHOICE (the PauseWhenIdle
     /// setting). This is the single place the two are combined, so the toggle cannot be
     /// honoured on one publishing path and forgotten on another.
+    /// Disconnect every connection setupIdleService made whose sender outlives the idle
+    /// service, and forget them. Used by BOTH stop() and a re-entrant setupIdleService, so
+    /// a second setup cannot stack duplicates on top of live connections.
+    void teardownIdleConnections();
+
     [[nodiscard]] bool sessionIdleNow() const;
 
     /// Announce the session's idle state to the KWin effect, on CHANGE only.

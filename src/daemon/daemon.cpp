@@ -2047,12 +2047,15 @@ void Daemon::start()
 
     // Re-arm the idle service. stop() tears it down (its Wayland notification object and
     // every connection around it), and setupIdleService is otherwise only reached from
-    // init(), which start() does not re-run — so a stop()→start() cycle came back up with
-    // PauseWhenIdle silently dead for the rest of the process. Guarded on !m_idleService
-    // so the ordinary init()-then-start() path does not build it twice.
+    // init(), which start() does not re-run — so an in-process restart came back up with
+    // the idle state permanently stale. Guarded on !m_idleService so the ordinary
+    // init()-then-start() path does not build it twice.
     //
-    // This daemon supports the cycle deliberately (the three repairs below exist for it,
-    // and stop() argues the same point), so the feature has to survive it.
+    // Note what this does NOT fix: stop() also unregisters the D-Bus object and the service
+    // name, and re-registering them lives in init(), not here. A restarted daemon therefore
+    // has no bus presence, so nothing it publishes reaches the effect regardless. The
+    // re-arm exists so the daemon's own state is consistent after the cycle (which the
+    // repairs below also do), not because the cycle fully restores service.
     if (!m_idleService) {
         setupIdleService();
     }
@@ -2492,10 +2495,10 @@ void Daemon::stop()
     // The next run starts from a fresh effect that assumes an active session. Leaving this
     // true would make the re-armed service's first publish look redundant and swallow it.
     m_publishedSessionIdle = false;
-    // The idle service's own signals die with it, but the three connections idle.cpp made
-    // have OTHER senders (m_settings, m_compositorBridge) and `this` as receiver, so they
-    // outlive it and a settings write between stop() and ~Daemon would still run their
-    // lambdas. Sever EXACTLY those three.
+    // The idle service's own signals die with it, but the FOUR connections idle.cpp made
+    // outlive it: the two settings signals, the bridgeRegistered push, and the debounce
+    // timer (a value member, so it outlives the service too). A settings write between
+    // stop() and ~Daemon would still run their lambdas. Sever exactly those four.
     //
     // NOT a blanket disconnect(m_settings.get(), nullptr, this, nullptr). That severs
     // every m_settings→this connection — the gap-resnap sweep, the adjacent-threshold
@@ -2503,10 +2506,7 @@ void Daemon::stop()
     // eleven of them — and most are made in the constructor or init(), which start() does
     // NOT re-run. A stop()→start() cycle (which this daemon supports deliberately, and
     // says so in three places) would come back up with them silently gone.
-    for (QMetaObject::Connection& c : m_idleConnections) {
-        disconnect(c);
-    }
-    m_idleConnections.clear();
+    teardownIdleConnections();
 
     // Destroy the router. Engines below outlive it so any in-flight
     // navigatorForShortcut path completes with the engine pointers it

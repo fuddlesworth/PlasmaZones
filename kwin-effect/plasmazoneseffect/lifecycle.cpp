@@ -672,7 +672,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             // Belt-and-suspenders for the not-expected case of a multipass entry
             // without a border entry (removeWindowDecoration's no-border early-return
             // would otherwise skip the FBO cleanup).
-            m_surfaceMultipass.erase(cachedId);
+            //
+            // Its own make-current, not one borrowed from the endShaderTransition above:
+            // this destroys GLTextures and GLFramebuffers, we are off the paint cycle, and
+            // the day that neighbour grows an early return this would silently become
+            // glDelete* against no context. The window is gone, so the transition guard
+            // releaseSurfaceState applies has nothing left to protect — erase directly.
+            if (m_surfaceMultipass.contains(cachedId)) {
+                ensureGlContextCurrent();
+                m_surfaceMultipass.erase(cachedId);
+            }
             // Mirror the m_pendingFrameGeometry cleanup that
             // slotWindowClosed runs (window_lifecycle.cpp). A
             // windowFrameGeometryChanged emission between

@@ -1220,12 +1220,15 @@ private:
 
     /// Repaint every decorated window whose chain reads the cursor. The ONLY thing that
     /// restarts a hover pack's repaint loop after it settles — see the note on it.
-    void repaintHoverDecorations();
+    void repaintHoverDecorations(const QPointF& cursor);
 
     /// The cursor value a fold bakes in for this window. The fold keys its cache on this
     /// and the repaint driver decides whether to drive on it, so it is one expression:
     /// two spellings that must agree exactly are two spellings that eventually will not.
-    QPointF foldCursorFor(KWin::EffectWindow* w, const QRectF& canvasGeo, bool mayAnimate) const;
+    /// @p cursor is passed explicitly rather than read from the frame cache, because the
+    /// pointer-motion path runs BEFORE the next frame refreshes that cache and would
+    /// otherwise compare against a stale position.
+    QPointF foldCursorFor(KWin::EffectWindow* w, const QRectF& canvasGeo, bool mayAnimate, const QPointF& cursor) const;
 
     /// Surface-shader pack registry (the "surface" category: window border /
     /// rounded corners / glow / …). Discovers data/surface packs; the effect

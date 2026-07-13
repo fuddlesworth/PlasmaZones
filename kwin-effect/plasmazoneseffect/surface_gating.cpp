@@ -93,13 +93,19 @@ void PlasmaZonesEffect::repaintAllDecorations()
 // exemption beside that short-circuit and a paused hover window would compare a live
 // cursor against a sentinel it can never converge on, and spin a full-window repaint at
 // vsync forever.
-QPointF PlasmaZonesEffect::foldCursorFor(KWin::EffectWindow* w, const QRectF& canvasGeo, bool mayAnimate) const
+QPointF PlasmaZonesEffect::foldCursorFor(KWin::EffectWindow* w, const QRectF& canvasGeo, bool mayAnimate,
+                                         const QPointF& cursor) const
 {
     if (!mayAnimate || !w) {
         return kCursorOutside;
     }
-    const QPointF cursor = m_shaderManager.m_cachedCursorGlobal;
-    return canvasGeo.contains(cursor) ? cursor : kCursorOutside;
+    // HALF-OPEN, exactly like pushBorderUniforms' own inside-test. QRectF::contains is
+    // closed on all four edges, so a pointer sitting precisely on the right or bottom edge
+    // was keyed as INSIDE while the shader was handed the absent sentinel — and this
+    // expression's whole purpose is to be the value the shader actually receives.
+    const bool inside = cursor.x() >= canvasGeo.left() && cursor.x() < canvasGeo.right()
+        && cursor.y() >= canvasGeo.top() && cursor.y() < canvasGeo.bottom();
+    return inside ? cursor : kCursorOutside;
 }
 
 // Repaint every decorated window whose chain reads the cursor.
@@ -111,7 +117,7 @@ QPointF PlasmaZonesEffect::foldCursorFor(KWin::EffectWindow* w, const QRectF& ca
 //
 // Flagged as ours, like every other driver repaint: the window's CONTENT has not changed,
 // only where the pointer is, and the fold keys on that itself (foldedCursor).
-void PlasmaZonesEffect::repaintHoverDecorations()
+void PlasmaZonesEffect::repaintHoverDecorations(const QPointF& cursor)
 {
     if (!KWin::effects || m_windowDecorations.isEmpty()) {
         return;
@@ -145,7 +151,33 @@ void PlasmaZonesEffect::repaintHoverDecorations()
         if (!decorationMayAnimate(sw)) {
             continue;
         }
+        // Skip a window whose fold would bake the SAME cursor it already has. The pointer
+        // moving on the far side of the desktop resolves to the outside sentinel for this
+        // window, which is what it is already keyed on — so the fold would reproduce a
+        // byte-identical composite and the repaint is pure cost, on the most frequent
+        // interaction there is.
+        //
+        // @p cursor is the position the motion event carries. m_cachedCursorGlobal is a
+        // frame stale here (prePaintScreen refreshes it) and would compare against the
+        // wrong pointer.
+        const auto sit = m_surfaceMultipass.find(it.key());
+        if (sit != m_surfaceMultipass.end()
+            && sit->second.foldedCursor == foldCursorFor(sw, sit->second.canvasGeo, /*mayAnimate=*/true, cursor)) {
+            continue;
+        }
         sw->addRepaintFull();
+        // A padded chain draws OUTSIDE the window rect, and addRepaintFull clips to the
+        // window item — so without this, a cursor-following glow updates its inner canvas
+        // and leaves a stale highlight in its outer band. Both sibling drivers damage the
+        // band; this one did not.
+        if (it->outerPadding > 0) {
+            QRectF padded = sw->expandedGeometry();
+            if (padded.isEmpty()) {
+                padded = sw->frameGeometry();
+            }
+            const int pad = it->outerPadding;
+            KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
+        }
     }
 }
 
@@ -264,7 +296,9 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
             }
             // Compare EXACTLY what the fold keys on. See foldCursorFor.
             KWin::EffectWindow* const sw = findWindowById(windowId);
-            if (sit->second.foldedCursor != foldCursorFor(sw, sit->second.canvasGeo, decorationMayAnimate(sw))) {
+            if (sit->second.foldedCursor
+                != foldCursorFor(sw, sit->second.canvasGeo, decorationMayAnimate(sw),
+                                 m_shaderManager.m_cachedCursorGlobal)) {
                 return true;
             }
         }

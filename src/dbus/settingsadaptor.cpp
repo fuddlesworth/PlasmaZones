@@ -997,7 +997,10 @@ QDBusVariant SettingsAdaptor::getSetting(const QString& key)
     // ClientHelpers::loadSettingAsync, so the value callback never runs and the
     // caller simply keeps its own default. Guarded once here rather than pushed out
     // to ~50 call sites as a defensive type-check.
-    qCWarning(lcDbusSettings) << "getSetting: unknown key" << key;
+    // DEBUG, matching the batch path. An unknown key is answered with a D-Bus error, which
+    // is the real signal; logging it at warning level let any process on the session bus
+    // fill the daemon's log with content of its own choosing, one key at a time.
+    qCDebug(lcDbusSettings) << "getSetting: unknown key" << key;
     if (calledFromDBus()) {
         sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Unknown setting key: %1").arg(key));
     }

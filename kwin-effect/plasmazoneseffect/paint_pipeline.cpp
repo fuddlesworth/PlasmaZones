@@ -454,11 +454,23 @@ void PlasmaZonesEffect::postPaintScreen()
             if (it->needsBackdrop) {
                 constexpr qint64 kBackdropRefoldIntervalMs = 33;
                 const auto stateIt = m_surfaceMultipass.find(it.key());
-                // Read the clock PINNED for this frame, not a live sample: every
-                // other consumer in this file reads it, so a live read here would
-                // let two windows in one frame disagree about what time it is.
-                backdropDue = stateIt == m_surfaceMultipass.end() || stateIt->second.lastFoldMs < 0
-                    || (frameClockMs - stateIt->second.lastFoldMs) >= kBackdropRefoldIntervalMs;
+                // NOT due when the window has never folded. lastFoldMs only advances when
+                // the fold actually runs, i.e. when KWin really paints the window — and it
+                // declines to paint one that is fully occluded by an opaque window above
+                // it. Treating "never folded" as due meant such a window was due on every
+                // frame, forever: the ~30fps backdrop refold degenerated into a per-vsync
+                // full repaint and the desktop could never idle, which is the exact shape
+                // of runaway this driver exists to bound.
+                //
+                // Its first real paint runs the fold, which creates the state, and the next
+                // postPaintScreen picks the backdrop up. The hover arm refuses to drive a
+                // never-folded window for precisely this reason; the two now agree.
+                //
+                // Read the clock PINNED for this frame, not a live sample: every other
+                // consumer in this file reads it, so a live read here would let two windows
+                // in one frame disagree about what time it is.
+                backdropDue = stateIt != m_surfaceMultipass.end() && stateIt->second.lastFoldMs >= 0
+                    && (frameClockMs - stateIt->second.lastFoldMs) >= kBackdropRefoldIntervalMs;
             }
             // Decorations.Performance: is this window's chain allowed to animate
             // right now (session not idle, and either it is focused or we animate
@@ -1154,13 +1166,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // raw msec count is ~43.2M, and a single-precision
                     // float divide there only resolves to ~4 ms steps
                     // (vs the ~1 µs steps produced by the decomposed
-                    // form). Matches `shadernoderhiuniforms.cpp:51-52`
+                    // form). Matches `PhosphorShaders::BaseUniformProfile`
                     // exactly so a shader that reads iDate.w sees the
                     // same value on both runtimes.
                     // 1Hz cache: re-decompose the QDateTime only when at
                     // least 1000 ms have elapsed since the last refresh
                     // (or this is the first paint to read iDate). Mirrors
-                    // shadernoderhiuniforms.cpp:42-53 — sub-second iDate
+                    // PhosphorShaders::BaseUniformProfile — sub-second iDate
                     // variation is invisible for typical shader use
                     // (clocks, time-of-day tints, etc.), and multiple
                     // in-flight transitions on a high-Hz display would
@@ -1853,8 +1865,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // iterator — re-entering from inside the drawWindow override corrupts
     // KWin's iterator mid-walk (crash in the following
     // OffscreenEffect::drawWindow). The override then only BINDS the ready
-    // composite for the present blit. The pre-gate skips windows with no
-    // applied border without a map lookup.
+    // composite for the present blit. The pre-gate short-circuits the whole thing on a
+    // desktop with no decorations at all, before any map lookup.
     if (!m_capturingSnapshot && !m_windowDecorations.isEmpty() && !m_shaderManager.findTransition(w)) {
         const auto bit = m_windowDecorations.constFind(getWindowId(w));
         if (bit != m_windowDecorations.constEnd() && bit->shaderApplied) {
