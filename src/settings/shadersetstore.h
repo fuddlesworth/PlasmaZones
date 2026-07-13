@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "animationfileutils.h"
+
 #include <QJsonObject>
 #include <QObject>
 #include <QString>
@@ -239,7 +241,7 @@ private:
     QString uniqueSetName(const QString& desiredName) const;
 
     /// Largest set file the store will read. A set is a few kilobytes of JSON.
-    static constexpr qint64 kMaxSetFileBytes = 4 * 1024 * 1024;
+    static constexpr qint64 kMaxSetFileBytes = animfileutil::kMaxJsonFileBytes;
 
     Config m_config;
     /// Guards the coalesced notifyLiveStateChanged() emission (see there).

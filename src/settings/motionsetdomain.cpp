@@ -9,6 +9,7 @@
 #include "motionsetdomain.h"
 
 #include "../core/logging.h"
+#include "animationfileutils.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 
@@ -40,8 +41,9 @@ constexpr QLatin1String kBaselineKey{"baseline"};
 
 /// Ceiling on one profile file read during the snapshot walk, which runs on the
 /// GUI thread on every setsChanged. The profiles dir is hand-editable, so it is
-/// a filesystem boundary like any other. Matches the store's set-file cap.
-constexpr qint64 kMaxProfileFileBytes = 4 * 1024 * 1024;
+/// a filesystem boundary like any other. Derived from the shared cap so it
+/// cannot drift from the store's set-file cap or the other profile readers.
+constexpr qint64 kMaxProfileFileBytes = animfileutil::kMaxJsonFileBytes;
 
 struct StagedEntry
 {

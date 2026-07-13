@@ -8,6 +8,7 @@
 #include "../core/isettings.h"
 #include "../core/logging.h"
 #include "../phosphor_i18n.h"
+#include "animationfileutils.h"
 #include "animationpresetlibrary.h"
 #include "animations_controller_detail.h"
 #include "dbusutils.h"
@@ -47,8 +48,9 @@ namespace {
 
 /// Ceiling on a single snapshotted profile file. The snapshot map holds these
 /// in memory for the session, and the file is a filesystem boundary a user can
-/// hand-place anything at. Matches ShaderSetStore's set-file cap.
-constexpr qint64 kMaxSnapshotBytes = 4 * 1024 * 1024;
+/// hand-place anything at. Derived from the shared cap so it cannot drift
+/// from ShaderSetStore's set-file cap or the other profile readers.
+constexpr qint64 kMaxSnapshotBytes = animfileutil::kMaxJsonFileBytes;
 
 } // namespace
 

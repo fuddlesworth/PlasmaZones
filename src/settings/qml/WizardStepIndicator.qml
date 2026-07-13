@@ -56,7 +56,7 @@ RowLayout {
                     // illegal duplicate binding that fails the whole document. FontUtils
                     // passes only the size dimension the theme font actually carries.
                     font: FontUtils.withProps(Kirigami.Theme.smallFont, {
-                        weight: Font.Bold
+                        bold: true
                     })
                     color: stepIndicator.index <= root.currentStep ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                     opacity: stepIndicator.index <= root.currentStep ? 1 : 0.4

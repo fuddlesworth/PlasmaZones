@@ -11,6 +11,7 @@
 // copy without relying on unity-build TU merging for cross-TU linkage.
 
 #include "../core/logging.h"
+#include "animationfileutils.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/Easing.h>
@@ -169,9 +170,9 @@ inline QVariantMap profileToVariantMap(const PhosphorAnimation::Profile& profile
     return profile.toJson().toVariantMap();
 }
 
-/// Ceiling on one profile file read. Shared by every reader of the
-/// hand-editable profiles dir; matches the snapshot and preset caps.
-constexpr qint64 kMaxProfileReadBytes = 4 * 1024 * 1024;
+/// Ceiling on one profile file read. Derived from the shared cap so it
+/// cannot drift from the snapshot, preset, and set-file readers.
+constexpr qint64 kMaxProfileReadBytes = animfileutil::kMaxJsonFileBytes;
 
 /// Read the JSON object at @p path. Returns an empty object on missing
 /// file / parse error / non-object root. The `name` field is stripped so

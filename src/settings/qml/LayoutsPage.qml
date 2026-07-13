@@ -443,7 +443,7 @@ SettingsFlickable {
                                 // (KCM / future preview) `window.layoutContextMenu`
                                 // is undefined; suppress the right-button mask so a
                                 // missing menu doesn't pretend to exist.
-                                contextMenuEnabled: typeof window !== "undefined" && window && window.layoutContextMenu
+                                contextMenuEnabled: !!(typeof window !== "undefined" && window && window.layoutContextMenu)
                                 onSelected: idx => {
                                     root.selectedLayoutId = String(modelData.id);
                                 }

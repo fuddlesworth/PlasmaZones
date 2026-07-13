@@ -25,10 +25,10 @@ namespace presetlib_detail {
 
 static constexpr QLatin1String JsonNameKey{"name"};
 
-/// Ceiling on a preset file read on the GUI thread. Matches the snapshot cap in
-/// AnimationsPageController: the profiles dir is a filesystem boundary a user can
-/// hand-place anything in.
-constexpr qint64 kMaxPresetFileBytes = 4 * 1024 * 1024;
+/// Ceiling on a preset file read on the GUI thread. The profiles dir is a
+/// filesystem boundary a user can hand-place anything in. Derived from the
+/// shared cap so it cannot drift from the other readers of these dirs.
+constexpr qint64 kMaxPresetFileBytes = animfileutil::kMaxJsonFileBytes;
 
 } // namespace presetlib_detail
 
