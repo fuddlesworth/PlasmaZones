@@ -893,17 +893,7 @@ private:
     QRect m_resizeStartGeometry;
     void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry);
 
-    /// wasDecoratedHint: whether @p windowId was decorated BEFORE this reconcile cycle
-    /// began. Per-window callers omit it (the internal m_windowDecorations lookup is
-    /// authoritative). updateAllDecorations MUST supply it, because its own loop can
-    /// re-enter this function for the same window before reaching it: resyncWindow and
-    /// the rule reconcilers emit windowDecorationRestored, whose handler calls
-    /// updateWindowDecoration. A live m_windowDecorations lookup could then observe the
-    /// entry that nested call just inserted, report the window as freshly decorated,
-    /// and scrub its in-flight focus cross-fade — so the hint must be a snapshot taken
-    /// before the sweep started, not a lookup taken during it.
-    void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w,
-                                std::optional<bool> wasDecoratedHint = std::nullopt);
+    void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
     /// windowHint: the EffectWindow when the caller still holds it and the
     /// window is already deleted (close / delete paths) — findWindowById
     /// cannot resolve a deleted id, and without the pointer the GL release
@@ -940,6 +930,12 @@ private:
     ///     for one frame rather than sampling a freed texture.
     /// Nothing else may.
     void releaseSurfaceState(const QString& windowId, KWin::EffectWindow* target);
+
+    /// The EXACT window a decoration belongs to: an exact-id live match, else the frozen
+    /// reverse mapping (which resolves a DELETED window and survives a close
+    /// transition), else @p hint. Shared by every teardown path, because a fuzzy
+    /// same-app sibling handed to the GL release tears down the wrong window.
+    KWin::EffectWindow* resolveDecorationTarget(const QString& windowId, KWin::EffectWindow* hint);
 
     /// Hand the window's OffscreenEffect redirect and shader slot back to KWin and
     /// damage what the decoration covered. Skipped by a decoration REFRESH (which is
@@ -994,9 +990,11 @@ private:
     ///   • a transition is active (animation owns the slot) → leave it alone;
     ///   • else the window has a border in m_windowDecorations → redirect + set the
     ///     border shader, marking the WindowDecoration `shaderApplied`;
-    ///   • else if WE applied the border shader → setShader(nullptr) + unredirect.
-    /// Idempotent and safe to call from updateWindowDecoration / removeWindowDecoration /
-    /// transition end. Never unredirects a window the animation system owns.
+    /// There is deliberately NO teardown branch here: a window that should no longer be
+    /// decorated has its redirect released by the teardown paths (releaseDecorationGl),
+    /// not by this reconcile, which only ever ADDS. Idempotent and safe to call from
+    /// updateWindowDecoration / removeWindowDecoration / transition end. Never
+    /// unredirects a window the animation system owns.
     void reconcileDecorationShader(const QString& windowId, KWin::EffectWindow* w);
 
     /// Per-frame uniform push for a bordered window painted through @p pack's
@@ -1020,7 +1018,7 @@ private:
     /// @p timeSec: the clock the FOLD decided on, in surfaceShaderTimeSeconds()
     /// units. Threaded in rather than sampled here because a chain that
     /// Decorations.Performance has paused is handed a frozen clock — see
-    /// SurfaceMultipassState::foldedTimeSec. Sampling live here would let a paused
+    /// SurfaceMultipassState::pausedAtSec / timeOffsetSec. Sampling live here would let a paused
     /// window's packs disagree with the frozen composite they are folding into.
     /// @p animating is false for a chain Decorations.Performance has paused. Every
     /// per-frame input it pushes is then frozen with the clock — see @p timeSec, and
@@ -1201,7 +1199,28 @@ private:
     /// were idle): a paused chain emits no damage of its own, so it would otherwise
     /// stay frozen on its last composite until something unrelated damaged it.
     /// Defined in surface_gating.cpp.
+    /// Make the compositor's GL context current, best-effort.
+    ///
+    /// Every path that DESTROYS a GL object (a shader, a texture, a framebuffer, or a
+    /// window's offscreen redirect) has to be able to run off the paint cycle — a file
+    /// watcher, a D-Bus reply, a QTimer, a window closing — and glDelete* against no
+    /// current context is undefined. This was asserted in six places and quietly ignored
+    /// in nine, including the hottest one (every time-driven animation's teardown). It is
+    /// one call here instead, idempotent and a no-op when the context is already current.
+    ///
+    /// False only during compositor teardown, where GL is going away and the driver
+    /// reclaims everything regardless — so callers clear their state either way rather
+    /// than leaking it to avoid a call that cannot matter.
+    bool ensureGlContextCurrent() const
+    {
+        return KWin::effects && KWin::effects->makeOpenGLContextCurrent();
+    }
+
     void repaintAllDecorations();
+
+    /// Repaint every decorated window whose chain reads the cursor. The ONLY thing that
+    /// restarts a hover pack's repaint loop after it settles — see the note on it.
+    void repaintHoverDecorations();
 
     /// Surface-shader pack registry (the "surface" category: window border /
     /// rounded corners / glow / …). Discovers data/surface packs; the effect
@@ -1395,8 +1414,11 @@ private:
     /// opacity after its placement state (snapped / floating / zone) changed.
     /// Those are rule MATCH inputs now, so without this a window stays resolved
     /// at its prior state (e.g. a `WHEN isSnapped` border never reverting on
-    /// unsnap). Mirrors slotWindowActivated's focus invalidation; no-op when
-    /// there are no animation rules.
+    /// unsnap). Mirrors slotWindowActivated's focus invalidation. A no-op only when the
+    /// window has nothing that could re-resolve: no rules AND no config-default window
+    /// appearance AND no decoration tree content. The last two matter — a config-default
+    /// border scoped to tiled windows must still reconcile on a snap flip with an empty
+    /// rule set.
     void invalidateRuleCacheForStateChange(const QString& windowId);
 
     /// Bulk analog of invalidateRuleCacheForStateChange for placement changes that

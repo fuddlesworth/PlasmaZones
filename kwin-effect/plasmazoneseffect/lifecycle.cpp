@@ -158,19 +158,27 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // has done this from the start and explains why; this one was written to
                 // the same contract and did not honour it.
                 //
-                // The only false case is compositor teardown (!KWin::effects), where GL
-                // is going away and the driver reclaims the objects regardless — but we
-                // must not call setShader/unredirect on live windows without a context,
-                // so bail rather than press on.
-                if (!KWin::effects || !KWin::effects->makeOpenGLContextCurrent()) {
-                    qCWarning(lcEffect) << "Animation shader hot-reload skipped: no current GL context";
-                    return;
+                // Best-effort, and then CARRY ON either way — the same policy as the
+                // sibling handler below, and for the same reason. The only false case is
+                // compositor teardown, where GL is going away and the driver reclaims the
+                // objects regardless. Bailing outright (as this first did) would leave the
+                // shader and texture caches populated with stale entries, so a hot-reloaded
+                // pack would keep rendering from its OLD compiled shader for the rest of the
+                // session — trading a theoretical teardown-time GL call for a real
+                // hot-reload bug. Only the setShader/unredirect drain, which touches live
+                // windows, is skipped without a context.
+                const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
+                if (!haveContext) {
+                    qCWarning(lcEffect) << "Animation shader hot-reload: no current GL context, skipping the "
+                                           "transition drain but clearing the caches anyway";
                 }
                 QVarLengthArray<KWin::EffectWindow*, 8> windows;
-                for (auto& [w, _] : m_shaderManager.shaderTransitions())
-                    windows.push_back(w);
-                for (auto* w : windows)
-                    endShaderTransition(w);
+                if (haveContext) {
+                    for (auto& [w, _] : m_shaderManager.shaderTransitions())
+                        windows.push_back(w);
+                    for (auto* w : windows)
+                        endShaderTransition(w);
+                }
                 // Release-build pair for the contract: every transition entry
                 // MUST drain through endShaderTransition before we clear the
                 // shader cache. A residual entry holds a cached shader

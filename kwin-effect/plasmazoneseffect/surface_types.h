@@ -238,10 +238,14 @@ struct SurfaceFoldPlan
     /// Can the window capture be reused across frames? False under a live transition,
     /// which re-captures every frame.
     bool captureCacheable = true;
+    /// Which texture the capture belongs in THIS fold — compositeTex[0] when no pack
+    /// compiles (nothing folds, so the capture is the composite), captureTex otherwise.
+    /// A chain can cross that line at runtime, and a capture cached on the wrong side of
+    /// it is not a capture at all.
+    bool captureInComposite = false;
 
     int foldablePacks = 0; ///< packs in the chain that compiled and therefore draw
     int staticPrefix = 0; ///< chain INDEX where the cacheable head ends
-    int staticFoldable = 0; ///< how many packs inside that head draw
     int lastStaticDraw = -1; ///< the last of those (where the prefix cache is written)
     bool usePrefix = false; ///< is the static-prefix cache worth keeping for this chain?
     bool allStatic = false; ///< nothing in the chain varies per frame: cache it entire

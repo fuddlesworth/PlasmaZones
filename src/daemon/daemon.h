@@ -282,9 +282,9 @@ private:
     void setupSurfaceShaderEffects();
 
     /// Watch the session going idle and push it to the KWin effect, which pauses
-    /// decoration-chain animation on it. Re-armed whenever the timeout or the
-    /// PauseWhenIdle toggle changes. See m_idleService for why the daemon owns this
-    /// rather than the effect.
+    /// decoration-chain animation on it. Re-armed whenever the timeout changes. The
+    /// PauseWhenIdle toggle deliberately does NOT re-arm it — see idle.cpp. See m_idleService for why the daemon owns
+    /// this rather than the effect.
     void setupIdleService();
 
     /// (Re)arm the idle ladder from the current timeout. A single stage, armed whenever
@@ -781,6 +781,12 @@ private:
     /// The last idle state we announced. The effect starts up assuming an active
     /// session, so this starts false and the two agree from the outset.
     bool m_publishedSessionIdle = false;
+
+    /// The connections setupIdleService made whose SENDER is not m_idleService (the two
+    /// settings signals and bridgeRegistered). Held so stop() can sever exactly these
+    /// and not, say, every connection m_settings has to us — most of which are made in
+    /// the constructor or init() and would never come back on a stop()→start() cycle.
+    QList<QMetaObject::Connection> m_idleConnections;
 
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;

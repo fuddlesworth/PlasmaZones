@@ -26,9 +26,6 @@
 #include <QScopeGuard>
 #include <QSet>
 #include <QStringList>
-#include <QTimer>
-
-#include <utility>
 
 #include "../autotilehandler.h"
 #include "../navigationhandler.h"

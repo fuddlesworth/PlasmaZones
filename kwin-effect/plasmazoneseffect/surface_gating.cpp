@@ -83,6 +83,46 @@ void PlasmaZonesEffect::repaintAllDecorations()
     }
 }
 
+// Repaint every decorated window whose chain reads the cursor.
+//
+// Called from the pointer-motion handler, and it is the ONLY thing that restarts a hover
+// pack's repaint loop: windowSurfaceAnimates stops driving one as soon as its folded
+// cursor matches the live one, and the live one is only sampled during a frame. Without
+// this, the driver would depend on some other window happening to damage.
+//
+// Flagged as ours, like every other driver repaint: the window's CONTENT has not changed,
+// only where the pointer is, and the fold keys on that itself (foldedCursor).
+void PlasmaZonesEffect::repaintHoverDecorations()
+{
+    if (!KWin::effects || m_windowDecorations.isEmpty()) {
+        return;
+    }
+    const auto selfRepaint = selfRepaintScope();
+    for (auto it = m_windowDecorations.cbegin(); it != m_windowDecorations.cend(); ++it) {
+        if (!it->shaderApplied) {
+            continue;
+        }
+        // Compiled packs only: an uncompiled chain has nothing to hover-react with yet, and
+        // its first content paint will compile it and pick the driver up.
+        bool readsCursor = false;
+        for (const QString& packId : it->chain) {
+            const auto cacheIt = m_compiledPacks.find(packId);
+            if (cacheIt != m_compiledPacks.end() && cacheIt->second.shader && cacheIt->second.iMouseLoc >= 0) {
+                readsCursor = true;
+                break;
+            }
+        }
+        if (!readsCursor) {
+            continue;
+        }
+        KWin::EffectWindow* const sw = findWindowById(it.key());
+        if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
+            continue;
+        }
+        sw->addRepaintFull();
+    }
+}
+
 // May this window's decoration chain animate right now?
 //
 // TWO consumers, and both matter. The repaint driver in postPaintScreen stops driving
@@ -187,7 +227,17 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
         // parked motionless on another monitor.
         if (pack->iMouseLoc >= 0) {
             const auto sit = m_surfaceMultipass.find(windowId);
-            if (sit == m_surfaceMultipass.end() || sit->second.foldedCursor != m_shaderManager.m_cachedCursorGlobal) {
+            if (sit == m_surfaceMultipass.end()) {
+                return true; // never folded: it has a cursor to pick up
+            }
+            // Compare what the FOLD would key on, which is the cursor RESOLVED against this
+            // window's canvas — not the raw global position. Otherwise a pointer moving
+            // anywhere on the desktop drives every hover window on it, each re-folding to
+            // reproduce the same outside sentinel.
+            static constexpr QPointF kCursorOutside(-1.0e9, -1.0e9);
+            const QPointF cursor = m_shaderManager.m_cachedCursorGlobal;
+            const QPointF resolved = sit->second.canvasGeo.contains(cursor) ? cursor : kCursorOutside;
+            if (sit->second.foldedCursor != resolved) {
                 return true;
             }
         }

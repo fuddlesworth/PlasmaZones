@@ -62,6 +62,51 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 
+/// Source with its COMMENTS REMOVED.
+///
+/// The scrape works on raw text, so a comment that merely mentions `loadSettingAsync(`
+/// inflates the call-site tally and fails the test pointing at prose. That is the safe
+/// direction, but a tripwire that cries wolf is a tripwire someone eventually loosens —
+/// and loosening this one is how it came to be broken four times. Strip the comments and
+/// it counts only code. String literals are left alone: a key IS a string literal, so they
+/// are the one thing the scrape must still be able to see.
+QString withoutComments(const QString& src)
+{
+    QString out;
+    out.reserve(src.size());
+    bool inLine = false;
+    bool inBlock = false;
+    for (qsizetype i = 0; i < src.size(); ++i) {
+        const QChar c = src.at(i);
+        const QChar next = (i + 1 < src.size()) ? src.at(i + 1) : QChar();
+        if (inLine) {
+            if (c == QLatin1Char('\n')) {
+                inLine = false;
+                out.append(c);
+            }
+            continue;
+        }
+        if (inBlock) {
+            if (c == QLatin1Char('*') && next == QLatin1Char('/')) {
+                inBlock = false;
+                ++i;
+            }
+            continue;
+        }
+        if (c == QLatin1Char('/') && next == QLatin1Char('/')) {
+            inLine = true;
+            continue;
+        }
+        if (c == QLatin1Char('/') && next == QLatin1Char('*')) {
+            inBlock = true;
+            ++i;
+            continue;
+        }
+        out.append(c);
+    }
+    return out;
+}
+
 QString readSource(const QString& path, QString* whyFailed)
 {
     QFile f(path);
@@ -75,7 +120,7 @@ QString readSource(const QString& path, QString* whyFailed)
         // has to explain itself too or the caller's failure message comes out blank.
         *whyFailed = QStringLiteral("%1 is empty").arg(path);
     }
-    return content;
+    return withoutComments(content);
 }
 
 /// Every setting key the effect fetches, scraped from its own sources rather than
@@ -114,11 +159,30 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
         return {};
     }
 
-    // SettingProperty::Name -> "actualKey", from ServiceConstants.h.
+    // SettingProperty::Name -> "actualKey", from ServiceConstants.h — scoped to THAT
+    // namespace block. The map is keyed on the bare identifier, and the header already has
+    // identifiers that repeat across namespaces (ServiceName, ObjectPath, Interface). A
+    // header-wide scrape would let a future SettingProperty member that shares a name with
+    // any of them bind a fetch to the WRONG key, silently, which is the bug this file has
+    // now had written into it four times.
+    const qsizetype nsStart = constantsSrc.indexOf(QLatin1String("namespace SettingProperty {"));
+    if (nsStart < 0) {
+        *whyFailed = QStringLiteral("ServiceConstants.h has no SettingProperty namespace — did it move?");
+        return {};
+    }
+    // The namespace closes on a bare `}` at column 0. It contains no nested braces (it is
+    // a flat list of constants), so the first one is the end of it.
+    const qsizetype nsEnd = constantsSrc.indexOf(QLatin1String("\n}"), nsStart);
+    if (nsEnd < 0) {
+        *whyFailed = QStringLiteral("SettingProperty namespace is not closed as expected");
+        return {};
+    }
+    const QString settingPropertySrc = constantsSrc.mid(nsStart, nsEnd - nsStart);
+
     QHash<QString, QString> constants;
     static const QRegularExpression constRe(
         QLatin1String("inline constexpr QLatin1String ([A-Za-z0-9_]+)\\(\"([A-Za-z0-9_]+)\"\\)"));
-    auto cit = constRe.globalMatch(constantsSrc);
+    auto cit = constRe.globalMatch(settingPropertySrc);
     while (cit.hasNext()) {
         const auto m = cit.next();
         constants.insert(m.captured(1), m.captured(2));
@@ -127,22 +191,35 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
     // Any call that fetches a setting, in every shape the effect writes. Escapes
     // rather than a raw string: a raw string inside QStringLiteral does not survive
     // preprocessing.
-    static const QRegularExpression fetchRe(QLatin1String(
-        "load(?:SettingAsync|AudioInt|AudioBool)\\(\\s*(?:this,\\s*)?(?:QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"
-        "|PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+))"));
+    // ANY load*() that NAMES a key. Deliberately not a list of wrapper names: that list was
+    // itself the hand-maintained part (loadAudioInt / loadAudioBool were added to it by
+    // hand), and a new wrapper forgotten from it contributed to NEITHER the numerator nor
+    // the denominator — the tally balanced and the key went unchecked. Silently. Now a
+    // wrapper is recognised by what it does, not by what it is called.
+    static const QRegularExpression fetchRe(
+        QLatin1String("load[A-Za-z0-9_]*\\(\\s*(?:this,\\s*)?(?:QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"
+                      "|PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+))"));
+    // Direct calls to the PRIMITIVE that name a key. The tally below is anchored on the
+    // primitive — every fetch, through however many wrappers, funnels into it — while the
+    // scrape above is deliberately broader. Two different jobs: the scrape collects keys,
+    // the tally proves no call site was overlooked.
+    static const QRegularExpression primitiveRe(
+        QLatin1String("loadSettingAsync\\(\\s*(?:this,\\s*)?(?:QStringLiteral\\(\"[A-Za-z0-9_]+\"\\)"
+                      "|PhosphorProtocol::Service::SettingProperty::[A-Za-z0-9_]+)"));
     // Call sites that do not name a key: they take it as a parameter.
     static const QRegularExpression nonFetchRe(
         QLatin1String("PlasmaZonesEffect::loadSettingAsync\\(const QString" // the definition
+                      "|void loadSettingAsync\\(const QString" // its declaration, in the header
                       "|loadSettingAsync\\(this,\\s*name\\b" // its forwarding call
-                      "|loadSettingAsync\\(name\\b")); // inside the audio wrappers
+                      "|loadSettingAsync\\(name\\b")); // inside a wrapper body
 
     // EVERY effect source, RECURSIVELY, found at test time. A hand-written file list is a
     // list to forget, and so is a hand-written directory list: the effect already has
     // three source directories, and a fetch in a new one would simply never be opened —
     // no tally, no failure, no key checked.
     QStringList files;
-    QDirIterator it(QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR), {QStringLiteral("*.cpp")}, QDir::Files,
-                    QDirIterator::Subdirectories);
+    QDirIterator it(QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR), {QStringLiteral("*.cpp"), QStringLiteral("*.h")},
+                    QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         files << it.next();
     }
@@ -173,16 +250,24 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
             ++scraped;
         }
 
-        const int total = static_cast<int>(src.count(QLatin1String("loadSettingAsync(")))
-            + static_cast<int>(src.count(QLatin1String("loadAudioInt(")))
-            + static_cast<int>(src.count(QLatin1String("loadAudioBool(")));
+        // Every DIRECT call to the primitive must be accounted for: either it names a key
+        // (and was scraped), or it is one of the known shapes that takes the key as a
+        // parameter. A fetch written in some shape this function does not understand shows
+        // up here as unaccounted, loudly, instead of vanishing.
+        const int total = static_cast<int>(src.count(QLatin1String("loadSettingAsync(")));
+        int direct = 0;
+        auto pit = primitiveRe.globalMatch(src);
+        while (pit.hasNext()) {
+            pit.next();
+            ++direct;
+        }
         int nonFetch = 0;
         auto nit = nonFetchRe.globalMatch(src);
         while (nit.hasNext()) {
             nit.next();
             ++nonFetch;
         }
-        if (scraped + nonFetch != total) {
+        if (direct + nonFetch != total) {
             *unaccounted << QStringLiteral(
                                 "%1: %2 fetch call sites, %3 scraped, %4 known non-fetches — %5 "
                                 "unaccounted for")

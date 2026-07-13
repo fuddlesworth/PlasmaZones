@@ -3,19 +3,8 @@
 
 #include "../plasmazoneseffect.h"
 
-#include <core/renderviewport.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
-#include <opengl/glshader.h>
-#include <opengl/glshadermanager.h>
-#include <opengl/gltexture.h>
-#include <window.h>
-
-#include <epoxy/gl.h>
-
-#include <QScopeGuard>
-
-#include <PhosphorAnimation/AnimationShaderContract.h>
 
 #include "../autotilehandler.h"
 #include "../snaphandler.h"
@@ -23,7 +12,6 @@
 #include "shader_resolve.h"
 #include "window_query.h"
 
-#include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorRules/RuleAction.h>
@@ -31,11 +19,9 @@
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
-#include <QByteArray>
 #include <QColor>
+#include <QtMath> // qCeil, resolving the chain's outer padding
 #include <QVariantMap>
-#include <QVector2D>
-#include <QVector4D>
 
 #include <optional>
 #include <utility>
@@ -237,21 +223,23 @@ ResolvedWindowAppearance PlasmaZonesEffect::resolveEffectiveWindowAppearance(KWi
     return out;
 }
 
-void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w,
-                                               std::optional<bool> wasDecoratedHint)
+void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w)
 {
-    // Did this window already have a decoration? Captured BEFORE the remove-first
-    // below so the focus cross-fade can tell a genuine undecorated→decorated
-    // transition (must SNAP to the current focus) from a plain refresh (focus
-    // change / snap flip / rule edit — all of which remove-then-readd and must
-    // keep easing). See the m_focusFade reconcile after the insert.
+    // Did this window already have a decoration? Read LIVE, and read BEFORE the
+    // remove-first below, so the focus cross-fade can tell a genuine undecorated→decorated
+    // transition (must SNAP to the current focus) from a plain refresh (focus change, snap
+    // flip, rule edit — all of which remove-then-readd and must keep easing).
     //
-    // updateAllDecorations supplies the hint from a snapshot taken before its sweep
-    // began, because the sweep can re-enter this function for the same window ahead of
-    // reaching it (resyncWindow and the rule reconcilers emit windowDecorationRestored,
-    // whose handler lands right back here). A live lookup could then see the entry that
-    // nested call just inserted and scrub a ramp that is still in flight.
-    const bool wasDecorated = wasDecoratedHint.value_or(m_windowDecorations.contains(windowId));
+    // This used to take a snapshot from updateAllDecorations, on the theory that the
+    // sweep's nested re-entries (resyncWindow and the rule reconcilers emit
+    // windowDecorationRestored, whose handler lands right back here) could make a live
+    // lookup see an entry that was not there when the sweep began. They can — and the live
+    // answer is the RIGHT one. A nested call that already decorated this window leaves a
+    // focus ramp that is genuinely in flight, and TRUE is what keeps it. The snapshot said
+    // false, which scrubbed that ramp and, worse, forced a full chain re-fold through
+    // foldInputsMoved below for a window whose fold inputs had not moved at all. The hint
+    // was strictly more destructive than the lookup it replaced.
+    const bool wasDecorated = m_windowDecorations.contains(windowId);
 
     // What the outgoing decoration held, captured BEFORE the remove-first erases it.
     // The remove keeps the GL working set AND the redirect/shader slot (see below),
@@ -278,16 +266,18 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // out to be undecoratable, the kept state is an orphan and the kept redirect is a
     // window left shaded with nothing to shade it with.
     const auto undecorate = [&] {
-        // Resolve the EXACT window, the same way removeWindowDecoration does, instead
-        // of handing the caller's `w` straight through. The first gate below invokes
-        // this with a NULL w, and releaseSurfaceState's live-transition guard is
-        // `if (target && findTransition(target))` — a null target sails past it and
-        // erases the composite an animation is still sampling, while releaseDecorationGl
-        // no-ops on null and leaves the window redirected with a shader whose samplers
-        // point at the textures just freed. That is the unbound-sampler black flash both
-        // files document at length. The frozen reverse mapping resolves a window the
-        // caller could not.
-        KWin::EffectWindow* const target = w ? w : m_windowIdReverse.value(windowId);
+        // The SAME resolver removeWindowDecoration uses, three lines above. Not the
+        // caller's `w` handed straight through: releaseSurfaceState's live-transition
+        // guard is `if (target && findTransition(target))`, so a null target sails past
+        // it and erases the composite an animation is still sampling, while
+        // releaseDecorationGl no-ops on null and leaves the window redirected with a
+        // shader whose samplers point at the textures just freed — the unbound-sampler
+        // black flash both files document at length.
+        //
+        // No live caller can pass a null w today (all seven guard first), so this is
+        // defence in depth rather than a live path. It is here because the two sites
+        // must not disagree about what "the exact window" means, and they did.
+        KWin::EffectWindow* const target = resolveDecorationTarget(windowId, w);
         if (priorShaderApplied) {
             releaseDecorationGl(target, priorOuterPadding);
         }
@@ -653,7 +643,7 @@ void PlasmaZonesEffect::updateAllDecorations()
         // virtual desktop would not take effect until next activation.
         if (w->isOnCurrentDesktop()) {
             revisited.insert(wid);
-            updateWindowDecoration(wid, w, previouslyDecorated.contains(wid));
+            updateWindowDecoration(wid, w);
         }
         reconcileRuleHiddenTitleBar(wid, w);
         // Stacking layer is persistent window state like the title bar, so it

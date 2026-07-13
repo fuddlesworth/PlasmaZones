@@ -391,7 +391,7 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     //
     // The value comes from the FOLD, not from a live clock read here: a chain that
     // Decorations.Performance has paused is folded against a frozen clock so it holds
-    // the frame it was paused on (SurfaceMultipassState::foldedTimeSec). Sampling live
+    // the frame it was paused on (SurfaceMultipassState::pausedAtSec / timeOffsetSec). Sampling live
     // here would let the packs run on while the composite they draw into does not.
     if (pack.uTimeLoc >= 0) {
         shader->setUniform(pack.uTimeLoc, timeSec);

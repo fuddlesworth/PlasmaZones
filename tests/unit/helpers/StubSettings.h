@@ -640,6 +640,7 @@ public:
         }
         m_decorationExcludeTransientWindows = exclude;
         Q_EMIT decorationExcludeTransientWindowsChanged();
+        Q_EMIT settingsChanged();
     }
     int decorationMinimumWindowWidth() const override
     {
@@ -652,6 +653,7 @@ public:
         }
         m_decorationMinimumWindowWidth = width;
         Q_EMIT decorationMinimumWindowWidthChanged();
+        Q_EMIT settingsChanged();
     }
     int decorationMinimumWindowHeight() const override
     {
@@ -664,6 +666,7 @@ public:
         }
         m_decorationMinimumWindowHeight = height;
         Q_EMIT decorationMinimumWindowHeightChanged();
+        Q_EMIT settingsChanged();
     }
 
     // Animation window filtering — pure-stub no-op accessors backed by

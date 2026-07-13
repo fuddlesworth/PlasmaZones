@@ -77,11 +77,10 @@ public:
     /// old sources are destroyed and new ones armed, and a compositor arms a fresh
     /// notification from the active state — so if the session was idle, `resumed()`
     /// fires and `currentStage` returns to 0. Passing an empty list therefore both
-    /// disarms idle detection AND releases an already-idle session. Consumers rely on
-    /// that (the PlasmaZones daemon clears the ladder to turn idle-pausing off, and
-    /// needs the resume edge to un-pause the compositor effect), so it is contract,
-    /// not incidental behaviour. Pinned by IdleStateMachine's
-    /// clearStagesWhileIdleResumes test.
+    /// disarms idle detection AND releases an already-idle session. That is contract, not
+    /// incidental behaviour, and it is pinned by IdleStateMachine's
+    /// clearStagesWhileIdleResumes test — a consumer that empties the ladder must be able
+    /// to rely on the resume edge to release whatever it gated on idleness.
     ///
     /// Setting the ladder it already has is a no-op: it does NOT re-arm and does NOT
     /// resume. That is what makes it safe to call on every settings change.

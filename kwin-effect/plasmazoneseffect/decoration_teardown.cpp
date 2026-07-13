@@ -19,6 +19,27 @@
 
 namespace PlasmaZones {
 
+// The EXACT window a decoration belongs to. One resolver, because the two sites that
+// need it sit three lines apart and used to spell the invariant differently — and the
+// weaker spelling (`w ? w : reverse`, with no exact-id re-check) would hand a fuzzy
+// same-app sibling to the GL teardown the moment a caller passed a non-exact window.
+//
+// Preference order: an exact-id live match; else the frozen reverse mapping (which
+// resolves a DELETED window under its exact id and survives a close transition); else
+// the caller's hint. The hint comes last because the close path passes the corpse, whose
+// getWindowId no longer re-derives to windowId and so cannot be exact-checked here.
+KWin::EffectWindow* PlasmaZonesEffect::resolveDecorationTarget(const QString& windowId, KWin::EffectWindow* hint)
+{
+    KWin::EffectWindow* target = findWindowById(windowId);
+    if (target && getWindowId(target) != windowId) {
+        target = nullptr; // a fuzzy appId fallback resolved a SIBLING; not ours
+    }
+    if (!target) {
+        target = m_windowIdReverse.value(windowId);
+    }
+    return target ? target : hint;
+}
+
 void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::EffectWindow* windowHint,
                                                bool keepSurfaceState)
 {
@@ -38,16 +59,7 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
     // its exact id, and survives a close transition); else the caller's hint
     // (the close path passes the corpse, whose getWindowId no longer
     // re-derives to windowId, so it can't be exact-checked here).
-    KWin::EffectWindow* target = findWindowById(windowId);
-    if (target && getWindowId(target) != windowId) {
-        target = nullptr;
-    }
-    if (!target) {
-        target = m_windowIdReverse.value(windowId);
-    }
-    if (!target) {
-        target = windowHint;
-    }
+    KWin::EffectWindow* const target = resolveDecorationTarget(windowId, windowHint);
     // Hand the offscreen redirect + shader slot back IF this decoration owns it.
     // (releaseDecorationGl no-ops while a transition owns the slot: the transition
     // lifecycle owns that handover, and a stray unredirect would tear down the
@@ -140,6 +152,11 @@ void PlasmaZonesEffect::releaseSurfaceState(const QString& windowId, KWin::Effec
     if (target && m_shaderManager.findTransition(target)) {
         return;
     }
+    // Erasing the entry destroys its GLTextures and GLFramebuffers, i.e. glDeleteTextures
+    // and glDeleteFramebuffers. Most callers reach here off the paint cycle (a window
+    // closing, a rule sweep on a zero-timer, a D-Bus reply), where the context is not
+    // current.
+    ensureGlContextCurrent();
     m_surfaceMultipass.erase(windowId);
 }
 
@@ -153,6 +170,10 @@ void PlasmaZonesEffect::releaseSurfaceState(const QString& windowId, KWin::Effec
 // would be left redirected and shaded with no decoration behind it.
 void PlasmaZonesEffect::releaseDecorationGl(KWin::EffectWindow* w, int outerPadding)
 {
+    // setShader(nullptr) + unredirect makes KWin destroy the window's OffscreenData — its
+    // texture and its framebuffer. Same discipline as releaseSurfaceState: most callers
+    // reach here off the paint cycle.
+    ensureGlContextCurrent();
     if (!w || m_shaderManager.findTransition(w)) {
         // A transition owns the slot; its own teardown does the handover.
         return;

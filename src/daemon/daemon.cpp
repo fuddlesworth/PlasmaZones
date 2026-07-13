@@ -2477,18 +2477,21 @@ void Daemon::stop()
     // explicitly rather than left to an invariant, and this is the last piece.
     m_idleStagesRefreshTimer.stop();
     m_idleService.reset();
-    // The idle service's own signals die with it, but the two settings connects and the
-    // bridgeRegistered connect have OTHER senders (m_settings, m_compositorBridge) and
-    // `this` as receiver, so they outlive it. A settings write landing between stop() and
-    // ~Daemon would still run their lambdas. Sever them here rather than rely on an
-    // ordering invariant no reader can see, which is the discipline the rest of this
-    // teardown follows.
-    if (m_settings) {
-        disconnect(m_settings.get(), nullptr, this, nullptr);
+    // The idle service's own signals die with it, but the three connections idle.cpp made
+    // have OTHER senders (m_settings, m_compositorBridge) and `this` as receiver, so they
+    // outlive it and a settings write between stop() and ~Daemon would still run their
+    // lambdas. Sever EXACTLY those three.
+    //
+    // NOT a blanket disconnect(m_settings.get(), nullptr, this, nullptr). That severs
+    // every m_settings→this connection — the gap-resnap sweep, the adjacent-threshold
+    // handler, the snapping/autotile enable-delta, the animation-profile republish, all
+    // eleven of them — and most are made in the constructor or init(), which start() does
+    // NOT re-run. A stop()→start() cycle (which this daemon supports deliberately, and
+    // says so in three places) would come back up with them silently gone.
+    for (QMetaObject::Connection& c : m_idleConnections) {
+        disconnect(c);
     }
-    if (m_compositorBridge) {
-        disconnect(m_compositorBridge, nullptr, this, nullptr);
-    }
+    m_idleConnections.clear();
 
     // Destroy the router. Engines below outlive it so any in-flight
     // navigatorForShortcut path completes with the engine pointers it

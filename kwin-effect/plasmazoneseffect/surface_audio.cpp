@@ -336,13 +336,23 @@ bool PlasmaZonesEffect::bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpect
     // the same hazard the iChannel and user-texture slots bind a transparent fallback to
     // prevent, and silence is now the steady state for every paused audio pack rather
     // than a rarity.
+    //
+    // Park the destination unit BEFORE resolving the texture. transparentFallbackTexture()
+    // creates it lazily on first use, and GLTexture::upload binds the new texture to
+    // whatever unit is ACTIVE — which here is TEXTURE0, holding the running composite. Do
+    // it the other way round and the first paused audio pack of the session rebinds unit 0
+    // to a 1x1 transparent texture and samples the window as transparent black: one frame
+    // of a vanished window. The sibling call sites park first for exactly this reason, and
+    // the fold hoists the spectrum upload to the top for it too.
+    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
     KWin::GLTexture* const bound = live ? m_audioSpectrumTex.get() : transparentFallbackTexture();
+    if (bound) {
+        bound->bind();
+    }
+    glActiveTexture(GL_TEXTURE0);
     if (!bound) {
         return false;
     }
-    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
-    bound->bind();
-    glActiveTexture(GL_TEXTURE0);
     shader->setUniform(uAudioSpectrumLoc, ShaderInternal::kSurfaceAudioUnit);
     return true;
 }

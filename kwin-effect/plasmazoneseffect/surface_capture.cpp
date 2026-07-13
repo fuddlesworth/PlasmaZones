@@ -35,6 +35,8 @@
 #include <QScopeGuard>
 #include <QSize>
 
+#include <algorithm> // std::max, unioning the two not-animating spans
+
 #include <epoxy/gl.h>
 
 namespace PlasmaZones {
@@ -166,6 +168,14 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
         state.prefixValid = false;
         state.prefixPackCount = -1;
         state.chainKey = chain;
+        // The prefix TEXTURE goes too, and this is the only place it is released. The new
+        // chain may not want one at all (["border","glow"] → ["border"]), and holding a
+        // full-canvas RGBA8 nothing will ever write again is ~8 MB per 4K window. The fold
+        // deliberately does NOT release it when usePrefix merely goes false, because that
+        // flips with the animation gate and would realloc on every focus change — but a
+        // chain change is rare and is already rebuilding everything.
+        state.prefixTex.reset();
+        state.prefixFbo.reset();
     }
     return true;
 }
@@ -254,27 +264,41 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     const float sharedNow = surfaceShaderTimeSeconds();
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     if (plan.mayAnimate) {
-        // GATED — Decorations.Performance paused it, and told us so.
+        // How long has this window NOT been animating? Two sensors, and they measure the
+        // SAME interval from different ends — so take the larger, never the sum. Adding
+        // them double-counts every span where both apply, which is the normal case, not
+        // an exotic one: a gate-paused window is precisely a window nothing is driving to
+        // repaint. Summing them subtracted each pause TWICE, so the clock walked backward
+        // by the pause duration on every idle resume and every focus return, cumulatively,
+        // until iTime went negative and anything under a sqrt() produced NaN.
+        float notAnimatingSec = 0.0f;
+
+        // GATED — Decorations.Performance paused it, and told us so. Measured from the
+        // instant the pause began.
         if (state.pausedAtSec >= 0.0f) {
-            state.timeOffsetSec += sharedNow - state.pausedAtSec;
+            notAnimatingSec = sharedNow - state.pausedAtSec;
             state.pausedAtSec = -1.0f;
         }
+
         // UNPAINTED — nothing stopped it, it simply was not drawn: minimized, on another
         // desktop, fully occluded. Nobody tells us that happened, so it is inferred from
-        // the GAP since the last fold. This is by far the more common case, and it is
-        // why the accounting cannot hang off the pause gate alone. The threshold is well
-        // clear of any real frame interval (even a 10Hz compositor) and well under any
-        // gap a person would notice as a phase jump.
+        // the gap since the last fold. This is the far more common case, and it is why the
+        // accounting cannot hang off the pause gate alone. The threshold is well clear of
+        // any real frame interval and well under any gap a person would notice as a phase
+        // jump. lastFoldMs is stamped on BOTH terminal paths of the fold, including the
+        // cached-composite early return, so a window that IS being painted but is serving
+        // from cache never looks unpainted here.
         constexpr qint64 kNotPaintedGapMs = 250;
         if (state.lastFoldMs >= 0 && nowMs - state.lastFoldMs > kNotPaintedGapMs) {
-            state.timeOffsetSec += static_cast<float>(nowMs - state.lastFoldMs) / 1000.0f;
+            notAnimatingSec = std::max(notAnimatingSec, static_cast<float>(nowMs - state.lastFoldMs) / 1000.0f);
         }
+        state.timeOffsetSec += notAnimatingSec;
     } else if (state.pausedAtSec < 0.0f) {
         state.pausedAtSec = sharedNow;
     }
-    // While paused this is pinned to the instant the pause began, so the folds that
-    // still have to run (the window's own content damaged, its focus ramp moving)
-    // reproduce the frame it froze on instead of drifting.
+    // While paused this is pinned to the instant the pause began, so the folds that still
+    // have to run (the window's own content damaged, its focus ramp moving) reproduce the
+    // frame it froze on instead of drifting.
     plan.foldTime = (plan.mayAnimate ? sharedNow : state.pausedAtSec) - state.timeOffsetSec;
     // A transition supplies its own restore shader and drives the window's geometry
     // frame by frame; don't trust a cached capture across it.
@@ -363,9 +387,21 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
         chainReadsCursor = chainReadsCursor || pk->iMouseLoc >= 0;
     }
     // The cursor is a cache KEY for a hover chain, exactly as focus and opacity are.
-    // A paused chain reads it as absent, matching what pushBorderUniforms pushes.
-    plan.foldCursor =
-        (chainReadsCursor && plan.mayAnimate) ? m_shaderManager.m_cachedCursorGlobal : QPointF(-1.0e9, -1.0e9);
+    //
+    // Keyed on the value the SHADER actually receives, not the raw global position.
+    // pushBorderUniforms resolves the cursor to an "outside" sentinel whenever it is not
+    // over this window's canvas, so keying on the global position would make every hover
+    // window on the desktop re-fold its entire chain every time the pointer moved
+    // ANYWHERE — each one to reproduce the identical outside sentinel it already had.
+    // A paused chain reads it as absent too, matching what pushBorderUniforms pushes.
+    static constexpr QPointF kCursorOutside(-1.0e9, -1.0e9);
+    plan.foldCursor = kCursorOutside;
+    if (chainReadsCursor && plan.mayAnimate) {
+        const QPointF cursor = m_shaderManager.m_cachedCursorGlobal;
+        if (state.canvasGeo.contains(cursor)) {
+            plan.foldCursor = cursor;
+        }
+    }
     const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
     plan.foldFocus = chainReadsFocus ? advanceFocusFade(windowId, focusedNow) : 0.0f;
     plan.foldOpacity = static_cast<float>(resolvedWindowOpacity(w, deco));
@@ -380,6 +416,17 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     };
     const bool stateMoved = !stateEqual(state.foldedFocus, plan.foldFocus)
         || !stateEqual(state.foldedOpacity, plan.foldOpacity) || plan.foldCursor != state.foldedCursor;
+
+    // Where does the capture BELONG this fold? Two homes: compositeTex[0] for a chain
+    // with no compilable pack (nothing folds, so the capture IS the composite), captureTex
+    // otherwise. This is a cache DECISION and so it lives here with the others — deciding
+    // it in the fold, after the invalidations below had already run, meant a flip
+    // re-captured but left compositeValid set, and the early return then served the stale
+    // composite and threw the fresh capture away.
+    plan.captureInComposite = foldablePacks == 0;
+    if (state.captureInComposite != plan.captureInComposite) {
+        state.captureValid = false; // it is sitting in the other texture
+    }
 
     // The PREFIX cache pays only when something per-frame follows the cacheable run:
     // it exists so those packs can fold over a run that does not need re-folding.
@@ -421,7 +468,6 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
 
     plan.foldablePacks = foldablePacks;
     plan.staticPrefix = staticPrefix;
-    plan.staticFoldable = staticFoldable;
     plan.lastStaticDraw = lastStaticDraw;
     plan.usePrefix = usePrefix;
     return plan;

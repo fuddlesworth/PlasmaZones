@@ -14,20 +14,13 @@
 
 #include <effect/effecthandler.h>
 
-#include <QLoggingCategory>
 #include <QSet>
 #include <QString>
-#include <QStringList>
 #include <QTimer>
 
-#include "../autotilehandler.h"
-#include "../navigationhandler.h"
-#include "../snaphandler.h"
-#include "window_query.h"
+#include <utility> // std::exchange, in flushPendingRuleInvalidations
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowId)
 {

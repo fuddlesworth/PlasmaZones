@@ -1520,6 +1520,11 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
 {
     if (!window)
         return;
+    // Hands the redirect back (KWin destroys the window's offscreen texture and
+    // framebuffer) and destroys the transition's own snapshot texture. This is the primary
+    // teardown for every time-driven animation and it fires from a QTimer between frames,
+    // dozens of times a minute, with no current context.
+    ensureGlContextCurrent();
     // Drop the expiry-pending guard regardless of whether the
     // transition still exists. If a synchronous teardown beat the
     // queued slot to the punch, the queued slot must not see this

@@ -28,8 +28,6 @@ namespace SettingsDbusQueries {
  * reason this helper exists. Used on the editor startup hot path by
  * refreshGlobalGapOverlaySettings() in gaps.cpp.
  *
- * If the daemon is a stale build without getSettings() the helper
- * transparently falls back to per-key getSetting() calls so the editor
  * still sees the user's real configured values. Returns an empty map if
  * the daemon is unreachable or the call times out (500 ms cap); callers
  * should treat missing keys and empty maps the same way (use defaults).

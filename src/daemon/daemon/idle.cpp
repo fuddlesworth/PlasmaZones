@@ -12,7 +12,11 @@
 
 #include "../daemon.h"
 
-#include "../../config/configdefaults.h"
+// Settings must be COMPLETE here: m_settings is a unique_ptr<Settings>, daemon.h only
+// forward-declares it, and this file connects to its signals and calls its accessors. It
+// compiles without this only because the unity build happens to group this TU with one
+// that includes settings.h — which is not a guarantee, it is a coincidence of chunking.
+#include "../../config/settings.h"
 #include "../../core/isettings.h"
 #include "../../dbus/compositorbridgeadaptor.h"
 #include "../../dbus/settingsadaptor.h"
@@ -88,7 +92,7 @@ void Daemon::setupIdleService()
     // guard would be worse than pointless: were it ever to trip, this connect would be
     // skipped and the ladder would sit pinned to its startup timeout for the process
     // lifetime, so the slider would become a silent no-op.
-    connect(m_settings.get(), &ISettings::decorationIdleTimeoutSecChanged, this, [this] {
+    m_idleConnections << connect(m_settings.get(), &ISettings::decorationIdleTimeoutSecChanged, this, [this] {
         m_idleStagesRefreshTimer.start();
     });
 
@@ -96,7 +100,7 @@ void Daemon::setupIdleService()
     // once rather than waiting for an edge that may never come: turning the feature ON
     // while the seat is already idle has to pause the decorations NOW, and turning it OFF
     // has to release them NOW. Plain change-check, no force — the value really does move.
-    connect(m_settings.get(), &ISettings::decorationPauseWhenIdleChanged, this, [this] {
+    m_idleConnections << connect(m_settings.get(), &ISettings::decorationPauseWhenIdleChanged, this, [this] {
         publishSessionIdle(sessionIdleNow());
     });
 
@@ -106,16 +110,16 @@ void Daemon::setupIdleService()
     // produces no edge, so an effect that restarted (or a daemon that did) would
     // otherwise run on a stale assumption until the next real idle/active flip.
     if (m_compositorBridge) {
-        connect(m_compositorBridge, &CompositorBridgeAdaptor::bridgeRegistered, this,
-                [this](const QString&, const QString&, const QStringList&) {
-                    // FORCED past the change check, and this is the one caller that needs
-                    // it. A newly registered effect starts from its OWN default (not
-                    // idle) and has heard nothing from us, so the question is what IT
-                    // believes, not what we last published. Suppressing a "redundant"
-                    // false would leave an effect that reconnected mid-idle running
-                    // unpaused for good.
-                    publishSessionIdle(sessionIdleNow(), /*force=*/true);
-                });
+        m_idleConnections << connect(m_compositorBridge, &CompositorBridgeAdaptor::bridgeRegistered, this,
+                                     [this](const QString&, const QString&, const QStringList&) {
+                                         // FORCED past the change check, and this is the one caller that needs
+                                         // it. A newly registered effect starts from its OWN default (not
+                                         // idle) and has heard nothing from us, so the question is what IT
+                                         // believes, not what we last published. Suppressing a "redundant"
+                                         // false would leave an effect that reconnected mid-idle running
+                                         // unpaused for good.
+                                         publishSessionIdle(sessionIdleNow(), /*force=*/true);
+                                     });
     }
 }
 

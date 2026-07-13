@@ -229,10 +229,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // torn out mid-animation; it re-captures every frame anyway and gets its own
         // chance to recover next one.
         if (!captureRestoreShader) {
-            releaseDecorationGl(w, deco.outerPadding);
-            if (const auto it = m_windowDecorations.find(windowId); it != m_windowDecorations.end()) {
-                it->shaderApplied = false;
-            }
+            // Route through the real teardown rather than half-undoing the decoration by
+            // hand. Doing it by hand left the entry's two connections live — and the
+            // padded-geometry one keeps damaging a margin band for a decoration that no
+            // longer exists — and left releaseDecorationGl's addRepaintFull unflagged,
+            // which only failed to invalidate the capture cache because the state had
+            // already been erased one line earlier. That is an accident, not a design.
+            // removeWindowDecoration disconnects both, releases the GL, and takes the
+            // self-repaint scope for us.
+            const auto selfRepaint = selfRepaintScope();
+            removeWindowDecoration(windowId, w);
         }
         return nullptr;
     }
@@ -260,10 +266,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // the wrong side of it is not a capture at all: the fold would read a texture that
     // was allocated and never written. Re-capture on the flip, which costs exactly one
     // frame and happens almost never.
-    const bool captureBelongsInComposite = foldablePacks == 0;
-    if (!state.captureValid || state.captureInComposite != captureBelongsInComposite) {
+    if (!state.captureValid) {
         captureWindowSurface(w, state, logicalGeometry, captureScale,
-                             /*intoCaptureTex=*/!captureBelongsInComposite, captureCacheable);
+                             /*intoCaptureTex=*/!plan.captureInComposite, captureCacheable);
     }
     // Hand the OffscreenEffect slot back: to the passthrough present on the rest
     // path, or to the caller's animation shader mid-transition. Runs on the
@@ -679,7 +684,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
 
     state.finalSlot = lastDst;
     // The composite just folded is reusable verbatim only when nothing in the chain
-    // varies PER FRAME (iTime, audio, backdrop, mouse). Focus and opacity are baked
+    // varies PER FRAME (iTime, audio, backdrop). Focus, opacity and the cursor are baked
     // in as keys instead, so record what this fold used — the next one refuses the
     // cache if either has moved.
     state.compositeValid = allStatic;
