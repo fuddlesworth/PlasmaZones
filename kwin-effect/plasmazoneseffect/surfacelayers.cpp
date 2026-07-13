@@ -32,6 +32,7 @@
 #include <QVector4D>
 
 #include <array>
+#include <cmath>
 #include <optional>
 #include <epoxy/gl.h>
 
@@ -111,6 +112,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
 
 // This TU owns the composite fold and nothing else. Its neighbours, all split out
 // to keep it under the 800-line limit:
+//   surface_capture.cpp    — the fold's INPUT side: target (re)allocation and the raw
+//                            window capture
 //   surface_backdrop.cpp   — captureWindowBackdrop (the scene behind the window)
 //   surface_audio.cpp      — the CAVA spectrum binding
 //   surface_compile.cpp    — pack compilation
@@ -119,9 +122,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
 //                            and the shared surface shader clock
 //   decoration_render.cpp  — surfacePresentShader, alongside the two paths that
 //                            consume the program it compiles
-
-// captureWindowBackdrop lives in surface_backdrop.cpp (split out to keep this
-// TU under the 800-line limit, mirroring the surface_audio.cpp split).
 
 KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWindow* w, qreal scale,
                                                                 KWin::GLShader* captureRestoreShader)
@@ -217,124 +217,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     SurfaceMultipassState& state = m_surfaceMultipass[windowId];
     state.canvasGeo = logicalGeometry;
 
-    // (Re)allocate the composite ping-pong pair on a size change — or on a SCALE
-    // change that the size does not reflect. Past the kMaxSurfaceDim cap the texture
-    // is pinned to the cap on its long axis whatever the input scale, so a huge
-    // window crossing between outputs of different scale keeps the same
-    // compositeSize while uSurfaceScale (which packs multiply logical-px border
-    // widths and radii by) moves under it.
-    if (state.compositeSize != textureSize || !qFuzzyCompare(state.captureScaleKey, captureScale)
-        || !state.compositeTex[0] || !state.compositeTex[1]) {
-        bool allocFailed = false;
-        for (size_t i = 0; i < state.compositeTex.size(); ++i) {
-            auto& t = state.compositeTex[i];
-            t = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
-            if (!t) {
-                allocFailed = true;
-                break;
-            }
-            t->setFilter(GL_LINEAR);
-            t->setWrapMode(GL_CLAMP_TO_EDGE);
-            // Wrap each composite target once, here, rather than per pass per
-            // frame in the fold below.
-            auto fbo = std::make_unique<KWin::GLFramebuffer>(t.get());
-            if (!fbo->valid()) {
-                allocFailed = true;
-                break;
-            }
-            state.compositeFbo[i] = std::move(fbo);
-        }
-        // The capture target lives alongside the ping-pong pair and is sized
-        // identically; a stale one at the old size must never be presented, so the
-        // realloc invalidates every cache keyed on it.
-        //
-        // The static-prefix target is NOT allocated here. It is only ever written
-        // when a chain has a cacheable run followed by a per-frame pack, which the
-        // most common chains do not — the default ["border"] has no per-frame pack at
-        // all — so allocating it eagerly meant a full-canvas RGBA8 (a fifth of the
-        // decoration's whole VRAM budget, ~8 MB on a 4K window) that was never
-        // written and never read. It is allocated lazily below, once the fold knows
-        // the chain actually needs it.
-        if (!allocFailed) {
-            state.captureValid = false;
-            state.prefixValid = false;
-            state.compositeValid = false;
-            state.prefixPackCount = -1;
-            state.captureFbo.reset();
-            state.prefixTex.reset();
-            state.prefixFbo.reset();
-            if (!allocSurfaceTarget(state.captureTex, state.captureFbo, textureSize)) {
-                allocFailed = true;
-            }
-        }
-        if (allocFailed) {
-            // Drop the half-allocated state. Erase AFTER the loop has ended so
-            // we never destroy the container mid-iteration (state is a reference
-            // into the map being erased).
-            m_surfaceMultipass.erase(windowId);
-            return nullptr;
-        }
-        state.compositeSize = textureSize;
-        state.captureScaleKey = captureScale;
-        state.chainKey.clear(); // force the per-pack buffers to reallocate at the new size
-    }
-
-    // (Re)allocate the cached per-pack buffer textures when the chain or size
-    // changes. chainBufferTex[k] holds one texture per pack k's buffer passes,
-    // downscaled by that pack's bufferScale; a pack that fails to compile (or has
-    // no buffers) leaves an empty inner vector and renders single-pass in the fold.
-    if (state.chainKey != chain) {
-        state.chainBufferTex.clear();
-        state.chainBufferTex.resize(chain.size());
-        state.chainBufferFbo.clear();
-        state.chainBufferFbo.resize(chain.size());
-        for (int k = 0; k < chain.size(); ++k) {
-            CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
-            if (!pk || !pk->shader || pk->bufferPasses.empty()) {
-                continue;
-            }
-            const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(chain.at(k));
-            const qreal bufferScale =
-                qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale, eff.bufferScale,
-                       PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
-            const QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
-                                   qMax(1, qRound(textureSize.height() * bufferScale)));
-            auto& bufs = state.chainBufferTex[k];
-            auto& fbos = state.chainBufferFbo[k];
-            bufs.reserve(pk->bufferPasses.size());
-            fbos.reserve(pk->bufferPasses.size());
-            for (size_t i = 0; i < pk->bufferPasses.size(); ++i) {
-                std::unique_ptr<KWin::GLTexture> bt = KWin::GLTexture::allocate(GL_RGBA8, bufferSize);
-                if (!bt) {
-                    // Pack k degrades to no buffers. The fold's main pass then
-                    // binds the transparent fallback to every iChannel the pack
-                    // still declares, so they genuinely sample 0 — an unset
-                    // sampler2D would otherwise read unit 0, i.e. the running
-                    // composite.
-                    bufs.clear();
-                    fbos.clear(); // the framebuffers pooled beside them go too
-                    break;
-                }
-                bt->setFilter(GL_LINEAR);
-                bt->setWrapMode(GL_CLAMP_TO_EDGE);
-                // Wrap the buffer target once here; the fold reuses it every frame.
-                // Keep bufs/fbos strictly in lockstep — the fold indexes both by i.
-                auto bfbo = std::make_unique<KWin::GLFramebuffer>(bt.get());
-                if (!bfbo->valid()) {
-                    bufs.clear();
-                    fbos.clear();
-                    break;
-                }
-                bufs.push_back(std::move(bt));
-                fbos.push_back(std::move(bfbo));
-            }
-        }
-        // A different chain folds to a different composite, so neither the whole-
-        // chain cache nor the static-prefix cache survives it.
-        state.compositeValid = false;
-        state.prefixValid = false;
-        state.prefixPackCount = -1;
-        state.chainKey = chain;
+    // (Re)allocate every GL target this fold draws into, for the current size, scale
+    // and chain, dropping the caches each allocation makes stale. On failure the whole
+    // surface state is gone (and `state` with it), so there is nothing left to fold.
+    if (!ensureSurfaceTargets(windowId, state, chain, textureSize, captureScale, compiledPackLazy)) {
+        return nullptr;
     }
 
     // ── Step 1: capture the raw window surface into captureTex ────────────────
@@ -361,6 +248,18 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             ++foldablePacks;
         }
     }
+
+    // Decorations.Performance: may this window's chain animate right now? A chain that
+    // may not is folded against a FROZEN clock, which is what lets it be cached — see
+    // packVariesPerFrame, and foldedTimeSec for why the freeze has to reach the
+    // uniform and not just the repaint driver.
+    //
+    // A window under a live shader TRANSITION always animates: the transition is the
+    // thing being watched, it drives the window's geometry frame by frame, and it is
+    // the one caller that supplies its own restore shader.
+    const bool mayAnimate = captureRestoreShader != nullptr || decorationMayAnimate(w);
+    const float foldTime =
+        (!mayAnimate && state.foldedTimeSec >= 0.0f) ? state.foldedTimeSec : surfaceShaderTimeSeconds();
     // A transition supplies its own restore shader and drives the window's
     // geometry frame by frame; don't trust a cached capture across it.
     const bool captureCacheable = foldablePacks > 0 && captureRestoreShader == nullptr;
@@ -374,15 +273,30 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     //
     // This is a leading RUN, not a set: once a per-frame pack has folded, its output
     // differs every frame, so every pack downstream is fed a different input every
-    // frame no matter how simple it is. Stop at the first pack that varies per frame
-    // — and at the first that failed to compile, whose skip would otherwise desync
-    // the count from the packs actually folded below.
+    // frame no matter how simple it is. Stop at the first pack that varies per frame.
+    //
+    // A pack that FAILED to compile does not stop the run. The fold below skips it
+    // (it draws nothing, so it cannot make the composite time-varying), and stopping
+    // here instead meant one broken pack mid-chain disabled the whole-composite cache
+    // for the entire chain permanently — the trailing static packs re-folded on every
+    // paint even though nothing about them had moved.
+    //
+    // Hence THREE counters, and the distinction between them matters: `staticPrefix`
+    // is a chain INDEX (where the run ends), `staticFoldable` is how many packs inside
+    // it actually draw, and `lastStaticDraw` is the last of those. Comparing an index
+    // against the foldable COUNT is what produced the bug above.
     int staticPrefix = 0;
+    int staticFoldable = 0;
+    int lastStaticDraw = -1;
     while (staticPrefix < chain.size()) {
         const CompiledSurfacePack* const pk = compiledPackLazy(chain.at(staticPrefix));
-        if (!pk || !pk->shader || staticPrefix >= static_cast<int>(state.chainBufferTex.size())
-            || packVariesPerFrame(*pk)) {
+        const bool draws = pk && pk->shader && staticPrefix < static_cast<int>(state.chainBufferTex.size());
+        if (draws && packVariesPerFrame(*pk, mayAnimate)) {
             break;
+        }
+        if (draws) {
+            ++staticFoldable;
+            lastStaticDraw = staticPrefix;
         }
         ++staticPrefix;
     }
@@ -395,19 +309,35 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // advanceFocusFade reads the PINNED per-frame clock, so calling it here and again
     // from pushBorderUniforms within the same fold is an exact no-op the second time:
     // the ramp still advances at most once per frame.
-    const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
-    const float foldFocus = advanceFocusFade(windowId, focusedNow);
-    float foldOpacity = static_cast<float>(bit->ruleOpacity);
-    if (m_shaderManager.frameOpacityCached(w)) {
-        const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
-        foldOpacity = frameOpacity ? static_cast<float>(qBound(0.0, *frameOpacity, 1.0)) : 1.0f;
+    //
+    // The ramp is advanced ONLY for a chain that some pack actually reads focus in
+    // (uFocusedLoc >= 0), matching pushBorderUniforms. advanceFocusFade CREATES the
+    // m_focusFade entry, and an entry mid-ramp forces per-frame repaints and clears
+    // the composite cache every frame of the fade — so advancing it for a chain that
+    // never samples uSurfaceFocused would drag focus-blind windows into a full re-fold
+    // of a composite that cannot change.
+    bool chainReadsFocus = false;
+    for (int k = 0; k < chain.size() && !chainReadsFocus; ++k) {
+        const CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
+        chainReadsFocus = pk && pk->shader && pk->uFocusedLoc >= 0;
     }
-    const bool stateMoved =
-        !qFuzzyCompare(state.foldedFocus, foldFocus) || !qFuzzyCompare(state.foldedOpacity, foldOpacity);
+    const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
+    const float foldFocus = chainReadsFocus ? advanceFocusFade(windowId, focusedNow) : 0.0f;
+    const float foldOpacity = static_cast<float>(resolvedWindowOpacity(w, *bit));
+    // Explicit epsilon, NOT qFuzzyCompare: both values settle at exactly 0.0, which
+    // qFuzzyCompare is documented not to handle (it is a RELATIVE comparison, and
+    // against zero its tolerance collapses to zero). It happens to fail SAFE here —
+    // a false "moved" only over-invalidates — but relying on that is not a contract.
+    // Both are clamped to 0..1, so an absolute epsilon is exactly right.
+    constexpr float kFoldStateEpsilon = 0.0001f;
+    const auto stateEqual = [](float a, float b) {
+        return std::fabs(a - b) <= kFoldStateEpsilon;
+    };
+    const bool stateMoved = !stateEqual(state.foldedFocus, foldFocus) || !stateEqual(state.foldedOpacity, foldOpacity);
 
     // The PREFIX cache pays only when something per-frame follows the cacheable run:
     // it exists so those packs can fold over a run that does not need re-folding.
-    bool usePrefix = captureCacheable && staticPrefix > 0 && staticPrefix < foldablePacks;
+    bool usePrefix = captureCacheable && staticFoldable > 0 && staticFoldable < foldablePacks;
     // Allocate its target lazily, and only for a chain that will actually use it. A
     // chain with no per-frame pack (the default ["border"]) never writes it, so an
     // eager allocation was a full-canvas RGBA8 held for nothing. Release it again if
@@ -424,7 +354,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     }
     // When NOTHING in the chain varies per frame there is no such split — the whole
     // composite is a pure function of (capture, state), so it is cached entire.
-    const bool allStatic = captureCacheable && foldablePacks > 0 && staticPrefix == foldablePacks;
+    const bool allStatic = captureCacheable && foldablePacks > 0 && staticFoldable == foldablePacks;
     // Both caches sit downstream of the capture and of the folded state.
     if (!state.captureValid || stateMoved) {
         state.prefixValid = false;
@@ -438,37 +368,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     }
 
     if (!state.captureValid) {
-        KWin::GLFramebuffer& fbo = foldablePacks > 0 ? *state.captureFbo : *state.compositeFbo[0];
-        setShader(w, nullptr);
-        m_capturingSnapshot = true;
-        // Guard the re-entrancy flag against a throw from the draw chain — a
-        // leaked m_capturingSnapshot would corrupt every subsequent paint.
-        // Same pattern as renderSurfaceChain.
-        auto resetCapture = qScopeGuard([this] {
-            m_capturingSnapshot = false;
-        });
-        {
-            KWin::RenderTarget renderTarget(&fbo);
-            KWin::RenderViewport viewport(logicalGeometry, captureScale, renderTarget, QPoint());
-            KWin::GLFramebuffer::pushFramebuffer(&fbo);
-            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            KWin::ItemEffect keepRenderable(w->windowItem());
-            KWin::WindowPaintData captureData;
-            // Capture RAW (opacity 1.0). Rule opacity is applied downstream
-            // as a shader concern: the present passthrough modulates the
-            // final composite (KWin-style uniform ghosting), unless a chain
-            // pack declares handlesOpacity and applies uSurfaceOpacity to
-            // its own content sample instead (frost). Dimming the capture
-            // here would double-apply against either.
-            captureData.setOpacity(1.0);
-            const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
-            KWin::effects->drawWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
-            KWin::GLFramebuffer::popFramebuffer();
-        }
-        resetCapture.dismiss();
-        m_capturingSnapshot = false;
-        state.captureValid = captureCacheable;
+        captureWindowSurface(w, state, logicalGeometry, captureScale, /*intoCaptureTex=*/foldablePacks > 0,
+                             captureCacheable);
     }
     // Hand the OffscreenEffect slot back: to the passthrough present on the rest
     // path, or to the caller's animation shader mid-transition. Runs on the
@@ -519,7 +420,13 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // A live prefix means the static head already sits in prefixTex, folded over
     // the still-valid capture: start the animated packs straight off it.
     int firstPack = 0;
-    if (state.prefixValid) {
+    // prefixValid implies prefixTex today (it is only ever set under writesPrefix,
+    // which requires a live prefixTex, and every path that releases the texture clears
+    // the flag). Check both anyway: if that ever came apart, srcTex would be null and
+    // the bind below would be a null deref inside the compositor — a far worse outcome
+    // than the one frame of cold fold this guard costs. The chainBufferTex bounds check
+    // in the loop below is defensive for exactly the same reason.
+    if (state.prefixValid && state.prefixTex) {
         srcTex = state.prefixTex.get();
         firstPack = staticPrefix;
     }
@@ -548,11 +455,13 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         if (!pk || !pk->shader) {
             continue; // skip a failed pack; the composite carries through unchanged
         }
-        // While rebuilding, the LAST static pack folds into prefixTex rather than a
-        // ping-pong slot, so the run is cached in place with no extra copy. The
-        // ping-pong then resumes from there for the animated packs (which never
-        // write prefixTex, so it survives as their source next frame).
-        const bool writesPrefix = usePrefix && !state.prefixValid && k == staticPrefix - 1;
+        // While rebuilding, the last pack of the cacheable run that actually DRAWS
+        // folds into prefixTex rather than a ping-pong slot, so the run is cached in
+        // place with no extra copy. The ping-pong then resumes from there for the
+        // animated packs (which never write prefixTex, so it survives as their source
+        // next frame). Keyed on lastStaticDraw, not on staticPrefix - 1: the run can
+        // end with a pack that failed to compile, and that pack never reaches here.
+        const bool writesPrefix = usePrefix && !state.prefixValid && k == lastStaticDraw;
         // Defensive: chainBufferTex is sized to chain.size() in the realloc block
         // above and stays in lockstep with `chain`, but guard the unchecked
         // operator[] in case a future edit decouples the two (out-of-bounds [] is
@@ -591,7 +500,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     pass.shader->setUniform(pass.uTexture0Loc, 0);
                 }
                 if (pass.uTimeLoc >= 0) {
-                    pass.shader->setUniform(pass.uTimeLoc, surfaceShaderTimeSeconds());
+                    pass.shader->setUniform(pass.uTimeLoc, foldTime);
                 }
                 // Canvas geometry for passes that translate logical lengths
                 // (blur radii) into canvas UV steps. uSurfaceSize is the
@@ -818,7 +727,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             }
             // Contract uniforms + pack params. windowId threaded in so the
             // focus-fade ramp doesn't recompute getWindowId(w) per pack.
-            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, pad, windowId);
+            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, foldTime, pad, windowId);
             drawFullscreenQuad();
         }
         for (int i = 0; i < mainChannelsBound; ++i) {
@@ -874,6 +783,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     state.handledOpacity = foldAppliedOpacity;
     state.foldedFocus = foldFocus;
     state.foldedOpacity = foldOpacity;
+    // What the packs were folded against. A paused chain re-reads this instead of the
+    // live clock, so the folds it cannot avoid (its own content damaged, its focus
+    // ramp moved) reproduce the frame it was paused on instead of teleporting to
+    // wherever the wall clock has reached.
+    state.foldedTimeSec = foldTime;
     state.lastFoldMs = ShaderInternal::shaderClockNowMs();
     return state.compositeTex[lastDst].get();
 }

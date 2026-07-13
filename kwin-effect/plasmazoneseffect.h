@@ -36,6 +36,7 @@
 #include <effect/globals.h> // For ElectricBorder enum
 #include <scene/borderradius.h>
 #include <QObject>
+#include <QScopeGuard>
 #include <QVector>
 #include <QSet>
 #include <QTimer>
@@ -892,12 +893,15 @@ private:
     QRect m_resizeStartGeometry;
     void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry);
 
-    /// wasDecoratedHint: whether @p windowId was decorated BEFORE this
-    /// reconcile cycle began. Per-window callers omit it (the internal
-    /// m_windowDecorations lookup is authoritative); updateAllDecorations MUST
-    /// supply it because it clears the whole decoration map before re-adding,
-    /// which would make every window look freshly decorated and scrub its
-    /// in-flight focus cross-fade (the fade would snap on every focus change).
+    /// wasDecoratedHint: whether @p windowId was decorated BEFORE this reconcile cycle
+    /// began. Per-window callers omit it (the internal m_windowDecorations lookup is
+    /// authoritative). updateAllDecorations MUST supply it, because its own loop can
+    /// re-enter this function for the same window before reaching it: resyncWindow and
+    /// the rule reconcilers emit windowDecorationRestored, whose handler calls
+    /// updateWindowDecoration. A live m_windowDecorations lookup could then observe the
+    /// entry that nested call just inserted, report the window as freshly decorated,
+    /// and scrub its in-flight focus cross-fade — so the hint must be a snapshot taken
+    /// before the sweep started, not a lookup taken during it.
     void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w,
                                 std::optional<bool> wasDecoratedHint = std::nullopt);
     /// windowHint: the EffectWindow when the caller still holds it and the
@@ -920,11 +924,20 @@ private:
                                 bool keepSurfaceState = false);
 
     /// Free a window's composite / capture / prefix / buffer GL targets — unless a
-    /// shader transition is mid-flight on it, which still samples them. THE ONLY
-    /// place m_surfaceMultipass is erased: every caller must route through here, or
-    /// it will destroy the composite a live animation is drawing from (the
-    /// compositeTexId-0 class of bug). @p target must be the EXACT window, never a
-    /// fuzzy same-app sibling.
+    /// shader transition is mid-flight on it, which still samples them. Every
+    /// decoration TEARDOWN must route through here, or it will destroy the composite a
+    /// live animation is drawing from (the compositeTexId-0 class of bug). @p target
+    /// must be the EXACT window, never a fuzzy same-app sibling.
+    ///
+    /// Three other sites erase m_surfaceMultipass directly, and each is deliberate:
+    ///   - lifecycle.cpp's surface-pack hot-reload clears the WHOLE map, because every
+    ///     compiled pack is about to be recompiled and no composite survives it;
+    ///   - lifecycle.cpp's windowDeleted backstop, which runs after the window is gone
+    ///     and there is nothing left to animate;
+    ///   - surfacelayers.cpp's alloc-failure path, which erases the half-built state it
+    ///     just failed to allocate and returns nullptr immediately, so a transition
+    ///     loses its layer for one frame rather than sampling a freed texture.
+    /// Nothing else may.
     void releaseSurfaceState(const QString& windowId, KWin::EffectWindow* target);
 
     /// Hand the window's OffscreenEffect redirect and shader slot back to KWin and
@@ -1003,9 +1016,23 @@ private:
     /// @p texturePaddingLogical: outer margin (logical px) baked into the
     /// TARGET texture's canvas — non-zero only on the padded composite path,
     /// where the geometry uniforms must describe the inflated space.
+    /// @p timeSec: the clock the FOLD decided on, in surfaceShaderTimeSeconds()
+    /// units. Threaded in rather than sampled here because a chain that
+    /// Decorations.Performance has paused is handed a frozen clock — see
+    /// SurfaceMultipassState::foldedTimeSec. Sampling live here would let a paused
+    /// window's packs disagree with the frozen composite they are folding into.
     void pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
-                            const CompiledSurfacePack& pack, qreal scale, qreal texturePaddingLogical = 0.0,
-                            const QString& windowId = {});
+                            const CompiledSurfacePack& pack, qreal scale, float timeSec,
+                            qreal texturePaddingLogical = 0.0, const QString& windowId = {});
+
+    /// The window's rule-resolved opacity, preferring the per-frame value
+    /// prePaintWindow cached over the decoration's own last-resolved one.
+    ///
+    /// ONE resolver, because three sites must agree exactly or the fold caches under
+    /// a key that does not describe the composite it produced: the fold's foldedOpacity
+    /// cache key, the uSurfaceOpacity push for a handlesOpacity pack, and the present
+    /// pass's final modulation when no pack owns the alpha.
+    qreal resolvedWindowOpacity(KWin::EffectWindow* w, const WindowDecoration& wb) const;
 
     /// Advance the per-window smoothed focus value (m_focusFade) toward the
     /// hard 0/1 target and return it, so focus changes cross-fade instead of
@@ -1014,6 +1041,26 @@ private:
     /// with several focus-reading packs) are exact no-ops — the ramp advances
     /// at most once per frame.
     float advanceFocusFade(const QString& windowId, bool focused);
+
+    /// Resolves a pack id to its compiled program, compiling on a cache miss. The fold
+    /// memoises the decoration-profile lookup behind this, so the input side takes it
+    /// as a callable rather than resolving the tree a second time.
+    using CompiledPackResolver = std::function<CompiledSurfacePack*(const QString&)>;
+
+    /// (Re)allocate a window's composite / capture / per-pack buffer targets for the
+    /// current size, scale and chain, dropping every cache an allocation makes stale.
+    /// False means an allocation FAILED and the window's surface state has been erased
+    /// — @p state is dangling and the caller must abandon the fold. Defined in
+    /// surface_capture.cpp.
+    bool ensureSurfaceTargets(const QString& windowId, SurfaceMultipassState& state, const QStringList& chain,
+                              const QSize& textureSize, qreal captureScale,
+                              const CompiledPackResolver& compiledPackLazy);
+
+    /// Capture the raw window surface for the fold to read as uTexture0. The single
+    /// most expensive step of the fold — it re-enters KWin's whole draw chain — and the
+    /// reason SurfaceMultipassState::captureValid exists. Defined in surface_capture.cpp.
+    void captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state, const QRectF& logicalGeometry,
+                              qreal captureScale, bool intoCaptureTex, bool captureCacheable);
 
     /// Render the window's active surface-layer stack into the window's
     /// per-window ping-pong FBO chain (`m_surfaceMultipass`, shared with the
@@ -1113,6 +1160,29 @@ private:
     /// composite and still LOOKS decorated — it just stops moving. Defined in
     /// surface_gating.cpp.
     bool decorationMayAnimate(KWin::EffectWindow* w) const;
+
+    /// Mark every repaint issued inside this scope as OURS, so the damage handler does
+    /// not read it as the window's content going stale and drop the capture cache.
+    /// See m_selfRepainting for why that distinction exists at all.
+    ///
+    /// RESTORES the previous value rather than clearing, so a scope nested inside
+    /// another cannot hand the outer one back an un-flagged window — the failure that
+    /// would produce (silent, per-frame capture invalidation) is exactly the one this
+    /// flag exists to prevent, and it would not be visible in any test.
+    [[nodiscard]] auto selfRepaintScope()
+    {
+        const bool previous = m_selfRepainting;
+        m_selfRepainting = true;
+        return qScopeGuard([this, previous] {
+            m_selfRepainting = previous;
+        });
+    }
+
+    /// Is the window's focus cross-fade still moving? Shared by the postPaintScreen
+    /// repaint driver and windowSurfaceAnimates, which must agree — one decides
+    /// whether to drive the window, the other whether the chain has anything to show
+    /// for being driven.
+    bool focusRampInFlight(const QString& windowId) const;
 
     /// Wake every decorated window with one repaint each. Needed whenever a gate
     /// above OPENS (a settings flip, the session resuming, the daemon dying while we
@@ -1540,6 +1610,8 @@ private:
     /// very capture cache it exists to let us reuse — every frame, so the cache
     /// could never hit. The damage handler ignores signals raised inside this
     /// window; genuine client damage lands outside it and still invalidates.
+    ///
+    /// Never set this directly — take a selfRepaintScope().
     bool m_selfRepainting = false;
 
     // ── Decorations.Performance ─────────────────────────────────────────────

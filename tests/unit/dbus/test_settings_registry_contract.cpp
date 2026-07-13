@@ -35,6 +35,8 @@
 #include <QHash>
 #include <QObject>
 #include <QRegularExpression>
+#include <QList>
+#include <QPair>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -43,7 +45,10 @@
 
 #include "../helpers/IsolatedConfigGuard.h"
 #include "config/settings.h"
+#include "core/shaderregistry.h"
 #include "dbus/settingsadaptor.h"
+
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -129,13 +134,30 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
             return {};
         }
 
-        // Local aliases first, so a `kName` argument can be resolved.
-        QHash<QString, QString> aliases;
+        // Local aliases, resolved POSITIONALLY — by where they are defined, not by
+        // name. Every one of them in shader_transitions.cpp is called `kName`, each in
+        // its own function scope, naming a DIFFERENT setting. A name-keyed map
+        // collapses all three into whichever was defined last, and the tally below
+        // still balances (three call sites, three scraped), so two real keys silently
+        // stopped being checked while the test went on passing. That is the exact
+        // silent-miss this file exists to catch, so it must not be reintroduced by the
+        // file's own scrape.
+        QList<QPair<qsizetype, QString>> aliases; // (offset of the definition, key)
         auto ait = aliasRe.globalMatch(src);
         while (ait.hasNext()) {
             const auto m = ait.next();
-            aliases.insert(m.captured(1), constants.value(m.captured(2)));
+            aliases.append({m.capturedStart(0), constants.value(m.captured(2))});
         }
+        // The alias in effect at @p offset is the last one defined before it.
+        const auto aliasAt = [&aliases](qsizetype offset) -> QString {
+            QString found;
+            for (const auto& [definedAt, key] : aliases) {
+                if (definedAt < offset) {
+                    found = key;
+                }
+            }
+            return found;
+        };
 
         int scraped = 0;
         auto it = fetchRe.globalMatch(src);
@@ -147,7 +169,7 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
             } else if (!m.captured(2).isEmpty()) {
                 key = constants.value(m.captured(2)); // SettingProperty::X
             } else {
-                key = aliases.value(m.captured(3)); // a local alias
+                key = aliasAt(m.capturedStart(0)); // a local alias
             }
             if (key.isEmpty()) {
                 continue; // an identifier we could not resolve; the tally below catches it
@@ -190,17 +212,22 @@ class TestSettingsRegistryContract : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// The fixture has to be able to SEE every key production registers, or this test
+    /// reports a correctly-registered key as missing and invites someone to "fix" it by
+    /// deleting the assertion. initializeRegistry() gates its getters behind THREE
+    /// things, and all three must be satisfied here:
+    ///   - a qobject_cast to the concrete Settings (so a StubSettings is not enough),
+    ///   - a non-null shader registry,
+    ///   - a non-null profile registry (motionProfileTree hangs off this one).
+    /// IsolatedConfigGuard keeps the real Settings off the developer's own config.
     void init()
     {
-        // A real Settings, not a stub: initializeRegistry() gates some getters behind
-        // a qobject_cast to the concrete type, so a stub backend would leave those keys
-        // out of getSettingKeys() and the test would report them missing even though
-        // production registers them correctly. IsolatedConfigGuard keeps this off the
-        // developer's own config.
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_settings = new Settings(nullptr);
+        m_shaderRegistry = new ShaderRegistry(nullptr);
+        m_profileRegistry = new PhosphorAnimation::PhosphorProfileRegistry(nullptr);
         m_parent = new QObject(nullptr);
-        m_adaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, /*profileRegistry=*/nullptr, m_parent);
+        m_adaptor = new SettingsAdaptor(m_settings, m_shaderRegistry, m_profileRegistry, m_parent);
     }
 
     void cleanup()
@@ -208,6 +235,10 @@ private Q_SLOTS:
         delete m_parent;
         m_parent = nullptr;
         m_adaptor = nullptr;
+        delete m_profileRegistry;
+        m_profileRegistry = nullptr;
+        delete m_shaderRegistry;
+        m_shaderRegistry = nullptr;
         delete m_settings;
         m_settings = nullptr;
         m_guard.reset();
@@ -302,6 +333,8 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     Settings* m_settings = nullptr;
+    ShaderRegistry* m_shaderRegistry = nullptr;
+    PhosphorAnimation::PhosphorProfileRegistry* m_profileRegistry = nullptr;
     QObject* m_parent = nullptr;
     SettingsAdaptor* m_adaptor = nullptr;
 };

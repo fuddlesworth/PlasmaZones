@@ -58,10 +58,7 @@ void PlasmaZonesEffect::repaintAllDecorations()
     if (!KWin::effects || m_windowDecorations.isEmpty()) {
         return;
     }
-    m_selfRepainting = true;
-    auto clearSelfRepaint = qScopeGuard([this] {
-        m_selfRepainting = false;
-    });
+    const auto selfRepaint = selfRepaintScope();
     for (auto it = m_windowDecorations.cbegin(); it != m_windowDecorations.cend(); ++it) {
         if (!it->shaderApplied) {
             continue;
@@ -86,9 +83,21 @@ void PlasmaZonesEffect::repaintAllDecorations()
     }
 }
 
+// May this window's decoration chain animate right now?
+//
+// TWO consumers, and both matter. The repaint driver in postPaintScreen stops driving
+// a paused window, which is what lets the GPU fall out of its top performance state.
+// The FOLD (renderSurfaceChainComposite) freezes a paused window's clock, which is
+// what makes its composite cacheable — without that half the pause bought nothing
+// whenever anything else on screen was moving, because KWin paints a window whenever
+// something overlapping it damages, and each of those paints re-folded the whole chain
+// against a live clock.
 bool PlasmaZonesEffect::decorationMayAnimate(KWin::EffectWindow* w) const
 {
-    if (!w) {
+    // No window, or no compositor to animate on. Fail CLOSED: the focus test below
+    // reads KWin::effects, and letting a null slip past it would report "may animate"
+    // for a window that cannot be painted at all.
+    if (!w || !KWin::effects) {
         return false;
     }
     // Nobody is watching an animation they walked away from, and this is where the
@@ -100,10 +109,24 @@ bool PlasmaZonesEffect::decorationMayAnimate(KWin::EffectWindow* w) const
     // Only the window in use shimmers. Divides the continuous redraw by the
     // decorated-window count, which is the single biggest lever available while
     // the user is still at the machine.
-    if (m_animateFocusedOnly && KWin::effects && KWin::effects->activeWindow() != w) {
+    if (m_animateFocusedOnly && KWin::effects->activeWindow() != w) {
         return false;
     }
     return true;
+}
+
+// Is this window's focus cross-fade mid-ramp?
+//
+// The ramp clamps to exactly 0.0 / 1.0 at its ends, so a value strictly between them
+// means the fade is still moving and the window must keep repainting until it lands.
+// Shared by the repaint driver and windowSurfaceAnimates, which have to agree: one
+// decides whether to drive the window, the other whether the chain has anything to
+// show for it, and a window driven by one but not the other either stalls mid-fade or
+// spins forever.
+bool PlasmaZonesEffect::focusRampInFlight(const QString& windowId) const
+{
+    const auto it = m_focusFade.constFind(windowId);
+    return it != m_focusFade.constEnd() && it->value > 0.001f && it->value < 0.999f;
 }
 
 // True when any pack in the window's resolved chain references iTime (main or a
@@ -118,11 +141,9 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
     if (it == m_windowDecorations.constEnd()) {
         return false;
     }
-    // A focus ramp in flight (value strictly between 0 and 1) needs continuous
-    // repaints so uSurfaceFocused reaches its target; the ramp clamps to 0/1
-    // at the ends, so this self-terminates.
-    if (const auto fit = m_focusFade.constFind(windowId);
-        fit != m_focusFade.constEnd() && fit->value > 0.001f && fit->value < 0.999f) {
+    // A focus ramp in flight needs continuous repaints so uSurfaceFocused reaches its
+    // target. It self-terminates: the ramp clamps at both ends.
+    if (focusRampInFlight(windowId)) {
         return true;
     }
     // Resolve the decoration profile LAZILY: compiledPack only reads it on a

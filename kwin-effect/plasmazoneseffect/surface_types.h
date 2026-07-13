@@ -268,8 +268,9 @@ struct SurfaceMultipassState
     std::unique_ptr<KWin::GLFramebuffer> captureFbo;
     bool captureValid = false;
 
-    /// The composite after folding the chain's leading run of STATIC packs (see
-    /// packIsStatic) over the capture. Those packs are a pure function of the
+    /// The composite after folding the chain's leading run of STATIC packs (those for
+    /// which packVariesPerFrame is false) over the capture. Those packs are a pure
+    /// function of the
     /// capture and their parameters, so while the capture holds, their fold holds
     /// too and the animated packs downstream can run straight off this instead.
     ///
@@ -326,6 +327,21 @@ struct SurfaceMultipassState
     /// value: focus is a clamped 0..1 and opacity a clamped 0..1.
     float foldedFocus = -1.0f;
     float foldedOpacity = -1.0f;
+
+    /// The clock the last fold pushed as iTime, in the same seconds as
+    /// surfaceShaderTimeSeconds().
+    ///
+    /// A chain that Decorations.Performance has PAUSED (idle session, or an unfocused
+    /// window under "animate the focused window only") is handed this value again
+    /// instead of a live clock reading. Its cached composite is then reused on every
+    /// incidental paint, and on the folds that DO still have to run while paused (the
+    /// window's own content damaged, its focus ramp moved, its rule opacity changed)
+    /// the animation reproduces the frame it was paused on rather than teleporting to
+    /// wherever the wall clock has got to. Reset to a live reading by every fold that
+    /// is allowed to animate, so resuming picks the clock straight back up.
+    ///
+    /// Negative means no fold has run yet, so the first one reads the live clock.
+    float foldedTimeSec = -1.0f;
 
     QStringList chainKey; ///< the chain `chainBufferTex` was allocated for
     QSize compositeSize; ///< full textureSize the composite targets were allocated for

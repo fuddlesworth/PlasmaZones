@@ -641,12 +641,14 @@ void PlasmaZonesEffect::loadCachedSettings()
     // either one has to wake the paused windows back up, or a window frozen under
     // the old setting would stay frozen until it happened to damage.
     //
-    // Both check the variant TYPE before reading it. getSetting answers an unknown
-    // key with an empty-string fallback rather than an error, and QVariant("").toBool()
-    // is false — so an unguarded read would silently force these off. That is merely
-    // redundant for a default-false setting, but it would INVERT the default-true
-    // PauseWhenIdle on any failed fetch (daemon not up yet, key not yet registered).
-    // Same guard the audio loaders below use.
+    // Both check the variant TYPE before reading it, and that guard still earns its
+    // keep even though an unknown key now answers with a D-Bus ERROR (which skips the
+    // callback entirely, leaving our own default in place). What it defends against is
+    // a reply that ARRIVES but is not a bool: an older daemon on the other end of the
+    // bus, a mid-restart half-answer, a getter returning the invalid-variant fallback.
+    // QVariant("").toBool() is false, so an unguarded read there would force these off,
+    // which is merely redundant for a default-false setting but INVERTS the
+    // default-true PauseWhenIdle. Same guard the audio loaders below use.
     loadSettingAsync(QStringLiteral("decorationAnimateFocusedOnly"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;

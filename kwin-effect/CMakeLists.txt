@@ -52,6 +52,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/decoration_render.cpp
     plasmazoneseffect/surfacelayers.cpp
     plasmazoneseffect/surface_backdrop.cpp
+    plasmazoneseffect/surface_capture.cpp
     plasmazoneseffect/surface_gating.cpp
     plasmazoneseffect/decoration_rules.cpp
     plasmazoneseffect/surface_audio.cpp
@@ -67,6 +68,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/drag_snap.cpp
     plasmazoneseffect/drag_end.cpp
     plasmazoneseffect/mesh_sim.cpp
+    plasmazoneseffect/mesh_sim.h
     plasmazoneseffect/paint_pipeline.cpp
     plasmazoneseffect/shader_transitions.cpp
     plasmazoneseffect/surface_compile.cpp

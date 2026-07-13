@@ -153,6 +153,31 @@ private Q_SLOTS:
         QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSecMin());
     }
 
+    /**
+     * A config with NO Decorations.Performance group at all must report the DEFAULTS,
+     * and PauseWhenIdle's default is TRUE.
+     *
+     * This pins the bug that actually shipped. Every layer of the wiring looked
+     * complete, but the key was missing from SettingsAdaptor's hand-maintained getter
+     * registry, and getSetting answered an unknown key with a valid EMPTY STRING —
+     * which QVariant::toBool() reads as false. So a default-true setting came back
+     * false on every startup: not merely disabled, INVERTED. The registry hole itself
+     * is guarded by test_settings_registry_contract; this guards the other half, that
+     * an absent key still yields the default it is supposed to.
+     */
+    void testDecorationPerformance_missingGroup_yieldsDefaults()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QVERIFY2(settings.decorationPauseWhenIdle(),
+                 "PauseWhenIdle defaults to TRUE. A false here means something is reading the absent key as a "
+                 "value rather than falling back — which is exactly how it shipped inverted once.");
+        QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
+        QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
+        QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+    }
+
     // =========================================================================
     // Schema validColorOr validator (invalid color string)
     // =========================================================================

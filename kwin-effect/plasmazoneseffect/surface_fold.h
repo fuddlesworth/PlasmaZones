@@ -55,8 +55,27 @@ inline bool allocSurfaceTarget(std::unique_ptr<KWin::GLTexture>& tex, std::uniqu
 ///   stale as soon as it is written and there is nothing to key on:
 ///       iTime            continuous seconds
 ///       audio spectrum   the live CAVA bars
-///       uBackdrop        the scene behind the window
+///       uBackdrop        the scene behind the window (and the uHasBackdrop gate and
+///                        uBackdropRect sub-rect that describe it, which move on their
+///                        own as the window crosses outputs)
 ///       iMouse           the cursor
+///
+/// @p animating is what Decorations.Performance decides: false when this window's
+/// chain is not allowed to animate right now (the session is idle, or the window is
+/// unfocused and only the focused one may animate). A chain that may not animate is
+/// handed a FROZEN clock and frozen audio, so those inputs stop being per-frame and
+/// the fold becomes cacheable — which is the whole point. Without this the pause
+/// bought nothing under concurrent activity: KWin paints a window whenever anything
+/// overlapping it damages, so a paused animated chain re-folded on a neighbour's
+/// damage with a fresh live clock, paying the full fold cost and lurching forward in
+/// jumps instead of holding still.
+///
+/// The BACKDROP is deliberately NOT frozen by @p animating. It changes with the scene
+/// behind the window, which keeps moving whether or not this window may animate, and
+/// its refold lands no damage on this window — so a frosted pane must keep re-folding
+/// or it shows a stale reflection of a desktop that has moved on. (The idle gate does
+/// freeze it, one level up: nothing is being looked at then, and a media player that
+/// IS being looked at holds an idle inhibitor.)
 ///
 ///   STATE — constant between events, so a cached fold stays correct until the
 ///   state moves, and the state itself is the cache key:
@@ -82,17 +101,28 @@ inline bool allocSurfaceTarget(std::unique_ptr<KWin::GLTexture>& tex, std::uniqu
 ///
 /// Deliberately introspective, never keyed on a pack id: the compiled shader's
 /// linked uniforms decide it, so a new pack is classified with no change here.
-inline bool packVariesPerFrame(const PlasmaZones::CompiledSurfacePack& pk)
+inline bool packVariesPerFrame(const PlasmaZones::CompiledSurfacePack& pk, bool animating)
 {
-    const auto passVaries = [](int time, int audio, int backdrop) {
-        return time >= 0 || audio >= 0 || backdrop >= 0;
+    // The backdrop half. uHasBackdrop and uBackdropRect are as per-frame as uBackdrop
+    // itself: the gate flips when the window leaves an output and the sub-rect is
+    // recomputed by every capture, so a pack that reads either without sampling the
+    // texture would otherwise be classified static, cached, and frozen on a stale rect.
+    const auto readsBackdrop = [](int backdrop, int hasBackdrop, int backdropRect) {
+        return backdrop >= 0 || hasBackdrop >= 0 || backdropRect >= 0;
     };
-    if (passVaries(pk.uTimeLoc, pk.iAudioSpectrumSizeLoc, pk.uBackdropLoc) || pk.iMouseLoc >= 0) {
+    // The half Decorations.Performance can freeze.
+    const auto readsClock = [animating](int time, int audio) {
+        return animating && (time >= 0 || audio >= 0);
+    };
+
+    if (readsBackdrop(pk.uBackdropLoc, pk.uHasBackdropLoc, pk.uBackdropRectLoc)
+        || readsClock(pk.uTimeLoc, pk.iAudioSpectrumSizeLoc) || (animating && pk.iMouseLoc >= 0)) {
         return true;
     }
     // A main pass fed by a time-varying buffer pass is itself time-varying.
     for (const PlasmaZones::CompiledSurfaceBufferPass& bp : pk.bufferPasses) {
-        if (passVaries(bp.uTimeLoc, bp.iAudioSpectrumSizeLoc, bp.uBackdropLoc)) {
+        if (readsBackdrop(bp.uBackdropLoc, bp.uHasBackdropLoc, bp.uBackdropRectLoc)
+            || readsClock(bp.uTimeLoc, bp.iAudioSpectrumSizeLoc)) {
             return true;
         }
     }

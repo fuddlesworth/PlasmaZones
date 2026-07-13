@@ -614,7 +614,13 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
         reconcileRuleWindowLayer(liveId, w);
         // An opacity-only (borderless) window needs an explicit repaint for its
         // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
+        //
+        // Flagged as OURS, for the same reason as that site: windowDamaged fires on
+        // repaint SCHEDULING, so an unflagged repaint here would clear the window's
+        // captureValid and cold-start the decoration capture cache on every float/snap
+        // flip. Only the opacity moved, and the fold keys on that itself.
         if (hasOpacity) {
+            const auto selfRepaint = selfRepaintScope();
             w->addRepaintFull();
         }
     }

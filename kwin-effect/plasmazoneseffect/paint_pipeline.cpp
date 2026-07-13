@@ -462,14 +462,13 @@ void PlasmaZonesEffect::postPaintScreen()
             }
             // Decorations.Performance: is this window's chain allowed to animate
             // right now (session not idle, and either it is focused or we animate
-            // everything)? A window that is not allowed simply stops being driven —
-            // it keeps its last composite and paints from it, so it still LOOKS
-            // decorated, it just stops moving. That is what lets the GPU drop out
-            // of its top performance state, which no amount of making the frame
-            // cheaper can achieve.
+            // everything)? A window that is not allowed stops being driven from here,
+            // and the fold freezes its clock (see decorationMayAnimate), so it keeps
+            // painting its last composite: it still LOOKS decorated, it just stops
+            // moving. That is what lets the GPU drop out of its top performance state,
+            // which no amount of making the frame cheaper can achieve.
             //
-            // Two exemptions from the FOCUS half of that gate (the idle half gates
-            // everything — nothing is being looked at then):
+            // Two exemptions from the FOCUS half of that gate:
             //
             //   A focus cross-fade must be allowed to finish, or a window losing
             //   focus would freeze mid-ramp between its active and inactive look.
@@ -482,10 +481,16 @@ void PlasmaZonesEffect::postPaintScreen()
             //   focus — the scene behind it would move and the frost would not.
             //   "Animate only the active window" is a promise about MOTION, not a
             //   licence to show a stale reflection of the desktop.
-            const bool focusRamping = [&] {
-                const auto fit = m_focusFade.constFind(it.key());
-                return fit != m_focusFade.constEnd() && fit->value > 0.001f && fit->value < 0.999f;
-            }();
+            //
+            // The IDLE half takes neither exemption, and that is deliberate rather
+            // than an oversight in the shape of the condition. An idle session is one
+            // nobody is looking at, so a stale reflection has no viewer — and anything
+            // that IS worth looking at while the user sits still (a video) holds an
+            // idle inhibitor, which stops the compositor reporting idle at all. A
+            // focus ramp cannot be in flight here either: it lasts at most
+            // FocusFadeMsMax, and idle takes seconds of no input while a focus change
+            // IS input.
+            const bool focusRamping = focusRampInFlight(it.key());
             const bool idleGated = m_pauseAnimationWhenIdle && m_sessionIdle;
             if (idleGated || (!focusRamping && !backdropDue && !decorationMayAnimate(sw))) {
                 continue;
@@ -505,10 +510,7 @@ void PlasmaZonesEffect::postPaintScreen()
                 // EVERY decorated window for the rest of the session, freezing
                 // their content under a still-animating decoration with no crash to
                 // point at. Strictly worse than the failure the sibling guards.
-                m_selfRepainting = true;
-                auto clearSelfRepaint = qScopeGuard([this] {
-                    m_selfRepainting = false;
-                });
+                const auto selfRepaint = selfRepaintScope();
                 sw->addRepaintFull();
                 // A padded chain's margin band sits OUTSIDE the window item;
                 // per-window repaints clip to it, so damage the band at
@@ -528,9 +530,9 @@ void PlasmaZonesEffect::postPaintScreen()
     // Unpin the per-frame clock. Any paintWindow() invocation outside
     // the prePaintScreen→postPaintScreen bracket (defensive bootstrap,
     // future test harness, an unexpected mid-cycle paint) then falls
-    // back to the live `shaderClockNowMs()` via the -1 sentinel branch
-    // via the -1 sentinel branch in this file's own clock read, instead of reading
-    // a stale pinned timestamp from this cycle.
+    // back to the live `shaderClockNowMs()` via the -1 sentinel branch in
+    // this file's own clock read, instead of reading a stale pinned
+    // timestamp from this cycle.
     m_shaderManager.setCurrentFrameClockMs(-1);
     // Drop the per-frame SetOpacity cache so next frame's prePaintWindow
     // re-resolves against any rule-set or window-metadata changes that
@@ -557,9 +559,12 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // hasn't changed (lifecycle-event shaders need this; without the
         // transformed flag, paintWindow only fires on actual window damage).
         //
-        // Damage-region expansion for actor-expansion transitions lives
-        // in `postPaintScreen`'s addLayerRepaint loop (see the ringRect
-        // block there). prePaintWindow doesn't drive that on KWin 6;
+        // Damage-region expansion for actor-expansion transitions lives in
+        // `postPaintScreen`, which damages the whole output through
+        // `KWin::effects->addRepaint(output->geometry())` rather than
+        // addLayerRepaint — the scene clips a layer repaint to the window
+        // item's bounding rect, which is exactly the margin the expansion
+        // needs to paint past. prePaintWindow doesn't drive that on KWin 6;
         // `WindowPrePaintData::devicePaint` is the dirty region in
         // device coords and isn't the right surface for declaring "I
         // want to paint this many pixels past the natural frame".

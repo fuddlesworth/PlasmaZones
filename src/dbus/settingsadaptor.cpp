@@ -460,8 +460,10 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("audioSpectrumBarCount", audioSpectrumBarCount, setAudioSpectrumBarCount)
     // The full CAVA analysis parameter set (Shaders.Audio): the KWin effect
     // runs its own cava instance and pulls every knob through this map via
-    // loadSettingAsync, so each one must be registered here or the effect's
-    // loaders only ever see the unknown-key empty reply and keep defaults.
+    // loadSettingAsync, so each one must be registered here. An unregistered key
+    // answers with a D-Bus error, the effect's value callback never runs, and the
+    // knob is stuck on the effect's own built-in default with nothing to show for it
+    // but a daemon-side warning.
     REGISTER_BOOL_SETTING("audioAutosens", audioAutosens, setAudioAutosens)
     REGISTER_INT_SETTING("audioSensitivity", audioSensitivity, setAudioSensitivity)
     REGISTER_INT_SETTING("audioNoiseReduction", audioNoiseReduction, setAudioNoiseReduction)
@@ -554,12 +556,18 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("decorationMinimumWindowHeight", decorationMinimumWindowHeight,
                          setDecorationMinimumWindowHeight)
 
-    // Decoration performance (Decorations.Performance). The KWin effect fetches
-    // these by name over getSetting, which resolves through THIS registry — not
-    // through Qt property reflection — so an unregistered key silently returns the
-    // empty fallback rather than failing loudly. decorationIdleTimeoutSec is read
-    // by the daemon directly, but registering it keeps the wire surface complete
-    // (getSettingKeys / getAllSettingSchemas enumerate this map).
+    // Decoration performance (Decorations.Performance). The KWin effect fetches these
+    // by name over getSetting, which resolves through THIS registry, not through Qt
+    // property reflection — so leaving a key out here disables the setting on the
+    // effect side however complete the rest of its wiring looks. That is not
+    // hypothetical: all three of these were missing once, and because getSetting then
+    // answered an unknown key with a valid empty string, PauseWhenIdle's default of
+    // true was being read back as false on every startup. tests/unit/dbus/
+    // test_settings_registry_contract.cpp is the tripwire for the next one.
+    //
+    // decorationIdleTimeoutSec is read by the daemon directly, but registering it
+    // keeps the wire surface complete (getSettingKeys / getAllSettingSchemas
+    // enumerate this map).
     REGISTER_BOOL_SETTING("decorationAnimateFocusedOnly", decorationAnimateFocusedOnly, setDecorationAnimateFocusedOnly)
     REGISTER_BOOL_SETTING("decorationPauseWhenIdle", decorationPauseWhenIdle, setDecorationPauseWhenIdle)
     REGISTER_INT_SETTING("decorationIdleTimeoutSec", decorationIdleTimeoutSec, setDecorationIdleTimeoutSec)
@@ -950,17 +958,25 @@ QString SettingsAdaptor::getAllSettings()
 
 QDBusVariant SettingsAdaptor::getSetting(const QString& key)
 {
+    // An empty key is a caller bug in exactly the way an unknown one is, so it gets
+    // exactly the same answer (see the long note below). Handing back a valid empty
+    // string here while the unknown-key path raised would have left one of the two
+    // failing silently and the other loudly, which is how the silent one survives.
     if (key.isEmpty()) {
         qCWarning(lcDbusSettings) << "getSetting: empty key";
-        // Return a valid but empty QDBusVariant to avoid marshalling errors
-        // (QDBusVariant() with no argument creates an invalid variant that can't be sent)
-        return QDBusVariant(QVariant(QString()));
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Empty setting key"));
+        }
+        return QDBusVariant(QVariant());
     }
 
     auto it = m_getters.find(key);
     if (it != m_getters.end()) {
         QVariant value = it.value()();
-        // Ensure we never return an invalid variant - use empty string as fallback
+        // A REGISTERED key that answers with an invalid variant is a bug in that
+        // getter, not a missing registration, and the caller asked for a real setting
+        // that really exists. An empty string of the right shape keeps the reply
+        // marshallable; the warning is what surfaces the getter.
         if (!value.isValid()) {
             qCWarning(lcDbusSettings) << "Setting" << key << "returned invalid variant, using empty string";
             return QDBusVariant(QVariant(QString()));

@@ -67,9 +67,17 @@ std::optional<QColor> resolveDefaultBorderColor(const QString& value, const QCol
 /// them on every focus change.
 struct FoldInputs
 {
+    // The two that can genuinely move on their own.
     QStringList chain;
-    QString basePackId;
     QHash<QString, SurfaceParamValues> packParamValues;
+    // Derived from those two, and each ALSO keyed independently inside the fold
+    // (basePackId is chain.first(); outerPadding rides compositeSize / captureScaleKey;
+    // needsBackdrop makes every pack per-frame, so such a chain is never cached at
+    // all). Compared anyway: they are what the fold actually reads, and a comparison
+    // that quietly depends on a derivation staying true elsewhere is the kind that
+    // stops holding without anyone noticing. The cost is a few word compares on a
+    // decoration refresh.
+    QString basePackId;
     int outerPadding = 0;
     bool needsBackdrop = false;
     // Opacity authority is deliberately absent, mirroring WindowDecoration: what the
@@ -90,16 +98,8 @@ struct FoldInputs
 FoldInputs foldInputsOf(const WindowDecoration& wb)
 {
     return FoldInputs{
-        wb.chain,
-        wb.basePackId,
-        wb.packParamValues,
-        wb.outerPadding,
-        wb.needsBackdrop,
-        wb.ruleBorder,
-        wb.ruleBorderWidth,
-        wb.ruleBorderRadius,
-        wb.ruleBorderActiveColor,
-        wb.ruleBorderInactiveColor,
+        wb.chain,      wb.packParamValues, wb.basePackId,       wb.outerPadding,          wb.needsBackdrop,
+        wb.ruleBorder, wb.ruleBorderWidth, wb.ruleBorderRadius, wb.ruleBorderActiveColor, wb.ruleBorderInactiveColor,
     };
 }
 
@@ -243,9 +243,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // transition (must SNAP to the current focus) from a plain refresh (focus
     // change / snap flip / rule edit — all of which remove-then-readd and must
     // keep easing). See the m_focusFade reconcile after the insert.
-    // updateAllDecorations supplies the hint: it clears the whole decoration map
-    // before re-adding, so the local lookup would report false for EVERY window
-    // and scrub every in-flight ramp — the fade would snap on each focus change.
+    //
+    // updateAllDecorations supplies the hint from a snapshot taken before its sweep
+    // began, because the sweep can re-enter this function for the same window ahead of
+    // reaching it (resyncWindow and the rule reconcilers emit windowDecorationRestored,
+    // whose handler lands right back here). A live lookup could then see the entry that
+    // nested call just inserted and scrub a ramp that is still in flight.
     const bool wasDecorated = wasDecoratedHint.value_or(m_windowDecorations.contains(windowId));
 
     // What the outgoing decoration held, captured BEFORE the remove-first erases it.
@@ -571,10 +574,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // keeping the surface state across a refresh exists to prevent. The window's
     // content is unchanged; only the fold's inputs moved, and the fold keys on those
     // (foldedFocus / foldedOpacity) itself.
-    m_selfRepainting = true;
-    auto clearSelfRepaint = qScopeGuard([this] {
-        m_selfRepainting = false;
-    });
+    const auto selfRepaint = selfRepaintScope();
     w->addRepaintFull();
     // Padded chains paint OUTSIDE the window's expanded rect; addRepaintFull
     // (and addLayerRepaint) clip to the window item, so the margin band needs

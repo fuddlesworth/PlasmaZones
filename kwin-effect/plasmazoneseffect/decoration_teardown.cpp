@@ -181,8 +181,12 @@ void PlasmaZonesEffect::clearAllDecorations()
     // Skip entries whose window is riding a live shader transition — the
     // close path DELIBERATELY keeps the closing window's border + multipass
     // entries alive so renderSurfaceChain can composite the decoration under
-    // the close animation, and this bulk clear runs within milliseconds of
-    // every close (focus shift → updateAllDecorations, autotile re-layout).
+    // the close animation, and a close can still be in flight when this runs. It no
+    // longer runs on focus shifts or autotile re-layouts (updateAllDecorations
+    // reconciles in place now, and removes only what it did not revisit) — its two
+    // remaining callers are the daemon-lost teardown and the effect's destructor. The
+    // daemon dying does not wait for an animation to finish, so the guard stays.
+    //
     // Removing them here nuked the kept state before the first close frame:
     // findWindowById refuses deleted windows and the bulk path has no window
     // hint, so removeWindowDecoration's own mid-transition guard could never

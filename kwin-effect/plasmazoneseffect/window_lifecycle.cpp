@@ -15,6 +15,7 @@
 
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QScopeGuard>
 
 #include "../autotilehandler.h"
 #include "../snaphandler.h"
@@ -459,7 +460,19 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
         // (m_lastActivatedWindow). Gated on hasOpacityRules() because pure
         // border-colour changes are already covered by updateAllDecorations()'s
         // per-window repaint.
+        //
+        // Flagged as OURS. addRepaintFull raises EffectWindow::windowDamaged (the
+        // signal fires on repaint SCHEDULING, not only on client content damage), and
+        // the decoration capture cache listens to that signal to know the window's
+        // content went stale. Neither window's CONTENT changed here — only its
+        // resolved opacity, which the fold keys on itself (foldedOpacity). Without the
+        // flag, every click would clear captureValid for both windows and force the
+        // fold's most expensive step, a full effects->drawWindow() re-entry, for any
+        // user who has a SetOpacity rule at all. The flagged repaint that
+        // updateAllDecorations issues below cannot undo it either: nothing restores
+        // captureValid except an actual re-capture.
         if (m_shaderManager.hasOpacityRules()) {
+            const auto selfRepaint = selfRepaintScope();
             if (w) {
                 w->addRepaintFull();
             }

@@ -24,10 +24,10 @@ QList<IdleStage> toStages(const QVariantList& list)
     stages.reserve(list.size());
     for (const QVariant& entry : list) {
         const QVariantMap map = entry.toMap();
-        const int ms = map.value(QLatin1String("timeoutMs")).toInt();
+        const int ms = map.value(StageKey::TimeoutMs).toInt();
         if (ms <= 0)
             continue; // a non-positive timeout has no meaning; drop it.
-        stages.push_back(IdleStage{map.value(QLatin1String("name")).toString(), std::chrono::milliseconds(ms)});
+        stages.push_back(IdleStage{map.value(StageKey::Name).toString(), std::chrono::milliseconds(ms)});
     }
     return stages;
 }
@@ -38,8 +38,8 @@ QVariantList fromStages(const QList<IdleStage>& stages)
     list.reserve(stages.size());
     for (const IdleStage& stage : stages) {
         QVariantMap map;
-        map.insert(QLatin1String("name"), stage.name);
-        map.insert(QLatin1String("timeoutMs"), static_cast<int>(stage.timeout.count()));
+        map.insert(StageKey::Name, stage.name);
+        map.insert(StageKey::TimeoutMs, static_cast<int>(stage.timeout.count()));
         list.push_back(map);
     }
     return list;

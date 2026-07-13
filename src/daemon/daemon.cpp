@@ -601,18 +601,17 @@ void Daemon::setupIdleService()
         // can still fire. Without this check that stale stage would idle-pause a session
         // the user has just told us not to pause. It also covers a future consumer arming
         // the ladder for its own reasons.
-        if (m_settings && m_settings->decorationPauseWhenIdle() && m_settingsAdaptor) {
-            Q_EMIT m_settingsAdaptor->sessionIdleChanged(true);
+        if (m_settings && m_settings->decorationPauseWhenIdle()) {
+            publishSessionIdle(true);
         }
     });
     connect(m_idleService.get(), &PhosphorServiceIdle::IdleService::resumed, this, [this]() {
-        // Announce the resume unconditionally, including when PauseWhenIdle was
-        // switched off mid-idle — the effect would otherwise stay paused on a stale
-        // `true`. Clearing the ladder emits resumed() through this same handler, so
-        // the toggle-off path is released here rather than needing its own emit.
-        if (m_settingsAdaptor) {
-            Q_EMIT m_settingsAdaptor->sessionIdleChanged(false);
-        }
+        // Announce the resume whatever the setting now says, including when
+        // PauseWhenIdle was switched off mid-idle — the effect would otherwise stay
+        // paused on a stale `true`. Clearing the ladder emits resumed() through this
+        // same handler, so the toggle-off path is released here rather than needing its
+        // own emit.
+        publishSessionIdle(false);
     });
 
     refreshIdleStages();
@@ -648,9 +647,6 @@ void Daemon::setupIdleService()
     if (m_compositorBridge) {
         connect(m_compositorBridge, &CompositorBridgeAdaptor::bridgeRegistered, this,
                 [this](const QString&, const QString&, const QStringList&) {
-                    if (!m_settingsAdaptor) {
-                        return;
-                    }
                     // The setting IS re-checked, and it is not redundant. The ladder
                     // rebuild is debounced, so between the user turning PauseWhenIdle
                     // off and the timer firing there is a window where the setting is
@@ -659,9 +655,33 @@ void Daemon::setupIdleService()
                     // otherwise push idle=true for a feature the user just switched off.
                     const bool idle =
                         m_idleService && m_settings && m_settings->decorationPauseWhenIdle() && m_idleService->isIdle();
-                    Q_EMIT m_settingsAdaptor->sessionIdleChanged(idle);
+                    // FORCED past the value-changed check. A newly registered effect
+                    // starts from its OWN default (not idle) and has heard nothing from
+                    // us, so what matters here is what IT believes, not what we last
+                    // published. Suppressing a "redundant" false would leave an effect
+                    // that reconnected mid-idle running unpaused, and a restarted daemon
+                    // publishing to an already-idle seat produces no edge of its own.
+                    publishSessionIdle(idle, /*force=*/true);
                 });
     }
+}
+
+void Daemon::publishSessionIdle(bool idle, bool force)
+{
+    if (!m_settingsAdaptor) {
+        return;
+    }
+    // Only on a real change, per the project's emit-on-change rule — the idle service
+    // can report the same state twice (a ladder rebuild that lands on the same value,
+    // a second stage on the same ladder), and each redundant emit wakes every decorated
+    // window on the desktop through repaintAllDecorations. @p force exists for the one
+    // case where the value is not the question: a client that has just connected and
+    // does not know our state at all. See the bridgeRegistered handler.
+    if (!force && idle == m_publishedSessionIdle) {
+        return;
+    }
+    m_publishedSessionIdle = idle;
+    Q_EMIT m_settingsAdaptor->sessionIdleChanged(idle);
 }
 
 void Daemon::refreshIdleStages()
@@ -677,8 +697,8 @@ void Daemon::refreshIdleStages()
     }
     const int timeoutMs = m_settings->decorationIdleTimeoutSec() * 1000;
     m_idleService->setStages({QVariantMap{
-        {QStringLiteral("name"), QStringLiteral("decorations")},
-        {QStringLiteral("timeoutMs"), timeoutMs},
+        {PhosphorServiceIdle::StageKey::Name, QStringLiteral("decorations")},
+        {PhosphorServiceIdle::StageKey::TimeoutMs, timeoutMs},
     }});
 }
 

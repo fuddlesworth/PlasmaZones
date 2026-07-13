@@ -164,7 +164,12 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
                        source.width() / sourceRect.width() * texW, source.height() / sourceRect.height() * texH);
     const KWin::Rect destination(qRound(destF.x()), qRound(destF.y()), qRound(destF.width()), qRound(destF.height()));
     if (!fbo.blitFromRenderTarget(renderTarget, viewport, source, destination)) {
-        state.backdropRect = QVector4D();
+        // Leave backdropRect alone, exactly as the empty-source path above does. This
+        // runs once per OUTPUT, and a canvas straddling two of them accumulates their
+        // slices into one texture — so zeroing the rect here would throw away a sibling
+        // output's perfectly good capture from the same frame, drop uHasBackdrop to 0,
+        // and collapse the frost to nothing for that frame. A failed blit means THIS
+        // slice is missing, not that the others are invalid.
         return;
     }
     // Valid sub-rect in TOP-DOWN normalized coords — matches backdropTexel's

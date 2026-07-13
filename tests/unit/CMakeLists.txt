@@ -719,7 +719,12 @@ add_executable(test_settings_registry_contract dbus/test_settings_registry_contr
 target_compile_definitions(test_settings_registry_contract
                            PRIVATE PLASMAZONES_EFFECT_SRC_DIR="${CMAKE_SOURCE_DIR}/kwin-effect"
                                    PLASMAZONES_PROTOCOL_INC_DIR="${CMAKE_SOURCE_DIR}/libs/phosphor-protocol/include")
-target_link_libraries(test_settings_registry_contract PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# PhosphorAnimation: the fixture builds a real PhosphorProfileRegistry, because
+# initializeRegistry() gates the motionProfileTree getter behind a non-null one — with
+# a null registry the test would report a correctly-registered key as missing.
+target_link_libraries(test_settings_registry_contract
+                      PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                              PhosphorAnimation::PhosphorAnimation)
 add_test(NAME test_settings_registry_contract COMMAND test_settings_registry_contract)
 
 # End-to-end adaptor routing test: verifies typed-struct slot dispatch works

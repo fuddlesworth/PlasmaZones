@@ -286,9 +286,18 @@ float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
     return fs.value;
 }
 
+qreal PlasmaZonesEffect::resolvedWindowOpacity(KWin::EffectWindow* w, const WindowDecoration& wb) const
+{
+    if (m_shaderManager.frameOpacityCached(w)) {
+        const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
+        return frameOpacity ? qBound(0.0, *frameOpacity, 1.0) : 1.0;
+    }
+    return wb.ruleOpacity;
+}
+
 void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
-                                           const CompiledSurfacePack& pack, qreal scale, qreal texturePaddingLogical,
-                                           const QString& windowId)
+                                           const CompiledSurfacePack& pack, qreal scale, float timeSec,
+                                           qreal texturePaddingLogical, const QString& windowId)
 {
     // The caller (renderSurfaceChainComposite's per-pack fold) has already
     // resolved @p pack and @p wb, confirmed the border is applied, and bound
@@ -372,22 +381,20 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // modulates instead — rather than the alpha baked in here AND applied again
     // there. Single-apply invariant; see CompiledSurfacePack::handlesOpacity.
     if (pack.uOpacityLoc >= 0) {
-        qreal resolved = 1.0;
-        if (pack.handlesOpacity) {
-            resolved = wb.ruleOpacity;
-            if (m_shaderManager.frameOpacityCached(w)) {
-                const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
-                resolved = frameOpacity ? qBound(0.0, *frameOpacity, 1.0) : 1.0;
-            }
-        }
+        const qreal resolved = pack.handlesOpacity ? resolvedWindowOpacity(w, wb) : 1.0;
         shader->setUniform(pack.uOpacityLoc, static_cast<float>(resolved));
     }
-    // Continuous time for an animated pack. -1 (static pack, e.g. the border)
-    // pushes nothing; postPaintScreen only drives the window to repaint when a
-    // pack actually references iTime (windowSurfaceAnimates), so a static
-    // decoration neither pays this push nor forces per-frame repaints.
+    // Time for an animated pack. -1 (static pack, e.g. the border) pushes nothing;
+    // postPaintScreen only drives the window to repaint when a pack actually
+    // references iTime (windowSurfaceAnimates), so a static decoration neither pays
+    // this push nor forces per-frame repaints.
+    //
+    // The value comes from the FOLD, not from a live clock read here: a chain that
+    // Decorations.Performance has paused is folded against a frozen clock so it holds
+    // the frame it was paused on (SurfaceMultipassState::foldedTimeSec). Sampling live
+    // here would let the packs run on while the composite they draw into does not.
     if (pack.uTimeLoc >= 0) {
-        shader->setUniform(pack.uTimeLoc, surfaceShaderTimeSeconds());
+        shader->setUniform(pack.uTimeLoc, timeSec);
     }
     // Cursor position for hover-reactive packs, in the same top-down device-px
     // space as the geometry uniforms above (origin at the padded canvas's
@@ -527,12 +534,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                     // regime. See SurfaceMultipassState::handledOpacity.
                     const bool foldOwnsOpacity = stateIt->second.handledOpacity;
                     if (!foldOwnsOpacity) {
-                        qreal resolved = bit->ruleOpacity;
-                        if (m_shaderManager.frameOpacityCached(w)) {
-                            const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
-                            resolved = frameOpacity ? qBound(0.0, *frameOpacity, 1.0) : 1.0;
-                        }
-                        presentOpacity = static_cast<float>(resolved);
+                        presentOpacity = static_cast<float>(resolvedWindowOpacity(w, *bit));
                     }
                     present->setUniform(m_surfacePresentOpacityLoc, presentOpacity);
                 }

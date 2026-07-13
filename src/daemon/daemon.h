@@ -290,6 +290,15 @@ private:
     /// (Re)arm the idle ladder from the current settings. A single stage: the
     /// configured timeout. Called on construction and whenever the setting moves.
     void refreshIdleStages();
+
+    /// Announce the session's idle state to the KWin effect, on CHANGE only.
+    ///
+    /// The idle service can report the same state more than once, and every emit wakes
+    /// every decorated window on the desktop (the effect repaints them all so a paused
+    /// chain un-freezes), so a redundant one is not free. @p force overrides the
+    /// change check for the one case where our last published value is not the
+    /// question: a client that just (re)connected and knows nothing of it.
+    void publishSessionIdle(bool idle, bool force = false);
     /// Push the current `Settings::animationProfile()` into the registry
     /// under the shell's well-known paths. Called from
     /// `setupAnimationProfiles()` at startup and from the coalescing
@@ -758,6 +767,10 @@ private:
     /// deferred to one net reconfigure once the value settles.
     QTimer m_idleStagesRefreshTimer;
     static constexpr int kIdleStagesRefreshDebounceMs = 250;
+
+    /// The last idle state we announced. The effect starts up assuming an active
+    /// session, so this starts false and the two agree from the outset.
+    bool m_publishedSessionIdle = false;
 
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;
