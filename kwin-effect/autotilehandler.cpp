@@ -57,6 +57,16 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
         return;
     }
 
+    // Pause FFM entirely during show-desktop/peek. Peeked windows are hidden
+    // from the scene but keep their frameGeometry, so the scan below would
+    // find one under the cursor and activateWindow() would synchronously
+    // cancel the peek (Workspace::activateWindow unhides on activation).
+    // Peek is hover-driven, so without this bail it collapses on the very
+    // first cursor move.
+    if (PlasmaZonesEffect::isShowingDesktop()) {
+        return;
+    }
+
     // Only act on autotile screens (screenId already resolved by caller)
     if (screenId.isEmpty() || !m_autotileScreens.contains(screenId)) {
         return;
@@ -108,7 +118,10 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
         KWin::EffectWindow* w = windows[i];
         // isDeleted: a close-grabbed dying window under the cursor must not
         // pause FFM via the occlusion bail (mirrors the snap FFM guard).
-        if (!w || w->isDeleted() || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        // isHiddenByShowDesktop: belt-and-braces behind the showing-desktop
+        // bail above, for the frame where peek engages mid-scan.
+        if (!w || w->isDeleted() || w->isMinimized() || w->isHiddenByShowDesktop() || !w->isOnCurrentDesktop()
+            || !w->isOnCurrentActivity()) {
             continue;
         }
         // Geometry check first (cheap QRectF::contains) before shouldHandleWindow (allocates via windowClass())

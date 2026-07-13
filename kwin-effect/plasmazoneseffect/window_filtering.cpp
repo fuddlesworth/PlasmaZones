@@ -10,6 +10,7 @@
 
 #include <effect/effecthandler.h>
 #include <window.h>
+#include <workspace.h>
 
 #include <QLoggingCategory>
 #include <QSet>
@@ -264,6 +265,12 @@ bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow*
     }
 
     return false;
+}
+
+bool PlasmaZonesEffect::isShowingDesktop()
+{
+    const auto* ws = KWin::Workspace::self();
+    return ws && ws->showingDesktop();
 }
 
 bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason) const

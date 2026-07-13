@@ -240,6 +240,14 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
         return;
     }
 
+    // Pause FFM entirely during show-desktop/peek. Peeked windows are hidden
+    // from the scene but keep their frameGeometry, so the scan below would
+    // find one under the cursor and activateWindow() would synchronously
+    // cancel the peek (mirrors the autotile FFM guard).
+    if (PlasmaZonesEffect::isShowingDesktop()) {
+        return;
+    }
+
     // Pause FFM whenever the active window is NOT snapped into a zone. Any
     // non-snapped active window — a popup/dialog/excluded app, a window the user
     // deliberately floated, or a free window they simply have not snapped — is
@@ -270,7 +278,10 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
         KWin::EffectWindow* w = windows[i];
         // isDeleted: a close-grabbed dying window under the cursor must not
         // pause FFM via the occlusion bail (or pollute id caches below).
-        if (!w || w->isDeleted() || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        // isHiddenByShowDesktop: belt-and-braces behind the showing-desktop
+        // bail above, for the frame where peek engages mid-scan.
+        if (!w || w->isDeleted() || w->isMinimized() || w->isHiddenByShowDesktop() || !w->isOnCurrentDesktop()
+            || !w->isOnCurrentActivity()) {
             continue;
         }
         // Cheap geometry test before the windowClass()/windowId allocations below.

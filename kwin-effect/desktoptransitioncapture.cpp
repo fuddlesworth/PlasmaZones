@@ -132,7 +132,10 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
         // it. Windows outside this output are clipped by the viewport.
         const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* w : stack) {
-            if (!w || w->isMinimized()) {
+            // isHiddenByShowDesktop: a capture taken while a peek is active
+            // must not bake the hidden windows into the transition texture —
+            // the scene isn't painting them, so the capture shouldn't either.
+            if (!w || w->isMinimized() || w->isHiddenByShowDesktop()) {
                 continue;
             }
             if (!(w->isOnDesktop(desktop) || w->isOnAllDesktops())) {

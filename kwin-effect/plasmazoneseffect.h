@@ -426,6 +426,18 @@ private:
     static bool isOwnPassthroughOverlayClass(const QString& windowClass);
 
     /**
+     * @brief Whether KWin is currently in the show-desktop / peek state.
+     *
+     * Workspace::activateWindow() cancels show-desktop the moment any hidden
+     * window is activated, so every AUTOMATIC activation path (focus-follows-
+     * mouse, retile reactivation, unfloat refocus) must bail while this is
+     * true or a peek collapses on the first cursor move. Deliberate user
+     * actions (daemon focus requests, D-Bus activate) stay ungated — ending
+     * the peek is the correct response to explicit intent, matching KWin.
+     */
+    static bool isShowingDesktop();
+
+    /**
      * @brief Reject XDG desktop portal surfaces by window class.
      *
      * File dialogs / color pickers / screenshot pickers brokered by

@@ -619,7 +619,9 @@ void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool is
     if (!isFloating) {
         m_effect->m_navigationHandler->setWindowFloating(windowId, false);
         KWin::EffectWindow* unfloatWin = m_effect->findWindowById(windowId);
-        if (unfloatWin && unfloatWin == KWin::effects->activeWindow()) {
+        // Showing-desktop guard: this refocus is automatic (daemon float-state
+        // signal), and activateWindow() would synchronously cancel a peek.
+        if (unfloatWin && unfloatWin == KWin::effects->activeWindow() && !PlasmaZonesEffect::isShowingDesktop()) {
             m_pendingAutotileFocusWindowId = windowId;
             KWin::effects->activateWindow(unfloatWin);
         }

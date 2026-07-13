@@ -401,7 +401,12 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         // top, burying non-tiled windows (e.g. System Settings KCM) that had
         // focus. Re-activate the previously focused window to restore stacking.
         if (m_pendingReactivateWindow && !m_pendingReactivateWindow->isDeleted()) {
-            KWin::effects->activateWindow(m_pendingReactivateWindow);
+            // Skip (and drop) the reactivation during show-desktop/peek:
+            // activateWindow() would synchronously cancel the peek. The
+            // stacking restore is cosmetic, so losing it beats breaking peek.
+            if (!PlasmaZonesEffect::isShowingDesktop()) {
+                KWin::effects->activateWindow(m_pendingReactivateWindow);
+            }
             m_pendingReactivateWindow = nullptr;
         }
 
