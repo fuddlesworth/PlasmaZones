@@ -149,6 +149,23 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     });
     connect(&m_shaderManager.m_animationShaderRegistry,
             &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this, [this]() {
+                // Make the GL context current FIRST. This fires from the registry's file
+                // watcher, between frames, where the compositor's context is not current
+                // — and everything below is GL: endShaderTransition hands the redirect
+                // back (KWin destroys the offscreen framebuffer), and the two cache
+                // clears destroy GLShaders and GLTextures, i.e. glDeleteProgram and
+                // glDeleteTextures. Its SIBLING handler (the surface registry's, below)
+                // has done this from the start and explains why; this one was written to
+                // the same contract and did not honour it.
+                //
+                // The only false case is compositor teardown (!KWin::effects), where GL
+                // is going away and the driver reclaims the objects regardless — but we
+                // must not call setShader/unredirect on live windows without a context,
+                // so bail rather than press on.
+                if (!KWin::effects || !KWin::effects->makeOpenGLContextCurrent()) {
+                    qCWarning(lcEffect) << "Animation shader hot-reload skipped: no current GL context";
+                    return;
+                }
                 QVarLengthArray<KWin::EffectWindow*, 8> windows;
                 for (auto& [w, _] : m_shaderManager.shaderTransitions())
                     windows.push_back(w);

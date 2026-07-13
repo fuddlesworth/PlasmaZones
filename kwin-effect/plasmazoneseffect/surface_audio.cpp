@@ -303,13 +303,18 @@ bool PlasmaZonesEffect::bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpect
     //
     // @p animating is false for a chain Decorations.Performance has PAUSED, and the
     // spectrum is then treated exactly as it is when no audio is playing: bar count 0,
-    // no texture bound, the pack renders its static look. This is not cosmetic tidying.
-    // packVariesPerFrame stops counting audio as per-frame while paused so the chain
-    // becomes CACHEABLE, and a cached composite fed by a live spectrum is a
-    // contradiction: the window would hold still on its cached frame yet bake a
-    // different beat into it on every fold the capture forced, which for the archetypal
-    // case (an unfocused music player, redrawing its own UI constantly) is most frames.
-    // Freeze the input or do not freeze the fold — not one without the other.
+    // the pack renders its silent look. This is not cosmetic tidying. packVariesPerFrame
+    // stops counting audio as per-frame while paused so the chain becomes CACHEABLE, and
+    // a cached composite fed by a live spectrum is a contradiction: the window would hold
+    // still on its cached frame yet bake a different beat into it on every fold the
+    // capture forced, which for the archetypal case (an unfocused music player, redrawing
+    // its own UI constantly) is most frames. Take the input away or do not cache the
+    // fold — not one without the other.
+    //
+    // SILENCED, not frozen — the pack settles rather than holding one arbitrary beat.
+    // Freezing would mean a per-window snapshot of the spectrum, and a bar stuck at
+    // whatever level the last beat left it is not obviously the better picture. See the
+    // note on packVariesPerFrame.
     const bool live = animating && audioActive() && m_audioSpectrumTex != nullptr;
     // Push the bar count (0 when not live) so surface_audio.glsl's helpers gate
     // themselves off and the pack renders static without a bound sampler. Derive
@@ -321,14 +326,25 @@ bool PlasmaZonesEffect::bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpect
     if (iAudioSpectrumSizeLoc >= 0) {
         shader->setUniform(iAudioSpectrumSizeLoc, live ? m_audioSpectrumTex->width() : 0);
     }
-    if (live && uAudioSpectrumLoc >= 0) {
-        glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
-        m_audioSpectrumTex->bind();
-        glActiveTexture(GL_TEXTURE0);
-        shader->setUniform(uAudioSpectrumLoc, ShaderInternal::kSurfaceAudioUnit);
-        return true;
+    if (uAudioSpectrumLoc < 0) {
+        return false;
     }
-    return false;
+    // Bind SOMETHING to the sampler either way. An unset sampler2D reads texture unit 0,
+    // which during the fold holds the RUNNING COMPOSITE — a pack that samples the
+    // spectrum without first checking iAudioSpectrumSize would sample the window itself.
+    // The helpers in surface_audio.glsl do all check, so this is inert today, but it is
+    // the same hazard the iChannel and user-texture slots bind a transparent fallback to
+    // prevent, and silence is now the steady state for every paused audio pack rather
+    // than a rarity.
+    KWin::GLTexture* const bound = live ? m_audioSpectrumTex.get() : transparentFallbackTexture();
+    if (!bound) {
+        return false;
+    }
+    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
+    bound->bind();
+    glActiveTexture(GL_TEXTURE0);
+    shader->setUniform(uAudioSpectrumLoc, ShaderInternal::kSurfaceAudioUnit);
+    return true;
 }
 
 } // namespace PlasmaZones

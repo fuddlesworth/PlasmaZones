@@ -287,17 +287,27 @@ private:
     /// rather than the effect.
     void setupIdleService();
 
-    /// (Re)arm the idle ladder from the current settings. A single stage: the
-    /// configured timeout. Called on construction and whenever the setting moves.
+    /// (Re)arm the idle ladder from the current timeout. A single stage, armed whenever
+    /// the compositor supports idle notification — NOT torn down when PauseWhenIdle goes
+    /// off (an empty ladder cannot tell us the seat is already idle when the user turns
+    /// the feature back on). Called from init() and whenever the timeout moves.
     void refreshIdleStages();
+
+    /// Is the session idle, as far as decoration pausing is concerned?
+    ///
+    /// The seat being idle is a FACT (the ladder reports it whenever the compositor
+    /// supports idle notification); pausing on it is a CHOICE (the PauseWhenIdle
+    /// setting). This is the single place the two are combined, so the toggle cannot be
+    /// honoured on one publishing path and forgotten on another.
+    [[nodiscard]] bool sessionIdleNow() const;
 
     /// Announce the session's idle state to the KWin effect, on CHANGE only.
     ///
-    /// The idle service can report the same state more than once, and every emit wakes
-    /// every decorated window on the desktop (the effect repaints them all so a paused
-    /// chain un-freezes), so a redundant one is not free. @p force overrides the
-    /// change check for the one case where our last published value is not the
-    /// question: a client that just (re)connected and knows nothing of it.
+    /// The idle service can report the same state more than once, and a redundant emit
+    /// is a D-Bus broadcast that says nothing (the effect does dedupe it at its own
+    /// door, so it costs traffic rather than repaints). @p force overrides the change
+    /// check for the one case where our last published value is not the question: a
+    /// client that just (re)connected and knows nothing of it.
     void publishSessionIdle(bool idle, bool force = false);
     /// Push the current `Settings::animationProfile()` into the registry
     /// under the shell's well-known paths. Called from

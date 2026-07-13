@@ -538,7 +538,7 @@ SettingsFlickable {
                         // useful half-minute band inside a few pixels of track.
                         stepSize: 5
                         value: appSettings.decorationIdleTimeoutSec
-                        valueSuffix: i18nc("seconds, as a slider unit suffix", " s")
+                        valueSuffix: " s"
                         labelWidth: Kirigami.Units.gridUnit * 5
                         onMoved: value => {
                             appSettings.decorationIdleTimeoutSec = Math.round(value);

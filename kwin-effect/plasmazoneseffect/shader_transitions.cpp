@@ -550,7 +550,12 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
                     cachedTex.lastAppliedWrap = GL_CLAMP_TO_EDGE;
                     cachedTex.lastAccessTick = ++effect->m_shaderManager.m_textureCacheAccessTick;
                     effect->m_shaderManager.m_textureCache.emplace(path, std::move(cachedTex));
-                    effect->evictLruTextureIfOverBound();
+                    // No `pending` to guard: this is a WARM, not a bind. Nothing holds a
+                    // pointer to the entry we just inserted, so the worst the sweep can do
+                    // is discard the warm we just paid for — which is exactly what being
+                    // over the bound means. A live transition's slots are protected by the
+                    // shaderTransitions() scan inside.
+                    effect->evictLruTextureIfOverBound(/*pending=*/nullptr);
                     qCDebug(lcEffect) << "warmUserTextureAsync: cached" << path;
                 },
                 Qt::QueuedConnection);
@@ -1228,15 +1233,23 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             cachedTex.lastAppliedWrap = GL_CLAMP_TO_EDGE;
             cachedTex.lastAccessTick = ++m_shaderManager.m_textureCacheAccessTick;
             texIt = m_shaderManager.m_textureCache.emplace(path, std::move(cachedTex)).first;
-            // Eviction sweep is safe here: std::map only invalidates the
-            // erased iterator, so `texIt` (the entry we just inserted)
-            // stays valid. The transition under construction is handed in
-            // explicitly — it is not in shaderTransitions() yet, so the
-            // slots it has already filled would not otherwise be protected.
-            evictLruTextureIfOverBound(&transition);
             freshlyLoaded = true;
         }
+        // Publish the slot BEFORE any eviction can run. The transition under
+        // construction is not in shaderTransitions() yet, so the sweep only knows
+        // about the slots we hand it — and the entry whose insertion pushed the cache
+        // over the bound would otherwise be the one entry nothing protects, because it
+        // is not assigned until after the sweep. It survived on arithmetic (a fresh
+        // entry carries the newest access tick, so the LRU scan reaches it last), which
+        // holds only while the soft bound stays far above the slot count. That is a
+        // property of two constants, neither of which knows it is load-bearing. Assign
+        // first, then sweep, and the bound stops mattering.
         transition.userTextures[slot] = &texIt->second;
+        if (freshlyLoaded) {
+            // std::map only invalidates the erased iterator, so `texIt` survives the
+            // sweep — and `transition` now covers every slot it holds, this one included.
+            evictLruTextureIfOverBound(&transition);
+        }
         // One-shot diagnostic per (effectId, slot, path) tuple — fires
         // on first upload only, so a leg that re-uses an already-cached
         // texture stays silent. Lets a journal scan answer "did matrix's
@@ -1927,22 +1940,28 @@ void PlasmaZonesEffect::scheduleShaderTransitionTeardown(KWin::EffectWindow* win
 
 void PlasmaZonesEffect::loadShaderProfileFromDbus()
 {
-    constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::ShaderProfileTree;
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this, kName](const QVariant& v) {
-        dispatchJsonSetting(kName, v,
-                            [this](const QJsonObject& obj) {
-                                auto& tree = m_shaderManager.profileTree();
-                                tree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(obj);
-                                qCDebug(lcEffect)
-                                    << "loadShaderProfileFromDbus: tree loaded with" << tree.overriddenPaths().size()
-                                    << "overrides — paths=" << tree.overriddenPaths();
-                                // A tree edit can assign or unassign an audio-reactive
-                                // animation pack; re-evaluate the cava run gate so the
-                                // provider is warm before the first transition needs it.
-                                scheduleEffectAudioSync();
-                            },
-                            /*arraySink=*/{});
-    });
+    // The key is named INLINE, not bound to a local alias first. An alias saves nothing
+    // here and costs real safety: the registry-contract test scrapes these call sites to
+    // prove every key the effect fetches is registered daemon-side, and an alias forces
+    // it to resolve an identifier back to a constant — which it has now got wrong three
+    // separate times, each time silently checking the wrong key while its own self-check
+    // balanced. Name the constant where it is used and there is nothing to resolve.
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(
+        this, PhosphorProtocol::Service::SettingProperty::ShaderProfileTree, [this](const QVariant& v) {
+            dispatchJsonSetting(PhosphorProtocol::Service::SettingProperty::ShaderProfileTree, v,
+                                [this](const QJsonObject& obj) {
+                                    auto& tree = m_shaderManager.profileTree();
+                                    tree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(obj);
+                                    qCDebug(lcEffect) << "loadShaderProfileFromDbus: tree loaded with"
+                                                      << tree.overriddenPaths().size()
+                                                      << "overrides — paths=" << tree.overriddenPaths();
+                                    // A tree edit can assign or unassign an audio-reactive
+                                    // animation pack; re-evaluate the cava run gate so the
+                                    // provider is warm before the first transition needs it.
+                                    scheduleEffectAudioSync();
+                                },
+                                /*arraySink=*/{});
+        });
 }
 
 void PlasmaZonesEffect::slotRulesChanged()
@@ -2086,38 +2105,44 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
 
 void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
 {
-    constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::MotionProfileTree;
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this, kName](const QVariant& v) {
-        dispatchJsonSetting(kName, v,
-                            [this](const QJsonObject& obj) {
-                                // ProfileTree::fromJson resolves each node's optional
-                                // `curve` field through a CurveRegistry. The effect now
-                                // resolves per-event curve AND duration from this tree
-                                // (resolveEventMotionProfile reads `.curve` to shape the
-                                // time-driven iTime), so parse with the effect's own
-                                // `m_curveRegistry` — the SAME registry the Rule path
-                                // resolves against (shader_resolve.cpp) — rather than a
-                                // throwaway.
-                                //
-                                // Builtins are sufficient here and no CurveLoader is
-                                // needed in the compositor: a Profile persists its curve
-                                // BY SPEC, not by registry key (Profile::toJson writes
-                                // `curve->toString()`, e.g. "0.34,1.20,0.64,1.00" or
-                                // "spring:<omega>,<zeta>"; the friendly name rides in the
-                                // separate `presetName` field). A user curve pack
-                                // (data/curves/*.json) is a named preset over a BUILTIN
-                                // typeId, so it round-trips through its spec and the
-                                // ctor-registered builtin factories resolve it. Sharing
-                                // one registry keeps both curve paths on identical
-                                // resolution rules rather than two that can drift.
-                                auto& tree = m_shaderManager.motionProfileTree();
-                                tree = PhosphorAnimation::ProfileTree::fromJson(obj, m_curveRegistry);
-                                qCDebug(lcEffect) << "loadMotionProfileTreeFromDbus: tree loaded with"
-                                                  << tree.overriddenPaths().size()
-                                                  << "per-event overrides — paths=" << tree.overriddenPaths();
-                            },
-                            /*arraySink=*/{});
-    });
+    // The key is named INLINE, not bound to a local alias first. An alias saves nothing
+    // here and costs real safety: the registry-contract test scrapes these call sites to
+    // prove every key the effect fetches is registered daemon-side, and an alias forces
+    // it to resolve an identifier back to a constant — which it has now got wrong three
+    // separate times, each time silently checking the wrong key while its own self-check
+    // balanced. Name the constant where it is used and there is nothing to resolve.
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(
+        this, PhosphorProtocol::Service::SettingProperty::MotionProfileTree, [this](const QVariant& v) {
+            dispatchJsonSetting(PhosphorProtocol::Service::SettingProperty::MotionProfileTree, v,
+                                [this](const QJsonObject& obj) {
+                                    // ProfileTree::fromJson resolves each node's optional
+                                    // `curve` field through a CurveRegistry. The effect now
+                                    // resolves per-event curve AND duration from this tree
+                                    // (resolveEventMotionProfile reads `.curve` to shape the
+                                    // time-driven iTime), so parse with the effect's own
+                                    // `m_curveRegistry` — the SAME registry the Rule path
+                                    // resolves against (shader_resolve.cpp) — rather than a
+                                    // throwaway.
+                                    //
+                                    // Builtins are sufficient here and no CurveLoader is
+                                    // needed in the compositor: a Profile persists its curve
+                                    // BY SPEC, not by registry key (Profile::toJson writes
+                                    // `curve->toString()`, e.g. "0.34,1.20,0.64,1.00" or
+                                    // "spring:<omega>,<zeta>"; the friendly name rides in the
+                                    // separate `presetName` field). A user curve pack
+                                    // (data/curves/*.json) is a named preset over a BUILTIN
+                                    // typeId, so it round-trips through its spec and the
+                                    // ctor-registered builtin factories resolve it. Sharing
+                                    // one registry keeps both curve paths on identical
+                                    // resolution rules rather than two that can drift.
+                                    auto& tree = m_shaderManager.motionProfileTree();
+                                    tree = PhosphorAnimation::ProfileTree::fromJson(obj, m_curveRegistry);
+                                    qCDebug(lcEffect) << "loadMotionProfileTreeFromDbus: tree loaded with"
+                                                      << tree.overriddenPaths().size()
+                                                      << "per-event overrides — paths=" << tree.overriddenPaths();
+                                },
+                                /*arraySink=*/{});
+        });
 }
 
 PhosphorAnimation::Profile PlasmaZonesEffect::resolveEventMotionProfile(const QString& profilePath,
@@ -2209,24 +2234,30 @@ void PlasmaZonesEffect::slotSessionIdleChanged(bool idle)
 
 void PlasmaZonesEffect::loadShaderRegistryFromDbus()
 {
-    constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths;
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this, kName](const QVariant& v) {
-        dispatchJsonSetting(kName, v,
-                            /*objectSink=*/{}, [this](const QJsonArray& arr) {
-                                QStringList paths;
-                                for (const auto& entry : arr) {
-                                    if (entry.isString())
-                                        paths.append(entry.toString());
-                                }
-                                if (!paths.isEmpty()) {
-                                    m_shaderManager.m_animationShaderRegistry.addSearchPaths(paths);
-                                }
-                                qCDebug(lcEffect)
-                                    << "loadShaderRegistryFromDbus: added" << paths.size()
-                                    << "search paths — registry effect count="
-                                    << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
-                            });
-    });
+    // The key is named INLINE, not bound to a local alias first. An alias saves nothing
+    // here and costs real safety: the registry-contract test scrapes these call sites to
+    // prove every key the effect fetches is registered daemon-side, and an alias forces
+    // it to resolve an identifier back to a constant — which it has now got wrong three
+    // separate times, each time silently checking the wrong key while its own self-check
+    // balanced. Name the constant where it is used and there is nothing to resolve.
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(
+        this, PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths, [this](const QVariant& v) {
+            dispatchJsonSetting(PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths, v,
+                                /*objectSink=*/{}, [this](const QJsonArray& arr) {
+                                    QStringList paths;
+                                    for (const auto& entry : arr) {
+                                        if (entry.isString())
+                                            paths.append(entry.toString());
+                                    }
+                                    if (!paths.isEmpty()) {
+                                        m_shaderManager.m_animationShaderRegistry.addSearchPaths(paths);
+                                    }
+                                    qCDebug(lcEffect)
+                                        << "loadShaderRegistryFromDbus: added" << paths.size()
+                                        << "search paths — registry effect count="
+                                        << m_shaderManager.m_animationShaderRegistry.availableEffects().size();
+                                });
+        });
 }
 
 } // namespace PlasmaZones

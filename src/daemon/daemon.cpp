@@ -577,147 +577,6 @@ void Daemon::setupAnimationShaderEffects()
     }
 }
 
-void Daemon::setupIdleService()
-{
-    // No QObject parent: the unique_ptr owns it. Passing `this` as well would be
-    // dual ownership (it survives only because member destruction runs before
-    // ~QObject de-parents the children), and every other unique_ptr-held QObject
-    // in this file is constructed with a null parent for the same reason.
-    m_idleService = std::make_unique<PhosphorServiceIdle::IdleService>(nullptr);
-    if (!m_idleService->isSupported()) {
-        // No ext-idle-notify-v1 on this compositor. The decoration chain simply
-        // keeps animating; PauseWhenIdle degrades to a no-op rather than guessing
-        // at idleness from some other signal.
-        qCInfo(lcDaemon) << "Idle notification unsupported by this compositor — "
-                            "decoration PauseWhenIdle will not engage";
-        m_idleService.reset();
-        return;
-    }
-
-    connect(m_idleService.get(), &PhosphorServiceIdle::IdleService::idled, this, [this](int /*stage*/) {
-        // The PauseWhenIdle re-check is LOAD-BEARING, not defensive. refreshIdleStages()
-        // does empty the ladder when the setting goes off, but it is debounced (see
-        // below), so between the toggle and the rebuild the old stage is still armed and
-        // can still fire. Without this check that stale stage would idle-pause a session
-        // the user has just told us not to pause. It also covers a future consumer arming
-        // the ladder for its own reasons.
-        if (m_settings && m_settings->decorationPauseWhenIdle()) {
-            publishSessionIdle(true);
-        }
-    });
-    connect(m_idleService.get(), &PhosphorServiceIdle::IdleService::resumed, this, [this]() {
-        // Announce the resume whatever the setting now says, including when
-        // PauseWhenIdle was switched off mid-idle — the effect would otherwise stay
-        // paused on a stale `true`. Clearing the ladder emits resumed() through this
-        // same handler, so the toggle-off path is released here rather than needing its
-        // own emit.
-        publishSessionIdle(false);
-    });
-
-    refreshIdleStages();
-
-    // Re-arm when the ladder moves: a timeout change has to rebuild the stage, and
-    // turning PauseWhenIdle off has to clear it. Turning it off ALSO releases an
-    // already-idle session, but not from here — setStages({}) drives the state
-    // machine back to stage 0, which emits resumed(), which the handler above turns
-    // into sessionIdleChanged(false).
-    //
-    // DEBOUNCED, because a rebuild is not free and not silent: it destroys and
-    // recreates the compositor's ext-idle-notify-v1 object, and if the session is
-    // currently idle it announces a resume (waking every decorated window through
-    // repaintAllDecorations). The "Idle after" slider writes on every step of a drag,
-    // so an undebounced connect would do all of that per pixel of travel.
-    m_idleStagesRefreshTimer.setSingleShot(true);
-    m_idleStagesRefreshTimer.setInterval(kIdleStagesRefreshDebounceMs);
-    connect(&m_idleStagesRefreshTimer, &QTimer::timeout, this, &Daemon::refreshIdleStages);
-    // NOT guarded on m_settings. It is a unique_ptr built in the constructor's init
-    // list and can never be null here — m_settingsAdaptor was constructed FROM it
-    // already. A guard would be worse than pointless: were it ever to trip, these two
-    // connects would be skipped and the idle ladder would sit pinned to its startup
-    // value for the process lifetime, so the timeout slider and the PauseWhenIdle
-    // toggle would both become silent no-ops.
-    connect(m_settings.get(), &ISettings::decorationIdleTimeoutSecChanged, this, [this] {
-        m_idleStagesRefreshTimer.start();
-    });
-    connect(m_settings.get(), &ISettings::decorationPauseWhenIdleChanged, this, [this] {
-        m_idleStagesRefreshTimer.start();
-        // Announce the state the toggle just put us in, NOW and unconditionally, rather
-        // than leaving it to the debounced rebuild.
-        //
-        // Turning it OFF means the session is not idle as far as this feature is
-        // concerned, whatever the seat is doing. Turning it back ON while the seat is
-        // ALREADY idle produces no new edge from the compositor to ride — the ladder
-        // rebuild re-arms from active, and until the next real idle timeout the effect
-        // would run unpaused on a session that has been idle the whole time. Forced past
-        // the change check for the same reason bridgeRegistered is: what the effect
-        // believes is the question, and it cannot be derived from what we last sent.
-        const bool idle = m_idleService && m_settings->decorationPauseWhenIdle() && m_idleService->isIdle();
-        publishSessionIdle(idle, /*force=*/true);
-    });
-
-    // Push the CURRENT state whenever the KWin effect (re)registers. sessionIdleChanged
-    // is edge-triggered, and a restarted daemon arms a fresh ext-idle-notify-v1
-    // notification on a seat that may already be idle or already active — either way
-    // it produces no edge, so an effect that restarted (or a daemon that did) would
-    // otherwise run on a stale assumption until the next real idle->active flip.
-    if (m_compositorBridge) {
-        connect(m_compositorBridge, &CompositorBridgeAdaptor::bridgeRegistered, this,
-                [this](const QString&, const QString&, const QStringList&) {
-                    // The setting IS re-checked, and it is not redundant. The ladder
-                    // rebuild is debounced, so between the user turning PauseWhenIdle
-                    // off and the timer firing there is a window where the setting is
-                    // already false but the ladder is still armed and isIdle() can
-                    // still be true. A bridge registering inside that window would
-                    // otherwise push idle=true for a feature the user just switched off.
-                    const bool idle =
-                        m_idleService && m_settings && m_settings->decorationPauseWhenIdle() && m_idleService->isIdle();
-                    // FORCED past the value-changed check. A newly registered effect
-                    // starts from its OWN default (not idle) and has heard nothing from
-                    // us, so what matters here is what IT believes, not what we last
-                    // published. Suppressing a "redundant" false would leave an effect
-                    // that reconnected mid-idle running unpaused, and a restarted daemon
-                    // publishing to an already-idle seat produces no edge of its own.
-                    publishSessionIdle(idle, /*force=*/true);
-                });
-    }
-}
-
-void Daemon::publishSessionIdle(bool idle, bool force)
-{
-    if (!m_settingsAdaptor) {
-        return;
-    }
-    // Only on a real change, per the project's emit-on-change rule — the idle service
-    // can report the same state twice (a ladder rebuild that lands on the same value,
-    // a second stage on the same ladder), and each redundant emit wakes every decorated
-    // window on the desktop through repaintAllDecorations. @p force exists for the one
-    // case where the value is not the question: a client that has just connected and
-    // does not know our state at all. See the bridgeRegistered handler.
-    if (!force && idle == m_publishedSessionIdle) {
-        return;
-    }
-    m_publishedSessionIdle = idle;
-    Q_EMIT m_settingsAdaptor->sessionIdleChanged(idle);
-}
-
-void Daemon::refreshIdleStages()
-{
-    if (!m_idleService || !m_settings) {
-        return;
-    }
-    if (!m_settings->decorationPauseWhenIdle()) {
-        // No stages = never fires. Cheaper and clearer than arming a ladder we
-        // would then ignore in the handlers.
-        m_idleService->setStages({});
-        return;
-    }
-    const int timeoutMs = m_settings->decorationIdleTimeoutSec() * 1000;
-    m_idleService->setStages({QVariantMap{
-        {PhosphorServiceIdle::StageKey::Name, QStringLiteral("decorations")},
-        {PhosphorServiceIdle::StageKey::TimeoutMs, timeoutMs},
-    }});
-}
-
 void Daemon::setupSurfaceShaderEffects()
 {
     m_surfaceShaderRegistry = std::make_unique<PhosphorSurfaceShaders::SurfaceShaderRegistry>(nullptr);
@@ -2618,6 +2477,18 @@ void Daemon::stop()
     // explicitly rather than left to an invariant, and this is the last piece.
     m_idleStagesRefreshTimer.stop();
     m_idleService.reset();
+    // The idle service's own signals die with it, but the two settings connects and the
+    // bridgeRegistered connect have OTHER senders (m_settings, m_compositorBridge) and
+    // `this` as receiver, so they outlive it. A settings write landing between stop() and
+    // ~Daemon would still run their lambdas. Sever them here rather than rely on an
+    // ordering invariant no reader can see, which is the discipline the rest of this
+    // teardown follows.
+    if (m_settings) {
+        disconnect(m_settings.get(), nullptr, this, nullptr);
+    }
+    if (m_compositorBridge) {
+        disconnect(m_compositorBridge, nullptr, this, nullptr);
+    }
 
     // Destroy the router. Engines below outlive it so any in-flight
     // navigatorForShortcut path completes with the engine pointers it

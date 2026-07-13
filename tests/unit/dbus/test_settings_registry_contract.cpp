@@ -36,6 +36,7 @@
 
 #include <QTest>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -80,20 +81,24 @@ QString readSource(const QString& path, QString* whyFailed)
 /// Every setting key the effect fetches, scraped from its own sources rather than
 /// duplicated here — a hand-copied list is exactly the thing that drifts.
 ///
-/// The effect fetches in FOUR shapes, and all of them must be understood or the key
-/// silently escapes this test:
+/// Every fetch must NAME its key at the call site, in one of two shapes:
 ///
-///   loadSettingAsync(QStringLiteral("key"), …)                        inline
-///   loadAudioInt / loadAudioBool(QStringLiteral("key"), …)            audio wrappers,
-///                                                                     which forward to
-///                                                                     loadSettingAsync
-///   loadSettingAsync(SettingProperty::X, …)                           named constant
-///   constexpr QLatin1String kName = SettingProperty::X;               local alias,
-///   loadSettingAsync(this, kName, …)                                    resolved by NAME
-///                                                                       and POSITION
+///   loadSettingAsync(QStringLiteral("key"), …)              a literal
+///   loadAudioInt / loadAudioBool(QStringLiteral("key"), …)  the audio wrappers, which
+///                                                           forward to loadSettingAsync
+///   loadSettingAsync(SettingProperty::X, …)                 a named constant, resolved
+///                                                           from ServiceConstants.h
 ///
-/// The constants are resolved by scraping ServiceConstants.h, so the named forms are
-/// checked as strictly as the literal ones.
+/// There used to be a third shape — bind the constant to a local `kName` first, then
+/// pass the alias — and resolving an identifier back to a key is where this scrape went
+/// wrong THREE separate times, each time binding a fetch to the wrong key while its own
+/// self-check balanced. The aliases are gone from the effect (the constant is named where
+/// it is used), and the scrape no longer tries to resolve identifiers at all: a fetch
+/// whose key it cannot read off the call site is UNRESOLVED, and unresolved is LOUD.
+///
+/// Still not covered, and deliberately so rather than silently: a key assembled at
+/// runtime, or a fetch hidden behind a macro. Neither exists, and both would have to be
+/// written on purpose.
 ///
 /// @p unaccounted receives any fetch call site that matches none of the above and is
 /// not a known non-fetch (the loadSettingAsync definition, its forwarding call, and
@@ -124,29 +129,22 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
     // preprocessing.
     static const QRegularExpression fetchRe(QLatin1String(
         "load(?:SettingAsync|AudioInt|AudioBool)\\(\\s*(?:this,\\s*)?(?:QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"
-        "|PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+)"
-        "|([A-Za-z][A-Za-z0-9_]*)\\s*,)"));
-    // A local alias: constexpr QLatin1String kName = SettingProperty::X;
-    static const QRegularExpression aliasRe(
-        QLatin1String("QLatin1String ([A-Za-z0-9_]+) = PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+)"));
+        "|PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+))"));
     // Call sites that do not name a key: they take it as a parameter.
     static const QRegularExpression nonFetchRe(
         QLatin1String("PlasmaZonesEffect::loadSettingAsync\\(const QString" // the definition
                       "|loadSettingAsync\\(this,\\s*name\\b" // its forwarding call
                       "|loadSettingAsync\\(name\\b")); // inside the audio wrappers
 
-    // EVERY effect source, found at test time. A hand-written file list is a list to
-    // forget: a new .cpp that fetches a setting would simply not be looked at, and the
-    // test would keep passing while the key went unchecked — which is the whole failure
-    // this file exists to make impossible. The two directories are where the effect's
-    // translation units live.
+    // EVERY effect source, RECURSIVELY, found at test time. A hand-written file list is a
+    // list to forget, and so is a hand-written directory list: the effect already has
+    // three source directories, and a fetch in a new one would simply never be opened —
+    // no tally, no failure, no key checked.
     QStringList files;
-    for (const QString& dir : {QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR),
-                               QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR "/plasmazoneseffect")}) {
-        const QFileInfoList entries = QDir(dir).entryInfoList({QStringLiteral("*.cpp")}, QDir::Files);
-        for (const QFileInfo& entry : entries) {
-            files << entry.absoluteFilePath();
-        }
+    QDirIterator it(QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR), {QStringLiteral("*.cpp")}, QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        files << it.next();
     }
     if (files.isEmpty()) {
         *whyFailed = QStringLiteral("found no effect sources under %1").arg(QLatin1String(PLASMAZONES_EFFECT_SRC_DIR));
@@ -160,59 +158,16 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
             return {};
         }
 
-        // Local aliases, resolved by NAME **and** POSITION. Both halves are load-bearing,
-        // and each was got wrong once:
-        //
-        //   By name alone: every alias in shader_transitions.cpp is called `kName`, each
-        //   in its own function scope, naming a DIFFERENT setting. A name-keyed map
-        //   collapses all three into whichever was written last, so two real keys stop
-        //   being checked — silently, because the tally still balances.
-        //
-        //   By position alone: an identifier that is NOT one of the aliases at all (a
-        //   member constant, a differently-spelled local, a new fetch appended after the
-        //   last alias in the file) binds to whichever alias happens to precede it. The
-        //   key checked is then not the key fetched — again silently, again with a
-        //   balanced tally.
-        //
-        // So: bind an identifier to the nearest alias DEFINED BEFORE IT that has THAT
-        // NAME. Anything else resolves to nothing and trips the tally below, loudly.
-        // This test exists to catch exactly the failure it kept committing itself.
-        struct Alias
-        {
-            qsizetype definedAt;
-            QString name;
-            QString key;
-        };
-        QList<Alias> aliases;
-        auto ait = aliasRe.globalMatch(src);
-        while (ait.hasNext()) {
-            const auto m = ait.next();
-            aliases.append({m.capturedStart(0), m.captured(1), constants.value(m.captured(2))});
-        }
-        const auto aliasAt = [&aliases](const QString& name, qsizetype offset) -> QString {
-            QString found;
-            for (const Alias& alias : aliases) {
-                if (alias.definedAt < offset && alias.name == name) {
-                    found = alias.key;
-                }
-            }
-            return found;
-        };
-
         int scraped = 0;
         auto it = fetchRe.globalMatch(src);
         while (it.hasNext()) {
             const auto m = it.next();
-            QString key;
-            if (!m.captured(1).isEmpty()) {
-                key = m.captured(1); // QStringLiteral("…")
-            } else if (!m.captured(2).isEmpty()) {
-                key = constants.value(m.captured(2)); // SettingProperty::X
-            } else {
-                key = aliasAt(m.captured(3), m.capturedStart(0)); // a local alias, by name
-            }
+            // Two shapes, both of which NAME the key at the call site: a literal, or a
+            // SettingProperty constant resolved from ServiceConstants.h. Anything else
+            // resolves to nothing and trips the tally below, loudly.
+            const QString key = !m.captured(1).isEmpty() ? m.captured(1) : constants.value(m.captured(2));
             if (key.isEmpty()) {
-                continue; // an identifier we could not resolve; the tally below catches it
+                continue; // unresolvable; the tally below catches it
             }
             keys << key;
             ++scraped;
@@ -254,12 +209,13 @@ class TestSettingsRegistryContract : public QObject
 private Q_SLOTS:
     /// The fixture has to be able to SEE every key production registers, or this test
     /// reports a correctly-registered key as missing and invites someone to "fix" it by
-    /// deleting the assertion. initializeRegistry() gates its getters behind THREE
-    /// things, and all three must be satisfied here:
+    /// deleting the assertion. initializeRegistry() gates its getters behind TWO things,
+    /// and both must be satisfied here:
     ///   - a qobject_cast to the concrete Settings (so a StubSettings is not enough),
-    ///   - a non-null shader registry,
     ///   - a non-null profile registry (motionProfileTree hangs off this one).
-    /// IsolatedConfigGuard keeps the real Settings off the developer's own config.
+    /// The shader registry is passed for completeness; nothing in initializeRegistry
+    /// gates on it. IsolatedConfigGuard keeps the real Settings off the developer's own
+    /// config.
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();

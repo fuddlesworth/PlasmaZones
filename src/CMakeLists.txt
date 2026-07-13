@@ -450,6 +450,7 @@ set(plasmazones_daemon_SRCS
     daemon/enginefactory.cpp
     daemon/daemon/start.cpp
     daemon/daemon/signals.cpp
+    daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
     daemon/daemon/osd.cpp

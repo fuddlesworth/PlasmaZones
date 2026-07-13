@@ -21,6 +21,7 @@
 
 #include <QColor>
 #include <QHash>
+#include <QPointF>
 #include <QRect>
 #include <QSize>
 #include <QString>
@@ -221,6 +222,36 @@ struct CompiledSurfacePack
     std::vector<CompiledSurfaceBufferPass> bufferPasses;
 };
 
+/// What one fold decided to reuse, computed up front by planSurfaceFold().
+///
+/// The fold's cache decisions used to be interleaved with the folding itself, in pieces
+/// that had to agree with each other and periodically did not. They live here now, and
+/// the fold only executes them.
+struct SurfaceFoldPlan
+{
+    /// May the chain animate at all right now (Decorations.Performance)? False means a
+    /// stopped clock, silence, and no cursor — which is what makes it cacheable.
+    bool mayAnimate = true;
+    /// The clock this fold pushes as iTime — the window's OWN, which stops while it is
+    /// not animating. Never a raw shared-clock read. See SurfaceMultipassState.
+    float foldTime = 0.0f;
+    /// Can the window capture be reused across frames? False under a live transition,
+    /// which re-captures every frame.
+    bool captureCacheable = true;
+
+    int foldablePacks = 0; ///< packs in the chain that compiled and therefore draw
+    int staticPrefix = 0; ///< chain INDEX where the cacheable head ends
+    int staticFoldable = 0; ///< how many packs inside that head draw
+    int lastStaticDraw = -1; ///< the last of those (where the prefix cache is written)
+    bool usePrefix = false; ///< is the static-prefix cache worth keeping for this chain?
+    bool allStatic = false; ///< nothing in the chain varies per frame: cache it entire
+
+    /// The STATE this fold bakes in, and therefore the key its cache is valid under.
+    float foldFocus = 0.0f;
+    float foldOpacity = 1.0f;
+    QPointF foldCursor;
+};
+
 /// Per-window GL state for the decoration composite fold
 /// (renderSurfaceChainComposite): the raw window capture, the cached static-prefix
 /// fold, the ping-pong composite pair, the per-pack buffer-pass textures
@@ -267,6 +298,18 @@ struct SurfaceMultipassState
     std::unique_ptr<KWin::GLTexture> captureTex;
     std::unique_ptr<KWin::GLFramebuffer> captureFbo;
     bool captureValid = false;
+    /// WHICH texture the valid capture is sitting in.
+    ///
+    /// It has two possible homes: captureTex normally, or compositeTex[0] for the
+    /// degenerate chain where no pack compiled (nothing folds, so the capture is the
+    /// final composite and is presented straight from there). captureValid alone says
+    /// only that A capture is current, not where — and a chain can cross the
+    /// "does any pack compile" line at runtime, when the decoration tree changes or a
+    /// broken pack is fixed and recompiles. Skipping the capture then leaves the fold
+    /// reading captureTex, which in that case was allocated and never written: the
+    /// window renders garbage until it happens to damage. The mirror case presents the
+    /// last folded composite as though it were the raw window.
+    bool captureInComposite = false;
 
     /// The composite after folding the chain's leading run of STATIC packs (those for
     /// which packVariesPerFrame is false) over the capture. Those packs are a pure
@@ -327,30 +370,33 @@ struct SurfaceMultipassState
     /// value: focus is a clamped 0..1 and opacity a clamped 0..1.
     float foldedFocus = -1.0f;
     float foldedOpacity = -1.0f;
+    /// The cursor the cached fold baked in, in global logical coords — a cache KEY, like
+    /// focus and opacity, for the chains that read iMouse. The sentinel is far outside
+    /// any real screen, so a never-folded state can never compare equal to a live cursor.
+    /// A hover pack therefore re-folds when the pointer MOVES and holds still otherwise,
+    /// instead of re-folding at vsync forever with the pointer parked.
+    QPointF foldedCursor = QPointF(-1.0e9, -1.0e9);
 
-    /// The window's own animation clock, in surfaceShaderTimeSeconds() seconds, and the
-    /// bookkeeping that makes it STOP while Decorations.Performance has the chain paused
-    /// (an idle session, or an unfocused window under "animate the focused window
-    /// only") and RESUME where it stopped.
+    /// The window's own animation clock, which STOPS whenever the window is not being
+    /// folded and RESUMES where it stopped.
     ///
-    /// Not simply the shared clock. That one runs on regardless, so a window paused for
-    /// ten minutes would resume by jumping its iTime ten minutes forward in a single
-    /// frame, and every periodic pack (anything on sin(iTime)) would pop to an
-    /// unrelated phase. Under "animate the focused window only" that fires on every
-    /// focus return, which is the most common interaction there is.
+    /// Not the shared clock. That one runs on regardless, so a window that was not
+    /// folding for ten minutes would resume by jumping its iTime ten minutes forward in
+    /// a single frame, and every periodic pack (anything on sin(iTime)) would pop to an
+    /// unrelated phase. Two things stop a window folding, and BOTH have to be accounted
+    /// or the jump comes back through whichever one was missed:
     ///
-    /// So the paused time is ACCUMULATED into timeOffsetSec and subtracted out. A
-    /// resumed window carries on from the frame it froze on, and the pause is invisible
-    /// beyond the stillness itself.
+    ///   Decorations.Performance paused it (an idle session, or an unfocused window
+    ///   under "animate the focused window only"). Tracked by pausedAtSec.
     ///
-    ///   pausedAtSec   the shared clock when the pause began; negative when running
-    ///   timeOffsetSec total seconds spent paused, subtracted from the shared clock
-    ///   foldedTimeSec what the last fold actually pushed as iTime
+    ///   Nothing painted it at all — minimized, on another desktop, fully occluded.
+    ///   Nothing tells us that happened, so it is inferred from the GAP since the last
+    ///   fold. This is the far more common case, and it is why the accounting cannot
+    ///   simply hang off the pause gate.
     ///
-    /// foldedTimeSec is what the folds that must still run while paused (the window's
-    /// own content damaged, its focus ramp moving) push, so they reproduce the frozen
-    /// frame instead of drifting. Negative means no fold has run yet.
-    float foldedTimeSec = -1.0f;
+    ///   pausedAtSec   the shared clock when a GATED pause began; negative when running
+    ///   timeOffsetSec total seconds this window has not been animating, subtracted from
+    ///                 the shared clock to give its own
     float pausedAtSec = -1.0f;
     float timeOffsetSec = 0.0f;
 
@@ -498,11 +544,19 @@ struct WindowDecoration
     /// 0 = the classic path, byte-for-byte unchanged.
     int outerPadding = 0;
 
-    /// True when any pack in the chain declares `"needsBackdrop": true`
-    /// (frost / glass). Forces the composite-fold path, has paintWindow
-    /// capture the scene behind the window each frame (uBackdrop), and
-    /// drives continuous repaints (the backdrop changes without any damage
-    /// landing on this window).
+    /// True when any pack in the chain declares `"needsBackdrop": true` (frost / glass).
+    /// Forces the composite-fold path, has paintWindow capture the scene behind the
+    /// window each frame (uBackdrop), and drives continuous repaints (the backdrop
+    /// changes without any damage landing on this window).
+    ///
+    /// METADATA, and it can over-report: a pack may declare the flag while its compiled
+    /// GLSL never actually links uBackdrop / uHasBackdrop / uBackdropRect. The FOLD reads
+    /// the linked uniforms instead (packVariesPerFrame) and will happily cache such a
+    /// chain, while this flag keeps the ~30fps backdrop refold driver running. The fold
+    /// stamps lastFoldMs on its cached-composite early return precisely so that driver
+    /// rate-limits instead of firing every vsync — see the note there. The metadata is
+    /// still the right gate for the CAPTURE (the scene must be captured before any pack
+    /// can be asked whether it sampled it), so the two are not redundant.
     bool needsBackdrop = false;
 
     /// The window's rule-resolved opacity (SetOpacity), 1.0 when no rule applies.

@@ -213,6 +213,218 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     resetCapture.dismiss();
     m_capturingSnapshot = false;
     state.captureValid = captureCacheable;
+    state.captureInComposite = !intoCaptureTex;
+}
+
+// Decide what a fold can REUSE before it does any work.
+//
+// Every cache decision the fold makes lives here and nowhere else: whether the chain may
+// animate right now, what clock it therefore runs on, how much of its head is cacheable,
+// and whether the state it was last folded with has moved. The fold then only executes
+// the plan. Keeping the decision in one place is what stops its parts from drifting out
+// of agreement with each other, which they have done more than once.
+//
+// @p inTransition: a live shader transition owns the window's shader slot. It always
+// animates (it IS the thing being watched), and its capture is never cacheable.
+SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const QString& windowId,
+                                                   const WindowDecoration& deco, const QStringList& chain,
+                                                   SurfaceMultipassState& state,
+                                                   const CompiledPackResolver& compiledPackLazy, bool inTransition)
+{
+    SurfaceFoldPlan plan;
+
+    // Decorations.Performance: may this window's chain animate right now? A chain that
+    // may not is folded against a FROZEN clock, which is what lets it be cached — see
+    // packVariesPerFrame, and pausedAtSec / timeOffsetSec for why the freeze has to
+    // reach the uniform and not just the repaint driver.
+    //
+    // A window under a live shader TRANSITION always animates: the transition is the
+    // thing being watched, it drives the window's geometry frame by frame, and it is
+    // the one caller that supplies its own restore shader.
+    plan.mayAnimate = inTransition || decorationMayAnimate(w);
+    // The window's own clock, which STOPS whenever the window is not animating and
+    // RESUMES where it stopped. Not the shared clock: that one runs on regardless, so a
+    // window that stopped for ten minutes would resume by jumping its iTime ten minutes
+    // forward in a single frame, and every periodic pack would pop to an unrelated
+    // phase. The seconds it was not animating are accumulated into timeOffsetSec and
+    // subtracted out instead.
+    //
+    // TWO ways a window stops, and both must be accounted or the jump returns through
+    // whichever was missed:
+    const float sharedNow = surfaceShaderTimeSeconds();
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    if (plan.mayAnimate) {
+        // GATED — Decorations.Performance paused it, and told us so.
+        if (state.pausedAtSec >= 0.0f) {
+            state.timeOffsetSec += sharedNow - state.pausedAtSec;
+            state.pausedAtSec = -1.0f;
+        }
+        // UNPAINTED — nothing stopped it, it simply was not drawn: minimized, on another
+        // desktop, fully occluded. Nobody tells us that happened, so it is inferred from
+        // the GAP since the last fold. This is by far the more common case, and it is
+        // why the accounting cannot hang off the pause gate alone. The threshold is well
+        // clear of any real frame interval (even a 10Hz compositor) and well under any
+        // gap a person would notice as a phase jump.
+        constexpr qint64 kNotPaintedGapMs = 250;
+        if (state.lastFoldMs >= 0 && nowMs - state.lastFoldMs > kNotPaintedGapMs) {
+            state.timeOffsetSec += static_cast<float>(nowMs - state.lastFoldMs) / 1000.0f;
+        }
+    } else if (state.pausedAtSec < 0.0f) {
+        state.pausedAtSec = sharedNow;
+    }
+    // While paused this is pinned to the instant the pause began, so the folds that
+    // still have to run (the window's own content damaged, its focus ramp moving)
+    // reproduce the frame it froze on instead of drifting.
+    plan.foldTime = (plan.mayAnimate ? sharedNow : state.pausedAtSec) - state.timeOffsetSec;
+    // A transition supplies its own restore shader and drives the window's geometry
+    // frame by frame; don't trust a cached capture across it.
+    //
+    // NOT gated on foldablePacks. A chain in which every pack failed to compile folds
+    // nothing — the capture goes straight into compositeTex[0] and is presented from
+    // there — and its capture is as reusable as any other, because the window's own
+    // damage is the only thing that can change it. Requiring a foldable pack here meant
+    // such a window re-ran the full effects->drawWindow() re-entry, the single most
+    // expensive step of the fold, on EVERY paint of any window overlapping it, forever,
+    // to reproduce a composite identical to the undecorated window.
+    plan.captureCacheable = !inTransition;
+    if (!plan.captureCacheable) {
+        state.captureValid = false;
+    }
+
+    // How many packs in the chain actually compiled and therefore draw? A pack that
+    // failed to compile folds nothing, so it cannot make the composite time-varying and
+    // it cannot be the reason a cache is refused. compiledPackLazy is memoised, so this
+    // pre-pass costs a hash lookup per pack and everything below re-reads it free.
+    int foldablePacks = 0;
+    for (int k = 0; k < chain.size(); ++k) {
+        const CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
+        if (pk && pk->shader && k < static_cast<int>(state.chainBufferTex.size())) {
+            ++foldablePacks;
+        }
+    }
+
+    // How many packs at the head of the chain are cacheable? Their fold is a pure
+    // function of the capture and the folded STATE (focus / opacity), so it can be
+    // cached across frames while the per-frame packs behind them keep re-folding.
+    //
+    // This is a leading RUN, not a set: once a per-frame pack has folded, its output
+    // differs every frame, so every pack downstream is fed a different input every
+    // frame no matter how simple it is. Stop at the first pack that varies per frame.
+    //
+    // A pack that FAILED to compile does not stop the run. The fold below skips it
+    // (it draws nothing, so it cannot make the composite time-varying), and stopping
+    // here instead meant one broken pack mid-chain disabled the whole-composite cache
+    // for the entire chain permanently — the trailing static packs re-folded on every
+    // paint even though nothing about them had moved.
+    //
+    // Hence THREE counters, and the distinction between them matters: `staticPrefix`
+    // is a chain INDEX (where the run ends), `staticFoldable` is how many packs inside
+    // it actually draw, and `lastStaticDraw` is the last of those. Comparing an index
+    // against the foldable COUNT is what produced the bug above.
+    int staticPrefix = 0;
+    int staticFoldable = 0;
+    int lastStaticDraw = -1;
+    while (staticPrefix < chain.size()) {
+        const CompiledSurfacePack* const pk = compiledPackLazy(chain.at(staticPrefix));
+        const bool draws = pk && pk->shader && staticPrefix < static_cast<int>(state.chainBufferTex.size());
+        if (draws && packVariesPerFrame(*pk, plan.mayAnimate)) {
+            break;
+        }
+        if (draws) {
+            ++staticFoldable;
+            lastStaticDraw = staticPrefix;
+        }
+        ++staticPrefix;
+    }
+
+    // The STATE the fold is about to bake in. Focus and rule-opacity are constant
+    // between events (the ramp clamps to exactly 0/1 at its ends), so they are cache
+    // keys rather than disqualifiers — which is what lets the default `border` chain
+    // cache at all, since that pack mixes its colours on uSurfaceFocused.
+    //
+    // advanceFocusFade reads the PINNED per-frame clock, so calling it here and again
+    // from pushBorderUniforms within the same fold is an exact no-op the second time:
+    // the ramp still advances at most once per frame.
+    //
+    // The ramp is advanced ONLY for a chain that some pack actually reads focus in
+    // (uFocusedLoc >= 0), matching pushBorderUniforms. advanceFocusFade CREATES the
+    // m_focusFade entry, and an entry mid-ramp forces per-frame repaints and clears
+    // the composite cache every frame of the fade — so advancing it for a chain that
+    // never samples uSurfaceFocused would drag focus-blind windows into a full re-fold
+    // of a composite that cannot change.
+    bool chainReadsFocus = false;
+    bool chainReadsCursor = false;
+    for (int k = 0; k < chain.size(); ++k) {
+        const CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
+        if (!pk || !pk->shader) {
+            continue;
+        }
+        chainReadsFocus = chainReadsFocus || pk->uFocusedLoc >= 0;
+        chainReadsCursor = chainReadsCursor || pk->iMouseLoc >= 0;
+    }
+    // The cursor is a cache KEY for a hover chain, exactly as focus and opacity are.
+    // A paused chain reads it as absent, matching what pushBorderUniforms pushes.
+    plan.foldCursor =
+        (chainReadsCursor && plan.mayAnimate) ? m_shaderManager.m_cachedCursorGlobal : QPointF(-1.0e9, -1.0e9);
+    const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
+    plan.foldFocus = chainReadsFocus ? advanceFocusFade(windowId, focusedNow) : 0.0f;
+    plan.foldOpacity = static_cast<float>(resolvedWindowOpacity(w, deco));
+    // Explicit epsilon, NOT qFuzzyCompare: both values settle at exactly 0.0, which
+    // qFuzzyCompare is documented not to handle (it is a RELATIVE comparison, and
+    // against zero its tolerance collapses to zero). It happens to fail SAFE here —
+    // a false "moved" only over-invalidates — but relying on that is not a contract.
+    // Both are clamped to 0..1, so an absolute epsilon is exactly right.
+    constexpr float kFoldStateEpsilon = 0.0001f;
+    const auto stateEqual = [](float a, float b) {
+        return std::fabs(a - b) <= kFoldStateEpsilon;
+    };
+    const bool stateMoved = !stateEqual(state.foldedFocus, plan.foldFocus)
+        || !stateEqual(state.foldedOpacity, plan.foldOpacity) || plan.foldCursor != state.foldedCursor;
+
+    // The PREFIX cache pays only when something per-frame follows the cacheable run:
+    // it exists so those packs can fold over a run that does not need re-folding.
+    bool usePrefix = plan.captureCacheable && staticFoldable > 0 && staticFoldable < foldablePacks;
+    // Allocate its target lazily, and only for a chain that will actually use it. A
+    // chain with no per-frame pack (the default ["border"]) never writes it, so an
+    // eager allocation was a full-canvas RGBA8 held for nothing. Release it again if
+    // the chain changes to a shape that no longer needs it.
+    if (usePrefix) {
+        if (!state.prefixTex && !allocSurfaceTarget(state.prefixTex, state.prefixFbo, state.compositeSize)) {
+            // Out of VRAM for the optional cache: fold the chain the long way rather
+            // than failing the whole paint.
+            usePrefix = false;
+        }
+    }
+    // NOTE the missing `else`. The prefix texture is NOT released just because this fold
+    // has no use for it. usePrefix flips with the animation gate — a chain like
+    // ["border", "glow"] needs the prefix while it animates and does not while it is
+    // paused — so releasing on the flip meant a full-canvas RGBA8 allocation and a
+    // framebuffer gen/check on every single focus change of every such window, roughly
+    // 8 MB of churn on a 4K window, on the most frequent interaction there is. The
+    // texture is keyed on size and chain and is freed with the rest of the surface state
+    // when either moves, or when the window goes away; holding it across a pause costs
+    // memory we were about to reallocate anyway.
+    // When NOTHING in the chain varies per frame there is no such split — the whole
+    // composite is a pure function of (capture, state), so it is cached entire.
+    plan.allStatic = plan.captureCacheable && foldablePacks > 0 && staticFoldable == foldablePacks;
+    // Both caches sit downstream of the capture and of the folded state.
+    if (!state.captureValid || stateMoved) {
+        state.prefixValid = false;
+        state.compositeValid = false;
+    }
+    if (!usePrefix || state.prefixPackCount != staticPrefix) {
+        state.prefixValid = false;
+    }
+    if (!plan.allStatic) {
+        state.compositeValid = false;
+    }
+
+    plan.foldablePacks = foldablePacks;
+    plan.staticPrefix = staticPrefix;
+    plan.staticFoldable = staticFoldable;
+    plan.lastStaticDraw = lastStaticDraw;
+    plan.usePrefix = usePrefix;
+    return plan;
 }
 
 } // namespace PlasmaZones

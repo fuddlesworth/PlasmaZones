@@ -1061,6 +1061,13 @@ private:
                               const QSize& textureSize, qreal captureScale,
                               const CompiledPackResolver& compiledPackLazy);
 
+    /// Decide what a fold can reuse — the animation gate, the clock, the cacheable head
+    /// of the chain, and the state keys — before it does any work. Defined in
+    /// surface_capture.cpp, beside the rest of the fold's input side.
+    SurfaceFoldPlan planSurfaceFold(KWin::EffectWindow* w, const QString& windowId, const WindowDecoration& deco,
+                                    const QStringList& chain, SurfaceMultipassState& state,
+                                    const CompiledPackResolver& compiledPackLazy, bool inTransition);
+
     /// Capture the raw window surface for the fold to read as uTexture0. The single
     /// most expensive step of the fold — it re-enters KWin's whole draw chain — and the
     /// reason SurfaceMultipassState::captureValid exists. Defined in surface_capture.cpp.
@@ -1598,7 +1605,10 @@ private:
     /// touching one a live transition still points at. @p pending is the transition
     /// currently being BUILT, which is not in shaderTransitions() yet and would
     /// otherwise have the slots it has already filled evicted out from under it.
-    void evictLruTextureIfOverBound(const ShaderTransition* pending = nullptr);
+    /// No default argument on purpose. A build site that forgets @p pending compiles
+    /// straight into the unguarded path with no diagnostic, and the entry it just
+    /// inserted is precisely the one the sweep would take.
+    void evictLruTextureIfOverBound(const ShaderTransition* pending);
     void warmUserTextureAsync(const QString& absolutePath);
 
     std::unique_ptr<DragTracker> m_dragTracker;

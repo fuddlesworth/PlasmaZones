@@ -29,36 +29,6 @@ QVariant unwrapGetSetting(const QDBusMessage& reply)
     return reply.arguments().constFirst().value<QDBusVariant>().variant();
 }
 
-// Fetch each key with its own getSetting() call. The fallback path for a daemon too
-// old to have the batched getSettings().
-//
-// An unknown key answers with a D-Bus ERROR, so unwrapGetSetting hands back an invalid
-// QVariant and the isValid() check below drops it — the caller keeps its own default.
-// This used to need a warning and a name to match: getSetting once answered an unknown
-// key with a valid EMPTY STRING, so "missing" and "the user cleared this string setting"
-// were the same reply, and this helper was restricted to int/bool keys because it could
-// not tell them apart. The daemon reports the difference properly now, so the
-// restriction is gone.
-QVariantMap querySettingsPerKey(const QStringList& keys)
-{
-    QVariantMap result;
-    for (const QString& key : keys) {
-        if (key.isEmpty()) {
-            continue;
-        }
-        const QVariant value = unwrapGetSetting(PhosphorProtocol::ClientHelpers::syncCall(
-            PhosphorProtocol::Service::Interface::Settings, QStringLiteral("getSetting"), {key}));
-        // An invalid variant is an unknown key (the daemon answered with an error) or a
-        // getter that failed. Either way there is nothing to report, and the caller's
-        // default stands. A legitimately EMPTY string is a real value and is kept.
-        if (!value.isValid()) {
-            continue;
-        }
-        result.insert(key, value);
-    }
-    return result;
-}
-
 } // namespace
 
 QVariantMap querySettingsBatch(const QStringList& keys)
@@ -82,19 +52,16 @@ QVariantMap querySettingsBatch(const QStringList& keys)
         return converted.toMap();
     }
 
-    // Stale daemon: this build knows about getSettings() but the daemon
-    // doesn't. Fall back to individual getSetting() calls so the editor
-    // still sees the user's real configured values instead of defaults.
-    // Other error types (timeout, service unreachable) would also fail
-    // per-key, so there's no point retrying those — return empty and let
-    // callers fall back to hardcoded defaults.
+    // No per-key fallback for a daemon too old to have getSettings(). There used to be
+    // one, and it was a trap: the only daemon that can reach it is one that predates this
+    // build, which is exactly the daemon that still answers an unknown key with a valid
+    // EMPTY STRING instead of an error — so the fallback silently wrote ""/0/false into
+    // the result map where the caller's own default belonged. It was written to work
+    // around that sentinel and then outlived the reasoning. The editor and the daemon
+    // ship together, and CLAUDE.md is explicit that ad-hoc backwards compatibility is
+    // write-once and maintain-forever. Callers fall back to their defaults.
     if (reply.type() == QDBusMessage::ErrorMessage) {
         const QDBusError err(reply);
-        if (err.type() == QDBusError::UnknownMethod) {
-            qCWarning(lcDbus) << "getSettings() unavailable on daemon — falling back to per-key getSetting()."
-                              << "Restart plasmazones-daemon to pick up the batched path.";
-            return querySettingsPerKey(keys);
-        }
         qCWarning(lcDbus) << "getSettings() failed:" << err.message() << "(type" << err.type() << ")";
     }
     return QVariantMap();

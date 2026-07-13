@@ -58,17 +58,24 @@ inline bool allocSurfaceTarget(std::unique_ptr<KWin::GLTexture>& tex, std::uniqu
 ///       uBackdrop        the scene behind the window (and the uHasBackdrop gate and
 ///                        uBackdropRect sub-rect that describe it, which move on their
 ///                        own as the window crosses outputs)
-///       iMouse           the cursor
 ///
 /// @p animating is what Decorations.Performance decides: false when this window's
 /// chain is not allowed to animate right now (the session is idle, or the window is
-/// unfocused and only the focused one may animate). A chain that may not animate is
-/// handed a FROZEN clock and frozen audio, so those inputs stop being per-frame and
-/// the fold becomes cacheable — which is the whole point. Without this the pause
-/// bought nothing under concurrent activity: KWin paints a window whenever anything
-/// overlapping it damages, so a paused animated chain re-folded on a neighbour's
-/// damage with a fresh live clock, paying the full fold cost and lurching forward in
-/// jumps instead of holding still.
+/// unfocused and only the focused one may animate). Such a chain has its per-frame
+/// inputs taken away — a STOPPED clock, SILENCE where the audio spectrum was, and no
+/// cursor — so they stop being per-frame and the fold becomes cacheable, which is the
+/// whole point. Without this the pause bought nothing under concurrent activity: KWin
+/// paints a window whenever anything overlapping it damages, so a paused animated chain
+/// re-folded on a neighbour's damage with a fresh live clock, paying the full fold cost
+/// and lurching forward in jumps instead of holding still.
+///
+/// Note the asymmetry, because it is a real one and it is deliberate. The clock is
+/// FROZEN (the pack keeps the phase it stopped at), but the audio is SILENCED rather
+/// than frozen: freezing it would mean snapshotting the spectrum per window, and a
+/// spectrum bar that holds one arbitrary beat forever is not obviously better than one
+/// that settles. So an audio-reactive decoration settles to its silent look when it
+/// pauses, and picks the beat back up when it resumes. The settle lands on the repaint
+/// the pause itself issues, alongside the focus cross-fade, not at some later moment.
 ///
 /// The BACKDROP is deliberately NOT frozen by @p animating. It changes with the scene
 /// behind the window, which keeps moving whether or not this window may animate, and
@@ -82,6 +89,12 @@ inline bool allocSurfaceTarget(std::unique_ptr<KWin::GLTexture>& tex, std::uniqu
 ///       uSurfaceFocused  focus (and the cross-fade ramp between the two states,
 ///                        which CLAMPS to exactly 0.0 / 1.0 at rest)
 ///       uSurfaceOpacity  the rule-resolved window opacity
+///       iMouse           the cursor. STATE, not per-frame: it is constant between
+///                        cursor MOVES, and a hover pack classed per-frame re-folded its
+///                        whole chain at vsync forever with the pointer sitting still on
+///                        another monitor — every other per-frame driver here settles
+///                        (audio quiets, the focus ramp clamps, the backdrop rate-limits)
+///                        and this one had no quiet condition at all
 ///
 /// This function answers only the first group. Treating focus as per-frame is what
 /// disqualified the DEFAULT border pack — data/surface/border/effect.frag mixes its
@@ -116,7 +129,7 @@ inline bool packVariesPerFrame(const PlasmaZones::CompiledSurfacePack& pk, bool 
     };
 
     if (readsBackdrop(pk.uBackdropLoc, pk.uHasBackdropLoc, pk.uBackdropRectLoc)
-        || readsClock(pk.uTimeLoc, pk.iAudioSpectrumSizeLoc) || (animating && pk.iMouseLoc >= 0)) {
+        || readsClock(pk.uTimeLoc, pk.iAudioSpectrumSizeLoc)) {
         return true;
     }
     // A main pass fed by a time-varying buffer pass is itself time-varying.

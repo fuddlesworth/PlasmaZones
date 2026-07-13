@@ -106,7 +106,8 @@ public Q_SLOTS:
      *
      * Applies all values via the setter registry, saves once (synchronously),
      * and lets the KConfig change notification propagate settingsChanged.
-     * Unknown keys are logged as warnings but do not abort the batch.
+     * Unknown keys are omitted from the result map (and logged at debug level, so production logs stay quiet) but do
+     * not abort the batch.
      *
      * @param settings Map of setting key -> value
      * @return true if every key was found in the registry and its setter succeeded

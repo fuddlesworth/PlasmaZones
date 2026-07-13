@@ -176,14 +176,20 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
         if (pack->iAudioSpectrumSizeLoc >= 0 && audioReactiveDriving()) {
             return true;
         }
-        // A hover-reactive pack has to be driven for the same reason: there is no
+        // A hover-reactive pack has to be driven while the cursor MOVES: there is no
         // per-cursor-move damage path, so if nothing repaints the window its highlight
-        // never follows the pointer. packVariesPerFrame already classifies iMouse as a
-        // per-frame input (so such a pack is excluded from both caches) — without this
-        // the two disagreed, and the pack paid a full chain re-fold on every incidental
-        // paint while STILL never tracking the cursor: the worst of both.
+        // never follows the pointer. Only while it moves, though — the fold bakes the
+        // cursor in as a cache key (SurfaceMultipassState::foldedCursor), so once the
+        // pointer stops, the composite is current and there is nothing to redraw. This
+        // self-terminates the same way every other driver here does: the audio quiets,
+        // the focus ramp clamps, the backdrop rate-limits. Driving unconditionally meant
+        // a hover pack re-folded its entire chain at vsync forever with the pointer
+        // parked motionless on another monitor.
         if (pack->iMouseLoc >= 0) {
-            return true;
+            const auto sit = m_surfaceMultipass.find(windowId);
+            if (sit == m_surfaceMultipass.end() || sit->second.foldedCursor != m_shaderManager.m_cachedCursorGlobal) {
+                return true;
+            }
         }
         for (const CompiledSurfaceBufferPass& bp : pack->bufferPasses) {
             if (bp.uTimeLoc >= 0 || (bp.iAudioSpectrumSizeLoc >= 0 && audioReactiveDriving())) {
