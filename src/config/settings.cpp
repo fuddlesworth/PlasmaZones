@@ -324,9 +324,10 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::orderingGroup(), // "Ordering"
         ConfigDefaults::windowsAppearanceGroup(), // "Windows" — window border + title bar decoration
         ConfigDefaults::decorationsWindowFilteringGroup(), // "Decorations.WindowFiltering" — border-pass window filter
+        ConfigDefaults::decorationsPerformanceGroup(), // "Decorations.Performance" — idle/focused-only animation gating
         ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
         ConfigDefaults::decorationsGroup(), // "Decorations" — per-surface decoration tree (DecorationProfileTree blob)
-                                            // + WindowFiltering sub-group
+                                            // + WindowFiltering + Performance sub-groups
     };
 }
 
@@ -1834,13 +1835,21 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         // Persistence failed — the in-memory rule set still advanced,
         // so consumers wired to `rulesChanged(persisted=false)` already
         // know. Surface it on the settings-side log too so users
-        // grepping `lcConfig` see the failure, and skip the aggregate
-        // `settingsChanged()` emit so dirty-state trackers don't
-        // believe the write made it to disk. Then try to roll the
+        // grepping `lcConfig` see the failure. Then try to roll the
         // in-memory store back to its on-disk state (mirrors the
         // reset() rollback below) so subsequent reads through this
         // Settings instance return the same view as cross-process
         // consumers reading the unmodified file.
+        //
+        // The aggregate `settingsChanged()` emit is GATED on whether that
+        // rollback actually restored the original set (see the
+        // emit-on-change note below it), NOT skipped outright. In the
+        // double-failure case the rollback leaves the value diverged and
+        // the emit does fire, so a dirty-state tracker can re-read the
+        // advanced in-memory value and mark itself clean while disk still
+        // holds the old list. That is the lesser of the two divergences:
+        // staying silent instead strands every disable-list UI on a set
+        // the getters no longer report.
         //
         // BEST-EFFORT, not guaranteed: load() deliberately keeps the
         // in-memory set when it cannot read the file, and an unreadable

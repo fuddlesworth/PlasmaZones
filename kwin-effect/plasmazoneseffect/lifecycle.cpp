@@ -249,13 +249,15 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // compositor teardown (!KWin::effects), where GL is being torn down and
         // the driver reclaims the objects regardless, so the clears are safe
         // either way.
-        const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
+        if (KWin::effects) {
+            KWin::effects->makeOpenGLContextCurrent();
+        }
         m_compiledPacks.clear();
         m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
         m_surfaceMultipass.clear();
         // Repaint whenever there is a compositor, NOT only when the context went current: a
-        // repaint is not GL work. Gating it on haveContext meant a transient make-current
+        // repaint is not GL work. Gating it on the make-current result meant a transient
         // failure dropped the caches but never asked the screen to redraw, so the reloaded
         // packs would not appear until something incidental damaged the scene.
         if (KWin::effects) {

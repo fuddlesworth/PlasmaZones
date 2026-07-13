@@ -100,6 +100,11 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropTex->setWrapMode(GL_CLAMP_TO_EDGE);
         state.backdropSize = textureSize;
         state.backdropRect = QVector4D();
+        // Fresh texture means no output has contributed to any accumulation generation yet, so
+        // reset the generation tracker alongside the rect. Harmless today (backdropUsable gates
+        // the union on the just-zeroed rect), but leaving stale output rects here would resurface
+        // the never-expiring-generation bug if that guard ever stops keying on backdropRect.
+        state.backdropGenerationOutputs.clear();
         // Wrap the texture once, here — the per-frame capture blit below reuses it.
         state.backdropFbo = std::make_unique<KWin::GLFramebuffer>(state.backdropTex.get());
         if (!state.backdropFbo->valid()) {

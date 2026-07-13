@@ -178,6 +178,42 @@ private Q_SLOTS:
         QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
     }
 
+    /**
+     * reset() must restore every Decorations.Performance key to its default.
+     *
+     * NOTE what this does and does not pin. It catches a reset() that no-ops, or a
+     * post-reset load() that fails to re-read. It does NOT pin the group's entry in
+     * Settings::managedGroupNames(): "Decorations.Performance" nests under
+     * root["Decorations"]["Performance"], and managedGroupNames already lists the
+     * parent "Decorations", whose delete removes the whole subtree. The explicit
+     * sub-group entry is defence-in-depth (it keeps working if the group is ever
+     * un-nested), not the thing this test guards. Mirrors the sibling
+     * testDecorationWindowFiltering_defaultsAndReset.
+     */
+    void testDecorationPerformance_defaultsAndReset()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
+        QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
+        QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+
+        // Flip every key away from its default (120 is in-range and distinct from the
+        // default of 30).
+        settings.setDecorationPauseWhenIdle(false);
+        settings.setDecorationAnimateFocusedOnly(true);
+        settings.setDecorationIdleTimeoutSec(120);
+        QCOMPARE(settings.decorationPauseWhenIdle(), false);
+        QCOMPARE(settings.decorationAnimateFocusedOnly(), true);
+        QCOMPARE(settings.decorationIdleTimeoutSec(), 120);
+
+        settings.reset();
+        QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
+        QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
+        QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+    }
+
     // =========================================================================
     // Schema clampDouble validator (window opacity / tint strength scalars)
     //
