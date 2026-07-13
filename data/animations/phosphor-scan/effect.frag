@@ -58,7 +58,9 @@ vec4 pTransition(vec2 uv, float t)
     float bd = clamp(1.0 - abs(uv.y - yB) / beamH, 0.0, 1.0);
 
     // lit: 1 above the beam (already scanned), 0 below (still dark).
-    float lit = smoothstep(yB + beamH * 0.5, yB - beamH * 0.5, uv.y);
+    // Inverted form rather than swapped arguments: smoothstep is undefined
+    // when edge0 >= edge1 per the GLSL spec.
+    float lit = 1.0 - smoothstep(yB - beamH * 0.5, yB + beamH * 0.5, uv.y);
 
     // Mid-leg envelope: peaks mid-flight, exactly zero at both endpoints.
     // Gates the persistence trail, scanlines, and jitter so a settled
@@ -92,8 +94,8 @@ vec4 pTransition(vec2 uv, float t)
 
     // ── Scanlines on the lit picture, fading out as it stabilises: fine
     // alternating rows in device pixels, mid-gated so the settled image is
-    // untouched. Multiplicative on the premultiplied pair, so coverage dims
-    // in step with the body. ──
+    // untouched. Deliberately dims rgb only, leaving alpha untouched: CRT
+    // scanlines are dark rows on the picture, not transparent slits in it. ──
     float scanAmt = clamp(p_scanlines, 0.0, 1.0) * mid;
     float scan = 0.5 + 0.5 * sin(px.y * 3.14159265);
     float scanDim = 1.0 - scanAmt * 0.35 * (1.0 - scan) * lit;

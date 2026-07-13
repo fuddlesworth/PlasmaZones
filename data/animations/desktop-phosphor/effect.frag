@@ -127,8 +127,11 @@ vec4 pTransition(vec2 uv, float t) {
 
             // ── Node dot: flares as its activation lands, holds a dimmer
             // core while its flood is still local, gone under env at the
-            // endpoints. ──
-            float flare = exp(-pow((t - aA) / 0.05, 2.0));
+            // endpoints. Squared via multiply — pow(x, 2.0) is undefined
+            // for x < 0 per the GLSL spec (see phosphor-stream) and this
+            // argument is negative before every activation. ──
+            float fl = (t - aA) / 0.05;
+            float flare = exp(-fl * fl);
             float hold  = smoothstep(aA - 0.02, aA + 0.02, t)
                         * (1.0 - smoothstep(aA + 0.12, aA + 0.30, t));
             float node = exp(-dNode * dNode / (nodeR * nodeR));
@@ -159,14 +162,19 @@ vec4 pTransition(vec2 uv, float t) {
                           * (1.0 - smoothstep(a1 + 0.08, a1 + 0.25, t));
                 if (lit <= 0.001) continue;
 
+                // Inverted form rather than swapped arguments: smoothstep
+                // is undefined when edge0 >= edge1 per the GLSL spec.
                 float dEdge = sdSegment(q, pFrom, pTo);
-                float line = smoothstep(lineW, lineW * 0.3, dEdge);
+                float line = 1.0 - smoothstep(lineW * 0.3, lineW, dEdge);
                 vec3 edgeCol = fluxGradient(clamp(a0 * 1.6 - 0.1 + gate * 0.2, 0.0, 1.0));
                 circuit += edgeCol * line * 0.35 * lit;
 
-                // ── Travelling pulse with a short fading tail. ──
+                // ── Travelling pulse with a short fading tail. The pulse
+                // fades out over a short window after landing instead of
+                // cutting — a step() kill at arrival would drop the full
+                // gaussian brightness in one frame. ──
                 float ph = clamp((t - a0) / max(a1 - a0, 0.04), 0.0, 1.0);
-                float travelling = step(a0, t) * (1.0 - step(a1 + 0.02, t));
+                float travelling = step(a0, t) * (1.0 - smoothstep(a1, a1 + 0.06, t));
                 vec2 pulsePos = mix(pFrom, pTo, ph);
                 float dPulse = length(q - pulsePos);
                 float pulse = exp(-dPulse * dPulse / (pulseR * pulseR));
