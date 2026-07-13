@@ -178,7 +178,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // shader whose samplers point at the textures just freed — the unbound-sampler
         // black flash both files document at length.
         //
-        // No live caller can pass a null w today (all seven guard first), so this is
+        // No live caller can pass a null w today (all eight guard first), so this is
         // defence in depth rather than a live path. It is here because the two sites
         // must not disagree about what "the exact window" means, and they did.
         KWin::EffectWindow* const target = resolveDecorationTarget(windowId, w);
