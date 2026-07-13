@@ -150,7 +150,7 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
         return nullptr;
     }
     // Per-pack-id cache: a hit returns the prior compile (success shader OR a
-    // failure latch — compileFailed true + shader null) without re-attempting the
+    // failure latch — a cached entry whose shader is null) without re-attempting the
     // compile every frame. The whole map is cleared on a registry hot-reload
     // (effectsChanged) so a pack edit recompiles on the next paint.
     auto cacheIt = m_compiledPacks.find(packId);
@@ -163,7 +163,7 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // and window-lifecycle slots, where KWin's GL context is not guaranteed
     // current (the snap-assist thumbnail capture makes this same guard before
     // its off-paint GL work). Make it current BEFORE inserting the cache slot:
-    // a no-context failure must NOT latch compileFailed for the session — the
+    // a no-context failure must NOT cache an entry for the session — the
     // next caller (at latest the paint cycle itself) retries with a live
     // context.
     if (!KWin::effects->makeOpenGLContextCurrent()) {
@@ -173,10 +173,9 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     }
 
     // Insert the cache slot up-front so every fail-closed early-return latches by
-    // leaving compileFailed=true / shader=null on the cached entry. (The single
+    // leaving shader=null on the cached entry. (The single
     // global path used member latch flags; the per-pack path latches on the slot.)
     CompiledSurfacePack& packState = m_compiledPacks[packId];
-    packState.compileFailed = true; // pessimistic until the compile succeeds
 
     ensureSurfaceRegistryPaths();
 
@@ -308,6 +307,17 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     packState.uScaleLoc = shader->uniformLocation(SC::kUSurfaceScale);
     packState.uFocusedLoc = shader->uniformLocation(SC::kUSurfaceFocused);
     packState.uOpacityLoc = shader->uniformLocation(SC::kUSurfaceOpacity);
+    // Pack metadata is the SOLE authority on who owns the rule alpha — the linker
+    // location alone is not, or a pack that samples uSurfaceOpacity without
+    // declaring "handlesOpacity" would get it applied twice (once folded, once by
+    // the present pass, which suppresses itself on the metadata flag). See
+    // CompiledSurfacePack::handlesOpacity.
+    packState.handlesOpacity = eff.handlesOpacity;
+    if (packState.uOpacityLoc >= 0 && !eff.handlesOpacity) {
+        qCWarning(lcEffect) << "Surface shader pack" << packId
+                            << "samples uSurfaceOpacity but does not declare \"handlesOpacity\": true — the rule"
+                               " alpha will be applied by the present pass, not by the pack";
+    }
     // iTime — present (>= 0) only when the pack's main references it; that is the
     // signal the window must be driven to repaint continuously (windowSurfaceAnimates).
     packState.uTimeLoc = shader->uniformLocation(SC::kITime);
@@ -506,81 +516,7 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     }
 
     packState.shader = std::move(shader);
-    packState.compileFailed = false; // success — clear the pessimistic latch
     return &packState;
-}
-
-// Lazily compile the passthrough present shader. It samples a bound texture
-// (uFinal) at vTexCoord and writes it verbatim, ignoring uTexture0 (the
-// redirected surface KWin binds to unit 0). Used as a multi-pack window's
-// redirect shader so OffscreenData::paint presents the pre-composited final FBO
-// at window geometry — the vertex applies modelViewProjectionMatrix (set by
-// OffscreenData) exactly like the pack default vertex, so the geometry matches.
-KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
-{
-    if (m_surfacePresentShader) {
-        return m_surfacePresentShader.get();
-    }
-    if (m_surfacePresentFailed) {
-        return nullptr;
-    }
-    // Same off-paint-caller guard as compiledPack(): reconcileDecorationShader
-    // reaches here from D-Bus/settings/lifecycle contexts where the GL context
-    // is not guaranteed current. A no-context call must return without
-    // latching so the next use (at latest the paint cycle) retries.
-    if (!KWin::effects || !KWin::effects->makeOpenGLContextCurrent()) {
-        qCWarning(lcEffect) << "Surface present shader compile deferred: no current GL context";
-        return nullptr;
-    }
-    m_surfacePresentFailed = true; // pessimistic until the compile succeeds
-
-    static const QByteArray kPresentVertex = QByteArrayLiteral(
-        "#version 450\n\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 texCoord;\n\n"
-        "layout(location = 0) out vec2 vTexCoord;\n\n"
-        "uniform mat4 modelViewProjectionMatrix;\n\n"
-        "void main() {\n"
-        "    vTexCoord = texCoord;\n"
-        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-        "}\n");
-    static const QByteArray kPresentFragment = QByteArrayLiteral(
-        "#version 450\n\n"
-        "layout(location = 0) in vec2 vTexCoord;\n\n"
-        "layout(location = 0) out vec4 fragColor;\n\n"
-        "uniform sampler2D uFinal;\n\n"
-        // Final KWin-style opacity modulation (premultiplied multiply): the
-        // WHOLE decorated output ghosts uniformly, exactly like KWin's own
-        // Modulate trait would. Pushed per frame in drawWindow's present
-        // branch; forced to 1.0 when a chain pack declares handlesOpacity
-        // (frost applies the window's opacity to its content sample itself
-        // so its slab stays solid).
-        "uniform float uOpacity;\n\n"
-        "void main() {\n"
-        "    fragColor = texture(uFinal, vTexCoord) * uOpacity;\n"
-        "}\n");
-
-    // Route BOTH stages through injectKwinDefineAfterVersion, exactly like
-    // every pack shader: KWin rewrites our #version 450 down to the GL context
-    // core version (140), where the `layout(location = N)` qualifiers are
-    // illegal without the ARB extensions the inject helper enables. Passing
-    // the raw sources here failed the present compile on NVIDIA (error C7548)
-    // and latched multi-pack / padded decoration off for the whole session —
-    // the same failure mode surface_compile.cpp documents for frag-only packs.
-    auto shader = KWin::ShaderManager::instance()->generateCustomShader(
-        KWin::ShaderTrait::MapTexture, ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentVertex)),
-        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kPresentFragment)));
-    // KWin 6.7 removed GLShader::isValid(); generateCustomShader returns nullptr
-    // when compilation or linking fails, so a null check is the validity test.
-    if (!shader) {
-        qCWarning(lcEffect) << "Failed to compile surface present shader — multi-pack decoration disabled this session";
-        return nullptr;
-    }
-    m_surfacePresentFinalLoc = shader->uniformLocation("uFinal");
-    m_surfacePresentOpacityLoc = shader->uniformLocation("uOpacity");
-    m_surfacePresentShader = std::move(shader);
-    m_surfacePresentFailed = false;
-    return m_surfacePresentShader.get();
 }
 
 } // namespace PlasmaZones

@@ -174,12 +174,16 @@ void PhosphorMotionAnimation::applyResolvedEasing()
         const qreal tMid1 = t0 + (t1 - t0) / 3.0;
         const qreal tMid2 = t0 + 2.0 * (t1 - t0) / 3.0;
 
-        const QPointF c1(tMid1, curve->evaluate(tMid1));
-        const QPointF c2(tMid2, curve->evaluate(tMid2));
+        // Bound the sampled control points to the overshoot envelope, the same one
+        // AnimatedValue interpolates within. This spline IS the curve as far as a
+        // QML-hosted animation is concerned, so leaving it unbounded would let the
+        // same named curve overshoot further in QML than in the compositor.
+        const QPointF c1(tMid1, boundCurveProgress(curve->evaluate(tMid1)));
+        const QPointF c2(tMid2, boundCurveProgress(curve->evaluate(tMid2)));
         // Force the terminal endpoint to exactly (1,1) so the spline
         // terminates canonically even when the source curve overshoots
         // (springs/elastics often return != 1 at t=1).
-        const QPointF end(t1, (i == kSegments - 1) ? qreal(1.0) : curve->evaluate(t1));
+        const QPointF end(t1, (i == kSegments - 1) ? qreal(1.0) : boundCurveProgress(curve->evaluate(t1)));
         ec.addCubicBezierSegment(c1, c2, end);
     }
 

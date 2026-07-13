@@ -155,7 +155,10 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     const auto floatGuard = qScopeGuard([this] {
                         m_effect->m_inDaemonGeometryApply = false;
                     });
-                    m_effect->applyWindowGeometry(floatWin, savedGeo.toRect());
+                    // Snap-out: leaving tile-managed sizing.
+                    m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
+                                                  /*skipAnimation=*/false,
+                                                  PhosphorAnimation::ProfilePaths::WindowSnapOut);
                     qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId << savedGeo.toRect();
                 }
             }

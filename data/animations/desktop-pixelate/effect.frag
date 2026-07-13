@@ -15,7 +15,12 @@ vec4 pTransition(vec2 uv, float t) {
     float dist = ceil(d * steps) / steps;
     vec2 squareSize = 2.0 * dist / vec2(max(p_blocks, 1.0));
     vec2 p = dist > 0.0 ? (floor(uv / squareSize) + 0.5) * squareSize : uv;
-    return crossFade(p, t);
+    // Clamp the blend factor: iTime can leave [0,1] for an overshooting curve, and
+    // crossFade is a plain mix(), so t = 1.2 extrapolates to 1.2*to - 0.2*from —
+    // colours below 0 or above 1. A unorm8 target clamps that into an over-contrast
+    // flash; a float/HDR target does not clamp it at all. A cross-fade has no
+    // meaningful state past its endpoints.
+    return crossFade(p, clamp(t, 0.0, 1.0));
 #else
     return vec4(0.0);
 #endif

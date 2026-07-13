@@ -73,8 +73,9 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/shader_resolve.cpp
     plasmazoneseffect/shader_resolve.h
     plasmazoneseffect/shader_internal.h
+    plasmazoneseffect/surface_types.h
+    plasmazoneseffect/transition_types.h
     plasmazoneseffect/types.h
-    plasmazoneseffect/surface_state.h
     plasmazoneseffect/surface_fold.h
     shadertransitionmanager.h
     shadertransitionmanager.cpp
@@ -87,6 +88,7 @@ set(plasmazones_effect_SRCS
     snaphandler.cpp
     snaphandler.h
     desktoptransitionmanager.cpp
+    desktoptransitioncapture.cpp
     desktoptransitionmanager.h
     navigationhandler.cpp
     navigationhandler.h
@@ -126,6 +128,10 @@ set_source_files_properties(snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY
 # fullscreen vertex-source constant; keep it out of the Unity blob so those
 # never ODR-collide with surfacelayers.cpp's equivalents.
 set_source_files_properties(desktoptransitionmanager.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+# desktoptransitioncapture.cpp holds the capture half of the same class, including
+# its own file-local helpers (captureFormatFor, allocateOutputTexture); same
+# reason, same exclusion.
+set_source_files_properties(desktoptransitioncapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE

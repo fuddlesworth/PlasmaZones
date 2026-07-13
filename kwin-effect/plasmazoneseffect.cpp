@@ -31,9 +31,16 @@ Q_LOGGING_CATEGORY(lcEffectDiag, "plasmazones.effect.diag", QtWarningMsg)
 
 bool PlasmaZonesEffect::supported()
 {
-    // This effect is a compositor plugin that works in KWin on Wayland
-    // Note: PlasmaZones daemon requires Wayland with layer-shell support
-    return true;
+    // OpenGL compositing is a hard requirement, not a preference: every render
+    // path in this effect is GL (GLShader / GLFramebuffer / GLTexture, the
+    // decoration composite fold, the transition shaders, the desktop blend).
+    // Under QPainter compositing KWin hands effects an image-backed RenderTarget
+    // whose framebuffer() is null, so the first thing that reaches for it —
+    // RenderTarget::texture(), which dereferences it — would crash. Mirrors the
+    // guard KWin's own GL-only effects (blur, screen transform) carry.
+    //
+    // The daemon additionally requires Wayland with layer-shell support.
+    return KWin::effects && KWin::effects->isOpenGLCompositing();
 }
 
 bool PlasmaZonesEffect::enabledByDefault()

@@ -82,8 +82,12 @@ public:
         return staggerInterval.value_or(DefaultStaggerInterval);
     }
 
-    /// Copy with every unset field filled from library defaults.
-    /// Curve is left null if still unset.
+    /// Copy with every unset field filled from library defaults — `curve` is
+    /// backfilled with a default-constructed Easing (OutCubic) when null, and
+    /// `duration` / `minDistance` / `sequenceMode` / `staggerInterval` take
+    /// their Default* constants. `presetName` is the ONE exception: it has no
+    /// library default and stays disengaged, so callers must still treat it as
+    /// optional (`value_or`), never dereference it blind.
     Profile withDefaults() const;
 
     // JSON field names — shared with consumers that build Profile blobs externally.

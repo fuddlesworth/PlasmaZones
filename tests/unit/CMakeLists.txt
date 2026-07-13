@@ -646,6 +646,16 @@ target_link_libraries(test_anchor_uniforms PRIVATE Qt6::Test Qt6::Core Qt6::Gui 
 target_include_directories(test_anchor_uniforms PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 add_test(NAME test_anchor_uniforms COMMAND test_anchor_uniforms)
 
+# Pure-timing test for the compositor's shader clock
+# (ShaderInternal::resolveTransitionLifetimeMs / easeProgress) — pins the
+# duration envelope (the only bound on a hand-edited profile or an undamped
+# spring), the stateless/stateful split, the dt cap, the peek contract, and the
+# deliberate overshoot passthrough. Same header-only reach as the anchor test.
+add_executable(test_shader_timing ui/test_shader_timing.cpp)
+target_link_libraries(test_shader_timing PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation)
+target_include_directories(test_shader_timing PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_shader_timing COMMAND test_shader_timing)
+
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently
 # drift from the GLSL wallpaperUv helper it mirrors.
