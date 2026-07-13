@@ -447,7 +447,12 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             // the editor (same treatment as SetSplitRatio). Mirror the
             // runtime resolver's reject paths (unitDoubleSlot: non-number or
             // out-of-range → ignored) like SetOpacity above, so the label
-            // never claims a strength the effect won't apply.
+            // never claims a strength the effect won't apply: null/undefined
+            // (present but unset) → bare label, bool or out-of-range →
+            // "(invalid)".
+            if (raw.isNull() || raw.isUndefined()) {
+                return PhosphorI18n::tr("Tint strength");
+            }
             const QVariant rv = raw.toVariant();
             bool ok = false;
             const double v = rv.typeId() == QMetaType::Bool ? 0.0 : rv.toDouble(&ok);

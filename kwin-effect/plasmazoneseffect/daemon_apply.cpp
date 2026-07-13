@@ -578,7 +578,6 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
     // placement-state change, so drop it once so border / opacity rules re-resolve
     // against the new snapped / floating / zone state.
     m_shaderManager.animationRuleEvaluator().clearCache();
-    const bool hasOpacity = m_shaderManager.hasOpacityRules();
     for (const QString& windowId : windowIds) {
         KWin::EffectWindow* w = findWindowById(windowId);
         if (!w) {
@@ -612,11 +611,10 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
         // re-apply on a float/snap flip — this is the trigger that makes
         // "floating windows above tiled windows" follow the float toggle.
         reconcileRuleWindowLayer(liveId, w);
-        // An opacity-only (borderless) window needs an explicit repaint for its
-        // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
-        if (hasOpacity) {
-            w->addRepaintFull();
-        }
+        // No explicit repaint is needed for opacity: it is layer-backed, so a
+        // re-resolved SetOpacity value reaches the screen through the
+        // updateWindowDecoration re-fold above, which repaints the window
+        // itself (an undecorated window carries no rule opacity at all).
     }
 }
 

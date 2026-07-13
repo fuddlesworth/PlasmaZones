@@ -847,13 +847,6 @@ private:
     /// defaults apply even with an empty rule set.
     ResolvedWindowAppearance resolveEffectiveWindowAppearance(KWin::EffectWindow* w, const QString& windowId) const;
 
-    // The window most recently passed to slotWindowActivated — i.e. the
-    // "previously active" window on the next focus change. Used to repaint the
-    // window that just lost focus so a focus-scoped (IsFocused) SetOpacity rule
-    // re-resolves on it; the window gaining focus is repainted via the slot's
-    // own argument. QPointer auto-nulls on window destruction.
-    QPointer<KWin::EffectWindow> m_lastActivatedWindow;
-
     // The window currently in an interactive RESIZE (set at
     // windowStartUserMovedResized when isUserResize(), cleared at finish).
     // windowFinishUserMovedResized does not reliably report isUserResize() at
