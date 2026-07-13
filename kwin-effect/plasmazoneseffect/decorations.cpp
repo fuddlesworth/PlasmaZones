@@ -39,12 +39,21 @@ namespace {
 /// comparable value. updateWindowDecoration drops the fold cache only when this actually
 /// moves, so an identical re-resolve (the common case) keeps the cache.
 ///
-/// Focus and opacity are deliberately absent: the fold keys on those itself
-/// (SurfaceMultipassState::foldedFocus / foldedOpacity), so they must not drag the far more
-/// expensive whole-chain invalidation along on every focus change. The rule-resolved border
-/// appearance is absent too, and for a stronger reason: in the layer-backed model it is
+/// Focus has no field of its own: the fold keys on it itself
+/// (SurfaceMultipassState::foldedFocus), so it must not drag the far more expensive
+/// whole-chain invalidation along on every focus change. The rule-resolved border
+/// appearance has no field either, for the opposite reason: in the layer-backed model it is
 /// folded into packParamValues by param id, so a border recolour already moves
-/// packParamValues below and needs no separate field here.
+/// packParamValues below and needs no separate one.
+///
+/// Opacity and tint sit with the border, NOT with focus, and the distinction is easy to
+/// misread. The fold does key on foldedOpacity separately, but the opacity-tint layer's
+/// opacity / tintStrength / tintColor are ALSO pack params routed by id, so they ride
+/// packParamValues and a move in them does invalidate the whole chain. That is correct and
+/// unavoidable now that opacity-tint is a user-selectable pack whose params must be
+/// compared like any other pack's. The cost lands on a focus-scoped SetOpacity / SetTint*
+/// rule, which re-folds the static prefix on every focus flip. A plain (unscoped) opacity
+/// rule or config value does not move per focus and pays nothing.
 struct FoldInputs
 {
     QStringList chain;
@@ -496,7 +505,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         if (!wasDecorated || priorFold != foldInputsOf(wb)) {
             sit->second.prefixValid = false;
             sit->second.compositeValid = false;
-            sit->second.prefixPackCount = -1;
+            sit->second.prefixChainEnd = -1;
         }
     }
 

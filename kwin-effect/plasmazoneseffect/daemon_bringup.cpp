@@ -1101,7 +1101,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         for (auto& [id, surfaceState] : m_surfaceMultipass) {
             surfaceState.compositeValid = false;
             surfaceState.prefixValid = false;
-            surfaceState.prefixPackCount = -1;
+            surfaceState.prefixChainEnd = -1;
         }
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
         updateAllDecorations();

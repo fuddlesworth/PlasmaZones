@@ -329,9 +329,6 @@ void IdleStateMachineTest::redundantSetStagesIsNoOpAndDropsInvalid()
     QCOMPARE(stagesSpy.count(), 2);
 }
 
-QTEST_GUILESS_MAIN(IdleStateMachineTest)
-#include "test_statemachine.moc"
-
 // isArmed() answers "is anything WRONG", which is not the same question as "is anything
 // watching" — and the difference is load-bearing, because the daemon responds to false by
 // rebuilding the ladder and, after a bounded number of tries, switching idle detection off
@@ -362,3 +359,6 @@ void IdleStateMachineTest::isArmedReportsLadderHealth()
     machine.setMonitoringEnabled(true);
     QVERIFY(machine.isArmed());
 }
+
+QTEST_GUILESS_MAIN(IdleStateMachineTest)
+#include "test_statemachine.moc"

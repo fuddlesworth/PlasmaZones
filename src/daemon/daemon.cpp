@@ -2295,6 +2295,44 @@ void Daemon::stop()
     PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
     PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
 
+    // Idle wiring, ALSO before the m_running gate, for the same reason as the two
+    // blocks above: setupIdleService() runs from init(), which precedes start(), so
+    // an init-without-start teardown (test fixtures, early-fail init, double-stop)
+    // reaches the member destructors with every idle connection still live. There the
+    // unique_ptr deleter runs BEFORE the pointer is nulled, so a seat that happens to
+    // be idle at that moment cascades ~IdleNotifier → destroyNotification() → resumed()
+    // → the daemon lambda → sessionIdleNow(), which dereferences an IdleService that is
+    // inside its own destructor and emits over D-Bus from a half-destroyed state
+    // machine. Severing here closes that window. Every call below is null-safe and
+    // idempotent, so running it on the already-stopped path costs nothing.
+    //
+    // The debounce timer goes with it: a pending fire would land in refreshIdleStages
+    // after teardown. It early-returns on a null m_idleService, so this is belt and
+    // braces — but every other piece of this wiring is severed explicitly rather than
+    // left to an invariant, and this is the last piece.
+    m_idleStagesRefreshTimer.stop();
+    m_idleService.reset();
+    // The next run starts from a fresh effect that assumes an active session. Leaving this
+    // true would make the re-armed service's first publish look redundant and swallow it.
+    m_publishedSessionIdle = false;
+    // And the arm-retry budget, for the same reason its two neighbours here are reset: the
+    // race it covers is a STARTUP race, so a restarted daemon needs its full budget. Spent
+    // in run 1, it would otherwise send run 2 straight to the give-up branch on the very
+    // first attempt.
+    m_idleArmRetriesLeft = kIdleArmRetries;
+    // The idle service's own signals die with it, but the FOUR connections idle.cpp made
+    // outlive it: the two settings signals, the bridgeRegistered push, and the debounce
+    // timer (a value member, so it outlives the service too). A settings write between
+    // stop() and ~Daemon would still run their lambdas. Sever exactly those four.
+    //
+    // NOT a blanket disconnect(m_settings.get(), nullptr, this, nullptr). That severs
+    // every m_settings→this connection — the gap-resnap sweep, the adjacent-threshold
+    // handler, the snapping/autotile enable-delta, the animation-profile republish, all
+    // eleven of them — and most are made in the constructor or init(), which start() does
+    // NOT re-run. A stop()→start() cycle (which this daemon supports deliberately, and
+    // says so in three places) would come back up with them silently gone.
+    teardownIdleConnections();
+
     if (!m_running) {
         return;
     }
@@ -2481,37 +2519,6 @@ void Daemon::stop()
     m_settingsGateAdapter.reset();
     m_screenModeAdapter.reset();
     m_workspaceStateAdapter.reset();
-    // Severed explicitly, like every other `this`-capturing wiring above. Its
-    // handlers dereference m_settings and m_settingsAdaptor, and it is currently
-    // safe only because reverse-declaration-order destruction happens to kill it
-    // first — an invariant no reader can see and a member reorder would break.
-    //
-    // The debounce timer goes with it, for the same reason: a pending fire would land
-    // in refreshIdleStages after teardown. It early-returns on a null m_idleService, so
-    // this is belt and braces — but every other piece of this wiring is severed
-    // explicitly rather than left to an invariant, and this is the last piece.
-    m_idleStagesRefreshTimer.stop();
-    m_idleService.reset();
-    // The next run starts from a fresh effect that assumes an active session. Leaving this
-    // true would make the re-armed service's first publish look redundant and swallow it.
-    m_publishedSessionIdle = false;
-    // And the arm-retry budget, for the same reason its two neighbours here are reset: the
-    // race it covers is a STARTUP race, so a restarted daemon needs its full budget. Spent
-    // in run 1, it would otherwise send run 2 straight to the give-up branch on the very
-    // first attempt.
-    m_idleArmRetriesLeft = kIdleArmRetries;
-    // The idle service's own signals die with it, but the FOUR connections idle.cpp made
-    // outlive it: the two settings signals, the bridgeRegistered push, and the debounce
-    // timer (a value member, so it outlives the service too). A settings write between
-    // stop() and ~Daemon would still run their lambdas. Sever exactly those four.
-    //
-    // NOT a blanket disconnect(m_settings.get(), nullptr, this, nullptr). That severs
-    // every m_settings→this connection — the gap-resnap sweep, the adjacent-threshold
-    // handler, the snapping/autotile enable-delta, the animation-profile republish, all
-    // eleven of them — and most are made in the constructor or init(), which start() does
-    // NOT re-run. A stop()→start() cycle (which this daemon supports deliberately, and
-    // says so in three places) would come back up with them silently gone.
-    teardownIdleConnections();
 
     // Destroy the router. Engines below outlive it so any in-flight
     // navigatorForShortcut path completes with the engine pointers it

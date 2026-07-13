@@ -115,7 +115,11 @@ public Q_SLOTS:
      * of its own choosing. The `false` is the real signal.
      *
      * @param settings Map of setting key -> value
-     * @return true if every key was found in the registry and its setter succeeded
+     * @return true if every key was known to the registry and every key that HAS a setter
+     *         applied successfully. A key that is registered read-only (motionProfileTree,
+     *         animationShaderSearchPaths, the gap projections) is skipped without failing
+     *         the batch — see the skip's rationale at the call site. Only an UNKNOWN key
+     *         makes this false.
      */
     bool setSettings(const QVariantMap& settings);
 
@@ -132,9 +136,13 @@ public Q_SLOTS:
      *
      * Applies every (key, value) pair in @p values via the same category
      * dispatch as setPerScreenSetting, then schedules a single debounced
-     * save. Mirrors the global getSettings/setSettings batch pattern so
-     * the KCM per-monitor page can flush a category in one round-trip
-     * instead of N sequential calls.
+     * save. Mirrors the global getSettings/setSettings batch pattern.
+     *
+     * NOTE: nothing in this tree calls it. It was added for a KCM per-monitor flush that
+     * never materialised — the KCM writes config.json in-process and calls
+     * reloadSettings(). It stays as part of the PUBLISHED D-Bus write surface (declared in
+     * org.plasmazones.Settings.xml, covered by tests/unit/dbus), for external clients. Do
+     * not re-justify it by naming an in-tree caller; there is none.
      *
      * Unknown keys inside @p values are passed through to the underlying
      * Settings method, which no-ops and logs at DEBUG (the key is caller-supplied; see

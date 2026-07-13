@@ -59,7 +59,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Map of setting key to value."/>
             </arg>
             <arg name="success" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if every key was found and its setter succeeded."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True if every key was known to the registry and every key that has a setter applied successfully. Read-only keys (motionProfileTree, animationShaderSearchPaths, the per-monitor gap projections) are skipped without failing the batch. Only an unknown key makes this false."/>
             </arg>
         </method>
         <method name="getSettingKeys">
@@ -204,10 +204,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
-        <!-- Batch-set multiple per-screen keys in one round-trip (Phase 5
-             of refactor/dbus-performance). Mirrors the global setSettings
-             pattern so the KCM per-monitor page can flush a category in
-             a single D-Bus call. -->
+        <!-- Batch-set multiple per-screen keys in one round-trip. Mirrors the
+             global setSettings pattern. No in-tree client calls it: it exists
+             for external D-Bus clients (the KCM per-monitor flush it was added
+             for never materialised, and the KCM writes config in-process). -->
         <method name="setPerScreenSettings">
             <annotation name="org.gtk.GDBus.DocString" value="Batch-set multiple per-screen keys in one D-Bus call. Applies every entry to the named category and schedules a single debounced save."/>
             <arg name="screenId" type="s" direction="in">

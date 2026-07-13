@@ -99,12 +99,17 @@ public:
             ext_idle_notification_v1_destroy(notification);
             notification = nullptr;
         }
-        if (idle && owner) {
+        // Clear the flag once, and announce the implicit resume the teardown causes. The
+        // store used to be spelled twice (inside the guard and again unconditionally),
+        // which read as if the guarded one could be skipped while the flag still had to
+        // land — it cannot: this is the only writer here.
+        if (idle) {
             idle = false;
-            Q_EMIT owner->idleChanged();
-            Q_EMIT owner->resumed();
+            if (owner) {
+                Q_EMIT owner->idleChanged();
+                Q_EMIT owner->resumed();
+            }
         }
-        idle = false;
     }
 };
 

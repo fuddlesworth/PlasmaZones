@@ -323,9 +323,16 @@ struct SurfaceMultipassState
     /// Cacheability is a property of the PREFIX, not of a pack on its own: each
     /// pack folds over the running composite, so the first time-varying pack makes
     /// every pack after it time-varying as well, however simple those are. Hence
-    /// the leading run, and hence `prefixPackCount` — the number of packs this
-    /// texture has folded, which must match the chain's current static run for the
-    /// cache to be reusable.
+    /// the leading run, and hence `prefixChainEnd` — the chain INDEX at which the run
+    /// this texture folded ended, which must match the chain's current static run for
+    /// the cache to be reusable.
+    ///
+    /// An INDEX, not a count, and the difference is the one that already produced a bug
+    /// once: a pack in the run that fails to compile is skipped, so the number of packs
+    /// actually folded (`staticFoldable`) is SMALLER than the index the run reaches
+    /// (`staticPrefix`). This stores and is compared against the latter. The field was
+    /// called prefixPackCount, which invited exactly the count-vs-index mix-up the
+    /// surface_capture comparison warns about.
     ///
     /// Invalidated with the capture (it is downstream of it), and by any chain or
     /// size change, which already rebuild everything here.
@@ -338,7 +345,7 @@ struct SurfaceMultipassState
     std::unique_ptr<KWin::GLTexture> prefixTex;
     std::unique_ptr<KWin::GLFramebuffer> prefixFbo;
     bool prefixValid = false;
-    int prefixPackCount = -1;
+    int prefixChainEnd = -1;
 
     /// The whole chain folded, for a chain with NO animated pack in it.
     ///

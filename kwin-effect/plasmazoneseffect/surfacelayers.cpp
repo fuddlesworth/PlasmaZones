@@ -272,7 +272,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // opacity move on this fail-safe path re-captures — planSurfaceFold clears captureValid
         // for it, keyed on the same missing-pack condition used right here.
         qreal captureOpacity = 1.0;
-        if (deco.chainBakesOpacity && !qFuzzyCompare(deco.foldedOpacity + 1.0, 2.0)) {
+        // foldStateEqual, matching the invalidator that decides this same opacity MOVED
+        // (planSurfaceFold). A relative qFuzzyCompare here made the two disagree about
+        // an opacity within 1e-4 of 1.0: unmoved to the invalidator, not-resting here.
+        if (deco.chainBakesOpacity && !foldStateEqual(static_cast<float>(deco.foldedOpacity), 1.0f)) {
             const CompiledSurfacePack* const otPack = compiledPackLazy(QStringLiteral("opacity-tint"));
             if (!otPack || !otPack->shader) {
                 captureOpacity = qBound(0.0, deco.foldedOpacity, 1.0);
@@ -308,7 +311,13 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     if (allStatic && state.compositeValid && state.compositeTex[state.finalSlot]) {
         // Stamp the fold time even though nothing was folded: the composite IS current as
         // of now, which is what the field means.
-        state.lastFoldMs = ShaderInternal::shaderClockNowMs();
+        //
+        // The PINNED frame clock, with the live read only as a fallback. Its consumer (the
+        // backdrop re-fold interval in paintWindow) compares against the pinned clock
+        // precisely so two windows in one frame cannot disagree about what time it is — a
+        // live stamp here would reintroduce exactly that skew from the other side.
+        const qint64 pinnedFoldMs = m_shaderManager.currentFrameClockMs();
+        state.lastFoldMs = pinnedFoldMs >= 0 ? pinnedFoldMs : ShaderInternal::shaderClockNowMs();
         // LEAVE backdropRepaintPending SET. Reaching here proves no pack in this chain
         // varies per frame — which means none of them samples uBackdrop, whatever the
         // metadata's needsBackdrop says (a pack whose shader failed to compile, or whose
@@ -749,7 +758,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // it can serve as their source again next frame.
             srcTex = state.prefixTex.get();
             state.prefixValid = true;
-            state.prefixPackCount = staticPrefix;
+            state.prefixChainEnd = staticPrefix;
         } else {
             srcTex = state.compositeTex[dst].get();
             lastDst = dst;
@@ -766,7 +775,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     state.foldedFocus = plan.foldFocus;
     state.foldedOpacity = plan.foldOpacity;
     state.foldedCursor = plan.foldCursor;
-    state.lastFoldMs = ShaderInternal::shaderClockNowMs();
+    // Pinned, for the same reason as the cached-composite stamp above.
+    const qint64 pinnedFoldMs = m_shaderManager.currentFrameClockMs();
+    state.lastFoldMs = pinnedFoldMs >= 0 ? pinnedFoldMs : ShaderInternal::shaderClockNowMs();
     // Both drivers' repaints have landed: this fold actually folded, so the composite
     // reflects the scene behind the window AND the live cursor.
     state.backdropRepaintPending = false;

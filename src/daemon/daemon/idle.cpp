@@ -74,6 +74,20 @@ void Daemon::setupIdleService()
         publishSessionIdle(sessionIdleNow());
     });
 
+    // BEFORE the first refreshIdleStages() below, which is not merely tidy: that call's
+    // arm-retry branch starts THIS timer. Set up after it, the timer would be started
+    // un-connected and not-yet-single-shot, and only the fact that both run before control
+    // returns to the event loop would save it. The login race the retry exists for is
+    // exactly when that ordering gets exercised.
+    //
+    // Single-shot and shared by two callers of refreshIdleStages: the settings debounce
+    // (below) and the arm-retry (in refreshIdleStages). Each start() passes its own interval,
+    // so a pending retry and a pending debounce coalesce into one refresh, and stop() in the
+    // daemon teardown cancels either — a plain QTimer::singleShot for the retry would outlive
+    // that teardown and could not be coalesced.
+    m_idleStagesRefreshTimer.setSingleShot(true);
+    m_idleConnections << connect(&m_idleStagesRefreshTimer, &QTimer::timeout, this, &Daemon::refreshIdleStages);
+
     refreshIdleStages();
 
     // The ladder is armed by the TIMEOUT and by nothing else. It is NOT torn down when
@@ -92,13 +106,6 @@ void Daemon::setupIdleService()
     // which every publisher goes through. The cost is one ext-idle-notify-v1 object we
     // sometimes ignore, which is nothing. What it buys is that turning the feature on
     // takes effect immediately rather than at some unpredictable point in the future.
-    // Single-shot and shared by two callers of refreshIdleStages: the settings debounce
-    // (below) and the arm-retry (in refreshIdleStages). Each start() passes its own interval,
-    // so a pending retry and a pending debounce coalesce into one refresh, and stop() in the
-    // daemon teardown cancels either — a plain QTimer::singleShot for the retry would outlive
-    // that teardown and could not be coalesced.
-    m_idleStagesRefreshTimer.setSingleShot(true);
-    m_idleConnections << connect(&m_idleStagesRefreshTimer, &QTimer::timeout, this, &Daemon::refreshIdleStages);
 
     // DEBOUNCED, because a rebuild is not free and not silent: it destroys and recreates
     // the compositor's ext-idle-notify-v1 object, and if the session is currently idle it
@@ -112,6 +119,16 @@ void Daemon::setupIdleService()
     // skipped and the ladder would sit pinned to its startup timeout for the process
     // lifetime, so the slider would become a silent no-op.
     m_idleConnections << connect(m_settings.get(), &ISettings::decorationIdleTimeoutSecChanged, this, [this] {
+        // A new timeout is a FRESH arming attempt against a source the rebuild recreates,
+        // not a continuation of an earlier burst — so give it the full retry budget back.
+        // Without this, a startup that exhausted the budget (no seat yet) leaves the user's
+        // later slider change going straight to the give-up branch, even though the rebuild
+        // it triggers would very likely arm.
+        //
+        // Replenished HERE and not in refreshIdleStages: that function is what the retry
+        // re-enters, so resetting the budget there would refill it on every retry and spin
+        // the 1 Hz rebuild forever instead of bounding it.
+        m_idleArmRetriesLeft = kIdleArmRetries;
         m_idleStagesRefreshTimer.start(kIdleStagesRefreshDebounceMs);
     });
 

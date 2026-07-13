@@ -110,7 +110,7 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
             state.captureValid = false;
             state.prefixValid = false;
             state.compositeValid = false;
-            state.prefixPackCount = -1;
+            state.prefixChainEnd = -1;
             state.captureFbo.reset();
             state.prefixTex.reset();
             state.prefixFbo.reset();
@@ -187,7 +187,7 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
         // chain cache nor the static-prefix cache survives it.
         state.compositeValid = false;
         state.prefixValid = false;
-        state.prefixPackCount = -1;
+        state.prefixChainEnd = -1;
         state.chainKey = chain;
         // The prefix TEXTURE goes too (the size-change branch above releases it as well;
         // that branch clears chainKey, so this one always follows it). The new
@@ -442,12 +442,12 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // against zero its tolerance collapses to zero). It happens to fail SAFE here —
     // a false "moved" only over-invalidates — but relying on that is not a contract.
     // Both are clamped to 0..1, so an absolute epsilon is exactly right.
-    constexpr float kFoldStateEpsilon = 0.0001f;
-    const auto stateEqual = [](float a, float b) {
-        return std::fabs(a - b) <= kFoldStateEpsilon;
-    };
-    const bool stateMoved = !stateEqual(state.foldedFocus, plan.foldFocus)
-        || !stateEqual(state.foldedOpacity, plan.foldOpacity) || plan.foldCursor != state.foldedCursor;
+    //
+    // foldStateEqual (surface_fold.h), not a local copy: the opacity fail-safe in
+    // surfacelayers.cpp asks the other half of this question ("is the folded opacity at
+    // rest"), and the two must not disagree about what "the same" means.
+    const bool stateMoved = !foldStateEqual(state.foldedFocus, plan.foldFocus)
+        || !foldStateEqual(state.foldedOpacity, plan.foldOpacity) || plan.foldCursor != state.foldedCursor;
 
     // The opacity fail-safe (surfacelayers.cpp) bakes the window's opacity INTO the capture
     // when an opacity-baking chain's opacity-tint pack failed to compile. On that path an
@@ -457,7 +457,7 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // layer-backed path captures raw and is correctly served by the re-fold alone, so gate on
     // the same missing-pack condition the fail-safe itself uses rather than re-capturing on
     // every opacity move.
-    if (deco.chainBakesOpacity && !stateEqual(state.foldedOpacity, plan.foldOpacity)) {
+    if (deco.chainBakesOpacity && !foldStateEqual(state.foldedOpacity, plan.foldOpacity)) {
         const CompiledSurfacePack* const otPack = compiledPackLazy(QStringLiteral("opacity-tint"));
         if (!otPack || !otPack->shader) {
             state.captureValid = false;
@@ -515,7 +515,7 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
         state.prefixValid = false;
         state.compositeValid = false;
     }
-    if (!usePrefix || state.prefixPackCount != staticPrefix) {
+    if (!usePrefix || state.prefixChainEnd != staticPrefix) {
         state.prefixValid = false;
     }
     if (!plan.allStatic) {

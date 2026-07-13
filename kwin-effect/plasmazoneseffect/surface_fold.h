@@ -22,11 +22,27 @@
 #include <QRectF>
 #include <QSize>
 
+#include <cmath>
 #include <memory>
 
 #include <epoxy/gl.h>
 
 namespace PlasmaZones {
+
+/// Absolute tolerance for the folded state scalars (focus, opacity).
+///
+/// ONE spelling, shared by the invalidator that decides the fold's state MOVED and by the
+/// consumers that ask whether a folded value is at its resting point. They gate the same
+/// machinery from opposite ends, so two different predicates let a value be "unmoved" to one
+/// and "not resting" to the other. Absolute, not qFuzzyCompare: that is a RELATIVE compare
+/// (~1e-12 here), which is the wrong question for a [0,1] scalar and is meaningless against
+/// zero.
+inline constexpr float kFoldStateEpsilon = 0.0001f;
+
+inline bool foldStateEqual(float a, float b)
+{
+    return std::fabs(a - b) <= kFoldStateEpsilon;
+}
 
 /// Does @p state hold a backdrop a pack can actually sample?
 ///
@@ -90,6 +106,9 @@ inline qreal windowSurfaceScale(const KWin::EffectWindow* w)
 /// bug that put the copy in the hover driver in the first place.
 inline QRectF paddedBandRect(const KWin::EffectWindow* w, int outerPadding)
 {
+    if (!w) {
+        return {};
+    }
     QRectF padded = w->expandedGeometry();
     if (padded.isEmpty()) {
         padded = w->frameGeometry();
@@ -100,9 +119,12 @@ inline QRectF paddedBandRect(const KWin::EffectWindow* w, int outerPadding)
 
 /// Damage the whole padded band. A no-op for an unpadded chain, whose composite never
 /// draws outside the window rect and is covered by addRepaintFull alone.
+///
+/// Guards the window too, matching windowSurfaceScale above: this is reached from teardown
+/// paths, where a null window is the natural way for a future edit to arrive here.
 inline void damagePaddedBand(const KWin::EffectWindow* w, int outerPadding)
 {
-    if (outerPadding <= 0 || !KWin::effects) {
+    if (!w || outerPadding <= 0 || !KWin::effects) {
         return;
     }
     KWin::effects->addRepaint(KWin::RectF(paddedBandRect(w, outerPadding)));

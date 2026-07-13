@@ -67,7 +67,7 @@ public:
 
     /// The idle ladder, as a list of `{ name: string, timeoutMs: int }` maps,
     /// sorted by ascending timeout. Entries with a non-positive `timeoutMs` are
-    /// ignored. Build the maps with the StageKey constants below rather than spelling
+    /// ignored. Build the maps with the StageKey constants above rather than spelling
     /// the field names out: they are a wire contract between this library and its
     /// callers, and a typo on either side silently produces a zero timeout, which
     /// toStages then DROPS — leaving an empty ladder that never fires, with no warning

@@ -202,10 +202,16 @@ void PlasmaZonesEffect::reconcileDecorationShader(const QString& windowId, KWin:
         // shader directly for single unpadded packs; retired — see drawWindow.)
         KWin::GLShader* const redirectShader = surfacePresentShader();
         if (!redirectShader) {
-            // setShader(nullptr)/unredirect are no-ops when the window was never
-            // redirected.
-            setShader(w, nullptr);
-            unredirect(w);
+            // Through releaseDecorationGl, the single owner of this teardown, rather than
+            // hand-rolling setShader(nullptr)+unredirect here. It matters on this exact
+            // path: the only non-latching way surfacePresentShader() returns null is
+            // makeOpenGLContextCurrent() having FAILED, so the context is guaranteed not
+            // current — and destroying KWin's OffscreenData (texture and framebuffer)
+            // without one is the hazard releaseDecorationGl's ensureGlContextCurrent
+            // exists to prevent. It also damages what the dead decoration was covering
+            // (this branch used to leave the stale decorated frame on screen) and honours
+            // the live-transition guard, which the hand-rolled version stole the slot from.
+            releaseDecorationGl(w, it->outerPadding);
             it->shaderApplied = false;
             return;
         }

@@ -2059,7 +2059,19 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
                 return;
             }
             const qreal pad = bit->outerPadding;
-            const QRectF padded = textureGeo.adjusted(-pad, -pad, pad, pad);
+            // The canvas the fold ACTUALLY produced, not a second derivation of it.
+            // SurfaceMultipassState::canvasGeo is the single source for this quantity
+            // (see its doc), and the layer-rect remap above already honours it: present
+            // the composite on the rect it was composited into, or a window whose
+            // geometry moved after the fold gets its decoration drawn against a canvas
+            // the texture does not match. The live derivation stays as the fallback for
+            // the fold's failure paths, which can erase the multipass entry.
+            QRectF padded = textureGeo.adjusted(-pad, -pad, pad, pad);
+            if (const auto psIt = m_surfaceMultipass.find(getWindowId(window)); psIt != m_surfaceMultipass.end()) {
+                if (psIt->second.canvasGeo.isValid()) {
+                    padded = psIt->second.canvasGeo;
+                }
+            }
 
             // quad-space <-> screen-space is a pure translation at 1:1
             // logical scale (see the surface-extent branch below for the

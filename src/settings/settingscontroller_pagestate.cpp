@@ -163,8 +163,11 @@ void SettingsController::setActivePage(const QString& page)
     if (!validPageNames().contains(resolved)) {
         // The page name arrives over D-Bus (SettingsAppAdaptor::setActivePage), so it is
         // caller-supplied and unbounded. A typo still deserves a trace, so keep one — at
-        // debug, without echoing arbitrary text into a warning.
-        qCDebug(PlasmaZones::lcCore) << "Unknown settings page requested";
+        // debug rather than warning, which is what kept the log-flooding concern honest.
+        // The NAME is echoed: a trace that cannot say which page was wrong carries none of
+        // the information a typo trace exists for, and debug is off in production anyway.
+        // Same treatment as the adaptor's unknown-key trace (settingsadaptor.cpp).
+        qCDebug(PlasmaZones::lcCore) << "Unknown settings page requested:" << page;
         return;
     }
     // Reentrancy guard: a slot connected to activePageChanged that

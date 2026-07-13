@@ -1144,8 +1144,11 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
     // Block settingsChanged during the batch — each setter emits it individually,
     // which would trigger N daemon handler invocations (autotile transitions, KWin
     // effect reloads) mid-batch with partially-applied state. Block all signals
-    // during iteration, save once, then the KCM's notifyReload() triggers load()
-    // which emits settingsChanged once with all values committed.
+    // during iteration and save once, so the change reaches consumers as a single
+    // committed settingsChanged rather than N partial ones. (This used to say the
+    // KCM's notifyReload() drives the reload; it does not — the KCM writes config
+    // in-process. Nothing in this tree calls setSettings at all; it is a published
+    // D-Bus surface for external clients.)
     bool allOk = true;
     {
         QSignalBlocker blocker(m_settings);
@@ -1385,11 +1388,6 @@ QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const
 
 bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QString& category, const QVariantMap& values)
 {
-    if (values.isEmpty()) {
-        // Empty map is a valid no-op — treat like setSettings batch and
-        // return true so callers don't need to guard for it.
-        return true;
-    }
     if (!m_settings) {
         return false;
     }
@@ -1407,6 +1405,14 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
             << "setPerScreenSettings: category" << category
             << "is read-only (a projection of config per-monitor gaps) — write via the autotile per-screen category";
         return false;
+    }
+    // An empty map is a valid no-op, so callers need not guard for it — but only AFTER the
+    // category has been validated. Short-circuiting on it first (as this did) meant an empty
+    // write to an unknown category, or to the read-only "snapping" projection, reported
+    // SUCCESS. The return value is the caller's only way to learn it wrote to the wrong
+    // category, and an empty batch is exactly when a caller is least likely to notice.
+    if (values.isEmpty()) {
+        return true;
     }
 
     for (auto it = values.constBegin(); it != values.constEnd(); ++it) {

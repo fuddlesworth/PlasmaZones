@@ -844,7 +844,13 @@ private:
         // PhosphorAnimation::ProfileTree — it has no hasAnyOverride(). Not a hot
         // path (this runs on reconcile, not per frame), so the QStringList copy
         // is fine here.
-        return !m_decorationTree.resolve(QString()).effectiveChain().isEmpty()
+        //
+        // enabledChain(), the SAME accessor updateWindowDecoration renders from, not
+        // effectiveChain(): the latter keeps packs the user toggled off, so a tree whose
+        // baseline chain exists but has every pack disabled reported "content" and made
+        // every snap / float / zone change do full per-window reconcile work for a
+        // configuration that can decorate nothing.
+        return !m_decorationTree.resolve(QString()).enabledChain().isEmpty()
             || !m_decorationTree.overriddenPaths().isEmpty();
     }
 
