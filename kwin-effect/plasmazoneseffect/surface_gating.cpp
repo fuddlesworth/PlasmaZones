@@ -83,6 +83,25 @@ void PlasmaZonesEffect::repaintAllDecorations()
     }
 }
 
+// The cursor value a fold would bake in for this window: the live pointer when the chain
+// may animate AND the pointer is over the window's canvas, else the outside sentinel.
+//
+// ONE expression, because the fold keys its cache on it and the repaint driver decides
+// whether to drive on it, and the two must agree EXACTLY. When they did not — the driver
+// omitted the may-animate factor — nothing caught it, because a short-circuit in a third
+// file happened to keep a paused window from ever reaching the comparison. Add one more
+// exemption beside that short-circuit and a paused hover window would compare a live
+// cursor against a sentinel it can never converge on, and spin a full-window repaint at
+// vsync forever.
+QPointF PlasmaZonesEffect::foldCursorFor(KWin::EffectWindow* w, const QRectF& canvasGeo, bool mayAnimate) const
+{
+    if (!mayAnimate || !w) {
+        return kCursorOutside;
+    }
+    const QPointF cursor = m_shaderManager.m_cachedCursorGlobal;
+    return canvasGeo.contains(cursor) ? cursor : kCursorOutside;
+}
+
 // Repaint every decorated window whose chain reads the cursor.
 //
 // Called from the pointer-motion handler, and it is the ONLY thing that restarts a hover
@@ -117,6 +136,13 @@ void PlasmaZonesEffect::repaintHoverDecorations()
         }
         KWin::EffectWindow* const sw = findWindowById(it.key());
         if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
+            continue;
+        }
+        // A PAUSED chain pins its cursor to the sentinel and cannot change, so waking it
+        // buys nothing. Skipping it matters: this fires on every pointer-motion event, and
+        // repainting every unfocused hover window on every mouse move is precisely the
+        // per-frame cost this PR exists to remove.
+        if (!decorationMayAnimate(sw)) {
             continue;
         }
         sw->addRepaintFull();
@@ -228,16 +254,17 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
         if (pack->iMouseLoc >= 0) {
             const auto sit = m_surfaceMultipass.find(windowId);
             if (sit == m_surfaceMultipass.end()) {
-                return true; // never folded: it has a cursor to pick up
+                // Never folded, so there is nothing to compare and nothing to converge on.
+                // Do NOT drive it: a window that is never painted (fully occluded) would
+                // never GET a state, and driving it every frame forever on that basis is a
+                // spin with no termination condition. Its first real paint runs the fold,
+                // which creates the state, and the next postPaintScreen picks the hover up
+                // — the same reasoning the not-yet-compiled case already uses.
+                continue;
             }
-            // Compare what the FOLD would key on, which is the cursor RESOLVED against this
-            // window's canvas — not the raw global position. Otherwise a pointer moving
-            // anywhere on the desktop drives every hover window on it, each re-folding to
-            // reproduce the same outside sentinel.
-            static constexpr QPointF kCursorOutside(-1.0e9, -1.0e9);
-            const QPointF cursor = m_shaderManager.m_cachedCursorGlobal;
-            const QPointF resolved = sit->second.canvasGeo.contains(cursor) ? cursor : kCursorOutside;
-            if (sit->second.foldedCursor != resolved) {
+            // Compare EXACTLY what the fold keys on. See foldCursorFor.
+            KWin::EffectWindow* const sw = findWindowById(windowId);
+            if (sit->second.foldedCursor != foldCursorFor(sw, sit->second.canvasGeo, decorationMayAnimate(sw))) {
                 return true;
             }
         }

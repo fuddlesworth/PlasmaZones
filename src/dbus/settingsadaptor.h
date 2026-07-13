@@ -89,9 +89,10 @@ public Q_SLOTS:
      * @brief Batch-get multiple settings in one D-Bus call.
      *
      * Reads every requested key via the getter registry and returns a map
-     * containing only the keys that were found. Unknown keys are logged as
-     * warnings and omitted from the result (callers should fall back to
-     * their hardcoded defaults for missing entries).
+     * containing only the keys that were found. An unknown key is omitted from the
+     * result and logged at DEBUG level, so a caller probing for optional settings does
+     * not spam production logs. Callers fall back to their own defaults for anything
+     * missing.
      *
      * Exists to collapse the editor startup's per-key getSetting() chain
      * (8 round-trips for gap/overlay settings) into a single round-trip.
@@ -104,10 +105,12 @@ public Q_SLOTS:
     /**
      * @brief Batch-set multiple settings in one D-Bus call.
      *
-     * Applies all values via the setter registry, saves once (synchronously),
-     * and lets the KConfig change notification propagate settingsChanged.
-     * Unknown keys are omitted from the result map (and logged at debug level, so production logs stay quiet) but do
-     * not abort the batch.
+     * Applies all values via the setter registry, saves once (synchronously), and lets
+     * the config backend's change notification propagate settingsChanged.
+     *
+     * An unknown key is logged as a WARNING and makes the call return false — writing a
+     * key nobody knows is a caller bug, not an optional probe — but it does not abort
+     * the batch: every key that IS known still gets applied.
      *
      * @param settings Map of setting key -> value
      * @return true if every key was found in the registry and its setter succeeded

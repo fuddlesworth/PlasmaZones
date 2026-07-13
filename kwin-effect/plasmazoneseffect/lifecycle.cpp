@@ -158,27 +158,20 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // has done this from the start and explains why; this one was written to
                 // the same contract and did not honour it.
                 //
-                // Best-effort, and then CARRY ON either way — the same policy as the
-                // sibling handler below, and for the same reason. The only false case is
-                // compositor teardown, where GL is going away and the driver reclaims the
-                // objects regardless. Bailing outright (as this first did) would leave the
-                // shader and texture caches populated with stale entries, so a hot-reloaded
-                // pack would keep rendering from its OLD compiled shader for the rest of the
-                // session — trading a theoretical teardown-time GL call for a real
-                // hot-reload bug. Only the setShader/unredirect drain, which touches live
-                // windows, is skipped without a context.
-                const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
-                if (!haveContext) {
-                    qCWarning(lcEffect) << "Animation shader hot-reload: no current GL context, skipping the "
-                                           "transition drain but clearing the caches anyway";
-                }
+                // Drain UNCONDITIONALLY. endShaderTransition makes the GL context current
+                // itself (it destroys the window's offscreen texture and framebuffer), so
+                // gating the drain on a context here bought nothing — and worse, the
+                // residual self-heal below would notice the undrained transitions, log a
+                // CRITICAL, and then drain them anyway, which made the gate a false alarm
+                // generator rather than a safety measure. Bailing outright, which this
+                // first did, was worse still: it left the caches populated, so a
+                // hot-reloaded pack kept rendering from its OLD compiled shader for the
+                // rest of the session.
                 QVarLengthArray<KWin::EffectWindow*, 8> windows;
-                if (haveContext) {
-                    for (auto& [w, _] : m_shaderManager.shaderTransitions())
-                        windows.push_back(w);
-                    for (auto* w : windows)
-                        endShaderTransition(w);
-                }
+                for (auto& [w, _] : m_shaderManager.shaderTransitions())
+                    windows.push_back(w);
+                for (auto* w : windows)
+                    endShaderTransition(w);
                 // Release-build pair for the contract: every transition entry
                 // MUST drain through endShaderTransition before we clear the
                 // shader cache. A residual entry holds a cached shader

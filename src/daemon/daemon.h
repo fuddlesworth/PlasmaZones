@@ -782,10 +782,11 @@ private:
     /// session, so this starts false and the two agree from the outset.
     bool m_publishedSessionIdle = false;
 
-    /// The connections setupIdleService made whose SENDER is not m_idleService (the two
-    /// settings signals and bridgeRegistered). Held so stop() can sever exactly these
-    /// and not, say, every connection m_settings has to us — most of which are made in
-    /// the constructor or init() and would never come back on a stop()→start() cycle.
+    /// Every connection setupIdleService made whose SENDER outlives m_idleService: the two
+    /// settings signals, bridgeRegistered, and the debounce timer (a value member). Held so
+    /// stop() severs exactly these — not, say, every connection m_settings has to us, most
+    /// of which are made in the constructor or init() and would never come back on a
+    /// stop()→start() cycle — and so a re-armed service cannot stack duplicates.
     QList<QMetaObject::Connection> m_idleConnections;
 
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;

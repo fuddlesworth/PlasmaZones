@@ -222,6 +222,14 @@ struct CompiledSurfacePack
     std::vector<CompiledSurfaceBufferPass> bufferPasses;
 };
 
+/// The cursor, when it is not over a window's canvas. Far outside any real screen, so a
+/// never-folded state can never compare equal to a live pointer.
+///
+/// ONE definition. The fold keys on it, the repaint driver compares against it, and the
+/// shader is handed it — and when those three each spelled it themselves, the only thing
+/// keeping them in agreement was that nobody had edited one of them yet.
+inline constexpr QPointF kCursorOutside(-1.0e9, -1.0e9);
+
 /// What one fold decided to reuse, computed up front by planSurfaceFold().
 ///
 /// The fold's cache decisions used to be interleaved with the folding itself, in pieces
@@ -379,7 +387,7 @@ struct SurfaceMultipassState
     /// any real screen, so a never-folded state can never compare equal to a live cursor.
     /// A hover pack therefore re-folds when the pointer MOVES and holds still otherwise,
     /// instead of re-folding at vsync forever with the pointer parked.
-    QPointF foldedCursor = QPointF(-1.0e9, -1.0e9);
+    QPointF foldedCursor = kCursorOutside;
 
     /// The window's own animation clock, which STOPS whenever the window is not being
     /// folded and RESUMES where it stopped.

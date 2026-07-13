@@ -168,7 +168,8 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
         state.prefixValid = false;
         state.prefixPackCount = -1;
         state.chainKey = chain;
-        // The prefix TEXTURE goes too, and this is the only place it is released. The new
+        // The prefix TEXTURE goes too (the size-change branch above releases it as well;
+        // that branch clears chainKey, so this one always follows it). The new
         // chain may not want one at all (["border","glow"] → ["border"]), and holding a
         // full-canvas RGBA8 nothing will ever write again is ~8 MB per 4K window. The fold
         // deliberately does NOT release it when usePrefix merely goes false, because that
@@ -294,6 +295,20 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
         }
         state.timeOffsetSec += notAnimatingSec;
     } else if (state.pausedAtSec < 0.0f) {
+        // ENTERING a gated pause. Account the unpainted gap FIRST, and by ADDING it: the
+        // span [lastFold, pauseStart] is disjoint from the pause that starts now, so this
+        // is the one place the two sensors do not overlap and max() would be wrong.
+        //
+        // Without this, a window that stopped being painted and only THEN got gated (the
+        // session idles while it sits occluded or on another desktop; focus leaves a
+        // window nothing was painting) lost the whole unpainted span, because the resume
+        // only ever measures back to the pause. Its iTime jumped forward by exactly that
+        // span — the phase pop this accounting exists to prevent, arriving through the
+        // door nobody was watching.
+        constexpr qint64 kNotPaintedGapMs = 250;
+        if (state.lastFoldMs >= 0 && nowMs - state.lastFoldMs > kNotPaintedGapMs) {
+            state.timeOffsetSec += static_cast<float>(nowMs - state.lastFoldMs) / 1000.0f;
+        }
         state.pausedAtSec = sharedNow;
     }
     // While paused this is pinned to the instant the pause began, so the folds that still
@@ -394,14 +409,7 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // window on the desktop re-fold its entire chain every time the pointer moved
     // ANYWHERE — each one to reproduce the identical outside sentinel it already had.
     // A paused chain reads it as absent too, matching what pushBorderUniforms pushes.
-    static constexpr QPointF kCursorOutside(-1.0e9, -1.0e9);
-    plan.foldCursor = kCursorOutside;
-    if (chainReadsCursor && plan.mayAnimate) {
-        const QPointF cursor = m_shaderManager.m_cachedCursorGlobal;
-        if (state.canvasGeo.contains(cursor)) {
-            plan.foldCursor = cursor;
-        }
-    }
+    plan.foldCursor = chainReadsCursor ? foldCursorFor(w, state.canvasGeo, plan.mayAnimate) : kCursorOutside;
     const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
     plan.foldFocus = chainReadsFocus ? advanceFocusFade(windowId, focusedNow) : 0.0f;
     plan.foldOpacity = static_cast<float>(resolvedWindowOpacity(w, deco));

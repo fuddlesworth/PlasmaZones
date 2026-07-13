@@ -2045,6 +2045,18 @@ void Daemon::start()
     // handler; this is the matching reset on the value side.
     m_shuttingDown = false;
 
+    // Re-arm the idle service. stop() tears it down (its Wayland notification object and
+    // every connection around it), and setupIdleService is otherwise only reached from
+    // init(), which start() does not re-run — so a stop()→start() cycle came back up with
+    // PauseWhenIdle silently dead for the rest of the process. Guarded on !m_idleService
+    // so the ordinary init()-then-start() path does not build it twice.
+    //
+    // This daemon supports the cycle deliberately (the three repairs below exist for it,
+    // and stop() argues the same point), so the feature has to survive it.
+    if (!m_idleService) {
+        setupIdleService();
+    }
+
     // Re-publish the QML static defaults. stop() nulls all three
     // (`PhosphorCurve::setDefaultRegistry(nullptr)` etc.) to prevent
     // borrowed-pointer UAF during teardown; without this re-publish,
@@ -2477,6 +2489,9 @@ void Daemon::stop()
     // explicitly rather than left to an invariant, and this is the last piece.
     m_idleStagesRefreshTimer.stop();
     m_idleService.reset();
+    // The next run starts from a fresh effect that assumes an active session. Leaving this
+    // true would make the re-armed service's first publish look redundant and swallow it.
+    m_publishedSessionIdle = false;
     // The idle service's own signals die with it, but the three connections idle.cpp made
     // have OTHER senders (m_settings, m_compositorBridge) and `this` as receiver, so they
     // outlive it and a settings write between stop() and ~Daemon would still run their

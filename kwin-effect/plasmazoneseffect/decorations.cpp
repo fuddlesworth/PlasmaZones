@@ -593,11 +593,11 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
 
 void PlasmaZonesEffect::updateAllDecorations()
 {
-    // Snapshot which windows are decorated BEFORE the reconcile: the hint passed to
-    // updateWindowDecoration below is what lets the focus cross-fade survive it (a
-    // window whose entry is rebuilt in place would otherwise look freshly decorated
-    // and snap its ramp), and the post-loop sweep needs it to find the entries this
-    // pass did not revisit.
+    // Snapshot which windows are decorated BEFORE the reconcile. This serves the post-loop
+    // sweep, and nothing else: it is how the sweep finds the entries this pass did not
+    // revisit. (It used to also feed a "was this decorated?" hint into
+    // updateWindowDecoration, which read the answer live instead once it turned out the
+    // snapshot was the more destructive of the two.)
     const QSet<QString> previouslyDecorated(m_windowDecorations.keyBegin(), m_windowDecorations.keyEnd());
 
     // NOT clearAllDecorations(). This runs on every focus change, and a bulk clear

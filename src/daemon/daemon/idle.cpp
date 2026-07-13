@@ -12,6 +12,8 @@
 
 #include "../daemon.h"
 
+#include "../../core/logging.h"
+
 // Settings must be COMPLETE here: m_settings is a unique_ptr<Settings>, daemon.h only
 // forward-declares it, and this file connects to its signals and calls its accessors. It
 // compiles without this only because the unity build happens to group this TU with one
@@ -23,17 +25,19 @@
 
 #include <PhosphorServiceIdle/IdleService.h>
 
-#include <QLoggingCategory>
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
 
 namespace PlasmaZones {
 
-Q_DECLARE_LOGGING_CATEGORY(lcDaemon)
-
 void Daemon::setupIdleService()
 {
+    // Re-entrant: start() calls this again after a stop(). Every connection it makes whose
+    // sender outlives m_idleService is recorded below and severed by stop(), so a second
+    // run cannot stack duplicates.
+    m_idleConnections.clear();
+
     // No QObject parent: the unique_ptr owns it. Passing `this` as well would be
     // dual ownership (it survives only because member destruction runs before
     // ~QObject de-parents the children), and every other unique_ptr-held QObject
@@ -79,7 +83,7 @@ void Daemon::setupIdleService()
     // takes effect immediately rather than at some unpredictable point in the future.
     m_idleStagesRefreshTimer.setSingleShot(true);
     m_idleStagesRefreshTimer.setInterval(kIdleStagesRefreshDebounceMs);
-    connect(&m_idleStagesRefreshTimer, &QTimer::timeout, this, &Daemon::refreshIdleStages);
+    m_idleConnections << connect(&m_idleStagesRefreshTimer, &QTimer::timeout, this, &Daemon::refreshIdleStages);
 
     // DEBOUNCED, because a rebuild is not free and not silent: it destroys and recreates
     // the compositor's ext-idle-notify-v1 object, and if the session is currently idle it
