@@ -436,7 +436,7 @@ void PlasmaZonesEffect::postPaintScreen()
             if (!it->shaderApplied) {
                 continue;
             }
-            KWin::EffectWindow* const sw = findWindowById(it.key());
+            KWin::EffectWindow* const sw = findWindowByIdExact(it.key());
             // Exact-id discipline (mirrors reconcileDecorationOnPlacementFlip and
             // the teardown paths): findWindowById's fuzzy appId fallback can
             // return a same-app sibling for a stale id, and repainting the

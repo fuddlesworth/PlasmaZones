@@ -150,6 +150,14 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         qCWarning(lcEffect) << "slotApplyGeometryRequested: invalid geometry" << geometry;
         return;
     }
+    // Consume the drag-to-float marker FIRST, before the minimized early-return can bypass
+    // it. The marker is a one-shot: this float-restore event is exactly the one it was
+    // waiting for, so it must be cleared whether or not we go on to apply the geometry.
+    // Consuming it only on the non-minimized path left it armed when a drag-floated window
+    // was minimized, and the next legitimate float-restore for that window was then wrongly
+    // skipped by the stale marker.
+    const bool wasDragFloated = zoneId.isEmpty() && m_dragFloatedWindowIds.remove(liveWindowId);
+
     // Skip float-restore geometry on minimized windows: when a snapped window is minimized
     // we float it (to free the zone slot), but applying the pre-tile geometry while minimized
     // would poison what KWin restores to on unminimize, causing a visible flash of the
@@ -162,7 +170,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // Skip float-restore geometry for drag-to-float: when the user drags a window
     // off the autotile layout, the daemon restores pre-autotile geometry. But the
     // user expects the window to stay where they dropped it, not snap back.
-    if (zoneId.isEmpty() && m_dragFloatedWindowIds.remove(liveWindowId)) {
+    if (wasDragFloated) {
         qCInfo(lcEffect) << "slotApplyGeometryRequested: skipping float-restore for drag-floated window:"
                          << liveWindowId;
         return;
@@ -521,13 +529,27 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
         qCWarning(lcEffect) << "slotWindowStateChanged: rejecting invalid entry —" << err;
         return;
     }
+    // Re-key to the window's LIVE id before writing, not the daemon-supplied one.
+    //
+    // ZoneCache keys on the instance UUID (extractInstanceId), and so does the IsSnapped /
+    // Zone rule-match READ — but through a cross-session restore the daemon can still hold
+    // the pre-restore UUID, so a write keyed on it files the entry under an instance id the
+    // rule matcher will never read, and a restored snapped window's IsSnapped / Zone(...)
+    // rules silently stop matching. Every other commit path already keys by the live id
+    // (slotApplyGeometryRequested spells out why). A window that cannot be resolved falls
+    // back to the daemon id — best-effort, and correct for the ordinary same-session case
+    // where the two ids are identical.
+    QString liveWindowId = windowId;
+    if (KWin::EffectWindow* const w = findWindowById(windowId)) {
+        liveWindowId = getWindowId(w);
+    }
     // Keep the effect-side zone cache current so the IsSnapped / Zone rule-match
     // fields resolve against the live placement. An empty zoneId (unsnapped /
     // floated / screen-changed) removes the entry. setWindowZone re-resolves this
     // window's rules when the zone actually changes (coalescing with the floating
     // path's invalidation when a float toggle emits both signals — see
     // flushPendingRuleInvalidations), so no separate invalidate call is needed.
-    m_navigationHandler->setWindowZone(windowId, state.zoneId);
+    m_navigationHandler->setWindowZone(liveWindowId, state.zoneId);
 }
 
 void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)

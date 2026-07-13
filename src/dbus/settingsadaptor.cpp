@@ -1385,6 +1385,10 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
     if (!m_settings) {
         return false;
     }
+    if (!isPlausibleScreenId(screenId)) {
+        qCDebug(lcDbusSettings) << "setPerScreenSettings: implausible screen id (rejected at the D-Bus boundary)";
+        return false;
+    }
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
         qCDebug(lcDbusSettings) << "setPerScreenSettings: unknown category" << category;

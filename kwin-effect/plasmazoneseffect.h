@@ -552,6 +552,19 @@ private:
     void notifyWindowActivated(KWin::EffectWindow* w);
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
 
+    /// The O(1) reverse-cache half of findWindowById, WITHOUT the fuzzy appId fallback.
+    ///
+    /// findWindowById's fallback walks the whole stacking order building a composite id per
+    /// window, which is the right thing when a cross-session restore has changed the UUID but
+    /// kept the appId. It is the wrong thing on a hot path: the per-frame repaint drivers and
+    /// the per-pointer-motion hover driver all re-check `getWindowId(sw) == key` immediately
+    /// and discard a fuzzy match anyway, so the walk is an O(N) string-building nothing on
+    /// every frame. Worse, a close-grabbed window (deleted, but held in the stacking order by
+    /// the close shader) is rejected by the exact check AND skipped by the fuzzy walk, so the
+    /// walk cannot even produce a result for the one case that reaches it. Those callers want
+    /// exactness; this gives it in one hash lookup.
+    KWin::EffectWindow* findWindowByIdExact(const QString& windowId) const;
+
     /**
      * @brief All windows matching windowId (exact or same appId).
      * Used by autotile to disambiguate when multiple windows share an appId (e.g. two Firefox).
@@ -1279,6 +1292,18 @@ private:
     /// and on teardown. A window's render path looks up its resolved base pack id
     /// (WindowDecoration::basePackId) here.
     std::unordered_map<QString, CompiledSurfacePack> m_compiledPacks;
+
+    /// Has ANY compiled pack ever declared iMouse in the current compile generation?
+    ///
+    /// A cheap necessary condition for the hover driver, which fires on every pointer-motion
+    /// event. When false, no decoration can possibly react to the cursor, so the whole
+    /// per-window chain scan is skipped — which is the entire common case (border-only chains,
+    /// no hover pack anywhere). Set true when a cursor-reading pack compiles; never cleared
+    /// except with m_compiledPacks itself, so a hot-reload that drops the last hover pack
+    /// re-derives it from the next round of compiles. It can lag TRUE for a pack no window
+    /// currently uses, which only costs the fuller scan the driver already did — it never
+    /// lags false, so the driver can never miss a real hover pack.
+    bool m_anyCompiledPackReadsCursor = false;
 
     /// Per-window multipass FBO targets (surfaceTex + bufferTex chain). Keyed by
     /// getWindowId(w). Allocated lazily by the composite fold, reallocated

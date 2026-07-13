@@ -907,7 +907,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     // the border / decoration pass. Re-fetched on every settingsChanged, and a
     // value change schedules a full border sweep so a Decorations page edit
     // adds/removes borders on open windows live (mirroring the appearance
-    // loaders below) — unlike the animation filter, decorations are persistent
+    // loaders above) — unlike the animation filter, decorations are persistent
     // state and won't self-correct on the next window event.
     // Default true (exclude transients). Guard on isValid() so a failed reply
     // leaves the member at its `true` init rather than `toBool()`'s
@@ -1038,6 +1038,7 @@ void PlasmaZonesEffect::loadCachedSettings()
             qCWarning(lcEffect) << "Decoration pack cache cleared without a current GL context (compositor teardown?)";
         }
         m_compiledPacks.clear();
+        m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
         // Recompiling the packs invalidates every CACHED FOLD, and updateAllDecorations
         // is not a sufficient net for that: it skips windows with a live shader
         // transition, and only re-resolves windows on the current desktop — so a

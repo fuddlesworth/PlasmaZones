@@ -51,11 +51,10 @@ PhosphorAnimation::Profile profileWithDuration(qreal ms)
 
 // Counting-stub: overrides one setter so the guard-fires test can
 // distinguish "setter not invoked" (guard hit) from "setter invoked,
-// returned true" (guard missed). StubSettings' getters are hard-coded
-// (setters are no-ops), so this subclass keeps the getter unchanged
-// and only adds a hit counter for setAdjacentThreshold (a registered int
-// scalar — the shared gap keys are no longer on this generic settings map
-// since their global default is rule-backed).
+// returned true" (guard missed). StubSettings' setters are real (member-backed,
+// change-guarded); this subclass adds only a hit counter for setAdjacentThreshold
+// (a registered int scalar — the shared gap keys are no longer on this generic
+// settings map since their global default is rule-backed).
 class CountingStubSettings : public StubSettings
 {
 public:
@@ -303,6 +302,30 @@ private Q_SLOTS:
         values[QStringLiteral("anyKey")] = 1;
         const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("bogus"), values);
         QVERIFY(!ok);
+    }
+
+    void testSetPerScreenSettings_readOnlySnappingCategory_returnsFalse()
+    {
+        // The 'snapping' per-screen category is a read-only projection of the config's
+        // per-monitor gaps (dispatch->writable == false). A batch WRITE to it must be
+        // rejected — the XML and header say so, and nothing pinned it.
+        QVariantMap values;
+        values[QStringLiteral("innerGap")] = 4;
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("snapping"), values);
+        QVERIFY(!ok);
+    }
+
+    void testSetPerScreenSettings_implausibleScreenId_returnsFalse()
+    {
+        // The screenId is caller-supplied over the session bus. An empty or control-char id
+        // is refused at the boundary (shape only — a disconnected monitor's real id is still
+        // accepted) so a hostile peer cannot grow the config file one junk group at a time.
+        QVariantMap values;
+        values[QStringLiteral("masterCount")] = 2;
+        QVERIFY(!m_adaptor->setPerScreenSettings(QString(), QStringLiteral("autotile"), values));
+        QVERIFY(!m_adaptor->setPerScreenSettings(QStringLiteral("bad\nid"), QStringLiteral("autotile"), values));
+        // A plain connector name is fine.
+        QVERIFY(m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("autotile"), values));
     }
 
     void testSetPerScreenSettings_recognizedCategory_returnsTrue()

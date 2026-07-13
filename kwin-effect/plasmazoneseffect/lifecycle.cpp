@@ -251,8 +251,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // either way.
         const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
         m_compiledPacks.clear();
+        m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
         m_surfaceMultipass.clear();
-        if (haveContext) {
+        // Repaint whenever there is a compositor, NOT only when the context went current: a
+        // repaint is not GL work. Gating it on haveContext meant a transient make-current
+        // failure dropped the caches but never asked the screen to redraw, so the reloaded
+        // packs would not appear until something incidental damaged the scene.
+        if (KWin::effects) {
             KWin::effects->addRepaintFull();
         }
         // A pack reload can flip a decoration pack's `audio` metadata flag,

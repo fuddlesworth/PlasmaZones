@@ -84,6 +84,12 @@ public:
         notification = ext_idle_notifier_v1_get_idle_notification(notifier, ms, seat);
         if (notification) {
             ext_idle_notification_v1_add_listener(notification, &listener, this);
+        } else {
+            // Every precondition passed and arming STILL produced nothing. This is exactly
+            // the state isArmed() reports false for and the daemon burns its retry budget on,
+            // so name it — the four early-returns above are logged, and the one case where
+            // the compositor simply hands back no object was the one left silent.
+            qCWarning(lcIdleNotifier) << "Idle notification not armed: the compositor returned no notification object";
         }
     }
 

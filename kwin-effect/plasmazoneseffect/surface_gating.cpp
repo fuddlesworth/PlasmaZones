@@ -69,7 +69,7 @@ void PlasmaZonesEffect::repaintAllDecorations()
         if (!it->shaderApplied) {
             continue;
         }
-        KWin::EffectWindow* const sw = findWindowById(it.key());
+        KWin::EffectWindow* const sw = findWindowByIdExact(it.key());
         // Same exact-id / deleted / on-desktop discipline as the per-frame driver in
         // postPaintScreen: findWindowById's fuzzy appId fallback can resolve a
         // same-app sibling for a stale id, and an off-desktop window has nothing to
@@ -124,7 +124,10 @@ QPointF PlasmaZonesEffect::foldCursorFor(KWin::EffectWindow* w, const QRectF& ca
 // only where the pointer is, and the fold keys on that itself (foldedCursor).
 void PlasmaZonesEffect::repaintHoverDecorations(const QPointF& cursor)
 {
-    if (!KWin::effects || m_windowDecorations.isEmpty()) {
+    // This fires on EVERY pointer-motion event. If no compiled pack reads the cursor at all
+    // — the default border-only configuration — nothing here can react, so skip the whole
+    // per-window chain scan on one bool read rather than paying it per decoration per motion.
+    if (!KWin::effects || m_windowDecorations.isEmpty() || !m_anyCompiledPackReadsCursor) {
         return;
     }
     const auto selfRepaint = selfRepaintScope();
@@ -145,7 +148,7 @@ void PlasmaZonesEffect::repaintHoverDecorations(const QPointF& cursor)
         if (!readsCursor) {
             continue;
         }
-        KWin::EffectWindow* const sw = findWindowById(it.key());
+        KWin::EffectWindow* const sw = findWindowByIdExact(it.key());
         if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
             continue;
         }
@@ -317,7 +320,7 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
                 continue;
             }
             // Compare EXACTLY what the fold keys on. See foldCursorFor.
-            KWin::EffectWindow* const sw = findWindowById(windowId);
+            KWin::EffectWindow* const sw = findWindowByIdExact(windowId);
             // Same exact-id / deleted discipline as every other findWindowById consumer: the
             // fuzzy appId fallback can resolve a same-app SIBLING for a stale id, and this
             // window's mayAnimate would then be decided by another window entirely — a
